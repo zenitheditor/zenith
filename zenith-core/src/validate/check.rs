@@ -254,6 +254,52 @@ fn walk_node(
             }
         }
 
+        Node::Line(l) => {
+            register_id(&l.id, seen_ids, diagnostics);
+
+            // Required geometry: x1, y1, x2, y2 must all be present.
+            check_optional_dim(&l.id, "x1", l.x1.as_ref(), l.source_span, diagnostics);
+            check_optional_dim(&l.id, "y1", l.y1.as_ref(), l.source_span, diagnostics);
+            check_optional_dim(&l.id, "x2", l.x2.as_ref(), l.source_span, diagnostics);
+            check_optional_dim(&l.id, "y2", l.y2.as_ref(), l.source_span, diagnostics);
+
+            // Visual properties (stroke-only; no fill for line).
+            // stroke is optional — only type-checked if present (a stroke-less
+            // line draws nothing, but it is not an error to omit stroke).
+            check_visual_prop(
+                &l.id,
+                "stroke",
+                l.stroke.as_ref(),
+                VisualExpect::Color,
+                referenced_token_ids,
+                resolved_tokens,
+                diagnostics,
+            );
+            check_visual_prop(
+                &l.id,
+                "stroke-width",
+                l.stroke_width.as_ref(),
+                VisualExpect::Dimension,
+                referenced_token_ids,
+                resolved_tokens,
+                diagnostics,
+            );
+
+            // Unknown properties.
+            for prop_name in l.unknown_props.keys() {
+                diagnostics.push(Diagnostic::warning(
+                    "node.unknown_property",
+                    format!(
+                        "line '{}': unknown property '{}' (version-relative; \
+                         may be valid in a later schema version)",
+                        l.id, prop_name
+                    ),
+                    l.source_span,
+                    Some(l.id.clone()),
+                ));
+            }
+        }
+
         Node::Text(t) => {
             register_id(&t.id, seen_ids, diagnostics);
 
@@ -510,7 +556,7 @@ mod tests {
 
     use super::*;
     use crate::ast::document::{Document, DocumentBody, Page};
-    use crate::ast::node::{EllipseNode, Node, RectNode, TextNode, UnknownNode};
+    use crate::ast::node::{EllipseNode, LineNode, Node, RectNode, TextNode, UnknownNode};
     use crate::ast::style::StyleBlock;
     use crate::ast::token::{Token, TokenBlock, TokenLiteral, TokenType, TokenValue};
     use crate::ast::value::{Dimension, PropertyValue, Unit};
@@ -1139,6 +1185,107 @@ mod tests {
                 vec![minimal_ellipse(
                     "ellipse.one",
                     Some(PropertyValue::Literal("#ff0000".to_owned())),
+                )],
+            )],
+        );
+        let report = validate(&doc);
+        assert!(
+            has_code(&report, "token.raw_visual_literal"),
+            "codes: {:?}",
+            codes(&report)
+        );
+        assert!(report.has_errors());
+    }
+
+    // ── Line helpers ──────────────────────────────────────────────────────
+
+    fn minimal_line(id: &str, stroke: Option<PropertyValue>) -> Node {
+        Node::Line(LineNode {
+            id: id.to_owned(),
+            name: None,
+            role: None,
+            x1: Some(px(0.0)),
+            y1: Some(px(0.0)),
+            x2: Some(px(100.0)),
+            y2: Some(px(0.0)),
+            style: None,
+            stroke,
+            stroke_width: None,
+            opacity: None,
+            visible: None,
+            locked: None,
+            source_span: None,
+            unknown_props: BTreeMap::new(),
+        })
+    }
+
+    // ── Line: clean doc produces no errors ───────────────────────────────
+
+    #[test]
+    fn line_clean_doc_no_errors() {
+        let doc = doc_with(
+            vec![color_token("color.rule")],
+            vec![minimal_page(
+                "page.one",
+                vec![minimal_line("line.one", Some(token_ref("color.rule")))],
+            )],
+        );
+        let report = validate(&doc);
+        assert!(
+            report.diagnostics.is_empty(),
+            "expected no diagnostics for clean line doc, got: {:?}",
+            codes(&report)
+        );
+        assert!(!report.has_errors());
+    }
+
+    // ── Line: missing x1 → node.missing_geometry ─────────────────────────
+
+    #[test]
+    fn line_missing_x1_produces_node_missing_geometry() {
+        let doc = doc_with(
+            vec![],
+            vec![minimal_page(
+                "page.one",
+                vec![Node::Line(LineNode {
+                    id: "line.no-x1".to_owned(),
+                    name: None,
+                    role: None,
+                    x1: None, // missing
+                    y1: Some(px(0.0)),
+                    x2: Some(px(100.0)),
+                    y2: Some(px(0.0)),
+                    style: None,
+                    stroke: None,
+                    stroke_width: None,
+                    opacity: None,
+                    visible: None,
+                    locked: None,
+                    source_span: None,
+                    unknown_props: BTreeMap::new(),
+                })],
+            )],
+        );
+        let report = validate(&doc);
+        assert!(
+            has_code(&report, "node.missing_geometry"),
+            "codes: {:?}",
+            codes(&report)
+        );
+        assert!(report.has_errors());
+    }
+
+    // ── Line: stroke raw literal → token.raw_visual_literal ──────────────
+
+    #[test]
+    fn line_stroke_raw_literal_produces_raw_visual_literal() {
+        let doc = doc_with(
+            vec![],
+            vec![minimal_page(
+                "page.one",
+                vec![minimal_line(
+                    "line.one",
+                    Some(PropertyValue::Literal("#000000".to_owned())),
                 )],
             )],
         );

@@ -11,7 +11,8 @@ use crate::ast::{
     Span,
     document::{Document, DocumentBody, Page, Project},
     node::{
-        EllipseNode, Node, RectNode, TextNode, TextSpan, UnknownNode, UnknownProperty, UnknownValue,
+        EllipseNode, LineNode, Node, RectNode, TextNode, TextSpan, UnknownNode, UnknownProperty,
+        UnknownValue,
     },
     style::{Style, StyleBlock},
     token::{Token, TokenBlock, TokenLiteral, TokenType, TokenValue},
@@ -509,6 +510,7 @@ fn transform_node(node: &KdlNode) -> Result<Node, ParseError> {
     match node.name().value() {
         "rect" => transform_rect(node).map(Node::Rect),
         "ellipse" => transform_ellipse(node).map(Node::Ellipse),
+        "line" => transform_line(node).map(Node::Line),
         "text" => transform_text(node).map(Node::Text),
         _ => Ok(Node::Unknown(UnknownNode {
             kind: node.name().value().to_owned(),
@@ -597,6 +599,53 @@ fn transform_ellipse(node: &KdlNode) -> Result<EllipseNode, ParseError> {
         visible: optional_bool_prop(node, "visible"),
         locked: optional_bool_prop(node, "locked"),
         rotate: optional_dimension_prop(node, "rotate"),
+        source_span: node_span(node),
+        unknown_props,
+    })
+}
+
+const LINE_KNOWN_PROPS: &[&str] = &[
+    "id",
+    "name",
+    "role",
+    "x1",
+    "y1",
+    "x2",
+    "y2",
+    "style",
+    "stroke",
+    "stroke-width",
+    "stroke_width",
+    "opacity",
+    "visible",
+    "locked",
+    // NOTE: "stroke-alignment" is intentionally absent — it does not apply to
+    // line nodes. An author who writes it will receive a node.unknown_property
+    // warning, which is the correct diagnostic for inapplicable properties.
+];
+
+fn transform_line(node: &KdlNode) -> Result<LineNode, ParseError> {
+    let id = required_string_prop(node, "id")?.to_owned();
+
+    // Handle both hyphenated and underscored variants for forward-compat.
+    let stroke_width = optional_property_value_aliased(node, "stroke-width", "stroke_width");
+
+    let unknown_props = collect_unknown_props(node, LINE_KNOWN_PROPS);
+
+    Ok(LineNode {
+        id,
+        name: optional_string_prop(node, "name").map(str::to_owned),
+        role: optional_string_prop(node, "role").map(str::to_owned),
+        x1: optional_dimension_prop(node, "x1"),
+        y1: optional_dimension_prop(node, "y1"),
+        x2: optional_dimension_prop(node, "x2"),
+        y2: optional_dimension_prop(node, "y2"),
+        style: optional_string_prop(node, "style").map(str::to_owned),
+        stroke: optional_property_value(node, "stroke"),
+        stroke_width,
+        opacity: optional_f64_prop(node, "opacity"),
+        visible: optional_bool_prop(node, "visible"),
+        locked: optional_bool_prop(node, "locked"),
         source_span: node_span(node),
         unknown_props,
     })

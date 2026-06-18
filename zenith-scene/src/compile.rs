@@ -379,25 +379,8 @@ fn compile_node(
             let families = vec![family_name];
 
             // Resolve font size in pixels; default to 16.0 if absent.
-            let font_size: f32 = match &text.font_size {
-                Some(PropertyValue::TokenRef(token_id)) => match resolved.get(token_id.as_str()) {
-                    Some(rt) => match &rt.value {
-                        ResolvedValue::Dimension(dim) => dim_to_px(dim.value, &dim.unit)
-                            .map(|v| v as f32)
-                            .unwrap_or(16.0),
-                        _ => 16.0,
-                    },
-                    None => 16.0,
-                },
-                Some(PropertyValue::Literal(_)) => {
-                    // Literals for font-size are stored as property values; at
-                    // this point we have no numeric extraction for bare strings,
-                    // so fall back to the default.  Font-size as a token ref is
-                    // the idiomatic path.
-                    16.0
-                }
-                None => 16.0,
-            };
+            let font_size: f32 =
+                resolve_property_dimension_px(&text.font_size, resolved, 16.0) as f32;
 
             // Resolve fill color; default to opaque black.
             let mut color = text
@@ -461,6 +444,96 @@ fn compile_node(
             }
         }
 
+        Node::Line(line) => {
+            // Skip invisible lines.
+            if line.visible == Some(false) {
+                return;
+            }
+
+            // Require all four endpoints; skip if any is absent or bad unit.
+            let (Some(x1d), Some(y1d), Some(x2d), Some(y2d)) =
+                (&line.x1, &line.y1, &line.x2, &line.y2)
+            else {
+                diagnostics.push(Diagnostic::advisory(
+                    "scene.missing_geometry",
+                    format!(
+                        "line '{}' is missing one or more endpoint properties (x1, y1, x2, y2); \
+                         skipped",
+                        line.id
+                    ),
+                    line.source_span,
+                    Some(line.id.clone()),
+                ));
+                return;
+            };
+
+            let Some(x1) = dim_to_px(x1d.value, &x1d.unit) else {
+                diagnostics.push(unsupported_unit_diag(
+                    "line",
+                    &line.id,
+                    "x1",
+                    line.source_span,
+                ));
+                return;
+            };
+            let Some(y1) = dim_to_px(y1d.value, &y1d.unit) else {
+                diagnostics.push(unsupported_unit_diag(
+                    "line",
+                    &line.id,
+                    "y1",
+                    line.source_span,
+                ));
+                return;
+            };
+            let Some(x2) = dim_to_px(x2d.value, &x2d.unit) else {
+                diagnostics.push(unsupported_unit_diag(
+                    "line",
+                    &line.id,
+                    "x2",
+                    line.source_span,
+                ));
+                return;
+            };
+            let Some(y2) = dim_to_px(y2d.value, &y2d.unit) else {
+                diagnostics.push(unsupported_unit_diag(
+                    "line",
+                    &line.id,
+                    "y2",
+                    line.source_span,
+                ));
+                return;
+            };
+
+            // Stroke is optional in validation, but a stroke-less line draws nothing.
+            let Some(stroke_prop) = &line.stroke else {
+                return;
+            };
+            let Some(mut color) =
+                resolve_property_color(stroke_prop, resolved, diagnostics, &line.id)
+            else {
+                return;
+            };
+
+            // Apply opacity.
+            if let Some(opacity) = line.opacity {
+                let o = opacity.clamp(0.0, 1.0);
+                color.a = (color.a as f64 * o).round() as u8;
+            }
+
+            // Resolve stroke_width to px; default 1.0 when absent.
+            let stroke_width: f64 =
+                resolve_property_dimension_px(&line.stroke_width, resolved, 1.0);
+
+            commands.push(SceneCommand::StrokeLine {
+                x1,
+                y1,
+                x2,
+                y2,
+                color,
+                stroke_width,
+            });
+        }
+
         Node::Unknown(unknown) => {
             diagnostics.push(Diagnostic::advisory(
                 "scene.unsupported_node",
@@ -503,6 +576,29 @@ fn unsupported_unit_diag(kind: &str, node_id: &str, field: &str, span: Option<Sp
         span,
         Some(node_id.to_owned()),
     )
+}
+
+/// Resolve an optional dimension-valued property to pixels.
+///
+/// Returns `default` when the property is absent, is a raw literal, references
+/// a non-dimension (or unresolved) token, or carries an unsupported unit. The
+/// idiomatic path is a token ref resolving to a `Dimension`. Shared by
+/// font-size and stroke-width resolution.
+fn resolve_property_dimension_px(
+    prop: &Option<PropertyValue>,
+    resolved: &BTreeMap<String, ResolvedToken>,
+    default: f64,
+) -> f64 {
+    match prop {
+        Some(PropertyValue::TokenRef(token_id)) => match resolved.get(token_id.as_str()) {
+            Some(rt) => match &rt.value {
+                ResolvedValue::Dimension(dim) => dim_to_px(dim.value, &dim.unit).unwrap_or(default),
+                _ => default,
+            },
+            None => default,
+        },
+        _ => default,
+    }
 }
 
 /// Resolve a `PropertyValue` to a `Color`, or push a diagnostic and return
@@ -1179,6 +1275,110 @@ mod tests {
 
         let cmds = &result.scene.commands;
         // Only PushClip + PopClip; no FillEllipse.
+        assert_eq!(
+            cmds.len(),
+            2,
+            "expected PushClip + PopClip only; got: {:?}",
+            cmds
+        );
+        assert!(matches!(cmds[0], SceneCommand::PushClip { .. }));
+        assert!(matches!(cmds[1], SceneCommand::PopClip));
+    }
+
+    // ── Line: token stroke compiles to StrokeLine ─────────────────────────
+
+    #[test]
+    fn single_line_token_stroke_compiles_correctly() {
+        let src = r##"zenith version=1 {
+  project id="proj.l1" name="L1"
+  tokens format="zenith-token-v1" {
+    token id="color.rule" type="color" value="#94a3b8"
+    token id="size.stroke" type="dimension" value=(px)2
+  }
+  styles {}
+  document id="doc.l1" title="L1" {
+    page id="page.l1" w=(px)320 h=(px)200 {
+      line id="line.divider" x1=(px)40 y1=(px)100 x2=(px)280 y2=(px)100 stroke=(token)"color.rule" stroke-width=(token)"size.stroke"
+    }
+  }
+}
+"##;
+        let doc = parse(src);
+        let result = compile(&doc, &default_provider());
+
+        assert!(
+            result.diagnostics.is_empty(),
+            "unexpected diagnostics: {:?}",
+            result.diagnostics
+        );
+
+        let cmds = &result.scene.commands;
+        // PushClip, StrokeLine, PopClip
+        assert_eq!(cmds.len(), 3, "expected 3 commands, got: {:?}", cmds);
+
+        assert!(
+            matches!(cmds[0], SceneCommand::PushClip { .. }),
+            "first command must be PushClip"
+        );
+
+        match &cmds[1] {
+            SceneCommand::StrokeLine {
+                x1,
+                y1,
+                x2,
+                y2,
+                color,
+                stroke_width,
+            } => {
+                assert_eq!(*x1, 40.0);
+                assert_eq!(*y1, 100.0);
+                assert_eq!(*x2, 280.0);
+                assert_eq!(*y2, 100.0);
+                // #94a3b8 → r=0x94=148, g=0xa3=163, b=0xb8=184
+                assert_eq!(color.r, 0x94);
+                assert_eq!(color.g, 0xa3);
+                assert_eq!(color.b, 0xb8);
+                assert_eq!(color.a, 255);
+                // size.stroke = (px)2
+                assert_eq!(*stroke_width, 2.0);
+            }
+            other => panic!("expected StrokeLine, got {other:?}"),
+        }
+
+        assert!(
+            matches!(cmds[2], SceneCommand::PopClip),
+            "last command must be PopClip"
+        );
+    }
+
+    // ── Line: visible=false not emitted ──────────────────────────────────
+
+    #[test]
+    fn invisible_line_not_emitted() {
+        let src = r##"zenith version=1 {
+  project id="proj.l2" name="L2"
+  tokens format="zenith-token-v1" {
+    token id="color.rule" type="color" value="#94a3b8"
+  }
+  styles {}
+  document id="doc.l2" title="L2" {
+    page id="page.l2" w=(px)100 h=(px)100 {
+      line id="line.hidden" x1=(px)0 y1=(px)50 x2=(px)100 y2=(px)50 stroke=(token)"color.rule" visible=#false
+    }
+  }
+}
+"##;
+        let doc = parse(src);
+        let result = compile(&doc, &default_provider());
+
+        assert!(
+            result.diagnostics.is_empty(),
+            "unexpected diagnostics: {:?}",
+            result.diagnostics
+        );
+
+        let cmds = &result.scene.commands;
+        // Only PushClip + PopClip; no StrokeLine.
         assert_eq!(
             cmds.len(),
             2,

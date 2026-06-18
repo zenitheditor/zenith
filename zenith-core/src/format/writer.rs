@@ -22,8 +22,9 @@
 use std::fmt::Write as _;
 
 use crate::ast::{
-    Dimension, Document, DocumentBody, EllipseNode, Node, Page, Project, PropertyValue, RectNode,
-    TextNode, TextSpan, Token, TokenBlock, TokenLiteral, TokenType, TokenValue, Unit, UnknownValue,
+    Dimension, Document, DocumentBody, EllipseNode, LineNode, Node, Page, Project, PropertyValue,
+    RectNode, TextNode, TextSpan, Token, TokenBlock, TokenLiteral, TokenType, TokenValue, Unit,
+    UnknownValue,
 };
 use crate::error::FormatError;
 
@@ -358,6 +359,7 @@ fn write_node(node: &Node, out: &mut String, depth: usize) {
     match node {
         Node::Rect(r) => write_rect(r, out, depth),
         Node::Ellipse(e) => write_ellipse(e, out, depth),
+        Node::Line(l) => write_line(l, out, depth),
         Node::Text(t) => write_text(t, out, depth),
         Node::Unknown(u) => write_unknown_node(u, out, depth),
     }
@@ -424,6 +426,39 @@ fn write_ellipse(e: &EllipseNode, out: &mut String, depth: usize) {
 
     // Unknown properties in sorted key order (BTreeMap iteration is sorted).
     for (key, prop) in &e.unknown_props {
+        out.push(' ');
+        out.push_str(key);
+        out.push('=');
+        out.push_str(&fmt_unknown_value(&prop.value));
+    }
+
+    out.push('\n');
+}
+
+fn write_line(l: &LineNode, out: &mut String, depth: usize) {
+    indent(out, depth);
+    out.push_str("line");
+
+    // Canonical property order: id, name, role, x1, y1, x2, y2, stroke,
+    // stroke-width, opacity, visible, locked, style, then unknown props.
+    out.push_str(" id=\"");
+    out.push_str(&l.id);
+    out.push('"');
+    write_opt_str(out, "name", &l.name);
+    write_opt_str(out, "role", &l.role);
+    write_opt_dimension(out, "x1", &l.x1);
+    write_opt_dimension(out, "y1", &l.y1);
+    write_opt_dimension(out, "x2", &l.x2);
+    write_opt_dimension(out, "y2", &l.y2);
+    write_opt_property_value(out, "stroke", &l.stroke);
+    write_opt_property_value(out, "stroke-width", &l.stroke_width);
+    write_opt_f64(out, "opacity", &l.opacity);
+    write_opt_bool(out, "visible", &l.visible);
+    write_opt_bool(out, "locked", &l.locked);
+    write_opt_str(out, "style", &l.style);
+
+    // Unknown properties in sorted key order (BTreeMap iteration is sorted).
+    for (key, prop) in &l.unknown_props {
         out.push(' ');
         out.push_str(key);
         out.push('=');
@@ -588,6 +623,7 @@ mod tests {
                 match node {
                     Node::Rect(r) => r.source_span = None,
                     Node::Ellipse(e) => e.source_span = None,
+                    Node::Line(l) => l.source_span = None,
                     Node::Text(t) => t.source_span = None,
                     Node::Unknown(u) => u.source_span = None,
                 }

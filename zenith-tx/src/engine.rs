@@ -217,6 +217,7 @@ fn find_node_mut<'doc>(doc: &'doc mut Document, id: &str) -> FindResult<'doc> {
             Node::Text(t) => t.id == id,
             Node::Rect(r) => r.id == id,
             Node::Ellipse(e) => e.id == id,
+            Node::Line(l) => l.id == id,
             Node::Unknown(_) => false,
         });
         if found { Some(pi) } else { None }
@@ -254,6 +255,7 @@ fn find_in_children_mut<'a>(children: &'a mut [Node], id: &str) -> Option<FindRe
             Node::Text(t) if t.id == id => Some(Hit::Text(i)),
             Node::Rect(r) if r.id == id => Some(Hit::WrongType("rect")),
             Node::Ellipse(e) if e.id == id => Some(Hit::WrongType("ellipse")),
+            Node::Line(l) if l.id == id => Some(Hit::WrongType("line")),
             // All other variants without a matching id, and Unknown: skip.
             _ => None,
         });
@@ -306,6 +308,7 @@ fn node_id_of(node: &Node) -> Option<&str> {
     match node {
         Node::Rect(r) => Some(&r.id),
         Node::Ellipse(e) => Some(&e.id),
+        Node::Line(l) => Some(&l.id),
         Node::Text(t) => Some(&t.id),
         Node::Unknown(_) => None,
     }

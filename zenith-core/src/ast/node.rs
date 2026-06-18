@@ -75,6 +75,32 @@ pub struct RectNode {
     pub unknown_props: BTreeMap<String, UnknownProperty>,
 }
 
+/// A `line` node (stroke-only; defined by two endpoints x1/y1/x2/y2).
+///
+/// Unlike `rect` and `ellipse` there is no bounding box, no fill, no radius,
+/// no rotate, and no stroke-alignment — a line is a 1-D geometry whose only
+/// visual property is its centered stroke.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LineNode {
+    pub id: String,
+    pub name: Option<String>,
+    pub role: Option<String>,
+    pub x1: Option<Dimension>,
+    pub y1: Option<Dimension>,
+    pub x2: Option<Dimension>,
+    pub y2: Option<Dimension>,
+    pub style: Option<String>,
+    pub stroke: Option<PropertyValue>,
+    pub stroke_width: Option<PropertyValue>,
+    pub opacity: Option<f64>,
+    pub visible: Option<bool>,
+    pub locked: Option<bool>,
+    /// Source declaration span, when available.
+    pub source_span: Option<Span>,
+    /// Unknown properties preserved for forward-compat.
+    pub unknown_props: BTreeMap<String, UnknownProperty>,
+}
+
 /// An `ellipse` node (fill-only; bounded by x/y/w/h bounding box).
 #[derive(Debug, Clone, PartialEq)]
 pub struct EllipseNode {
@@ -144,6 +170,7 @@ pub struct UnknownNode {
 pub enum Node {
     Rect(RectNode),
     Ellipse(EllipseNode),
+    Line(LineNode),
     Text(TextNode),
     Unknown(UnknownNode),
 }

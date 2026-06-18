@@ -1,0 +1,16 @@
+zenith version=1 {
+  project id="proj.line" name="Line Example"
+  tokens format="zenith-token-v1" {
+    token id="color.bg" type="color" value="#f8fafc"
+    token id="color.rule" type="color" value="#94a3b8"
+    token id="size.stroke" type="dimension" value=(px)2
+  }
+  styles {
+  }
+  document id="doc.line" title="Line Example" {
+    page id="page.line" w=(px)320 h=(px)200 {
+      rect id="rect.bg" x=(px)0 y=(px)0 w=(px)320 h=(px)200 fill=(token)"color.bg"
+      line id="line.divider" x1=(px)40 y1=(px)100 x2=(px)280 y2=(px)100 stroke=(token)"color.rule" stroke-width=(token)"size.stroke"
+    }
+  }
+}

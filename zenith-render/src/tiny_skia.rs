@@ -4,7 +4,7 @@
 //! `ttf_parser` types.  All other modules see only the backend-neutral types
 //! from `backend.rs`.
 
-use tiny_skia::{FillRule, Paint, PathBuilder, Pixmap, Rect, Transform};
+use tiny_skia::{FillRule, Paint, PathBuilder, Pixmap, Rect, Stroke, Transform};
 use zenith_core::FontProvider;
 use zenith_scene::{Scene, SceneCommand};
 
@@ -279,6 +279,72 @@ impl RasterBackend for TinySkiaBackend {
                         Transform::identity(),
                         None,
                     );
+                }
+
+                SceneCommand::StrokeLine {
+                    x1,
+                    y1,
+                    x2,
+                    y2,
+                    color,
+                    stroke_width,
+                } => {
+                    // Guard against non-finite or out-of-f32-range values before
+                    // building the path — tiny-skia requires finite f32 values,
+                    // and a finite-but-huge f64 would overflow to f32::INFINITY.
+                    if !x1.is_finite()
+                        || !y1.is_finite()
+                        || !x2.is_finite()
+                        || !y2.is_finite()
+                        || !stroke_width.is_finite()
+                        || *stroke_width > f64::from(f32::MAX)
+                    {
+                        continue;
+                    }
+
+                    let effective_clip = *clip_stack.last().unwrap_or(&page_clip);
+
+                    // A line is 1-D so we cannot reshape it to the clip; instead we
+                    // compute the ink bounding box (endpoints expanded by half the
+                    // stroke width) and skip entirely if it is outside the clip.
+                    // We still rely on native pixmap-edge clipping for on-screen
+                    // pixels: the page clip equals the pixmap extent in v0.
+                    // Sub-page clip regions will need Mask-based clipping in the
+                    // future clip-mask unit.
+                    let half_sw = stroke_width / 2.0;
+                    let ink_x = x1.min(*x2) - half_sw;
+                    let ink_y = y1.min(*y2) - half_sw;
+                    let ink_x2 = x1.max(*x2) + half_sw;
+                    let ink_y2 = y1.max(*y2) + half_sw;
+                    if intersect_rects((ink_x, ink_y, ink_x2, ink_y2), effective_clip).is_none() {
+                        continue;
+                    }
+
+                    // Build path: a single open segment from (x1,y1) to (x2,y2).
+                    let mut pb = PathBuilder::new();
+                    pb.move_to(*x1 as f32, *y1 as f32);
+                    pb.line_to(*x2 as f32, *y2 as f32);
+                    let path = match pb.finish() {
+                        Some(p) => p,
+                        None => continue, // degenerate (zero-length) line: skip
+                    };
+
+                    // Stroke defaults: Butt cap, Miter join, miter_limit 4.
+                    // These are the normative v0 values (doc 09); we intentionally
+                    // keep the defaults for cap/join and only set the width, so the
+                    // defaults remain authoritative.
+                    let stroke = Stroke {
+                        width: *stroke_width as f32,
+                        ..Default::default()
+                    };
+
+                    let mut paint = Paint::default();
+                    paint.set_color_rgba8(color.r, color.g, color.b, color.a);
+                    // AA on: diagonal lines need sub-pixel coverage; deterministic
+                    // same-machine like ellipse/glyph fills.
+                    paint.anti_alias = true;
+
+                    pixmap.stroke_path(&path, &paint, &stroke, Transform::identity(), None);
                 }
 
                 SceneCommand::DrawGlyphRun {
