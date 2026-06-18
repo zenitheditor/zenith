@@ -8,6 +8,7 @@
 pub mod ast;
 pub mod diagnostics;
 pub mod error;
+pub mod font;
 pub mod format;
 pub mod parse;
 pub mod tokens;
@@ -21,6 +22,7 @@ pub use ast::{
 };
 pub use diagnostics::{Diagnostic, Severity};
 pub use error::{FormatError, ParseError, ParseErrorCode};
+pub use font::{BytesFontProvider, FontData, FontProvider, FontStyle, default_provider};
 pub use parse::{KdlAdapter, KdlSource};
 pub use tokens::{ResolvedToken, ResolvedValue, TokenResolution, resolve_tokens};
 pub use validate::{ValidationReport, validate};
