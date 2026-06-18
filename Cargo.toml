@@ -1,0 +1,22 @@
+[workspace]
+resolver = "3"
+members = [
+    "zenith-core",
+    "zenith-layout",
+    "zenith-scene",
+    "zenith-render",
+    "zenith-tx",
+    "zenith-cli",
+]
+
+[workspace.package]
+version = "0.0.0"
+edition = "2024"
+license = "MIT"
+publish = false
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }

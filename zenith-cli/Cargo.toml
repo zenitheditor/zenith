@@ -1,0 +1,15 @@
+[package]
+name = "zenith-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+zenith-core = { path = "../zenith-core" }
+zenith-tx = { path = "../zenith-tx" }
+zenith-scene = { path = "../zenith-scene" }
+zenith-render = { path = "../zenith-render" }
+
+[lints]
+workspace = true

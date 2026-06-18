@@ -1,0 +1,13 @@
+[package]
+name = "zenith-scene"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+zenith-core = { path = "../zenith-core" }
+zenith-layout = { path = "../zenith-layout" }
+
+[lints]
+workspace = true
