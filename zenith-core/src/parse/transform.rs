@@ -11,8 +11,8 @@ use crate::ast::{
     Span,
     document::{Document, DocumentBody, Page, Project},
     node::{
-        EllipseNode, LineNode, Node, RectNode, TextNode, TextSpan, UnknownNode, UnknownProperty,
-        UnknownValue,
+        EllipseNode, GroupNode, LineNode, Node, RectNode, TextNode, TextSpan, UnknownNode,
+        UnknownProperty, UnknownValue,
     },
     style::{Style, StyleBlock},
     token::{Token, TokenBlock, TokenLiteral, TokenType, TokenValue},
@@ -483,13 +483,7 @@ fn transform_page(node: &KdlNode) -> Result<Page, ParseError> {
         .and_then(|e| entry_to_property_value(e).ok());
 
     let source_span = node_span(node);
-
-    let mut children: Vec<Node> = Vec::new();
-    if let Some(doc) = node.children() {
-        for child in doc.nodes() {
-            children.push(transform_node(child)?);
-        }
-    }
+    let children = transform_children(node)?;
 
     Ok(Page {
         id,
@@ -502,6 +496,26 @@ fn transform_page(node: &KdlNode) -> Result<Page, ParseError> {
     })
 }
 
+/// Iterate a KDL node's children block and transform each child into a
+/// [`Node`].  Returns an empty `Vec` when the node has no children block.
+///
+/// Both `transform_page` and `transform_group` use this helper to avoid
+/// duplicating the child-iteration logic.
+///
+/// # Known limitation
+/// Groups nest recursively via `transform_node` → `transform_group` →
+/// `transform_children` with no depth guard.  This is an accepted v0
+/// limitation; stack overflow is only possible with pathologically deep trees.
+fn transform_children(node: &KdlNode) -> Result<Vec<Node>, ParseError> {
+    let mut children: Vec<Node> = Vec::new();
+    if let Some(doc) = node.children() {
+        for child in doc.nodes() {
+            children.push(transform_node(child)?);
+        }
+    }
+    Ok(children)
+}
+
 // ---------------------------------------------------------------------------
 // Renderable nodes
 // ---------------------------------------------------------------------------
@@ -512,6 +526,7 @@ fn transform_node(node: &KdlNode) -> Result<Node, ParseError> {
         "ellipse" => transform_ellipse(node).map(Node::Ellipse),
         "line" => transform_line(node).map(Node::Line),
         "text" => transform_text(node).map(Node::Text),
+        "group" => transform_group(node).map(Node::Group),
         _ => Ok(Node::Unknown(UnknownNode {
             kind: node.name().value().to_owned(),
             source_span: node_span(node),
@@ -711,6 +726,34 @@ fn transform_text(node: &KdlNode) -> Result<TextNode, ParseError> {
         locked: optional_bool_prop(node, "locked"),
         rotate: optional_dimension_prop(node, "rotate"),
         spans,
+        source_span: node_span(node),
+        unknown_props,
+    })
+}
+
+const GROUP_KNOWN_PROPS: &[&str] = &[
+    "id", "name", "role", "x", "y", "w", "h", "opacity", "visible", "locked", "rotate", "style",
+];
+
+fn transform_group(node: &KdlNode) -> Result<GroupNode, ParseError> {
+    let id = required_string_prop(node, "id")?.to_owned();
+
+    let unknown_props = collect_unknown_props(node, GROUP_KNOWN_PROPS);
+
+    Ok(GroupNode {
+        id,
+        name: optional_string_prop(node, "name").map(str::to_owned),
+        role: optional_string_prop(node, "role").map(str::to_owned),
+        x: optional_dimension_prop(node, "x"),
+        y: optional_dimension_prop(node, "y"),
+        w: optional_dimension_prop(node, "w"),
+        h: optional_dimension_prop(node, "h"),
+        opacity: optional_f64_prop(node, "opacity"),
+        visible: optional_bool_prop(node, "visible"),
+        locked: optional_bool_prop(node, "locked"),
+        rotate: optional_dimension_prop(node, "rotate"),
+        style: optional_string_prop(node, "style").map(str::to_owned),
+        children: transform_children(node)?,
         source_span: node_span(node),
         unknown_props,
     })

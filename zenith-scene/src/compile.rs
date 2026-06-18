@@ -2,19 +2,49 @@
 //!
 //! Entry point: [`compile`].
 //!
-//! Rect nodes and text nodes are compiled; the page background is emitted
-//! first; unknown nodes produce an advisory diagnostic and are skipped.
+//! Rect, ellipse, line, text, and group nodes are compiled; the page
+//! background is emitted first; unknown nodes produce an advisory diagnostic
+//! and are skipped.
 
 use std::collections::BTreeMap;
 
 use zenith_core::{
-    Diagnostic, Document, FontProvider, FontStyle, Node, PropertyValue, ResolvedToken,
+    Diagnostic, Document, FontProvider, FontStyle, GroupNode, Node, PropertyValue, ResolvedToken,
     ResolvedValue, Span, Unit, resolve_tokens,
 };
 use zenith_layout::{RustybuzzEngine, ShapeRequest, TextLayoutEngine};
 
 use crate::color::parse_srgb_hex;
 use crate::ir::{Color, Scene, SceneCommand, SceneGlyph};
+
+// ── Render context ────────────────────────────────────────────────────────────
+
+/// Per-subtree rendering context that cascades through the node tree.
+///
+/// Each field accumulates transformations as we descend:
+/// - `opacity` — multiplied together at each group boundary; leaf nodes
+///   apply it on top of their own node-level opacity.
+/// - `dx`/`dy` — translation offset accumulated from all ancestor groups
+///   with an `x`/`y` property; added to every leaf geometry position.
+#[derive(Clone, Copy)]
+struct RenderCtx {
+    /// Accumulated opacity multiplier (1.0 = fully opaque).
+    opacity: f64,
+    /// Accumulated x-translation in pixels.
+    dx: f64,
+    /// Accumulated y-translation in pixels.
+    dy: f64,
+}
+
+impl RenderCtx {
+    fn root() -> Self {
+        RenderCtx {
+            opacity: 1.0,
+            dx: 0.0,
+            dy: 0.0,
+        }
+    }
+}
 
 // ── Public result type ────────────────────────────────────────────────────────
 
@@ -136,6 +166,7 @@ pub fn compile(doc: &Document, fonts: &dyn FontProvider) -> CompileResult {
             &engine,
             &mut scene.commands,
             &mut diagnostics,
+            RenderCtx::root(),
         );
     }
 
@@ -154,6 +185,7 @@ fn compile_node(
     engine: &RustybuzzEngine,
     commands: &mut Vec<SceneCommand>,
     diagnostics: &mut Vec<Diagnostic>,
+    ctx: RenderCtx,
 ) {
     match node {
         Node::Rect(rect) => {
@@ -180,7 +212,7 @@ fn compile_node(
                 return;
             };
 
-            let Some(x) = dim_to_px(x_dim.value, &x_dim.unit) else {
+            let Some(x_raw) = dim_to_px(x_dim.value, &x_dim.unit) else {
                 diagnostics.push(unsupported_unit_diag(
                     "rect",
                     &rect.id,
@@ -189,7 +221,7 @@ fn compile_node(
                 ));
                 return;
             };
-            let Some(y) = dim_to_px(y_dim.value, &y_dim.unit) else {
+            let Some(y_raw) = dim_to_px(y_dim.value, &y_dim.unit) else {
                 diagnostics.push(unsupported_unit_diag(
                     "rect",
                     &rect.id,
@@ -217,6 +249,10 @@ fn compile_node(
                 return;
             };
 
+            // Apply group translation offset.
+            let x = x_raw + ctx.dx;
+            let y = y_raw + ctx.dy;
+
             // Resolve fill color.
             let Some(fill_prop) = &rect.fill else {
                 // No fill → nothing to draw for a fill-only skeleton.
@@ -228,11 +264,9 @@ fn compile_node(
                 return;
             };
 
-            // Apply opacity.
-            if let Some(opacity) = rect.opacity {
-                let o = opacity.clamp(0.0, 1.0);
-                color.a = (color.a as f64 * o).round() as u8;
-            }
+            // Apply node opacity then cascade ctx.opacity on top.
+            let node_opacity = rect.opacity.unwrap_or(1.0).clamp(0.0, 1.0);
+            color.a = (color.a as f64 * node_opacity * ctx.opacity).round() as u8;
 
             commands.push(SceneCommand::FillRect { x, y, w, h, color });
         }
@@ -261,7 +295,7 @@ fn compile_node(
                 return;
             };
 
-            let Some(x) = dim_to_px(x_dim.value, &x_dim.unit) else {
+            let Some(x_raw) = dim_to_px(x_dim.value, &x_dim.unit) else {
                 diagnostics.push(unsupported_unit_diag(
                     "ellipse",
                     &ellipse.id,
@@ -270,7 +304,7 @@ fn compile_node(
                 ));
                 return;
             };
-            let Some(y) = dim_to_px(y_dim.value, &y_dim.unit) else {
+            let Some(y_raw) = dim_to_px(y_dim.value, &y_dim.unit) else {
                 diagnostics.push(unsupported_unit_diag(
                     "ellipse",
                     &ellipse.id,
@@ -298,6 +332,10 @@ fn compile_node(
                 return;
             };
 
+            // Apply group translation offset.
+            let x = x_raw + ctx.dx;
+            let y = y_raw + ctx.dy;
+
             // Resolve fill color.
             let Some(fill_prop) = &ellipse.fill else {
                 // No fill → nothing to draw for a fill-only primitive.
@@ -309,11 +347,9 @@ fn compile_node(
                 return;
             };
 
-            // Apply opacity.
-            if let Some(opacity) = ellipse.opacity {
-                let o = opacity.clamp(0.0, 1.0);
-                color.a = (color.a as f64 * o).round() as u8;
-            }
+            // Apply node opacity then cascade ctx.opacity on top.
+            let node_opacity = ellipse.opacity.unwrap_or(1.0).clamp(0.0, 1.0);
+            color.a = (color.a as f64 * node_opacity * ctx.opacity).round() as u8;
 
             commands.push(SceneCommand::FillEllipse { x, y, w, h, color });
         }
@@ -338,7 +374,7 @@ fn compile_node(
                 return;
             };
 
-            let Some(text_x) = dim_to_px(x_dim.value, &x_dim.unit) else {
+            let Some(text_x_raw) = dim_to_px(x_dim.value, &x_dim.unit) else {
                 diagnostics.push(unsupported_unit_diag(
                     "text node",
                     &text.id,
@@ -347,7 +383,7 @@ fn compile_node(
                 ));
                 return;
             };
-            let Some(text_y) = dim_to_px(y_dim.value, &y_dim.unit) else {
+            let Some(text_y_raw) = dim_to_px(y_dim.value, &y_dim.unit) else {
                 diagnostics.push(unsupported_unit_diag(
                     "text node",
                     &text.id,
@@ -356,6 +392,10 @@ fn compile_node(
                 ));
                 return;
             };
+
+            // Apply group translation offset.
+            let text_x = text_x_raw + ctx.dx;
+            let text_y = text_y_raw + ctx.dy;
 
             // Concatenate span text; skip silently if empty (nothing to draw).
             let content: String = text.spans.iter().map(|s| s.text.as_str()).collect();
@@ -394,11 +434,9 @@ fn compile_node(
                     a: 255,
                 });
 
-            // Apply opacity.
-            if let Some(opacity) = text.opacity {
-                let o = opacity.clamp(0.0, 1.0);
-                color.a = (color.a as f64 * o).round() as u8;
-            }
+            // Apply node opacity then cascade ctx.opacity on top.
+            let node_opacity = text.opacity.unwrap_or(1.0).clamp(0.0, 1.0);
+            color.a = (color.a as f64 * node_opacity * ctx.opacity).round() as u8;
 
             // Shape the text.
             // Weight and style are hardcoded to 400/Normal — the TextNode AST
@@ -467,7 +505,7 @@ fn compile_node(
                 return;
             };
 
-            let Some(x1) = dim_to_px(x1d.value, &x1d.unit) else {
+            let Some(x1_raw) = dim_to_px(x1d.value, &x1d.unit) else {
                 diagnostics.push(unsupported_unit_diag(
                     "line",
                     &line.id,
@@ -476,7 +514,7 @@ fn compile_node(
                 ));
                 return;
             };
-            let Some(y1) = dim_to_px(y1d.value, &y1d.unit) else {
+            let Some(y1_raw) = dim_to_px(y1d.value, &y1d.unit) else {
                 diagnostics.push(unsupported_unit_diag(
                     "line",
                     &line.id,
@@ -485,7 +523,7 @@ fn compile_node(
                 ));
                 return;
             };
-            let Some(x2) = dim_to_px(x2d.value, &x2d.unit) else {
+            let Some(x2_raw) = dim_to_px(x2d.value, &x2d.unit) else {
                 diagnostics.push(unsupported_unit_diag(
                     "line",
                     &line.id,
@@ -494,7 +532,7 @@ fn compile_node(
                 ));
                 return;
             };
-            let Some(y2) = dim_to_px(y2d.value, &y2d.unit) else {
+            let Some(y2_raw) = dim_to_px(y2d.value, &y2d.unit) else {
                 diagnostics.push(unsupported_unit_diag(
                     "line",
                     &line.id,
@@ -503,6 +541,12 @@ fn compile_node(
                 ));
                 return;
             };
+
+            // Apply group translation offset.
+            let x1 = x1_raw + ctx.dx;
+            let y1 = y1_raw + ctx.dy;
+            let x2 = x2_raw + ctx.dx;
+            let y2 = y2_raw + ctx.dy;
 
             // Stroke is optional in validation, but a stroke-less line draws nothing.
             let Some(stroke_prop) = &line.stroke else {
@@ -514,11 +558,9 @@ fn compile_node(
                 return;
             };
 
-            // Apply opacity.
-            if let Some(opacity) = line.opacity {
-                let o = opacity.clamp(0.0, 1.0);
-                color.a = (color.a as f64 * o).round() as u8;
-            }
+            // Apply node opacity then cascade ctx.opacity on top.
+            let node_opacity = line.opacity.unwrap_or(1.0).clamp(0.0, 1.0);
+            color.a = (color.a as f64 * node_opacity * ctx.opacity).round() as u8;
 
             // Resolve stroke_width to px; default 1.0 when absent.
             let stroke_width: f64 =
@@ -534,6 +576,10 @@ fn compile_node(
             });
         }
 
+        Node::Group(group) => {
+            compile_group(group, resolved, fonts, engine, commands, diagnostics, ctx);
+        }
+
         Node::Unknown(unknown) => {
             diagnostics.push(Diagnostic::advisory(
                 "scene.unsupported_node",
@@ -546,6 +592,64 @@ fn compile_node(
                 None,
             ));
         }
+    }
+}
+
+// NOTE: compile_group → compile_node → compile_group recursion has no depth
+// guard.  Pathologically deep group trees can overflow the stack.  This is a
+// known v0 limitation; a guard will be added when nested documents are tested.
+fn compile_group(
+    group: &GroupNode,
+    resolved: &BTreeMap<String, ResolvedToken>,
+    fonts: &dyn FontProvider,
+    engine: &RustybuzzEngine,
+    commands: &mut Vec<SceneCommand>,
+    diagnostics: &mut Vec<Diagnostic>,
+    ctx: RenderCtx,
+) {
+    // Entire subtree excluded when visible=false.
+    if group.visible == Some(false) {
+        return;
+    }
+
+    // Cascade opacity: multiply the group's own opacity into the inherited ctx.
+    let group_opacity = group.opacity.unwrap_or(1.0).clamp(0.0, 1.0);
+    let child_opacity = ctx.opacity * group_opacity;
+
+    // Resolve group x/y to pixels; absent or unsupported-unit → 0.0 (no diagnostic).
+    let group_x_px = group
+        .x
+        .as_ref()
+        .and_then(|d| dim_to_px(d.value, &d.unit))
+        .unwrap_or(0.0);
+    let group_y_px = group
+        .y
+        .as_ref()
+        .and_then(|d| dim_to_px(d.value, &d.unit))
+        .unwrap_or(0.0);
+
+    let child_dx = ctx.dx + group_x_px;
+    let child_dy = ctx.dy + group_y_px;
+
+    // DEFERRED: group rotate — consistent with the universal rotate deferral
+    // (no node applies rotate yet).
+
+    // Emit children in source order; the group itself produces no command.
+    let child_ctx = RenderCtx {
+        opacity: child_opacity,
+        dx: child_dx,
+        dy: child_dy,
+    };
+    for child in &group.children {
+        compile_node(
+            child,
+            resolved,
+            fonts,
+            engine,
+            commands,
+            diagnostics,
+            child_ctx,
+        );
     }
 }
 
@@ -564,8 +668,8 @@ fn dim_to_px(value: f64, unit: &Unit) -> Option<f64> {
 
 /// Build a `scene.unsupported_unit` advisory for a named geometry field.
 ///
-/// `kind` is the human-readable node kind ("rect" or "text node") used in the
-/// diagnostic message.
+/// `kind` is the human-readable node kind (e.g. `"rect"`, `"ellipse"`,
+/// `"line"`, `"text node"`) used in the diagnostic message.
 fn unsupported_unit_diag(kind: &str, node_id: &str, field: &str, span: Option<Span>) -> Diagnostic {
     Diagnostic::advisory(
         "scene.unsupported_unit",
@@ -1142,6 +1246,196 @@ mod tests {
         );
         // Determinism: two serializations must be identical.
         assert_eq!(j1, j2, "two serializations must be identical (determinism)");
+    }
+
+    // ── Group: children emitted in source order ───────────────────────────
+
+    #[test]
+    fn group_children_emitted_in_order() {
+        // A page with a bg rect and a group containing a rect then an ellipse.
+        // After PushClip + bg FillRect, the group produces: FillRect, FillEllipse.
+        let src = r##"zenith version=1 {
+  project id="proj.gc" name="GC"
+  tokens format="zenith-token-v1" {
+    token id="color.bg"   type="color" value="#ffffff"
+    token id="color.r"    type="color" value="#ff0000"
+    token id="color.e"    type="color" value="#0000ff"
+  }
+  styles {}
+  document id="doc.gc" title="GC" {
+    page id="page.gc" w=(px)320 h=(px)200 background=(token)"color.bg" {
+      group id="group.gc" {
+        rect id="rect.gc" x=(px)10 y=(px)10 w=(px)50 h=(px)50 fill=(token)"color.r"
+        ellipse id="ellipse.gc" x=(px)70 y=(px)10 w=(px)50 h=(px)50 fill=(token)"color.e"
+      }
+    }
+  }
+}
+"##;
+        let doc = parse(src);
+        let result = compile(&doc, &default_provider());
+
+        assert!(
+            result.diagnostics.is_empty(),
+            "unexpected diagnostics: {:?}",
+            result.diagnostics
+        );
+
+        let cmds = &result.scene.commands;
+        // PushClip, FillRect(bg), FillRect(rect.gc), FillEllipse(ellipse.gc), PopClip
+        assert_eq!(cmds.len(), 5, "expected 5 commands; got: {:?}", cmds);
+        assert!(matches!(cmds[0], SceneCommand::PushClip { .. }));
+        assert!(
+            matches!(cmds[1], SceneCommand::FillRect { .. }),
+            "cmd[1] must be bg FillRect"
+        );
+        assert!(
+            matches!(cmds[2], SceneCommand::FillRect { .. }),
+            "cmd[2] must be group-child FillRect"
+        );
+        assert!(
+            matches!(cmds[3], SceneCommand::FillEllipse { .. }),
+            "cmd[3] must be group-child FillEllipse"
+        );
+        assert!(matches!(cmds[4], SceneCommand::PopClip));
+    }
+
+    // ── Group: visible=false → entire subtree excluded ────────────────────
+
+    #[test]
+    fn invisible_group_subtree_not_emitted() {
+        let src = r##"zenith version=1 {
+  project id="proj.gv" name="GV"
+  tokens format="zenith-token-v1" {
+    token id="color.r" type="color" value="#ff0000"
+    token id="color.b" type="color" value="#0000ff"
+  }
+  styles {}
+  document id="doc.gv" title="GV" {
+    page id="page.gv" w=(px)100 h=(px)100 {
+      group id="group.gv" visible=#false {
+        rect id="rect.gv1" x=(px)0 y=(px)0 w=(px)50 h=(px)50 fill=(token)"color.r"
+        rect id="rect.gv2" x=(px)50 y=(px)50 w=(px)50 h=(px)50 fill=(token)"color.b"
+      }
+    }
+  }
+}
+"##;
+        let doc = parse(src);
+        let result = compile(&doc, &default_provider());
+
+        assert!(
+            result.diagnostics.is_empty(),
+            "unexpected diagnostics: {:?}",
+            result.diagnostics
+        );
+
+        let cmds = &result.scene.commands;
+        // Only PushClip + PopClip; both children excluded because group is invisible.
+        assert_eq!(
+            cmds.len(),
+            2,
+            "expected PushClip + PopClip only; got: {:?}",
+            cmds
+        );
+        assert!(matches!(cmds[0], SceneCommand::PushClip { .. }));
+        assert!(matches!(cmds[1], SceneCommand::PopClip));
+    }
+
+    // ── Group: opacity cascades to child alpha ────────────────────────────
+
+    #[test]
+    fn group_opacity_cascades_to_child() {
+        // Group opacity=0.5, child rect fill is fully opaque #ffffff (a=255).
+        // Expected child FillRect alpha ≈ 128 (255 * 1.0 * 0.5 = 127.5 → 128).
+        let src = r##"zenith version=1 {
+  project id="proj.go" name="GO"
+  tokens format="zenith-token-v1" {
+    token id="color.w" type="color" value="#ffffff"
+  }
+  styles {}
+  document id="doc.go" title="GO" {
+    page id="page.go" w=(px)100 h=(px)100 {
+      group id="group.go" opacity=0.5 {
+        rect id="rect.go" x=(px)0 y=(px)0 w=(px)100 h=(px)100 fill=(token)"color.w"
+      }
+    }
+  }
+}
+"##;
+        let doc = parse(src);
+        let result = compile(&doc, &default_provider());
+
+        assert!(
+            result.diagnostics.is_empty(),
+            "unexpected diagnostics: {:?}",
+            result.diagnostics
+        );
+
+        let cmds = &result.scene.commands;
+        // PushClip, FillRect, PopClip
+        assert_eq!(cmds.len(), 3, "expected 3 commands; got: {:?}", cmds);
+
+        match &cmds[1] {
+            SceneCommand::FillRect { color, .. } => {
+                // 255 * 1.0 (node opacity) * 0.5 (group opacity) = 127.5 → 128.
+                assert_eq!(
+                    color.a, 128,
+                    "cascaded opacity 0.5 must give a=128; got {}",
+                    color.a
+                );
+            }
+            other => panic!("expected FillRect, got {other:?}"),
+        }
+    }
+
+    // ── Group: x/y translates child geometry ─────────────────────────────
+
+    #[test]
+    fn group_xy_translates_child() {
+        // Group x=(px)10 y=(px)20; child rect at x=(px)5 y=(px)5.
+        // Expected FillRect at x=15.0 y=25.0.
+        let src = r##"zenith version=1 {
+  project id="proj.gt" name="GT"
+  tokens format="zenith-token-v1" {
+    token id="color.k" type="color" value="#000000"
+  }
+  styles {}
+  document id="doc.gt" title="GT" {
+    page id="page.gt" w=(px)200 h=(px)200 {
+      group id="group.gt" x=(px)10 y=(px)20 {
+        rect id="rect.gt" x=(px)5 y=(px)5 w=(px)50 h=(px)50 fill=(token)"color.k"
+      }
+    }
+  }
+}
+"##;
+        let doc = parse(src);
+        let result = compile(&doc, &default_provider());
+
+        assert!(
+            result.diagnostics.is_empty(),
+            "unexpected diagnostics: {:?}",
+            result.diagnostics
+        );
+
+        let cmds = &result.scene.commands;
+        // PushClip, FillRect, PopClip
+        assert_eq!(cmds.len(), 3, "expected 3 commands; got: {:?}", cmds);
+
+        match &cmds[1] {
+            SceneCommand::FillRect { x, y, .. } => {
+                assert_eq!(
+                    *x, 15.0,
+                    "child x must be group.x(10) + rect.x(5) = 15; got {x}"
+                );
+                assert_eq!(
+                    *y, 25.0,
+                    "child y must be group.y(20) + rect.y(5) = 25; got {y}"
+                );
+            }
+            other => panic!("expected FillRect, got {other:?}"),
+        }
     }
 
     // ── Unresolvable font → text_unshaped advisory, no DrawGlyphRun ──────

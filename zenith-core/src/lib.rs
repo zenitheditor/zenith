@@ -16,9 +16,9 @@ pub mod validate;
 
 // Curated flat re-exports for the most-used public surface.
 pub use ast::{
-    Dimension, Document, DocumentBody, EllipseNode, LineNode, Node, Page, Project, PropertyValue,
-    RectNode, Span, StyleBlock, TextNode, TextSpan, Token, TokenBlock, TokenLiteral, TokenType,
-    TokenValue, Unit, UnknownNode, UnknownProperty, UnknownValue,
+    Dimension, Document, DocumentBody, EllipseNode, GroupNode, LineNode, Node, Page, Project,
+    PropertyValue, RectNode, Span, StyleBlock, TextNode, TextSpan, Token, TokenBlock, TokenLiteral,
+    TokenType, TokenValue, Unit, UnknownNode, UnknownProperty, UnknownValue,
 };
 pub use diagnostics::{Diagnostic, Severity};
 pub use error::{FormatError, ParseError, ParseErrorCode};

@@ -149,6 +149,10 @@ pub fn validate(doc: &Document) -> ValidationReport {
 ///
 /// `referenced_token_ids` accumulates every token id actually used so that
 /// the unused-token check (done after the walk) can diff against defined ids.
+///
+/// # Known limitation
+/// Recursion through `Node::Group` children has no depth guard.  Pathologically
+/// deep trees can overflow the stack.  This is an accepted v0 limitation.
 fn walk_node(
     node: &Node,
     seen_ids: &mut HashSet<String>,
@@ -350,6 +354,38 @@ fn walk_node(
                     t.source_span,
                     Some(t.id.clone()),
                 ));
+            }
+        }
+
+        Node::Group(g) => {
+            register_id(&g.id, seen_ids, diagnostics);
+
+            // Groups have NO required geometry — x/y/w/h are all advisory.
+
+            // Unknown properties.
+            for prop_name in g.unknown_props.keys() {
+                diagnostics.push(Diagnostic::warning(
+                    "node.unknown_property",
+                    format!(
+                        "group '{}': unknown property '{}' (version-relative; \
+                         may be valid in a later schema version)",
+                        g.id, prop_name
+                    ),
+                    g.source_span,
+                    Some(g.id.clone()),
+                ));
+            }
+
+            // Recurse into children, passing the SAME seen_ids so that
+            // nested ids participate in the global uniqueness check.
+            for child in &g.children {
+                walk_node(
+                    child,
+                    seen_ids,
+                    referenced_token_ids,
+                    resolved_tokens,
+                    diagnostics,
+                );
             }
         }
 
@@ -556,7 +592,9 @@ mod tests {
 
     use super::*;
     use crate::ast::document::{Document, DocumentBody, Page};
-    use crate::ast::node::{EllipseNode, LineNode, Node, RectNode, TextNode, UnknownNode};
+    use crate::ast::node::{
+        EllipseNode, GroupNode, LineNode, Node, RectNode, TextNode, UnknownNode,
+    };
     use crate::ast::style::StyleBlock;
     use crate::ast::token::{Token, TokenBlock, TokenLiteral, TokenType, TokenValue};
     use crate::ast::value::{Dimension, PropertyValue, Unit};
@@ -1015,6 +1053,169 @@ mod tests {
                     visible: None,
                     locked: None,
                     rotate: None,
+                    source_span: None,
+                    unknown_props,
+                })],
+            )],
+        );
+        let report = validate(&doc);
+        assert!(
+            has_code(&report, "node.unknown_property"),
+            "codes: {:?}",
+            codes(&report)
+        );
+        let diag = report
+            .diagnostics
+            .iter()
+            .find(|d| d.code == "node.unknown_property")
+            .expect("should exist");
+        assert_eq!(diag.severity, Severity::Warning);
+        assert!(!report.has_errors());
+    }
+
+    // ── Group helpers ─────────────────────────────────────────────────────
+
+    fn minimal_group(id: &str, children: Vec<Node>) -> Node {
+        Node::Group(GroupNode {
+            id: id.to_owned(),
+            name: None,
+            role: None,
+            x: None,
+            y: None,
+            w: None,
+            h: None,
+            opacity: None,
+            visible: None,
+            locked: None,
+            rotate: None,
+            style: None,
+            children,
+            source_span: None,
+            unknown_props: BTreeMap::new(),
+        })
+    }
+
+    // ── Group: no required geometry — clean group has no errors ──────────
+
+    #[test]
+    fn group_with_children_no_errors() {
+        let doc = doc_with(
+            vec![color_token("color.fill")],
+            vec![minimal_page(
+                "page.one",
+                vec![minimal_group(
+                    "group.one",
+                    vec![minimal_rect("rect.inner", Some(token_ref("color.fill")))],
+                )],
+            )],
+        );
+        let report = validate(&doc);
+        assert!(
+            report.diagnostics.is_empty(),
+            "expected no diagnostics for clean group doc, got: {:?}",
+            codes(&report)
+        );
+        assert!(!report.has_errors());
+    }
+
+    // ── Group: nested id duplicate with page sibling → id.duplicate ──────
+
+    #[test]
+    fn group_nested_id_duplicate_with_page_sibling() {
+        // Page has a rect "shared" and a group containing another node "shared".
+        // The walk must share seen_ids across page-level and group-children,
+        // so the second "shared" triggers id.duplicate.
+        let doc = doc_with(
+            vec![],
+            vec![minimal_page(
+                "page.one",
+                vec![
+                    minimal_rect("shared", None),
+                    minimal_group("group.one", vec![minimal_rect("shared", None)]),
+                ],
+            )],
+        );
+        let report = validate(&doc);
+        assert!(
+            has_code(&report, "id.duplicate"),
+            "codes: {:?}",
+            codes(&report)
+        );
+        assert!(report.has_errors());
+    }
+
+    // ── Group: child with missing geometry surfaces → node.missing_geometry
+
+    #[test]
+    fn group_child_missing_geometry_surfaces() {
+        // A rect nested inside a group has no `x` property; walk_node must
+        // recurse into group children and report the missing geometry.
+        let child_rect = Node::Rect(RectNode {
+            id: "rect.inner".to_owned(),
+            name: None,
+            role: None,
+            x: None, // missing — triggers node.missing_geometry
+            y: Some(px(0.0)),
+            w: Some(px(50.0)),
+            h: Some(px(50.0)),
+            radius: None,
+            style: None,
+            fill: None,
+            stroke: None,
+            stroke_width: None,
+            stroke_alignment: None,
+            opacity: None,
+            visible: None,
+            locked: None,
+            rotate: None,
+            source_span: None,
+            unknown_props: BTreeMap::new(),
+        });
+        let doc = doc_with(
+            vec![],
+            vec![minimal_page(
+                "page.one",
+                vec![minimal_group("group.one", vec![child_rect])],
+            )],
+        );
+        let report = validate(&doc);
+        assert!(
+            has_code(&report, "node.missing_geometry"),
+            "codes: {:?}",
+            codes(&report)
+        );
+        assert!(report.has_errors());
+    }
+
+    // ── Group: unknown property → node.unknown_property (Warning) ─────────
+
+    #[test]
+    fn group_unknown_property_warns() {
+        let mut unknown_props = BTreeMap::new();
+        unknown_props.insert(
+            "future-blend".to_owned(),
+            crate::ast::node::UnknownProperty {
+                value: crate::ast::node::UnknownValue::String("multiply".to_owned()),
+            },
+        );
+        let doc = doc_with(
+            vec![],
+            vec![minimal_page(
+                "page.one",
+                vec![Node::Group(GroupNode {
+                    id: "group.one".to_owned(),
+                    name: None,
+                    role: None,
+                    x: None,
+                    y: None,
+                    w: None,
+                    h: None,
+                    opacity: None,
+                    visible: None,
+                    locked: None,
+                    rotate: None,
+                    style: None,
+                    children: vec![],
                     source_span: None,
                     unknown_props,
                 })],

@@ -165,6 +165,43 @@ pub struct UnknownNode {
     pub source_span: Option<Span>,
 }
 
+/// A `group` node — a container that holds child nodes and renders them in
+/// source order (first child = bottom of z-order).
+///
+/// Groups introduce recursive nesting: a group can contain any mix of leaf
+/// nodes and further groups.  The group itself emits no scene command; it
+/// only propagates a render context (opacity cascade + translation offset)
+/// to its descendants.
+#[derive(Debug, Clone, PartialEq)]
+pub struct GroupNode {
+    pub id: String,
+    pub name: Option<String>,
+    pub role: Option<String>,
+    /// Advisory x-translation offset applied to the subtree (default 0).
+    pub x: Option<Dimension>,
+    /// Advisory y-translation offset applied to the subtree (default 0).
+    pub y: Option<Dimension>,
+    /// Advisory bounding width — NOT used to scale children.
+    pub w: Option<Dimension>,
+    /// Advisory bounding height — NOT used to scale children.
+    pub h: Option<Dimension>,
+    /// Opacity that cascades (multiplies) into all descendant node alphas.
+    pub opacity: Option<f64>,
+    /// When `Some(false)` the entire subtree is excluded from the render.
+    pub visible: Option<bool>,
+    pub locked: Option<bool>,
+    /// Rotation — parsed and preserved but DEFERRED (not applied at render,
+    /// consistent with the universal rotate deferral on all node types).
+    pub rotate: Option<Dimension>,
+    pub style: Option<String>,
+    /// Child nodes in source order.
+    pub children: Vec<Node>,
+    /// Source declaration span, when available.
+    pub source_span: Option<Span>,
+    /// Unknown properties preserved for forward-compat.
+    pub unknown_props: BTreeMap<String, UnknownProperty>,
+}
+
 /// A renderable content node within a page.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Node {
@@ -172,5 +209,6 @@ pub enum Node {
     Ellipse(EllipseNode),
     Line(LineNode),
     Text(TextNode),
+    Group(GroupNode),
     Unknown(UnknownNode),
 }

@@ -218,6 +218,7 @@ fn find_node_mut<'doc>(doc: &'doc mut Document, id: &str) -> FindResult<'doc> {
             Node::Rect(r) => r.id == id,
             Node::Ellipse(e) => e.id == id,
             Node::Line(l) => l.id == id,
+            Node::Group(g) => g.id == id,
             Node::Unknown(_) => false,
         });
         if found { Some(pi) } else { None }
@@ -248,6 +249,9 @@ fn find_in_children_mut<'a>(children: &'a mut [Node], id: &str) -> Option<FindRe
         WrongType(&'static str),
     }
 
+    // NOTED LIMITATION: tx ops cannot yet target nodes nested inside a group;
+    // the scan is top-level only. Recursive nested-targeting is tracked as a
+    // separate unit.
     let hit = children
         .iter()
         .enumerate()
@@ -256,6 +260,7 @@ fn find_in_children_mut<'a>(children: &'a mut [Node], id: &str) -> Option<FindRe
             Node::Rect(r) if r.id == id => Some(Hit::WrongType("rect")),
             Node::Ellipse(e) if e.id == id => Some(Hit::WrongType("ellipse")),
             Node::Line(l) if l.id == id => Some(Hit::WrongType("line")),
+            Node::Group(g) if g.id == id => Some(Hit::WrongType("group")),
             // All other variants without a matching id, and Unknown: skip.
             _ => None,
         });
@@ -310,6 +315,7 @@ fn node_id_of(node: &Node) -> Option<&str> {
         Node::Ellipse(e) => Some(&e.id),
         Node::Line(l) => Some(&l.id),
         Node::Text(t) => Some(&t.id),
+        Node::Group(g) => Some(&g.id),
         Node::Unknown(_) => None,
     }
 }
@@ -550,6 +556,51 @@ mod tests {
                 .any(|d| d.code == "tx.wrong_node_type" && d.message.contains("ellipse")),
             "expected tx.wrong_node_type diagnostic naming the ellipse kind"
         );
+        assert_eq!(result.source_after, result.source_before);
+    }
+
+    // ── Group limitation: tx ops cannot yet target nodes nested in a group ──
+
+    #[test]
+    fn tx_cannot_yet_target_node_nested_in_group() {
+        // A document where a text node lives INSIDE a group.
+        // SetTextAlign on the nested text id → tx.unknown_node + Rejected,
+        // because find_node_mut only scans top-level page children.
+        // This test PINS the current limitation so the follow-up unit can flip it.
+        let src = r##"zenith version=1 {
+  project id="proj" name="Nest"
+  tokens format="zenith-token-v1" { }
+  styles { }
+  document id="doc1" title="T" {
+    page id="pg1" w=(px)400 h=(px)300 {
+      group id="grp1" {
+        text id="nested.label" x=(px)10 y=(px)10 w=(px)200 h=(px)40 {
+          span "Hello"
+        }
+      }
+    }
+  }
+}"##;
+        let doc = parse(src);
+        let tx = Transaction {
+            ops: vec![Op::SetTextAlign {
+                node: "nested.label".to_owned(),
+                align: "center".to_owned(),
+            }],
+        };
+        let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
+
+        // Must be Rejected: the nested text id is not visible at the top-level scan.
+        assert_eq!(result.status, TxStatus::Rejected);
+        assert!(
+            result
+                .diagnostics
+                .iter()
+                .any(|d| d.code == "tx.unknown_node"),
+            "expected tx.unknown_node diagnostic for nested node; got: {:?}",
+            result.diagnostics
+        );
+        // source_after must equal source_before (nothing was changed).
         assert_eq!(result.source_after, result.source_before);
     }
 
