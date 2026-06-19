@@ -22,7 +22,7 @@ pub use ast::{
     FrameNode, GroupNode, ImageNode, LineNode, Node, ObjectPosition, Page, Point, PolygonNode,
     PolylineNode, Project, PropertyValue, RectNode, Span, Style, StyleBlock, TextNode, TextSpan,
     Token, TokenBlock, TokenLiteral, TokenType, TokenValue, Unit, UnknownNode, UnknownProperty,
-    UnknownStyleProp, UnknownValue,
+    UnknownStyleProp, UnknownValue, dim_to_px,
 };
 pub use diagnostics::{Diagnostic, Severity};
 pub use error::{FormatError, ParseError, ParseErrorCode};

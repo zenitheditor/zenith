@@ -37,6 +37,22 @@ pub struct Dimension {
     pub unit: Unit,
 }
 
+/// Convert a dimension value + unit to pixels.
+///
+/// Returns `Some(px)` for `Px` (identity) and `Pt` (×96/72).
+/// Returns `None` for `Pct`, `Deg`, and `Unknown` — the caller decides
+/// whether to resolve against an axis basis or emit an advisory.
+///
+/// This is the canonical conversion used by both the scene compiler and the
+/// validator; keeping it here ensures both agree on the arithmetic.
+pub fn dim_to_px(value: f64, unit: &Unit) -> Option<f64> {
+    match unit {
+        Unit::Px => Some(value),
+        Unit::Pt => Some(value * 96.0 / 72.0),
+        Unit::Pct | Unit::Deg | Unit::Unknown(_) => None,
+    }
+}
+
 /// A property value that is either a token reference or a raw literal string.
 #[derive(Debug, Clone, PartialEq)]
 pub enum PropertyValue {

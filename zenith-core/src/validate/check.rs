@@ -28,7 +28,7 @@ use crate::ast::document::Document;
 use crate::ast::node::{Node, PolygonNode, PolylineNode};
 use crate::ast::style::StyleBlock;
 use crate::ast::token::TokenType;
-use crate::ast::value::{PropertyValue, Unit};
+use crate::ast::value::{Dimension, PropertyValue, Unit, dim_to_px};
 use crate::diagnostics::{Diagnostic, Severity};
 use crate::tokens::ResolvedToken;
 
@@ -148,6 +148,13 @@ pub fn validate(doc: &Document) -> ValidationReport {
             &mut diagnostics,
         );
 
+        // ── Resolve page dimensions to px for off_canvas checks ──────────
+        // If either dimension is unresolvable (e.g. Pct/Deg unit — already
+        // diagnosed above as node.invalid_geometry), skip off_canvas checks
+        // for this page to avoid spurious noise.
+        let page_px_bounds = dim_to_px(page.width.value, &page.width.unit)
+            .zip(dim_to_px(page.height.value, &page.height.unit));
+
         // ── Walk page children ────────────────────────────────────────────
         for node in &page.children {
             walk_node(
@@ -157,6 +164,7 @@ pub fn validate(doc: &Document) -> ValidationReport {
                 resolved_tokens,
                 &declared_asset_ids,
                 &declared_style_ids,
+                page_px_bounds,
                 &mut diagnostics,
             );
         }
@@ -190,6 +198,10 @@ pub fn validate(doc: &Document) -> ValidationReport {
 /// `referenced_token_ids` accumulates every token id actually used so that
 /// the unused-token check (done after the walk) can diff against defined ids.
 ///
+/// `page_px_bounds` is `Some((page_w, page_h))` when the page's dimensions
+/// resolved successfully; `None` means off_canvas checks are skipped for this
+/// page (page unit was bad — already diagnosed).
+///
 /// # Known limitation
 /// Recursion through `Node::Group` and `Node::Frame` children has no depth
 /// guard.  Pathologically deep trees can overflow the stack.  This is an
@@ -202,8 +214,30 @@ fn walk_node(
     resolved_tokens: &BTreeMap<String, ResolvedToken>,
     declared_asset_ids: &HashSet<String>,
     declared_style_ids: &HashSet<String>,
+    page_px_bounds: Option<(f64, f64)>,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
+    // ── off_canvas advisory ───────────────────────────────────────────────
+    // Check whether the node's authored bounding box exceeds the page rect
+    // [0, 0, page_w, page_h]. This uses authored coordinates only — group
+    // translation offsets are NOT accumulated (v0 advisory behavior; render-
+    // time offset accumulation is a scene-compiler concern, not validation).
+    if let Some((page_w, page_h)) = page_px_bounds
+        && let Some((nx, ny, nw, nh)) = node_bbox(node, page_w, page_h)
+        && (nx < 0.0 || ny < 0.0 || nx + nw > page_w || ny + nh > page_h)
+    {
+        let (node_id, node_span) = node_id_and_span(node);
+        diagnostics.push(Diagnostic::advisory(
+            "off_canvas",
+            format!(
+                "node '{}' extends outside the page bounds (0, 0, {page_w}, {page_h})",
+                node_id
+            ),
+            node_span,
+            Some(node_id.to_owned()),
+        ));
+    }
+
     match node {
         Node::Rect(r) => {
             register_id(&r.id, seen_ids, diagnostics);
@@ -539,6 +573,7 @@ fn walk_node(
                     resolved_tokens,
                     declared_asset_ids,
                     declared_style_ids,
+                    page_px_bounds,
                     diagnostics,
                 );
             }
@@ -580,6 +615,7 @@ fn walk_node(
                     resolved_tokens,
                     declared_asset_ids,
                     declared_style_ids,
+                    page_px_bounds,
                     diagnostics,
                 );
             }
@@ -682,6 +718,143 @@ fn walk_node(
             ));
             // Unknown nodes have no children in the v0 AST; nothing to recurse.
         }
+    }
+}
+
+// ── off_canvas geometry helpers ───────────────────────────────────────────────
+
+/// Resolve a single geometry axis dimension to pixels.
+///
+/// `Pct` is resolved against `basis` (e.g. page_w for x/w, page_h for y/h).
+/// All other convertible units delegate to [`dim_to_px`]; `None` on failure.
+fn resolve_axis(dim: &Dimension, basis: f64) -> Option<f64> {
+    if dim.unit == Unit::Pct {
+        Some(dim.value / 100.0 * basis)
+    } else {
+        dim_to_px(dim.value, &dim.unit)
+    }
+}
+
+/// Compute the authored bounding box `(x, y, w, h)` of a node in pixels.
+///
+/// Returns `None` when the node has no resolvable bounding box (Group, Unknown,
+/// or any node with a missing/unresolvable required dimension). Callers should
+/// treat `None` as "no check possible" and produce no advisory.
+///
+/// v0 NOTE: authored coordinates are used as-is. Group translation offsets are
+/// NOT accumulated here (that is a scene-compiler / render-time concern). The
+/// off_canvas advisory documents this v0 behavior: it checks authored geometry
+/// against the page rectangle, not render-time geometry.
+fn node_bbox(node: &Node, page_w: f64, page_h: f64) -> Option<(f64, f64, f64, f64)> {
+    match node {
+        Node::Rect(n) => {
+            let x = resolve_axis(n.x.as_ref()?, page_w)?;
+            let y = resolve_axis(n.y.as_ref()?, page_h)?;
+            let w = resolve_axis(n.w.as_ref()?, page_w)?;
+            let h = resolve_axis(n.h.as_ref()?, page_h)?;
+            Some((x, y, w, h))
+        }
+        Node::Ellipse(n) => {
+            let x = resolve_axis(n.x.as_ref()?, page_w)?;
+            let y = resolve_axis(n.y.as_ref()?, page_h)?;
+            let w = resolve_axis(n.w.as_ref()?, page_w)?;
+            let h = resolve_axis(n.h.as_ref()?, page_h)?;
+            Some((x, y, w, h))
+        }
+        Node::Image(n) => {
+            let x = resolve_axis(n.x.as_ref()?, page_w)?;
+            let y = resolve_axis(n.y.as_ref()?, page_h)?;
+            let w = resolve_axis(n.w.as_ref()?, page_w)?;
+            let h = resolve_axis(n.h.as_ref()?, page_h)?;
+            Some((x, y, w, h))
+        }
+        Node::Frame(n) => {
+            let x = resolve_axis(n.x.as_ref()?, page_w)?;
+            let y = resolve_axis(n.y.as_ref()?, page_h)?;
+            let w = resolve_axis(n.w.as_ref()?, page_w)?;
+            let h = resolve_axis(n.h.as_ref()?, page_h)?;
+            Some((x, y, w, h))
+        }
+        Node::Text(n) => {
+            let x = resolve_axis(n.x.as_ref()?, page_w)?;
+            let y = resolve_axis(n.y.as_ref()?, page_h)?;
+            let w = resolve_axis(n.w.as_ref()?, page_w)?;
+            let h = resolve_axis(n.h.as_ref()?, page_h)?;
+            Some((x, y, w, h))
+        }
+        Node::Code(n) => {
+            let x = resolve_axis(n.x.as_ref()?, page_w)?;
+            let y = resolve_axis(n.y.as_ref()?, page_h)?;
+            let w = resolve_axis(n.w.as_ref()?, page_w)?;
+            let h = resolve_axis(n.h.as_ref()?, page_h)?;
+            Some((x, y, w, h))
+        }
+        Node::Line(n) => {
+            let x1 = resolve_axis(n.x1.as_ref()?, page_w)?;
+            let y1 = resolve_axis(n.y1.as_ref()?, page_h)?;
+            let x2 = resolve_axis(n.x2.as_ref()?, page_w)?;
+            let y2 = resolve_axis(n.y2.as_ref()?, page_h)?;
+            let bx = x1.min(x2);
+            let by = y1.min(y2);
+            let bw = (x2 - x1).abs();
+            let bh = (y2 - y1).abs();
+            Some((bx, by, bw, bh))
+        }
+        Node::Polygon(n) => points_bbox(&n.points, page_w, page_h),
+        Node::Polyline(n) => points_bbox(&n.points, page_w, page_h),
+        // Groups have no authoritative bbox in v0 — children are checked individually.
+        Node::Group(_) | Node::Unknown(_) => None,
+    }
+}
+
+/// Compute the bounding box of a slice of [`Point`]s, resolving each coordinate
+/// against the given page axis bases.
+///
+/// Returns `Some((min_x, min_y, w, h))` when at least one point resolves
+/// successfully, `None` when no point has resolvable coordinates.
+fn points_bbox(
+    points: &[crate::ast::node::Point],
+    page_w: f64,
+    page_h: f64,
+) -> Option<(f64, f64, f64, f64)> {
+    let mut min_x = f64::INFINITY;
+    let mut min_y = f64::INFINITY;
+    let mut max_x = f64::NEG_INFINITY;
+    let mut max_y = f64::NEG_INFINITY;
+    let mut any = false;
+    for pt in points {
+        if let (Some(px_val), Some(py_val)) = (
+            pt.x.as_ref().and_then(|d| resolve_axis(d, page_w)),
+            pt.y.as_ref().and_then(|d| resolve_axis(d, page_h)),
+        ) {
+            min_x = min_x.min(px_val);
+            min_y = min_y.min(py_val);
+            max_x = max_x.max(px_val);
+            max_y = max_y.max(py_val);
+            any = true;
+        }
+    }
+    if any {
+        Some((min_x, min_y, max_x - min_x, max_y - min_y))
+    } else {
+        None
+    }
+}
+
+/// Extract the string id and source span from any node variant.
+fn node_id_and_span(node: &Node) -> (&str, Option<crate::ast::Span>) {
+    match node {
+        Node::Rect(n) => (&n.id, n.source_span),
+        Node::Ellipse(n) => (&n.id, n.source_span),
+        Node::Line(n) => (&n.id, n.source_span),
+        Node::Text(n) => (&n.id, n.source_span),
+        Node::Code(n) => (&n.id, n.source_span),
+        Node::Frame(n) => (&n.id, n.source_span),
+        Node::Group(n) => (&n.id, n.source_span),
+        Node::Image(n) => (&n.id, n.source_span),
+        Node::Polygon(n) => (&n.id, n.source_span),
+        Node::Polyline(n) => (&n.id, n.source_span),
+        Node::Unknown(n) => (&n.kind, n.source_span),
     }
 }
 
@@ -3355,6 +3528,144 @@ mod tests {
         assert!(
             unused.is_empty(),
             "token referenced by style must not be flagged token.unused; codes: {:?}",
+            codes(&report)
+        );
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // off_canvas advisory tests
+    // ══════════════════════════════════════════════════════════════════════
+
+    /// Helper: build a page with a given width/height (px) and children.
+    fn bounded_page(id: &str, w: f64, h: f64, children: Vec<Node>) -> Page {
+        Page {
+            id: id.to_owned(),
+            name: None,
+            width: px(w),
+            height: px(h),
+            background: None,
+            children,
+            source_span: None,
+        }
+    }
+
+    /// Helper: rect at (x, y, w, h) in px, no fill.
+    fn rect_at(id: &str, x: f64, y: f64, w: f64, h: f64) -> Node {
+        Node::Rect(RectNode {
+            id: id.to_owned(),
+            name: None,
+            role: None,
+            x: Some(px(x)),
+            y: Some(px(y)),
+            w: Some(px(w)),
+            h: Some(px(h)),
+            radius: None,
+            style: None,
+            fill: None,
+            stroke: None,
+            stroke_width: None,
+            stroke_alignment: None,
+            opacity: None,
+            visible: None,
+            locked: None,
+            rotate: None,
+            source_span: None,
+            unknown_props: BTreeMap::new(),
+        })
+    }
+
+    /// A rect with x=-20 on a 100×100 page → off_canvas advisory.
+    #[test]
+    fn rect_negative_x_is_off_canvas() {
+        let doc = doc_with(
+            vec![],
+            vec![bounded_page(
+                "page.one",
+                100.0,
+                100.0,
+                vec![rect_at("rect.out", -20.0, 0.0, 50.0, 50.0)],
+            )],
+        );
+        let report = validate(&doc);
+        assert!(
+            has_code(&report, "off_canvas"),
+            "expected off_canvas advisory; codes: {:?}",
+            codes(&report)
+        );
+        let diag = report
+            .diagnostics
+            .iter()
+            .find(|d| d.code == "off_canvas")
+            .expect("must exist");
+        assert_eq!(diag.severity, Severity::Advisory);
+        assert_eq!(diag.subject_id.as_deref(), Some("rect.out"));
+        // off_canvas is advisory only — no errors.
+        assert!(!report.has_errors());
+    }
+
+    /// A rect fully inside the page → NO off_canvas advisory.
+    #[test]
+    fn rect_fully_inside_no_off_canvas() {
+        let doc = doc_with(
+            vec![],
+            vec![bounded_page(
+                "page.one",
+                100.0,
+                100.0,
+                vec![rect_at("rect.in", 10.0, 10.0, 80.0, 80.0)],
+            )],
+        );
+        let report = validate(&doc);
+        assert!(
+            !has_code(&report, "off_canvas"),
+            "rect fully inside should NOT get off_canvas; codes: {:?}",
+            codes(&report)
+        );
+    }
+
+    /// A rect at x=80, w=40 (right edge=120 > page_w=100) → off_canvas.
+    #[test]
+    fn rect_overflowing_right_edge_is_off_canvas() {
+        let doc = doc_with(
+            vec![],
+            vec![bounded_page(
+                "page.one",
+                100.0,
+                100.0,
+                vec![rect_at("rect.wide", 80.0, 0.0, 40.0, 50.0)],
+            )],
+        );
+        let report = validate(&doc);
+        assert!(
+            has_code(&report, "off_canvas"),
+            "rect extending past right edge should be off_canvas; codes: {:?}",
+            codes(&report)
+        );
+        let diag = report
+            .diagnostics
+            .iter()
+            .find(|d| d.code == "off_canvas")
+            .expect("must exist");
+        assert_eq!(diag.severity, Severity::Advisory);
+        assert!(!report.has_errors());
+    }
+
+    /// A rect exactly touching the page edges (x=0,y=0,w=100,h=100) → no off_canvas.
+    #[test]
+    fn rect_exactly_on_page_edge_no_off_canvas() {
+        let doc = doc_with(
+            vec![],
+            vec![bounded_page(
+                "page.one",
+                100.0,
+                100.0,
+                vec![rect_at("rect.edge", 0.0, 0.0, 100.0, 100.0)],
+            )],
+        );
+        let report = validate(&doc);
+        assert!(
+            !has_code(&report, "off_canvas"),
+            "rect exactly on page boundary should NOT be off_canvas; codes: {:?}",
             codes(&report)
         );
     }

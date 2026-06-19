@@ -13,7 +13,7 @@ use std::collections::BTreeMap;
 use zenith_core::{
     Diagnostic, Document, FontProvider, FontStyle, FrameNode, GroupNode, ImageNode, Node,
     ObjectPosition, Point, PolygonNode, PolylineNode, PropertyValue, ResolvedToken, ResolvedValue,
-    Span, Style, TokenKind, Unit, builtin_color, is_supported, resolve_tokens, scan,
+    Span, Style, TokenKind, builtin_color, dim_to_px, is_supported, resolve_tokens, scan,
     token_id_for_kind,
 };
 use zenith_layout::{RustybuzzEngine, ShapeRequest, TextLayoutEngine, ZenithGlyphRun};
@@ -2003,17 +2003,6 @@ fn object_pos_to_f64(pos: &Option<ObjectPosition>) -> f64 {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-/// Convert a dimension value + unit to pixels.
-///
-/// Returns `None` for unsupported / unknown units (caller pushes advisory).
-fn dim_to_px(value: f64, unit: &Unit) -> Option<f64> {
-    match unit {
-        Unit::Px => Some(value),
-        Unit::Pt => Some(value * 96.0 / 72.0),
-        Unit::Pct | Unit::Deg | Unit::Unknown(_) => None,
-    }
-}
 
 /// Build a `scene.unsupported_unit` advisory for a named geometry field.
 ///
