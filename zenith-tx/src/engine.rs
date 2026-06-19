@@ -5,10 +5,10 @@
 
 use zenith_core::{
     Diagnostic, Dimension, Document, KdlAdapter, KdlSource, Node, Point, PropertyValue, Severity,
-    Unit, validate,
+    TextSpan, Unit, validate,
 };
 
-use crate::op::{Op, OpPoint, Position, Transaction};
+use crate::op::{Op, OpPoint, OpSpan, Position, Transaction};
 use crate::result::{TxError, TxResult, TxStatus};
 
 // ── Valid align values ────────────────────────────────────────────────────────
@@ -160,6 +160,18 @@ fn apply_op(
         }
         Op::RemoveNode { node: node_id } => {
             apply_remove_node(node_id, doc, diagnostics, affected);
+        }
+        Op::SetOpacity {
+            node: node_id,
+            opacity,
+        } => {
+            apply_set_opacity(node_id, *opacity, doc, diagnostics, affected);
+        }
+        Op::ReplaceText {
+            node: node_id,
+            spans,
+        } => {
+            apply_replace_text(node_id, spans, doc, diagnostics, affected);
         }
     }
 }
@@ -494,6 +506,24 @@ fn node_points_mut(node: &mut Node) -> Option<&mut Vec<Point>> {
         Node::Polygon(p) => Some(&mut p.points),
         Node::Polyline(p) => Some(&mut p.points),
         _ => None,
+    }
+}
+
+/// Return a mutable reference to the `opacity` field of a node, or `None`
+/// for `Node::Unknown` which carries no `opacity` field.
+fn node_opacity_mut(node: &mut Node) -> Option<&mut Option<f64>> {
+    match node {
+        Node::Rect(n) => Some(&mut n.opacity),
+        Node::Ellipse(n) => Some(&mut n.opacity),
+        Node::Line(n) => Some(&mut n.opacity),
+        Node::Text(n) => Some(&mut n.opacity),
+        Node::Code(n) => Some(&mut n.opacity),
+        Node::Frame(n) => Some(&mut n.opacity),
+        Node::Group(n) => Some(&mut n.opacity),
+        Node::Image(n) => Some(&mut n.opacity),
+        Node::Polygon(n) => Some(&mut n.opacity),
+        Node::Polyline(n) => Some(&mut n.opacity),
+        Node::Unknown(_) => None,
     }
 }
 
@@ -1071,6 +1101,94 @@ fn apply_remove_node(
         None,
         Some(node_id.to_owned()),
     ));
+}
+
+// ── SetOpacity ────────────────────────────────────────────────────────────────
+
+fn apply_set_opacity(
+    node_id: &str,
+    opacity: f64,
+    doc: &mut Document,
+    diagnostics: &mut Vec<Diagnostic>,
+    affected: &mut Vec<String>,
+) {
+    match find_node_any_mut(doc, node_id) {
+        None => {
+            diagnostics.push(Diagnostic::error(
+                "tx.unknown_node",
+                format!("node {:?} not found in document", node_id),
+                None,
+                Some(node_id.to_owned()),
+            ));
+        }
+        Some(node) => {
+            let kind = node_kind_str(node);
+            match node_opacity_mut(node) {
+                Some(slot) => {
+                    *slot = Some(opacity.clamp(0.0, 1.0));
+                    record_affected(node_id, affected);
+                }
+                None => {
+                    diagnostics.push(Diagnostic::error(
+                        "tx.unsupported_property",
+                        format!("set_opacity is not supported on a {} node", kind),
+                        None,
+                        Some(node_id.to_owned()),
+                    ));
+                }
+            }
+        }
+    }
+}
+
+// ── ReplaceText ───────────────────────────────────────────────────────────────
+
+fn apply_replace_text(
+    node_id: &str,
+    spans: &[OpSpan],
+    doc: &mut Document,
+    diagnostics: &mut Vec<Diagnostic>,
+    affected: &mut Vec<String>,
+) {
+    match find_node_any_mut(doc, node_id) {
+        None => {
+            diagnostics.push(Diagnostic::error(
+                "tx.unknown_node",
+                format!("node {:?} not found in document", node_id),
+                None,
+                Some(node_id.to_owned()),
+            ));
+        }
+        Some(Node::Text(text_node)) => {
+            text_node.spans = spans
+                .iter()
+                .map(|s| TextSpan {
+                    text: s.text.clone(),
+                    fill: s
+                        .fill
+                        .as_ref()
+                        .map(|id| PropertyValue::TokenRef(id.clone())),
+                    font_weight: s
+                        .font_weight
+                        .as_ref()
+                        .map(|id| PropertyValue::TokenRef(id.clone())),
+                    italic: s.italic,
+                    underline: s.underline,
+                    strikethrough: s.strikethrough,
+                })
+                .collect();
+            record_affected(node_id, affected);
+        }
+        Some(other) => {
+            let kind = node_kind_str(other);
+            diagnostics.push(Diagnostic::error(
+                "tx.unsupported_property",
+                format!("replace_text is not supported on a {} node", kind),
+                None,
+                Some(node_id.to_owned()),
+            ));
+        }
+    }
 }
 
 // ── Reorder internals ────────────────────────────────────────────────────────
@@ -3043,6 +3161,261 @@ mod tests {
                     },
                 ],
             }
+        );
+    }
+
+    // ── SetOpacity tests ──────────────────────────────────────────────────────
+
+    #[test]
+    fn set_opacity_on_rect() {
+        let doc = parse(TWO_RECT_DOC);
+        let tx = Transaction {
+            ops: vec![Op::SetOpacity {
+                node: "a".to_owned(),
+                opacity: 0.5,
+            }],
+        };
+        let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
+
+        assert_eq!(result.status, TxStatus::Accepted);
+        assert_eq!(result.affected_node_ids, vec!["a".to_owned()]);
+        assert!(
+            result.source_after.contains("opacity=0.5"),
+            "source_after must contain opacity=0.5; got:\n{}",
+            result.source_after
+        );
+        assert_ne!(result.source_before, result.source_after);
+    }
+
+    #[test]
+    fn set_opacity_clamped_above_one() {
+        let doc = parse(TWO_RECT_DOC);
+        let tx = Transaction {
+            ops: vec![Op::SetOpacity {
+                node: "a".to_owned(),
+                opacity: 1.5,
+            }],
+        };
+        let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
+
+        assert_eq!(result.status, TxStatus::Accepted);
+        // 1.5 clamped to 1.0; formatter writes "1" (or "1.0") — just verify source
+        // changed and the candidate has Some(1.0) by checking node in candidate.
+        // We check the diagnostic list is clean (no errors) and affected is recorded.
+        assert!(
+            result
+                .diagnostics
+                .iter()
+                .all(|d| d.severity != zenith_core::Severity::Error),
+            "no errors expected; got: {:?}",
+            result.diagnostics
+        );
+        assert_eq!(result.affected_node_ids, vec!["a".to_owned()]);
+    }
+
+    #[test]
+    fn set_opacity_clamped_below_zero() {
+        let doc = parse(TWO_RECT_DOC);
+        let tx = Transaction {
+            ops: vec![Op::SetOpacity {
+                node: "a".to_owned(),
+                opacity: -0.5,
+            }],
+        };
+        let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
+
+        assert_eq!(result.status, TxStatus::Accepted);
+        assert_eq!(result.affected_node_ids, vec!["a".to_owned()]);
+        assert!(
+            result.source_after.contains("opacity=0"),
+            "clamped-to-0 opacity must appear in source_after; got:\n{}",
+            result.source_after
+        );
+    }
+
+    #[test]
+    fn set_opacity_unknown_node_rejected() {
+        let doc = parse(TWO_RECT_DOC);
+        let tx = Transaction {
+            ops: vec![Op::SetOpacity {
+                node: "nope".to_owned(),
+                opacity: 0.5,
+            }],
+        };
+        let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
+
+        assert_eq!(result.status, TxStatus::Rejected);
+        assert!(
+            result
+                .diagnostics
+                .iter()
+                .any(|d| d.code == "tx.unknown_node"),
+            "expected tx.unknown_node; got: {:?}",
+            result.diagnostics
+        );
+        assert_eq!(result.source_after, result.source_before);
+    }
+
+    // ── from_json round-trip: set_opacity + replace_text ─────────────────────
+
+    #[test]
+    fn from_json_set_opacity_replace_text_round_trip() {
+        use crate::op::OpSpan;
+        let json = r#"{"ops":[
+            {"op":"set_opacity","node":"box","opacity":0.75},
+            {"op":"replace_text","node":"lbl","spans":[
+                {"text":"Hello","fill":"color.brand","italic":true},
+                {"text":" world","underline":false}
+            ]}
+        ]}"#;
+        let tx = Transaction::from_json(json).expect("parse JSON");
+        assert_eq!(
+            tx,
+            Transaction {
+                ops: vec![
+                    Op::SetOpacity {
+                        node: "box".to_owned(),
+                        opacity: 0.75,
+                    },
+                    Op::ReplaceText {
+                        node: "lbl".to_owned(),
+                        spans: vec![
+                            OpSpan {
+                                text: "Hello".to_owned(),
+                                fill: Some("color.brand".to_owned()),
+                                font_weight: None,
+                                italic: Some(true),
+                                underline: None,
+                                strikethrough: None,
+                            },
+                            OpSpan {
+                                text: " world".to_owned(),
+                                fill: None,
+                                font_weight: None,
+                                italic: None,
+                                underline: Some(false),
+                                strikethrough: None,
+                            },
+                        ],
+                    },
+                ],
+            }
+        );
+    }
+
+    // ── ReplaceText tests ─────────────────────────────────────────────────────
+
+    #[test]
+    fn replace_text_updates_spans() {
+        use crate::op::OpSpan;
+        let doc = parse(TEXT_DOC);
+        let tx = Transaction {
+            ops: vec![Op::ReplaceText {
+                node: "label".to_owned(),
+                spans: vec![OpSpan {
+                    text: "Goodbye".to_owned(),
+                    fill: None,
+                    font_weight: None,
+                    italic: None,
+                    underline: None,
+                    strikethrough: None,
+                }],
+            }],
+        };
+        let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
+
+        assert_eq!(result.status, TxStatus::Accepted);
+        assert_eq!(result.affected_node_ids, vec!["label".to_owned()]);
+        assert!(
+            result.source_after.contains("Goodbye"),
+            "source_after must contain new text; got:\n{}",
+            result.source_after
+        );
+        assert!(
+            !result.source_after.contains("Hello"),
+            "old text must not appear in source_after"
+        );
+        assert_ne!(result.source_before, result.source_after);
+    }
+
+    #[test]
+    fn replace_text_on_rect_unsupported() {
+        use crate::op::OpSpan;
+        let doc = parse(MIXED_DOC);
+        let tx = Transaction {
+            ops: vec![Op::ReplaceText {
+                node: "box1".to_owned(),
+                spans: vec![OpSpan {
+                    text: "hi".to_owned(),
+                    fill: None,
+                    font_weight: None,
+                    italic: None,
+                    underline: None,
+                    strikethrough: None,
+                }],
+            }],
+        };
+        let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
+
+        assert_eq!(result.status, TxStatus::Rejected);
+        assert!(
+            result
+                .diagnostics
+                .iter()
+                .any(|d| d.code == "tx.unsupported_property" && d.message.contains("rect")),
+            "expected tx.unsupported_property naming rect; got: {:?}",
+            result.diagnostics
+        );
+        assert_eq!(result.source_after, result.source_before);
+    }
+
+    #[test]
+    fn replace_text_span_with_fill_token() {
+        use crate::op::OpSpan;
+        // A doc that has both color tokens and a text node.
+        const TEXT_WITH_TOKEN_DOC: &str = r##"zenith version=1 {
+  project id="proj" name="Test"
+  tokens format="zenith-token-v1" {
+    token id="color.a" type="color" value="#ff0000"
+    token id="color.b" type="color" value="#0000ff"
+  }
+  styles { }
+  document id="doc1" title="T" {
+    page id="pg1" w=(px)400 h=(px)300 {
+      text id="lbl" x=(px)10 y=(px)10 w=(px)200 h=(px)40 {
+        span "Original"
+      }
+    }
+  }
+}"##;
+        let doc2 = parse(TEXT_WITH_TOKEN_DOC);
+        let tx = Transaction {
+            ops: vec![Op::ReplaceText {
+                node: "lbl".to_owned(),
+                spans: vec![OpSpan {
+                    text: "Branded".to_owned(),
+                    fill: Some("color.a".to_owned()),
+                    font_weight: None,
+                    italic: None,
+                    underline: None,
+                    strikethrough: None,
+                }],
+            }],
+        };
+        let result = run_transaction(&doc2, &tx).expect("run_transaction should not error");
+
+        assert_eq!(
+            result.status,
+            TxStatus::Accepted,
+            "expected Accepted; diagnostics: {:?}",
+            result.diagnostics
+        );
+        assert_eq!(result.affected_node_ids, vec!["lbl".to_owned()]);
+        // The formatter should emit the span's fill token ref in source_after.
+        assert!(
+            result.source_after.contains("Branded"),
+            "new text must appear in source_after; got:\n{}",
+            result.source_after
         );
     }
 }

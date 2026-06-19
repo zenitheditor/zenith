@@ -27,6 +27,32 @@ pub struct OpPoint {
     pub y: f64,
 }
 
+/// A single text span used by [`Op::ReplaceText`].
+///
+/// JSON shape: `{"text":"Hello","fill":"color.brand","italic":true}`.
+/// All fields except `text` are optional and default to `None`/absent.
+/// `fill` and `font_weight` are token ids (like [`Op::SetFill`]), not raw values.
+#[derive(serde::Deserialize, Debug, Clone, PartialEq)]
+pub struct OpSpan {
+    /// The literal text content of this span.
+    pub text: String,
+    /// Token id to set as the per-span fill (e.g. `"color.brand"`). `None` = inherit.
+    #[serde(default)]
+    pub fill: Option<String>,
+    /// Token id to set as the per-span font-weight. `None` = inherit.
+    #[serde(default)]
+    pub font_weight: Option<String>,
+    /// Italic override. `None` = inherit.
+    #[serde(default)]
+    pub italic: Option<bool>,
+    /// Underline decoration. `None` = inherit.
+    #[serde(default)]
+    pub underline: Option<bool>,
+    /// Strikethrough decoration. `None` = inherit.
+    #[serde(default)]
+    pub strikethrough: Option<bool>,
+}
+
 /// Insertion position for [`Op::AddNode`] within a container's children.
 ///
 /// JSON shapes: `{"at":"last"}`, `{"at":"first"}`, `{"at":"index","index":2}`,
@@ -246,5 +272,34 @@ pub enum Op {
     RemoveNode {
         /// The stable node `id` to remove.
         node: String,
+    },
+    /// Set the `opacity` of a node (0.0 = fully transparent, 1.0 = fully opaque).
+    ///
+    /// The value is clamped to `[0.0, 1.0]` before being stored.
+    ///
+    /// Supported nodes: all concrete variants (`rect`, `ellipse`, `line`, `text`,
+    /// `code`, `frame`, `group`, `image`, `polygon`, `polyline`).
+    /// Unsupported: `unknown` — yields `tx.unsupported_property`.
+    SetOpacity {
+        /// The stable node `id` to target.
+        node: String,
+        /// New opacity value; clamped to `[0.0, 1.0]`.
+        opacity: f64,
+    },
+    /// Replace the entire span list of a `text` node with a new set of spans.
+    ///
+    /// The `spans` vec fully replaces `TextNode.spans`. Replacing with an empty
+    /// vec is valid and clears all text content. `fill` and `font_weight` in each
+    /// [`OpSpan`] are token ids wrapped as `PropertyValue::TokenRef`; post-validation
+    /// rejects unknown token ids automatically (same as `set_fill`).
+    ///
+    /// Supported nodes: `text` only.
+    /// Unsupported: all other variants — yields `tx.unsupported_property`.
+    ReplaceText {
+        /// The stable node `id` to target.
+        node: String,
+        /// Replacement span list. Each span's `text` is required; all other fields
+        /// are optional and default to `None` (inherit from node-level styles).
+        spans: Vec<OpSpan>,
     },
 }
