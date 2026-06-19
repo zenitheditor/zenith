@@ -302,4 +302,27 @@ pub enum Op {
         /// are optional and default to `None` (inherit from node-level styles).
         spans: Vec<OpSpan>,
     },
+    /// Duplicate a leaf node, assigning it a new id, and insert the clone
+    /// immediately after the original in the same parent's children.
+    ///
+    /// **v0 scope — leaf nodes only.** Duplicating a container (`frame` or
+    /// `group`) is rejected with `tx.unsupported_property`. A deep-clone would
+    /// copy all descendant ids, producing duplicate ids throughout the subtree;
+    /// re-id'ing an entire subtree is deferred to a future version.
+    ///
+    /// Post-validation catches a `new_id` that collides with an existing node
+    /// id via the `id.duplicate` diagnostic (same as [`Op::AddNode`]).
+    ///
+    /// Rejects with `tx.unknown_node` if `node` does not exist in the document.
+    ///
+    /// JSON example:
+    /// ```json
+    /// {"op":"duplicate_node","node":"box","new_id":"box-copy"}
+    /// ```
+    DuplicateNode {
+        /// The stable id of the node to duplicate.
+        node: String,
+        /// The id to assign to the newly created clone.
+        new_id: String,
+    },
 }

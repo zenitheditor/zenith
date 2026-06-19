@@ -173,6 +173,12 @@ fn apply_op(
         } => {
             apply_replace_text(node_id, spans, doc, diagnostics, affected);
         }
+        Op::DuplicateNode {
+            node: node_id,
+            new_id,
+        } => {
+            apply_duplicate_node(node_id, new_id, doc, diagnostics, affected);
+        }
     }
 }
 
@@ -1101,6 +1107,188 @@ fn apply_remove_node(
         None,
         Some(node_id.to_owned()),
     ));
+}
+
+// ── DuplicateNode ─────────────────────────────────────────────────────────────
+
+/// Return `true` if `node` is a container variant (`Frame` or `Group`).
+///
+/// Used by [`apply_duplicate_node`] to enforce the v0 leaf-only restriction.
+/// Duplicating a container would clone all descendant ids verbatim, producing
+/// document-wide duplicate ids. Re-id'ing an entire subtree is deferred.
+fn node_is_container(node: &Node) -> bool {
+    matches!(node, Node::Frame(_) | Node::Group(_))
+}
+
+/// Set the `id` field on a leaf [`Node`] variant to `new_id`.
+///
+/// Mirrors [`node_id_of`] (the shared-borrow id reader). Only leaf variants
+/// are covered; `Frame` and `Group` are deliberately excluded because
+/// [`apply_duplicate_node`] rejects containers before calling this helper.
+/// Returns `false` only if called on an `Unknown` node (which has no id field)
+/// — that path is also unreachable from `apply_duplicate_node` because an
+/// `Unknown` node cannot be found by `node_id_of`, so it can never be the
+/// source.
+fn node_set_id(node: &mut Node, new_id: String) -> bool {
+    match node {
+        Node::Rect(r) => {
+            r.id = new_id;
+            true
+        }
+        Node::Ellipse(e) => {
+            e.id = new_id;
+            true
+        }
+        Node::Line(l) => {
+            l.id = new_id;
+            true
+        }
+        Node::Text(t) => {
+            t.id = new_id;
+            true
+        }
+        Node::Code(c) => {
+            c.id = new_id;
+            true
+        }
+        Node::Image(i) => {
+            i.id = new_id;
+            true
+        }
+        Node::Polygon(p) => {
+            p.id = new_id;
+            true
+        }
+        Node::Polyline(p) => {
+            p.id = new_id;
+            true
+        }
+        // Containers handled by the v0 guard in apply_duplicate_node; Unknown
+        // nodes have no id field and are never reached here.
+        Node::Frame(_) | Node::Group(_) | Node::Unknown(_) => false,
+    }
+}
+
+/// Walk `children` looking for a node with `id`. When found, clone it, set
+/// its id to `new_id`, and insert the clone immediately after the original.
+/// Returns `true` on success, `false` if the id is not in this slice (recurse
+/// into container children to continue the search).
+///
+/// Callers that need the source-is-container check must do so before calling
+/// this function (see [`apply_duplicate_node`]).
+fn duplicate_in_children(children: &mut Vec<Node>, id: &str, new_id: &str) -> bool {
+    // Phase 1 (shared scan): find the index of the source node in this slice.
+    let direct = children.iter().position(|n| node_id_of(n) == Some(id));
+
+    if let Some(i) = direct {
+        // Source is a direct child — clone it here, assign the new id, insert.
+        // Allocate the owned String only at the single insertion site.
+        let mut clone = children[i].clone();
+        node_set_id(&mut clone, new_id.to_owned());
+        children.insert(i + 1, clone);
+        return true;
+    }
+
+    // Phase 2: descend into container children. The recursive call performs its
+    // own search-and-insert, so we just recurse into each container and stop at
+    // the first that reports success. No String clone per iteration — new_id is
+    // a borrowed &str that is passed down without allocation.
+    for child in children.iter_mut() {
+        let grandchildren = match child {
+            Node::Frame(f) => &mut f.children,
+            Node::Group(g) => &mut g.children,
+            _ => continue,
+        };
+        if duplicate_in_children(grandchildren, id, new_id) {
+            return true;
+        }
+    }
+
+    false
+}
+
+fn apply_duplicate_node(
+    node_id: &str,
+    new_id: &str,
+    doc: &mut Document,
+    diagnostics: &mut Vec<Diagnostic>,
+    affected: &mut Vec<String>,
+) {
+    // 1. Verify the source node exists anywhere in the document (shared scan).
+    //    We also need its variant to enforce the v0 leaf-only restriction.
+    //    Use a two-phase approach mirroring find_node_any_mut.
+    let page_index = doc.body.pages.iter().enumerate().find_map(|(pi, page)| {
+        let found = page.children.iter().any(|n| subtree_contains(n, node_id));
+        if found { Some(pi) } else { None }
+    });
+
+    let pi = match page_index {
+        Some(pi) => pi,
+        None => {
+            diagnostics.push(Diagnostic::error(
+                "tx.unknown_node",
+                format!("node {:?} not found in document", node_id),
+                None,
+                Some(node_id.to_owned()),
+            ));
+            return;
+        }
+    };
+
+    // 2. Check whether the source is a container (v0 restriction).
+    //    We must obtain a shared reference to inspect the variant, then release
+    //    it before taking the mutable borrow needed for the clone-insert step.
+    {
+        let Some(page) = doc.body.pages.get(pi) else {
+            return; // unreachable: pi came from the enumerate scan above.
+        };
+        // find_in_children_any_mut logic, but shared (we only need the variant).
+        fn find_shared<'a>(children: &'a [Node], id: &str) -> Option<&'a Node> {
+            for node in children {
+                if node_id_of(node) == Some(id) {
+                    return Some(node);
+                }
+                let hit = match node {
+                    Node::Frame(f) => find_shared(&f.children, id),
+                    Node::Group(g) => find_shared(&g.children, id),
+                    _ => None,
+                };
+                if hit.is_some() {
+                    return hit;
+                }
+            }
+            None
+        }
+
+        if let Some(src) = find_shared(&page.children, node_id)
+            && node_is_container(src)
+        {
+            let kind = node_kind_str(src);
+            diagnostics.push(Diagnostic::error(
+                "tx.unsupported_property",
+                format!(
+                    "duplicating a {} is not supported in v0; re-id'ing a subtree \
+                     is deferred — only leaf nodes may be duplicated",
+                    kind
+                ),
+                None,
+                Some(node_id.to_owned()),
+            ));
+            return;
+        }
+        // Shared borrow of `page` ends here.
+    }
+
+    // 3. Clone the source and insert it immediately after the original.
+    //    `duplicate_in_children` does the clone+id-set+insert in one pass.
+    let Some(page) = doc.body.pages.get_mut(pi) else {
+        return; // unreachable: pi came from the enumerate scan above.
+    };
+    duplicate_in_children(&mut page.children, node_id, new_id);
+
+    // 4. Record the clone as affected. Post-validation (step 4 of run_transaction)
+    //    will catch a new_id collision with an existing node via id.duplicate.
+    record_affected(new_id, affected);
 }
 
 // ── SetOpacity ────────────────────────────────────────────────────────────────
@@ -3416,6 +3604,204 @@ mod tests {
             result.source_after.contains("Branded"),
             "new text must appear in source_after; got:\n{}",
             result.source_after
+        );
+    }
+
+    // ── DuplicateNode tests ───────────────────────────────────────────────────
+
+    /// Document with a single rect and a fill token (needed for post-validate).
+    const DUP_RECT_DOC: &str = r##"zenith version=1 {
+  project id="proj" name="Test"
+  tokens format="zenith-token-v1" {
+    token id="color.a" type="color" value="#ff0000"
+  }
+  styles { }
+  document id="doc1" title="T" {
+    page id="pg1" w=(px)400 h=(px)300 {
+      rect id="orig" x=(px)10 y=(px)20 w=(px)80 h=(px)60 fill=(token)"color.a"
+    }
+  }
+}"##;
+
+    /// Document with a group containing a rect (for container-rejection test).
+    const DUP_GROUP_DOC: &str = r##"zenith version=1 {
+  project id="proj" name="Test"
+  tokens format="zenith-token-v1" { }
+  styles { }
+  document id="doc1" title="T" {
+    page id="pg1" w=(px)400 h=(px)300 {
+      group id="grp" {
+        rect id="inner" x=(px)0 y=(px)0 w=(px)50 h=(px)50
+      }
+    }
+  }
+}"##;
+
+    /// Duplicate a leaf rect: parent now has 2 rects, clone right after original,
+    /// clone has new_id and same geometry/fill.
+    #[test]
+    fn duplicate_node_leaf_rect_accepted() {
+        let doc = parse(DUP_RECT_DOC);
+        let tx = Transaction {
+            ops: vec![Op::DuplicateNode {
+                node: "orig".to_owned(),
+                new_id: "orig-copy".to_owned(),
+            }],
+        };
+        let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
+
+        assert_eq!(
+            result.status,
+            TxStatus::Accepted,
+            "expected Accepted; diagnostics: {:?}",
+            result.diagnostics
+        );
+        assert_eq!(result.affected_node_ids, vec!["orig-copy".to_owned()]);
+
+        // Both ids must appear in source_after.
+        assert!(
+            result.source_after.contains("id=\"orig\""),
+            "original must still be present; got:\n{}",
+            result.source_after
+        );
+        assert!(
+            result.source_after.contains("id=\"orig-copy\""),
+            "clone must be present; got:\n{}",
+            result.source_after
+        );
+
+        // Clone must appear AFTER the original in source text.
+        let pos_orig = result
+            .source_after
+            .find("id=\"orig\"")
+            .expect("orig in source_after");
+        let pos_copy = result
+            .source_after
+            .find("id=\"orig-copy\"")
+            .expect("orig-copy in source_after");
+        assert!(
+            pos_orig < pos_copy,
+            "clone should appear after original in source_after"
+        );
+
+        // Clone must carry the same geometry and fill as the original.
+        // Count occurrences: both nodes should have x=(px)10, y=(px)20, etc.
+        assert_eq!(
+            result.source_after.matches("x=(px)10").count(),
+            2,
+            "both orig and clone should have x=(px)10; got:\n{}",
+            result.source_after
+        );
+        assert_eq!(
+            result.source_after.matches("w=(px)80").count(),
+            2,
+            "both orig and clone should have w=(px)80; got:\n{}",
+            result.source_after
+        );
+        assert_eq!(
+            result.source_after.matches("(token)\"color.a\"").count(),
+            2,
+            "both orig and clone should reference color.a; got:\n{}",
+            result.source_after
+        );
+
+        // source_before has only one rect.
+        assert_eq!(
+            result.source_before.matches("id=\"orig").count(),
+            1,
+            "source_before should have only one orig* node"
+        );
+    }
+
+    /// Duplicate with a new_id that already exists → post-validate rejects (id.duplicate).
+    #[test]
+    fn duplicate_node_colliding_new_id_rejected() {
+        // TWO_RECT_DOC has rect "a" and rect "b"; duplicating "a" with new_id="b"
+        // creates a second node with id "b" → id.duplicate from post-validate.
+        let doc = parse(TWO_RECT_DOC);
+        let tx = Transaction {
+            ops: vec![Op::DuplicateNode {
+                node: "a".to_owned(),
+                new_id: "b".to_owned(),
+            }],
+        };
+        let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
+
+        assert_eq!(
+            result.status,
+            TxStatus::Rejected,
+            "colliding new_id must be rejected; diagnostics: {:?}",
+            result.diagnostics
+        );
+        assert!(
+            result.diagnostics.iter().any(|d| d.code == "id.duplicate"),
+            "expected id.duplicate diagnostic; got: {:?}",
+            result.diagnostics
+        );
+        assert_eq!(result.source_after, result.source_before);
+    }
+
+    /// Attempting to duplicate a group → tx.unsupported_property (v0 scope).
+    #[test]
+    fn duplicate_node_container_group_rejected() {
+        let doc = parse(DUP_GROUP_DOC);
+        let tx = Transaction {
+            ops: vec![Op::DuplicateNode {
+                node: "grp".to_owned(),
+                new_id: "grp-copy".to_owned(),
+            }],
+        };
+        let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
+
+        assert_eq!(result.status, TxStatus::Rejected);
+        assert!(
+            result
+                .diagnostics
+                .iter()
+                .any(|d| { d.code == "tx.unsupported_property" && d.message.contains("group") }),
+            "expected tx.unsupported_property mentioning group; got: {:?}",
+            result.diagnostics
+        );
+        assert_eq!(result.source_after, result.source_before);
+    }
+
+    /// Attempting to duplicate an unknown node id → tx.unknown_node.
+    #[test]
+    fn duplicate_node_unknown_id_rejected() {
+        let doc = parse(TWO_RECT_DOC);
+        let tx = Transaction {
+            ops: vec![Op::DuplicateNode {
+                node: "does_not_exist".to_owned(),
+                new_id: "copy".to_owned(),
+            }],
+        };
+        let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
+
+        assert_eq!(result.status, TxStatus::Rejected);
+        assert!(
+            result
+                .diagnostics
+                .iter()
+                .any(|d| d.code == "tx.unknown_node"),
+            "expected tx.unknown_node; got: {:?}",
+            result.diagnostics
+        );
+        assert_eq!(result.source_after, result.source_before);
+    }
+
+    /// Extend the ops serde round-trip to include duplicate_node.
+    #[test]
+    fn from_json_duplicate_node_round_trip() {
+        let json = r#"{"ops":[{"op":"duplicate_node","node":"orig","new_id":"orig-copy"}]}"#;
+        let tx = Transaction::from_json(json).expect("parse JSON");
+        assert_eq!(
+            tx,
+            Transaction {
+                ops: vec![Op::DuplicateNode {
+                    node: "orig".to_owned(),
+                    new_id: "orig-copy".to_owned(),
+                }],
+            }
         );
     }
 }
