@@ -255,6 +255,24 @@ fn run_to_scene_glyphs(run: &ZenithGlyphRun) -> Vec<SceneGlyph> {
 
 // ── Node dispatch ─────────────────────────────────────────────────────────────
 
+/// The `role` of any node, if set. Used to exclude non-printing nodes
+/// (`role="guide"`) from render output.
+fn node_role(node: &Node) -> Option<&str> {
+    match node {
+        Node::Rect(n) => n.role.as_deref(),
+        Node::Ellipse(n) => n.role.as_deref(),
+        Node::Line(n) => n.role.as_deref(),
+        Node::Text(n) => n.role.as_deref(),
+        Node::Code(n) => n.role.as_deref(),
+        Node::Frame(n) => n.role.as_deref(),
+        Node::Group(n) => n.role.as_deref(),
+        Node::Image(n) => n.role.as_deref(),
+        Node::Polygon(n) => n.role.as_deref(),
+        Node::Polyline(n) => n.role.as_deref(),
+        Node::Unknown(_) => None,
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn compile_node(
     node: &Node,
@@ -266,6 +284,12 @@ fn compile_node(
     diagnostics: &mut Vec<Diagnostic>,
     ctx: RenderCtx,
 ) {
+    // Non-printing guide nodes (`role="guide"`) are excluded from render output
+    // entirely — including their subtree when the guide is a group/frame.
+    if node_role(node) == Some("guide") {
+        return;
+    }
+
     match node {
         Node::Rect(rect) => {
             // Skip invisible rects.
@@ -2835,6 +2859,42 @@ mod tests {
             }
             other => panic!("expected FillRect, got {other:?}"),
         }
+    }
+
+    // ── role="guide" nodes are excluded from render output ──────────────────
+
+    #[test]
+    fn guide_role_nodes_are_not_rendered() {
+        let src = r##"zenith version=1 {
+  project id="proj.g" name="G"
+  tokens format="zenith-token-v1" {
+    token id="color.fill" type="color" value="#000000"
+  }
+  styles {}
+  document id="doc.g" title="G" {
+    page id="page.g" w=(px)100 h=(px)100 {
+      rect id="rect.real" x=(px)0 y=(px)0 w=(px)40 h=(px)40 fill=(token)"color.fill"
+      rect id="rect.guide" role="guide" x=(px)50 y=(px)50 w=(px)40 h=(px)40 fill=(token)"color.fill"
+    }
+  }
+}
+"##;
+        let doc = parse(src);
+        let result = compile(&doc, &default_provider());
+
+        // Exactly one FillRect for the real rect; the guide rect emits nothing.
+        // (No page background, so no background FillRect.)
+        let fills = result
+            .scene
+            .commands
+            .iter()
+            .filter(|c| matches!(c, SceneCommand::FillRect { .. }))
+            .count();
+        assert_eq!(
+            fills, 1,
+            "guide-role rect must not render; expected 1 FillRect, got {fills}: {:?}",
+            result.scene.commands
+        );
     }
 
     // ── Unresolvable font → font.unresolved advisory + fallback render ──────
