@@ -1,0 +1,1023 @@
+//! Structural op application: reorder, add/remove, group/ungroup, reparent,
+//! duplicate — plus the container/child finders and tree-mutation helpers they
+//! share.
+
+use std::collections::BTreeMap;
+
+use zenith_core::{Diagnostic, Document, GroupNode, KdlAdapter, KdlSource, Node};
+
+use crate::op::Position;
+
+use super::{find_node_shared, node_id_of, node_kind_str, record_affected, subtree_contains};
+
+// ── Reorder ops ───────────────────────────────────────────────────────────────
+
+/// Which z-order reorder to perform.
+#[derive(Copy, Clone)]
+pub(super) enum ReorderKind {
+    Forward,
+    Backward,
+    ToFront,
+    ToBack,
+}
+
+/// Outcome of a reorder attempt.
+enum MoveOutcome {
+    NotFound,
+    /// The node is already at the target extreme for this operation; no change made.
+    NoChange,
+    Moved,
+}
+
+pub(super) fn apply_reorder(
+    node_id: &str,
+    kind: ReorderKind,
+    doc: &mut Document,
+    diagnostics: &mut Vec<Diagnostic>,
+    affected: &mut Vec<String>,
+) {
+    for page in doc.body.pages.iter_mut() {
+        match reorder_in(&mut page.children, node_id, kind) {
+            MoveOutcome::NotFound => {
+                // Try the next page.
+            }
+            MoveOutcome::Moved => {
+                record_affected(node_id, affected);
+                return;
+            }
+            MoveOutcome::NoChange => {
+                // Already at the target extreme — emit a kind-specific advisory.
+                let msg = match kind {
+                    ReorderKind::Forward | ReorderKind::ToFront => {
+                        format!("node {:?} is already at the front of its parent", node_id)
+                    }
+                    ReorderKind::Backward | ReorderKind::ToBack => {
+                        format!("node {:?} is already at the back of its parent", node_id)
+                    }
+                };
+                diagnostics.push(Diagnostic::advisory(
+                    "tx.noop",
+                    msg,
+                    None,
+                    Some(node_id.to_owned()),
+                ));
+                return;
+            }
+        }
+    }
+    // No page contained the node.
+    diagnostics.push(Diagnostic::error(
+        "tx.unknown_node",
+        format!("node {:?} not found in document", node_id),
+        None,
+        Some(node_id.to_owned()),
+    ));
+}
+
+/// Reorder the node with `id` within whatever children slice directly contains
+/// it, according to `kind`. Recurses into `Group` and `Frame` containers.
+fn reorder_in(children: &mut [Node], id: &str, kind: ReorderKind) -> MoveOutcome {
+    if let Some(i) = children.iter().position(|n| node_id_of(n) == Some(id)) {
+        let len = children.len();
+        match kind {
+            ReorderKind::Forward => {
+                if i + 1 >= len {
+                    return MoveOutcome::NoChange;
+                }
+                children.swap(i, i + 1);
+            }
+            ReorderKind::Backward => {
+                if i == 0 {
+                    return MoveOutcome::NoChange;
+                }
+                children.swap(i, i - 1);
+            }
+            ReorderKind::ToFront => {
+                if i + 1 >= len {
+                    return MoveOutcome::NoChange;
+                }
+                // rotate_left(1) on children[i..] moves element at index i to
+                // the last position, shifting i+1..len-1 one step left.
+                children[i..].rotate_left(1);
+            }
+            ReorderKind::ToBack => {
+                if i == 0 {
+                    return MoveOutcome::NoChange;
+                }
+                // rotate_right(1) on children[..=i] moves element at index i
+                // to index 0, shifting 0..i-1 one step right.
+                children[..=i].rotate_right(1);
+            }
+        }
+        return MoveOutcome::Moved;
+    }
+    for child in children.iter_mut() {
+        match child {
+            Node::Frame(f) => match reorder_in(&mut f.children, id, kind) {
+                MoveOutcome::NotFound => {}
+                other => return other,
+            },
+            Node::Group(g) => match reorder_in(&mut g.children, id, kind) {
+                MoveOutcome::NotFound => {}
+                other => return other,
+            },
+            _ => {}
+        }
+    }
+    MoveOutcome::NotFound
+}
+
+// ── Container / child finders ─────────────────────────────────────────────────
+
+/// Return a mutable reference to the children vec of the container identified by
+/// `parent_id` — either a page (matched by page `id`) or a nested `group`/`frame`
+/// (matched by node `id`). Returns `None` if no such container exists (including
+/// when the id names a leaf node).
+///
+/// Two-phase borrow, mirroring [`find_node_any_mut`]: a shared scan locates the
+/// target page index first, then a single exclusive borrow descends.
+fn find_container_children_mut<'doc>(
+    doc: &'doc mut Document,
+    parent_id: &str,
+) -> Option<&'doc mut Vec<Node>> {
+    // Phase 1: find which page is, or contains, the target container.
+    let page_index = doc.body.pages.iter().enumerate().find_map(|(pi, page)| {
+        if page.id == parent_id {
+            return Some(pi);
+        }
+        let found = page
+            .children
+            .iter()
+            .any(|n| subtree_contains_container(n, parent_id));
+        if found { Some(pi) } else { None }
+    });
+
+    // Phase 2: take the exclusive borrow we deferred.
+    match page_index {
+        None => None,
+        Some(pi) => match doc.body.pages.get_mut(pi) {
+            None => None,
+            Some(page) => {
+                if page.id == parent_id {
+                    Some(&mut page.children)
+                } else {
+                    find_container_in_children_mut(&mut page.children, parent_id)
+                }
+            }
+        },
+    }
+}
+
+/// Returns true if `node` is, or transitively contains, a `group`/`frame`
+/// container whose `id == parent_id`. Leaves are never containers.
+fn subtree_contains_container(node: &Node, parent_id: &str) -> bool {
+    match node {
+        Node::Frame(f) => {
+            f.id == parent_id
+                || f.children
+                    .iter()
+                    .any(|c| subtree_contains_container(c, parent_id))
+        }
+        Node::Group(g) => {
+            g.id == parent_id
+                || g.children
+                    .iter()
+                    .any(|c| subtree_contains_container(c, parent_id))
+        }
+        _ => false,
+    }
+}
+
+/// Descend into a children slice and return a mutable reference to the children
+/// vec of the `group`/`frame` whose `id == parent_id`. Two-phase borrow.
+fn find_container_in_children_mut<'a>(
+    children: &'a mut [Node],
+    parent_id: &str,
+) -> Option<&'a mut Vec<Node>> {
+    // `Direct(i)` — children[i] is the container itself.
+    // `Descend(i)` — the container lives somewhere inside children[i].
+    enum Hit {
+        Direct(usize),
+        Descend(usize),
+    }
+
+    let hit = children
+        .iter()
+        .enumerate()
+        .find_map(|(i, node)| match node {
+            Node::Frame(f) if f.id == parent_id => Some(Hit::Direct(i)),
+            Node::Group(g) if g.id == parent_id => Some(Hit::Direct(i)),
+            Node::Frame(f)
+                if f.children
+                    .iter()
+                    .any(|c| subtree_contains_container(c, parent_id)) =>
+            {
+                Some(Hit::Descend(i))
+            }
+            Node::Group(g)
+                if g.children
+                    .iter()
+                    .any(|c| subtree_contains_container(c, parent_id)) =>
+            {
+                Some(Hit::Descend(i))
+            }
+            _ => None,
+        });
+
+    match hit {
+        None => None,
+        Some(Hit::Direct(i)) => match children.get_mut(i) {
+            Some(Node::Frame(f)) => Some(&mut f.children),
+            Some(Node::Group(g)) => Some(&mut g.children),
+            _ => None, // unreachable: phase-1 confirmed a container at i
+        },
+        Some(Hit::Descend(i)) => match children.get_mut(i) {
+            Some(Node::Frame(f)) => find_container_in_children_mut(&mut f.children, parent_id),
+            Some(Node::Group(g)) => find_container_in_children_mut(&mut g.children, parent_id),
+            _ => None, // unreachable
+        },
+    }
+}
+
+/// Remove the node with `id` from `children` or any nested `group`/`frame`
+/// container within it, returning the removed node, or `None` if absent.
+fn remove_node_by_id(children: &mut Vec<Node>, id: &str) -> Option<Node> {
+    if let Some(i) = children.iter().position(|n| node_id_of(n) == Some(id)) {
+        return Some(children.remove(i));
+    }
+    for child in children.iter_mut() {
+        let nested = match child {
+            Node::Frame(f) => remove_node_by_id(&mut f.children, id),
+            Node::Group(g) => remove_node_by_id(&mut g.children, id),
+            _ => None,
+        };
+        if nested.is_some() {
+            return nested;
+        }
+    }
+    None
+}
+
+/// Resolve the index of a `Position` within `children`, emitting a diagnostic
+/// and returning `None` if a `Before`/`After` sibling id cannot be found.
+///
+/// Extracted so both `apply_add_node` and `apply_reparent` share identical
+/// resolution logic without duplication.
+fn resolve_position(
+    position: &Position,
+    children: &[Node],
+    parent_id: &str,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<usize> {
+    match position {
+        Position::Last => Some(children.len()),
+        Position::First => Some(0),
+        Position::Index { index } => Some((*index).min(children.len())),
+        Position::Before { id } => {
+            match children
+                .iter()
+                .position(|n| node_id_of(n) == Some(id.as_str()))
+            {
+                Some(i) => Some(i),
+                None => {
+                    diagnostics.push(Diagnostic::error(
+                        "tx.unknown_node",
+                        format!("sibling {:?} not found in parent {:?}", id, parent_id),
+                        None,
+                        Some(id.to_owned()),
+                    ));
+                    None
+                }
+            }
+        }
+        Position::After { id } => {
+            match children
+                .iter()
+                .position(|n| node_id_of(n) == Some(id.as_str()))
+            {
+                Some(i) => Some(i + 1),
+                None => {
+                    diagnostics.push(Diagnostic::error(
+                        "tx.unknown_node",
+                        format!("sibling {:?} not found in parent {:?}", id, parent_id),
+                        None,
+                        Some(id.to_owned()),
+                    ));
+                    None
+                }
+            }
+        }
+    }
+}
+
+// ── AddNode / RemoveNode ──────────────────────────────────────────────────────
+
+/// Construct a single [`Node`] from a `.zen` node fragment by wrapping it in a
+/// minimal synthetic document and parsing it through the canonical KDL parser.
+///
+/// Reusing the parser means every node kind, nested children (for group/frame),
+/// tokens, and properties are supported with no per-field mapping. The wrapper's
+/// `tokens`/`styles` blocks are left to their AST defaults (empty) — the real
+/// candidate document, which carries the real tokens/assets, is what
+/// post-validation actually checks.
+///
+/// Returns `Err` with a human-readable message if the fragment does not parse or
+/// does not contain exactly one top-level node.
+fn build_node_from_fragment(fragment: &str) -> Result<Node, String> {
+    let synthetic = format!(
+        "zenith version=1 {{\n  document id=\"__tx_doc\" {{\n    page id=\"__tx_page\" w=(px)1 h=(px)1 {{\n{fragment}\n    }}\n  }}\n}}\n"
+    );
+    let doc = KdlAdapter
+        .parse(synthetic.as_bytes())
+        .map_err(|e| format!("failed to parse node fragment: {e}"))?;
+    let mut page = doc
+        .body
+        .pages
+        .into_iter()
+        .next()
+        .ok_or_else(|| "synthetic document produced no page".to_owned())?;
+    if page.children.len() != 1 {
+        return Err(format!(
+            "expected exactly one node in fragment, found {}",
+            page.children.len()
+        ));
+    }
+    Ok(page.children.remove(0))
+}
+
+pub(super) fn apply_add_node(
+    parent: &str,
+    position: &Position,
+    source: &str,
+    doc: &mut Document,
+    diagnostics: &mut Vec<Diagnostic>,
+    affected: &mut Vec<String>,
+) {
+    // 1. Build the node from the `.zen` fragment.
+    let node = match build_node_from_fragment(source) {
+        Ok(n) => n,
+        Err(e) => {
+            diagnostics.push(Diagnostic::error(
+                "tx.invalid_node_spec",
+                format!("could not construct node from source fragment: {e}"),
+                None,
+                None,
+            ));
+            return;
+        }
+    };
+
+    // 2. Locate the parent container.
+    let children = match find_container_children_mut(doc, parent) {
+        Some(c) => c,
+        None => {
+            diagnostics.push(Diagnostic::error(
+                "tx.invalid_parent",
+                format!(
+                    "no container node with id {:?} (parent must be a page, group, or frame)",
+                    parent
+                ),
+                None,
+                Some(parent.to_owned()),
+            ));
+            return;
+        }
+    };
+
+    // 3. Resolve the insertion index against the current children.
+    let idx = match resolve_position(position, children, parent, diagnostics) {
+        Some(i) => i,
+        None => return, // resolve_position already pushed a diagnostic
+    };
+
+    // 4. Capture the new node's id (if any) before moving it in, then insert.
+    let new_id = node_id_of(&node).map(|s| s.to_owned());
+    children.insert(idx, node);
+    if let Some(id) = new_id {
+        record_affected(&id, affected);
+    }
+    // 5. Post-validation handles duplicate-id / missing-geometry / unknown-token / etc.
+}
+
+pub(super) fn apply_remove_node(
+    node_id: &str,
+    doc: &mut Document,
+    diagnostics: &mut Vec<Diagnostic>,
+    affected: &mut Vec<String>,
+) {
+    for page in doc.body.pages.iter_mut() {
+        if remove_node_by_id(&mut page.children, node_id).is_some() {
+            record_affected(node_id, affected);
+            return;
+        }
+    }
+    diagnostics.push(Diagnostic::error(
+        "tx.unknown_node",
+        format!("no node with id {:?}", node_id),
+        None,
+        Some(node_id.to_owned()),
+    ));
+}
+
+// ── DuplicateNode ─────────────────────────────────────────────────────────────
+
+/// Return `true` if `node` is a container variant (`Frame` or `Group`).
+///
+/// Used by [`apply_duplicate_node`] to enforce the v0 leaf-only restriction.
+/// Duplicating a container would clone all descendant ids verbatim, producing
+/// document-wide duplicate ids. Re-id'ing an entire subtree is deferred.
+fn node_is_container(node: &Node) -> bool {
+    matches!(node, Node::Frame(_) | Node::Group(_))
+}
+
+/// Set the `id` field on a leaf [`Node`] variant to `new_id`.
+///
+/// Mirrors [`node_id_of`] (the shared-borrow id reader). Only leaf variants
+/// are covered; `Frame` and `Group` are deliberately excluded because
+/// [`apply_duplicate_node`] rejects containers before calling this helper.
+/// Returns `false` only if called on an `Unknown` node (which has no id field)
+/// — that path is also unreachable from `apply_duplicate_node` because an
+/// `Unknown` node cannot be found by `node_id_of`, so it can never be the
+/// source.
+fn node_set_id(node: &mut Node, new_id: String) -> bool {
+    match node {
+        Node::Rect(r) => {
+            r.id = new_id;
+            true
+        }
+        Node::Ellipse(e) => {
+            e.id = new_id;
+            true
+        }
+        Node::Line(l) => {
+            l.id = new_id;
+            true
+        }
+        Node::Text(t) => {
+            t.id = new_id;
+            true
+        }
+        Node::Code(c) => {
+            c.id = new_id;
+            true
+        }
+        Node::Image(i) => {
+            i.id = new_id;
+            true
+        }
+        Node::Polygon(p) => {
+            p.id = new_id;
+            true
+        }
+        Node::Polyline(p) => {
+            p.id = new_id;
+            true
+        }
+        // Containers handled by the v0 guard in apply_duplicate_node; Unknown
+        // nodes have no id field and are never reached here.
+        Node::Frame(_) | Node::Group(_) | Node::Unknown(_) => false,
+    }
+}
+
+/// Walk `children` looking for a node with `id`. When found, clone it, set
+/// its id to `new_id`, and insert the clone immediately after the original.
+/// Returns `true` on success, `false` if the id is not in this slice (recurse
+/// into container children to continue the search).
+///
+/// Callers that need the source-is-container check must do so before calling
+/// this function (see [`apply_duplicate_node`]).
+fn duplicate_in_children(children: &mut Vec<Node>, id: &str, new_id: &str) -> bool {
+    // Phase 1 (shared scan): find the index of the source node in this slice.
+    let direct = children.iter().position(|n| node_id_of(n) == Some(id));
+
+    if let Some(i) = direct {
+        // Source is a direct child — clone it here, assign the new id, insert.
+        // Allocate the owned String only at the single insertion site.
+        let mut clone = children[i].clone();
+        node_set_id(&mut clone, new_id.to_owned());
+        children.insert(i + 1, clone);
+        return true;
+    }
+
+    // Phase 2: descend into container children. The recursive call performs its
+    // own search-and-insert, so we just recurse into each container and stop at
+    // the first that reports success. No String clone per iteration — new_id is
+    // a borrowed &str that is passed down without allocation.
+    for child in children.iter_mut() {
+        let grandchildren = match child {
+            Node::Frame(f) => &mut f.children,
+            Node::Group(g) => &mut g.children,
+            _ => continue,
+        };
+        if duplicate_in_children(grandchildren, id, new_id) {
+            return true;
+        }
+    }
+
+    false
+}
+
+pub(super) fn apply_duplicate_node(
+    node_id: &str,
+    new_id: &str,
+    doc: &mut Document,
+    diagnostics: &mut Vec<Diagnostic>,
+    affected: &mut Vec<String>,
+) {
+    // 1. Verify the source node exists anywhere in the document (shared scan).
+    //    We also need its variant to enforce the v0 leaf-only restriction.
+    //    Use a two-phase approach mirroring find_node_any_mut.
+    let page_index = doc.body.pages.iter().enumerate().find_map(|(pi, page)| {
+        let found = page.children.iter().any(|n| subtree_contains(n, node_id));
+        if found { Some(pi) } else { None }
+    });
+
+    let pi = match page_index {
+        Some(pi) => pi,
+        None => {
+            diagnostics.push(Diagnostic::error(
+                "tx.unknown_node",
+                format!("node {:?} not found in document", node_id),
+                None,
+                Some(node_id.to_owned()),
+            ));
+            return;
+        }
+    };
+
+    // 2. Check whether the source is a container (v0 restriction).
+    //    We must obtain a shared reference to inspect the variant, then release
+    //    it before taking the mutable borrow needed for the clone-insert step.
+    {
+        let Some(page) = doc.body.pages.get(pi) else {
+            return; // unreachable: pi came from the enumerate scan above.
+        };
+        if let Some(src) = find_node_shared(&page.children, node_id)
+            && node_is_container(src)
+        {
+            let kind = node_kind_str(src);
+            diagnostics.push(Diagnostic::error(
+                "tx.unsupported_property",
+                format!(
+                    "duplicating a {} is not supported in v0; re-id'ing a subtree \
+                     is deferred — only leaf nodes may be duplicated",
+                    kind
+                ),
+                None,
+                Some(node_id.to_owned()),
+            ));
+            return;
+        }
+        // Shared borrow of `page` ends here.
+    }
+
+    // 3. Clone the source and insert it immediately after the original.
+    //    `duplicate_in_children` does the clone+id-set+insert in one pass.
+    let Some(page) = doc.body.pages.get_mut(pi) else {
+        return; // unreachable: pi came from the enumerate scan above.
+    };
+    duplicate_in_children(&mut page.children, node_id, new_id);
+
+    // 4. Record the clone as affected. Post-validation (step 4 of run_transaction)
+    //    will catch a new_id collision with an existing node via id.duplicate.
+    record_affected(new_id, affected);
+}
+
+// ── Group ─────────────────────────────────────────────────────────────────────
+
+/// Find which page directly contains (at the top level of `page.children`) ALL
+/// of the ids in `node_ids`. Returns `(page_index, sorted_indices)` where
+/// `sorted_indices` is the list of positions within `page.children` in
+/// ascending order, or `None` if the ids are not all siblings on one page.
+///
+/// We walk each page's *direct* children only — a flat O(pages × ids) scan.
+/// Nesting is handled by a second pass that descends into containers.
+fn find_common_parent_children_mut<'doc>(
+    doc: &'doc mut Document,
+    node_ids: &[String],
+) -> Option<&'doc mut Vec<Node>> {
+    // Phase 1 (shared scan): find which page + container has ALL ids as direct
+    // children.  We search each page's full subtree of containers.
+    struct Hit {
+        page_index: usize,
+        /// If `None` the parent is the page itself; otherwise it's the container id.
+        container_id: Option<String>,
+    }
+
+    let hit: Option<Hit> = 'outer: {
+        for (pi, page) in doc.body.pages.iter().enumerate() {
+            // Check if all are direct children of this page.
+            if node_ids.iter().all(|id| {
+                page.children
+                    .iter()
+                    .any(|n| node_id_of(n) == Some(id.as_str()))
+            }) {
+                break 'outer Some(Hit {
+                    page_index: pi,
+                    container_id: None,
+                });
+            }
+            // Walk containers within this page.
+            if let Some(cid) = find_container_with_all_children(&page.children, node_ids) {
+                break 'outer Some(Hit {
+                    page_index: pi,
+                    container_id: Some(cid),
+                });
+            }
+        }
+        None
+    };
+
+    let Hit {
+        page_index,
+        container_id,
+    } = hit?;
+
+    // Phase 2 (exclusive borrow): return a mutable ref to the right vec.
+    match container_id {
+        None => doc.body.pages.get_mut(page_index).map(|p| &mut p.children),
+        Some(cid) => find_container_children_mut(doc, &cid),
+    }
+}
+
+/// Walk `children` recursively and return the id of the first container whose
+/// *direct* children include all ids in `node_ids`. Returns `None` if no such
+/// container exists in this subtree.
+fn find_container_with_all_children(children: &[Node], node_ids: &[String]) -> Option<String> {
+    for node in children {
+        let (container_id, grandchildren) = match node {
+            Node::Frame(f) => (f.id.as_str(), f.children.as_slice()),
+            Node::Group(g) => (g.id.as_str(), g.children.as_slice()),
+            _ => continue,
+        };
+        if node_ids.iter().all(|id| {
+            grandchildren
+                .iter()
+                .any(|n| node_id_of(n) == Some(id.as_str()))
+        }) {
+            return Some(container_id.to_owned());
+        }
+        if let Some(found) = find_container_with_all_children(grandchildren, node_ids) {
+            return Some(found);
+        }
+    }
+    None
+}
+
+pub(super) fn apply_group(
+    node_ids: &[String],
+    group_id: &str,
+    doc: &mut Document,
+    diagnostics: &mut Vec<Diagnostic>,
+    affected: &mut Vec<String>,
+) {
+    // Require at least one id.
+    if node_ids.is_empty() {
+        diagnostics.push(Diagnostic::error(
+            "tx.invalid_parent",
+            "group requires at least one node id".to_owned(),
+            None,
+            None,
+        ));
+        return;
+    }
+
+    // Phase 1: locate the common parent children vec (shared-then-exclusive
+    // two-phase, handled inside find_common_parent_children_mut).
+    let children = match find_common_parent_children_mut(doc, node_ids) {
+        Some(c) => c,
+        None => {
+            diagnostics.push(Diagnostic::error(
+                "tx.invalid_parent",
+                "group requires all nodes to share a parent".to_owned(),
+                None,
+                None,
+            ));
+            return;
+        }
+    };
+
+    // Phase 2: collect the indices of the named nodes within this children vec,
+    // in ascending order so we can determine insert position and remove cleanly.
+    let mut indices: Vec<usize> = node_ids
+        .iter()
+        .filter_map(|id| {
+            children
+                .iter()
+                .position(|n| node_id_of(n) == Some(id.as_str()))
+        })
+        .collect();
+
+    // All ids must resolve (filter_map would silently drop missing ones).
+    if indices.len() != node_ids.len() {
+        diagnostics.push(Diagnostic::error(
+            "tx.invalid_parent",
+            "group requires all nodes to share a parent".to_owned(),
+            None,
+            None,
+        ));
+        return;
+    }
+
+    indices.sort_unstable();
+
+    // Insert position = index of the first (lowest) member.
+    // indices is non-empty: node_ids is non-empty and all ids resolved (guarded
+    // by the length check above), so .first() will always be Some.
+    let Some(&insert_at) = indices.first() else {
+        return; // unreachable: guarded by node_ids.is_empty() check above
+    };
+
+    // Extract the nodes in their original relative order (lowest index first).
+    // indices is already sorted ascending, so this produces source-order children.
+    // All indices came from `.position()` on the same `children` slice and the
+    // slice has not been mutated since — `.get()` returns Some for all of them.
+    let group_children: Vec<Node> = indices
+        .iter()
+        .filter_map(|&i| children.get(i).cloned())
+        .collect();
+
+    // Remove from back to front to keep earlier indices stable.
+    for &i in indices.iter().rev() {
+        children.remove(i);
+    }
+
+    // Adjust insert_at: each removal of an index < insert_at shifts insert_at
+    // down by one.  Since we sorted indices ascending and insert_at == indices[0],
+    // all removed indices that were < insert_at have already been removed by the
+    // rev-order loop above.  Actually insert_at is indices[0] (the minimum), so
+    // no indices precede it — insert_at is stable after we remove >= insert_at
+    // indices. We need to count how many indices were strictly less than insert_at
+    // before the removals: since insert_at = indices[0] (minimum), zero indices
+    // are smaller. So insert_at doesn't change.
+    let insert_at = insert_at.min(children.len());
+
+    // Build the group node with all fields at defaults (None / empty).
+    // v0: x/y are None — no translation offset; authors must adjust child
+    // geometry themselves if a specific group origin is needed.
+    let group_node = Node::Group(GroupNode {
+        id: group_id.to_owned(),
+        name: None,
+        role: None,
+        x: None,
+        y: None,
+        w: None,
+        h: None,
+        opacity: None,
+        visible: None,
+        locked: None,
+        rotate: None,
+        style: None,
+        children: group_children,
+        source_span: None,
+        unknown_props: BTreeMap::new(),
+    });
+
+    children.insert(insert_at, group_node);
+    record_affected(group_id, affected);
+    // Post-validation catches group_id collision (id.duplicate).
+}
+
+// ── Ungroup ───────────────────────────────────────────────────────────────────
+
+pub(super) fn apply_ungroup(
+    group_id: &str,
+    doc: &mut Document,
+    diagnostics: &mut Vec<Diagnostic>,
+    affected: &mut Vec<String>,
+) {
+    // Phase 1 (shared scan): verify node exists and is a group; also capture
+    // whether it has a non-zero x/y (for the advisory) and its page index.
+    struct GroupInfo {
+        page_index: usize,
+        has_nonzero_offset: bool,
+    }
+
+    let info: Option<Result<GroupInfo, &'static str>> = {
+        let mut result = None;
+        'outer: for (pi, page) in doc.body.pages.iter().enumerate() {
+            if let Some(node) = find_node_shared(&page.children, group_id) {
+                let info = match node {
+                    Node::Group(g) => {
+                        let has_offset = g.x.as_ref().map(|d| d.value != 0.0).unwrap_or(false)
+                            || g.y.as_ref().map(|d| d.value != 0.0).unwrap_or(false);
+                        Ok(GroupInfo {
+                            page_index: pi,
+                            has_nonzero_offset: has_offset,
+                        })
+                    }
+                    _ => Err("not a group"),
+                };
+                result = Some(info);
+                break 'outer;
+            }
+        }
+        result
+    };
+
+    let info = match info {
+        None => {
+            diagnostics.push(Diagnostic::error(
+                "tx.unknown_node",
+                format!("node {:?} not found in document", group_id),
+                None,
+                Some(group_id.to_owned()),
+            ));
+            return;
+        }
+        Some(Err(reason)) => {
+            diagnostics.push(Diagnostic::error(
+                "tx.unsupported_property",
+                format!("ungroup: {:?} is {}", group_id, reason),
+                None,
+                Some(group_id.to_owned()),
+            ));
+            return;
+        }
+        Some(Ok(info)) => info,
+    };
+
+    // Advisory: v0 limitation — group x/y offset is not propagated to children.
+    if info.has_nonzero_offset {
+        diagnostics.push(Diagnostic::advisory(
+            "tx.noop",
+            format!(
+                "ungroup: group {:?} has a non-zero x/y offset; v0 does not \
+                 apply the offset to children on ungroup — child positions may \
+                 shift visually",
+                group_id
+            ),
+            None,
+            Some(group_id.to_owned()),
+        ));
+    }
+
+    // Phase 2 (exclusive borrow): splice the group's children in-place.
+    let Some(page) = doc.body.pages.get_mut(info.page_index) else {
+        return; // unreachable: page_index came from the shared scan above.
+    };
+
+    // Find and remove the group node from the page's subtree, then splice.
+    splice_ungroup(&mut page.children, group_id);
+
+    record_affected(group_id, affected);
+}
+
+/// Walk `children` to find the group with `group_id`, remove it, and insert
+/// its children at the same index. Returns `true` if the group was found and
+/// spliced, `false` otherwise (to continue recursion).
+fn splice_ungroup(children: &mut Vec<Node>, group_id: &str) -> bool {
+    // Check direct children first.
+    if let Some(i) = children
+        .iter()
+        .position(|n| node_id_of(n) == Some(group_id))
+    {
+        // We confirmed it's a group in the shared-scan phase; use .get() for
+        // checked access — the match arm handles the unreachable-but-safe case.
+        let group_children = match children.get(i) {
+            Some(Node::Group(g)) => g.children.clone(),
+            _ => return false, // unreachable under normal flow
+        };
+        children.remove(i);
+        // Insert the group's children at the same position, in order.
+        for (offset, child) in group_children.into_iter().enumerate() {
+            children.insert(i + offset, child);
+        }
+        return true;
+    }
+    // Descend into nested containers.
+    for child in children.iter_mut() {
+        let grandchildren = match child {
+            Node::Frame(f) => &mut f.children,
+            Node::Group(g) => &mut g.children,
+            _ => continue,
+        };
+        if splice_ungroup(grandchildren, group_id) {
+            return true;
+        }
+    }
+    false
+}
+
+// ── Reparent ──────────────────────────────────────────────────────────────────
+
+pub(super) fn apply_reparent(
+    node_id: &str,
+    new_parent: &str,
+    position: &Position,
+    doc: &mut Document,
+    diagnostics: &mut Vec<Diagnostic>,
+    affected: &mut Vec<String>,
+) {
+    // Phase 1 (shared scan): verify the node exists and capture the subtree so
+    // we can run the cycle check without a mutable borrow.
+    let node_page_index = doc.body.pages.iter().enumerate().find_map(|(pi, page)| {
+        if page.children.iter().any(|n| subtree_contains(n, node_id)) {
+            Some(pi)
+        } else {
+            None
+        }
+    });
+
+    let pi = match node_page_index {
+        Some(pi) => pi,
+        None => {
+            diagnostics.push(Diagnostic::error(
+                "tx.unknown_node",
+                format!("node {:?} not found in document", node_id),
+                None,
+                Some(node_id.to_owned()),
+            ));
+            return;
+        }
+    };
+
+    // Cycle check (shared borrow): new_parent must not be node itself or a
+    // descendant of node.  We locate the node in the shared slice and run
+    // subtree_contains on it.
+    {
+        let page = match doc.body.pages.get(pi) {
+            Some(p) => p,
+            None => return, // unreachable
+        };
+        if let Some(node_ref) = find_node_shared(&page.children, node_id)
+            && subtree_contains(node_ref, new_parent)
+        {
+            diagnostics.push(Diagnostic::error(
+                "tx.invalid_parent",
+                format!(
+                    "cannot reparent {:?} into {:?}: new_parent is within \
+                     the node's own subtree",
+                    node_id, new_parent
+                ),
+                None,
+                Some(new_parent.to_owned()),
+            ));
+            return;
+        }
+        // Shared borrow of `page` ends here.
+    }
+
+    // Phase 2 (exclusive borrows): remove then re-insert.
+    // Step 2a — remove the node from its current parent.
+    let node = {
+        // We need a mutable borrow of the page to remove; we know the page index.
+        let page = match doc.body.pages.get_mut(pi) {
+            Some(p) => p,
+            None => return, // unreachable
+        };
+        match remove_node_by_id(&mut page.children, node_id) {
+            Some(n) => n,
+            None => {
+                // Unexpected: the shared scan found it but remove didn't.
+                diagnostics.push(Diagnostic::error(
+                    "tx.unknown_node",
+                    format!("node {:?} disappeared during reparent", node_id),
+                    None,
+                    Some(node_id.to_owned()),
+                ));
+                return;
+            }
+        }
+    };
+    // The mutable borrow of `doc.body.pages[pi]` ends here.
+
+    // Step 2b — locate the new parent's children vec.
+    // `find_container_children_mut` handles page ids AND nested container ids.
+    let new_children = match find_container_children_mut(doc, new_parent) {
+        Some(c) => c,
+        None => {
+            // new_parent is not a container — roll back by re-inserting the node
+            // at the end of its original page (best-effort; the transaction will
+            // be rejected by the error diagnostic anyway).
+            if let Some(page) = doc.body.pages.get_mut(pi) {
+                page.children.push(node);
+            }
+            diagnostics.push(Diagnostic::error(
+                "tx.invalid_parent",
+                format!(
+                    "no container with id {:?} (new_parent must be a page, group, or frame)",
+                    new_parent
+                ),
+                None,
+                Some(new_parent.to_owned()),
+            ));
+            return;
+        }
+    };
+
+    // Step 2c — resolve the insertion index and insert.
+    let idx = match resolve_position(position, new_children, new_parent, diagnostics) {
+        Some(i) => i,
+        None => {
+            // resolve_position already pushed a diagnostic; roll back.
+            if let Some(page) = doc.body.pages.get_mut(pi) {
+                page.children.push(node);
+            }
+            return;
+        }
+    };
+
+    new_children.insert(idx, node);
+    record_affected(node_id, affected);
+}
