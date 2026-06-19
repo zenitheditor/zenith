@@ -658,11 +658,16 @@ fn compile_node(
             // commands are byte-for-byte identical to the previous single-pass.
 
             // Per-shaped-span record: (run, color, underline, strikethrough).
-            struct ShapedSpan {
+            // `text`/`weight`/`style` are retained so the wrap path can re-shape
+            // individual words without re-running color/weight/style resolution.
+            struct ShapedSpan<'a> {
                 run: ZenithGlyphRun,
                 color: Color,
                 underline: bool,
                 strikethrough: bool,
+                text: &'a str,
+                weight: u16,
+                style: FontStyle,
             }
 
             // ── Pass 1: shape ────────────────────────────────────────────────
@@ -722,6 +727,9 @@ fn compile_node(
                             color,
                             underline: span.underline == Some(true),
                             strikethrough: span.strikethrough == Some(true),
+                            text: &span.text,
+                            weight,
+                            style,
                         });
                     }
                 }
@@ -733,60 +741,276 @@ fn compile_node(
             let box_w_opt: Option<f64> = text.w.as_ref().and_then(|d| dim_to_px(d.value, &d.unit));
 
             let align = text.align.as_deref().unwrap_or("start");
-            let x_offset: f64 = match box_w_opt {
-                None => 0.0, // no box width → always start-anchor
-                Some(box_w) => match align {
-                    "center" => (box_w - total_advance) / 2.0,
-                    "end" => box_w - total_advance,
-                    // TODO: justify needs line-wrapping (F3); treat as start for now.
-                    _ => 0.0, // "start", "justify", unknown → no offset
-                },
+            let deco_thickness = (font_size as f64 / 14.0).max(1.0);
+
+            // Decide single-line (fast path) vs. wrapping path. The fast path is
+            // taken when there is no box width OR the whole-span layout already
+            // fits within it. Shaping a span whole differs glyph-for-glyph from
+            // shaping its words separately, so the fast path is preserved exactly
+            // to keep every fitting example byte-identical.
+            let needs_wrap = match box_w_opt {
+                Some(box_w) => total_advance > box_w,
+                None => false,
             };
 
-            // ── Pass 2: emit ─────────────────────────────────────────────────
-            let deco_thickness = (font_size as f64 / 14.0).max(1.0);
-            let mut x_cursor = text_x + x_offset;
+            if !needs_wrap {
+                // ── FAST PATH (fits / no box): single-line two-pass emit ──────
+                let x_offset: f64 = match box_w_opt {
+                    None => 0.0, // no box width → always start-anchor
+                    Some(box_w) => match align {
+                        "center" => (box_w - total_advance) / 2.0,
+                        "end" => box_w - total_advance,
+                        // "start"/"justify"/unknown → no offset. Justify on a
+                        // single line that already fits is start-aligned.
+                        _ => 0.0,
+                    },
+                };
 
-            for shaped in shaped_spans {
-                let run_advance = shaped.run.advance_width as f64;
-                let baseline_y = text_y + shaped.run.ascent as f64;
-                let glyphs = run_to_scene_glyphs(&shaped.run);
+                // ── Pass 2: emit ─────────────────────────────────────────────
+                let mut x_cursor = text_x + x_offset;
 
-                // Per-span decorations: a thin filled rule in the span's own
-                // color, spanning the run's advance. Position/thickness are
-                // derived from the font size (the shaped run does not expose the
-                // font's underline metrics) — a deterministic v0 approximation.
-                // Emitted before the glyphs so the text sits on top of any overlap.
-                if shaped.underline {
-                    commands.push(SceneCommand::FillRect {
+                for shaped in shaped_spans {
+                    let run_advance = shaped.run.advance_width as f64;
+                    let baseline_y = text_y + shaped.run.ascent as f64;
+                    let glyphs = run_to_scene_glyphs(&shaped.run);
+
+                    // Per-span decorations: a thin filled rule in the span's own
+                    // color, spanning the run's advance. Position/thickness are
+                    // derived from the font size (the shaped run does not expose the
+                    // font's underline metrics) — a deterministic v0 approximation.
+                    // Emitted before the glyphs so the text sits on top of any overlap.
+                    if shaped.underline {
+                        commands.push(SceneCommand::FillRect {
+                            x: x_cursor,
+                            y: baseline_y + font_size as f64 * 0.12,
+                            w: run_advance,
+                            h: deco_thickness,
+                            color: shaped.color,
+                        });
+                    }
+                    if shaped.strikethrough {
+                        commands.push(SceneCommand::FillRect {
+                            x: x_cursor,
+                            y: baseline_y - font_size as f64 * 0.30,
+                            w: run_advance,
+                            h: deco_thickness,
+                            color: shaped.color,
+                        });
+                    }
+
+                    commands.push(SceneCommand::DrawGlyphRun {
                         x: x_cursor,
-                        y: baseline_y + font_size as f64 * 0.12,
-                        w: run_advance,
-                        h: deco_thickness,
+                        y: baseline_y,
+                        font_id: shaped.run.font_id,
+                        font_size: shaped.run.font_size,
                         color: shaped.color,
+                        glyphs,
+                    });
+
+                    // Advance the cursor past this run for the next span.
+                    x_cursor += run_advance;
+                }
+            } else if let Some(box_w) = box_w_opt {
+                // ── WRAP PATH (overflow): greedy cross-span word packing ──────
+                // Per-word token carrying its re-shaped run plus the visual
+                // attributes inherited from its source span.
+                struct WordToken {
+                    run: ZenithGlyphRun,
+                    advance: f64,
+                    color: Color,
+                    underline: bool,
+                    strikethrough: bool,
+                }
+                struct Line {
+                    words: Vec<WordToken>,
+                    content_w: f64,
+                }
+
+                // 1+2. Tokenize each (already-resolved) span into words and shape
+                // each word once. Capture shared ascent/line_height from the first
+                // successful word run (all words share font + size).
+                let mut tokens: Vec<WordToken> = Vec::new();
+                let mut ascent: f64 = 0.0;
+                let mut line_height: f64 = 0.0;
+                let mut have_metrics = false;
+
+                for shaped in &shaped_spans {
+                    for word in shaped.text.split_whitespace() {
+                        let req = ShapeRequest {
+                            text: word,
+                            families: &families,
+                            weight: shaped.weight,
+                            style: shaped.style,
+                            font_size,
+                        };
+                        match engine.shape(&req, fonts) {
+                            Err(e) => {
+                                diagnostics.push(Diagnostic::advisory(
+                                    "scene.text_unshaped",
+                                    format!(
+                                        "text node '{}' could not be shaped: {}",
+                                        text.id, e.message
+                                    ),
+                                    text.source_span,
+                                    Some(text.id.clone()),
+                                ));
+                                // Skip this word; it contributes no token.
+                            }
+                            Ok(run) => {
+                                if !have_metrics {
+                                    ascent = run.ascent as f64;
+                                    line_height = run.line_height as f64;
+                                    have_metrics = true;
+                                }
+                                tokens.push(WordToken {
+                                    advance: run.advance_width as f64,
+                                    color: shaped.color,
+                                    underline: shaped.underline,
+                                    strikethrough: shaped.strikethrough,
+                                    run,
+                                });
+                            }
+                        }
+                    }
+                }
+
+                // Shape a single space once (node base weight/style) for inter-word
+                // gaps and packing measurement.
+                let space_advance: f64 = {
+                    let base_weight = resolve_font_weight(node_weight_prop, resolved, 400);
+                    let req = ShapeRequest {
+                        text: " ",
+                        families: &families,
+                        weight: base_weight,
+                        style: FontStyle::Normal,
+                        font_size,
+                    };
+                    match engine.shape(&req, fonts) {
+                        Ok(run) => run.advance_width as f64,
+                        Err(_) => 0.0,
+                    }
+                };
+
+                // 3. Greedy pack tokens into lines, left-to-right and deterministic.
+                let mut lines: Vec<Line> = Vec::new();
+                let mut cur: Vec<WordToken> = Vec::new();
+                let mut line_w: f64 = 0.0;
+                for tok in tokens {
+                    if !cur.is_empty() && line_w + space_advance + tok.advance > box_w {
+                        let content_w = line_w;
+                        lines.push(Line {
+                            words: std::mem::take(&mut cur),
+                            content_w,
+                        });
+                        line_w = 0.0;
+                    }
+                    let gap = if cur.is_empty() { 0.0 } else { space_advance };
+                    line_w += gap + tok.advance;
+                    cur.push(tok);
+                }
+                if !cur.is_empty() {
+                    lines.push(Line {
+                        words: cur,
+                        content_w: line_w,
                     });
                 }
-                if shaped.strikethrough {
-                    commands.push(SceneCommand::FillRect {
-                        x: x_cursor,
-                        y: baseline_y - font_size as f64 * 0.30,
-                        w: run_advance,
-                        h: deco_thickness,
-                        color: shaped.color,
-                    });
+
+                // 4. Emit each line, stacked by line_height, with per-line align.
+                let last_idx = lines.len().saturating_sub(1);
+                for (i, line) in lines.iter().enumerate() {
+                    let baseline_y = text_y + ascent + (i as f64) * line_height;
+                    let word_count = line.words.len();
+
+                    let (base_x, gap) = match align {
+                        "center" => (text_x + (box_w - line.content_w) / 2.0, space_advance),
+                        "end" => (text_x + (box_w - line.content_w), space_advance),
+                        "justify" => {
+                            if i != last_idx && word_count > 1 {
+                                let extra = (box_w - line.content_w) / (word_count as f64 - 1.0);
+                                (text_x, space_advance + extra)
+                            } else {
+                                // Last line (or single word) is start-aligned.
+                                (text_x, space_advance)
+                            }
+                        }
+                        // "start"/unknown → start-aligned.
+                        _ => (text_x, space_advance),
+                    };
+
+                    // Precompute each word's left x along the line (base_x plus
+                    // accumulated advances and gaps). Used for both decorations
+                    // and glyph placement so positions stay exactly consistent.
+                    let mut word_x: Vec<f64> = Vec::with_capacity(word_count);
+                    {
+                        let mut x = base_x;
+                        for (wi, word) in line.words.iter().enumerate() {
+                            word_x.push(x);
+                            x += word.advance;
+                            if wi + 1 < word_count {
+                                x += gap;
+                            }
+                        }
+                    }
+
+                    // Decorations FIRST (so glyphs paint on top), one FillRect per
+                    // maximal contiguous same-flag run of words. The rect spans
+                    // from the first word's x to the last word's right edge,
+                    // covering interior spaces so the rule is continuous.
+                    let underline_y = baseline_y + font_size as f64 * 0.12;
+                    let strike_y = baseline_y - font_size as f64 * 0.30;
+                    // (is_underline, deco rect y) for the two decoration kinds.
+                    for (is_underline, deco_y) in [
+                        (true, underline_y), // underline pass
+                        (false, strike_y),   // strikethrough pass
+                    ] {
+                        let mut run_start: Option<(f64, Color)> = None;
+                        let mut run_right: f64 = base_x;
+                        for (wi, word) in line.words.iter().enumerate() {
+                            let on = if is_underline {
+                                word.underline
+                            } else {
+                                word.strikethrough
+                            };
+                            let wx = word_x.get(wi).copied().unwrap_or(base_x);
+                            if on {
+                                if run_start.is_none() {
+                                    run_start = Some((wx, word.color));
+                                }
+                                run_right = wx + word.advance;
+                            } else if let Some((sx, color)) = run_start.take() {
+                                commands.push(SceneCommand::FillRect {
+                                    x: sx,
+                                    y: deco_y,
+                                    w: run_right - sx,
+                                    h: deco_thickness,
+                                    color,
+                                });
+                            }
+                        }
+                        if let Some((sx, color)) = run_start.take() {
+                            commands.push(SceneCommand::FillRect {
+                                x: sx,
+                                y: deco_y,
+                                w: run_right - sx,
+                                h: deco_thickness,
+                                color,
+                            });
+                        }
+                    }
+
+                    // Glyphs.
+                    for (wi, word) in line.words.iter().enumerate() {
+                        let x = word_x.get(wi).copied().unwrap_or(base_x);
+                        commands.push(SceneCommand::DrawGlyphRun {
+                            x,
+                            y: baseline_y,
+                            font_id: word.run.font_id.clone(),
+                            font_size: word.run.font_size,
+                            color: word.color,
+                            glyphs: run_to_scene_glyphs(&word.run),
+                        });
+                    }
                 }
-
-                commands.push(SceneCommand::DrawGlyphRun {
-                    x: x_cursor,
-                    y: baseline_y,
-                    font_id: shaped.run.font_id,
-                    font_size: shaped.run.font_size,
-                    color: shaped.color,
-                    glyphs,
-                });
-
-                // Advance the cursor past this run for the next span.
-                x_cursor += run_advance;
             }
         }
 
@@ -5042,6 +5266,182 @@ mod tests {
         assert!(
             x1 > x0,
             "second span x ({x1}) must follow first span x ({x0})"
+        );
+    }
+
+    // ── Text wrapping (word wrap) ─────────────────────────────────────────
+
+    /// Helper: collect (x, y, color) of every DrawGlyphRun emitted for a single
+    /// text node with the given box width, align, and span text.
+    fn wrap_runs(node_x: f64, box_w: f64, align: &str, span: &str) -> Vec<(f64, f64)> {
+        let src = format!(
+            r##"zenith version=1 {{
+  project id="proj.wr" name="WR"
+  tokens format="zenith-token-v1" {{}}
+  styles {{}}
+  document id="doc.wr" title="WR" {{
+    page id="page.wr" w=(px)1000 h=(px)600 {{
+      text id="text.wr" x=(px){node_x} y=(px)20 w=(px){box_w} align="{align}" {{
+        span "{span}"
+      }}
+    }}
+  }}
+}}
+"##
+        );
+        let doc = parse(&src);
+        let result = compile(&doc, &default_provider());
+        result
+            .scene
+            .commands
+            .iter()
+            .filter_map(|c| {
+                if let SceneCommand::DrawGlyphRun { x, y, .. } = c {
+                    Some((*x, *y))
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
+    /// A long single span in a narrow box wraps to multiple lines: more than one
+    /// DrawGlyphRun, appearing at >= 2 distinct baseline y values.
+    #[test]
+    fn text_wraps_when_exceeding_box_width() {
+        let runs = wrap_runs(
+            10.0,
+            120.0,
+            "start",
+            "the quick brown fox jumps over the lazy dog",
+        );
+        assert!(
+            runs.len() > 1,
+            "wrapped text must emit more than one run; got {}",
+            runs.len()
+        );
+        let mut ys: Vec<f64> = runs.iter().map(|(_, y)| *y).collect();
+        ys.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        ys.dedup_by(|a, b| (*a - *b).abs() < 1e-6);
+        assert!(
+            ys.len() >= 2,
+            "wrapped text must occupy >= 2 distinct baselines; got {ys:?}"
+        );
+    }
+
+    /// Short text that fits the box takes the unchanged fast path: exactly one
+    /// logical line and (for start align) the first run sits at node x.
+    #[test]
+    fn text_fits_single_line_unchanged() {
+        let runs = wrap_runs(40.0, 600.0, "start", "Hi there");
+        // All runs share a single baseline (one line).
+        let y0 = runs[0].1;
+        assert!(
+            runs.iter().all(|(_, y)| (*y - y0).abs() < 1e-6),
+            "fitting text must stay on one line; got {runs:?}"
+        );
+        // First run x == node x (start-aligned fast path).
+        assert_eq!(
+            runs[0].0, 40.0,
+            "start-aligned fitting text must begin at node x"
+        );
+    }
+
+    /// Wrapped + center: each line's first run is inset to the right of node x.
+    #[test]
+    fn text_wrap_center_lines_inset() {
+        let runs = wrap_runs(
+            10.0,
+            120.0,
+            "center",
+            "the quick brown fox jumps over the lazy dog",
+        );
+        assert!(runs.len() > 1, "expected wrapping; got {}", runs.len());
+        // Group first-run-per-line by baseline; each line's first x > node_x.
+        let mut seen_y: Vec<f64> = Vec::new();
+        for (x, y) in &runs {
+            if !seen_y.iter().any(|sy| (*sy - *y).abs() < 1e-6) {
+                seen_y.push(*y);
+                assert!(
+                    *x > 10.0,
+                    "center-wrapped line first run x ({x}) must be inset past node x (10)"
+                );
+            }
+        }
+    }
+
+    /// Wrapped + justify: a non-last multi-word line is fully justified (first
+    /// word at node x, last word right edge ≈ node x + box_w), while the LAST
+    /// line stays start-aligned (first run at node x, not stretched).
+    #[test]
+    fn text_wrap_justify_spreads() {
+        let node_x = 10.0;
+        let box_w = 120.0;
+        // Need the per-run advances too, so re-collect including last word edge.
+        let src = format!(
+            r##"zenith version=1 {{
+  project id="proj.wj" name="WJ"
+  tokens format="zenith-token-v1" {{}}
+  styles {{}}
+  document id="doc.wj" title="WJ" {{
+    page id="page.wj" w=(px)1000 h=(px)600 {{
+      text id="text.wj" x=(px){node_x} y=(px)20 w=(px){box_w} align="justify" {{
+        span "the quick brown fox jumps over the lazy dog"
+      }}
+    }}
+  }}
+}}
+"##
+        );
+        let doc = parse(&src);
+        let result = compile(&doc, &default_provider());
+        // Collect (y, x) of all runs.
+        let runs: Vec<(f64, f64)> = result
+            .scene
+            .commands
+            .iter()
+            .filter_map(|c| {
+                if let SceneCommand::DrawGlyphRun { x, y, .. } = c {
+                    Some((*y, *x))
+                } else {
+                    None
+                }
+            })
+            .collect();
+        assert!(runs.len() > 1, "expected wrapping; got {}", runs.len());
+
+        // Distinct baselines, in order.
+        let mut ys: Vec<f64> = Vec::new();
+        for (y, _) in &runs {
+            if !ys.iter().any(|v| (*v - *y).abs() < 1e-6) {
+                ys.push(*y);
+            }
+        }
+        assert!(ys.len() >= 2, "need >= 2 lines; got {}", ys.len());
+
+        // First line: its first run must start at node x (justify keeps left edge).
+        let first_line_y = ys[0];
+        let first_line_first_x = runs
+            .iter()
+            .filter(|(y, _)| (*y - first_line_y).abs() < 1e-6)
+            .map(|(_, x)| *x)
+            .fold(f64::INFINITY, f64::min);
+        assert!(
+            (first_line_first_x - node_x).abs() < 1e-6,
+            "justified first line must start at node x; got {first_line_first_x}"
+        );
+
+        // Last line stays start-aligned: its first run also begins at node x and
+        // is not stretched to the box edge. We assert it begins at node x.
+        let last_line_y = ys[ys.len() - 1];
+        let last_line_first_x = runs
+            .iter()
+            .filter(|(y, _)| (*y - last_line_y).abs() < 1e-6)
+            .map(|(_, x)| *x)
+            .fold(f64::INFINITY, f64::min);
+        assert!(
+            (last_line_first_x - node_x).abs() < 1e-6,
+            "last (start-aligned) line must begin at node x; got {last_line_first_x}"
         );
     }
 
