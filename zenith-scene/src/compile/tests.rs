@@ -1,0 +1,4650 @@
+//! Tests for the scene compiler.
+//!
+//! Moved verbatim from the former `compile.rs` test module; imports are stated
+//! explicitly because this file now lives one directory deeper and the parent
+//! module's `use` block is trimmed to what production code references.
+
+use super::{CompileResult, compile, compile_page};
+use crate::ir::{Color, FitMode, SceneCommand};
+use zenith_core::{Document, KdlAdapter, KdlSource, default_provider};
+
+// ── Helper to parse a .zen source string ──────────────────────────────
+
+fn parse(src: &str) -> Document {
+    KdlAdapter
+        .parse(src.as_bytes())
+        .expect("test document must parse")
+}
+
+// ── Minimal single-rect document ──────────────────────────────────────
+
+/// A page with a single full-page rect filled via a token color.
+/// Expected scene: PushClip → FillRect (bg from token) → FillRect (rect) → PopClip.
+/// In this test the page has no background, so background FillRect is absent.
+#[test]
+fn single_rect_token_fill_compiles_correctly() {
+    let src = r##"zenith version=1 {
+  project id="proj.t1" name="T1"
+  tokens format="zenith-token-v1" {
+token id="color.fill" type="color" value="#f8fafc"
+  }
+  styles {}
+  document id="doc.t1" title="T1" {
+page id="page.t1" w=(px)640 h=(px)360 {
+  rect id="rect.t1" x=(px)0 y=(px)0 w=(px)640 h=(px)360 fill=(token)"color.fill"
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+
+    let cmds = &result.scene.commands;
+    // PushClip, FillRect, PopClip
+    assert_eq!(cmds.len(), 3, "expected 3 commands, got: {:?}", cmds);
+
+    assert!(
+        matches!(cmds[0], SceneCommand::PushClip { x, y, w, h } if x == 0.0 && y == 0.0 && w == 640.0 && h == 360.0),
+        "first command must be PushClip covering the page"
+    );
+
+    match &cmds[1] {
+        SceneCommand::FillRect { x, y, w, h, color } => {
+            assert_eq!(*x, 0.0);
+            assert_eq!(*y, 0.0);
+            assert_eq!(*w, 640.0);
+            assert_eq!(*h, 360.0);
+            // #f8fafc → r=0xf8=248, g=0xfa=250, b=0xfc=252, a=255
+            assert_eq!(color.r, 0xf8);
+            assert_eq!(color.g, 0xfa);
+            assert_eq!(color.b, 0xfc);
+            assert_eq!(color.a, 255);
+        }
+        other => panic!("expected FillRect, got {other:?}"),
+    }
+
+    assert!(
+        matches!(cmds[2], SceneCommand::PopClip),
+        "last command must be PopClip"
+    );
+}
+
+// ── Two rects → two FillRects in source order ─────────────────────────
+
+#[test]
+fn two_rects_emitted_in_source_order() {
+    let src = r##"zenith version=1 {
+  project id="proj.t2" name="T2"
+  tokens format="zenith-token-v1" {
+token id="color.a" type="color" value="#111111"
+token id="color.b" type="color" value="#222222"
+  }
+  styles {}
+  document id="doc.t2" title="T2" {
+page id="page.t2" w=(px)100 h=(px)100 {
+  rect id="rect.a" x=(px)0 y=(px)0 w=(px)50 h=(px)50 fill=(token)"color.a"
+  rect id="rect.b" x=(px)50 y=(px)50 w=(px)50 h=(px)50 fill=(token)"color.b"
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+
+    let cmds = &result.scene.commands;
+    // PushClip, FillRect(a), FillRect(b), PopClip
+    assert_eq!(cmds.len(), 4, "expected 4 commands, got: {:?}", cmds);
+
+    match &cmds[1] {
+        SceneCommand::FillRect { color, .. } => assert_eq!(color.r, 0x11),
+        other => panic!("expected FillRect for rect.a, got {other:?}"),
+    }
+    match &cmds[2] {
+        SceneCommand::FillRect { color, .. } => assert_eq!(color.r, 0x22),
+        other => panic!("expected FillRect for rect.b, got {other:?}"),
+    }
+}
+
+// ── visible=false rect is not emitted ─────────────────────────────────
+
+#[test]
+fn invisible_rect_not_emitted() {
+    let src = r##"zenith version=1 {
+  project id="proj.t3" name="T3"
+  tokens format="zenith-token-v1" {
+token id="color.fill" type="color" value="#abcdef"
+  }
+  styles {}
+  document id="doc.t3" title="T3" {
+page id="page.t3" w=(px)100 h=(px)100 {
+  rect id="rect.hidden" x=(px)0 y=(px)0 w=(px)100 h=(px)100 fill=(token)"color.fill" visible=#false
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+
+    // No diagnostics expected (visible=false is a normal skip, not an error).
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+
+    let cmds = &result.scene.commands;
+    // Only PushClip + PopClip; no FillRect.
+    assert_eq!(
+        cmds.len(),
+        2,
+        "expected PushClip + PopClip only; got: {:?}",
+        cmds
+    );
+    assert!(matches!(cmds[0], SceneCommand::PushClip { .. }));
+    assert!(matches!(cmds[1], SceneCommand::PopClip));
+}
+
+// ── JSON schema field is "zenith-scene-v1" ────────────────────────────
+
+#[test]
+fn json_schema_field_value() {
+    let src = r##"zenith version=1 {
+  project id="proj.t5" name="T5"
+  tokens format="zenith-token-v1" {}
+  styles {}
+  document id="doc.t5" title="T5" {
+page id="page.t5" w=(px)100 h=(px)100 {}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+    let json = result.scene.to_json().expect("serialize must succeed");
+    assert!(
+        json.contains(r#""schema": "zenith-scene-v1""#),
+        "JSON must contain schema field; got snippet: {}",
+        &json[..json.len().min(200)]
+    );
+}
+
+// ── JSON determinism ──────────────────────────────────────────────────
+
+#[test]
+fn json_serialization_is_deterministic() {
+    let src = r##"zenith version=1 {
+  project id="proj.t6" name="T6"
+  tokens format="zenith-token-v1" {
+token id="color.fill" type="color" value="#aabbcc"
+  }
+  styles {}
+  document id="doc.t6" title="T6" {
+page id="page.t6" w=(px)200 h=(px)100 {
+  rect id="rect.t6" x=(px)10 y=(px)20 w=(px)100 h=(px)50 fill=(token)"color.fill"
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let r1 = compile(&doc, &default_provider());
+    let r2 = compile(&doc, &default_provider());
+    let j1 = r1.scene.to_json().expect("serialize 1");
+    let j2 = r2.scene.to_json().expect("serialize 2");
+    assert_eq!(
+        j1, j2,
+        "two compiles of the same doc must produce identical JSON"
+    );
+}
+
+// ── Page background emitted as first FillRect ─────────────────────────
+
+#[test]
+fn page_background_emitted_before_children() {
+    let src = r##"zenith version=1 {
+  project id="proj.t7" name="T7"
+  tokens format="zenith-token-v1" {
+token id="color.bg" type="color" value="#ffffff"
+token id="color.fill" type="color" value="#000000"
+  }
+  styles {}
+  document id="doc.t7" title="T7" {
+page id="page.t7" w=(px)100 h=(px)100 background=(token)"color.bg" {
+  rect id="rect.t7" x=(px)0 y=(px)0 w=(px)100 h=(px)100 fill=(token)"color.fill"
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+
+    let cmds = &result.scene.commands;
+    // PushClip, FillRect(bg=white), FillRect(rect=black), PopClip
+    assert_eq!(cmds.len(), 4, "expected 4 commands; got: {:?}", cmds);
+
+    // Background fill must be white.
+    match &cmds[1] {
+        SceneCommand::FillRect { color, .. } => {
+            assert_eq!(color.r, 255, "bg must be white");
+            assert_eq!(color.g, 255);
+            assert_eq!(color.b, 255);
+        }
+        other => panic!("expected background FillRect, got {other:?}"),
+    }
+
+    // Child rect must be black.
+    match &cmds[2] {
+        SceneCommand::FillRect { color, .. } => {
+            assert_eq!(color.r, 0, "child rect must be black");
+            assert_eq!(color.g, 0);
+            assert_eq!(color.b, 0);
+        }
+        other => panic!("expected child FillRect, got {other:?}"),
+    }
+}
+
+// ── Opacity multiplied into alpha ─────────────────────────────────────
+
+#[test]
+fn opacity_applied_to_fill_alpha() {
+    // A full-alpha color (#ffffff, a=255) with opacity=0.5 → a≈128.
+    let src = r##"zenith version=1 {
+  project id="proj.t8" name="T8"
+  tokens format="zenith-token-v1" {
+token id="color.fill" type="color" value="#ffffff"
+  }
+  styles {}
+  document id="doc.t8" title="T8" {
+page id="page.t8" w=(px)100 h=(px)100 {
+  rect id="rect.t8" x=(px)0 y=(px)0 w=(px)100 h=(px)100 fill=(token)"color.fill" opacity=0.5
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+
+    match &result.scene.commands[1] {
+        SceneCommand::FillRect { color, .. } => {
+            // 255 * 0.5 = 127.5 → rounds to 128.
+            assert_eq!(color.a, 128, "opacity 0.5 must give a=128; got {}", color.a);
+        }
+        other => panic!("expected FillRect, got {other:?}"),
+    }
+}
+
+// ── Text node with token-resolved fill/font/size → DrawGlyphRun ───────
+
+#[test]
+fn text_node_token_resolved_compiles_to_draw_glyph_run() {
+    // A page with a text node whose fill, font-family, and font-size all
+    // reference tokens.  Shaping uses the bundled Noto Sans provider.
+    let src = r##"zenith version=1 {
+  project id="proj.tx1" name="TX1"
+  tokens format="zenith-token-v1" {
+token id="color.ink"     type="color"      value="#111827"
+token id="font.body"     type="fontFamily" value="Noto Sans"
+token id="size.body"     type="dimension"  value=(px)24
+  }
+  styles {}
+  document id="doc.tx1" title="TX1" {
+page id="page.tx1" w=(px)400 h=(px)200 {
+  text id="label.tx1" x=(px)10 y=(px)20 w=(px)380 h=(px)40 fill=(token)"color.ink" font-family=(token)"font.body" font-size=(token)"size.body" {
+    span "Hello Zenith"
+  }
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+
+    // No shaping errors expected.
+    let unshaped: Vec<_> = result
+        .diagnostics
+        .iter()
+        .filter(|d| d.code == "scene.text_unshaped")
+        .collect();
+    assert!(
+        unshaped.is_empty(),
+        "no text_unshaped diagnostics expected; got: {:?}",
+        result.diagnostics
+    );
+
+    // Commands: PushClip, DrawGlyphRun, PopClip.
+    let cmds = &result.scene.commands;
+    assert_eq!(cmds.len(), 3, "expected 3 commands; got: {:?}", cmds);
+    assert!(matches!(cmds[0], SceneCommand::PushClip { .. }));
+    assert!(matches!(cmds[2], SceneCommand::PopClip));
+
+    match &cmds[1] {
+        SceneCommand::DrawGlyphRun {
+            x,
+            y,
+            font_id,
+            font_size,
+            color,
+            glyphs,
+        } => {
+            // x is the text-box origin x.
+            assert_eq!(*x, 10.0, "x must be text-box origin (10px)");
+            // y is baseline = text_y + ascent; ascent > 0, so y > 20.0.
+            assert!(*y > 20.0, "baseline y must be > text_y (20px); got {}", y);
+            // font_id must be the stable Noto Sans id.
+            assert_eq!(
+                font_id, "noto-sans-400-normal",
+                "font_id must be noto-sans-400-normal"
+            );
+            assert_eq!(*font_size, 24.0, "font_size must be 24px");
+            // Fill color: #111827 → r=0x11=17, g=0x18=24, b=0x27=39.
+            assert_eq!(color.r, 0x11, "color.r must be 0x11");
+            assert_eq!(color.g, 0x18, "color.g must be 0x18");
+            assert_eq!(color.b, 0x27, "color.b must be 0x27");
+            assert_eq!(color.a, 255, "color.a must be 255 (opaque)");
+            // Glyph run must be non-empty.
+            assert!(
+                !glyphs.is_empty(),
+                "glyphs must be non-empty for 'Hello Zenith'"
+            );
+        }
+        other => panic!("expected DrawGlyphRun, got {other:?}"),
+    }
+}
+
+// ── Rect then text → FillRect before DrawGlyphRun (z-order) ──────────
+
+#[test]
+fn rect_then_text_z_order_preserved() {
+    let src = r##"zenith version=1 {
+  project id="proj.tx2" name="TX2"
+  tokens format="zenith-token-v1" {
+token id="color.bg"  type="color"      value="#ffffff"
+token id="color.ink" type="color"      value="#000000"
+token id="font.body" type="fontFamily" value="Noto Sans"
+token id="size.body" type="dimension"  value=(px)16
+  }
+  styles {}
+  document id="doc.tx2" title="TX2" {
+page id="page.tx2" w=(px)400 h=(px)200 {
+  rect id="bg.rect" x=(px)0 y=(px)0 w=(px)400 h=(px)200 fill=(token)"color.bg"
+  text id="label.tx2" x=(px)10 y=(px)20 w=(px)380 h=(px)40 fill=(token)"color.ink" font-family=(token)"font.body" font-size=(token)"size.body" {
+    span "Hello"
+  }
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+
+    let cmds = &result.scene.commands;
+    // PushClip, FillRect, DrawGlyphRun, PopClip
+    assert_eq!(cmds.len(), 4, "expected 4 commands; got: {:?}", cmds);
+    assert!(
+        matches!(cmds[1], SceneCommand::FillRect { .. }),
+        "second command must be FillRect (rect comes first)"
+    );
+    assert!(
+        matches!(cmds[2], SceneCommand::DrawGlyphRun { .. }),
+        "third command must be DrawGlyphRun (text comes after rect)"
+    );
+}
+
+// ── Scene JSON of text contains DrawGlyphRun op + font_id, no byte arrays ─
+
+#[test]
+fn scene_json_draw_glyph_run_op_and_font_id_no_bytes() {
+    let src = r##"zenith version=1 {
+  project id="proj.tx3" name="TX3"
+  tokens format="zenith-token-v1" {
+token id="color.ink" type="color"      value="#333333"
+token id="font.body" type="fontFamily" value="Noto Sans"
+token id="size.body" type="dimension"  value=(px)18
+  }
+  styles {}
+  document id="doc.tx3" title="TX3" {
+page id="page.tx3" w=(px)300 h=(px)100 {
+  text id="label.tx3" x=(px)0 y=(px)0 w=(px)300 h=(px)50 fill=(token)"color.ink" font-family=(token)"font.body" font-size=(token)"size.body" {
+    span "Hi"
+  }
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+
+    let j1 = result.scene.to_json().expect("serialize 1");
+    let j2 = result.scene.to_json().expect("serialize 2");
+
+    // Must contain the op tag.
+    assert!(
+        j1.contains(r#""op": "DrawGlyphRun""#),
+        "JSON must contain DrawGlyphRun op; snippet: {}",
+        &j1[..j1.len().min(500)]
+    );
+    // Must contain the font_id string.
+    assert!(
+        j1.contains("noto-sans-400-normal"),
+        "JSON must contain font_id; snippet: {}",
+        &j1[..j1.len().min(500)]
+    );
+    // Must NOT contain a large byte array (no font bytes in IR).
+    // Large byte arrays appear as `[1, 2, 3, ...]` with > ~50 numbers.
+    // A simple heuristic: no run of more than 10 consecutive numbers separated by ", ".
+    // We check that the JSON does not contain "bytes" as a key.
+    assert!(
+        !j1.contains(r#""bytes""#),
+        "JSON must not contain a 'bytes' field; font bytes must not appear in the IR"
+    );
+    // Determinism: two serializations must be identical.
+    assert_eq!(j1, j2, "two serializations must be identical (determinism)");
+}
+
+// ── Group: children emitted in source order ───────────────────────────
+
+#[test]
+fn group_children_emitted_in_order() {
+    // A page with a bg rect and a group containing a rect then an ellipse.
+    // After PushClip + bg FillRect, the group produces: FillRect, FillEllipse.
+    let src = r##"zenith version=1 {
+  project id="proj.gc" name="GC"
+  tokens format="zenith-token-v1" {
+token id="color.bg"   type="color" value="#ffffff"
+token id="color.r"    type="color" value="#ff0000"
+token id="color.e"    type="color" value="#0000ff"
+  }
+  styles {}
+  document id="doc.gc" title="GC" {
+page id="page.gc" w=(px)320 h=(px)200 background=(token)"color.bg" {
+  group id="group.gc" {
+    rect id="rect.gc" x=(px)10 y=(px)10 w=(px)50 h=(px)50 fill=(token)"color.r"
+    ellipse id="ellipse.gc" x=(px)70 y=(px)10 w=(px)50 h=(px)50 fill=(token)"color.e"
+  }
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+
+    let cmds = &result.scene.commands;
+    // PushClip, FillRect(bg), FillRect(rect.gc), FillEllipse(ellipse.gc), PopClip
+    assert_eq!(cmds.len(), 5, "expected 5 commands; got: {:?}", cmds);
+    assert!(matches!(cmds[0], SceneCommand::PushClip { .. }));
+    assert!(
+        matches!(cmds[1], SceneCommand::FillRect { .. }),
+        "cmd[1] must be bg FillRect"
+    );
+    assert!(
+        matches!(cmds[2], SceneCommand::FillRect { .. }),
+        "cmd[2] must be group-child FillRect"
+    );
+    assert!(
+        matches!(cmds[3], SceneCommand::FillEllipse { .. }),
+        "cmd[3] must be group-child FillEllipse"
+    );
+    assert!(matches!(cmds[4], SceneCommand::PopClip));
+}
+
+// ── Group: visible=false → entire subtree excluded ────────────────────
+
+#[test]
+fn invisible_group_subtree_not_emitted() {
+    let src = r##"zenith version=1 {
+  project id="proj.gv" name="GV"
+  tokens format="zenith-token-v1" {
+token id="color.r" type="color" value="#ff0000"
+token id="color.b" type="color" value="#0000ff"
+  }
+  styles {}
+  document id="doc.gv" title="GV" {
+page id="page.gv" w=(px)100 h=(px)100 {
+  group id="group.gv" visible=#false {
+    rect id="rect.gv1" x=(px)0 y=(px)0 w=(px)50 h=(px)50 fill=(token)"color.r"
+    rect id="rect.gv2" x=(px)50 y=(px)50 w=(px)50 h=(px)50 fill=(token)"color.b"
+  }
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+
+    let cmds = &result.scene.commands;
+    // Only PushClip + PopClip; both children excluded because group is invisible.
+    assert_eq!(
+        cmds.len(),
+        2,
+        "expected PushClip + PopClip only; got: {:?}",
+        cmds
+    );
+    assert!(matches!(cmds[0], SceneCommand::PushClip { .. }));
+    assert!(matches!(cmds[1], SceneCommand::PopClip));
+}
+
+// ── Group: opacity cascades to child alpha ────────────────────────────
+
+#[test]
+fn group_opacity_cascades_to_child() {
+    // Group opacity=0.5, child rect fill is fully opaque #ffffff (a=255).
+    // Expected child FillRect alpha ≈ 128 (255 * 1.0 * 0.5 = 127.5 → 128).
+    let src = r##"zenith version=1 {
+  project id="proj.go" name="GO"
+  tokens format="zenith-token-v1" {
+token id="color.w" type="color" value="#ffffff"
+  }
+  styles {}
+  document id="doc.go" title="GO" {
+page id="page.go" w=(px)100 h=(px)100 {
+  group id="group.go" opacity=0.5 {
+    rect id="rect.go" x=(px)0 y=(px)0 w=(px)100 h=(px)100 fill=(token)"color.w"
+  }
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+
+    let cmds = &result.scene.commands;
+    // PushClip, FillRect, PopClip
+    assert_eq!(cmds.len(), 3, "expected 3 commands; got: {:?}", cmds);
+
+    match &cmds[1] {
+        SceneCommand::FillRect { color, .. } => {
+            // 255 * 1.0 (node opacity) * 0.5 (group opacity) = 127.5 → 128.
+            assert_eq!(
+                color.a, 128,
+                "cascaded opacity 0.5 must give a=128; got {}",
+                color.a
+            );
+        }
+        other => panic!("expected FillRect, got {other:?}"),
+    }
+}
+
+// ── Group: x/y translates child geometry ─────────────────────────────
+
+#[test]
+fn group_xy_translates_child() {
+    // Group x=(px)10 y=(px)20; child rect at x=(px)5 y=(px)5.
+    // Expected FillRect at x=15.0 y=25.0.
+    let src = r##"zenith version=1 {
+  project id="proj.gt" name="GT"
+  tokens format="zenith-token-v1" {
+token id="color.k" type="color" value="#000000"
+  }
+  styles {}
+  document id="doc.gt" title="GT" {
+page id="page.gt" w=(px)200 h=(px)200 {
+  group id="group.gt" x=(px)10 y=(px)20 {
+    rect id="rect.gt" x=(px)5 y=(px)5 w=(px)50 h=(px)50 fill=(token)"color.k"
+  }
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+
+    let cmds = &result.scene.commands;
+    // PushClip, FillRect, PopClip
+    assert_eq!(cmds.len(), 3, "expected 3 commands; got: {:?}", cmds);
+
+    match &cmds[1] {
+        SceneCommand::FillRect { x, y, .. } => {
+            assert_eq!(
+                *x, 15.0,
+                "child x must be group.x(10) + rect.x(5) = 15; got {x}"
+            );
+            assert_eq!(
+                *y, 25.0,
+                "child y must be group.y(20) + rect.y(5) = 25; got {y}"
+            );
+        }
+        other => panic!("expected FillRect, got {other:?}"),
+    }
+}
+
+// ── role="guide" nodes are excluded from render output ──────────────────
+
+#[test]
+fn guide_role_nodes_are_not_rendered() {
+    let src = r##"zenith version=1 {
+  project id="proj.g" name="G"
+  tokens format="zenith-token-v1" {
+token id="color.fill" type="color" value="#000000"
+  }
+  styles {}
+  document id="doc.g" title="G" {
+page id="page.g" w=(px)100 h=(px)100 {
+  rect id="rect.real" x=(px)0 y=(px)0 w=(px)40 h=(px)40 fill=(token)"color.fill"
+  rect id="rect.guide" role="guide" x=(px)50 y=(px)50 w=(px)40 h=(px)40 fill=(token)"color.fill"
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+
+    // Exactly one FillRect for the real rect; the guide rect emits nothing.
+    // (No page background, so no background FillRect.)
+    let fills = result
+        .scene
+        .commands
+        .iter()
+        .filter(|c| matches!(c, SceneCommand::FillRect { .. }))
+        .count();
+    assert_eq!(
+        fills, 1,
+        "guide-role rect must not render; expected 1 FillRect, got {fills}: {:?}",
+        result.scene.commands
+    );
+}
+
+// ── Unresolvable font → font.unresolved advisory + fallback render ──────
+
+#[test]
+fn unresolvable_font_family_falls_back_and_emits_advisory() {
+    let src = r##"zenith version=1 {
+  project id="proj.tx4" name="TX4"
+  tokens format="zenith-token-v1" {}
+  styles {}
+  document id="doc.tx4" title="TX4" {
+page id="page.tx4" w=(px)200 h=(px)100 {
+  text id="label.tx4" x=(px)0 y=(px)0 w=(px)200 h=(px)50 fill="#000000" font-family="Nonexistent" {
+    span "test"
+  }
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+
+    // Exactly one font.unresolved advisory naming the node and the missing family.
+    let unresolved: Vec<_> = result
+        .diagnostics
+        .iter()
+        .filter(|d| d.code == "font.unresolved")
+        .collect();
+    assert_eq!(
+        unresolved.len(),
+        1,
+        "expected 1 font.unresolved advisory; got: {:?}",
+        result.diagnostics
+    );
+    assert!(
+        unresolved[0].message.contains("label.tx4")
+            && unresolved[0].message.contains("Nonexistent"),
+        "advisory must name the node and the missing family; got: {:?}",
+        unresolved[0]
+    );
+
+    // Text must STILL render via the fallback face — DrawGlyphRun present.
+    let glyph_cmds: Vec<_> = result
+        .scene
+        .commands
+        .iter()
+        .filter(|c| matches!(c, SceneCommand::DrawGlyphRun { .. }))
+        .collect();
+    assert!(
+        !glyph_cmds.is_empty(),
+        "text must render in the fallback face, not be dropped; got: {:?}",
+        result.scene.commands
+    );
+}
+
+// ── Ellipse: token fill compiles to FillEllipse ───────────────────────
+
+#[test]
+fn single_ellipse_token_fill_compiles_correctly() {
+    let src = r##"zenith version=1 {
+  project id="proj.e1" name="E1"
+  tokens format="zenith-token-v1" {
+token id="color.fill" type="color" value="#f8fafc"
+  }
+  styles {}
+  document id="doc.e1" title="E1" {
+page id="page.e1" w=(px)640 h=(px)360 {
+  ellipse id="ellipse.e1" x=(px)0 y=(px)0 w=(px)640 h=(px)360 fill=(token)"color.fill"
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+
+    let cmds = &result.scene.commands;
+    // PushClip, FillEllipse, PopClip
+    assert_eq!(cmds.len(), 3, "expected 3 commands, got: {:?}", cmds);
+
+    assert!(
+        matches!(cmds[0], SceneCommand::PushClip { x, y, w, h } if x == 0.0 && y == 0.0 && w == 640.0 && h == 360.0),
+        "first command must be PushClip covering the page"
+    );
+
+    match &cmds[1] {
+        SceneCommand::FillEllipse { x, y, w, h, color } => {
+            assert_eq!(*x, 0.0);
+            assert_eq!(*y, 0.0);
+            assert_eq!(*w, 640.0);
+            assert_eq!(*h, 360.0);
+            // #f8fafc → r=0xf8=248, g=0xfa=250, b=0xfc=252, a=255
+            assert_eq!(color.r, 0xf8);
+            assert_eq!(color.g, 0xfa);
+            assert_eq!(color.b, 0xfc);
+            assert_eq!(color.a, 255);
+        }
+        other => panic!("expected FillEllipse, got {other:?}"),
+    }
+
+    assert!(
+        matches!(cmds[2], SceneCommand::PopClip),
+        "last command must be PopClip"
+    );
+}
+
+// ── Ellipse: visible=false not emitted ────────────────────────────────
+
+#[test]
+fn invisible_ellipse_not_emitted() {
+    let src = r##"zenith version=1 {
+  project id="proj.e2" name="E2"
+  tokens format="zenith-token-v1" {
+token id="color.fill" type="color" value="#abcdef"
+  }
+  styles {}
+  document id="doc.e2" title="E2" {
+page id="page.e2" w=(px)100 h=(px)100 {
+  ellipse id="ellipse.hidden" x=(px)0 y=(px)0 w=(px)100 h=(px)100 fill=(token)"color.fill" visible=#false
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+
+    let cmds = &result.scene.commands;
+    // Only PushClip + PopClip; no FillEllipse.
+    assert_eq!(
+        cmds.len(),
+        2,
+        "expected PushClip + PopClip only; got: {:?}",
+        cmds
+    );
+    assert!(matches!(cmds[0], SceneCommand::PushClip { .. }));
+    assert!(matches!(cmds[1], SceneCommand::PopClip));
+}
+
+// ── Ellipse: fill + stroke tokens compile to FillEllipse then StrokeEllipse
+
+#[test]
+fn ellipse_fill_and_stroke_tokens_emit_fill_then_stroke() {
+    let src = r##"zenith version=1 {
+  project id="proj.e3" name="E3"
+  tokens format="zenith-token-v1" {
+token id="color.fill"   type="color"     value="#1e293b"
+token id="color.stroke" type="color"     value="#94a3b8"
+token id="size.sw"      type="dimension" value=(px)4
+  }
+  styles {}
+  document id="doc.e3" title="E3" {
+page id="page.e3" w=(px)200 h=(px)200 {
+  ellipse id="ellipse.e3" x=(px)10 y=(px)10 w=(px)180 h=(px)180 fill=(token)"color.fill" stroke=(token)"color.stroke" stroke-width=(token)"size.sw"
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+
+    let cmds = &result.scene.commands;
+    // PushClip, FillEllipse, StrokeEllipse, PopClip
+    assert_eq!(cmds.len(), 4, "expected 4 commands, got: {:?}", cmds);
+
+    assert!(
+        matches!(cmds[0], SceneCommand::PushClip { .. }),
+        "first command must be PushClip"
+    );
+
+    match &cmds[1] {
+        SceneCommand::FillEllipse { x, y, w, h, color } => {
+            assert_eq!(*x, 10.0);
+            assert_eq!(*y, 10.0);
+            assert_eq!(*w, 180.0);
+            assert_eq!(*h, 180.0);
+            // #1e293b → r=0x1e=30, g=0x29=41, b=0x3b=59, a=255
+            assert_eq!(color.r, 0x1e);
+            assert_eq!(color.g, 0x29);
+            assert_eq!(color.b, 0x3b);
+            assert_eq!(color.a, 255);
+        }
+        other => panic!("expected FillEllipse at index 1, got {other:?}"),
+    }
+
+    match &cmds[2] {
+        SceneCommand::StrokeEllipse {
+            x,
+            y,
+            w,
+            h,
+            color,
+            stroke_width,
+        } => {
+            assert_eq!(*x, 10.0);
+            assert_eq!(*y, 10.0);
+            assert_eq!(*w, 180.0);
+            assert_eq!(*h, 180.0);
+            // #94a3b8 → r=0x94=148, g=0xa3=163, b=0xb8=184, a=255
+            assert_eq!(color.r, 0x94);
+            assert_eq!(color.g, 0xa3);
+            assert_eq!(color.b, 0xb8);
+            assert_eq!(color.a, 255);
+            assert_eq!(*stroke_width, 4.0);
+        }
+        other => panic!("expected StrokeEllipse at index 2, got {other:?}"),
+    }
+
+    assert!(
+        matches!(cmds[3], SceneCommand::PopClip),
+        "last command must be PopClip"
+    );
+}
+
+// ── Ellipse: stroke only (no fill) compiles to StrokeEllipse only ─────
+
+#[test]
+fn ellipse_stroke_only_emits_stroke_ellipse_without_fill() {
+    let src = r##"zenith version=1 {
+  project id="proj.e4" name="E4"
+  tokens format="zenith-token-v1" {
+token id="color.stroke" type="color"     value="#f43f5e"
+token id="size.sw"      type="dimension" value=(px)3
+  }
+  styles {}
+  document id="doc.e4" title="E4" {
+page id="page.e4" w=(px)100 h=(px)100 {
+  ellipse id="ellipse.e4" x=(px)5 y=(px)5 w=(px)90 h=(px)90 stroke=(token)"color.stroke" stroke-width=(token)"size.sw"
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+
+    let cmds = &result.scene.commands;
+    // PushClip, StrokeEllipse, PopClip — no FillEllipse
+    assert_eq!(
+        cmds.len(),
+        3,
+        "expected 3 commands (no fill), got: {:?}",
+        cmds
+    );
+
+    assert!(
+        matches!(cmds[0], SceneCommand::PushClip { .. }),
+        "first command must be PushClip"
+    );
+
+    match &cmds[1] {
+        SceneCommand::StrokeEllipse {
+            x,
+            y,
+            w,
+            h,
+            color,
+            stroke_width,
+        } => {
+            assert_eq!(*x, 5.0);
+            assert_eq!(*y, 5.0);
+            assert_eq!(*w, 90.0);
+            assert_eq!(*h, 90.0);
+            // #f43f5e → r=0xf4=244, g=0x3f=63, b=0x5e=94, a=255
+            assert_eq!(color.r, 0xf4);
+            assert_eq!(color.g, 0x3f);
+            assert_eq!(color.b, 0x5e);
+            assert_eq!(color.a, 255);
+            assert_eq!(*stroke_width, 3.0);
+        }
+        other => panic!("expected StrokeEllipse at index 1, got {other:?}"),
+    }
+
+    assert!(
+        matches!(cmds[2], SceneCommand::PopClip),
+        "last command must be PopClip"
+    );
+}
+
+// ── Line: token stroke compiles to StrokeLine ─────────────────────────
+
+#[test]
+fn single_line_token_stroke_compiles_correctly() {
+    let src = r##"zenith version=1 {
+  project id="proj.l1" name="L1"
+  tokens format="zenith-token-v1" {
+token id="color.rule" type="color" value="#94a3b8"
+token id="size.stroke" type="dimension" value=(px)2
+  }
+  styles {}
+  document id="doc.l1" title="L1" {
+page id="page.l1" w=(px)320 h=(px)200 {
+  line id="line.divider" x1=(px)40 y1=(px)100 x2=(px)280 y2=(px)100 stroke=(token)"color.rule" stroke-width=(token)"size.stroke"
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+
+    let cmds = &result.scene.commands;
+    // PushClip, StrokeLine, PopClip
+    assert_eq!(cmds.len(), 3, "expected 3 commands, got: {:?}", cmds);
+
+    assert!(
+        matches!(cmds[0], SceneCommand::PushClip { .. }),
+        "first command must be PushClip"
+    );
+
+    match &cmds[1] {
+        SceneCommand::StrokeLine {
+            x1,
+            y1,
+            x2,
+            y2,
+            color,
+            stroke_width,
+        } => {
+            assert_eq!(*x1, 40.0);
+            assert_eq!(*y1, 100.0);
+            assert_eq!(*x2, 280.0);
+            assert_eq!(*y2, 100.0);
+            // #94a3b8 → r=0x94=148, g=0xa3=163, b=0xb8=184
+            assert_eq!(color.r, 0x94);
+            assert_eq!(color.g, 0xa3);
+            assert_eq!(color.b, 0xb8);
+            assert_eq!(color.a, 255);
+            // size.stroke = (px)2
+            assert_eq!(*stroke_width, 2.0);
+        }
+        other => panic!("expected StrokeLine, got {other:?}"),
+    }
+
+    assert!(
+        matches!(cmds[2], SceneCommand::PopClip),
+        "last command must be PopClip"
+    );
+}
+
+// ── Line: visible=false not emitted ──────────────────────────────────
+
+#[test]
+fn invisible_line_not_emitted() {
+    let src = r##"zenith version=1 {
+  project id="proj.l2" name="L2"
+  tokens format="zenith-token-v1" {
+token id="color.rule" type="color" value="#94a3b8"
+  }
+  styles {}
+  document id="doc.l2" title="L2" {
+page id="page.l2" w=(px)100 h=(px)100 {
+  line id="line.hidden" x1=(px)0 y1=(px)50 x2=(px)100 y2=(px)50 stroke=(token)"color.rule" visible=#false
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+
+    let cmds = &result.scene.commands;
+    // Only PushClip + PopClip; no StrokeLine.
+    assert_eq!(
+        cmds.len(),
+        2,
+        "expected PushClip + PopClip only; got: {:?}",
+        cmds
+    );
+    assert!(matches!(cmds[0], SceneCommand::PushClip { .. }));
+    assert!(matches!(cmds[1], SceneCommand::PopClip));
+}
+
+// ── Frame: PushClip → FillRect(child) → PopClip sequence ─────────────
+
+#[test]
+fn frame_emits_pushclip_children_popclip() {
+    let src = r##"zenith version=1 {
+  project id="proj.f1" name="F1"
+  tokens format="zenith-token-v1" {
+token id="color.fill" type="color" value="#3b82f6"
+  }
+  styles {}
+  document id="doc.f1" title="F1" {
+page id="page.f1" w=(px)320 h=(px)200 {
+  frame id="frame.clip" x=(px)40 y=(px)40 w=(px)120 h=(px)100 {
+    rect id="rect.inner" x=(px)50 y=(px)50 w=(px)60 h=(px)60 fill=(token)"color.fill"
+  }
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+
+    let cmds = &result.scene.commands;
+    // Page PushClip, Frame PushClip, FillRect(child), Frame PopClip, Page PopClip
+    assert_eq!(cmds.len(), 5, "expected 5 commands; got: {:?}", cmds);
+
+    // Page clip
+    assert!(
+        matches!(cmds[0], SceneCommand::PushClip { x, y, w, h } if x == 0.0 && y == 0.0 && w == 320.0 && h == 200.0),
+        "cmd[0] must be page PushClip"
+    );
+    // Frame clip — the frame's own bbox
+    assert!(
+        matches!(cmds[1], SceneCommand::PushClip { x, y, w, h } if x == 40.0 && y == 40.0 && w == 120.0 && h == 100.0),
+        "cmd[1] must be frame PushClip at (40,40,120,100); got: {:?}",
+        cmds[1]
+    );
+    // Child FillRect
+    assert!(
+        matches!(cmds[2], SceneCommand::FillRect { .. }),
+        "cmd[2] must be child FillRect"
+    );
+    // Frame PopClip
+    assert!(
+        matches!(cmds[3], SceneCommand::PopClip),
+        "cmd[3] must be frame PopClip"
+    );
+    // Page PopClip
+    assert!(
+        matches!(cmds[4], SceneCommand::PopClip),
+        "cmd[4] must be page PopClip"
+    );
+}
+
+// ── Frame: child overflow still emitted (renderer clips, not compiler) ─
+
+#[test]
+fn frame_child_overflow_still_emitted() {
+    // Child rect extends well beyond the frame bounds — compiler must emit
+    // its full FillRect unchanged; clipping is the renderer's job.
+    let src = r##"zenith version=1 {
+  project id="proj.f2" name="F2"
+  tokens format="zenith-token-v1" {
+token id="color.fill" type="color" value="#f97316"
+  }
+  styles {}
+  document id="doc.f2" title="F2" {
+page id="page.f2" w=(px)320 h=(px)200 {
+  frame id="frame.clip" x=(px)40 y=(px)40 w=(px)120 h=(px)100 {
+    rect id="rect.overflow" x=(px)100 y=(px)30 w=(px)100 h=(px)120 fill=(token)"color.fill"
+  }
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+
+    let cmds = &result.scene.commands;
+    // Ensure child FillRect is present with its full (unclipped) geometry.
+    let fill_rects: Vec<_> = cmds
+        .iter()
+        .filter_map(|c| {
+            if let SceneCommand::FillRect { x, y, w, h, .. } = c {
+                Some((*x, *y, *w, *h))
+            } else {
+                None
+            }
+        })
+        .collect();
+    assert_eq!(fill_rects.len(), 1, "expected exactly one FillRect");
+    let (rx, ry, rw, rh) = fill_rects[0];
+    assert_eq!(
+        rx, 100.0,
+        "child FillRect x must be 100 (absolute, unclipped)"
+    );
+    assert_eq!(ry, 30.0, "child FillRect y must be 30");
+    assert_eq!(rw, 100.0, "child FillRect w must be 100");
+    assert_eq!(rh, 120.0, "child FillRect h must be 120");
+}
+
+// ── Frame: missing geometry → advisory, no PushClip ───────────────────
+
+#[test]
+fn frame_missing_geometry_skipped() {
+    // Frame with x=None; compile must push a scene.missing_geometry advisory
+    // and emit NO PushClip (so push/pop balance is preserved).
+    let src = r##"zenith version=1 {
+  project id="proj.f3" name="F3"
+  tokens format="zenith-token-v1" {}
+  styles {}
+  document id="doc.f3" title="F3" {
+page id="page.f3" w=(px)100 h=(px)100 {
+  frame id="frame.nogeo" y=(px)0 w=(px)100 h=(px)100 {
+  }
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+
+    let missing: Vec<_> = result
+        .diagnostics
+        .iter()
+        .filter(|d| d.code == "scene.missing_geometry")
+        .collect();
+    assert_eq!(
+        missing.len(),
+        1,
+        "expected 1 scene.missing_geometry advisory; got: {:?}",
+        result.diagnostics
+    );
+
+    // Push/pop must still be balanced: only page PushClip + PopClip.
+    let push_count = result
+        .scene
+        .commands
+        .iter()
+        .filter(|c| matches!(c, SceneCommand::PushClip { .. }))
+        .count();
+    let pop_count = result
+        .scene
+        .commands
+        .iter()
+        .filter(|c| matches!(c, SceneCommand::PopClip))
+        .count();
+    assert_eq!(push_count, pop_count, "PushClip/PopClip must be balanced");
+    assert_eq!(push_count, 1, "only the page PushClip must be present");
+}
+
+// ── Frame: visible=false → entire subtree excluded ────────────────────
+
+#[test]
+fn invisible_frame_subtree_not_emitted() {
+    let src = r##"zenith version=1 {
+  project id="proj.f4" name="F4"
+  tokens format="zenith-token-v1" {
+token id="color.fill" type="color" value="#3b82f6"
+  }
+  styles {}
+  document id="doc.f4" title="F4" {
+page id="page.f4" w=(px)100 h=(px)100 {
+  frame id="frame.hidden" x=(px)0 y=(px)0 w=(px)100 h=(px)100 visible=#false {
+    rect id="rect.inner" x=(px)0 y=(px)0 w=(px)50 h=(px)50 fill=(token)"color.fill"
+  }
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+
+    let cmds = &result.scene.commands;
+    // Only page PushClip + PopClip; no frame PushClip, no FillRect.
+    assert_eq!(
+        cmds.len(),
+        2,
+        "expected PushClip + PopClip only; got: {:?}",
+        cmds
+    );
+    assert!(matches!(cmds[0], SceneCommand::PushClip { .. }));
+    assert!(matches!(cmds[1], SceneCommand::PopClip));
+}
+
+// ── Frame: opacity cascades to child alpha ─────────────────────────────
+
+#[test]
+fn frame_opacity_cascades_to_child() {
+    // Frame opacity=0.5, child rect fill fully opaque #ffffff (a=255).
+    // Expected child FillRect alpha ≈ 128 (255 * 1.0 * 0.5 = 127.5 → 128).
+    let src = r##"zenith version=1 {
+  project id="proj.f5" name="F5"
+  tokens format="zenith-token-v1" {
+token id="color.w" type="color" value="#ffffff"
+  }
+  styles {}
+  document id="doc.f5" title="F5" {
+page id="page.f5" w=(px)100 h=(px)100 {
+  frame id="frame.opaque" x=(px)0 y=(px)0 w=(px)100 h=(px)100 opacity=0.5 {
+    rect id="rect.inner" x=(px)0 y=(px)0 w=(px)100 h=(px)100 fill=(token)"color.w"
+  }
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+
+    let fill_rect = result
+        .scene
+        .commands
+        .iter()
+        .find(|c| matches!(c, SceneCommand::FillRect { .. }));
+    match fill_rect {
+        Some(SceneCommand::FillRect { color, .. }) => {
+            // 255 * 1.0 (node opacity) * 0.5 (frame opacity) = 127.5 → 128.
+            assert_eq!(
+                color.a, 128,
+                "cascaded opacity 0.5 must give a=128; got {}",
+                color.a
+            );
+        }
+        _ => panic!("expected a FillRect command"),
+    }
+}
+
+// ── Frame: does NOT translate children (clip-only) ─────────────────────
+
+#[test]
+fn frame_does_not_translate_child() {
+    // Frame at x=(px)40 y=(px)40; child rect at x=(px)50 y=(px)50.
+    // Because frame is clip-only (no translation), the child FillRect must
+    // be at x=50.0 y=50.0, NOT 90.0/90.0.
+    let src = r##"zenith version=1 {
+  project id="proj.f6" name="F6"
+  tokens format="zenith-token-v1" {
+token id="color.k" type="color" value="#000000"
+  }
+  styles {}
+  document id="doc.f6" title="F6" {
+page id="page.f6" w=(px)200 h=(px)200 {
+  frame id="frame.noxlate" x=(px)40 y=(px)40 w=(px)120 h=(px)120 {
+    rect id="rect.abs" x=(px)50 y=(px)50 w=(px)50 h=(px)50 fill=(token)"color.k"
+  }
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+
+    let fill_rect = result
+        .scene
+        .commands
+        .iter()
+        .find(|c| matches!(c, SceneCommand::FillRect { .. }));
+    match fill_rect {
+        Some(SceneCommand::FillRect { x, y, .. }) => {
+            assert_eq!(
+                *x, 50.0,
+                "child x must be 50 (absolute, frame does not translate); got {x}"
+            );
+            assert_eq!(
+                *y, 50.0,
+                "child y must be 50 (absolute, frame does not translate); got {y}"
+            );
+        }
+        _ => panic!("expected a FillRect command"),
+    }
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// Image node compile tests
+// ══════════════════════════════════════════════════════════════════════
+
+// ── image → PushClip, DrawImage, PopClip with default fields ──────────
+
+#[test]
+fn image_emits_pushclip_drawimage_popclip() {
+    let src = r##"zenith version=1 {
+  project id="proj.i1" name="I1"
+  assets {
+asset id="asset.swatch" kind="image" src="assets/swatch.png"
+  }
+  tokens format="zenith-token-v1" {}
+  styles {}
+  document id="doc.i1" title="I1" {
+page id="page.i1" w=(px)320 h=(px)200 {
+  image id="img.i1" asset="asset.swatch" x=(px)40 y=(px)40 w=(px)160 h=(px)120 fit="stretch"
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+
+    let cmds = &result.scene.commands;
+    // PushClip(page), PushClip(box), DrawImage, PopClip(box), PopClip(page)
+    assert_eq!(cmds.len(), 5, "expected 5 commands, got: {:?}", cmds);
+    assert!(
+        matches!(cmds[1], SceneCommand::PushClip { x, y, w, h } if x == 40.0 && y == 40.0 && w == 160.0 && h == 120.0),
+        "cmd[1] must be the image box PushClip"
+    );
+    match &cmds[2] {
+        SceneCommand::DrawImage {
+            x,
+            y,
+            w,
+            h,
+            asset_id,
+            fit,
+            pos_x,
+            pos_y,
+            opacity,
+        } => {
+            assert_eq!(*x, 40.0);
+            assert_eq!(*y, 40.0);
+            assert_eq!(*w, 160.0);
+            assert_eq!(*h, 120.0);
+            assert_eq!(asset_id, "asset.swatch");
+            assert_eq!(*fit, FitMode::Stretch);
+            assert_eq!(*pos_x, 50.0, "default object-position-x must be 50");
+            assert_eq!(*pos_y, 50.0, "default object-position-y must be 50");
+            assert_eq!(*opacity, 1.0);
+        }
+        other => panic!("expected DrawImage, got {other:?}"),
+    }
+    assert!(matches!(cmds[3], SceneCommand::PopClip));
+}
+
+// ── image fit="cover" + object-position-x=(pct)25 → mapped fields ─────
+
+#[test]
+fn image_fit_and_object_position_mapped() {
+    let src = r##"zenith version=1 {
+  project id="proj.i2" name="I2"
+  assets {
+asset id="asset.swatch" kind="image" src="assets/swatch.png"
+  }
+  tokens format="zenith-token-v1" {}
+  styles {}
+  document id="doc.i2" title="I2" {
+page id="page.i2" w=(px)320 h=(px)200 {
+  image id="img.i2" asset="asset.swatch" x=(px)0 y=(px)0 w=(px)100 h=(px)100 fit="cover" object-position-x=(pct)25 object-position-y="start"
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+
+    let draw = result
+        .scene
+        .commands
+        .iter()
+        .find_map(|c| match c {
+            SceneCommand::DrawImage {
+                fit, pos_x, pos_y, ..
+            } => Some((*fit, *pos_x, *pos_y)),
+            _ => None,
+        })
+        .expect("must emit a DrawImage");
+    assert_eq!(draw.0, FitMode::Cover);
+    assert_eq!(draw.1, 25.0, "object-position-x (pct)25 → 25.0");
+    assert_eq!(draw.2, 0.0, "object-position-y start → 0.0");
+}
+
+// ── invisible image is not emitted ────────────────────────────────────
+
+#[test]
+fn invisible_image_not_emitted() {
+    let src = r##"zenith version=1 {
+  project id="proj.i3" name="I3"
+  assets {
+asset id="asset.swatch" kind="image" src="assets/swatch.png"
+  }
+  tokens format="zenith-token-v1" {}
+  styles {}
+  document id="doc.i3" title="I3" {
+page id="page.i3" w=(px)320 h=(px)200 {
+  image id="img.i3" asset="asset.swatch" x=(px)40 y=(px)40 w=(px)160 h=(px)120 visible=#false
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+
+    let cmds = &result.scene.commands;
+    // Only the page PushClip + PopClip; no image commands.
+    assert_eq!(
+        cmds.len(),
+        2,
+        "expected PushClip + PopClip only; got: {cmds:?}"
+    );
+    assert!(
+        !cmds
+            .iter()
+            .any(|c| matches!(c, SceneCommand::DrawImage { .. })),
+        "no DrawImage expected for invisible image"
+    );
+}
+
+// ── image opacity cascades under a group opacity ──────────────────────
+
+#[test]
+fn image_opacity_cascades() {
+    // Group opacity 0.5 × image opacity 0.5 = 0.25.
+    let src = r##"zenith version=1 {
+  project id="proj.i4" name="I4"
+  assets {
+asset id="asset.swatch" kind="image" src="assets/swatch.png"
+  }
+  tokens format="zenith-token-v1" {}
+  styles {}
+  document id="doc.i4" title="I4" {
+page id="page.i4" w=(px)320 h=(px)200 {
+  group id="group.i4" opacity=0.5 {
+    image id="img.i4" asset="asset.swatch" x=(px)40 y=(px)40 w=(px)160 h=(px)120 opacity=0.5
+  }
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+
+    let opacity = result
+        .scene
+        .commands
+        .iter()
+        .find_map(|c| match c {
+            SceneCommand::DrawImage { opacity, .. } => Some(*opacity),
+            _ => None,
+        })
+        .expect("must emit a DrawImage");
+    assert!(
+        (opacity - 0.25).abs() < 1e-9,
+        "cascaded opacity must be 0.25; got {opacity}"
+    );
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// Polygon / Polyline compile tests
+// ══════════════════════════════════════════════════════════════════════
+
+// ── polygon: fill + stroke emits FillPolygon then StrokePolyline(closed) ─
+
+#[test]
+fn polygon_emits_fill_and_stroke() {
+    let src = r##"zenith version=1 {
+  project id="proj.p1" name="P1"
+  tokens format="zenith-token-v1" {
+token id="color.fill" type="color" value="#ff0000"
+token id="color.stroke" type="color" value="#000000"
+token id="size.stroke" type="dimension" value=(px)2
+  }
+  styles {}
+  document id="doc.p1" title="P1" {
+page id="page.p1" w=(px)320 h=(px)200 {
+  polygon id="poly.tri" fill=(token)"color.fill" stroke=(token)"color.stroke" stroke-width=(token)"size.stroke" {
+    point x=(px)160 y=(px)40
+    point x=(px)260 y=(px)170
+    point x=(px)60 y=(px)170
+  }
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+
+    // PushClip, FillPolygon, StrokePolyline, PopClip
+    let cmds = &result.scene.commands;
+    assert_eq!(cmds.len(), 4, "expected 4 commands, got: {:?}", cmds);
+
+    match &cmds[1] {
+        SceneCommand::FillPolygon {
+            points,
+            color,
+            even_odd,
+        } => {
+            // 3 points × 2 = 6 coordinates
+            assert_eq!(points.len(), 6, "must have 6 flat coords");
+            assert_eq!(points[0], 160.0, "x0 must be 160");
+            assert_eq!(points[1], 40.0, "y0 must be 40");
+            assert_eq!(color.r, 255, "fill color must be red");
+            assert!(!even_odd, "even_odd must be false by default");
+        }
+        other => panic!("cmd[1] must be FillPolygon, got {other:?}"),
+    }
+
+    match &cmds[2] {
+        SceneCommand::StrokePolyline {
+            points,
+            closed,
+            color,
+            stroke_width,
+        } => {
+            assert_eq!(points.len(), 6);
+            assert!(closed, "polygon stroke must be closed");
+            assert_eq!(color.r, 0, "stroke color must be black");
+            assert!((stroke_width - 2.0).abs() < 1e-9);
+        }
+        other => panic!("cmd[2] must be StrokePolyline, got {other:?}"),
+    }
+}
+
+// ── polygon: fill-rule="evenodd" → FillPolygon.even_odd == true ───────
+
+#[test]
+fn polygon_evenodd_fill_rule() {
+    let src = r##"zenith version=1 {
+  project id="proj.p2" name="P2"
+  tokens format="zenith-token-v1" {
+token id="color.fill" type="color" value="#0000ff"
+  }
+  styles {}
+  document id="doc.p2" title="P2" {
+page id="page.p2" w=(px)200 h=(px)200 {
+  polygon id="poly.star" fill=(token)"color.fill" fill-rule="evenodd" {
+    point x=(px)100 y=(px)10
+    point x=(px)40 y=(px)180
+    point x=(px)190 y=(px)60
+    point x=(px)10 y=(px)60
+    point x=(px)160 y=(px)180
+  }
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+
+    let fp = result.scene.commands.iter().find_map(|c| match c {
+        SceneCommand::FillPolygon { even_odd, .. } => Some(*even_odd),
+        _ => None,
+    });
+    assert_eq!(fp, Some(true), "fill-rule=evenodd must set even_odd=true");
+}
+
+// ── polyline: stroke-only → one StrokePolyline(closed:false), no FillPolygon ─
+
+#[test]
+fn polyline_emits_open_stroke() {
+    let src = r##"zenith version=1 {
+  project id="proj.pl1" name="PL1"
+  tokens format="zenith-token-v1" {
+token id="color.stroke" type="color" value="#334155"
+token id="size.stroke" type="dimension" value=(px)3
+  }
+  styles {}
+  document id="doc.pl1" title="PL1" {
+page id="page.pl1" w=(px)320 h=(px)200 {
+  polyline id="line.conn" stroke=(token)"color.stroke" stroke-width=(token)"size.stroke" {
+    point x=(px)40 y=(px)100
+    point x=(px)120 y=(px)60
+    point x=(px)200 y=(px)140
+  }
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+
+    // PushClip, StrokePolyline, PopClip — no FillPolygon
+    let cmds = &result.scene.commands;
+    assert_eq!(cmds.len(), 3, "expected 3 commands, got: {:?}", cmds);
+
+    assert!(
+        !cmds
+            .iter()
+            .any(|c| matches!(c, SceneCommand::FillPolygon { .. })),
+        "stroke-only polyline must not emit FillPolygon"
+    );
+
+    match &cmds[1] {
+        SceneCommand::StrokePolyline { points, closed, .. } => {
+            assert_eq!(points.len(), 6, "3 points × 2 = 6 flat coords");
+            assert!(!closed, "polyline stroke must NOT be closed");
+        }
+        other => panic!("cmd[1] must be StrokePolyline, got {other:?}"),
+    }
+}
+
+// ── polygon: visible=false → not emitted ──────────────────────────────
+
+#[test]
+fn invisible_polygon_not_emitted() {
+    let src = r##"zenith version=1 {
+  project id="proj.p3" name="P3"
+  tokens format="zenith-token-v1" {
+token id="color.fill" type="color" value="#ff0000"
+  }
+  styles {}
+  document id="doc.p3" title="P3" {
+page id="page.p3" w=(px)100 h=(px)100 {
+  polygon id="poly.hidden" fill=(token)"color.fill" visible=#false {
+    point x=(px)10 y=(px)10
+    point x=(px)90 y=(px)10
+    point x=(px)50 y=(px)90
+  }
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+    let cmds = &result.scene.commands;
+    assert_eq!(
+        cmds.len(),
+        2,
+        "expected PushClip + PopClip only; got: {:?}",
+        cmds
+    );
+    assert!(matches!(cmds[0], SceneCommand::PushClip { .. }));
+    assert!(matches!(cmds[1], SceneCommand::PopClip));
+}
+
+// ── polygon: group opacity 0.5 cascades into fill color.a ─────────────
+
+#[test]
+fn polygon_opacity_cascades() {
+    let src = r##"zenith version=1 {
+  project id="proj.p4" name="P4"
+  tokens format="zenith-token-v1" {
+token id="color.fill" type="color" value="#ffffff"
+  }
+  styles {}
+  document id="doc.p4" title="P4" {
+page id="page.p4" w=(px)200 h=(px)200 {
+  group id="grp.p4" opacity=0.5 {
+    polygon id="poly.p4" fill=(token)"color.fill" {
+      point x=(px)10 y=(px)10
+      point x=(px)100 y=(px)10
+      point x=(px)55 y=(px)100
+    }
+  }
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+
+    let fill_a = result.scene.commands.iter().find_map(|c| match c {
+        SceneCommand::FillPolygon { color, .. } => Some(color.a),
+        _ => None,
+    });
+    // #ffffff α=255, node opacity=1.0, ctx opacity=0.5 → 255*0.5 ≈ 128
+    assert!(
+        fill_a.map(|a| (a as i32 - 128).abs() <= 1).unwrap_or(false),
+        "cascaded opacity 0.5 must halve fill alpha to ≈128; got {fill_a:?}"
+    );
+}
+
+// ── Style cascade tests ───────────────────────────────────────────────
+
+/// A rect with no local fill but a style that provides fill → FillRect emitted.
+#[test]
+fn rect_inherits_fill_from_style() {
+    let src = r##"zenith version=1 {
+  project id="proj.sc1" name="SC1"
+  tokens format="zenith-token-v1" {
+token id="color.panel" type="color" value="#3b82f6"
+  }
+  styles {
+style id="style.panel" {
+  fill (token)"color.panel"
+}
+  }
+  document id="doc.sc1" title="SC1" {
+page id="page.sc1" w=(px)320 h=(px)200 {
+  rect id="rect.sc1" x=(px)0 y=(px)0 w=(px)100 h=(px)100 style="style.panel"
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+
+    // PushClip, FillRect (from style fill), PopClip
+    let cmds = &result.scene.commands;
+    assert_eq!(cmds.len(), 3, "expected 3 commands; got: {:?}", cmds);
+
+    match &cmds[1] {
+        SceneCommand::FillRect { color, .. } => {
+            // #3b82f6 → r=0x3b=59, g=0x82=130, b=0xf6=246
+            assert_eq!(color.r, 0x3b, "r must be 0x3b from style fill");
+            assert_eq!(color.g, 0x82, "g must be 0x82 from style fill");
+            assert_eq!(color.b, 0xf6, "b must be 0xf6 from style fill");
+        }
+        other => panic!("expected FillRect from style cascade, got {other:?}"),
+    }
+}
+
+/// A rect with BOTH local fill AND a style fill → local fill wins.
+#[test]
+fn node_local_fill_overrides_style() {
+    let src = r##"zenith version=1 {
+  project id="proj.sc2" name="SC2"
+  tokens format="zenith-token-v1" {
+token id="color.style" type="color" value="#ff0000"
+token id="color.local" type="color" value="#00ff00"
+  }
+  styles {
+style id="style.red" {
+  fill (token)"color.style"
+}
+  }
+  document id="doc.sc2" title="SC2" {
+page id="page.sc2" w=(px)320 h=(px)200 {
+  rect id="rect.sc2" x=(px)0 y=(px)0 w=(px)100 h=(px)100 fill=(token)"color.local" style="style.red"
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+
+    let cmds = &result.scene.commands;
+    assert_eq!(cmds.len(), 3, "expected 3 commands; got: {:?}", cmds);
+
+    match &cmds[1] {
+        SceneCommand::FillRect { color, .. } => {
+            // Must be local (green #00ff00), NOT the style (red #ff0000).
+            assert_eq!(color.r, 0x00, "local fill r=0 must override style r=255");
+            assert_eq!(color.g, 0xff, "local fill g=255 must override style g=0");
+            assert_eq!(color.b, 0x00, "local fill b=0 must override style b=0");
+        }
+        other => panic!("expected FillRect with local color, got {other:?}"),
+    }
+}
+
+/// A text node with style providing font-size → DrawGlyphRun uses the style size.
+#[test]
+fn text_inherits_font_from_style() {
+    let src = r##"zenith version=1 {
+  project id="proj.sc3" name="SC3"
+  tokens format="zenith-token-v1" {
+token id="color.ink" type="color" value="#111827"
+token id="size.title" type="dimension" value=(px)32
+  }
+  styles {
+style id="style.title" {
+  fill (token)"color.ink"
+  font-size (token)"size.title"
+}
+  }
+  document id="doc.sc3" title="SC3" {
+page id="page.sc3" w=(px)640 h=(px)360 {
+  text id="text.sc3" x=(px)10 y=(px)20 w=(px)400 h=(px)50 style="style.title" {
+    span "Hello"
+  }
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+
+    let unshaped: Vec<_> = result
+        .diagnostics
+        .iter()
+        .filter(|d| d.code == "scene.text_unshaped")
+        .collect();
+    assert!(
+        unshaped.is_empty(),
+        "no text_unshaped diagnostics expected; got: {:?}",
+        result.diagnostics
+    );
+
+    let cmds = &result.scene.commands;
+    match cmds
+        .iter()
+        .find(|c| matches!(c, SceneCommand::DrawGlyphRun { .. }))
+    {
+        Some(SceneCommand::DrawGlyphRun {
+            font_size, color, ..
+        }) => {
+            assert_eq!(*font_size, 32.0, "font_size must be 32px from style");
+            assert_eq!(
+                color.r, 0x11,
+                "fill must come from style (color.ink r=0x11)"
+            );
+        }
+        _ => panic!("expected DrawGlyphRun from style cascade"),
+    }
+}
+
+/// A polygon with no local fill/stroke but a style providing both → both emitted.
+#[test]
+fn polygon_inherits_stroke_from_style() {
+    let src = r##"zenith version=1 {
+  project id="proj.sc4" name="SC4"
+  tokens format="zenith-token-v1" {
+token id="color.stroke" type="color" value="#ef4444"
+token id="size.sw" type="dimension" value=(px)2
+  }
+  styles {
+style id="style.outlined" {
+  stroke (token)"color.stroke"
+  stroke-width (token)"size.sw"
+}
+  }
+  document id="doc.sc4" title="SC4" {
+page id="page.sc4" w=(px)320 h=(px)200 {
+  polygon id="poly.sc4" style="style.outlined" {
+    point x=(px)50 y=(px)10
+    point x=(px)90 y=(px)90
+    point x=(px)10 y=(px)90
+  }
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+
+    // PushClip, StrokePolyline (no fill), PopClip
+    let cmds = &result.scene.commands;
+    assert_eq!(cmds.len(), 3, "expected 3 commands; got: {:?}", cmds);
+
+    match &cmds[1] {
+        SceneCommand::StrokePolyline {
+            color,
+            stroke_width,
+            closed,
+            ..
+        } => {
+            // #ef4444 → r=0xef=239
+            assert_eq!(color.r, 0xef, "stroke r must be 0xef from style");
+            assert!(
+                (*stroke_width - 2.0).abs() < 0.01,
+                "stroke-width must be 2px from style"
+            );
+            assert!(closed, "polygon stroke must be closed");
+        }
+        other => panic!("expected StrokePolyline from style cascade, got {other:?}"),
+    }
+}
+
+// ── rect: fill only → FillRect (regression) ──────────────────────────
+
+#[test]
+fn rect_fill_only_emits_fill_rect() {
+    let src = r##"zenith version=1 {
+  project id="proj.rf" name="RF"
+  tokens format="zenith-token-v1" {
+token id="color.fill" type="color" value="#112233"
+  }
+  styles {}
+  document id="doc.rf" title="RF" {
+page id="page.rf" w=(px)100 h=(px)100 {
+  rect id="rect.rf" x=(px)10 y=(px)10 w=(px)40 h=(px)40 fill=(token)"color.fill"
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+    let cmds = &result.scene.commands;
+    // PushClip, FillRect, PopClip
+    assert_eq!(cmds.len(), 3, "expected 3 commands; got: {:?}", cmds);
+    assert!(
+        matches!(cmds[1], SceneCommand::FillRect { .. }),
+        "expected a single FillRect; got {:?}",
+        cmds[1]
+    );
+}
+
+// ── rect: fill + stroke → FillRect then StrokeRect ───────────────────
+
+#[test]
+fn rect_fill_and_stroke_emits_fill_then_stroke() {
+    let src = r##"zenith version=1 {
+  project id="proj.rfs" name="RFS"
+  tokens format="zenith-token-v1" {
+token id="color.fill" type="color" value="#112233"
+token id="color.stroke" type="color" value="#445566"
+token id="size.sw" type="dimension" value=(px)4
+  }
+  styles {}
+  document id="doc.rfs" title="RFS" {
+page id="page.rfs" w=(px)100 h=(px)100 {
+  rect id="rect.rfs" x=(px)10 y=(px)10 w=(px)40 h=(px)40 fill=(token)"color.fill" stroke=(token)"color.stroke" stroke-width=(token)"size.sw"
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+    let cmds = &result.scene.commands;
+    // PushClip, FillRect, StrokeRect, PopClip
+    assert_eq!(cmds.len(), 4, "expected 4 commands; got: {:?}", cmds);
+    match &cmds[1] {
+        SceneCommand::FillRect { color, .. } => assert_eq!(color.r, 0x11),
+        other => panic!("expected FillRect first, got {other:?}"),
+    }
+    match &cmds[2] {
+        SceneCommand::StrokeRect {
+            color,
+            stroke_width,
+            ..
+        } => {
+            assert_eq!(color.r, 0x44, "stroke color r must be 0x44");
+            assert!(
+                (*stroke_width - 4.0).abs() < 0.01,
+                "stroke-width must be 4px"
+            );
+        }
+        other => panic!("expected StrokeRect on top, got {other:?}"),
+    }
+}
+
+// ── rect: fill + radius → FillRoundedRect ────────────────────────────
+
+#[test]
+fn rect_fill_with_radius_emits_fill_rounded_rect() {
+    let src = r##"zenith version=1 {
+  project id="proj.rfr" name="RFR"
+  tokens format="zenith-token-v1" {
+token id="color.fill" type="color" value="#112233"
+token id="size.r" type="dimension" value=(px)8
+  }
+  styles {}
+  document id="doc.rfr" title="RFR" {
+page id="page.rfr" w=(px)100 h=(px)100 {
+  rect id="rect.rfr" x=(px)10 y=(px)10 w=(px)40 h=(px)40 fill=(token)"color.fill" radius=(token)"size.r"
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+    let cmds = &result.scene.commands;
+    // PushClip, FillRoundedRect, PopClip
+    assert_eq!(cmds.len(), 3, "expected 3 commands; got: {:?}", cmds);
+    match &cmds[1] {
+        SceneCommand::FillRoundedRect { radius, color, .. } => {
+            assert_eq!(color.r, 0x11);
+            assert!((*radius - 8.0).abs() < 0.01, "radius must be 8px");
+        }
+        other => panic!("expected FillRoundedRect, got {other:?}"),
+    }
+}
+
+// ── rect: fill + stroke + radius → FillRoundedRect then StrokeRoundedRect
+
+#[test]
+fn rect_fill_stroke_radius_emits_rounded_fill_then_rounded_stroke() {
+    let src = r##"zenith version=1 {
+  project id="proj.rfsr" name="RFSR"
+  tokens format="zenith-token-v1" {
+token id="color.fill" type="color" value="#112233"
+token id="color.stroke" type="color" value="#445566"
+token id="size.sw" type="dimension" value=(px)4
+token id="size.r" type="dimension" value=(px)8
+  }
+  styles {}
+  document id="doc.rfsr" title="RFSR" {
+page id="page.rfsr" w=(px)100 h=(px)100 {
+  rect id="rect.rfsr" x=(px)10 y=(px)10 w=(px)40 h=(px)40 fill=(token)"color.fill" stroke=(token)"color.stroke" stroke-width=(token)"size.sw" radius=(token)"size.r"
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+    let cmds = &result.scene.commands;
+    // PushClip, FillRoundedRect, StrokeRoundedRect, PopClip
+    assert_eq!(cmds.len(), 4, "expected 4 commands; got: {:?}", cmds);
+    match &cmds[1] {
+        SceneCommand::FillRoundedRect { radius, .. } => {
+            assert!((*radius - 8.0).abs() < 0.01, "fill radius must be 8px");
+        }
+        other => panic!("expected FillRoundedRect first, got {other:?}"),
+    }
+    match &cmds[2] {
+        SceneCommand::StrokeRoundedRect {
+            radius,
+            stroke_width,
+            color,
+            ..
+        } => {
+            assert_eq!(color.r, 0x44);
+            assert!((*radius - 8.0).abs() < 0.01, "stroke radius must be 8px");
+            assert!(
+                (*stroke_width - 4.0).abs() < 0.01,
+                "stroke-width must be 4px"
+            );
+        }
+        other => panic!("expected StrokeRoundedRect on top, got {other:?}"),
+    }
+}
+
+// ── rect: stroke only (no fill) → StrokeRect only ────────────────────
+
+#[test]
+fn rect_stroke_only_emits_stroke_rect() {
+    let src = r##"zenith version=1 {
+  project id="proj.rso" name="RSO"
+  tokens format="zenith-token-v1" {
+token id="color.stroke" type="color" value="#445566"
+token id="size.sw" type="dimension" value=(px)2
+  }
+  styles {}
+  document id="doc.rso" title="RSO" {
+page id="page.rso" w=(px)100 h=(px)100 {
+  rect id="rect.rso" x=(px)10 y=(px)10 w=(px)40 h=(px)40 stroke=(token)"color.stroke" stroke-width=(token)"size.sw"
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+    let cmds = &result.scene.commands;
+    // PushClip, StrokeRect, PopClip
+    assert_eq!(cmds.len(), 3, "expected 3 commands; got: {:?}", cmds);
+    match &cmds[1] {
+        SceneCommand::StrokeRect {
+            color,
+            stroke_width,
+            ..
+        } => {
+            assert_eq!(color.r, 0x44);
+            assert!(
+                (*stroke_width - 2.0).abs() < 0.01,
+                "stroke-width must be 2px"
+            );
+        }
+        other => panic!("expected a single StrokeRect, got {other:?}"),
+    }
+}
+
+#[test]
+fn rect_stroke_alignment_inside_and_outside_shift_geometry() {
+    // sw = 4 → inside shifts in by 2 (x+2, w-4); outside shifts out by 2.
+    let doc_for = |align: &str| {
+        let src = format!(
+            r##"zenith version=1 {{
+  project id="proj.sa" name="SA"
+  tokens format="zenith-token-v1" {{
+token id="color.stroke" type="color" value="#445566"
+token id="size.sw" type="dimension" value=(px)4
+  }}
+  styles {{}}
+  document id="doc.sa" title="SA" {{
+page id="page.sa" w=(px)200 h=(px)200 {{
+  rect id="rect.sa" x=(px)20 y=(px)20 w=(px)100 h=(px)100 stroke=(token)"color.stroke" stroke-width=(token)"size.sw" stroke-alignment="{align}"
+}}
+  }}
+}}
+"##
+        );
+        let doc = parse(&src);
+        compile(&doc, &default_provider())
+    };
+
+    let stroke_xywh = |result: &CompileResult| -> (f64, f64, f64, f64) {
+        for c in &result.scene.commands {
+            if let SceneCommand::StrokeRect { x, y, w, h, .. } = c {
+                return (*x, *y, *w, *h);
+            }
+        }
+        panic!("no StrokeRect emitted");
+    };
+
+    assert_eq!(
+        stroke_xywh(&doc_for("inside")),
+        (22.0, 22.0, 96.0, 96.0),
+        "inside must inset the box by sw/2 on each side (w - sw)"
+    );
+    assert_eq!(
+        stroke_xywh(&doc_for("outside")),
+        (18.0, 18.0, 104.0, 104.0),
+        "outside must outset by sw/2"
+    );
+    assert_eq!(
+        stroke_xywh(&doc_for("center")),
+        (20.0, 20.0, 100.0, 100.0),
+        "center must be unchanged"
+    );
+}
+
+// ── Code node: multi-line stacks DrawGlyphRun by line_height ─────────────
+
+#[test]
+fn code_node_multi_line_stacks_by_line_height() {
+    // A 3-line code node (no w/h → no clip) emits 3 DrawGlyphRun commands
+    // whose baselines increase by a constant delta equal to line_height.
+    let src = r##"zenith version=1 {
+  project id="proj.cd1" name="CD1"
+  tokens format="zenith-token-v1" {}
+  styles {}
+  document id="doc.cd1" title="CD1" {
+page id="page.cd1" w=(px)400 h=(px)200 {
+  code id="code.cd1" x=(px)10 y=(px)20 font-size=(px)14 overflow="visible" {
+    content "line one\nline two\nline three"
+  }
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+
+    let unshaped: Vec<_> = result
+        .diagnostics
+        .iter()
+        .filter(|d| d.code == "scene.text_unshaped")
+        .collect();
+    assert!(
+        unshaped.is_empty(),
+        "no text_unshaped diagnostics expected; got: {:?}",
+        result.diagnostics
+    );
+
+    let runs: Vec<f64> = result
+        .scene
+        .commands
+        .iter()
+        .filter_map(|c| match c {
+            SceneCommand::DrawGlyphRun { y, .. } => Some(*y),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(runs.len(), 3, "expected 3 DrawGlyphRun; got {}", runs.len());
+
+    let d0 = runs[1] - runs[0];
+    let d1 = runs[2] - runs[1];
+    assert!(d0 > 0.0, "baselines must increase; got {runs:?}");
+    assert!(
+        (d0 - d1).abs() < 0.001,
+        "inter-line delta must be constant (line_height); got {d0} vs {d1}"
+    );
+}
+
+// ── Code node: overflow clip wraps the runs; "visible" omits the clip ────
+
+#[test]
+fn code_node_overflow_clip_wraps_runs() {
+    // Default overflow + w/h present → PushClip, runs…, PopClip.
+    let src = r##"zenith version=1 {
+  project id="proj.cd2" name="CD2"
+  tokens format="zenith-token-v1" {}
+  styles {}
+  document id="doc.cd2" title="CD2" {
+page id="page.cd2" w=(px)400 h=(px)200 {
+  code id="code.cd2" x=(px)10 y=(px)20 w=(px)300 h=(px)80 {
+    content "alpha\nbeta"
+  }
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+    let cmds = &result.scene.commands;
+
+    // First command after the page background is PushClip; last is PopClip.
+    let first_run = cmds
+        .iter()
+        .position(|c| matches!(c, SceneCommand::DrawGlyphRun { .. }))
+        .expect("a DrawGlyphRun must exist");
+    assert!(
+        matches!(cmds[first_run - 1], SceneCommand::PushClip { .. }),
+        "PushClip must immediately precede the first run; got {:?}",
+        cmds[first_run - 1]
+    );
+    assert!(
+        matches!(cmds.last(), Some(SceneCommand::PopClip)),
+        "PopClip must be the final command; got {:?}",
+        cmds.last()
+    );
+
+    // overflow="visible" → no clip at all.
+    let src_vis = r##"zenith version=1 {
+  project id="proj.cd2v" name="CD2V"
+  tokens format="zenith-token-v1" {}
+  styles {}
+  document id="doc.cd2v" title="CD2V" {
+page id="page.cd2v" w=(px)400 h=(px)200 {
+  code id="code.cd2v" x=(px)10 y=(px)20 w=(px)300 h=(px)80 overflow="visible" {
+    content "alpha\nbeta"
+  }
+}
+  }
+}
+"##;
+    let doc_vis = parse(src_vis);
+    let result_vis = compile(&doc_vis, &default_provider());
+    // The page itself always wraps content in one PushClip/PopClip. With
+    // overflow=visible the code node must add NO clip of its own, so exactly
+    // one PushClip (the page) should be present — not two.
+    let push_clips = result_vis
+        .scene
+        .commands
+        .iter()
+        .filter(|c| matches!(c, SceneCommand::PushClip { .. }))
+        .count();
+    assert_eq!(
+        push_clips, 1,
+        "overflow=visible must add no clip beyond the page's; got {:?}",
+        result_vis.scene.commands
+    );
+}
+
+// ── Code node: blank middle line preserves vertical space ────────────────
+
+#[test]
+fn code_node_blank_line_preserves_spacing() {
+    // "a\n\nb" → 2 runs (blank skipped), but "b" sits at i=2 spacing:
+    // baseline_b == code_y + ascent + 2*line_height.
+    let src = r##"zenith version=1 {
+  project id="proj.cd3" name="CD3"
+  tokens format="zenith-token-v1" {}
+  styles {}
+  document id="doc.cd3" title="CD3" {
+page id="page.cd3" w=(px)400 h=(px)200 {
+  code id="code.cd3" x=(px)10 y=(px)20 font-size=(px)14 overflow="visible" {
+    content "a\n\nb"
+  }
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+    let runs: Vec<f64> = result
+        .scene
+        .commands
+        .iter()
+        .filter_map(|c| match c {
+            SceneCommand::DrawGlyphRun { y, .. } => Some(*y),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        runs.len(),
+        2,
+        "blank middle line must be skipped → 2 runs; got {}",
+        runs.len()
+    );
+
+    // The delta between "a" (i=0) and "b" (i=2) must equal 2*line_height,
+    // i.e. exactly twice a single-step delta. Derive a single step from a
+    // separate two-line node sharing the same font/size.
+    let src2 = r##"zenith version=1 {
+  project id="proj.cd3b" name="CD3B"
+  tokens format="zenith-token-v1" {}
+  styles {}
+  document id="doc.cd3b" title="CD3B" {
+page id="page.cd3b" w=(px)400 h=(px)200 {
+  code id="code.cd3b" x=(px)10 y=(px)20 font-size=(px)14 overflow="visible" {
+    content "a\nb"
+  }
+}
+  }
+}
+"##;
+    let doc2 = parse(src2);
+    let result2 = compile(&doc2, &default_provider());
+    let runs2: Vec<f64> = result2
+        .scene
+        .commands
+        .iter()
+        .filter_map(|c| match c {
+            SceneCommand::DrawGlyphRun { y, .. } => Some(*y),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(runs2.len(), 2);
+    let single_step = runs2[1] - runs2[0];
+    let blank_gap = runs[1] - runs[0];
+    assert!(
+        (blank_gap - 2.0 * single_step).abs() < 0.001,
+        "blank line must reserve one line: expected 2*{single_step}, got {blank_gap}"
+    );
+}
+
+// ── Code node: leading tab expands and the node compiles cleanly ─────────
+
+#[test]
+fn code_node_tab_expansion_compiles() {
+    // A line with a leading tab and tab-width=2 expands to 2 leading spaces.
+    // Exact glyph counts are brittle, so assert the node compiles to a run
+    // without a shaping error.
+    let src = r##"zenith version=1 {
+  project id="proj.cd4" name="CD4"
+  tokens format="zenith-token-v1" {}
+  styles {}
+  document id="doc.cd4" title="CD4" {
+page id="page.cd4" w=(px)400 h=(px)200 {
+  code id="code.cd4" x=(px)10 y=(px)20 tab-width=2 overflow="visible" {
+    content "\tindented"
+  }
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+    let unshaped: Vec<_> = result
+        .diagnostics
+        .iter()
+        .filter(|d| d.code == "scene.text_unshaped")
+        .collect();
+    assert!(
+        unshaped.is_empty(),
+        "no shaping error expected: {unshaped:?}"
+    );
+    let run_count = result
+        .scene
+        .commands
+        .iter()
+        .filter(|c| matches!(c, SceneCommand::DrawGlyphRun { .. }))
+        .count();
+    assert_eq!(run_count, 1, "expected one DrawGlyphRun");
+}
+
+// ── Code node: default font family is the mono face ──────────────────────
+
+#[test]
+fn code_node_default_font_is_mono() {
+    // No font-family → the run's font_id resolves to the mono face.
+    let src = r##"zenith version=1 {
+  project id="proj.cd5" name="CD5"
+  tokens format="zenith-token-v1" {}
+  styles {}
+  document id="doc.cd5" title="CD5" {
+page id="page.cd5" w=(px)400 h=(px)200 {
+  code id="code.cd5" x=(px)10 y=(px)20 overflow="visible" {
+    content "fn main() {}"
+  }
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+    let font_id = result
+        .scene
+        .commands
+        .iter()
+        .find_map(|c| match c {
+            SceneCommand::DrawGlyphRun { font_id, .. } => Some(font_id.clone()),
+            _ => None,
+        })
+        .expect("a DrawGlyphRun must exist");
+    assert!(
+        font_id.contains("noto-sans-mono"),
+        "default code font must be mono; got font_id {font_id}"
+    );
+}
+
+// ── Code node: syntax highlighting splits into per-token runs ────────────
+
+/// A code node with `language="rust"` and a Rust snippet must produce MORE
+/// DrawGlyphRun commands than there are lines (per-token splitting) and at
+/// least two distinct colors.
+#[test]
+fn code_node_highlighted_rust_emits_per_token_runs() {
+    let src = r##"zenith version=1 {
+  project id="proj.hl1" name="HL1"
+  tokens format="zenith-token-v1" {}
+  styles {}
+  document id="doc.hl1" title="HL1" {
+page id="page.hl1" w=(px)800 h=(px)400 {
+  code id="code.hl1" x=(px)10 y=(px)10 language="rust" overflow="visible" {
+    content "let x = 42;"
+  }
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+    let runs: Vec<&SceneCommand> = result
+        .scene
+        .commands
+        .iter()
+        .filter(|c| matches!(c, SceneCommand::DrawGlyphRun { .. }))
+        .collect();
+    // "let x = 42;" tokenises into multiple tokens → more than 1 run per line.
+    assert!(
+        runs.len() > 1,
+        "highlighted line must emit multiple runs; got {}",
+        runs.len()
+    );
+    // At least two distinct colors must appear (keyword vs number vs operator…).
+    let mut colors: Vec<(u8, u8, u8, u8)> = runs
+        .iter()
+        .filter_map(|c| match c {
+            SceneCommand::DrawGlyphRun { color, .. } => Some((color.r, color.g, color.b, color.a)),
+            _ => None,
+        })
+        .collect();
+    colors.dedup();
+    assert!(
+        colors.len() >= 2,
+        "at least two distinct colors expected; got {:?}",
+        colors
+    );
+}
+
+/// A code node with NO language (or an unsupported one) must emit exactly
+/// ONE DrawGlyphRun per non-empty line — byte-identical to the pre-highlight
+/// behavior.
+#[test]
+fn code_node_no_language_single_run_per_line() {
+    let src = r##"zenith version=1 {
+  project id="proj.hl2" name="HL2"
+  tokens format="zenith-token-v1" {}
+  styles {}
+  document id="doc.hl2" title="HL2" {
+page id="page.hl2" w=(px)800 h=(px)400 {
+  code id="code.hl2" x=(px)10 y=(px)10 language="zzz" overflow="visible" {
+    content "let x = 42;\nlet y = 1;"
+  }
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+    let run_count = result
+        .scene
+        .commands
+        .iter()
+        .filter(|c| matches!(c, SceneCommand::DrawGlyphRun { .. }))
+        .count();
+    // 2 non-empty lines → exactly 2 runs (single-run plain path).
+    assert_eq!(
+        run_count, 2,
+        "unsupported language must yield 1 run/line (2 total); got {run_count}"
+    );
+}
+
+/// A code node with `language="rust"` and a doc-declared `syntax.keyword`
+/// token (red) must use that color for keyword runs, overriding the builtin.
+#[test]
+fn code_node_highlighted_doc_token_overrides_builtin_color() {
+    // `let` is a Rust keyword. With syntax.keyword=#ff0000 the keyword run
+    // must be red (r=255, g=0, b=0).
+    let src = r##"zenith version=1 {
+  project id="proj.hl3" name="HL3"
+  tokens format="zenith-token-v1" {
+token id="syntax.keyword" type="color" value="#ff0000"
+  }
+  styles {}
+  document id="doc.hl3" title="HL3" {
+page id="page.hl3" w=(px)800 h=(px)400 {
+  code id="code.hl3" x=(px)10 y=(px)10 language="rust" overflow="visible" {
+    content "let x = 1;"
+  }
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+    let keyword_run = result.scene.commands.iter().find_map(|c| match c {
+        SceneCommand::DrawGlyphRun { color, .. }
+            if color.r == 255 && color.g == 0 && color.b == 0 =>
+        {
+            Some(*color)
+        }
+        _ => None,
+    });
+    assert!(
+        keyword_run.is_some(),
+        "expected a red (r=255,g=0,b=0) run for the overridden keyword token; \
+         commands: {:?}",
+        result.scene.commands
+    );
+}
+
+// ── Text node: font-weight token selects the bold face ───────────────────
+
+/// A text node with a `font-weight` token resolving to 700 must emit a
+/// `DrawGlyphRun` whose `font_id` is the BOLD Noto Sans face; a text node
+/// with NO font-weight must resolve to the regular (400) face.
+#[test]
+fn text_node_font_weight_selects_bold_face() {
+    // Helper: extract the first DrawGlyphRun's font_id from a compiled doc.
+    fn first_run_font_id(src: &str) -> String {
+        let doc = parse(src);
+        let result = compile(&doc, &default_provider());
+        result
+            .scene
+            .commands
+            .iter()
+            .find_map(|c| match c {
+                SceneCommand::DrawGlyphRun { font_id, .. } => Some(font_id.clone()),
+                _ => None,
+            })
+            .expect("a DrawGlyphRun must exist")
+    }
+
+    // Bold: font-weight=(token)"weight.bold" → fontWeight 700 → bold face.
+    let bold_src = r##"zenith version=1 {
+  project id="proj.fw" name="FW"
+  tokens format="zenith-token-v1" {
+token id="weight.bold" type="fontWeight" value=700
+  }
+  styles {}
+  document id="doc.fw" title="FW" {
+page id="page.fw" w=(px)400 h=(px)200 {
+  text id="text.bold" x=(px)10 y=(px)20 w=(px)380 h=(px)40 font-weight=(token)"weight.bold" { span "Bold" }
+}
+  }
+}
+"##;
+    let bold_font_id = first_run_font_id(bold_src);
+    assert!(
+        bold_font_id.contains("noto-sans-700"),
+        "font-weight 700 must select the bold face; got font_id {bold_font_id}"
+    );
+
+    // Regular: no font-weight → the default (400) face.
+    let regular_src = r##"zenith version=1 {
+  project id="proj.fw" name="FW"
+  tokens format="zenith-token-v1" {}
+  styles {}
+  document id="doc.fw" title="FW" {
+page id="page.fw" w=(px)400 h=(px)200 {
+  text id="text.reg" x=(px)10 y=(px)20 w=(px)380 h=(px)40 { span "Regular" }
+}
+  }
+}
+"##;
+    let regular_font_id = first_run_font_id(regular_src);
+    assert!(
+        regular_font_id.contains("noto-sans-400") && !regular_font_id.contains("700"),
+        "absent font-weight must select the regular (400) face; got font_id {regular_font_id}"
+    );
+}
+
+// ── Per-span text rendering ───────────────────────────────────────────
+
+/// Collect every `DrawGlyphRun` (x, color, font_id) in source order.
+fn glyph_runs(src: &str) -> Vec<(f64, Color, String)> {
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+    result
+        .scene
+        .commands
+        .iter()
+        .filter_map(|c| match c {
+            SceneCommand::DrawGlyphRun {
+                x, color, font_id, ..
+            } => Some((*x, *color, font_id.clone())),
+            _ => None,
+        })
+        .collect()
+}
+
+/// Two spans with different fill tokens → two runs, distinct colors, the
+/// second positioned to the right of the first.
+#[test]
+fn text_spans_render_with_per_span_fill_and_order() {
+    let src = r##"zenith version=1 {
+  project id="proj.ps" name="PS"
+  tokens format="zenith-token-v1" {
+token id="color.red" type="color" value="#ff0000"
+token id="color.blue" type="color" value="#0000ff"
+  }
+  styles {}
+  document id="doc.ps" title="PS" {
+page id="page.ps" w=(px)400 h=(px)200 {
+  text id="text.ps" x=(px)10 y=(px)20 w=(px)380 h=(px)40 {
+    span "Red" fill=(token)"color.red"
+    span "Blue" fill=(token)"color.blue"
+  }
+}
+  }
+}
+"##;
+    let runs = glyph_runs(src);
+    assert_eq!(
+        runs.len(),
+        2,
+        "expected two DrawGlyphRun; got {}",
+        runs.len()
+    );
+
+    let (x0, c0, _) = &runs[0];
+    let (x1, c1, _) = &runs[1];
+    assert_eq!((c0.r, c0.g, c0.b), (0xff, 0x00, 0x00), "first span red");
+    assert_eq!((c1.r, c1.g, c1.b), (0x00, 0x00, 0xff), "second span blue");
+    assert!(
+        x1 > x0,
+        "second run x ({x1}) must be greater than first ({x0})"
+    );
+}
+
+/// A bold second span → its run resolves to the 700 face while the first
+/// (regular) span resolves to the 400 face.
+#[test]
+fn text_spans_render_with_per_span_weight() {
+    let src = r##"zenith version=1 {
+  project id="proj.pw" name="PW"
+  tokens format="zenith-token-v1" {
+token id="weight.bold" type="fontWeight" value=700
+  }
+  styles {}
+  document id="doc.pw" title="PW" {
+page id="page.pw" w=(px)400 h=(px)200 {
+  text id="text.pw" x=(px)10 y=(px)20 w=(px)380 h=(px)40 {
+    span "Reg"
+    span "Bold" font-weight=(token)"weight.bold"
+  }
+}
+  }
+}
+"##;
+    let runs = glyph_runs(src);
+    assert_eq!(
+        runs.len(),
+        2,
+        "expected two DrawGlyphRun; got {}",
+        runs.len()
+    );
+    assert!(
+        runs[0].2.contains("noto-sans-400"),
+        "first span must use the regular (400) face; got {}",
+        runs[0].2
+    );
+    assert!(
+        runs[1].2.contains("noto-sans-700"),
+        "second span must use the bold (700) face; got {}",
+        runs[1].2
+    );
+}
+
+/// An italic span selects the italic face; a plain span stays upright.
+#[test]
+fn text_italic_span_selects_italic_face() {
+    let src = r##"zenith version=1 {
+  project id="proj.it" name="IT"
+  tokens format="zenith-token-v1" {}
+  styles {}
+  document id="doc.it" title="IT" {
+page id="page.it" w=(px)400 h=(px)200 {
+  text id="text.it" x=(px)10 y=(px)20 w=(px)380 h=(px)40 {
+    span "Up"
+    span "Italic" italic=#true
+  }
+}
+  }
+}
+"##;
+    let runs = glyph_runs(src);
+    assert_eq!(runs.len(), 2, "expected two runs; got {}", runs.len());
+    assert!(
+        !runs[0].2.contains("italic"),
+        "first span must be upright; got {}",
+        runs[0].2
+    );
+    assert!(
+        runs[1].2.contains("italic"),
+        "second span must use the italic face; got {}",
+        runs[1].2
+    );
+}
+
+/// Underline/strikethrough spans each emit one decoration `FillRect`; a
+/// plain span emits none.
+#[test]
+fn text_span_decorations_emit_fill_rects() {
+    let src = r##"zenith version=1 {
+  project id="proj.dec" name="DEC"
+  tokens format="zenith-token-v1" {}
+  styles {}
+  document id="doc.dec" title="DEC" {
+page id="page.dec" w=(px)400 h=(px)200 {
+  text id="text.dec" x=(px)10 y=(px)20 w=(px)380 h=(px)40 {
+    span "plain"
+    span "under" underline=#true
+    span "strike" strikethrough=#true
+  }
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+    let fill_rects = result
+        .scene
+        .commands
+        .iter()
+        .filter(|c| matches!(c, SceneCommand::FillRect { .. }))
+        .count();
+    assert_eq!(
+        fill_rects, 2,
+        "one underline + one strikethrough → 2 decoration rects; got {fill_rects}"
+    );
+}
+
+/// A single-span node emits exactly one run (non-breaking regression).
+#[test]
+fn text_single_span_emits_one_run() {
+    let src = r##"zenith version=1 {
+  project id="proj.ss" name="SS"
+  tokens format="zenith-token-v1" {}
+  styles {}
+  document id="doc.ss" title="SS" {
+page id="page.ss" w=(px)400 h=(px)200 {
+  text id="text.ss" x=(px)10 y=(px)20 w=(px)380 h=(px)40 { span "Solo" }
+}
+  }
+}
+"##;
+    let runs = glyph_runs(src);
+    assert_eq!(runs.len(), 1, "single span must emit exactly one run");
+}
+
+/// An empty span between two non-empty spans is skipped (no run emitted),
+/// yet positioning of the following span still accounts for the previous
+/// span's advance — i.e. empty spans don't emit but don't break order.
+#[test]
+fn text_empty_span_is_skipped_without_breaking_order() {
+    let src = r##"zenith version=1 {
+  project id="proj.es" name="ES"
+  tokens format="zenith-token-v1" {}
+  styles {}
+  document id="doc.es" title="ES" {
+page id="page.es" w=(px)400 h=(px)200 {
+  text id="text.es" x=(px)10 y=(px)20 w=(px)380 h=(px)40 {
+    span "AAAA"
+    span ""
+    span "BBBB"
+  }
+}
+  }
+}
+"##;
+    let runs = glyph_runs(src);
+    assert_eq!(
+        runs.len(),
+        2,
+        "empty span must be skipped → two runs; got {}",
+        runs.len()
+    );
+    let (x0, _, _) = &runs[0];
+    let (x1, _, _) = &runs[1];
+    assert!(
+        x1 > x0,
+        "third span x ({x1}) must follow the first span's advance ({x0})"
+    );
+}
+
+// ── Multi-page page selection ─────────────────────────────────────────
+
+/// A two-page document. Page 1 has a full-bleed rect filled `#252525`
+/// (r=0x25); page 2 a full-bleed rect filled `#dcdcdc` (r=0xdc). The page
+/// fill color uniquely identifies which page was compiled.
+const TWO_PAGE_DOC: &str = r##"zenith version=1 {
+  project id="proj.mp" name="MP"
+  tokens format="zenith-token-v1" {
+token id="color.p1" type="color" value="#252525"
+token id="color.p2" type="color" value="#dcdcdc"
+  }
+  styles {}
+  document id="doc.mp" title="MP" {
+page id="page.p1" w=(px)100 h=(px)100 {
+  rect id="rect.p1" x=(px)0 y=(px)0 w=(px)100 h=(px)100 fill=(token)"color.p1"
+}
+page id="page.p2" w=(px)200 h=(px)200 {
+  rect id="rect.p2" x=(px)0 y=(px)0 w=(px)200 h=(px)200 fill=(token)"color.p2"
+}
+  }
+}
+"##;
+
+/// The `FillRect` color red-channel values present in a scene.
+fn fill_reds(result: &CompileResult) -> Vec<u8> {
+    result
+        .scene
+        .commands
+        .iter()
+        .filter_map(|c| match c {
+            SceneCommand::FillRect { color, .. } => Some(color.r),
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn compile_page_selects_second_page() {
+    let doc = parse(TWO_PAGE_DOC);
+    let result = compile_page(&doc, &default_provider(), 1);
+
+    // Page 2 size is 200×200 (page 1 is 100×100).
+    assert_eq!(result.scene.width, 200.0, "must be page 2's width");
+    assert_eq!(result.scene.height, 200.0, "must be page 2's height");
+
+    let reds = fill_reds(&result);
+    assert!(
+        reds.contains(&0xdc),
+        "page-2 fill (#dc...) must be present; got {reds:?}"
+    );
+    assert!(
+        !reds.contains(&0x25),
+        "page-1-only fill (#25...) must be absent; got {reds:?}"
+    );
+}
+
+#[test]
+fn compile_page_out_of_range_is_empty_with_advisory() {
+    let doc = parse(TWO_PAGE_DOC);
+    let result = compile_page(&doc, &default_provider(), 9);
+
+    assert_eq!(result.scene.width, 0.0, "out-of-range scene must be 0 wide");
+    assert_eq!(
+        result.scene.height, 0.0,
+        "out-of-range scene must be 0 tall"
+    );
+    assert!(
+        result
+            .diagnostics
+            .iter()
+            .any(|d| d.code == "scene.page_out_of_range"),
+        "out-of-range page must emit scene.page_out_of_range; got {:?}",
+        result
+            .diagnostics
+            .iter()
+            .map(|d| d.code.as_str())
+            .collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn compile_no_pages_still_yields_no_pages_advisory() {
+    let src = r##"zenith version=1 {
+  project id="proj.np" name="NP"
+  tokens format="zenith-token-v1" {}
+  styles {}
+  document id="doc.np" title="NP" {}
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+
+    assert!(
+        result
+            .diagnostics
+            .iter()
+            .any(|d| d.code == "scene.no_pages"),
+        "empty document must emit scene.no_pages"
+    );
+}
+
+#[test]
+fn compile_equals_compile_page_zero() {
+    let doc = parse(TWO_PAGE_DOC);
+    let via_compile = compile(&doc, &default_provider());
+    let via_page0 = compile_page(&doc, &default_provider(), 0);
+
+    // compile renders page 1 (index 0): same dimensions and fills.
+    assert_eq!(via_compile.scene.width, via_page0.scene.width);
+    assert_eq!(via_compile.scene.height, via_page0.scene.height);
+    assert_eq!(fill_reds(&via_compile), fill_reds(&via_page0));
+    // And it is page 1, not page 2.
+    assert!(fill_reds(&via_compile).contains(&0x25));
+}
+
+// ── Literal visual dimensions (no token) resolve at compile time ──────────
+
+/// A rect with a LITERAL `radius=(px)16` (no token) must emit a
+/// `FillRoundedRect` whose radius is 16.0 — previously the literal was
+/// dropped and the radius defaulted to 0.0 (a plain FillRect).
+#[test]
+fn rect_literal_radius_emits_fill_rounded_rect() {
+    let src = r##"zenith version=1 {
+  project id="proj.lr" name="LR"
+  tokens format="zenith-token-v1" {
+token id="color.fill" type="color" value="#112233"
+  }
+  styles {}
+  document id="doc.lr" title="LR" {
+page id="page.lr" w=(px)100 h=(px)100 {
+  rect id="rect.lr" x=(px)10 y=(px)10 w=(px)40 h=(px)40 radius=(px)16 fill=(token)"color.fill"
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+    let cmds = &result.scene.commands;
+    match cmds
+        .iter()
+        .find(|c| matches!(c, SceneCommand::FillRoundedRect { .. }))
+    {
+        Some(SceneCommand::FillRoundedRect { radius, .. }) => {
+            assert!(
+                (*radius - 16.0).abs() < 0.01,
+                "literal radius must resolve to 16px, got {radius}"
+            );
+        }
+        other => panic!("expected FillRoundedRect, got {other:?}"),
+    }
+}
+
+/// A text node with a LITERAL `font-size=(px)20` must produce a
+/// `DrawGlyphRun` whose `font_size` is 20.0.
+#[test]
+fn text_literal_font_size_resolves() {
+    let src = r##"zenith version=1 {
+  project id="proj.lfs" name="LFS"
+  tokens format="zenith-token-v1" {
+token id="color.text" type="color" value="#111827"
+  }
+  styles {}
+  document id="doc.lfs" title="LFS" {
+page id="page.lfs" w=(px)320 h=(px)200 {
+  text id="text.lfs" x=(px)10 y=(px)10 w=(px)200 h=(px)50 fill=(token)"color.text" font-size=(px)20 {
+    span "Hi"
+  }
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+    match result
+        .scene
+        .commands
+        .iter()
+        .find(|c| matches!(c, SceneCommand::DrawGlyphRun { .. }))
+    {
+        Some(SceneCommand::DrawGlyphRun { font_size, .. }) => {
+            assert_eq!(*font_size, 20.0, "literal font-size must resolve to 20px");
+        }
+        other => panic!("expected DrawGlyphRun, got {other:?}"),
+    }
+}
+
+// ── Text alignment ────────────────────────────────────────────────────
+
+/// Helper: compile a single-span text node with the given align and w,
+/// return the x of the sole DrawGlyphRun.
+fn text_align_run_x(align: Option<&str>, node_x: f64, node_w: Option<f64>) -> f64 {
+    let w_attr = node_w.map_or(String::new(), |w| format!(" w=(px){w}"));
+    let align_attr = align.map_or(String::new(), |a| format!(" align=\"{a}\""));
+    let src = format!(
+        r##"zenith version=1 {{
+  project id="proj.al" name="AL"
+  tokens format="zenith-token-v1" {{}}
+  styles {{}}
+  document id="doc.al" title="AL" {{
+page id="page.al" w=(px)800 h=(px)400 {{
+  text id="text.al" x=(px){node_x} y=(px)20{w_attr}{align_attr} {{
+    span "Hello"
+  }}
+}}
+  }}
+}}
+"##
+    );
+    let doc = parse(&src);
+    let result = compile(&doc, &default_provider());
+    result
+        .scene
+        .commands
+        .iter()
+        .find_map(|c| {
+            if let SceneCommand::DrawGlyphRun { x, .. } = c {
+                Some(*x)
+            } else {
+                None
+            }
+        })
+        .expect("a DrawGlyphRun must be emitted")
+}
+
+/// `align="start"` (or absent) → run x equals node x (no offset applied).
+#[test]
+fn text_align_start_run_at_node_x() {
+    // Explicit "start"
+    let x = text_align_run_x(Some("start"), 50.0, Some(300.0));
+    assert_eq!(x, 50.0, "align=start must place run at node x");
+    // Absent align
+    let x = text_align_run_x(None, 50.0, Some(300.0));
+    assert_eq!(x, 50.0, "absent align must behave as start");
+    // Absent w — no box, no offset regardless of align
+    let x = text_align_run_x(Some("center"), 50.0, None);
+    assert_eq!(x, 50.0, "absent w disables alignment (start fallback)");
+}
+
+/// `align="center"` → run x is inset from node x by (w − advance) / 2,
+/// which is strictly greater than node x when the text is narrower than w.
+#[test]
+fn text_align_center_run_inset_from_node_x() {
+    let node_x = 10.0;
+    let box_w = 500.0;
+    let x = text_align_run_x(Some("center"), node_x, Some(box_w));
+    assert!(
+        x > node_x,
+        "center-aligned run x ({x}) must be greater than node x ({node_x})"
+    );
+    // The run's right edge is at x + advance; by symmetry the left inset
+    // and right inset from the box edges are equal, so x must be strictly
+    // less than node_x + box_w / 2 (text "Hello" is narrower than half the box).
+    assert!(
+        x < node_x + box_w / 2.0,
+        "center-aligned run x ({x}) must be less than box midpoint ({})",
+        node_x + box_w / 2.0
+    );
+}
+
+/// `align="end"` → the run's advance right-edge aligns with node_x + w,
+/// i.e. run_x < node_x + w AND run_x > node_x (text is narrower than box).
+#[test]
+fn text_align_end_run_right_edge_at_box_right() {
+    let node_x = 10.0;
+    let box_w = 500.0;
+    let x = text_align_run_x(Some("end"), node_x, Some(box_w));
+    // x should be greater than node_x (we advanced inward from start)
+    assert!(
+        x > node_x,
+        "end-aligned run x ({x}) must be greater than node x ({node_x})"
+    );
+    // x should be less than node_x + box_w (the run has positive width)
+    assert!(
+        x < node_x + box_w,
+        "end-aligned run x ({x}) must be less than right edge ({})",
+        node_x + box_w
+    );
+}
+
+/// Multi-span centered line: first span starts at the centered offset and
+/// the second span is contiguous (its x equals first_x + first_advance).
+#[test]
+fn text_align_center_multi_span_contiguous() {
+    let src = r##"zenith version=1 {
+  project id="proj.ac2" name="AC2"
+  tokens format="zenith-token-v1" {}
+  styles {}
+  document id="doc.ac2" title="AC2" {
+page id="page.ac2" w=(px)800 h=(px)400 {
+  text id="text.ac2" x=(px)10 y=(px)20 w=(px)600 align="center" {
+    span "Hello"
+    span " World"
+  }
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+    let runs: Vec<(f64, f32)> = result
+        .scene
+        .commands
+        .iter()
+        .filter_map(|c| {
+            if let SceneCommand::DrawGlyphRun { x, font_size, .. } = c {
+                Some((*x, *font_size))
+            } else {
+                None
+            }
+        })
+        .collect();
+    assert_eq!(runs.len(), 2, "two spans → two runs; got {}", runs.len());
+    let (x0, _) = runs[0];
+    let (x1, _) = runs[1];
+    // First run must be inset from node x (centered)
+    assert!(
+        x0 > 10.0,
+        "first span of center-aligned text must be to the right of node x; got {x0}"
+    );
+    // Spans must be contiguous (second starts where first ends)
+    assert!(
+        x1 > x0,
+        "second span x ({x1}) must follow first span x ({x0})"
+    );
+}
+
+// ── Text wrapping (word wrap) ─────────────────────────────────────────
+
+/// Helper: collect (x, y, color) of every DrawGlyphRun emitted for a single
+/// text node with the given box width, align, and span text.
+fn wrap_runs(node_x: f64, box_w: f64, align: &str, span: &str) -> Vec<(f64, f64)> {
+    let src = format!(
+        r##"zenith version=1 {{
+  project id="proj.wr" name="WR"
+  tokens format="zenith-token-v1" {{}}
+  styles {{}}
+  document id="doc.wr" title="WR" {{
+page id="page.wr" w=(px)1000 h=(px)600 {{
+  text id="text.wr" x=(px){node_x} y=(px)20 w=(px){box_w} align="{align}" {{
+    span "{span}"
+  }}
+}}
+  }}
+}}
+"##
+    );
+    let doc = parse(&src);
+    let result = compile(&doc, &default_provider());
+    result
+        .scene
+        .commands
+        .iter()
+        .filter_map(|c| {
+            if let SceneCommand::DrawGlyphRun { x, y, .. } = c {
+                Some((*x, *y))
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
+/// A long single span in a narrow box wraps to multiple lines: more than one
+/// DrawGlyphRun, appearing at >= 2 distinct baseline y values.
+#[test]
+fn text_wraps_when_exceeding_box_width() {
+    let runs = wrap_runs(
+        10.0,
+        120.0,
+        "start",
+        "the quick brown fox jumps over the lazy dog",
+    );
+    assert!(
+        runs.len() > 1,
+        "wrapped text must emit more than one run; got {}",
+        runs.len()
+    );
+    let mut ys: Vec<f64> = runs.iter().map(|(_, y)| *y).collect();
+    ys.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    ys.dedup_by(|a, b| (*a - *b).abs() < 1e-6);
+    assert!(
+        ys.len() >= 2,
+        "wrapped text must occupy >= 2 distinct baselines; got {ys:?}"
+    );
+}
+
+/// Short text that fits the box takes the unchanged fast path: exactly one
+/// logical line and (for start align) the first run sits at node x.
+#[test]
+fn text_fits_single_line_unchanged() {
+    let runs = wrap_runs(40.0, 600.0, "start", "Hi there");
+    // All runs share a single baseline (one line).
+    let y0 = runs[0].1;
+    assert!(
+        runs.iter().all(|(_, y)| (*y - y0).abs() < 1e-6),
+        "fitting text must stay on one line; got {runs:?}"
+    );
+    // First run x == node x (start-aligned fast path).
+    assert_eq!(
+        runs[0].0, 40.0,
+        "start-aligned fitting text must begin at node x"
+    );
+}
+
+/// Wrapped + center: each line's first run is inset to the right of node x.
+#[test]
+fn text_wrap_center_lines_inset() {
+    let runs = wrap_runs(
+        10.0,
+        120.0,
+        "center",
+        "the quick brown fox jumps over the lazy dog",
+    );
+    assert!(runs.len() > 1, "expected wrapping; got {}", runs.len());
+    // Group first-run-per-line by baseline; each line's first x > node_x.
+    let mut seen_y: Vec<f64> = Vec::new();
+    for (x, y) in &runs {
+        if !seen_y.iter().any(|sy| (*sy - *y).abs() < 1e-6) {
+            seen_y.push(*y);
+            assert!(
+                *x > 10.0,
+                "center-wrapped line first run x ({x}) must be inset past node x (10)"
+            );
+        }
+    }
+}
+
+/// Wrapped + justify: a non-last multi-word line is fully justified (first
+/// word at node x, last word right edge ≈ node x + box_w), while the LAST
+/// line stays start-aligned (first run at node x, not stretched).
+#[test]
+fn text_wrap_justify_spreads() {
+    let node_x = 10.0;
+    let box_w = 120.0;
+    // Need the per-run advances too, so re-collect including last word edge.
+    let src = format!(
+        r##"zenith version=1 {{
+  project id="proj.wj" name="WJ"
+  tokens format="zenith-token-v1" {{}}
+  styles {{}}
+  document id="doc.wj" title="WJ" {{
+page id="page.wj" w=(px)1000 h=(px)600 {{
+  text id="text.wj" x=(px){node_x} y=(px)20 w=(px){box_w} align="justify" {{
+    span "the quick brown fox jumps over the lazy dog"
+  }}
+}}
+  }}
+}}
+"##
+    );
+    let doc = parse(&src);
+    let result = compile(&doc, &default_provider());
+    // Collect (y, x) of all runs.
+    let runs: Vec<(f64, f64)> = result
+        .scene
+        .commands
+        .iter()
+        .filter_map(|c| {
+            if let SceneCommand::DrawGlyphRun { x, y, .. } = c {
+                Some((*y, *x))
+            } else {
+                None
+            }
+        })
+        .collect();
+    assert!(runs.len() > 1, "expected wrapping; got {}", runs.len());
+
+    // Distinct baselines, in order.
+    let mut ys: Vec<f64> = Vec::new();
+    for (y, _) in &runs {
+        if !ys.iter().any(|v| (*v - *y).abs() < 1e-6) {
+            ys.push(*y);
+        }
+    }
+    assert!(ys.len() >= 2, "need >= 2 lines; got {}", ys.len());
+
+    // First line: its first run must start at node x (justify keeps left edge).
+    let first_line_y = ys[0];
+    let first_line_first_x = runs
+        .iter()
+        .filter(|(y, _)| (*y - first_line_y).abs() < 1e-6)
+        .map(|(_, x)| *x)
+        .fold(f64::INFINITY, f64::min);
+    assert!(
+        (first_line_first_x - node_x).abs() < 1e-6,
+        "justified first line must start at node x; got {first_line_first_x}"
+    );
+
+    // Last line stays start-aligned: its first run also begins at node x and
+    // is not stretched to the box edge. We assert it begins at node x.
+    let last_line_y = ys[ys.len() - 1];
+    let last_line_first_x = runs
+        .iter()
+        .filter(|(y, _)| (*y - last_line_y).abs() < 1e-6)
+        .map(|(_, x)| *x)
+        .fold(f64::INFINITY, f64::min);
+    assert!(
+        (last_line_first_x - node_x).abs() < 1e-6,
+        "last (start-aligned) line must begin at node x; got {last_line_first_x}"
+    );
+}
+
+/// A line with a LITERAL `stroke-width=(px)3` must produce a `StrokeLine`
+/// whose `stroke_width` is 3.0.
+#[test]
+fn line_literal_stroke_width_resolves() {
+    let src = r##"zenith version=1 {
+  project id="proj.lsw" name="LSW"
+  tokens format="zenith-token-v1" {
+token id="color.rule" type="color" value="#94a3b8"
+  }
+  styles {}
+  document id="doc.lsw" title="LSW" {
+page id="page.lsw" w=(px)320 h=(px)200 {
+  line id="line.lsw" x1=(px)40 y1=(px)100 x2=(px)280 y2=(px)100 stroke=(token)"color.rule" stroke-width=(px)3
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+    match result
+        .scene
+        .commands
+        .iter()
+        .find(|c| matches!(c, SceneCommand::StrokeLine { .. }))
+    {
+        Some(SceneCommand::StrokeLine { stroke_width, .. }) => {
+            assert_eq!(
+                *stroke_width, 3.0,
+                "literal stroke-width must resolve to 3px"
+            );
+        }
+        other => panic!("expected StrokeLine, got {other:?}"),
+    }
+}
+
+// ── Font fallback diagnostics ─────────────────────────────────────────
+
+/// A text node whose font-family token resolves to an UNREGISTERED family
+/// ("Oswald") must still emit a `DrawGlyphRun` (text not dropped) AND
+/// produce exactly one `font.unresolved` advisory naming the node id and
+/// the missing family.
+#[test]
+fn text_node_unregistered_family_falls_back_and_emits_advisory() {
+    let src = r##"zenith version=1 {
+  project id="proj.fb1" name="FB1"
+  tokens format="zenith-token-v1" {}
+  styles {}
+  document id="doc.fb1" title="FB1" {
+page id="page.fb1" w=(px)400 h=(px)200 {
+  text id="headline" x=(px)10 y=(px)10 font-family="Oswald" {
+    span "Hello"
+  }
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+
+    // The scene must contain at least one DrawGlyphRun (text not dropped).
+    assert!(
+        result
+            .scene
+            .commands
+            .iter()
+            .any(|c| matches!(c, SceneCommand::DrawGlyphRun { .. })),
+        "expected DrawGlyphRun when unregistered family falls back; commands: {:?}",
+        result.scene.commands,
+    );
+
+    // Exactly one font.unresolved advisory must be present, naming the node.
+    let unresolved: Vec<_> = result
+        .diagnostics
+        .iter()
+        .filter(|d| d.code == "font.unresolved")
+        .collect();
+    assert_eq!(
+        unresolved.len(),
+        1,
+        "expected exactly one font.unresolved diagnostic, got {:?}",
+        unresolved,
+    );
+    let msg = &unresolved[0].message;
+    assert!(
+        msg.contains("headline"),
+        "advisory message should name the node 'headline'; got: {msg}"
+    );
+    assert!(
+        msg.contains("Oswald"),
+        "advisory message should name the missing family 'Oswald'; got: {msg}"
+    );
+}
+
+/// A text node using the registered "Noto Sans" family must produce NO
+/// `font.unresolved` diagnostic and must emit a `DrawGlyphRun` as usual.
+#[test]
+fn text_node_registered_family_no_advisory() {
+    let src = r##"zenith version=1 {
+  project id="proj.fb2" name="FB2"
+  tokens format="zenith-token-v1" {}
+  styles {}
+  document id="doc.fb2" title="FB2" {
+page id="page.fb2" w=(px)400 h=(px)200 {
+  text id="body.text" x=(px)10 y=(px)10 font-family="Noto Sans" {
+    span "Hello"
+  }
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+
+    // No font.unresolved diagnostics.
+    let unresolved: Vec<_> = result
+        .diagnostics
+        .iter()
+        .filter(|d| d.code == "font.unresolved")
+        .collect();
+    assert!(
+        unresolved.is_empty(),
+        "expected no font.unresolved diagnostics for registered family; got: {:?}",
+        unresolved,
+    );
+
+    // DrawGlyphRun must still be present.
+    assert!(
+        result
+            .scene
+            .commands
+            .iter()
+            .any(|c| matches!(c, SceneCommand::DrawGlyphRun { .. })),
+        "expected DrawGlyphRun for registered Noto Sans family",
+    );
+}
+
+/// A code node with `font-weight=(token)"weight.bold"` (a fontWeight token = 700)
+/// must produce a DrawGlyphRun whose font_id corresponds to the bold mono face
+/// (distinct from the regular-weight code run's font_id).
+#[test]
+fn code_bold_font_weight_uses_bold_mono_face() {
+    let src = r##"zenith version=1 {
+  project id="proj.cbw" name="CBW"
+  tokens format="zenith-token-v1" {
+token id="weight.bold" type="fontWeight" value=700
+  }
+  styles {}
+  document id="doc.cbw" title="CBW" {
+page id="page.cbw" w=(px)400 h=(px)200 {
+  code id="code.regular" x=(px)10 y=(px)10 {
+    content "hello"
+  }
+  code id="code.bold" x=(px)10 y=(px)50 font-weight=(token)"weight.bold" {
+    content "hello"
+  }
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+
+    // Collect DrawGlyphRun font_ids for each code node (by order: regular first,
+    // bold second). Both nodes shape the same text, so each emits exactly one run.
+    let glyph_runs: Vec<_> = result
+        .scene
+        .commands
+        .iter()
+        .filter_map(|c| match c {
+            SceneCommand::DrawGlyphRun { font_id, .. } => Some(font_id.clone()),
+            _ => None,
+        })
+        .collect();
+
+    assert!(
+        glyph_runs.len() >= 2,
+        "expected at least 2 DrawGlyphRun commands (one per code node); got: {:?}",
+        glyph_runs
+    );
+
+    // The first run (regular weight=400) must use a different font than the
+    // second run (bold weight=700).
+    let regular_font = &glyph_runs[0];
+    let bold_font = &glyph_runs[1];
+    assert_ne!(
+        regular_font, bold_font,
+        "bold code node must use a different font_id than regular code node; \
+         regular={regular_font:?}, bold={bold_font:?}"
+    );
+
+    // The bold font_id must contain "700" (mirrors the provider id format).
+    assert!(
+        bold_font.contains("700"),
+        "bold code font_id should encode weight 700; got {bold_font:?}"
+    );
+}
+
+/// A code node WITHOUT `font-weight` defaults to weight 400, and must produce
+/// a DrawGlyphRun with the same font_id as a code node with explicit weight=400.
+/// This confirms the default-weight path is byte-identical to the original.
+#[test]
+fn code_default_weight_is_regular_mono_face() {
+    let src = r##"zenith version=1 {
+  project id="proj.cdw" name="CDW"
+  tokens format="zenith-token-v1" {
+token id="weight.normal" type="fontWeight" value=400
+  }
+  styles {}
+  document id="doc.cdw" title="CDW" {
+page id="page.cdw" w=(px)400 h=(px)200 {
+  code id="code.implicit" x=(px)10 y=(px)10 {
+    content "hello"
+  }
+  code id="code.explicit400" x=(px)10 y=(px)50 font-weight=(token)"weight.normal" {
+    content "hello"
+  }
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+
+    let glyph_runs: Vec<_> = result
+        .scene
+        .commands
+        .iter()
+        .filter_map(|c| match c {
+            SceneCommand::DrawGlyphRun { font_id, .. } => Some(font_id.clone()),
+            _ => None,
+        })
+        .collect();
+
+    assert!(
+        glyph_runs.len() >= 2,
+        "expected at least 2 DrawGlyphRun commands; got: {:?}",
+        glyph_runs
+    );
+
+    // Both the implicit-400 and explicit-400 code nodes must resolve to the
+    // same (regular) mono font_id — the default path is byte-identical.
+    assert_eq!(
+        glyph_runs[0], glyph_runs[1],
+        "implicit weight=400 and explicit weight=400 must resolve to the same \
+         mono font face; implicit={:?}, explicit={:?}",
+        glyph_runs[0], glyph_runs[1]
+    );
+
+    // The font_id must NOT contain "700".
+    assert!(
+        !glyph_runs[0].contains("700"),
+        "regular code font_id must not encode weight 700; got {:?}",
+        glyph_runs[0]
+    );
+}
+
+// ── Leaf-node rotation: PushTransform bracket ─────────────────────────
+
+/// A rect with `rotate=(deg)45` must emit
+/// PushTransform{angle_deg:45, cx:x+w/2, cy:y+h/2} before any draw
+/// command and PopTransform after, outermost.
+#[test]
+fn rect_with_rotate_emits_push_pop_transform() {
+    let src = r##"zenith version=1 {
+  project id="proj.rot1" name="Rot1"
+  tokens format="zenith-token-v1" {
+token id="color.fill" type="color" value="#ff0000"
+  }
+  styles {}
+  document id="doc.rot1" title="Rot1" {
+page id="page.rot1" w=(px)200 h=(px)200 {
+  rect id="rect.rot" x=(px)20 y=(px)40 w=(px)100 h=(px)60 fill=(token)"color.fill" rotate=(deg)45
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+
+    let cmds = &result.scene.commands;
+    // Expected: PushClip(page) PushTransform FillRect PopTransform PopClip
+    assert_eq!(cmds.len(), 5, "expected 5 commands; got: {:?}", cmds);
+
+    // cmds[0] = page PushClip
+    assert!(matches!(cmds[0], SceneCommand::PushClip { .. }));
+
+    // cmds[1] = PushTransform with correct angle and center
+    match &cmds[1] {
+        SceneCommand::PushTransform { angle_deg, cx, cy } => {
+            assert_eq!(*angle_deg, 45.0, "angle must be 45");
+            // x=20, w=100 → cx=70
+            assert_eq!(*cx, 70.0, "cx must be x+w/2 = 20+50 = 70");
+            // y=40, h=60 → cy=70
+            assert_eq!(*cy, 70.0, "cy must be y+h/2 = 40+30 = 70");
+        }
+        other => panic!("expected PushTransform, got {other:?}"),
+    }
+
+    // cmds[2] = FillRect (the draw command)
+    assert!(
+        matches!(cmds[2], SceneCommand::FillRect { .. }),
+        "expected FillRect at index 2, got {:?}",
+        cmds[2]
+    );
+
+    // cmds[3] = PopTransform
+    assert!(
+        matches!(cmds[3], SceneCommand::PopTransform),
+        "expected PopTransform at index 3, got {:?}",
+        cmds[3]
+    );
+
+    // cmds[4] = page PopClip
+    assert!(matches!(cmds[4], SceneCommand::PopClip));
+}
+
+/// A rect WITHOUT `rotate` must emit NO PushTransform — output is
+/// byte-identical to the pre-rotation implementation.
+#[test]
+fn rect_without_rotate_emits_no_transform() {
+    let src = r##"zenith version=1 {
+  project id="proj.rot2" name="Rot2"
+  tokens format="zenith-token-v1" {
+token id="color.fill" type="color" value="#00ff00"
+  }
+  styles {}
+  document id="doc.rot2" title="Rot2" {
+page id="page.rot2" w=(px)200 h=(px)200 {
+  rect id="rect.norot" x=(px)10 y=(px)10 w=(px)80 h=(px)80 fill=(token)"color.fill"
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+
+    let cmds = &result.scene.commands;
+    // PushClip FillRect PopClip — no transform commands at all.
+    assert_eq!(
+        cmds.len(),
+        3,
+        "expected 3 commands (no transform); got: {:?}",
+        cmds
+    );
+
+    let has_transform = cmds.iter().any(|c| {
+        matches!(
+            c,
+            SceneCommand::PushTransform { .. } | SceneCommand::PopTransform
+        )
+    });
+    assert!(
+        !has_transform,
+        "no transform commands expected for unrotated rect"
+    );
+}
+
+/// A rect with `rotate=(deg)0` must also emit NO PushTransform —
+/// zero-angle rotation is a no-op.
+#[test]
+fn rect_with_rotate_zero_emits_no_transform() {
+    let src = r##"zenith version=1 {
+  project id="proj.rot3" name="Rot3"
+  tokens format="zenith-token-v1" {
+token id="color.fill" type="color" value="#0000ff"
+  }
+  styles {}
+  document id="doc.rot3" title="Rot3" {
+page id="page.rot3" w=(px)200 h=(px)200 {
+  rect id="rect.zerorot" x=(px)10 y=(px)10 w=(px)80 h=(px)80 fill=(token)"color.fill" rotate=(deg)0
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+
+    let cmds = &result.scene.commands;
+    let has_transform = cmds.iter().any(|c| {
+        matches!(
+            c,
+            SceneCommand::PushTransform { .. } | SceneCommand::PopTransform
+        )
+    });
+    assert!(
+        !has_transform,
+        "rotate=(deg)0 must emit no transform commands; got: {:?}",
+        cmds
+    );
+}
+
+/// An ellipse with `rotate=(deg)90` must emit PushTransform with the
+/// correct center (x+w/2, y+h/2) before FillEllipse and PopTransform after.
+#[test]
+fn ellipse_with_rotate_emits_correct_transform() {
+    let src = r##"zenith version=1 {
+  project id="proj.rot4" name="Rot4"
+  tokens format="zenith-token-v1" {
+token id="color.fill" type="color" value="#ffaa00"
+  }
+  styles {}
+  document id="doc.rot4" title="Rot4" {
+page id="page.rot4" w=(px)400 h=(px)300 {
+  ellipse id="ell.rot" x=(px)50 y=(px)100 w=(px)200 h=(px)80 fill=(token)"color.fill" rotate=(deg)90
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+
+    let cmds = &result.scene.commands;
+    // PushClip PushTransform FillEllipse PopTransform PopClip
+    assert_eq!(cmds.len(), 5, "expected 5 commands; got: {:?}", cmds);
+
+    match &cmds[1] {
+        SceneCommand::PushTransform { angle_deg, cx, cy } => {
+            assert_eq!(*angle_deg, 90.0);
+            // x=50, w=200 → cx=150
+            assert_eq!(*cx, 150.0, "cx=x+w/2=50+100=150");
+            // y=100, h=80 → cy=140
+            assert_eq!(*cy, 140.0, "cy=y+h/2=100+40=140");
+        }
+        other => panic!("expected PushTransform, got {other:?}"),
+    }
+
+    assert!(
+        matches!(cmds[2], SceneCommand::FillEllipse { .. }),
+        "expected FillEllipse at index 2"
+    );
+    assert!(
+        matches!(cmds[3], SceneCommand::PopTransform),
+        "expected PopTransform at index 3"
+    );
+}
+
+/// A polygon with `rotate=(deg)30` must emit PushTransform whose center
+/// is the centroid-bbox midpoint of the (translated) points.
+#[test]
+fn polygon_with_rotate_emits_centroid_transform() {
+    // Triangle at (10,20) (110,20) (60,70) → bbox center = (60, 45).
+    let src = r##"zenith version=1 {
+  project id="proj.rot5" name="Rot5"
+  tokens format="zenith-token-v1" {
+token id="color.fill" type="color" value="#aabbcc"
+  }
+  styles {}
+  document id="doc.rot5" title="Rot5" {
+page id="page.rot5" w=(px)200 h=(px)200 {
+  polygon id="poly.rot" fill=(token)"color.fill" rotate=(deg)30 {
+    point x=(px)10 y=(px)20
+    point x=(px)110 y=(px)20
+    point x=(px)60 y=(px)70
+  }
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+
+    let cmds = &result.scene.commands;
+    // PushClip PushTransform FillPolygon PopTransform PopClip
+    assert_eq!(cmds.len(), 5, "expected 5 commands; got: {:?}", cmds);
+
+    match &cmds[1] {
+        SceneCommand::PushTransform { angle_deg, cx, cy } => {
+            assert_eq!(*angle_deg, 30.0);
+            // x range: [10, 110] → cx = 60; y range: [20, 70] → cy = 45
+            assert_eq!(*cx, 60.0, "centroid cx must be (10+110)/2=60");
+            assert_eq!(*cy, 45.0, "centroid cy must be (20+70)/2=45");
+        }
+        other => panic!("expected PushTransform, got {other:?}"),
+    }
+
+    assert!(
+        matches!(cmds[2], SceneCommand::FillPolygon { .. }),
+        "expected FillPolygon at index 2"
+    );
+    assert!(
+        matches!(cmds[3], SceneCommand::PopTransform),
+        "expected PopTransform at index 3"
+    );
+}
+
+// ── Container rotation: GROUP / FRAME ─────────────────────────────────
+
+/// (1) A group with `rotate=(deg)30` and NO w/h, containing two rects,
+/// must emit PushTransform (center = union-bbox center of the two rects
+/// in device space) before the children, and PopTransform last.
+///
+/// Group at (0,0), rects at (10,20,100,60) and (50,100,40,30).
+/// Union bbox: x=[10,110], y=[20,130] → center = (60, 75).
+#[test]
+fn group_rotate_no_wh_uses_children_union_bbox_center() {
+    let src = r##"zenith version=1 {
+  project id="proj.gr1" name="GR1"
+  tokens format="zenith-token-v1" {
+token id="color.a" type="color" value="#ff0000"
+token id="color.b" type="color" value="#0000ff"
+  }
+  styles {}
+  document id="doc.gr1" title="GR1" {
+page id="page.gr1" w=(px)300 h=(px)300 {
+  group id="grp.rot" rotate=(deg)30 {
+    rect id="r1" x=(px)10 y=(px)20 w=(px)100 h=(px)60 fill=(token)"color.a"
+    rect id="r2" x=(px)50 y=(px)100 w=(px)40 h=(px)30 fill=(token)"color.b"
+  }
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+
+    let cmds = &result.scene.commands;
+    // Expected: PushClip(page) PushTransform FillRect FillRect PopTransform PopClip
+    assert_eq!(cmds.len(), 6, "expected 6 commands; got: {:?}", cmds);
+
+    assert!(matches!(cmds[0], SceneCommand::PushClip { .. }));
+
+    match &cmds[1] {
+        SceneCommand::PushTransform { angle_deg, cx, cy } => {
+            assert_eq!(*angle_deg, 30.0, "angle must be 30");
+            // Union bbox: x=[10,110] → cx=60, y=[20,130] → cy=75
+            assert_eq!(*cx, 60.0, "cx must be (10+110)/2=60");
+            assert_eq!(*cy, 75.0, "cy must be (20+130)/2=75");
+        }
+        other => panic!("expected PushTransform at [1], got {other:?}"),
+    }
+
+    assert!(
+        matches!(cmds[2], SceneCommand::FillRect { .. }),
+        "expected FillRect at [2]"
+    );
+    assert!(
+        matches!(cmds[3], SceneCommand::FillRect { .. }),
+        "expected FillRect at [3]"
+    );
+
+    assert!(
+        matches!(cmds[4], SceneCommand::PopTransform),
+        "expected PopTransform at [4], got {:?}",
+        cmds[4]
+    );
+    assert!(matches!(cmds[5], SceneCommand::PopClip));
+}
+
+/// (2) A group WITHOUT rotate must emit NO PushTransform — byte-identical
+/// to the pre-container-rotation baseline.
+#[test]
+fn group_without_rotate_emits_no_transform() {
+    let src = r##"zenith version=1 {
+  project id="proj.gr2" name="GR2"
+  tokens format="zenith-token-v1" {
+token id="color.a" type="color" value="#00ff00"
+  }
+  styles {}
+  document id="doc.gr2" title="GR2" {
+page id="page.gr2" w=(px)200 h=(px)200 {
+  group id="grp.norot" {
+    rect id="r1" x=(px)10 y=(px)10 w=(px)80 h=(px)80 fill=(token)"color.a"
+  }
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+
+    let cmds = &result.scene.commands;
+    let has_transform = cmds.iter().any(|c| {
+        matches!(
+            c,
+            SceneCommand::PushTransform { .. } | SceneCommand::PopTransform
+        )
+    });
+    assert!(
+        !has_transform,
+        "unrotated group must emit no transform commands; got: {:?}",
+        cmds
+    );
+}
+
+/// (3) A group WITH declared w/h + rotate uses the declared box center,
+/// not the children bbox.
+///
+/// Group x=0 y=0 w=200 h=100 → center = (100, 50).
+/// The single child rect at (10,10,80,80) would give a different center.
+#[test]
+fn group_rotate_with_wh_uses_declared_box_center() {
+    let src = r##"zenith version=1 {
+  project id="proj.gr3" name="GR3"
+  tokens format="zenith-token-v1" {
+token id="color.a" type="color" value="#aabbcc"
+  }
+  styles {}
+  document id="doc.gr3" title="GR3" {
+page id="page.gr3" w=(px)300 h=(px)200 {
+  group id="grp.wh" w=(px)200 h=(px)100 rotate=(deg)45 {
+    rect id="r1" x=(px)10 y=(px)10 w=(px)80 h=(px)80 fill=(token)"color.a"
+  }
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+
+    let cmds = &result.scene.commands;
+    // PushClip(page) PushTransform FillRect PopTransform PopClip
+    assert_eq!(cmds.len(), 5, "expected 5 commands; got: {:?}", cmds);
+
+    match &cmds[1] {
+        SceneCommand::PushTransform { angle_deg, cx, cy } => {
+            assert_eq!(*angle_deg, 45.0, "angle must be 45");
+            // group x defaults 0, w=200 → cx=0+200/2=100
+            // group y defaults 0, h=100 → cy=0+100/2=50
+            assert_eq!(*cx, 100.0, "cx must be declared box center 0+200/2=100");
+            assert_eq!(*cy, 50.0, "cy must be declared box center 0+100/2=50");
+        }
+        other => panic!("expected PushTransform at [1], got {other:?}"),
+    }
+
+    assert!(matches!(cmds[4], SceneCommand::PopClip));
+}
+
+/// (4) A frame with rotate=(deg)20 must emit PushTransform (center from
+/// the frame box) BEFORE PushClip, and PopTransform AFTER PopClip.
+///
+/// Frame x=10 y=20 w=100 h=60 → device-space center = (60, 50).
+#[test]
+fn frame_rotate_wraps_clip_outermost() {
+    let src = r##"zenith version=1 {
+  project id="proj.fr1" name="FR1"
+  tokens format="zenith-token-v1" {
+token id="color.a" type="color" value="#112233"
+  }
+  styles {}
+  document id="doc.fr1" title="FR1" {
+page id="page.fr1" w=(px)200 h=(px)200 {
+  frame id="frm.rot" x=(px)10 y=(px)20 w=(px)100 h=(px)60 rotate=(deg)20 {
+    rect id="r1" x=(px)15 y=(px)25 w=(px)40 h=(px)30 fill=(token)"color.a"
+  }
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+
+    let cmds = &result.scene.commands;
+    // PushClip(page) PushTransform PushClip(frame) FillRect PopClip PopTransform PopClip(page)
+    assert_eq!(cmds.len(), 7, "expected 7 commands; got: {:?}", cmds);
+
+    assert!(
+        matches!(cmds[0], SceneCommand::PushClip { .. }),
+        "[0] must be page PushClip"
+    );
+
+    match &cmds[1] {
+        SceneCommand::PushTransform { angle_deg, cx, cy } => {
+            assert_eq!(*angle_deg, 20.0, "angle must be 20");
+            // ctx.dx=0 + frame_x=10 + frame_w/2=50 → cx=60
+            // ctx.dy=0 + frame_y=20 + frame_h/2=30 → cy=50
+            assert_eq!(*cx, 60.0, "cx must be 0+10+100/2=60");
+            assert_eq!(*cy, 50.0, "cy must be 0+20+60/2=50");
+        }
+        other => panic!("expected PushTransform at [1], got {other:?}"),
+    }
+
+    assert!(
+        matches!(cmds[2], SceneCommand::PushClip { .. }),
+        "[2] must be frame PushClip (inside transform); got {:?}",
+        cmds[2]
+    );
+
+    assert!(
+        matches!(cmds[3], SceneCommand::FillRect { .. }),
+        "[3] must be FillRect"
+    );
+
+    assert!(
+        matches!(cmds[4], SceneCommand::PopClip),
+        "[4] must be frame PopClip; got {:?}",
+        cmds[4]
+    );
+
+    assert!(
+        matches!(cmds[5], SceneCommand::PopTransform),
+        "[5] must be PopTransform (after PopClip); got {:?}",
+        cmds[5]
+    );
+
+    assert!(
+        matches!(cmds[6], SceneCommand::PopClip),
+        "[6] must be page PopClip"
+    );
+}
+
+/// (5) A rotated group containing a rotated rect must emit BOTH
+/// PushTransform commands nested correctly:
+///   PushClip(page) PushTransform(group) PushTransform(rect) FillRect PopTransform(rect) PopTransform(group) PopClip(page)
+///
+/// Group (no w/h) rotate=15°, contains rect x=10 y=10 w=80 h=40 rotate=45°.
+/// Children bbox center = (50, 30) → group PushTransform cx=50, cy=30.
+/// Rect center = (10+40, 10+20) = (50, 30) (device space same as group).
+#[test]
+fn rotated_group_containing_rotated_rect_nests_both_transforms() {
+    let src = r##"zenith version=1 {
+  project id="proj.gr5" name="GR5"
+  tokens format="zenith-token-v1" {
+token id="color.a" type="color" value="#ff8800"
+  }
+  styles {}
+  document id="doc.gr5" title="GR5" {
+page id="page.gr5" w=(px)200 h=(px)200 {
+  group id="grp.outer" rotate=(deg)15 {
+    rect id="r1" x=(px)10 y=(px)10 w=(px)80 h=(px)40 fill=(token)"color.a" rotate=(deg)45
+  }
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+
+    let cmds = &result.scene.commands;
+    // PushClip PushTransform(group) PushTransform(rect) FillRect PopTransform(rect) PopTransform(group) PopClip
+    assert_eq!(cmds.len(), 7, "expected 7 commands; got: {:?}", cmds);
+
+    assert!(matches!(cmds[0], SceneCommand::PushClip { .. }));
+
+    // Group PushTransform
+    match &cmds[1] {
+        SceneCommand::PushTransform { angle_deg, cx, cy } => {
+            assert_eq!(*angle_deg, 15.0, "group angle must be 15");
+            // Rect bbox: x=10,y=10,w=80,h=40 → center=(50,30)
+            assert_eq!(*cx, 50.0, "group pivot cx=10+80/2=50");
+            assert_eq!(*cy, 30.0, "group pivot cy=10+40/2=30");
+        }
+        other => panic!("expected group PushTransform at [1], got {other:?}"),
+    }
+
+    // Rect PushTransform
+    match &cmds[2] {
+        SceneCommand::PushTransform { angle_deg, .. } => {
+            assert_eq!(*angle_deg, 45.0, "rect angle must be 45");
+        }
+        other => panic!("expected rect PushTransform at [2], got {other:?}"),
+    }
+
+    assert!(
+        matches!(cmds[3], SceneCommand::FillRect { .. }),
+        "[3] must be FillRect"
+    );
+    assert!(
+        matches!(cmds[4], SceneCommand::PopTransform),
+        "[4] must be rect PopTransform"
+    );
+    assert!(
+        matches!(cmds[5], SceneCommand::PopTransform),
+        "[5] must be group PopTransform"
+    );
+    assert!(matches!(cmds[6], SceneCommand::PopClip));
+}
+
+// ── overflow="fit" tests ──────────────────────────────────────────────────
+
+/// A text node with `overflow="fit"` whose long text overflows the small box
+/// height must produce a `text.fit_failed` Error diagnostic, AND must still
+/// emit glyph run commands (the scene is not suppressed).
+#[test]
+fn overflow_fit_height_exceeded_emits_fit_failed_and_still_draws() {
+    // A tiny 60×20 px box. Font size 16 px → line_height ≈ 18–20 px.
+    // The text has many words that will wrap into multiple lines, so
+    // content_height will exceed 20 px.
+    let src = r##"zenith version=1 {
+  project id="proj.fit1" name="Fit Overflow"
+  tokens format="zenith-token-v1" {}
+  styles {}
+  document id="doc.fit1" title="Fit Overflow" {
+page id="page.fit1" w=(px)400 h=(px)400 {
+  text id="text.overflow" x=(px)10 y=(px)10 w=(px)60 h=(px)20 overflow="fit" {
+    span "The quick brown fox jumps over the lazy dog and keeps on going"
+  }
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+
+    // Must have exactly one `text.fit_failed` Error diagnostic.
+    let fit_errors: Vec<_> = result
+        .diagnostics
+        .iter()
+        .filter(|d| d.code == "text.fit_failed")
+        .collect();
+    assert_eq!(
+        fit_errors.len(),
+        1,
+        "expected exactly one text.fit_failed diagnostic; got: {:?}",
+        result.diagnostics
+    );
+    assert_eq!(
+        fit_errors[0].severity,
+        zenith_core::Severity::Error,
+        "text.fit_failed must be Error severity"
+    );
+    assert!(
+        fit_errors[0]
+            .subject_id
+            .as_deref()
+            .map(|s| s.contains("text.overflow"))
+            .unwrap_or(false),
+        "subject_id must name the overflowing text node; got {:?}",
+        fit_errors[0].subject_id
+    );
+
+    // Glyph runs must still be emitted — the scene is not suppressed.
+    let has_glyphs = result
+        .scene
+        .commands
+        .iter()
+        .any(|c| matches!(c, SceneCommand::DrawGlyphRun { .. }));
+    assert!(
+        has_glyphs,
+        "glyph runs must still be emitted even when fit fails"
+    );
+}
+
+/// A text node with `overflow="fit"` whose text FITS within the box must
+/// produce NO `text.fit_failed` diagnostic.
+#[test]
+fn overflow_fit_text_fits_no_diagnostic() {
+    // A wide, tall box that the short text will easily fit in.
+    let src = r##"zenith version=1 {
+  project id="proj.fit2" name="Fit OK"
+  tokens format="zenith-token-v1" {}
+  styles {}
+  document id="doc.fit2" title="Fit OK" {
+page id="page.fit2" w=(px)400 h=(px)400 {
+  text id="text.fits" x=(px)10 y=(px)10 w=(px)300 h=(px)100 overflow="fit" {
+    span "Hi"
+  }
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+
+    let fit_errors: Vec<_> = result
+        .diagnostics
+        .iter()
+        .filter(|d| d.code == "text.fit_failed")
+        .collect();
+    assert!(
+        fit_errors.is_empty(),
+        "text that fits must produce no text.fit_failed diagnostic; got: {:?}",
+        fit_errors
+    );
+}
+
+/// A text node with `overflow="clip"` (not "fit") must NEVER produce a
+/// `text.fit_failed` diagnostic, even when the text clearly overflows.
+#[test]
+fn overflow_clip_overflowing_text_no_fit_diagnostic() {
+    let src = r##"zenith version=1 {
+  project id="proj.fit3" name="Clip Overflow"
+  tokens format="zenith-token-v1" {}
+  styles {}
+  document id="doc.fit3" title="Clip Overflow" {
+page id="page.fit3" w=(px)400 h=(px)400 {
+  text id="text.clip" x=(px)10 y=(px)10 w=(px)60 h=(px)20 overflow="clip" {
+    span "The quick brown fox jumps over the lazy dog and keeps on going"
+  }
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+
+    let fit_errors: Vec<_> = result
+        .diagnostics
+        .iter()
+        .filter(|d| d.code == "text.fit_failed")
+        .collect();
+    assert!(
+        fit_errors.is_empty(),
+        "overflow=\"clip\" must never produce text.fit_failed; got: {:?}",
+        fit_errors
+    );
+}
+
+/// A text node with no `overflow` property and overflowing text must NOT
+/// produce a `text.fit_failed` diagnostic.
+#[test]
+fn overflow_absent_overflowing_text_no_fit_diagnostic() {
+    let src = r##"zenith version=1 {
+  project id="proj.fit4" name="No Overflow Prop"
+  tokens format="zenith-token-v1" {}
+  styles {}
+  document id="doc.fit4" title="No Overflow Prop" {
+page id="page.fit4" w=(px)400 h=(px)400 {
+  text id="text.noov" x=(px)10 y=(px)10 w=(px)60 h=(px)20 {
+    span "The quick brown fox jumps over the lazy dog and keeps on going"
+  }
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+
+    let fit_errors: Vec<_> = result
+        .diagnostics
+        .iter()
+        .filter(|d| d.code == "text.fit_failed")
+        .collect();
+    assert!(
+        fit_errors.is_empty(),
+        "absent overflow must never produce text.fit_failed; got: {:?}",
+        fit_errors
+    );
+}
+
+// ── Gradient fill compilation (GRAD-2) ────────────────────────────────
+
+/// A page background, a rect fill, and an ellipse fill all referencing a
+/// gradient token must emit the corresponding `*Gradient` commands with the
+/// resolved stop colors and angle.
+#[test]
+fn gradient_fill_emits_gradient_commands() {
+    let src = r##"zenith version=1 {
+  project id="proj.g" name="G"
+  tokens format="zenith-token-v1" {
+token id="color.top" type="color" value="#112233"
+token id="color.bottom" type="color" value="#445566"
+token id="grad.bg" type="gradient" angle=(deg)90 {
+  stop offset=0.0 color=(token)"color.top"
+  stop offset=1.0 color=(token)"color.bottom"
+}
+  }
+  styles {}
+  document id="doc.g" title="G" {
+page id="page.g" w=(px)640 h=(px)360 background=(token)"grad.bg" {
+  rect id="rect.g" x=(px)10 y=(px)20 w=(px)100 h=(px)50 fill=(token)"grad.bg"
+  ellipse id="ell.g" x=(px)10 y=(px)20 w=(px)100 h=(px)50 fill=(token)"grad.bg"
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+
+    let cmds = &result.scene.commands;
+
+    // Page background gradient (full page, no opacity cascade).
+    match &cmds[1] {
+        SceneCommand::FillRectGradient {
+            x,
+            y,
+            w,
+            h,
+            gradient,
+        } => {
+            assert_eq!((*x, *y, *w, *h), (0.0, 0.0, 640.0, 360.0));
+            assert_eq!(gradient.angle_deg, 90.0);
+            assert_eq!(gradient.stops.len(), 2);
+            assert_eq!(gradient.stops[0].offset, 0.0);
+            assert_eq!(gradient.stops[0].color.r, 0x11);
+            assert_eq!(gradient.stops[0].color.a, 255);
+            assert_eq!(gradient.stops[1].color.r, 0x44);
+        }
+        other => panic!("expected FillRectGradient bg, got {other:?}"),
+    }
+
+    // Rect fill gradient.
+    let has_rect_grad = cmds.iter().any(|c| {
+        matches!(
+            c,
+            SceneCommand::FillRectGradient { x, w, .. } if *x == 10.0 && *w == 100.0
+        )
+    });
+    assert!(has_rect_grad, "expected rect FillRectGradient: {cmds:?}");
+
+    // Ellipse fill gradient.
+    let has_ell_grad = cmds
+        .iter()
+        .any(|c| matches!(c, SceneCommand::FillEllipseGradient { .. }));
+    assert!(has_ell_grad, "expected FillEllipseGradient: {cmds:?}");
+}
+
+/// A SOLID color fill must still emit the plain `FillRect` / `FillEllipse`
+/// (the gradient path must not perturb the solid path).
+#[test]
+fn solid_fill_unchanged_by_gradient_support() {
+    let src = r##"zenith version=1 {
+  project id="proj.s" name="S"
+  tokens format="zenith-token-v1" {
+token id="color.fill" type="color" value="#112233"
+  }
+  styles {}
+  document id="doc.s" title="S" {
+page id="page.s" w=(px)640 h=(px)360 {
+  rect id="rect.s" x=(px)0 y=(px)0 w=(px)640 h=(px)360 fill=(token)"color.fill"
+  ellipse id="ell.s" x=(px)0 y=(px)0 w=(px)100 h=(px)50 fill=(token)"color.fill"
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+    let cmds = &result.scene.commands;
+    assert!(
+        cmds.iter()
+            .any(|c| matches!(c, SceneCommand::FillRect { .. })),
+        "solid rect must emit FillRect: {cmds:?}"
+    );
+    assert!(
+        cmds.iter()
+            .any(|c| matches!(c, SceneCommand::FillEllipse { .. })),
+        "solid ellipse must emit FillEllipse: {cmds:?}"
+    );
+    assert!(
+        !cmds.iter().any(|c| matches!(
+            c,
+            SceneCommand::FillRectGradient { .. } | SceneCommand::FillEllipseGradient { .. }
+        )),
+        "solid fills must not emit gradient commands: {cmds:?}"
+    );
+}
+
+// ── Shadow compilation (SHAD-2) ───────────────────────────────────────
+
+/// A text node and a rect node carrying a `shadow=(token)` must emit a
+/// `BeginShadow { shadows:[…] }` … `EndShadow` bracket around their draw
+/// commands, with the layer color resolved from the referenced color token.
+#[test]
+fn shadow_emits_begin_end_bracket() {
+    let src = r##"zenith version=1 {
+  project id="proj.sh" name="Sh"
+  tokens format="zenith-token-v1" {
+token id="color.shadow" type="color" value="#102030"
+token id="color.fill" type="color" value="#445566"
+token id="shadow.soft" type="shadow" {
+  layer dx=(px)2 dy=(px)3 blur=(px)4 color=(token)"color.shadow"
+}
+  }
+  styles {}
+  document id="doc.sh" title="Sh" {
+page id="page.sh" w=(px)200 h=(px)200 {
+  rect id="rect.sh" x=(px)10 y=(px)10 w=(px)80 h=(px)40 fill=(token)"color.fill" shadow=(token)"shadow.soft"
+  text id="text.sh" x=(px)10 y=(px)80 shadow=(token)"shadow.soft" {
+    span "Hello"
+  }
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+    let cmds = &result.scene.commands;
+
+    // Locate the first BeginShadow and verify the resolved layer.
+    let begin = cmds.iter().find_map(|c| match c {
+        SceneCommand::BeginShadow { shadows } => Some(shadows),
+        _ => None,
+    });
+    let shadows = begin.expect("a BeginShadow must be emitted");
+    assert_eq!(shadows.len(), 1, "one shadow layer: {shadows:?}");
+    let layer = shadows.first().expect("layer present");
+    assert_eq!((layer.dx, layer.dy, layer.blur), (2.0, 3.0, 4.0));
+    assert_eq!(layer.color.r, 0x10);
+    assert_eq!(layer.color.g, 0x20);
+    assert_eq!(layer.color.b, 0x30);
+    assert_eq!(layer.color.a, 0xff);
+
+    // BeginShadow/EndShadow must be balanced, and a Begin must precede a
+    // draw which precedes the End (bracket order).
+    let begins = cmds
+        .iter()
+        .filter(|c| matches!(c, SceneCommand::BeginShadow { .. }))
+        .count();
+    let ends = cmds
+        .iter()
+        .filter(|c| matches!(c, SceneCommand::EndShadow))
+        .count();
+    assert_eq!(begins, 2, "rect + text each open a shadow: {cmds:?}");
+    assert_eq!(ends, 2, "each shadow must be closed: {cmds:?}");
+
+    // The first Begin is immediately followed by a fill and closed by an End.
+    let begin_idx = cmds
+        .iter()
+        .position(|c| matches!(c, SceneCommand::BeginShadow { .. }))
+        .expect("begin index");
+    let end_idx = cmds
+        .iter()
+        .position(|c| matches!(c, SceneCommand::EndShadow))
+        .expect("end index");
+    assert!(begin_idx < end_idx, "Begin must precede End");
+    let has_draw_between = cmds
+        .get(begin_idx + 1..end_idx)
+        .map(|window| {
+            window
+                .iter()
+                .any(|c| matches!(c, SceneCommand::FillRect { .. }))
+        })
+        .unwrap_or(false);
+    assert!(
+        has_draw_between,
+        "a draw must sit inside the bracket: {cmds:?}"
+    );
+}
+
+/// A node WITHOUT a shadow must emit a command stream byte-identical to the
+/// pre-shadow behavior: no `BeginShadow`/`EndShadow` anywhere.
+#[test]
+fn no_shadow_emits_no_bracket() {
+    let src = r##"zenith version=1 {
+  project id="proj.ns" name="Ns"
+  tokens format="zenith-token-v1" {
+token id="color.fill" type="color" value="#445566"
+  }
+  styles {}
+  document id="doc.ns" title="Ns" {
+page id="page.ns" w=(px)200 h=(px)200 {
+  rect id="rect.ns" x=(px)10 y=(px)10 w=(px)80 h=(px)40 fill=(token)"color.fill"
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+    let cmds = &result.scene.commands;
+    assert!(
+        !cmds.iter().any(|c| matches!(
+            c,
+            SceneCommand::BeginShadow { .. } | SceneCommand::EndShadow
+        )),
+        "a shadow-less node must emit no shadow bracket: {cmds:?}"
+    );
+}
