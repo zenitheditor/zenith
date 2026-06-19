@@ -21,8 +21,8 @@ mod tests;
 use flags::{apply_set_locked, apply_set_points, apply_set_visible};
 use geometry::{apply_align_nodes, apply_set_geometry};
 use structure::{
-    ReorderKind, apply_add_node, apply_duplicate_node, apply_group, apply_remove_node,
-    apply_reorder, apply_reparent, apply_ungroup,
+    ReorderKind, apply_add_node, apply_duplicate_node, apply_duplicate_page, apply_group,
+    apply_remove_node, apply_reorder, apply_reparent, apply_ungroup,
 };
 use style::{
     apply_replace_text, apply_set_fill, apply_set_opacity, apply_set_stroke,
@@ -222,6 +222,13 @@ fn apply_op(
         } => {
             apply_duplicate_node(node_id, new_id, doc, diagnostics, affected);
         }
+        Op::DuplicatePage {
+            page,
+            new_id,
+            id_suffix,
+        } => {
+            apply_duplicate_page(page, new_id, id_suffix, doc, diagnostics, affected);
+        }
         Op::Group { node_ids, group_id } => {
             apply_group(node_ids, group_id, doc, diagnostics, affected);
         }
@@ -278,6 +285,7 @@ fn op_lock_targets(op: &Op) -> Vec<&str> {
         | Op::SetVisible { .. }
         | Op::AddNode { .. }
         | Op::DuplicateNode { .. }
+        | Op::DuplicatePage { .. }
         | Op::Group { .. }
         | Op::Ungroup { .. } => Vec::new(),
     }

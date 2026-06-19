@@ -583,6 +583,115 @@ pub(super) fn apply_duplicate_node(
     record_affected(new_id, affected);
 }
 
+// ── DuplicatePage ─────────────────────────────────────────────────────────────
+
+/// Recursively append `id_suffix` to the id of every node in `children`,
+/// descending into `group`/`frame` containers.
+///
+/// Mirrors the ordered recursion of [`duplicate_in_children`]: a plain in-order
+/// walk over the slice with no HashMap, so the result is deterministic. Ids are
+/// read/written through the shared [`node_id_of`] reader and the
+/// [`node_set_id_any`] setter; leaf and container nodes alike get suffixed, and
+/// containers also recurse into their own children.
+fn suffix_ids_in_children(children: &mut [Node], id_suffix: &str) {
+    for child in children.iter_mut() {
+        // Suffix this node's own id (if it has one), then recurse.
+        if let Some(old_id) = node_id_of(child) {
+            let new_id = format!("{old_id}{id_suffix}");
+            node_set_id_any(child, new_id);
+        }
+        match child {
+            Node::Frame(f) => suffix_ids_in_children(&mut f.children, id_suffix),
+            Node::Group(g) => suffix_ids_in_children(&mut g.children, id_suffix),
+            _ => {}
+        }
+    }
+}
+
+/// Set the `id` of any id-bearing [`Node`] variant, including containers.
+///
+/// [`node_set_id`] deliberately excludes `Frame`/`Group` because the leaf-only
+/// `duplicate_node` path never re-ids a container. `duplicate_page` does need to
+/// re-id containers, so this sibling covers every variant that [`node_id_of`]
+/// can read an id from. `Unknown` has no id field and is a no-op (it is also
+/// never reached: `node_id_of` returns `None` for it, so the caller skips it).
+fn node_set_id_any(node: &mut Node, new_id: String) {
+    match node {
+        Node::Frame(f) => f.id = new_id,
+        Node::Group(g) => g.id = new_id,
+        // Leaf variants share the existing setter.
+        Node::Rect(_)
+        | Node::Ellipse(_)
+        | Node::Line(_)
+        | Node::Text(_)
+        | Node::Code(_)
+        | Node::Image(_)
+        | Node::Polygon(_)
+        | Node::Polyline(_) => {
+            node_set_id(node, new_id);
+        }
+        Node::Unknown(_) => {}
+    }
+}
+
+pub(super) fn apply_duplicate_page(
+    page_id: &str,
+    new_id: &str,
+    id_suffix: &str,
+    doc: &mut Document,
+    diagnostics: &mut Vec<Diagnostic>,
+    affected: &mut Vec<String>,
+) {
+    // 1. Locate the source page by id.
+    let Some(position) = doc.body.pages.iter().position(|p| p.id == page_id) else {
+        diagnostics.push(Diagnostic::error(
+            "tx.unknown_node",
+            format!("duplicate_page: page {:?} not found", page_id),
+            None,
+            Some(page_id.to_owned()),
+        ));
+        return;
+    };
+
+    // Advisory: an empty suffix cannot keep descendant ids unique. Post-validation
+    // will still reject via id.duplicate; this just makes the cause obvious.
+    if id_suffix.is_empty() {
+        diagnostics.push(Diagnostic::advisory(
+            "tx.noop",
+            format!(
+                "duplicate_page: empty id_suffix will not keep cloned node ids \
+                 unique for page {:?}; the transaction will be rejected",
+                page_id
+            ),
+            None,
+            Some(page_id.to_owned()),
+        ));
+    }
+
+    // 2. Clone the source page. `.get()` is checked though `position` is valid.
+    let Some(source) = doc.body.pages.get(position) else {
+        return; // unreachable: position came from the scan above.
+    };
+    let mut clone = source.clone();
+
+    // 3. The new page takes new_id exactly; clear its stale source span.
+    clone.id = new_id.to_owned();
+    clone.source_span = None;
+
+    // 4. Suffix every descendant node id and every safe-zone id in the copy.
+    suffix_ids_in_children(&mut clone.children, id_suffix);
+    for zone in clone.safe_zones.iter_mut() {
+        zone.id.push_str(id_suffix);
+        zone.source_span = None;
+    }
+
+    // 5. Insert the clone immediately after the source page.
+    doc.body.pages.insert(position + 1, clone);
+
+    // 6. Record the new page id. Post-validation catches any residual duplicate id.
+    record_affected(new_id, affected);
+}
+
 // ── Group ─────────────────────────────────────────────────────────────────────
 
 /// Find which page directly contains (at the top level of `page.children`) ALL

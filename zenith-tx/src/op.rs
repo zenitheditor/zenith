@@ -347,6 +347,34 @@ pub enum Op {
         /// The id to assign to the newly created clone.
         new_id: String,
     },
+    /// Duplicate an entire page (and its full subtree), inserting the copy
+    /// immediately after the source page in the document body.
+    ///
+    /// Unlike [`Op::DuplicateNode`] (leaf-only, v0), this performs a deep clone:
+    /// the new page gets `new_id`, and **every descendant node id** in the copy
+    /// is suffixed with `id_suffix` so all ids stay unique. Any page-level
+    /// `safe_zones[].id` is suffixed the same way.
+    ///
+    /// `duplicate_page` only *creates* new content and never mutates the source,
+    /// so it is exempt from lock enforcement.
+    ///
+    /// Rejects with `tx.unknown_node` if no page with id `page` exists.
+    /// Post-validation rejects the transaction if `id_suffix` fails to keep ids
+    /// unique (e.g. an empty suffix) via the `id.duplicate` diagnostic — that is
+    /// the safety net; an empty suffix also emits a helpful advisory.
+    ///
+    /// JSON example:
+    /// ```json
+    /// {"op":"duplicate_page","page":"page.x","new_id":"page.x2","id_suffix":".v2"}
+    /// ```
+    DuplicatePage {
+        /// Source page id to clone.
+        page: String,
+        /// Id for the new (duplicated) page.
+        new_id: String,
+        /// Suffix appended to EVERY descendant node id in the copy (keeps ids unique).
+        id_suffix: String,
+    },
     /// Wrap a set of sibling nodes inside a new group node.
     ///
     /// All `node_ids` must be **direct siblings under the same parent**
