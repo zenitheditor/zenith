@@ -108,6 +108,11 @@ fn code_zen_renders_to_valid_png() {
     assert_example_renders("code");
 }
 
+#[test]
+fn highlight_zen_renders_to_valid_png() {
+    assert_example_renders("highlight");
+}
+
 // ── --locked sha256 verification ────────────────────────────────────────────────
 
 /// Path to the workspace-root `examples/` directory (where `assets/swatch.png`

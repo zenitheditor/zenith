@@ -1,0 +1,25 @@
+zenith version=1 {
+  project id="proj.highlight" name="Syntax Highlighting Example"
+  assets {
+  }
+  tokens format="zenith-token-v1" {
+    token id="color.darkbg" type="color" value="#0f172a"
+    token id="color.litebg" type="color" value="#ffffff"
+    token id="font.mono" type="fontFamily" value="Noto Sans Mono"
+    token id="size.code" type="dimension" value=(px)14
+  }
+  styles {
+  }
+  document id="doc.highlight" title="Syntax Highlighting Example" {
+    page id="page.highlight" w=(px)520 h=(px)360 {
+      rect id="bg.dark" x=(px)0 y=(px)0 w=(px)520 h=(px)180 fill=(token)"color.darkbg"
+      code id="code.dark" x=(px)20 y=(px)18 w=(px)480 h=(px)150 overflow="clip" language="rust" tab-width=4 font-family=(token)"font.mono" font-size=(token)"size.code" {
+        content "fn main() {\n\tlet name = \"Zenith\";\n\tlet count = 42;\n\t// greet the world\n\tprintln!(\"Hello, {name}!\");\n}"
+      }
+      rect id="bg.light" x=(px)0 y=(px)180 w=(px)520 h=(px)180 fill=(token)"color.litebg"
+      code id="code.light" x=(px)20 y=(px)198 w=(px)480 h=(px)150 overflow="clip" language="rust" tab-width=4 font-family=(token)"font.mono" font-size=(token)"size.code" syntax-theme="light" {
+        content "fn main() {\n\tlet name = \"Zenith\";\n\tlet count = 42;\n\t// greet the world\n\tprintln!(\"Hello, {name}!\");\n}"
+      }
+    }
+  }
+}
