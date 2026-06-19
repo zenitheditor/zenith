@@ -1301,6 +1301,15 @@ fn compile_node(
             let font_size: f32 =
                 resolve_property_dimension_px(&font_size_prop, resolved, 14.0) as f32;
 
+            // Resolve font weight with style cascade; default to 400.
+            // A weight of 700 causes the provider to select Noto Sans Mono Bold
+            // instead of Noto Sans Mono Regular (unchanged → byte-identical for 400).
+            let font_weight_prop = code
+                .font_weight
+                .as_ref()
+                .or_else(|| style_prop(&code.style, style_map, "font-weight"));
+            let weight = resolve_font_weight(font_weight_prop, resolved, 400);
+
             // Resolve fill color with style cascade; default to opaque black.
             let fill_prop = code
                 .fill
@@ -1422,7 +1431,7 @@ fn compile_node(
                         let req = ShapeRequest {
                             text: seg_text,
                             families: &families,
-                            weight: 400,
+                            weight,
                             style: FontStyle::Normal,
                             font_size,
                         };
@@ -1467,11 +1476,12 @@ fn compile_node(
                     }
                 } else {
                     // ── Plain path (no highlighting): single run per line ──────
-                    // Kept byte-identical to the original implementation.
+                    // weight defaults to 400 (from resolve_font_weight), so code
+                    // nodes without font-weight remain byte-identical to before.
                     let req = ShapeRequest {
                         text: line,
                         families: &families,
-                        weight: 400,
+                        weight,
                         style: FontStyle::Normal,
                         font_size,
                     };
@@ -5803,6 +5813,126 @@ mod tests {
                 .iter()
                 .any(|c| matches!(c, SceneCommand::DrawGlyphRun { .. })),
             "expected DrawGlyphRun for registered Noto Sans family",
+        );
+    }
+
+    /// A code node with `font-weight=(token)"weight.bold"` (a fontWeight token = 700)
+    /// must produce a DrawGlyphRun whose font_id corresponds to the bold mono face
+    /// (distinct from the regular-weight code run's font_id).
+    #[test]
+    fn code_bold_font_weight_uses_bold_mono_face() {
+        let src = r##"zenith version=1 {
+  project id="proj.cbw" name="CBW"
+  tokens format="zenith-token-v1" {
+    token id="weight.bold" type="fontWeight" value=700
+  }
+  styles {}
+  document id="doc.cbw" title="CBW" {
+    page id="page.cbw" w=(px)400 h=(px)200 {
+      code id="code.regular" x=(px)10 y=(px)10 {
+        content "hello"
+      }
+      code id="code.bold" x=(px)10 y=(px)50 font-weight=(token)"weight.bold" {
+        content "hello"
+      }
+    }
+  }
+}
+"##;
+        let doc = parse(src);
+        let result = compile(&doc, &default_provider());
+
+        // Collect DrawGlyphRun font_ids for each code node (by order: regular first,
+        // bold second). Both nodes shape the same text, so each emits exactly one run.
+        let glyph_runs: Vec<_> = result
+            .scene
+            .commands
+            .iter()
+            .filter_map(|c| match c {
+                SceneCommand::DrawGlyphRun { font_id, .. } => Some(font_id.clone()),
+                _ => None,
+            })
+            .collect();
+
+        assert!(
+            glyph_runs.len() >= 2,
+            "expected at least 2 DrawGlyphRun commands (one per code node); got: {:?}",
+            glyph_runs
+        );
+
+        // The first run (regular weight=400) must use a different font than the
+        // second run (bold weight=700).
+        let regular_font = &glyph_runs[0];
+        let bold_font = &glyph_runs[1];
+        assert_ne!(
+            regular_font, bold_font,
+            "bold code node must use a different font_id than regular code node; \
+             regular={regular_font:?}, bold={bold_font:?}"
+        );
+
+        // The bold font_id must contain "700" (mirrors the provider id format).
+        assert!(
+            bold_font.contains("700"),
+            "bold code font_id should encode weight 700; got {bold_font:?}"
+        );
+    }
+
+    /// A code node WITHOUT `font-weight` defaults to weight 400, and must produce
+    /// a DrawGlyphRun with the same font_id as a code node with explicit weight=400.
+    /// This confirms the default-weight path is byte-identical to the original.
+    #[test]
+    fn code_default_weight_is_regular_mono_face() {
+        let src = r##"zenith version=1 {
+  project id="proj.cdw" name="CDW"
+  tokens format="zenith-token-v1" {
+    token id="weight.normal" type="fontWeight" value=400
+  }
+  styles {}
+  document id="doc.cdw" title="CDW" {
+    page id="page.cdw" w=(px)400 h=(px)200 {
+      code id="code.implicit" x=(px)10 y=(px)10 {
+        content "hello"
+      }
+      code id="code.explicit400" x=(px)10 y=(px)50 font-weight=(token)"weight.normal" {
+        content "hello"
+      }
+    }
+  }
+}
+"##;
+        let doc = parse(src);
+        let result = compile(&doc, &default_provider());
+
+        let glyph_runs: Vec<_> = result
+            .scene
+            .commands
+            .iter()
+            .filter_map(|c| match c {
+                SceneCommand::DrawGlyphRun { font_id, .. } => Some(font_id.clone()),
+                _ => None,
+            })
+            .collect();
+
+        assert!(
+            glyph_runs.len() >= 2,
+            "expected at least 2 DrawGlyphRun commands; got: {:?}",
+            glyph_runs
+        );
+
+        // Both the implicit-400 and explicit-400 code nodes must resolve to the
+        // same (regular) mono font_id — the default path is byte-identical.
+        assert_eq!(
+            glyph_runs[0], glyph_runs[1],
+            "implicit weight=400 and explicit weight=400 must resolve to the same \
+             mono font face; implicit={:?}, explicit={:?}",
+            glyph_runs[0], glyph_runs[1]
+        );
+
+        // The font_id must NOT contain "700".
+        assert!(
+            !glyph_runs[0].contains("700"),
+            "regular code font_id must not encode weight 700; got {:?}",
+            glyph_runs[0]
         );
     }
 }

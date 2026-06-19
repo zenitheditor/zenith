@@ -559,6 +559,15 @@ fn walk_node(
                 resolved_tokens,
                 diagnostics,
             );
+            check_visual_prop(
+                &c.id,
+                "font-weight",
+                c.font_weight.as_ref(),
+                VisualExpect::FontWeight,
+                referenced_token_ids,
+                resolved_tokens,
+                diagnostics,
+            );
 
             // Unknown properties.
             for prop_name in c.unknown_props.keys() {
@@ -1744,6 +1753,7 @@ mod tests {
             fill,
             font_family: None,
             font_size: None,
+            font_weight: None,
             syntax_theme: None,
             opacity: None,
             visible: None,

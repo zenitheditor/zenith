@@ -1033,6 +1033,8 @@ const CODE_KNOWN_PROPS: &[&str] = &[
     "font_family",
     "font-size",
     "font_size",
+    "font-weight",
+    "font_weight",
     "syntax-theme",
     "syntax_theme",
     "opacity",
@@ -1046,6 +1048,7 @@ fn transform_code(node: &KdlNode) -> Result<CodeNode, ParseError> {
 
     let font_family = optional_property_value_aliased(node, "font-family", "font_family");
     let font_size = optional_property_value_aliased(node, "font-size", "font_size");
+    let font_weight = optional_property_value_aliased(node, "font-weight", "font_weight");
     let line_numbers = optional_bool_prop(node, "line-numbers")
         .or_else(|| optional_bool_prop(node, "line_numbers"));
     let tab_width =
@@ -1089,6 +1092,7 @@ fn transform_code(node: &KdlNode) -> Result<CodeNode, ParseError> {
         fill: optional_property_value(node, "fill"),
         font_family,
         font_size,
+        font_weight,
         syntax_theme,
         opacity: optional_f64_prop(node, "opacity"),
         visible: optional_bool_prop(node, "visible"),

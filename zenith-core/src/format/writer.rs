@@ -788,8 +788,8 @@ fn write_code(c: &CodeNode, out: &mut String, depth: usize) {
     out.push_str("code");
 
     // Canonical property order: id, name, role, x, y, w, h, overflow, language,
-    // line-numbers, tab-width, style, fill, font-family, font-size, opacity,
-    // visible, locked, rotate, then unknown props.
+    // line-numbers, tab-width, style, fill, font-family, font-size, font-weight,
+    // syntax-theme, opacity, visible, locked, rotate, then unknown props.
     out.push_str(" id=\"");
     out.push_str(&c.id);
     out.push('"');
@@ -809,6 +809,7 @@ fn write_code(c: &CodeNode, out: &mut String, depth: usize) {
     write_opt_property_value(out, "fill", &c.fill);
     write_opt_property_value(out, "font-family", &c.font_family);
     write_opt_property_value(out, "font-size", &c.font_size);
+    write_opt_property_value(out, "font-weight", &c.font_weight);
     if let Some(t) = c.syntax_theme {
         let _ = write!(out, " syntax-theme=\"{}\"", t.as_str());
     }
@@ -1967,5 +1968,59 @@ mod tests {
             String::from_utf8(s2).unwrap(),
             "ellipse stroke formatting must be idempotent"
         );
+    }
+
+    /// **code font-weight round-trip + ordering**: a code node with a `font-weight`
+    /// token must survive parse→format→parse, and the formatter must place
+    /// `font-weight` immediately AFTER `font-size` in the canonical output.
+    #[test]
+    fn test_code_font_weight_round_trip_and_order() {
+        use crate::ast::{Node, PropertyValue};
+        let src = r##"zenith version=1 {
+  project id="proj.cfw" name="CFW"
+  tokens format="zenith-token-v1" {
+    token id="size.mono" type="dimension" value=(px)14
+    token id="weight.bold" type="fontWeight" value=700
+  }
+  styles {
+  }
+  document id="doc.cfw" title="CFW" {
+    page id="p" w=(px)400 h=(px)300 {
+      code id="c" x=(px)0 y=(px)0 font-size=(token)"size.mono" font-weight=(token)"weight.bold" {
+        content "let x = 1;"
+      }
+    }
+  }
+}
+"##;
+        let adapter = KdlAdapter;
+        let doc = adapter.parse(src.as_bytes()).expect("parse");
+        let out = format_document(&doc).expect("format");
+        let text = String::from_utf8(out).unwrap();
+
+        // Canonical order: font-weight comes immediately after font-size.
+        let code_line = text
+            .lines()
+            .find(|l| l.trim_start().starts_with("code"))
+            .expect("must find code line");
+        let pos_size = code_line.find(" font-size=").expect("must find font-size=");
+        let pos_weight = code_line
+            .find(" font-weight=")
+            .expect("must find font-weight=");
+        assert!(
+            pos_size < pos_weight,
+            "font-weight must follow font-size in code node; code line: {code_line:?}"
+        );
+
+        // Round-trip: re-parse preserves the font_weight token ref.
+        let doc2 = adapter.parse(text.as_bytes()).expect("re-parse");
+        match &doc2.body.pages[0].children[0] {
+            Node::Code(c) => assert_eq!(
+                c.font_weight,
+                Some(PropertyValue::TokenRef("weight.bold".to_owned())),
+                "font-weight must survive the code format round-trip"
+            ),
+            other => panic!("expected Code, got {other:?}"),
+        }
     }
 }

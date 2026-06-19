@@ -218,7 +218,7 @@ impl FontProvider for BytesFontProvider {
 
 /// Build a `BytesFontProvider` preloaded with the bundled default fonts.
 ///
-/// Five faces are embedded at compile time, all Apache-2.0:
+/// Six faces are embedded at compile time, all Apache-2.0:
 /// - Noto Sans Regular (`"Noto Sans"`, weight 400, Normal) — the proportional
 ///   default for text nodes.
 /// - Noto Sans Bold (`"Noto Sans"`, weight 700, Normal) — resolved when a node
@@ -229,6 +229,8 @@ impl FontProvider for BytesFontProvider {
 ///   span that is BOTH bold and italic (completes the weight×style matrix).
 /// - Noto Sans Mono Regular (`"Noto Sans Mono"`, weight 400, Normal) — the
 ///   monospace default for code nodes.
+/// - Noto Sans Mono Bold (`"Noto Sans Mono"`, weight 700, Normal) — resolved
+///   when a code node requests `font-weight` 700.
 #[must_use]
 pub fn default_provider() -> BytesFontProvider {
     let sans: Arc<[u8]> =
@@ -241,12 +243,15 @@ pub fn default_provider() -> BytesFontProvider {
         Arc::from(&include_bytes!("../../../assets/fonts/NotoSans-BoldItalic.ttf")[..]);
     let mono: Arc<[u8]> =
         Arc::from(&include_bytes!("../../../assets/fonts/NotoSansMono-Regular.ttf")[..]);
+    let mono_bold: Arc<[u8]> =
+        Arc::from(&include_bytes!("../../../assets/fonts/NotoSansMono-Bold.ttf")[..]);
     let mut provider = BytesFontProvider::new();
     provider.register("Noto Sans", 400, FontStyle::Normal, sans, 0);
     provider.register("Noto Sans", 700, FontStyle::Normal, sans_bold, 0);
     provider.register("Noto Sans", 400, FontStyle::Italic, sans_italic, 0);
     provider.register("Noto Sans", 700, FontStyle::Italic, sans_bold_italic, 0);
     provider.register("Noto Sans Mono", 400, FontStyle::Normal, mono, 0);
+    provider.register("Noto Sans Mono", 700, FontStyle::Normal, mono_bold, 0);
     provider
 }
 
@@ -409,6 +414,33 @@ mod tests {
             regular.bytes.len(),
             bold.bytes.len(),
             "regular and bold must be different font files"
+        );
+    }
+
+    #[test]
+    fn mono_bold_weight_resolves_distinct_bold_face() {
+        // The bundled Noto Sans Mono Bold face (weight 700) must resolve EXACTLY
+        // and be a different file than the Mono Regular (weight 400) face.
+        let p = default_provider();
+        let mono_regular = p
+            .resolve(&["Noto Sans Mono".to_string()], 400, FontStyle::Normal)
+            .expect("mono regular resolves");
+        let mono_bold = p
+            .resolve(&["Noto Sans Mono".to_string()], 700, FontStyle::Normal)
+            .expect("mono bold resolves");
+        assert!(
+            mono_bold.id.contains("noto-sans-mono-700"),
+            "mono bold id should encode weight 700, got {}",
+            mono_bold.id
+        );
+        assert_ne!(
+            mono_regular.id, mono_bold.id,
+            "mono regular and mono bold must have distinct ids"
+        );
+        assert_ne!(
+            mono_regular.bytes.len(),
+            mono_bold.bytes.len(),
+            "mono regular and mono bold must be different font files"
         );
     }
 

@@ -241,6 +241,8 @@ pub struct CodeNode {
     pub fill: Option<PropertyValue>,
     pub font_family: Option<PropertyValue>,
     pub font_size: Option<PropertyValue>,
+    /// Numeric font weight (100–900), usually a `fontWeight` token ref.
+    pub font_weight: Option<PropertyValue>,
     /// Optional built-in syntax-highlight color theme; `None` = use default (`Dark`).
     pub syntax_theme: Option<SyntaxTheme>,
     pub opacity: Option<f64>,
