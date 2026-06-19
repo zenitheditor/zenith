@@ -34,8 +34,42 @@ pub(super) fn walk_node(
     declared_asset_ids: &HashSet<String>,
     declared_style_ids: &HashSet<String>,
     page_px_bounds: Option<(f64, f64)>,
+    in_flow_parent: bool,
+    enclosing_frame: Option<(f64, f64, f64, f64)>,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
+    // ── frame.child_overflow advisory ─────────────────────────────────────
+    // When this node is a direct (or group-nested) child of a frame whose px
+    // box resolved, advise if the child's AUTHORED bbox protrudes beyond the
+    // frame box on any side. `node_bbox` returns None for flow-supplied
+    // (missing) geometry, so such children are naturally skipped.
+    if let Some((fx, fy, fw, fh)) = enclosing_frame
+        && let Some((page_w, page_h)) = page_px_bounds
+        && let Some((nx, ny, nw, nh)) = node_bbox(node, page_w, page_h)
+    {
+        const EPSILON: f64 = 0.5;
+        let over_left = nx < fx - EPSILON;
+        let over_top = ny < fy - EPSILON;
+        let over_right = nx + nw > fx + fw + EPSILON;
+        let over_bottom = ny + nh > fy + fh + EPSILON;
+        if over_left || over_top || over_right || over_bottom {
+            let (node_id, node_span) = node_id_and_span(node);
+            diagnostics.push(Diagnostic::advisory(
+                "frame.child_overflow",
+                format!(
+                    "node '{}' (bbox {nx}, {ny}, {nw}, {nh}) protrudes beyond its \
+                     enclosing frame (bbox {fx}, {fy}, {fw}, {fh})",
+                    node_id
+                ),
+                node_span,
+                Some(node_id.to_owned()),
+            ));
+        }
+    }
+
+    // Direct children of a `layout="flow"` frame have their x/y (and, when
+    // omitted, w/h) supplied by the flow algorithm, so geometry is optional.
+    let geom_required = !in_flow_parent;
     // ── off_canvas advisory ───────────────────────────────────────────────
     // Check whether the node's authored bounding box exceeds the page rect
     // [0, 0, page_w, page_h]. This uses authored coordinates only — group
@@ -69,10 +103,38 @@ pub(super) fn walk_node(
             );
 
             // Required geometry: x, y, w, h must all be present.
-            check_optional_dim(&r.id, "x", r.x.as_ref(), r.source_span, diagnostics);
-            check_optional_dim(&r.id, "y", r.y.as_ref(), r.source_span, diagnostics);
-            check_optional_dim(&r.id, "w", r.w.as_ref(), r.source_span, diagnostics);
-            check_optional_dim(&r.id, "h", r.h.as_ref(), r.source_span, diagnostics);
+            check_optional_dim(
+                &r.id,
+                "x",
+                r.x.as_ref(),
+                geom_required,
+                r.source_span,
+                diagnostics,
+            );
+            check_optional_dim(
+                &r.id,
+                "y",
+                r.y.as_ref(),
+                geom_required,
+                r.source_span,
+                diagnostics,
+            );
+            check_optional_dim(
+                &r.id,
+                "w",
+                r.w.as_ref(),
+                geom_required,
+                r.source_span,
+                diagnostics,
+            );
+            check_optional_dim(
+                &r.id,
+                "h",
+                r.h.as_ref(),
+                geom_required,
+                r.source_span,
+                diagnostics,
+            );
 
             // Visual properties.
             check_visual_prop(
@@ -147,10 +209,38 @@ pub(super) fn walk_node(
             );
 
             // Required geometry: x, y, w, h must all be present.
-            check_optional_dim(&e.id, "x", e.x.as_ref(), e.source_span, diagnostics);
-            check_optional_dim(&e.id, "y", e.y.as_ref(), e.source_span, diagnostics);
-            check_optional_dim(&e.id, "w", e.w.as_ref(), e.source_span, diagnostics);
-            check_optional_dim(&e.id, "h", e.h.as_ref(), e.source_span, diagnostics);
+            check_optional_dim(
+                &e.id,
+                "x",
+                e.x.as_ref(),
+                geom_required,
+                e.source_span,
+                diagnostics,
+            );
+            check_optional_dim(
+                &e.id,
+                "y",
+                e.y.as_ref(),
+                geom_required,
+                e.source_span,
+                diagnostics,
+            );
+            check_optional_dim(
+                &e.id,
+                "w",
+                e.w.as_ref(),
+                geom_required,
+                e.source_span,
+                diagnostics,
+            );
+            check_optional_dim(
+                &e.id,
+                "h",
+                e.h.as_ref(),
+                geom_required,
+                e.source_span,
+                diagnostics,
+            );
 
             // Visual properties.
             check_visual_prop(
@@ -216,10 +306,10 @@ pub(super) fn walk_node(
             );
 
             // Required geometry: x1, y1, x2, y2 must all be present.
-            check_optional_dim(&l.id, "x1", l.x1.as_ref(), l.source_span, diagnostics);
-            check_optional_dim(&l.id, "y1", l.y1.as_ref(), l.source_span, diagnostics);
-            check_optional_dim(&l.id, "x2", l.x2.as_ref(), l.source_span, diagnostics);
-            check_optional_dim(&l.id, "y2", l.y2.as_ref(), l.source_span, diagnostics);
+            check_optional_dim(&l.id, "x1", l.x1.as_ref(), true, l.source_span, diagnostics);
+            check_optional_dim(&l.id, "y1", l.y1.as_ref(), true, l.source_span, diagnostics);
+            check_optional_dim(&l.id, "x2", l.x2.as_ref(), true, l.source_span, diagnostics);
+            check_optional_dim(&l.id, "y2", l.y2.as_ref(), true, l.source_span, diagnostics);
 
             // Visual properties (stroke-only; no fill for line).
             // stroke is optional — only type-checked if present (a stroke-less
@@ -269,10 +359,38 @@ pub(super) fn walk_node(
             );
 
             // Required geometry.
-            check_optional_dim(&t.id, "x", t.x.as_ref(), t.source_span, diagnostics);
-            check_optional_dim(&t.id, "y", t.y.as_ref(), t.source_span, diagnostics);
-            check_optional_dim(&t.id, "w", t.w.as_ref(), t.source_span, diagnostics);
-            check_optional_dim(&t.id, "h", t.h.as_ref(), t.source_span, diagnostics);
+            check_optional_dim(
+                &t.id,
+                "x",
+                t.x.as_ref(),
+                geom_required,
+                t.source_span,
+                diagnostics,
+            );
+            check_optional_dim(
+                &t.id,
+                "y",
+                t.y.as_ref(),
+                geom_required,
+                t.source_span,
+                diagnostics,
+            );
+            check_optional_dim(
+                &t.id,
+                "w",
+                t.w.as_ref(),
+                geom_required,
+                t.source_span,
+                diagnostics,
+            );
+            check_optional_dim(
+                &t.id,
+                "h",
+                t.h.as_ref(),
+                geom_required,
+                t.source_span,
+                diagnostics,
+            );
 
             // Visual properties.
             check_visual_prop(
@@ -372,10 +490,38 @@ pub(super) fn walk_node(
             );
 
             // Geometry (advisory box for v0; only unit-checked if present).
-            check_optional_dim(&c.id, "x", c.x.as_ref(), c.source_span, diagnostics);
-            check_optional_dim(&c.id, "y", c.y.as_ref(), c.source_span, diagnostics);
-            check_optional_dim(&c.id, "w", c.w.as_ref(), c.source_span, diagnostics);
-            check_optional_dim(&c.id, "h", c.h.as_ref(), c.source_span, diagnostics);
+            check_optional_dim(
+                &c.id,
+                "x",
+                c.x.as_ref(),
+                geom_required,
+                c.source_span,
+                diagnostics,
+            );
+            check_optional_dim(
+                &c.id,
+                "y",
+                c.y.as_ref(),
+                geom_required,
+                c.source_span,
+                diagnostics,
+            );
+            check_optional_dim(
+                &c.id,
+                "w",
+                c.w.as_ref(),
+                geom_required,
+                c.source_span,
+                diagnostics,
+            );
+            check_optional_dim(
+                &c.id,
+                "h",
+                c.h.as_ref(),
+                geom_required,
+                c.source_span,
+                diagnostics,
+            );
 
             // Visual properties (mirror text; overflow is not enum-validated,
             // matching how text.overflow is currently handled).
@@ -442,10 +588,38 @@ pub(super) fn walk_node(
             );
 
             // Frames REQUIRE all four geometry dimensions (unlike groups).
-            check_optional_dim(&f.id, "x", f.x.as_ref(), f.source_span, diagnostics);
-            check_optional_dim(&f.id, "y", f.y.as_ref(), f.source_span, diagnostics);
-            check_optional_dim(&f.id, "w", f.w.as_ref(), f.source_span, diagnostics);
-            check_optional_dim(&f.id, "h", f.h.as_ref(), f.source_span, diagnostics);
+            check_optional_dim(
+                &f.id,
+                "x",
+                f.x.as_ref(),
+                geom_required,
+                f.source_span,
+                diagnostics,
+            );
+            check_optional_dim(
+                &f.id,
+                "y",
+                f.y.as_ref(),
+                geom_required,
+                f.source_span,
+                diagnostics,
+            );
+            check_optional_dim(
+                &f.id,
+                "w",
+                f.w.as_ref(),
+                geom_required,
+                f.source_span,
+                diagnostics,
+            );
+            check_optional_dim(
+                &f.id,
+                "h",
+                f.h.as_ref(),
+                geom_required,
+                f.source_span,
+                diagnostics,
+            );
 
             // Unknown properties.
             for prop_name in f.unknown_props.keys() {
@@ -462,7 +636,25 @@ pub(super) fn walk_node(
             }
 
             // Recurse into children, passing the SAME seen_ids so that
-            // nested ids participate in the global uniqueness check.
+            // nested ids participate in the global uniqueness check. Direct
+            // children of a flow frame have flow-supplied geometry.
+            let children_in_flow = f.layout.as_deref() == Some("flow");
+
+            // Compute this frame's own px box; children are checked for
+            // overflow against it. If any of x/y/w/h is missing or has a bad
+            // unit, pass None so no spurious overflow advisory is produced.
+            let frame_box = match page_px_bounds {
+                Some((page_w, page_h)) => {
+                    f.x.as_ref()
+                        .and_then(|d| resolve_axis(d, page_w))
+                        .zip(f.y.as_ref().and_then(|d| resolve_axis(d, page_h)))
+                        .zip(f.w.as_ref().and_then(|d| resolve_axis(d, page_w)))
+                        .zip(f.h.as_ref().and_then(|d| resolve_axis(d, page_h)))
+                        .map(|(((x, y), w), h)| (x, y, w, h))
+                }
+                None => None,
+            };
+
             for child in &f.children {
                 walk_node(
                     child,
@@ -472,6 +664,8 @@ pub(super) fn walk_node(
                     declared_asset_ids,
                     declared_style_ids,
                     page_px_bounds,
+                    children_in_flow,
+                    frame_box,
                     diagnostics,
                 );
             }
@@ -504,7 +698,11 @@ pub(super) fn walk_node(
             }
 
             // Recurse into children, passing the SAME seen_ids so that
-            // nested ids participate in the global uniqueness check.
+            // nested ids participate in the global uniqueness check. Groups do
+            // not lay out children, so geometry remains required for them.
+            // Groups don't clip, so the enclosing frame (if any) is propagated
+            // unchanged: a group inside a frame still has the frame as the
+            // clipping ancestor.
             for child in &g.children {
                 walk_node(
                     child,
@@ -514,6 +712,8 @@ pub(super) fn walk_node(
                     declared_asset_ids,
                     declared_style_ids,
                     page_px_bounds,
+                    false,
+                    enclosing_frame,
                     diagnostics,
                 );
             }
@@ -530,10 +730,38 @@ pub(super) fn walk_node(
             );
 
             // Required geometry: x, y, w, h must all be present (mirror rect).
-            check_optional_dim(&img.id, "x", img.x.as_ref(), img.source_span, diagnostics);
-            check_optional_dim(&img.id, "y", img.y.as_ref(), img.source_span, diagnostics);
-            check_optional_dim(&img.id, "w", img.w.as_ref(), img.source_span, diagnostics);
-            check_optional_dim(&img.id, "h", img.h.as_ref(), img.source_span, diagnostics);
+            check_optional_dim(
+                &img.id,
+                "x",
+                img.x.as_ref(),
+                geom_required,
+                img.source_span,
+                diagnostics,
+            );
+            check_optional_dim(
+                &img.id,
+                "y",
+                img.y.as_ref(),
+                geom_required,
+                img.source_span,
+                diagnostics,
+            );
+            check_optional_dim(
+                &img.id,
+                "w",
+                img.w.as_ref(),
+                geom_required,
+                img.source_span,
+                diagnostics,
+            );
+            check_optional_dim(
+                &img.id,
+                "h",
+                img.h.as_ref(),
+                geom_required,
+                img.source_span,
+                diagnostics,
+            );
 
             // The referenced asset must exist in the document's assets block.
             if !declared_asset_ids.contains(&img.asset) {
@@ -805,6 +1033,7 @@ fn check_polygon(
             &poly.id,
             &x_label,
             pt.x.as_ref(),
+            true,
             poly.source_span,
             diagnostics,
         );
@@ -812,6 +1041,7 @@ fn check_polygon(
             &poly.id,
             &y_label,
             pt.y.as_ref(),
+            true,
             poly.source_span,
             diagnostics,
         );
@@ -917,6 +1147,7 @@ fn check_polyline(
             &poly.id,
             &x_label,
             pt.x.as_ref(),
+            true,
             poly.source_span,
             diagnostics,
         );
@@ -924,6 +1155,7 @@ fn check_polyline(
             &poly.id,
             &y_label,
             pt.y.as_ref(),
+            true,
             poly.source_span,
             diagnostics,
         );
@@ -1007,17 +1239,22 @@ fn check_polyline(
 // ── Geometry helpers ──────────────────────────────────────────────────────────
 
 /// Check a single optional geometry dimension (`x`, `y`, `w`, `h`):
-/// - absent → `node.missing_geometry` (Error).
-/// - present but `Unit::Unknown` → `node.invalid_geometry` (Error).
+/// - absent AND `required` → `node.missing_geometry` (Error).
+/// - absent AND NOT `required` (e.g. a direct child of a `layout="flow"`
+///   frame, whose position/size is supplied by the flow algorithm) → no
+///   diagnostic.
+/// - present but `Unit::Unknown` → `node.invalid_geometry` (Error) regardless
+///   of `required`.
 fn check_optional_dim(
     node_id: &str,
     prop: &str,
     dim: Option<&crate::ast::value::Dimension>,
+    required: bool,
     span: Option<crate::ast::Span>,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
     match dim {
-        None => {
+        None if required => {
             diagnostics.push(Diagnostic::error(
                 "node.missing_geometry",
                 format!(
@@ -1027,6 +1264,9 @@ fn check_optional_dim(
                 span,
                 Some(node_id.to_owned()),
             ));
+        }
+        None => {
+            // Flow-positioned child: geometry is supplied by the parent.
         }
         Some(d) if matches!(d.unit, Unit::Unknown(_)) => {
             diagnostics.push(Diagnostic::error(

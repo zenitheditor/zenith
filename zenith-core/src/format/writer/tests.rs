@@ -1153,6 +1153,65 @@ fn style_underscore_keys_canonicalized() {
     );
 }
 
+/// `padding` and `gap` are recognized token-only dimension style props:
+/// they parse into `Style.properties` under their canonical keys and survive
+/// a parse → format → parse round-trip.
+#[test]
+fn style_padding_gap_round_trip() {
+    use crate::ast::PropertyValue;
+    let src = r##"zenith version=1 {
+  project id="proj.pg" name="PG"
+  tokens format="zenith-token-v1" {
+    token id="space.pad" type="dimension" value=(px)16
+    token id="space.gap" type="dimension" value=(px)8
+  }
+  styles {
+    style id="style.flow" {
+      gap (token)"space.gap"
+      padding (token)"space.pad"
+    }
+  }
+  document id="doc.pg" {
+    page id="page.pg" w=(px)200 h=(px)200 {
+    }
+  }
+}
+"##;
+    let adapter = KdlAdapter;
+    let doc = adapter.parse(src.as_bytes()).expect("parse");
+
+    let style = &doc.styles.styles[0];
+    assert_eq!(
+        style.properties.get("padding"),
+        Some(&PropertyValue::TokenRef("space.pad".to_owned())),
+        "padding must be a TokenRef to space.pad"
+    );
+    assert_eq!(
+        style.properties.get("gap"),
+        Some(&PropertyValue::TokenRef("space.gap".to_owned())),
+        "gap must be a TokenRef to space.gap"
+    );
+    assert!(
+        style.unknown_props.is_empty(),
+        "padding/gap must be recognized, not captured as unknown props"
+    );
+
+    // Round-trip: parse → format → parse preserves both props.
+    let formatted = format_document(&doc).expect("format");
+    let reparsed = adapter.parse(&formatted).expect("re-parse after format");
+    let style2 = &reparsed.styles.styles[0];
+    assert_eq!(
+        style2.properties.get("padding"),
+        Some(&PropertyValue::TokenRef("space.pad".to_owned())),
+        "padding must survive round-trip"
+    );
+    assert_eq!(
+        style2.properties.get("gap"),
+        Some(&PropertyValue::TokenRef("space.gap".to_owned())),
+        "gap must survive round-trip"
+    );
+}
+
 /// Unknown style child names are captured in `unknown_props`.
 #[test]
 fn style_unknown_child_captured() {

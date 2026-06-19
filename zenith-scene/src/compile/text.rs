@@ -91,6 +91,11 @@ fn resolve_family_with_fallback(
 }
 
 /// Compile a `text` leaf node.
+///
+/// Returns the laid-out content height in pixels (`line_count * line_height`),
+/// which the flow-layout path in [`super::container`] uses to advance its
+/// vertical cursor past a text child that declares no explicit `h`. Early
+/// returns (invisible, missing/bad geometry, empty spans) yield `0.0`.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn compile_text(
     text: &TextNode,
@@ -101,10 +106,10 @@ pub(super) fn compile_text(
     commands: &mut Vec<SceneCommand>,
     diagnostics: &mut Vec<Diagnostic>,
     ctx: RenderCtx,
-) {
+) -> f64 {
     // Skip invisible text nodes.
     if text.visible == Some(false) {
-        return;
+        return 0.0;
     }
 
     // Resolve geometry — x and y are required; skip if absent or bad unit.
@@ -118,7 +123,7 @@ pub(super) fn compile_text(
             text.source_span,
             Some(text.id.clone()),
         ));
-        return;
+        return 0.0;
     };
 
     let Some(text_x_raw) = dim_to_px(x_dim.value, &x_dim.unit) else {
@@ -128,7 +133,7 @@ pub(super) fn compile_text(
             "x",
             text.source_span,
         ));
-        return;
+        return 0.0;
     };
     let Some(text_y_raw) = dim_to_px(y_dim.value, &y_dim.unit) else {
         diagnostics.push(unsupported_unit_diag(
@@ -137,7 +142,7 @@ pub(super) fn compile_text(
             "y",
             text.source_span,
         ));
-        return;
+        return 0.0;
     };
 
     // Apply group translation offset.
@@ -146,7 +151,7 @@ pub(super) fn compile_text(
 
     // Skip silently if every span is empty (nothing to draw).
     if text.spans.iter().all(|s| s.text.is_empty()) {
-        return;
+        return 0.0;
     }
 
     // Resolve font family with style cascade.
@@ -717,9 +722,21 @@ pub(super) fn compile_text(
     if text_rot.is_some() {
         commands.push(SceneCommand::PopTransform);
     }
+
+    // Laid-out content height: line count (1 on the fast path, the wrapped
+    // line count otherwise) times the shared per-line height. Reuses exactly
+    // the quantities the overflow="fit" check measures above, so flow-layout
+    // advance and fit-detection agree by construction.
+    fit_line_count as f64 * first_line_height
 }
 
 /// Compile a `code` leaf node.
+///
+/// Returns the laid-out content height in pixels (`line_count * line_height`,
+/// where `line_count` counts every physical source line including blanks),
+/// which the flow-layout path in [`super::container`] uses to advance its
+/// vertical cursor past a code child that declares no explicit `h`. Early
+/// returns (invisible, missing/bad geometry) yield `0.0`.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn compile_code(
     code: &CodeNode,
@@ -730,10 +747,10 @@ pub(super) fn compile_code(
     commands: &mut Vec<SceneCommand>,
     diagnostics: &mut Vec<Diagnostic>,
     ctx: RenderCtx,
-) {
+) -> f64 {
     // Skip invisible code nodes.
     if code.visible == Some(false) {
-        return;
+        return 0.0;
     }
 
     // Resolve geometry — x and y are required; skip if absent or bad unit.
@@ -747,7 +764,7 @@ pub(super) fn compile_code(
             code.source_span,
             Some(code.id.clone()),
         ));
-        return;
+        return 0.0;
     };
 
     let Some(code_x_raw) = dim_to_px(x_dim.value, &x_dim.unit) else {
@@ -757,7 +774,7 @@ pub(super) fn compile_code(
             "x",
             code.source_span,
         ));
-        return;
+        return 0.0;
     };
     let Some(code_y_raw) = dim_to_px(y_dim.value, &y_dim.unit) else {
         diagnostics.push(unsupported_unit_diag(
@@ -766,7 +783,7 @@ pub(super) fn compile_code(
             "y",
             code.source_span,
         ));
-        return;
+        return 0.0;
     };
 
     // Width/height are OPTIONAL; they bound the clip rectangle when
@@ -928,10 +945,19 @@ pub(super) fn compile_code(
     // still advances, preserving their vertical space. All non-blank
     // lines share identical ascent/line_height (same font + size), so the
     // per-line metrics give consistent stacking.
+    //
+    // `measured_line_height` captures the shared per-line height from the
+    // first successfully shaped run; combined with the physical line count
+    // it gives the laid-out content height returned for flow layout.
+    let mut measured_line_height: f64 = 0.0;
+    // Largest index of a non-empty (ink-bearing) line; `(last + 1)` is the
+    // line count spanned by the block, ignoring trailing blank lines.
+    let mut last_inked_line: Option<usize> = None;
     for (i, line) in expanded.split('\n').enumerate() {
         if line.is_empty() {
             continue;
         }
+        last_inked_line = Some(i);
 
         if let Some(lang) = hl_lang {
             // ── Highlighted path: per-token colored segments ──────────
@@ -995,6 +1021,9 @@ pub(super) fn compile_code(
 
             // Emit: metrics are font-constant, read from first shaped run.
             if let Some((first_run, _)) = shaped.first() {
+                if measured_line_height == 0.0 {
+                    measured_line_height = first_run.line_height as f64;
+                }
                 let baseline_y =
                     code_y + first_run.ascent as f64 + (i as f64) * first_run.line_height as f64;
                 let mut x_cursor = code_x;
@@ -1035,6 +1064,9 @@ pub(super) fn compile_code(
                     continue;
                 }
                 Ok(run) => {
+                    if measured_line_height == 0.0 {
+                        measured_line_height = run.line_height as f64;
+                    }
                     let baseline_y =
                         code_y + run.ascent as f64 + (i as f64) * run.line_height as f64;
                     let glyphs = run_to_scene_glyphs(&run);
@@ -1058,5 +1090,13 @@ pub(super) fn compile_code(
 
     if code_rot.is_some() {
         commands.push(SceneCommand::PopTransform);
+    }
+
+    // Laid-out content height: number of lines spanned (index of the last
+    // ink-bearing line + 1, so trailing blank lines do not inflate the box)
+    // times the shared per-line height. Zero when nothing was shaped.
+    match last_inked_line {
+        Some(last) => (last + 1) as f64 * measured_line_height,
+        None => 0.0,
     }
 }

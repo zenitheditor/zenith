@@ -24,7 +24,8 @@ pub struct Style {
     /// Recognized visual properties, keyed by their canonical hyphenated name.
     ///
     /// Canonical keys: `fill`, `stroke`, `stroke-width`, `stroke-alignment`,
-    /// `font-family`, `font-size`, `font-weight`, `line-height`, `radius`.
+    /// `font-family`, `font-size`, `font-weight`, `line-height`, `radius`,
+    /// `padding`, `gap`.
     pub properties: BTreeMap<String, PropertyValue>,
     /// Unknown (unrecognized) child node names encountered in the style block.
     ///

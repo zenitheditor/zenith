@@ -271,7 +271,7 @@ pub fn compile_page(doc: &Document, fonts: &dyn FontProvider, page_index: usize)
 
 /// The `role` of any node, if set. Used to exclude non-printing nodes
 /// (`role="guide"`) from render output.
-fn node_role(node: &Node) -> Option<&str> {
+pub(super) fn node_role(node: &Node) -> Option<&str> {
     match node {
         Node::Rect(n) => n.role.as_deref(),
         Node::Ellipse(n) => n.role.as_deref(),
@@ -291,6 +291,12 @@ fn node_role(node: &Node) -> Option<&str> {
 ///
 /// Each arm forwards the full cascade context to a `compile_*` function; the
 /// emitted `SceneCommand` stream is identical to the previous inline match.
+///
+/// Returns the child's laid-out content height in pixels for the kinds whose
+/// intrinsic height is meaningful to flow layout (`text`/`code`); every other
+/// kind returns `0.0`. The absolute-positioning callers ignore this value, so
+/// command output is unchanged; only the flow-layout path in [`container`]
+/// consumes it to advance its vertical cursor.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn compile_node(
     node: &Node,
@@ -301,34 +307,35 @@ pub(super) fn compile_node(
     commands: &mut Vec<SceneCommand>,
     diagnostics: &mut Vec<Diagnostic>,
     ctx: RenderCtx,
-) {
+) -> f64 {
     // Non-printing guide nodes (`role="guide"`) are excluded from render output
     // entirely — including their subtree when the guide is a group/frame.
     if node_role(node) == Some("guide") {
-        return;
+        return 0.0;
     }
 
     match node {
         Node::Rect(rect) => {
             compile_rect(rect, resolved, style_map, commands, diagnostics, ctx);
+            0.0
         }
         Node::Ellipse(ellipse) => {
             compile_ellipse(ellipse, resolved, style_map, commands, diagnostics, ctx);
+            0.0
         }
-        Node::Text(text) => {
-            compile_text(
-                text,
-                resolved,
-                style_map,
-                fonts,
-                engine,
-                commands,
-                diagnostics,
-                ctx,
-            );
-        }
+        Node::Text(text) => compile_text(
+            text,
+            resolved,
+            style_map,
+            fonts,
+            engine,
+            commands,
+            diagnostics,
+            ctx,
+        ),
         Node::Line(line) => {
             compile_line(line, resolved, style_map, commands, diagnostics, ctx);
+            0.0
         }
         Node::Frame(frame) => {
             compile_frame(
@@ -341,6 +348,7 @@ pub(super) fn compile_node(
                 diagnostics,
                 ctx,
             );
+            0.0
         }
         Node::Group(group) => {
             compile_group(
@@ -353,28 +361,30 @@ pub(super) fn compile_node(
                 diagnostics,
                 ctx,
             );
+            0.0
         }
         Node::Image(image) => {
             compile_image(image, resolved, commands, diagnostics, ctx);
+            0.0
         }
         Node::Polygon(poly) => {
             compile_polygon(poly, resolved, style_map, commands, diagnostics, ctx);
+            0.0
         }
         Node::Polyline(poly) => {
             compile_polyline(poly, resolved, style_map, commands, diagnostics, ctx);
+            0.0
         }
-        Node::Code(code) => {
-            compile_code(
-                code,
-                resolved,
-                style_map,
-                fonts,
-                engine,
-                commands,
-                diagnostics,
-                ctx,
-            );
-        }
+        Node::Code(code) => compile_code(
+            code,
+            resolved,
+            style_map,
+            fonts,
+            engine,
+            commands,
+            diagnostics,
+            ctx,
+        ),
         Node::Unknown(unknown) => {
             diagnostics.push(Diagnostic::advisory(
                 "scene.unsupported_node",
@@ -386,6 +396,7 @@ pub(super) fn compile_node(
                 unknown.source_span,
                 None,
             ));
+            0.0
         }
     }
 }

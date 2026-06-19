@@ -762,6 +762,30 @@ fn minimal_frame(id: &str, x: f64, y: f64, w: f64, h: f64, children: Vec<Node>) 
 
 #[test]
 fn frame_clean_doc_no_errors() {
+    // Child rect sits fully inside the frame box (40,40,120,100), so neither
+    // off_canvas nor frame.child_overflow fire.
+    let inner = Node::Rect(RectNode {
+        shadow: None,
+        id: "rect.inner".to_owned(),
+        name: None,
+        role: None,
+        x: Some(px(50.0)),
+        y: Some(px(50.0)),
+        w: Some(px(40.0)),
+        h: Some(px(40.0)),
+        radius: None,
+        style: None,
+        fill: Some(token_ref("color.fill")),
+        stroke: None,
+        stroke_width: None,
+        stroke_alignment: None,
+        opacity: None,
+        visible: None,
+        locked: None,
+        rotate: None,
+        source_span: None,
+        unknown_props: BTreeMap::new(),
+    });
     let doc = doc_with(
         vec![color_token("color.fill")],
         vec![minimal_page(
@@ -772,7 +796,7 @@ fn frame_clean_doc_no_errors() {
                 40.0,
                 120.0,
                 100.0,
-                vec![minimal_rect("rect.inner", Some(token_ref("color.fill")))],
+                vec![inner],
             )],
         )],
     );
@@ -908,6 +932,122 @@ fn frame_child_missing_geometry_surfaces() {
         codes(&report)
     );
     assert!(report.has_errors());
+}
+
+// ── Frame: child overflow advisories ──────────────────────────────────
+
+/// A frame child whose `x + w` exceeds the frame's right edge → advisory
+/// `frame.child_overflow`.
+#[test]
+fn frame_child_overflowing_right_edge_advises() {
+    // Frame box: x=40 y=40 w=120 h=100 → right edge at 160.
+    // Child rect: x=100 w=100 → right edge at 200 > 160 → protrudes.
+    let doc = doc_with(
+        vec![],
+        vec![bounded_page(
+            "page.one",
+            1000.0,
+            1000.0,
+            vec![minimal_frame(
+                "frame.clip",
+                40.0,
+                40.0,
+                120.0,
+                100.0,
+                vec![rect_at("rect.over", 100.0, 50.0, 100.0, 40.0)],
+            )],
+        )],
+    );
+    let report = validate(&doc);
+    assert!(
+        has_code(&report, "frame.child_overflow"),
+        "expected frame.child_overflow; codes: {:?}",
+        codes(&report)
+    );
+}
+
+/// A frame child fully inside the frame box → no overflow advisory.
+#[test]
+fn frame_child_fully_inside_is_clean() {
+    // Frame box: x=40 y=40 w=120 h=100. Child rect fully inside.
+    let doc = doc_with(
+        vec![],
+        vec![bounded_page(
+            "page.one",
+            1000.0,
+            1000.0,
+            vec![minimal_frame(
+                "frame.clip",
+                40.0,
+                40.0,
+                120.0,
+                100.0,
+                vec![rect_at("rect.in", 50.0, 50.0, 40.0, 40.0)],
+            )],
+        )],
+    );
+    let report = validate(&doc);
+    assert!(
+        !has_code(&report, "frame.child_overflow"),
+        "inside child must not overflow; codes: {:?}",
+        codes(&report)
+    );
+}
+
+/// A flow-frame child with no explicit geometry → no overflow advisory
+/// (node_bbox is None, so the child is naturally skipped).
+#[test]
+fn flow_frame_child_without_geometry_is_skipped() {
+    let child_rect = Node::Rect(RectNode {
+        shadow: None,
+        id: "rect.flow".to_owned(),
+        name: None,
+        role: None,
+        x: None,
+        y: None,
+        w: None,
+        h: None,
+        radius: None,
+        style: None,
+        fill: None,
+        stroke: None,
+        stroke_width: None,
+        stroke_alignment: None,
+        opacity: None,
+        visible: None,
+        locked: None,
+        rotate: None,
+        source_span: None,
+        unknown_props: BTreeMap::new(),
+    });
+    let flow_frame = Node::Frame(FrameNode {
+        id: "frame.flow".to_owned(),
+        name: None,
+        role: None,
+        x: Some(px(40.0)),
+        y: Some(px(40.0)),
+        w: Some(px(120.0)),
+        h: Some(px(100.0)),
+        layout: Some("flow".to_owned()),
+        opacity: None,
+        visible: None,
+        locked: None,
+        rotate: None,
+        style: None,
+        children: vec![child_rect],
+        source_span: None,
+        unknown_props: BTreeMap::new(),
+    });
+    let doc = doc_with(
+        vec![],
+        vec![bounded_page("page.one", 1000.0, 1000.0, vec![flow_frame])],
+    );
+    let report = validate(&doc);
+    assert!(
+        !has_code(&report, "frame.child_overflow"),
+        "flow child without geometry must be skipped; codes: {:?}",
+        codes(&report)
+    );
 }
 
 // ── Frame: nested id duplicate with page sibling → id.duplicate ───────
@@ -2092,6 +2232,44 @@ fn style_raw_literal_fill() {
     assert!(
         has_code(&report, "token.raw_visual_literal"),
         "expected token.raw_visual_literal; codes: {:?}",
+        codes(&report)
+    );
+    assert!(report.has_errors());
+}
+
+/// A style `padding` with a raw literal dimension → `token.raw_visual_literal`.
+///
+/// `padding` is a token-only visual dimension prop, identical to `font-size` /
+/// `stroke-width`: a raw `(px)N` literal (a `PropertyValue::Dimension`, not a
+/// token) MUST be flagged, never silently accepted.
+#[test]
+fn style_padding_raw_literal_rejected() {
+    let style = style_with_props(
+        "style.flow",
+        vec![("padding", PropertyValue::Dimension(px(16.0)))],
+    );
+    let doc = doc_with_styles(vec![], vec![style], vec![minimal_page("page.one", vec![])]);
+    let report = validate(&doc);
+    assert!(
+        has_code(&report, "token.raw_visual_literal"),
+        "a raw-literal padding must flag token.raw_visual_literal; codes: {:?}",
+        codes(&report)
+    );
+    assert!(report.has_errors());
+}
+
+/// A style `gap` with a raw literal dimension → `token.raw_visual_literal`.
+#[test]
+fn style_gap_raw_literal_rejected() {
+    let style = style_with_props(
+        "style.flow",
+        vec![("gap", PropertyValue::Dimension(px(8.0)))],
+    );
+    let doc = doc_with_styles(vec![], vec![style], vec![minimal_page("page.one", vec![])]);
+    let report = validate(&doc);
+    assert!(
+        has_code(&report, "token.raw_visual_literal"),
+        "a raw-literal gap must flag token.raw_visual_literal; codes: {:?}",
         codes(&report)
     );
     assert!(report.has_errors());

@@ -308,8 +308,10 @@ pub struct FrameNode {
     pub w: Option<Dimension>,
     /// Required: clip-rectangle height.
     pub h: Option<Dimension>,
-    /// Layout algorithm hint ("absolute"/"flow") — parsed and preserved but
-    /// NOT acted on in v0; flow layout is not implemented.
+    /// Layout algorithm hint ("absolute"/"flow"). `"flow"` activates a
+    /// vertical-stack flow layout (uniform `padding` inset + `gap` between
+    /// children, resolved from the frame's style); any other value (including
+    /// `None` and `"absolute"`) keeps the clip-only absolute-positioning model.
     pub layout: Option<String>,
     /// Opacity that cascades (multiplies) into all descendant node alphas.
     pub opacity: Option<f64>,

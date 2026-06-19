@@ -215,6 +215,8 @@ pub fn validate(doc: &Document) -> ValidationReport {
                 &declared_asset_ids,
                 &declared_style_ids,
                 page_px_bounds,
+                false,
+                None,
                 &mut diagnostics,
             );
             // Contrast check runs after the structural walk so that
@@ -411,7 +413,9 @@ fn validate_style_block(
 fn style_prop_expect(key: &str) -> Option<VisualExpect> {
     match key {
         "fill" | "stroke" => Some(VisualExpect::Color),
-        "stroke-width" | "font-size" | "line-height" | "radius" => Some(VisualExpect::Dimension),
+        "stroke-width" | "font-size" | "line-height" | "radius" | "padding" | "gap" => {
+            Some(VisualExpect::Dimension)
+        }
         "font-family" => Some(VisualExpect::FontFamily),
         // stroke-alignment: plain enum string, not type-checked.
         // font-weight: fontWeight token type — no VisualExpect variant for it; skip check.

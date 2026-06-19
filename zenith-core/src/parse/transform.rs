@@ -681,6 +681,8 @@ const STYLE_RECOGNIZED_KEYS: &[&str] = &[
     "font-weight",
     "line-height",
     "radius",
+    "padding",
+    "gap",
 ];
 
 /// Map underscore-spelled style child names to their canonical hyphenated form.

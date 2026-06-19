@@ -5,15 +5,15 @@
 use std::collections::BTreeMap;
 
 use zenith_core::{
-    Diagnostic, FontProvider, FrameNode, GroupNode, Node, Point, ResolvedToken, Style, dim_to_px,
+    Diagnostic, Dimension, FontProvider, FrameNode, GroupNode, Node, Point, ResolvedToken, Style,
+    Unit, dim_to_px,
 };
 use zenith_layout::RustybuzzEngine;
 
 use crate::ir::SceneCommand;
 
-use super::RenderCtx;
-use super::compile_node;
-use super::util::{rotation_degrees, unsupported_unit_diag};
+use super::util::{resolve_property_dimension_px, rotation_degrees, unsupported_unit_diag};
+use super::{RenderCtx, compile_node, node_role, style_prop};
 
 // NOTE: compile_frame → compile_node → compile_frame recursion has no depth
 // guard, consistent with the compile_group limitation in v0.
@@ -118,9 +118,12 @@ pub(super) fn compile_frame(
         dy: ctx.dy, // clip-only: no translation
     };
 
-    for child in &frame.children {
-        compile_node(
-            child,
+    if frame.layout.as_deref() == Some("flow") {
+        compile_frame_flow(
+            frame,
+            frame_x,
+            frame_y,
+            frame_w,
             resolved,
             style_map,
             fonts,
@@ -129,6 +132,20 @@ pub(super) fn compile_frame(
             diagnostics,
             child_ctx,
         );
+    } else {
+        // Absolute (clip-only) model: children render at their own page coords.
+        for child in &frame.children {
+            compile_node(
+                child,
+                resolved,
+                style_map,
+                fonts,
+                engine,
+                commands,
+                diagnostics,
+                child_ctx,
+            );
+        }
     }
 
     commands.push(SceneCommand::PopClip);
@@ -137,6 +154,214 @@ pub(super) fn compile_frame(
         commands.push(SceneCommand::PopTransform);
     }
     // Frame emits no fill of its own in v0.
+}
+
+/// Lay a flow-frame's children out as a vertical stack inside its padded
+/// content box, compiling each at the injected absolute coordinates.
+///
+/// Triggered only when `frame.layout == Some("flow")`. `frame_x`/`frame_y`/
+/// `frame_w` are the already-resolved frame box in page coordinates (the same
+/// values used for the surrounding `PushClip`). Children stack in source order
+/// with `gap` between them; `padding` insets the content box uniformly. Both
+/// `padding` and `gap` are token-only dimension style props on the frame's
+/// style, defaulting to `0.0` when absent.
+#[allow(clippy::too_many_arguments)]
+fn compile_frame_flow(
+    frame: &FrameNode,
+    frame_x: f64,
+    frame_y: f64,
+    frame_w: f64,
+    resolved: &BTreeMap<String, ResolvedToken>,
+    style_map: &BTreeMap<&str, &Style>,
+    fonts: &dyn FontProvider,
+    engine: &RustybuzzEngine,
+    commands: &mut Vec<SceneCommand>,
+    diagnostics: &mut Vec<Diagnostic>,
+    child_ctx: RenderCtx,
+) {
+    // Resolve padding / gap from the frame's style (token → px); 0.0 default.
+    let pad = resolve_property_dimension_px(
+        &style_prop(&frame.style, style_map, "padding").cloned(),
+        resolved,
+        0.0,
+    );
+    let gap = resolve_property_dimension_px(
+        &style_prop(&frame.style, style_map, "gap").cloned(),
+        resolved,
+        0.0,
+    );
+
+    // Content box: uniform padding on all four sides.
+    let content_left = frame_x + pad;
+    let content_top = frame_y + pad;
+    let content_w = (frame_w - 2.0 * pad).max(0.0);
+
+    // Lay out children that participate (skip invisible and guide nodes) so a
+    // trailing gap is only suppressed relative to the LAST laid-out child.
+    let laid_out: Vec<&Node> = frame
+        .children
+        .iter()
+        .filter(|c| !node_skipped_in_flow(c))
+        .collect();
+    let last_idx = laid_out.len().saturating_sub(1);
+
+    let mut cursor_y = content_top;
+    for (i, child) in laid_out.iter().enumerate() {
+        // Cross-axis = start; child width = own declared `w` or the content
+        // width. (A text child's own `align` still centers WITHIN its width.)
+        let child_w = node_declared_w(child).unwrap_or(content_w);
+
+        // Vertical extent: own declared `h` when present, else the MEASURED
+        // intrinsic height returned by compiling the child (text/code wrapped
+        // height; 0.0 for leaves with no declared height).
+        let declared_h = node_declared_h(child);
+
+        // Inject the absolute box onto a clone; compile with the SAME ctx
+        // (dx/dy unchanged — injected coords are absolute page coords).
+        let positioned = with_flow_box(child, content_left, cursor_y, child_w, declared_h);
+        let measured_h = compile_node(
+            &positioned,
+            resolved,
+            style_map,
+            fonts,
+            engine,
+            commands,
+            diagnostics,
+            child_ctx,
+        );
+
+        // Advance by the declared height when present, otherwise the measured
+        // intrinsic height read back from the compile.
+        let advance = declared_h.unwrap_or(measured_h);
+        cursor_y += advance;
+        if i != last_idx {
+            cursor_y += gap;
+        }
+    }
+}
+
+/// Whether a child is excluded from flow layout entirely (consumes no space):
+/// `visible == Some(false)` or `role == "guide"`.
+fn node_skipped_in_flow(node: &Node) -> bool {
+    node_role(node) == Some("guide") || node_visible(node) == Some(false)
+}
+
+/// The `visible` flag of any node kind, if set (kinds without the property
+/// — `Unknown` — yield `None`).
+fn node_visible(node: &Node) -> Option<bool> {
+    match node {
+        Node::Rect(n) => n.visible,
+        Node::Ellipse(n) => n.visible,
+        Node::Line(n) => n.visible,
+        Node::Text(n) => n.visible,
+        Node::Code(n) => n.visible,
+        Node::Frame(n) => n.visible,
+        Node::Group(n) => n.visible,
+        Node::Image(n) => n.visible,
+        Node::Polygon(n) => n.visible,
+        Node::Polyline(n) => n.visible,
+        Node::Unknown(_) => None,
+    }
+}
+
+/// The declared `w` of a node in pixels, if the node kind carries a `w`/`h`
+/// box and the dimension resolves to pixels. Geometry-less kinds (line,
+/// polygon, polyline, unknown) yield `None`.
+fn node_declared_w(node: &Node) -> Option<f64> {
+    let w = match node {
+        Node::Rect(n) => n.w.as_ref(),
+        Node::Ellipse(n) => n.w.as_ref(),
+        Node::Text(n) => n.w.as_ref(),
+        Node::Code(n) => n.w.as_ref(),
+        Node::Frame(n) => n.w.as_ref(),
+        Node::Group(n) => n.w.as_ref(),
+        Node::Image(n) => n.w.as_ref(),
+        Node::Line(_) | Node::Polygon(_) | Node::Polyline(_) | Node::Unknown(_) => None,
+    }?;
+    dim_to_px(w.value, &w.unit)
+}
+
+/// The declared `h` of a node in pixels, if the node kind carries a `w`/`h`
+/// box and the dimension resolves to pixels. Geometry-less kinds yield `None`.
+fn node_declared_h(node: &Node) -> Option<f64> {
+    let h = match node {
+        Node::Rect(n) => n.h.as_ref(),
+        Node::Ellipse(n) => n.h.as_ref(),
+        Node::Text(n) => n.h.as_ref(),
+        Node::Code(n) => n.h.as_ref(),
+        Node::Frame(n) => n.h.as_ref(),
+        Node::Group(n) => n.h.as_ref(),
+        Node::Image(n) => n.h.as_ref(),
+        Node::Line(_) | Node::Polygon(_) | Node::Polyline(_) | Node::Unknown(_) => None,
+    }?;
+    dim_to_px(h.value, &h.unit)
+}
+
+/// Clone `node` and overwrite its `x`/`y`/`w`/`h` box with the injected
+/// flow coordinates (all in absolute page px). `h` is set only when the flow
+/// path resolved one (declared height); a `None` `h` leaves the clone's `h`
+/// unset so the child auto-measures its own intrinsic height.
+///
+/// Kinds without an `x`/`y`/`w`/`h` box (`Line`/`Polygon`/`Polyline`/
+/// `Unknown`) are returned unchanged — the flow path advances its cursor by
+/// `0.0` for those.
+fn with_flow_box(node: &Node, x: f64, y: f64, w: f64, h: Option<f64>) -> Node {
+    let px = |v: f64| {
+        Some(Dimension {
+            value: v,
+            unit: Unit::Px,
+        })
+    };
+    let h_dim = h.and_then(px);
+
+    let mut out = node.clone();
+    match &mut out {
+        Node::Rect(n) => {
+            n.x = px(x);
+            n.y = px(y);
+            n.w = px(w);
+            n.h = h_dim;
+        }
+        Node::Ellipse(n) => {
+            n.x = px(x);
+            n.y = px(y);
+            n.w = px(w);
+            n.h = h_dim;
+        }
+        Node::Text(n) => {
+            n.x = px(x);
+            n.y = px(y);
+            n.w = px(w);
+            n.h = h_dim;
+        }
+        Node::Code(n) => {
+            n.x = px(x);
+            n.y = px(y);
+            n.w = px(w);
+            n.h = h_dim;
+        }
+        Node::Image(n) => {
+            n.x = px(x);
+            n.y = px(y);
+            n.w = px(w);
+            n.h = h_dim;
+        }
+        Node::Frame(n) => {
+            n.x = px(x);
+            n.y = px(y);
+            n.w = px(w);
+            n.h = h_dim;
+        }
+        Node::Group(n) => {
+            n.x = px(x);
+            n.y = px(y);
+            n.w = px(w);
+            n.h = h_dim;
+        }
+        // Geometry-less kinds: no x/y/w/h box to inject.
+        Node::Line(_) | Node::Polygon(_) | Node::Polyline(_) | Node::Unknown(_) => {}
+    }
+    out
 }
 
 // NOTE: compile_group → compile_node → compile_group recursion has no depth
