@@ -46,6 +46,35 @@ pub fn run_transaction(doc: &Document, tx: &Transaction) -> Result<TxResult, TxE
     let mut affected: Vec<String> = Vec::new(); // insertion-order, de-duplicated
 
     for op in &tx.ops {
+        // Lock pre-check: a guarded op against a locked node is rejected unless
+        // the transaction carries `permissions.allow_locked`. The check reads the
+        // *candidate* state, so a `set_locked` earlier in the same transaction
+        // locks the node for later ops (and `set_locked` itself is exempt, so a
+        // node can always be unlocked). Targets are visited in order for
+        // determinism; if any target is locked the whole op is skipped, leaving
+        // the emitted `node.locked` error to reject the transaction in step 5.
+        if !tx.permissions.allow_locked {
+            let mut locked_hit = false;
+            for target in op_lock_targets(op) {
+                if node_is_locked(&candidate, target) {
+                    locked_hit = true;
+                    diagnostics.push(Diagnostic::error(
+                        "node.locked",
+                        format!(
+                            "node '{}' is locked; unlock it or set \
+                             permissions.allow_locked to edit it",
+                            target
+                        ),
+                        None,
+                        Some(target.to_owned()),
+                    ));
+                }
+            }
+            if locked_hit {
+                continue;
+            }
+        }
+
         apply_op(op, &mut candidate, &mut diagnostics, &mut affected);
     }
 
@@ -205,6 +234,74 @@ fn apply_op(
             apply_align_nodes(node_ids, align, anchor, doc, diagnostics, affected);
         }
     }
+}
+
+// ── Lock enforcement ──────────────────────────────────────────────────────────
+
+/// Return the node id(s) a *mutating* op would edit, for the lock-guarded ops
+/// only. Exempt ops return an empty `Vec`.
+///
+/// Guarded (return target id(s)): the property/geometry/text setters, removal,
+/// the z-order reorders, `reparent` (its `node`), and `align_nodes` (every id,
+/// in source order).
+///
+/// Exempt (empty): `set_locked` (must be able to *unlock* a locked node),
+/// `set_visible` (visibility is a view toggle), `add_node`, `duplicate_node`
+/// (the source is read-only), `group`, and `ungroup`.
+fn op_lock_targets(op: &Op) -> Vec<&str> {
+    match op {
+        Op::SetTextAlign { node, .. }
+        | Op::SetFill { node, .. }
+        | Op::SetStroke { node, .. }
+        | Op::SetStrokeWidth { node, .. }
+        | Op::SetGeometry { node, .. }
+        | Op::SetPoints { node, .. }
+        | Op::SetOpacity { node, .. }
+        | Op::ReplaceText { node, .. }
+        | Op::RemoveNode { node }
+        | Op::MoveForward { node }
+        | Op::MoveBackward { node }
+        | Op::MoveToFront { node }
+        | Op::MoveToBack { node }
+        | Op::Reparent { node, .. } => vec![node.as_str()],
+        Op::AlignNodes { node_ids, .. } => node_ids.iter().map(String::as_str).collect(),
+        Op::SetLocked { .. }
+        | Op::SetVisible { .. }
+        | Op::AddNode { .. }
+        | Op::DuplicateNode { .. }
+        | Op::Group { .. }
+        | Op::Ungroup { .. } => Vec::new(),
+    }
+}
+
+/// Return `true` if the node with `id` exists and has `locked == Some(true)`.
+///
+/// Missing nodes and nodes with `locked` absent/`Some(false)` return `false`;
+/// the missing-node case is left for the op's own `tx.unknown_node` path.
+/// Mirrors the variant coverage of [`node_locked_mut`] via a shared scan.
+fn node_is_locked(doc: &Document, id: &str) -> bool {
+    fn locked_of(node: &Node) -> Option<bool> {
+        match node {
+            Node::Rect(n) => n.locked,
+            Node::Ellipse(n) => n.locked,
+            Node::Line(n) => n.locked,
+            Node::Text(n) => n.locked,
+            Node::Code(n) => n.locked,
+            Node::Frame(n) => n.locked,
+            Node::Group(n) => n.locked,
+            Node::Image(n) => n.locked,
+            Node::Polygon(n) => n.locked,
+            Node::Polyline(n) => n.locked,
+            Node::Unknown(_) => None,
+        }
+    }
+
+    doc.body
+        .pages
+        .iter()
+        .find_map(|page| find_node_shared(&page.children, id))
+        .and_then(locked_of)
+        == Some(true)
 }
 
 // ── SetTextAlign ──────────────────────────────────────────────────────────────
@@ -509,24 +606,24 @@ type GeometryMut<'a> = (
 /// Return mutable references to the four bbox geometry fields `(x, y, w, h)`,
 /// or `None` for node variants excluded from `set_geometry`.
 ///
-/// `Line` is excluded because it uses `x1/y1/x2/y2` endpoints, not a bbox.
-/// `Polygon` and `Polyline` are excluded because they carry no `x/y/w/h` fields.
-/// `Text` and `Group` are excluded by spec even though their structs carry `x/y/w/h`
-/// fields: those fields are advisory/layout hints, not a canonical bbox to set.
-/// `Unknown` is excluded because its schema is opaque.
+/// The bbox nodes — `Rect`, `Ellipse`, `Frame`, `Image`, `Text`, `Code`, and
+/// `Group` — are settable: each carries canonical `x/y/w/h` fields (a text/code
+/// node's `x/y/w/h` is its text box; a group's `x/y` is a real translation
+/// offset applied to its children at render time).
+///
+/// `Line` is excluded because it has no bbox — it uses `x1/y1/x2/y2` endpoints.
+/// `Polygon` and `Polyline` are excluded because they have no bbox either — their
+/// geometry is the `points` list. `Unknown` is excluded because its schema is opaque.
 fn node_geometry_mut(node: &mut Node) -> Option<GeometryMut<'_>> {
     match node {
         Node::Rect(r) => Some((&mut r.x, &mut r.y, &mut r.w, &mut r.h)),
         Node::Ellipse(e) => Some((&mut e.x, &mut e.y, &mut e.w, &mut e.h)),
         Node::Frame(f) => Some((&mut f.x, &mut f.y, &mut f.w, &mut f.h)),
         Node::Image(i) => Some((&mut i.x, &mut i.y, &mut i.w, &mut i.h)),
-        Node::Line(_)
-        | Node::Text(_)
-        | Node::Code(_)
-        | Node::Group(_)
-        | Node::Polygon(_)
-        | Node::Polyline(_)
-        | Node::Unknown(_) => None,
+        Node::Text(t) => Some((&mut t.x, &mut t.y, &mut t.w, &mut t.h)),
+        Node::Code(c) => Some((&mut c.x, &mut c.y, &mut c.w, &mut c.h)),
+        Node::Group(g) => Some((&mut g.x, &mut g.y, &mut g.w, &mut g.h)),
+        Node::Line(_) | Node::Polygon(_) | Node::Polyline(_) | Node::Unknown(_) => None,
     }
 }
 
@@ -1962,6 +2059,9 @@ fn read_geometry_px(node: &Node) -> Option<(f64, f64, f64, f64)> {
         Node::Ellipse(e) => (e.x.as_ref(), e.y.as_ref(), e.w.as_ref(), e.h.as_ref()),
         Node::Frame(f) => (f.x.as_ref(), f.y.as_ref(), f.w.as_ref(), f.h.as_ref()),
         Node::Image(i) => (i.x.as_ref(), i.y.as_ref(), i.w.as_ref(), i.h.as_ref()),
+        Node::Text(t) => (t.x.as_ref(), t.y.as_ref(), t.w.as_ref(), t.h.as_ref()),
+        Node::Code(c) => (c.x.as_ref(), c.y.as_ref(), c.w.as_ref(), c.h.as_ref()),
+        Node::Group(g) => (g.x.as_ref(), g.y.as_ref(), g.w.as_ref(), g.h.as_ref()),
         _ => return None,
     };
     let resolve = |d: Option<&Dimension>| -> Option<f64> {
@@ -2198,7 +2298,7 @@ fn record_affected(id: &str, affected: &mut Vec<String>) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::op::Transaction;
+    use crate::op::{Permissions, Transaction};
     use zenith_core::{KdlAdapter, KdlSource};
 
     /// Minimal valid document with a `text` node (align `start`) and a `rect`.
@@ -2290,6 +2390,7 @@ mod tests {
                 node: "label".to_owned(),
                 align: "center".to_owned(),
             }],
+            permissions: Permissions::default(),
         };
         let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
 
@@ -2324,6 +2425,7 @@ mod tests {
                         node: "accent".to_owned()
                     },
                 ],
+                permissions: Permissions::default(),
             }
         );
     }
@@ -2337,6 +2439,7 @@ mod tests {
             ops: vec![Op::MoveForward {
                 node: "a".to_owned(),
             }],
+            permissions: Permissions::default(),
         };
         let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
 
@@ -2376,6 +2479,7 @@ mod tests {
                 node: "does_not_exist".to_owned(),
                 align: "center".to_owned(),
             }],
+            permissions: Permissions::default(),
         };
         let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
 
@@ -2400,6 +2504,7 @@ mod tests {
                 node: "box1".to_owned(),
                 align: "center".to_owned(),
             }],
+            permissions: Permissions::default(),
         };
         let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
 
@@ -2424,6 +2529,7 @@ mod tests {
                 node: "dot".to_owned(),
                 align: "center".to_owned(),
             }],
+            permissions: Permissions::default(),
         };
         let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
 
@@ -2448,6 +2554,7 @@ mod tests {
                 node: "pic".to_owned(),
                 align: "center".to_owned(),
             }],
+            permissions: Permissions::default(),
         };
         let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
 
@@ -2490,6 +2597,7 @@ mod tests {
                 node: "nested.label".to_owned(),
                 align: "center".to_owned(),
             }],
+            permissions: Permissions::default(),
         };
         let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
 
@@ -2513,6 +2621,7 @@ mod tests {
                 node: "grp1".to_owned(),
                 align: "center".to_owned(),
             }],
+            permissions: Permissions::default(),
         };
         let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
 
@@ -2553,6 +2662,7 @@ mod tests {
             ops: vec![Op::MoveForward {
                 node: "a".to_owned(),
             }],
+            permissions: Permissions::default(),
         };
         let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
 
@@ -2654,6 +2764,7 @@ mod tests {
                 node: "r1".to_owned(),
                 fill: "color.b".to_owned(),
             }],
+            permissions: Permissions::default(),
         };
         let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
 
@@ -2680,6 +2791,7 @@ mod tests {
                 node: "ln1".to_owned(),
                 fill: "color.a".to_owned(),
             }],
+            permissions: Permissions::default(),
         };
         let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
 
@@ -2704,6 +2816,7 @@ mod tests {
                 node: "r1".to_owned(),
                 fill: "color.nope".to_owned(),
             }],
+            permissions: Permissions::default(),
         };
         let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
 
@@ -2754,6 +2867,7 @@ mod tests {
                 node: "r1".to_owned(),
                 stroke: "color.rule".to_owned(),
             }],
+            permissions: Permissions::default(),
         };
         let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
 
@@ -2775,6 +2889,7 @@ mod tests {
                 node: "r1".to_owned(),
                 stroke: "color.nope".to_owned(),
             }],
+            permissions: Permissions::default(),
         };
         let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
 
@@ -2799,6 +2914,7 @@ mod tests {
                 node: "dot".to_owned(),
                 stroke: "color.rule".to_owned(),
             }],
+            permissions: Permissions::default(),
         };
         let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
 
@@ -2823,6 +2939,7 @@ mod tests {
                 node: "nope".to_owned(),
                 stroke: "color.rule".to_owned(),
             }],
+            permissions: Permissions::default(),
         };
         let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
 
@@ -2846,6 +2963,7 @@ mod tests {
                 node: "poly1".to_owned(),
                 stroke_width: "size.stroke".to_owned(),
             }],
+            permissions: Permissions::default(),
         };
         let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
 
@@ -2868,6 +2986,7 @@ mod tests {
                 node: "lbl".to_owned(),
                 stroke_width: "size.stroke".to_owned(),
             }],
+            permissions: Permissions::default(),
         };
         let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
 
@@ -2895,6 +3014,7 @@ mod tests {
                 node: "a".to_owned(),
                 visible: false,
             }],
+            permissions: Permissions::default(),
         };
         let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
 
@@ -2916,6 +3036,7 @@ mod tests {
                 node: "inner".to_owned(),
                 visible: false,
             }],
+            permissions: Permissions::default(),
         };
         let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
 
@@ -2938,6 +3059,7 @@ mod tests {
                 node: "b".to_owned(),
                 locked: true,
             }],
+            permissions: Permissions::default(),
         };
         let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
 
@@ -2969,6 +3091,7 @@ mod tests {
                 node: "does_not_exist".to_owned(),
                 visible: false,
             }],
+            permissions: Permissions::default(),
         };
         let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
 
@@ -3030,6 +3153,7 @@ mod tests {
                         node: "r".to_owned(),
                     },
                 ],
+                permissions: Permissions::default(),
             }
         );
     }
@@ -3047,6 +3171,7 @@ mod tests {
                     position: Position::Last,
                     source: "rect id=\"r2\"".to_owned(),
                 }],
+                permissions: Permissions::default(),
             }
         );
     }
@@ -3096,6 +3221,7 @@ mod tests {
                 w: Some(200.0),
                 h: None,
             }],
+            permissions: Permissions::default(),
         };
         let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
 
@@ -3138,6 +3264,7 @@ mod tests {
                 w: None,
                 h: None,
             }],
+            permissions: Permissions::default(),
         };
         let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
 
@@ -3164,6 +3291,7 @@ mod tests {
                 w: None,
                 h: None,
             }],
+            permissions: Permissions::default(),
         };
         let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
 
@@ -3193,6 +3321,7 @@ mod tests {
                 node: "snip".to_owned(),
                 visible: false,
             }],
+            permissions: Permissions::default(),
         };
         let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
 
@@ -3215,6 +3344,7 @@ mod tests {
                 node: "snip".to_owned(),
                 fill: "color.b".to_owned(),
             }],
+            permissions: Permissions::default(),
         };
         let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
 
@@ -3228,7 +3358,7 @@ mod tests {
     }
 
     #[test]
-    fn set_geometry_unsupported_on_code() {
+    fn set_geometry_supported_on_code() {
         let doc = parse(CODE_DOC);
         let tx = Transaction {
             ops: vec![Op::SetGeometry {
@@ -3238,19 +3368,43 @@ mod tests {
                 w: None,
                 h: None,
             }],
+            permissions: Permissions::default(),
         };
         let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
 
-        assert_eq!(result.status, TxStatus::Rejected);
+        assert_eq!(result.status, TxStatus::Accepted);
+        assert_eq!(result.affected_node_ids, vec!["snip".to_owned()]);
         assert!(
-            result
-                .diagnostics
-                .iter()
-                .any(|d| d.code == "tx.unsupported_property" && d.message.contains("code")),
-            "expected tx.unsupported_property mentioning \"code\"; got: {:?}",
-            result.diagnostics
+            result.source_after.contains("x=(px)10"),
+            "source_after must contain x=(px)10; got:\n{}",
+            result.source_after
         );
-        assert_eq!(result.source_after, result.source_before);
+        assert_ne!(result.source_after, result.source_before);
+    }
+
+    #[test]
+    fn set_geometry_supported_on_text() {
+        let doc = parse(TEXT_DOC);
+        let tx = Transaction {
+            ops: vec![Op::SetGeometry {
+                node: "label".to_owned(),
+                x: Some(-200.0),
+                y: None,
+                w: None,
+                h: None,
+            }],
+            permissions: Permissions::default(),
+        };
+        let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
+
+        assert_eq!(result.status, TxStatus::Accepted);
+        assert_eq!(result.affected_node_ids, vec!["label".to_owned()]);
+        assert!(
+            result.source_after.contains("x=(px)-200"),
+            "source_after must contain x=(px)-200; got:\n{}",
+            result.source_after
+        );
+        assert_ne!(result.source_after, result.source_before);
     }
 
     #[test]
@@ -3264,6 +3418,7 @@ mod tests {
                     r#"code id="snip2" x=(px)0 y=(px)0 w=(px)100 h=(px)40 { content "let x = 1;" }"#
                         .to_owned(),
             }],
+            permissions: Permissions::default(),
         };
         let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
 
@@ -3297,6 +3452,7 @@ mod tests {
                     crate::op::OpPoint { x: 50.0, y: 70.0 },
                 ],
             }],
+            permissions: Permissions::default(),
         };
         let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
 
@@ -3335,6 +3491,7 @@ mod tests {
                     crate::op::OpPoint { x: 100.0, y: 0.0 },
                 ],
             }],
+            permissions: Permissions::default(),
         };
         let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
 
@@ -3362,6 +3519,7 @@ mod tests {
                     crate::op::OpPoint { x: 50.0, y: 80.0 },
                 ],
             }],
+            permissions: Permissions::default(),
         };
         let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
 
@@ -3395,6 +3553,7 @@ mod tests {
                     w: Some(200.0),
                     h: None,
                 }],
+                permissions: Permissions::default(),
             }
         );
 
@@ -3407,6 +3566,7 @@ mod tests {
                     node: "p".to_owned(),
                     points: vec![OpPoint { x: 0.0, y: 0.0 }, OpPoint { x: 1.0, y: 1.0 },],
                 }],
+                permissions: Permissions::default(),
             }
         );
     }
@@ -3421,6 +3581,7 @@ mod tests {
                 node: "label".to_owned(),
                 align: "middle".to_owned(),
             }],
+            permissions: Permissions::default(),
         };
         let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
 
@@ -3476,6 +3637,7 @@ mod tests {
             ops: vec![Op::MoveBackward {
                 node: "b".to_owned(),
             }],
+            permissions: Permissions::default(),
         };
         let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
 
@@ -3502,6 +3664,7 @@ mod tests {
             ops: vec![Op::MoveBackward {
                 node: "a".to_owned(),
             }],
+            permissions: Permissions::default(),
         };
         let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
 
@@ -3531,6 +3694,7 @@ mod tests {
             ops: vec![Op::MoveBackward {
                 node: "y".to_owned(),
             }],
+            permissions: Permissions::default(),
         };
         let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
 
@@ -3559,6 +3723,7 @@ mod tests {
             ops: vec![Op::MoveToFront {
                 node: "a".to_owned(),
             }],
+            permissions: Permissions::default(),
         };
         let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
 
@@ -3590,6 +3755,7 @@ mod tests {
             ops: vec![Op::MoveToFront {
                 node: "c".to_owned(),
             }],
+            permissions: Permissions::default(),
         };
         let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
 
@@ -3620,6 +3786,7 @@ mod tests {
             ops: vec![Op::MoveToBack {
                 node: "c".to_owned(),
             }],
+            permissions: Permissions::default(),
         };
         let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
 
@@ -3667,6 +3834,7 @@ mod tests {
                         node: "x".to_owned()
                     },
                 ],
+                permissions: Permissions::default(),
             }
         );
     }
@@ -3715,6 +3883,7 @@ mod tests {
                 source: r#"rect id="box" x=(px)10 y=(px)10 w=(px)100 h=(px)80 fill=(token)"color.accent""#
                     .to_owned(),
             }],
+            permissions: Permissions::default(),
         };
         let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
 
@@ -3745,6 +3914,7 @@ mod tests {
                 position: Position::First,
                 source: r#"rect id="g.new" x=(px)0 y=(px)0 w=(px)10 h=(px)10"#.to_owned(),
             }],
+            permissions: Permissions::default(),
         };
         let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
 
@@ -3773,6 +3943,7 @@ mod tests {
                 },
                 source: r#"rect id="g.mid" x=(px)0 y=(px)0 w=(px)10 h=(px)10"#.to_owned(),
             }],
+            permissions: Permissions::default(),
         };
         let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
         assert_eq!(
@@ -3799,6 +3970,7 @@ mod tests {
                 },
                 source: r#"rect id="g.mid" x=(px)0 y=(px)0 w=(px)10 h=(px)10"#.to_owned(),
             }],
+            permissions: Permissions::default(),
         };
         let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
         assert_eq!(
@@ -3826,6 +3998,7 @@ mod tests {
                 position: Position::Index { index: 99 },
                 source: r#"rect id="g.tail" x=(px)0 y=(px)0 w=(px)10 h=(px)10"#.to_owned(),
             }],
+            permissions: Permissions::default(),
         };
         let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
         assert_eq!(
@@ -3850,6 +4023,7 @@ mod tests {
                     position: Position::Last,
                     source: r#"rect id="base" x=(px)0 y=(px)0 w=(px)20 h=(px)20"#.to_owned(),
                 }],
+                permissions: Permissions::default(),
             },
         )
         .expect("run_transaction should not error");
@@ -3867,6 +4041,7 @@ mod tests {
                 position: Position::Last,
                 source: "not valid kdl {{{".to_owned(),
             }],
+            permissions: Permissions::default(),
         };
         let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
 
@@ -3891,6 +4066,7 @@ mod tests {
                 position: Position::Last,
                 source: r#"rect id="box" x=(px)0 y=(px)0 w=(px)10 h=(px)10"#.to_owned(),
             }],
+            permissions: Permissions::default(),
         };
         let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
 
@@ -3916,6 +4092,7 @@ mod tests {
                 position: Position::Last,
                 source: r#"rect id="box" x=(px)0 y=(px)0 w=(px)10 h=(px)10"#.to_owned(),
             }],
+            permissions: Permissions::default(),
         };
         let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
 
@@ -3942,6 +4119,7 @@ mod tests {
                 },
                 source: r#"rect id="g.new" x=(px)0 y=(px)0 w=(px)10 h=(px)10"#.to_owned(),
             }],
+            permissions: Permissions::default(),
         };
         let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
 
@@ -3966,6 +4144,7 @@ mod tests {
             ops: vec![Op::RemoveNode {
                 node: "a".to_owned(),
             }],
+            permissions: Permissions::default(),
         };
         let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
 
@@ -3991,6 +4170,7 @@ mod tests {
             ops: vec![Op::RemoveNode {
                 node: "g.a".to_owned(),
             }],
+            permissions: Permissions::default(),
         };
         let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
 
@@ -4019,6 +4199,7 @@ mod tests {
             ops: vec![Op::RemoveNode {
                 node: "nope".to_owned(),
             }],
+            permissions: Permissions::default(),
         };
         let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
 
@@ -4062,6 +4243,7 @@ mod tests {
                         node: "r".to_owned(),
                     },
                 ],
+                permissions: Permissions::default(),
             }
         );
     }
@@ -4076,6 +4258,7 @@ mod tests {
                 node: "a".to_owned(),
                 opacity: 0.5,
             }],
+            permissions: Permissions::default(),
         };
         let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
 
@@ -4097,6 +4280,7 @@ mod tests {
                 node: "a".to_owned(),
                 opacity: 1.5,
             }],
+            permissions: Permissions::default(),
         };
         let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
 
@@ -4123,6 +4307,7 @@ mod tests {
                 node: "a".to_owned(),
                 opacity: -0.5,
             }],
+            permissions: Permissions::default(),
         };
         let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
 
@@ -4143,6 +4328,7 @@ mod tests {
                 node: "nope".to_owned(),
                 opacity: 0.5,
             }],
+            permissions: Permissions::default(),
         };
         let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
 
@@ -4201,6 +4387,7 @@ mod tests {
                         ],
                     },
                 ],
+                permissions: Permissions::default(),
             }
         );
     }
@@ -4223,6 +4410,7 @@ mod tests {
                     strikethrough: None,
                 }],
             }],
+            permissions: Permissions::default(),
         };
         let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
 
@@ -4256,6 +4444,7 @@ mod tests {
                     strikethrough: None,
                 }],
             }],
+            permissions: Permissions::default(),
         };
         let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
 
@@ -4303,6 +4492,7 @@ mod tests {
                     strikethrough: None,
                 }],
             }],
+            permissions: Permissions::default(),
         };
         let result = run_transaction(&doc2, &tx).expect("run_transaction should not error");
 
@@ -4361,6 +4551,7 @@ mod tests {
                 node: "orig".to_owned(),
                 new_id: "orig-copy".to_owned(),
             }],
+            permissions: Permissions::default(),
         };
         let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
 
@@ -4438,6 +4629,7 @@ mod tests {
                 node: "a".to_owned(),
                 new_id: "b".to_owned(),
             }],
+            permissions: Permissions::default(),
         };
         let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
 
@@ -4464,6 +4656,7 @@ mod tests {
                 node: "grp".to_owned(),
                 new_id: "grp-copy".to_owned(),
             }],
+            permissions: Permissions::default(),
         };
         let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
 
@@ -4488,6 +4681,7 @@ mod tests {
                 node: "does_not_exist".to_owned(),
                 new_id: "copy".to_owned(),
             }],
+            permissions: Permissions::default(),
         };
         let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
 
@@ -4515,6 +4709,7 @@ mod tests {
                     node: "orig".to_owned(),
                     new_id: "orig-copy".to_owned(),
                 }],
+                permissions: Permissions::default(),
             }
         );
     }
@@ -4592,6 +4787,7 @@ mod tests {
                 node_ids: vec!["r1".to_owned(), "r2".to_owned()],
                 group_id: "grp-new".to_owned(),
             }],
+            permissions: Permissions::default(),
         };
         let result = run_transaction(&doc, &tx).expect("run_transaction must not error");
 
@@ -4648,6 +4844,7 @@ mod tests {
                 node_ids: vec!["r1".to_owned(), "r3".to_owned()],
                 group_id: "grp-bad".to_owned(),
             }],
+            permissions: Permissions::default(),
         };
         let result = run_transaction(&doc, &tx).expect("run_transaction must not error");
 
@@ -4673,6 +4870,7 @@ mod tests {
             ops: vec![Op::Ungroup {
                 group_id: "grp1".to_owned(),
             }],
+            permissions: Permissions::default(),
         };
         let result = run_transaction(&doc, &tx).expect("run_transaction must not error");
 
@@ -4723,6 +4921,7 @@ mod tests {
             ops: vec![Op::Ungroup {
                 group_id: "r1".to_owned(), // r1 is a rect, not a group
             }],
+            permissions: Permissions::default(),
         };
         let result = run_transaction(&doc, &tx).expect("run_transaction must not error");
 
@@ -4746,6 +4945,7 @@ mod tests {
             ops: vec![Op::Ungroup {
                 group_id: "grp1".to_owned(),
             }],
+            permissions: Permissions::default(),
         };
         let result = run_transaction(&doc, &tx).expect("run_transaction must not error");
 
@@ -4786,6 +4986,7 @@ mod tests {
                 new_parent: "grp1".to_owned(),
                 position: Position::Last,
             }],
+            permissions: Permissions::default(),
         };
         let result = run_transaction(&doc, &tx).expect("run_transaction must not error");
 
@@ -4829,6 +5030,7 @@ mod tests {
                 new_parent: "r1".to_owned(), // r1 is a rect, not a container
                 position: Position::Last,
             }],
+            permissions: Permissions::default(),
         };
         let result = run_transaction(&doc, &tx).expect("run_transaction must not error");
 
@@ -4855,6 +5057,7 @@ mod tests {
                 new_parent: "inner".to_owned(),
                 position: Position::Last,
             }],
+            permissions: Permissions::default(),
         };
         let result = run_transaction(&doc, &tx).expect("run_transaction must not error");
 
@@ -4897,6 +5100,7 @@ mod tests {
                         position: Position::First,
                     },
                 ],
+                permissions: Permissions::default(),
             }
         );
     }
@@ -4948,6 +5152,7 @@ mod tests {
                 align: "left".to_owned(),
                 anchor: "selection".to_owned(),
             }],
+            permissions: Permissions::default(),
         };
         let result = run_transaction(&doc, &tx).expect("run_transaction must not error");
 
@@ -4983,6 +5188,7 @@ mod tests {
                 align: "right".to_owned(),
                 anchor: "selection".to_owned(),
             }],
+            permissions: Permissions::default(),
         };
         let result = run_transaction(&doc, &tx).expect("run_transaction must not error");
 
@@ -5012,6 +5218,7 @@ mod tests {
                 align: "hcenter".to_owned(),
                 anchor: "page".to_owned(),
             }],
+            permissions: Permissions::default(),
         };
         let result = run_transaction(&doc, &tx).expect("run_transaction must not error");
 
@@ -5053,6 +5260,7 @@ mod tests {
                 align: "left".to_owned(),
                 anchor: "selection".to_owned(),
             }],
+            permissions: Permissions::default(),
         };
         let result = run_transaction(&doc, &tx).expect("run_transaction must not error");
 
@@ -5095,6 +5303,7 @@ mod tests {
                 align: "diagonal".to_owned(),
                 anchor: "selection".to_owned(),
             }],
+            permissions: Permissions::default(),
         };
         let result = run_transaction(&doc, &tx).expect("run_transaction must not error");
 
@@ -5125,7 +5334,117 @@ mod tests {
                     align: "left".to_owned(),
                     anchor: "selection".to_owned(),
                 }],
+                permissions: Permissions::default(),
             }
+        );
+    }
+
+    // ── LOCKED-NODE enforcement ───────────────────────────────────────────────
+
+    #[test]
+    fn set_geometry_on_locked_node_rejected() {
+        let doc = parse(TWO_RECT_DOC);
+
+        // Two ops in one tx: lock the node, then try to move it. The lock check
+        // reads the candidate state, so the earlier set_locked locks "a" for the
+        // later set_geometry — which must therefore be rejected.
+        let tx = Transaction {
+            ops: vec![
+                Op::SetLocked {
+                    node: "a".to_owned(),
+                    locked: true,
+                },
+                Op::SetGeometry {
+                    node: "a".to_owned(),
+                    x: Some(50.0),
+                    y: None,
+                    w: None,
+                    h: None,
+                },
+            ],
+            permissions: Permissions::default(),
+        };
+        let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
+
+        assert_eq!(result.status, TxStatus::Rejected);
+        assert!(
+            result
+                .diagnostics
+                .iter()
+                .any(|d| d.code == "node.locked" && d.subject_id.as_deref() == Some("a")),
+            "expected a node.locked diagnostic naming 'a', got: {:?}",
+            result.diagnostics
+        );
+        // Rejected ⇒ document unchanged.
+        assert_eq!(result.source_before, result.source_after);
+    }
+
+    #[test]
+    fn set_geometry_on_locked_node_allowed_with_permission() {
+        let doc = parse(TWO_RECT_DOC);
+
+        let tx = Transaction {
+            ops: vec![
+                Op::SetLocked {
+                    node: "a".to_owned(),
+                    locked: true,
+                },
+                Op::SetGeometry {
+                    node: "a".to_owned(),
+                    x: Some(50.0),
+                    y: None,
+                    w: None,
+                    h: None,
+                },
+            ],
+            permissions: Permissions {
+                allow_locked: true,
+                allow_raw_visual_literals: false,
+            },
+        };
+        let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
+
+        assert_eq!(result.status, TxStatus::Accepted);
+        assert!(
+            !result.diagnostics.iter().any(|d| d.code == "node.locked"),
+            "no node.locked diagnostic expected with allow_locked, got: {:?}",
+            result.diagnostics
+        );
+        // Geometry changed: x moved to 50.
+        assert!(
+            result.source_after.contains("(px)50"),
+            "source_after should reflect the moved geometry: {}",
+            result.source_after
+        );
+        assert_ne!(result.source_before, result.source_after);
+    }
+
+    #[test]
+    fn set_locked_can_unlock_a_locked_node() {
+        let doc = parse(TWO_RECT_DOC);
+
+        // Lock then unlock in one tx: set_locked is exempt from the lock guard,
+        // so the unlock must be allowed even though the node is locked when it runs.
+        let tx = Transaction {
+            ops: vec![
+                Op::SetLocked {
+                    node: "a".to_owned(),
+                    locked: true,
+                },
+                Op::SetLocked {
+                    node: "a".to_owned(),
+                    locked: false,
+                },
+            ],
+            permissions: Permissions::default(),
+        };
+        let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
+
+        assert_eq!(result.status, TxStatus::Accepted);
+        assert!(
+            !result.diagnostics.iter().any(|d| d.code == "node.locked"),
+            "set_locked must be exempt from the lock guard, got: {:?}",
+            result.diagnostics
         );
     }
 }

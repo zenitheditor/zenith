@@ -12,5 +12,5 @@ pub mod result;
 
 // Curated flat re-exports.
 pub use engine::run_transaction;
-pub use op::{Op, OpPoint, OpSpan, Position, Transaction};
+pub use op::{Op, OpPoint, OpSpan, Permissions, Position, Transaction};
 pub use result::{TxError, TxResult, TxStatus};

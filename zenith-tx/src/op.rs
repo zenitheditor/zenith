@@ -73,10 +73,32 @@ pub enum Position {
     After { id: String },
 }
 
+/// Per-transaction permission flags that relax otherwise-enforced guards.
+///
+/// Carried in a transaction's optional `"permissions"` object, e.g.
+/// `{"permissions":{"allow_locked":false,"allow_raw_visual_literals":false}}`.
+/// Both flags default to `false`, so a transaction JSON that omits the
+/// `permissions` key still parses with all guards active.
+#[derive(serde::Deserialize, Debug, Clone, PartialEq, Default)]
+pub struct Permissions {
+    /// When `true`, mutating ops are allowed to target locked nodes.
+    /// When `false` (default), a guarded op against a locked node is rejected
+    /// with a `node.locked` diagnostic.
+    #[serde(default)]
+    pub allow_locked: bool,
+    /// When `true`, raw (non-token) visual literal values are permitted.
+    #[serde(default)]
+    pub allow_raw_visual_literals: bool,
+}
+
 /// A batch of operations to apply to a document in order.
 #[derive(serde::Deserialize, Debug, Clone, PartialEq)]
 pub struct Transaction {
     pub ops: Vec<Op>,
+    /// Permission flags relaxing per-op guards. Defaults to all-`false`
+    /// (every guard active) when the `permissions` key is absent from JSON.
+    #[serde(default)]
+    pub permissions: Permissions,
 }
 
 impl Transaction {
