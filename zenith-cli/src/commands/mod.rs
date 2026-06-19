@@ -6,6 +6,7 @@
 //! responsibility of the dispatcher in `lib.rs`.
 
 pub mod fmt;
+pub mod inspect;
 pub mod render;
 pub mod tokens;
 pub mod tx;

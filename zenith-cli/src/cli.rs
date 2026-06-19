@@ -31,6 +31,9 @@ pub enum Command {
 
     /// Apply a transaction to a `.zen` document (dry-run by default).
     Tx(TxArgs),
+
+    /// Print the node tree of a `.zen` document (read-only).
+    Inspect(InspectArgs),
 }
 
 /// Arguments for `zenith validate`.
@@ -80,6 +83,21 @@ pub struct TxArgs {
     pub apply: bool,
 
     /// Emit machine-readable JSON instead of a human-readable summary.
+    #[arg(long)]
+    pub json: bool,
+}
+
+/// Arguments for `zenith inspect`.
+#[derive(Debug, Args)]
+pub struct InspectArgs {
+    /// Path to the `.zen` document.
+    pub path: PathBuf,
+
+    /// Inspect only the subtree rooted at this node id.
+    #[arg(long, value_name = "ID")]
+    pub node: Option<String>,
+
+    /// Emit machine-readable JSON instead of a human-readable tree.
     #[arg(long)]
     pub json: bool,
 }

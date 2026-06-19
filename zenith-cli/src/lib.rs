@@ -210,6 +210,26 @@ pub fn run() -> ExitCode {
             ExitCode::SUCCESS
         }
 
+        Command::Inspect(args) => {
+            let src = match read_file(&args.path) {
+                Ok(s) => s,
+                Err(msg) => {
+                    eprintln!("{}", msg);
+                    return ExitCode::from(2);
+                }
+            };
+            match commands::inspect::run(&src, args.node.as_deref(), args.json) {
+                Ok(out) => {
+                    println!("{}", out);
+                    ExitCode::SUCCESS
+                }
+                Err(e) => {
+                    eprintln!("{}", e.message);
+                    ExitCode::from(e.exit_code)
+                }
+            }
+        }
+
         Command::Tx(args) => {
             // Read document source.
             let doc_src = match read_file(&args.path) {
