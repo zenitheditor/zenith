@@ -45,6 +45,14 @@ Because a Zenith file is just text, it lives wherever your code lives. Commit it
 - **High-volume producers** — marketing, publishing, localization — who need lots of correct variants.
 - **Tool builders** who'd rather build on an open format than a closed cloud API.
 
+## Showcase
+
+The public showcase lives at [`farhan-syah/zenith-showcase`](https://github.com/farhan-syah/zenith-showcase) and is linked here as the [`zenith-showcase`](./zenith-showcase) submodule.
+
+It is the place for reusable Zenith examples: `.zen` source, rendered outputs, visual recipes, actions, filters, backgrounds, posters, flyers, books, magazines, ads, diagrams, presentations, and other generated design work.
+
+Only put files in the showcase if you have the rights to share them and you allow others to reuse the submitted source, outputs, and assets under the declared license. Private, client, portfolio-only, or custom-licensed work should be linked from the showcase's external gallery instead; licensing for external work stays with the owner.
+
 ## Status
 
 Early days. Zenith isn't ready to use yet — the format and tools are still being designed, nothing is stable, and there's no build to download. This README will grow with the project.
