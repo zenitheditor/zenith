@@ -11,7 +11,7 @@ pub mod font_meta;
 pub mod rustybuzz_engine;
 
 // Curated flat re-exports for the public surface.
-pub use engine::{PositionedGlyph, ShapeRequest, TextLayoutEngine, ZenithGlyphRun};
+pub use engine::{PositionedGlyph, ShapeRequest, TextDirection, TextLayoutEngine, ZenithGlyphRun};
 pub use error::LayoutError;
 pub use font_meta::{FaceMetadata, face_metadata};
 pub use rustybuzz_engine::RustybuzzEngine;

@@ -11,12 +11,18 @@
 //! - **recto** = ODD page (1, 3, 5 …) → binding on the LEFT.
 //! - **verso** = EVEN page (2, 4, 6 …) → binding on the RIGHT.
 //!
-//! Live-area left edge:
+//! Live-area left edge (LTR books, `page-progression` absent or "ltr"):
 //! - `mirror_margins == Some(true)`:
 //!   - recto → `live_x = margin_inner` (inner/binding margin on the left);
 //!   - verso → `live_x = margin_outer` (inner/binding margin on the right, so
 //!     the OUTER margin is the left inset).
 //! - otherwise → `live_x = margin_inner` on every page (uniform).
+//!
+//! For an RTL book (`page-progression="rtl"`) the spread is MIRRORED: the
+//! binding (inner) margin sits on the RIGHT for recto and on the LEFT for verso.
+//! So with `mirror_margins`, recto → `live_x = margin_outer` and verso →
+//! `live_x = margin_inner` — the exact opposite of the LTR parity. Width, top,
+//! and bottom are unchanged.
 //!
 //! In all cases:
 //! - `live_y = margin_top`
@@ -55,6 +61,7 @@ fn live_area(
     page_h: f64,
     page_index_1based: usize,
     mirror_margins: bool,
+    rtl: bool,
 ) -> Option<LiveArea> {
     let inner_dim = page.margin_inner.as_ref()?;
     let outer_dim = page.margin_outer.as_ref()?;
@@ -66,14 +73,18 @@ fn live_area(
     let top = dim_to_px(top_dim.value, &top_dim.unit)?;
     let bottom = dim_to_px(bottom_dim.value, &bottom_dim.unit)?;
 
-    // recto = odd (1-based); verso = even.
+    // recto = odd (1-based); verso = even. For an LTR book the binding (inner)
+    // margin is on the LEFT for recto; for an RTL book (page-progression="rtl")
+    // the whole spread is mirrored, so the binding is on the RIGHT for recto.
+    // `inner_on_right` is then true for recto under RTL and for verso under LTR.
     let is_recto = page_index_1based % 2 == 1;
-    let left_inset = if mirror_margins && !is_recto {
-        // verso: binding (inner) is on the RIGHT, so the OUTER margin insets the
-        // left edge.
+    let inner_on_right = if rtl { is_recto } else { !is_recto };
+    let left_inset = if mirror_margins && inner_on_right {
+        // Binding (inner) is on the RIGHT, so the OUTER margin insets the left
+        // edge.
         outer
     } else {
-        // recto, or non-mirrored: inner margin insets the left edge.
+        // Inner margin insets the left edge.
         inner
     };
 
@@ -90,15 +101,17 @@ fn live_area(
 /// `page_index_1based` is the page's position in `doc.body.pages` (1-based).
 /// Deterministic: nodes are iterated in child order. Skipped when any margin is
 /// absent/unresolvable, and skipped per-node for `role="guide"` nodes.
+#[allow(clippy::too_many_arguments)]
 pub(super) fn check_margins(
     page: &Page,
     page_w: f64,
     page_h: f64,
     page_index_1based: usize,
     mirror_margins: bool,
+    rtl: bool,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
-    let Some(area) = live_area(page, page_w, page_h, page_index_1based, mirror_margins) else {
+    let Some(area) = live_area(page, page_w, page_h, page_index_1based, mirror_margins, rtl) else {
         // Some margin is absent or unresolvable — nothing to validate against.
         return;
     };

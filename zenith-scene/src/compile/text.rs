@@ -8,7 +8,9 @@ use zenith_core::{
     Style, TextNode, TextSpan, TokenKind, builtin_color, dim_to_px, is_supported, scan,
     token_id_for_kind,
 };
-use zenith_layout::{RustybuzzEngine, ShapeRequest, TextLayoutEngine, ZenithGlyphRun};
+use zenith_layout::{
+    RustybuzzEngine, ShapeRequest, TextDirection, TextLayoutEngine, ZenithGlyphRun,
+};
 
 use crate::color::parse_srgb_hex;
 use crate::ir::{Color, SceneCommand, SceneGlyph};
@@ -119,6 +121,7 @@ pub(super) fn shape_words(
     diagnostics: &mut Vec<Diagnostic>,
     node_id: &str,
     span: Option<zenith_core::Span>,
+    direction: TextDirection,
 ) -> (Vec<WordToken>, WordMetrics) {
     let mut tokens: Vec<WordToken> = Vec::new();
     let mut metrics = WordMetrics::default();
@@ -149,6 +152,7 @@ pub(super) fn shape_words(
                     weight: shaped.weight,
                     style: shaped.style,
                     font_size: word_font_size,
+                    direction,
                 };
                 match engine.shape_with_fallback(&req, fonts) {
                     Err(e) => {
@@ -200,6 +204,9 @@ pub(super) fn shape_words(
             weight: node_base_weight,
             style: FontStyle::Normal,
             font_size,
+            // A single space's advance is direction-independent; keep LTR so the
+            // inter-word gap measurement is identical for LTR and RTL.
+            direction: TextDirection::Ltr,
         };
         match engine.shape(&req, fonts) {
             Ok(run) => run.advance_width as f64,
@@ -246,6 +253,8 @@ pub(super) struct HyphenationContext<'a> {
     pub(super) families: &'a [String],
     /// The hyphen glyph string shaped onto the head fragment.
     pub(super) hyphen: &'a str,
+    /// Base writing direction for re-shaping fragments (matches the node).
+    pub(super) direction: TextDirection,
 }
 
 /// A word split at a hyphenation point: the head (`fragment-`, including the
@@ -271,6 +280,7 @@ fn reshape_fragment(
         weight: donor.src.weight,
         style: donor.src.style,
         font_size: donor.src.font_size,
+        direction: ctx.direction,
     };
     let runs = ctx.engine.shape_with_fallback(&req, ctx.fonts).ok()?;
     let advance: f64 = runs.iter().map(|r| r.advance_width as f64).sum();
@@ -562,6 +572,7 @@ pub(super) fn emit_lines(
     font_size: f32,
     deco_thickness: f64,
     justify_final_line: bool,
+    direction: TextDirection,
     commands: &mut Vec<SceneCommand>,
 ) {
     // Uniform geometry: every line shares `text_x`/`box_w`. Delegates to the
@@ -576,6 +587,7 @@ pub(super) fn emit_lines(
         font_size,
         deco_thickness,
         justify_final_line,
+        direction,
         commands,
     );
 }
@@ -598,6 +610,7 @@ pub(super) fn emit_lines_profiled<F>(
     font_size: f32,
     deco_thickness: f64,
     justify_final_line: bool,
+    direction: TextDirection,
     commands: &mut Vec<SceneCommand>,
 ) where
     F: Fn(usize) -> (f64, f64),
@@ -606,38 +619,76 @@ pub(super) fn emit_lines_profiled<F>(
     let line_height = metrics.line_height;
     let space_advance = metrics.space_advance;
     let last_idx = lines.len().saturating_sub(1);
+    let is_rtl = direction == TextDirection::Rtl;
     for (i, line) in lines.iter().enumerate() {
         let (text_x, box_w) = geom(i);
         let baseline_y = text_y + ascent + (i as f64) * line_height;
         let word_count = line.words.len();
 
-        let (base_x, gap) = match align {
-            "center" => (text_x + (box_w - line.content_w) / 2.0, space_advance),
-            "end" => (text_x + (box_w - line.content_w), space_advance),
-            "justify" => {
-                // Justify stretches inter-word gaps so a non-final, multi-word
-                // line fills the box. The final line and single-word lines stay
-                // at the start offset (paragraph semantics). `extra` is clamped
-                // ≥ 0 so an overlong line (content_w > box_w) never SHRINKS gaps
-                // below the normal space; `word_count > 1` guards the divisor.
-                // A continuation chain box (`justify_final_line`) justifies its
-                // own last line too, since the paragraph flows on past it.
-                let is_final_line = i == last_idx && !justify_final_line;
-                if !is_final_line && word_count > 1 {
-                    let extra = (box_w - line.content_w).max(0.0) / (word_count as f64 - 1.0);
-                    (text_x, space_advance + extra)
-                } else {
-                    (text_x, space_advance)
-                }
-            }
-            _ => (text_x, space_advance),
+        // Visual left-to-right word order. LTR is logical order (byte-identical
+        // to before); RTL reverses the words so the first LOGICAL word sits
+        // rightmost (each word's own glyphs are already in visual order from the
+        // shaper). Words are then placed left-to-right by `word_x` in this order.
+        let visual: Vec<&WordToken> = if is_rtl {
+            line.words.iter().rev().collect()
+        } else {
+            line.words.iter().collect()
         };
 
-        // Precompute each word's left x along the line.
+        // `(base_x, gap)`: the line's left origin and inter-word gap. LTR keeps
+        // the historical mapping exactly. RTL flips the anchor: `start`
+        // right-anchors (line right edge at box right), `end` left-anchors,
+        // `center` is symmetric. Because `content_w` is order-independent, the
+        // right-anchor offset `box_w - content_w` is identical whichever order
+        // the words sit in.
+        let (base_x, gap) = if is_rtl {
+            match align {
+                "center" => (text_x + (box_w - line.content_w) / 2.0, space_advance),
+                // RTL `end` → left-anchor (left edge at box left).
+                "end" => (text_x, space_advance),
+                "justify" => {
+                    // RTL justify: stretch inter-word gaps to fill, right-
+                    // anchored; the last line stays right-aligned (ragged left).
+                    let is_final_line = i == last_idx && !justify_final_line;
+                    if !is_final_line && word_count > 1 {
+                        let extra = (box_w - line.content_w).max(0.0) / (word_count as f64 - 1.0);
+                        (text_x, space_advance + extra)
+                    } else {
+                        (text_x + (box_w - line.content_w), space_advance)
+                    }
+                }
+                // RTL `start`/unknown → right-anchor.
+                _ => (text_x + (box_w - line.content_w), space_advance),
+            }
+        } else {
+            match align {
+                "center" => (text_x + (box_w - line.content_w) / 2.0, space_advance),
+                "end" => (text_x + (box_w - line.content_w), space_advance),
+                "justify" => {
+                    // Justify stretches inter-word gaps so a non-final, multi-word
+                    // line fills the box. The final line and single-word lines stay
+                    // at the start offset (paragraph semantics). `extra` is clamped
+                    // ≥ 0 so an overlong line (content_w > box_w) never SHRINKS gaps
+                    // below the normal space; `word_count > 1` guards the divisor.
+                    // A continuation chain box (`justify_final_line`) justifies its
+                    // own last line too, since the paragraph flows on past it.
+                    let is_final_line = i == last_idx && !justify_final_line;
+                    if !is_final_line && word_count > 1 {
+                        let extra = (box_w - line.content_w).max(0.0) / (word_count as f64 - 1.0);
+                        (text_x, space_advance + extra)
+                    } else {
+                        (text_x, space_advance)
+                    }
+                }
+                _ => (text_x, space_advance),
+            }
+        };
+
+        // Precompute each VISUAL word's left x along the line, left-to-right.
         let mut word_x: Vec<f64> = Vec::with_capacity(word_count);
         {
             let mut x = base_x;
-            for (wi, word) in line.words.iter().enumerate() {
+            for (wi, word) in visual.iter().enumerate() {
                 word_x.push(x);
                 x += word.advance;
                 if wi + 1 < word_count {
@@ -647,13 +698,13 @@ pub(super) fn emit_lines_profiled<F>(
         }
 
         // Decorations FIRST (so glyphs paint on top), one FillRect per maximal
-        // contiguous same-flag run of words.
+        // contiguous same-flag run of words (in visual order).
         let underline_y = baseline_y + font_size as f64 * 0.12;
         let strike_y = baseline_y - font_size as f64 * 0.30;
         for (is_underline, deco_y) in [(true, underline_y), (false, strike_y)] {
             let mut run_start: Option<(f64, Color)> = None;
             let mut run_right: f64 = base_x;
-            for (wi, word) in line.words.iter().enumerate() {
+            for (wi, word) in visual.iter().enumerate() {
                 let on = if is_underline {
                     word.underline
                 } else {
@@ -689,7 +740,7 @@ pub(super) fn emit_lines_profiled<F>(
         // Glyphs. A super/subscript word carries a non-zero `baseline_dy`,
         // shifting its runs off the shared line baseline (negative = up); a
         // baseline word has dy 0 and is byte-identical to before.
-        for (wi, word) in line.words.iter().enumerate() {
+        for (wi, word) in visual.iter().enumerate() {
             let mut run_x = word_x.get(wi).copied().unwrap_or(base_x);
             let word_baseline_y = baseline_y + word.baseline_dy;
             for run in &word.runs {
@@ -803,6 +854,15 @@ fn render_chain_member(
         }
     };
 
+    // Honor the node's direction for line layout. The chain pre-pass shapes the
+    // source's spans with the source direction (see [`super::chain`]); here the
+    // member's own `direction` drives line ordering/alignment. RTL chains are
+    // feasible because shaping + this emit both consult direction.
+    let chain_direction = match text.direction.as_deref() {
+        Some("rtl") => TextDirection::Rtl,
+        _ => TextDirection::Ltr,
+    };
+
     emit_lines(
         &assignment.lines,
         text_x,
@@ -816,6 +876,7 @@ fn render_chain_member(
         // justify; a continuation box justifies its last line because the
         // paragraph flows on into the next box.
         !assignment.is_last_member,
+        chain_direction,
         commands,
     );
 
@@ -1027,6 +1088,9 @@ fn shape_drop_cap(
         weight,
         style: initial.style,
         font_size: cap_size,
+        // Drop caps are a single glyph; RTL drop caps are a documented v0
+        // follow-up, so the cap always shapes LTR.
+        direction: TextDirection::Ltr,
     };
     let run = engine
         .shape_with_fallback(&req, fonts)
@@ -1091,6 +1155,8 @@ fn shape_tab_leader_row(
             weight,
             style: FontStyle::Normal,
             font_size,
+            // Tab-leader (TOC) rows are LTR in v0; RTL TOC is a follow-up.
+            direction: TextDirection::Ltr,
         };
         match engine.shape_with_fallback(&req, fonts) {
             Ok(runs) => {
@@ -1213,6 +1279,8 @@ fn compile_tab_leader(
         weight,
         style: FontStyle::Normal,
         font_size,
+        // Tab-leader (TOC) mode is LTR in v0.
+        direction: TextDirection::Ltr,
     };
     let leader_run = match engine.shape_with_fallback(&leader_req, fonts) {
         Ok(runs) => runs.into_iter().next(),
@@ -1560,6 +1628,14 @@ pub(super) fn compile_text(
         vertical_align: bool,
     }
 
+    // Node base writing direction. `direction="rtl"` shapes RTL (correct Arabic/
+    // Hebrew joining + visual glyph order) AND flips line layout below; any other
+    // value (including absent) is LTR, byte-identical to before.
+    let node_direction = match text.direction.as_deref() {
+        Some("rtl") => TextDirection::Rtl,
+        _ => TextDirection::Ltr,
+    };
+
     // ── Pass 1: shape ────────────────────────────────────────────────
     let mut shaped_spans: Vec<ShapedSpan> = Vec::new();
     let mut total_advance: f64 = 0.0;
@@ -1604,6 +1680,7 @@ pub(super) fn compile_text(
             weight,
             style,
             font_size: span_font_size,
+            direction: node_direction,
         };
 
         // Shape with per-glyph font fallback: a span whose characters are all
@@ -1727,20 +1804,43 @@ pub(super) fn compile_text(
 
     if !needs_wrap {
         // ── FAST PATH (fits / no box): single-line two-pass emit ──────
+        // Alignment → x_offset. LTR is unchanged. Under RTL the anchor flips:
+        // `start` right-anchors (line right edge at box right), `end`
+        // left-anchors, `center` is symmetric (unchanged). Each span's run is
+        // already in visual RTL order from the shaper, so reversing the SPAN
+        // sequence (below) puts the first logical span rightmost.
+        let is_rtl = node_direction == TextDirection::Rtl;
         let x_offset: f64 = match box_w_opt {
-            None => 0.0, // no box width → always start-anchor
-            Some(box_w) => match align {
-                "center" => (box_w - total_advance) / 2.0,
-                "end" => box_w - total_advance,
-                // "start"/"justify"/unknown → no offset. Justify on a
-                // single line that already fits is start-aligned.
-                _ => 0.0,
-            },
+            None => 0.0, // no box width → always start-anchor (origin)
+            Some(box_w) => {
+                if is_rtl {
+                    match align {
+                        "center" => (box_w - total_advance) / 2.0,
+                        // RTL `end` → left edge at box left (no offset).
+                        "end" => 0.0,
+                        // RTL `start`/`justify`/unknown → right-anchor.
+                        _ => box_w - total_advance,
+                    }
+                } else {
+                    match align {
+                        "center" => (box_w - total_advance) / 2.0,
+                        "end" => box_w - total_advance,
+                        // "start"/"justify"/unknown → no offset. Justify on a
+                        // single line that already fits is start-aligned.
+                        _ => 0.0,
+                    }
+                }
+            }
         };
 
         // ── Pass 2: emit ─────────────────────────────────────────────
         let mut x_cursor = text_x + x_offset;
 
+        // RTL: emit spans in reverse logical order so the first logical span
+        // sits rightmost (each run is internally visual-ordered already).
+        if is_rtl {
+            shaped_spans.reverse();
+        }
         for shaped in shaped_spans {
             let run_advance = shaped.run.advance_width as f64;
             // A super/subscript span sits on the SHARED full-size baseline plus
@@ -1834,6 +1934,7 @@ pub(super) fn compile_text(
             diagnostics,
             &text.id,
             text.source_span,
+            node_direction,
         );
 
         // Shape the cap now that the body `line_height` is known.
@@ -1893,6 +1994,9 @@ pub(super) fn compile_text(
                 font_size,
                 deco_thickness,
                 false,
+                // Drop-cap wrap-around is an LTR feature in v0; RTL drop caps are
+                // a documented follow-up.
+                TextDirection::Ltr,
                 commands,
             );
         } else {
@@ -1906,6 +2010,7 @@ pub(super) fn compile_text(
                     fonts,
                     families: &families,
                     hyphen: "-",
+                    direction: node_direction,
                 })
             } else {
                 None
@@ -1927,6 +2032,7 @@ pub(super) fn compile_text(
                 // Single-box wrap: the batch's last line IS the paragraph's last
                 // line → leave it ragged under justify.
                 false,
+                node_direction,
                 commands,
             );
         }
@@ -2288,6 +2394,8 @@ pub(super) fn compile_code(
                     weight,
                     style: FontStyle::Normal,
                     font_size,
+                    // Code is shaped LTR (source code is left-to-right).
+                    direction: TextDirection::Ltr,
                 };
                 match engine.shape(&req, fonts) {
                     Err(e) => {
@@ -2337,6 +2445,8 @@ pub(super) fn compile_code(
                 weight,
                 style: FontStyle::Normal,
                 font_size,
+                // Code is shaped LTR (source code is left-to-right).
+                direction: TextDirection::Ltr,
             };
 
             match engine.shape(&req, fonts) {
@@ -2384,5 +2494,125 @@ pub(super) fn compile_code(
     match last_inked_line {
         Some(last) => (last + 1) as f64 * measured_line_height,
         None => 0.0,
+    }
+}
+
+#[cfg(test)]
+mod rtl_tests {
+    use super::*;
+
+    /// Build a single-run [`WordToken`] of the given `advance` so per-word x
+    /// positions in the emitted commands are deterministic and checkable.
+    fn word(advance: f64) -> WordToken {
+        WordToken {
+            runs: vec![ZenithGlyphRun {
+                font_id: "test-font".to_owned(),
+                font_size: 16.0,
+                ascent: 12.0,
+                descent: 4.0,
+                line_height: 18.0,
+                advance_width: advance as f32,
+                glyphs: Vec::new(),
+            }],
+            advance,
+            color: Color::srgb(0, 0, 0, 255),
+            underline: false,
+            strikethrough: false,
+            baseline_dy: 0.0,
+            src: WordSource {
+                text: String::new(),
+                weight: 400,
+                style: FontStyle::Normal,
+                font_size: 16.0,
+                paragraph: 0,
+                hyphen_part: None,
+            },
+        }
+    }
+
+    fn metrics() -> WordMetrics {
+        WordMetrics {
+            ascent: 12.0,
+            line_height: 18.0,
+            space_advance: 5.0,
+        }
+    }
+
+    /// The x origin of every emitted glyph run, in command order.
+    fn run_xs(commands: &[SceneCommand]) -> Vec<f64> {
+        commands
+            .iter()
+            .filter_map(|c| match c {
+                SceneCommand::DrawGlyphRun { x, .. } => Some(*x),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// Emit a single line of three words `[10, 20, 30]` with the given direction
+    /// and align, returning the per-word x origins in COMMAND order.
+    fn emit_line(direction: TextDirection, align: &str) -> Vec<f64> {
+        // content_w = 10 + 5 + 20 + 5 + 30 = 70.
+        let line = Line {
+            words: vec![word(10.0), word(20.0), word(30.0)],
+            content_w: 70.0,
+            paragraph: 0,
+        };
+        let mut commands = Vec::new();
+        emit_lines(
+            std::slice::from_ref(&line),
+            /* text_x */ 100.0,
+            /* text_y */ 0.0,
+            /* box_w */ 200.0,
+            align,
+            metrics(),
+            16.0,
+            1.0,
+            false,
+            direction,
+            &mut commands,
+        );
+        run_xs(&commands)
+    }
+
+    #[test]
+    fn ltr_start_is_byte_identical_left_anchored() {
+        // LTR start: first word at the left origin (100), running rightward.
+        let xs = emit_line(TextDirection::Ltr, "start");
+        assert_eq!(xs, vec![100.0, 115.0, 140.0]);
+        // word0 left edge = 100; word1 = 100+10+5; word2 = 115+20+5.
+    }
+
+    #[test]
+    fn rtl_start_first_word_at_right_descending_leftward() {
+        // RTL start right-anchors the line: box right = 100 + 200 = 300, line
+        // right edge = 300, so the line starts at 300 - 70 = 230. Words are
+        // emitted in reversed (visual) order, so the COMMAND order is word2,
+        // word1, word0 from left to right. The FIRST LOGICAL word (advance 10)
+        // is therefore the LAST command and sits at the largest x (rightmost).
+        let xs = emit_line(TextDirection::Rtl, "start");
+        // Visual left-to-right: word2 @230, word1 @230+30+5=265, word0 @265+20+5=290.
+        assert_eq!(xs, vec![230.0, 265.0, 290.0]);
+        // The first logical word (word0) is the rightmost run.
+        let first_logical_x = *xs.last().expect("three runs");
+        assert!(
+            first_logical_x > xs[0] && first_logical_x > xs[1],
+            "first logical word must be rightmost, got {xs:?}"
+        );
+    }
+
+    #[test]
+    fn rtl_end_left_anchors() {
+        // RTL end → left edge at box left (100). Visual order word2,word1,word0.
+        let xs = emit_line(TextDirection::Rtl, "end");
+        assert_eq!(xs, vec![100.0, 135.0, 160.0]);
+    }
+
+    #[test]
+    fn rtl_center_is_symmetric() {
+        // center: base_x = 100 + (200 - 70)/2 = 165, same anchor as LTR center,
+        // only the word order differs.
+        let xs = emit_line(TextDirection::Rtl, "center");
+        assert_eq!(xs, vec![165.0, 200.0, 225.0]);
     }
 }

@@ -353,7 +353,10 @@ pub fn compile_page(doc: &Document, fonts: &dyn FontProvider, page_index: usize)
     let page_index_1based = page_index + 1;
     let is_recto = page_index_1based % 2 == 1;
     let mirror_margins = doc.mirror_margins.unwrap_or(false);
-    let live_area = compute_live_area(page, page_w, page_h, is_recto, mirror_margins);
+    // RTL book: the binding margin is mirrored to the opposite side (recto →
+    // inner-on-right). Matches the validator's `margin.rs` parity.
+    let rtl_book = doc.page_progression.as_deref() == Some("rtl");
+    let live_area = compute_live_area(page, page_w, page_h, is_recto, mirror_margins, rtl_book);
 
     // ── Step 7b: collect this page's footnote markers ────────────────────
     // Every `footnote` DIRECT child of the page is auto-numbered 1..N in source

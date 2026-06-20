@@ -7,7 +7,7 @@
 use std::sync::Arc;
 
 use zenith_core::{AssetKind, BytesAssetProvider, FontStyle, default_provider};
-use zenith_layout::{RustybuzzEngine, ShapeRequest, TextLayoutEngine};
+use zenith_layout::{RustybuzzEngine, ShapeRequest, TextDirection, TextLayoutEngine};
 use zenith_scene::{
     Color, FitMode, GradientPaint, GradientStop, ImageClip, Scene, SceneCommand, SceneGlyph,
     ShadowSpec,
@@ -204,6 +204,7 @@ fn glyph_run_draws_pixels() {
         weight: 400,
         style: FontStyle::Normal,
         font_size,
+        direction: TextDirection::Ltr,
     };
     let run = RustybuzzEngine::new()
         .shape(&req, &provider)
@@ -270,6 +271,7 @@ fn glyph_run_deterministic_png() {
         weight: 400,
         style: FontStyle::Normal,
         font_size,
+        direction: TextDirection::Ltr,
     };
     let run = RustybuzzEngine::new()
         .shape(&req, &provider)
@@ -821,6 +823,7 @@ fn glyph_run_clipped_to_subpage_clip() {
         weight: 400,
         style: FontStyle::Normal,
         font_size,
+        direction: TextDirection::Ltr,
     };
     let run = RustybuzzEngine::new()
         .shape(&req, &provider)

@@ -7,6 +7,21 @@ use zenith_core::{FontProvider, FontStyle};
 
 use crate::error::LayoutError;
 
+/// Base writing direction for a shaping request.
+///
+/// Controls the rustybuzz buffer direction so glyph advances and complex-script
+/// joining (e.g. Arabic) are correct. The DEFAULT is [`TextDirection::Ltr`], so
+/// a request that omits the field shapes exactly as before (byte-identical).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum TextDirection {
+    /// Left-to-right (the default).
+    #[default]
+    Ltr,
+    /// Right-to-left (Arabic, Hebrew, …). The shaper reorders glyphs to visual
+    /// order and applies RTL-correct joining.
+    Rtl,
+}
+
 /// A request to shape a run of text into positioned glyphs.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ShapeRequest<'a> {
@@ -20,6 +35,8 @@ pub struct ShapeRequest<'a> {
     pub style: FontStyle,
     /// Requested font size in pixels.
     pub font_size: f32,
+    /// Base writing direction. Defaults to [`TextDirection::Ltr`].
+    pub direction: TextDirection,
 }
 
 /// One positioned glyph, baseline-relative, measured from the run origin in pixels.

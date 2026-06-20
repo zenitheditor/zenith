@@ -50,7 +50,7 @@ use zenith_core::{
     Diagnostic, FontProvider, FontStyle, Node, PropertyValue, ResolvedToken, Style, TextNode,
     dim_to_px,
 };
-use zenith_layout::RustybuzzEngine;
+use zenith_layout::{RustybuzzEngine, TextDirection};
 
 use crate::ir::Color;
 
@@ -283,6 +283,13 @@ fn distribute_chains(
             continue;
         };
 
+        // Source writing direction drives RTL shaping for the whole chain (the
+        // per-member emit re-reads each member's own direction for line layout).
+        let direction = match src.direction.as_deref() {
+            Some("rtl") => TextDirection::Rtl,
+            _ => TextDirection::Ltr,
+        };
+
         // Shape the source spans ONCE into word tokens with the shared style.
         let (families, font_size, base_weight, spans) =
             resolve_chain_style(src, resolved, style_map, fonts, diagnostics);
@@ -296,6 +303,7 @@ fn distribute_chains(
             diagnostics,
             &src.id,
             src.source_span,
+            direction,
         );
 
         // Opt-in hyphenation for the whole chain, read from the source node.
@@ -307,6 +315,7 @@ fn distribute_chains(
                 fonts,
                 families: &families,
                 hyphen: "-",
+                direction,
             })
         } else {
             None

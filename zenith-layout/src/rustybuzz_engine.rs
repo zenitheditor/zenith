@@ -5,7 +5,9 @@
 
 use zenith_core::FontProvider;
 
-use crate::engine::{PositionedGlyph, ShapeRequest, TextLayoutEngine, ZenithGlyphRun};
+use crate::engine::{
+    PositionedGlyph, ShapeRequest, TextDirection, TextLayoutEngine, ZenithGlyphRun,
+};
 use crate::error::LayoutError;
 
 /// HarfBuzz-port shaping engine backed by `rustybuzz` and `rustybuzz::ttf_parser`.
@@ -45,6 +47,7 @@ impl RustybuzzEngine {
         text: &str,
         font_id: String,
         font_size: f32,
+        direction: TextDirection,
     ) -> Result<ZenithGlyphRun, LayoutError> {
         // ── Compute pixel scale ───────────────────────────────────────────────
         // `units_per_em` comes from the `ttf_parser::Face` trait exposed by
@@ -69,7 +72,14 @@ impl RustybuzzEngine {
         // ── Shape the text ────────────────────────────────────────────────────
         let mut buffer = rustybuzz::UnicodeBuffer::new();
         buffer.push_str(text);
-        buffer.set_direction(rustybuzz::Direction::LeftToRight);
+        // RTL sets the buffer direction so rustybuzz reorders glyphs to visual
+        // order and applies RTL-correct joining (Arabic, Hebrew). The run's
+        // advance + glyph pen positions stay left-to-right, so a word emitted
+        // at its left x renders correctly; LTR is the default (unchanged).
+        buffer.set_direction(match direction {
+            TextDirection::Ltr => rustybuzz::Direction::LeftToRight,
+            TextDirection::Rtl => rustybuzz::Direction::RightToLeft,
+        });
 
         // Shape with no extra features; deterministic across machines.
         let glyph_buffer = rustybuzz::shape(face, &[], buffer);
@@ -135,7 +145,7 @@ impl TextLayoutEngine for RustybuzzEngine {
             })?;
 
         // ── 3. Shape via the shared single-face helper ────────────────────────
-        Self::shape_run_with_face(&face, req.text, font_data.id, req.font_size)
+        Self::shape_run_with_face(&face, req.text, font_data.id, req.font_size, req.direction)
     }
 
     fn shape_with_fallback(
@@ -231,6 +241,7 @@ impl TextLayoutEngine for RustybuzzEngine {
                 req.text,
                 font_id.clone(),
                 req.font_size,
+                req.direction,
             )?]);
         }
 
@@ -238,6 +249,16 @@ impl TextLayoutEngine for RustybuzzEngine {
         // The all-primary case is exactly one segment at index 0 spanning the
         // whole text → a single run byte-identical to `shape`, because both
         // call `shape_run_with_face` with the same face, text, id, and size.
+        //
+        // Segments are itemized in LOGICAL (text) order. The returned runs are
+        // concatenated left-to-right by the caller, so for RTL the FIRST logical
+        // segment must sit rightmost: reverse the emission order. A single
+        // segment (the common all-primary case) is unaffected, and LTR keeps
+        // logical order — so both the LTR path and a single-run RTL word stay
+        // byte-identical.
+        if req.direction == TextDirection::Rtl {
+            segments.reverse();
+        }
         let mut runs: Vec<ZenithGlyphRun> = Vec::with_capacity(segments.len());
         for (idx, start, end) in segments {
             let (font_id, face) = faces.get(idx).ok_or_else(|| {
@@ -251,6 +272,7 @@ impl TextLayoutEngine for RustybuzzEngine {
                 sub_text,
                 font_id.clone(),
                 req.font_size,
+                req.direction,
             )?);
         }
 
@@ -276,6 +298,7 @@ mod tests {
             weight: 400,
             style: FontStyle::Normal,
             font_size,
+            direction: TextDirection::Ltr,
         };
         let provider = default_provider();
         RustybuzzEngine::new().shape(&req, &provider)
@@ -336,6 +359,7 @@ mod tests {
             weight: 400,
             style: FontStyle::Normal,
             font_size: 16.0,
+            direction: TextDirection::Ltr,
         };
         let provider = default_provider();
         let result = RustybuzzEngine::new().shape(&req, &provider);
@@ -358,6 +382,7 @@ mod tests {
             weight: 400,
             style: FontStyle::Normal,
             font_size: 24.0,
+            direction: TextDirection::Ltr,
         };
         let provider = default_provider();
         let engine = RustybuzzEngine::new();
@@ -389,6 +414,7 @@ mod tests {
             weight: 400,
             style: FontStyle::Normal,
             font_size: 16.0,
+            direction: TextDirection::Ltr,
         };
         let provider = default_provider();
         let engine = RustybuzzEngine::new();
@@ -415,6 +441,7 @@ mod tests {
             weight: 400,
             style: FontStyle::Normal,
             font_size: 16.0,
+            direction: TextDirection::Ltr,
         };
         let provider = default_provider();
         let result = RustybuzzEngine::new().shape_with_fallback(&req, &provider);
@@ -430,12 +457,81 @@ mod tests {
             weight: 400,
             style: FontStyle::Normal,
             font_size: 18.0,
+            direction: TextDirection::Ltr,
         };
         let provider = default_provider();
         let engine = RustybuzzEngine::new();
         let a = engine.shape_with_fallback(&req, &provider).expect("a");
         let b = engine.shape_with_fallback(&req, &provider).expect("b");
         assert_eq!(a, b, "fallback shaping must be deterministic");
+    }
+
+    #[test]
+    fn rtl_reverses_visual_glyph_order() {
+        // For a non-joining script (Latin), RTL shaping reorders glyphs to
+        // visual (right-to-left) order: the RTL glyph_id sequence is the reverse
+        // of the LTR one, while the total advance stays positive and equal.
+        let families = vec!["Noto Sans".to_string()];
+        let provider = default_provider();
+        let engine = RustybuzzEngine::new();
+
+        let ltr = engine
+            .shape(
+                &ShapeRequest {
+                    text: "ABC",
+                    families: &families,
+                    weight: 400,
+                    style: FontStyle::Normal,
+                    font_size: 24.0,
+                    direction: TextDirection::Ltr,
+                },
+                &provider,
+            )
+            .expect("ltr shape");
+        let rtl = engine
+            .shape(
+                &ShapeRequest {
+                    text: "ABC",
+                    families: &families,
+                    weight: 400,
+                    style: FontStyle::Normal,
+                    font_size: 24.0,
+                    direction: TextDirection::Rtl,
+                },
+                &provider,
+            )
+            .expect("rtl shape");
+
+        let ltr_ids: Vec<u16> = ltr.glyphs.iter().map(|g| g.glyph_id).collect();
+        let mut rtl_ids: Vec<u16> = rtl.glyphs.iter().map(|g| g.glyph_id).collect();
+        rtl_ids.reverse();
+        assert_eq!(
+            ltr_ids, rtl_ids,
+            "RTL glyph order must be the visual reverse of LTR"
+        );
+        assert!(rtl.advance_width > 0.0, "RTL advance must be positive");
+        assert!(
+            (rtl.advance_width - ltr.advance_width).abs() < 1e-3,
+            "RTL and LTR total advance must match"
+        );
+    }
+
+    #[test]
+    fn rtl_shaping_is_deterministic() {
+        let families = vec!["Noto Sans".to_string()];
+        let provider = default_provider();
+        let engine = RustybuzzEngine::new();
+        let req = ShapeRequest {
+            text: "Shalom",
+            families: &families,
+            weight: 400,
+            style: FontStyle::Normal,
+            font_size: 20.0,
+            direction: TextDirection::Rtl,
+        };
+        let a = engine.shape(&req, &provider).expect("a");
+        let b = engine.shape(&req, &provider).expect("b");
+        assert_eq!(a, b, "RTL shaping must be deterministic");
     }
 
     #[test]

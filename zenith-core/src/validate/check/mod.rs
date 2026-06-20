@@ -278,6 +278,9 @@ pub fn validate(doc: &Document) -> ValidationReport {
     // The page index is 1-based (recto = odd, verso = even) and threaded into
     // the margin advisory so it can pick the parity-correct live area.
     let mirror_margins = doc.mirror_margins.unwrap_or(false);
+    // RTL book: the binding is on the opposite side, mirroring the recto/verso
+    // live-area parity (see `margin::check_margins`).
+    let rtl_book = doc.page_progression.as_deref() == Some("rtl");
     for (page_idx0, page) in doc.body.pages.iter().enumerate() {
         let page_index_1based = page_idx0 + 1;
         register_id(&page.id, &mut seen_ids, &mut diagnostics);
@@ -450,6 +453,7 @@ pub fn validate(doc: &Document) -> ValidationReport {
                 page_h,
                 page_index_1based,
                 mirror_margins,
+                rtl_book,
                 &mut diagnostics,
             );
         }

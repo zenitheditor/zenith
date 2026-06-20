@@ -189,9 +189,11 @@ fn node_id(node: &Node) -> Option<&str> {
 /// Returns `None` unless all four margins (`inner`/`outer`/`top`/`bottom`)
 /// resolve to pixels — the same all-or-nothing gate the validator uses.
 ///
-/// recto (odd, 1-based): `live_x = margin_inner`; verso (even) with
+/// LTR book — recto (odd, 1-based): `live_x = margin_inner`; verso (even) with
 /// `mirror_margins`: `live_x = margin_outer`; otherwise `live_x = margin_inner`.
-/// `live_y = margin_top`, `live_w = page_w - inner - outer`,
+/// RTL book (`rtl == true`): the parity is MIRRORED — recto with `mirror_margins`
+/// → `live_x = margin_outer` (binding on the right), verso → `live_x =
+/// margin_inner`. `live_y = margin_top`, `live_w = page_w - inner - outer`,
 /// `live_h = page_h - top - bottom`.
 pub(super) fn compute_live_area(
     page: &zenith_core::Page,
@@ -199,6 +201,7 @@ pub(super) fn compute_live_area(
     page_h: f64,
     is_recto: bool,
     mirror_margins: bool,
+    rtl: bool,
 ) -> Option<(f64, f64, f64, f64)> {
     use zenith_core::dim_to_px;
     let inner_dim = page.margin_inner.as_ref()?;
@@ -211,8 +214,11 @@ pub(super) fn compute_live_area(
     let top = dim_to_px(top_dim.value, &top_dim.unit)?;
     let bottom = dim_to_px(bottom_dim.value, &bottom_dim.unit)?;
 
-    let left_inset = if mirror_margins && !is_recto {
-        // verso: binding (inner) is on the RIGHT, so OUTER insets the left edge.
+    // Inner (binding) is on the RIGHT for verso under LTR, and for recto under
+    // RTL (the spread is mirrored). When it is on the right, OUTER insets the
+    // left edge.
+    let inner_on_right = if rtl { is_recto } else { !is_recto };
+    let left_inset = if mirror_margins && inner_on_right {
         outer
     } else {
         inner
@@ -253,22 +259,44 @@ mod tests {
 
     #[test]
     fn live_area_recto_uses_inner_margin() {
-        // Recto (is_recto = true): left inset = margin_inner = 160.
-        let la = compute_live_area(&margined_page(), 1200.0, 1900.0, true, true);
+        // LTR recto (is_recto = true): left inset = margin_inner = 160.
+        let la = compute_live_area(&margined_page(), 1200.0, 1900.0, true, true, false);
         assert_eq!(la, Some((160.0, 80.0, 940.0, 1740.0)));
     }
 
     #[test]
     fn live_area_verso_mirrors_to_outer_margin() {
-        // Verso (is_recto = false) with mirror: left inset = margin_outer = 100.
-        let la = compute_live_area(&margined_page(), 1200.0, 1900.0, false, true);
+        // LTR verso (is_recto = false) with mirror: left inset = margin_outer = 100.
+        let la = compute_live_area(&margined_page(), 1200.0, 1900.0, false, true, false);
         assert_eq!(la, Some((100.0, 80.0, 940.0, 1740.0)));
     }
 
     #[test]
     fn live_area_unmirrored_verso_keeps_inner() {
         // Without mirroring, verso still uses inner as the left inset.
-        let la = compute_live_area(&margined_page(), 1200.0, 1900.0, false, false);
+        let la = compute_live_area(&margined_page(), 1200.0, 1900.0, false, false, false);
+        assert_eq!(la, Some((160.0, 80.0, 940.0, 1740.0)));
+    }
+
+    #[test]
+    fn live_area_rtl_recto_mirrors_to_outer_margin() {
+        // RTL recto: binding on the RIGHT, so left inset = margin_outer = 100
+        // (the mirror of the LTR recto). Width/top/bottom unchanged.
+        let la = compute_live_area(&margined_page(), 1200.0, 1900.0, true, true, true);
+        assert_eq!(la, Some((100.0, 80.0, 940.0, 1740.0)));
+    }
+
+    #[test]
+    fn live_area_rtl_verso_uses_inner_margin() {
+        // RTL verso: binding on the LEFT, so left inset = margin_inner = 160.
+        let la = compute_live_area(&margined_page(), 1200.0, 1900.0, false, true, true);
+        assert_eq!(la, Some((160.0, 80.0, 940.0, 1740.0)));
+    }
+
+    #[test]
+    fn live_area_rtl_unmirrored_keeps_inner() {
+        // Without mirroring, RTL recto still uses inner as the left inset.
+        let la = compute_live_area(&margined_page(), 1200.0, 1900.0, true, false, true);
         assert_eq!(la, Some((160.0, 80.0, 940.0, 1740.0)));
     }
 
@@ -277,7 +305,7 @@ mod tests {
         let mut page = margined_page();
         page.margin_bottom = None;
         assert_eq!(
-            compute_live_area(&page, 1200.0, 1900.0, true, true),
+            compute_live_area(&page, 1200.0, 1900.0, true, true, false),
             None,
             "an incomplete margin set yields no live area"
         );

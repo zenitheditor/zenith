@@ -3526,6 +3526,37 @@ fn margin_verso_parity_flips_inner_side() {
 }
 
 #[test]
+fn margin_rtl_parity_is_mirror_of_ltr() {
+    // page-progression="rtl" mirrors the spread: recto binding is on the RIGHT
+    // (left inset = outer = 150), verso binding on the LEFT (left inset = inner
+    // = 225) — the exact opposite of the LTR parity above. A rect at x=160:
+    //   - page 1 (recto, RTL): left inset = outer = 150 → 160 ≥ 150 → NO violation.
+    //   - page 2 (verso, RTL): left inset = inner = 225 → 160 < 225 → VIOLATION.
+    let recto_rect = rect_at("r.node", 160.0, 300.0, 400.0, 400.0);
+    let verso_rect = rect_at("v.node", 160.0, 300.0, 400.0, 400.0);
+    let mut doc = doc_with(
+        vec![],
+        vec![
+            book_page("page.recto", vec![recto_rect]),
+            book_page("page.verso", vec![verso_rect]),
+        ],
+    );
+    doc.mirror_margins = Some(true);
+    doc.page_progression = Some("rtl".to_owned());
+    let report = validate(&doc);
+    assert!(
+        !has_margin_violation_for(&report, "r.node"),
+        "RTL recto node at x=160 (≥ outer 150) must NOT violate (inner on right); got {:?}",
+        codes(&report)
+    );
+    assert!(
+        has_margin_violation_for(&report, "v.node"),
+        "RTL verso node at x=160 (< inner 225) must violate (inner on left); got {:?}",
+        codes(&report)
+    );
+}
+
+#[test]
 fn margin_guide_role_is_exempt() {
     // A node with role="guide" intentionally lives in the margins → exempt.
     let mut guide = rect_at("guide.line", 0.0, 300.0, 50.0, 50.0);
