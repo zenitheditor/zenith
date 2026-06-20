@@ -5896,6 +5896,99 @@ fn folio_renders_one_per_page_and_two_run_byte_identical() {
     }
 }
 
+/// The same book, but with `page-parity-start="verso"` so page 1 is a VERSO.
+const BOOK_SRC_VERSO_START: &str = r##"zenith version=1 mirror-margins=#true page-parity-start="verso" {
+  project id="proj.book" name="Book"
+  tokens format="zenith-token-v1" {
+token id="color.ink" type="color" value="#111111"
+  }
+  styles {}
+  masters {
+master id="m.body" {
+  field id="rh" type="running-head" recto="Chapter One: A Long Recto Title" verso="Verso" y=(px)80 h=(px)40 fill=(token)"color.ink"
+  field id="folio" type="page-number" y=(px)1820 h=(px)40 fill=(token)"color.ink"
+}
+  }
+  document id="doc.book" title="Book" {
+page id="p1" w=(px)1200 h=(px)1900 margin-inner=(px)160 margin-outer=(px)100 margin-top=(px)80 margin-bottom=(px)80 master="m.body" {
+  text id="b1" x=(px)160 y=(px)200 w=(px)900 h=(px)40 fill=(token)"color.ink" { span "Body one" }
+}
+page id="p2" w=(px)1200 h=(px)1900 margin-inner=(px)160 margin-outer=(px)100 margin-top=(px)80 margin-bottom=(px)80 master="m.body" {
+  text id="b2" x=(px)160 y=(px)200 w=(px)900 h=(px)40 fill=(token)"color.ink" { span "Body two" }
+}
+  }
+}
+"##;
+
+/// Find the running-head run's `(x, glyph_count)` on a compiled page (the run
+/// whose baseline sits just below y=80).
+fn running_head_x_and_glyphs(r: &CompileResult) -> Option<(f64, usize)> {
+    r.scene.commands.iter().find_map(|c| match c {
+        SceneCommand::DrawGlyphRun { x, y, glyphs, .. } if *y > 80.0 && *y < 130.0 => {
+            Some((*x, glyphs.len()))
+        }
+        _ => None,
+    })
+}
+
+/// With `page-parity-start="verso"`, page 1 (index 0) becomes a VERSO: its
+/// running head must show the VERSO text and its live-area left inset flips to
+/// the outer (100) margin — matching what page 2 shows in the default book.
+#[test]
+fn page_parity_start_verso_flips_page_one_running_head() {
+    let provider = default_provider();
+
+    // Default book: page 1 is recto (long "Chapter One…" text, inner=160 inset).
+    let default_doc = parse(BOOK_SRC);
+    let default_p1 = compile_page(&default_doc, &provider, 0);
+    let (_, default_p1_glyphs) =
+        running_head_x_and_glyphs(&default_p1).expect("default page 1 running head");
+
+    // verso-start book: page 1 is now a verso (short "Verso" text, outer=100 inset).
+    let verso_doc = parse(BOOK_SRC_VERSO_START);
+    let verso_p1 = compile_page(&verso_doc, &provider, 0);
+    let (_, verso_p1_glyphs) =
+        running_head_x_and_glyphs(&verso_p1).expect("verso-start page 1 running head");
+
+    assert_ne!(
+        default_p1_glyphs, verso_p1_glyphs,
+        "page-parity-start=verso must select the verso running-head text on page 1"
+    );
+
+    // The verso-start page 1 must match the DEFAULT page 2 (also a verso): same
+    // verso text glyph count.
+    let default_p2 = compile_page(&default_doc, &provider, 1);
+    let (_, default_p2_glyphs) =
+        running_head_x_and_glyphs(&default_p2).expect("default page 2 running head");
+    assert_eq!(
+        verso_p1_glyphs, default_p2_glyphs,
+        "verso-start page 1 must render the same verso text as a normal verso page"
+    );
+}
+
+/// An explicit per-page `parity="recto"` on page 1 of the verso-start book flips
+/// it back to recto — restoring the long recto running-head text.
+#[test]
+fn page_parity_override_recto_restores_page_one() {
+    let provider = default_provider();
+    let mut doc = parse(BOOK_SRC_VERSO_START);
+    // Force page 1 back to recto via the per-page override.
+    doc.body.pages[0].parity = Some("recto".to_owned());
+
+    let p1 = compile_page(&doc, &provider, 0);
+    let (_, p1_glyphs) = running_head_x_and_glyphs(&p1).expect("page 1 running head");
+
+    // Compare against the default book's page 1 (a recto): same long recto text.
+    let default_doc = parse(BOOK_SRC);
+    let default_p1 = compile_page(&default_doc, &provider, 0);
+    let (_, default_p1_glyphs) =
+        running_head_x_and_glyphs(&default_p1).expect("default page 1 running head");
+    assert_eq!(
+        p1_glyphs, default_p1_glyphs,
+        "explicit parity=recto must restore the recto running-head text on page 1"
+    );
+}
+
 #[test]
 fn inline_page_number_field_renders_folio_without_master() {
     // A field used directly in a page's children (not via a master) resolves

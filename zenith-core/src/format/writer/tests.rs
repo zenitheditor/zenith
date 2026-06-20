@@ -2184,3 +2184,48 @@ fn test_master_field_round_trip() {
         "masters + field must survive a format round-trip (spans excluded)"
     );
 }
+
+/// **Page parity attributes round-trip**: the document `page-parity-start` and a
+/// per-page `parity` override parse, format into canonical text, and survive
+/// parse → format → parse.
+#[test]
+fn test_page_parity_round_trip() {
+    let src = r##"zenith version=1 page-parity-start="verso" {
+  project id="proj.par" name="Parity"
+  tokens format="zenith-token-v1" {
+  }
+  styles {
+  }
+  document id="doc.par" title="Parity" {
+    page id="page.one" w=(px)1240 h=(px)1754 parity="recto" {
+    }
+    page id="page.two" w=(px)1240 h=(px)1754 {
+    }
+  }
+}
+"##;
+    let adapter = KdlAdapter;
+    let doc = adapter.parse(src.as_bytes()).expect("parse");
+
+    assert_eq!(doc.page_parity_start.as_deref(), Some("verso"));
+    assert_eq!(doc.body.pages[0].parity.as_deref(), Some("recto"));
+    assert_eq!(doc.body.pages[1].parity, None);
+
+    let formatted = format_document(&doc).expect("format");
+    let text = String::from_utf8(formatted).expect("utf8");
+    for needle in ["page-parity-start=\"verso\"", "parity=\"recto\""] {
+        assert!(
+            text.contains(needle),
+            "formatted output must carry `{needle}`; got:\n{text}"
+        );
+    }
+
+    let reparsed = adapter
+        .parse(text.as_bytes())
+        .expect("re-parse after format");
+    assert_eq!(
+        strip_spans(doc),
+        strip_spans(reparsed),
+        "page-parity-start + page parity must survive round-trip"
+    );
+}

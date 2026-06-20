@@ -351,7 +351,9 @@ pub fn compile_page(doc: &Document, fonts: &dyn FontProvider, page_index: usize)
     // even). The live area mirrors the validator's margin formula so an omitted
     // field x/w auto-mirrors recto/verso via the page margins.
     let page_index_1based = page_index + 1;
-    let is_recto = page_index_1based % 2 == 1;
+    // Single source of truth for parity (explicit page.parity > document
+    // page-parity-start > default index%2==1). Mirrors the validator.
+    let is_recto = doc.page_is_recto(page, page_index_1based);
     let mirror_margins = doc.mirror_margins.unwrap_or(false);
     // RTL book: the binding margin is mirrored to the opposite side (recto →
     // inner-on-right). Matches the validator's `margin.rs` parity.

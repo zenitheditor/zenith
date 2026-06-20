@@ -58,6 +58,7 @@ fn write_page(page: &Page, out: &mut String, depth: usize) {
     write_opt_dimension(out, "margin-outer", &page.margin_outer);
     write_opt_dimension(out, "margin-top", &page.margin_top);
     write_opt_dimension(out, "margin-bottom", &page.margin_bottom);
+    write_opt_str(out, "parity", &page.parity);
     write_opt_str(out, "master", &page.master);
 
     out.push_str(" {\n");

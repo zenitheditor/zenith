@@ -249,6 +249,7 @@ mod tests {
             margin_outer: Some(px(100.0)),
             margin_top: Some(px(80.0)),
             margin_bottom: Some(px(80.0)),
+            parity: None,
             master: None,
             safe_zones: Vec::new(),
             folds: Vec::new(),

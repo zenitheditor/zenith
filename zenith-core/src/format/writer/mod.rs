@@ -238,6 +238,7 @@ fn write_document(doc: &Document, out: &mut String) {
     write_opt_str(out, "colorspace", &doc.colorspace);
     write_opt_bool(out, "mirror-margins", &doc.mirror_margins);
     write_opt_str(out, "page-progression", &doc.page_progression);
+    write_opt_str(out, "page-parity-start", &doc.page_parity_start);
     out.push_str(" {\n");
 
     // Child order: project, assets, tokens, styles, document.

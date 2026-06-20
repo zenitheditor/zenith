@@ -49,7 +49,14 @@ struct LiveArea {
 }
 
 /// Resolve the parity-correct live area for `page`, given the page pixel
-/// dimensions, the 1-based page index, and the document mirror toggle.
+/// dimensions, the page's resolved recto/verso parity, and the document mirror
+/// toggle.
+///
+/// `is_recto` is the page's parity as resolved by
+/// [`Document::page_is_recto`](crate::ast::document::Document::page_is_recto) —
+/// the single source of truth (explicit `page.parity` > document
+/// `page-parity-start` > default `index % 2 == 1`). This function never
+/// recomputes parity from the page index.
 ///
 /// Returns `None` when any of the four margins is absent or resolves to a
 /// non-pixel (pct/deg/unknown) unit — the caller then skips the check (no
@@ -59,7 +66,7 @@ fn live_area(
     page: &Page,
     page_w: f64,
     page_h: f64,
-    page_index_1based: usize,
+    is_recto: bool,
     mirror_margins: bool,
     rtl: bool,
 ) -> Option<LiveArea> {
@@ -73,11 +80,11 @@ fn live_area(
     let top = dim_to_px(top_dim.value, &top_dim.unit)?;
     let bottom = dim_to_px(bottom_dim.value, &bottom_dim.unit)?;
 
-    // recto = odd (1-based); verso = even. For an LTR book the binding (inner)
-    // margin is on the LEFT for recto; for an RTL book (page-progression="rtl")
-    // the whole spread is mirrored, so the binding is on the RIGHT for recto.
-    // `inner_on_right` is then true for recto under RTL and for verso under LTR.
-    let is_recto = page_index_1based % 2 == 1;
+    // `is_recto` is the page's resolved parity (single source of truth). For an
+    // LTR book the binding (inner) margin is on the LEFT for recto; for an RTL
+    // book (page-progression="rtl") the whole spread is mirrored, so the binding
+    // is on the RIGHT for recto. `inner_on_right` is then true for recto under RTL
+    // and for verso under LTR.
     let inner_on_right = if rtl { is_recto } else { !is_recto };
     let left_inset = if mirror_margins && inner_on_right {
         // Binding (inner) is on the RIGHT, so the OUTER margin insets the left
@@ -98,7 +105,8 @@ fn live_area(
 
 /// Validate every direct page child against the page's parity-correct live area.
 ///
-/// `page_index_1based` is the page's position in `doc.body.pages` (1-based).
+/// `is_recto` is the page's resolved parity (from
+/// [`Document::page_is_recto`](crate::ast::document::Document::page_is_recto)).
 /// Deterministic: nodes are iterated in child order. Skipped when any margin is
 /// absent/unresolvable, and skipped per-node for `role="guide"` nodes.
 #[allow(clippy::too_many_arguments)]
@@ -106,22 +114,18 @@ pub(super) fn check_margins(
     page: &Page,
     page_w: f64,
     page_h: f64,
-    page_index_1based: usize,
+    is_recto: bool,
     mirror_margins: bool,
     rtl: bool,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
-    let Some(area) = live_area(page, page_w, page_h, page_index_1based, mirror_margins, rtl) else {
+    let Some(area) = live_area(page, page_w, page_h, is_recto, mirror_margins, rtl) else {
         // Some margin is absent or unresolvable — nothing to validate against.
         return;
     };
 
     const EPSILON: f64 = 0.5;
-    let parity = if page_index_1based % 2 == 1 {
-        "recto"
-    } else {
-        "verso"
-    };
+    let parity = if is_recto { "recto" } else { "verso" };
 
     for node in &page.children {
         // Guides intentionally live in the margins; exempt them.

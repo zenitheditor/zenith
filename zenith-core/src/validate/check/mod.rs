@@ -127,6 +127,27 @@ pub fn validate(doc: &Document) -> ValidationReport {
         ));
     }
 
+    // ── Document page-parity-start ────────────────────────────────────────
+    // `page_parity_start` selects whether page 1 is a recto (default) or a verso.
+    // Only "recto" and "verso" (case-insensitive) are recognized; any other value
+    // is a Warning (forward-compatible — never a hard error) and falls back to the
+    // default parity.
+    if let Some(pps) = &doc.page_parity_start
+        && !pps.eq_ignore_ascii_case("recto")
+        && !pps.eq_ignore_ascii_case("verso")
+    {
+        diagnostics.push(Diagnostic::warning(
+            "document.invalid_page_parity_start",
+            format!(
+                "document page-parity-start '{}' is unrecognized; expected \"recto\" \
+                 or \"verso\" (falling back to the default where page 1 is a recto)",
+                pps
+            ),
+            None,
+            None,
+        ));
+    }
+
     // ── Step 2: collect all IDs and gather referenced token ids ──────────
     // `seen_ids` accumulates every id encountered across the whole document.
     // When we encounter a duplicate we push `id.duplicate`.
@@ -284,6 +305,31 @@ pub fn validate(doc: &Document) -> ValidationReport {
     for (page_idx0, page) in doc.body.pages.iter().enumerate() {
         let page_index_1based = page_idx0 + 1;
         register_id(&page.id, &mut seen_ids, &mut diagnostics);
+
+        // ── Per-page parity override validity ─────────────────────────────
+        // `parity` forces this page's recto/verso. Only "recto"/"verso"
+        // (case-insensitive) are recognized; any other value is a Warning
+        // (forward-compatible — never a hard error) and falls back to the derived
+        // parity (an invalid value resolves to recto, see `Document::page_is_recto`).
+        if let Some(p) = &page.parity
+            && !p.eq_ignore_ascii_case("recto")
+            && !p.eq_ignore_ascii_case("verso")
+        {
+            diagnostics.push(Diagnostic::warning(
+                "page.invalid_parity",
+                format!(
+                    "page '{}': parity '{}' is unrecognized; expected \"recto\" or \
+                     \"verso\" (falling back to the derived page parity)",
+                    page.id, p
+                ),
+                page.source_span,
+                Some(page.id.clone()),
+            ));
+        }
+
+        // Single source of truth for this page's parity (drives the margin
+        // advisory's binding side + recto/verso label).
+        let is_recto = doc.page_is_recto(page, page_index_1based);
 
         // ── Master reference must resolve to a declared master ────────────
         if let Some(master_id) = &page.master
@@ -451,7 +497,7 @@ pub fn validate(doc: &Document) -> ValidationReport {
                 page,
                 page_w,
                 page_h,
-                page_index_1based,
+                is_recto,
                 mirror_margins,
                 rtl_book,
                 &mut diagnostics,

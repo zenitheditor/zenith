@@ -184,6 +184,7 @@ fn minimal_page(id: &str, children: Vec<Node>) -> Page {
         margin_outer: None,
         margin_top: None,
         margin_bottom: None,
+        parity: None,
         master: None,
         safe_zones: Vec::new(),
         folds: Vec::new(),
@@ -198,6 +199,7 @@ fn doc_with(tokens: Vec<Token>, pages: Vec<Page>) -> Document {
         colorspace: None,
         mirror_margins: None,
         page_progression: None,
+        page_parity_start: None,
         project: None,
         assets: AssetBlock::default(),
         tokens: TokenBlock {
@@ -531,6 +533,7 @@ fn page_unknown_unit_produces_invalid_geometry() {
             margin_outer: None,
             margin_top: None,
             margin_bottom: None,
+            parity: None,
             master: None,
             safe_zones: Vec::new(),
             folds: Vec::new(),
@@ -1484,6 +1487,7 @@ fn doc_with_assets(assets: Vec<AssetDecl>) -> Document {
         colorspace: None,
         mirror_margins: None,
         page_progression: None,
+        page_parity_start: None,
         project: None,
         assets: AssetBlock {
             assets,
@@ -2123,6 +2127,7 @@ fn doc_with_styles(tokens: Vec<Token>, styles: Vec<Style>, pages: Vec<Page>) -> 
         colorspace: None,
         mirror_margins: None,
         page_progression: None,
+        page_parity_start: None,
         project: None,
         assets: AssetBlock::default(),
         tokens: TokenBlock {
@@ -2401,6 +2406,7 @@ fn bounded_page(id: &str, w: f64, h: f64, children: Vec<Node>) -> Page {
         margin_outer: None,
         margin_top: None,
         margin_bottom: None,
+        parity: None,
         master: None,
         safe_zones: Vec::new(),
         folds: Vec::new(),
@@ -2581,6 +2587,7 @@ fn page_with_bg(id: &str, bg_token_id: &str, children: Vec<Node>) -> Page {
         margin_outer: None,
         margin_top: None,
         margin_bottom: None,
+        parity: None,
         master: None,
         safe_zones: Vec::new(),
         folds: Vec::new(),
@@ -2817,6 +2824,7 @@ fn page_with_zones(
         margin_outer: None,
         margin_top: None,
         margin_bottom: None,
+        parity: None,
         master: None,
         safe_zones,
         folds: Vec::new(),
@@ -3059,6 +3067,7 @@ fn page_with_folds(id: &str, w: f64, h: f64, folds: Vec<Fold>, children: Vec<Nod
         margin_outer: None,
         margin_top: None,
         margin_bottom: None,
+        parity: None,
         master: None,
         safe_zones: Vec::new(),
         folds,
@@ -3617,6 +3626,120 @@ fn page_progression_invalid_warns() {
     assert!(
         !report.has_errors(),
         "page-progression warning must not be a hard error"
+    );
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// page-parity-start / page parity warning tests
+// ══════════════════════════════════════════════════════════════════════
+
+#[test]
+fn page_parity_start_verso_is_valid() {
+    let mut doc = doc_with(vec![], vec![minimal_page("page.one", vec![])]);
+    doc.page_parity_start = Some("verso".to_owned());
+    let report = validate(&doc);
+    assert!(!has_code(&report, "document.invalid_page_parity_start"));
+    assert!(!report.has_errors());
+}
+
+#[test]
+fn page_parity_start_invalid_warns() {
+    let mut doc = doc_with(vec![], vec![minimal_page("page.one", vec![])]);
+    doc.page_parity_start = Some("sideways".to_owned());
+    let report = validate(&doc);
+    assert!(
+        has_code(&report, "document.invalid_page_parity_start"),
+        "an unrecognized page-parity-start must warn; got {:?}",
+        codes(&report)
+    );
+    assert!(
+        !report.has_errors(),
+        "page-parity-start warning must not be a hard error"
+    );
+}
+
+#[test]
+fn page_parity_override_valid_does_not_warn() {
+    let mut page = minimal_page("page.one", vec![]);
+    page.parity = Some("verso".to_owned());
+    let doc = doc_with(vec![], vec![page]);
+    let report = validate(&doc);
+    assert!(!has_code(&report, "page.invalid_parity"));
+    assert!(!report.has_errors());
+}
+
+#[test]
+fn page_parity_override_invalid_warns() {
+    let mut page = minimal_page("page.one", vec![]);
+    page.parity = Some("upside-down".to_owned());
+    let doc = doc_with(vec![], vec![page]);
+    let report = validate(&doc);
+    assert!(
+        has_code(&report, "page.invalid_parity"),
+        "an unrecognized per-page parity must warn; got {:?}",
+        codes(&report)
+    );
+    assert!(
+        !report.has_errors(),
+        "page parity warning must not be a hard error"
+    );
+}
+
+// ══════════════════════════════════════════════════════════════════════
+// Configurable parity drives the mirrored-margin live area
+// ══════════════════════════════════════════════════════════════════════
+
+/// With `mirror-margins`, `page-parity-start="verso"` makes page 1 a VERSO, so
+/// its binding (inner) margin moves to the right and the left inset becomes the
+/// OUTER margin — flipping the `margin.violation` advisory's named parity and
+/// live-area x relative to the default (page 1 = recto).
+#[test]
+fn page_parity_start_verso_flips_page_one_live_area() {
+    // book_page: inner=225, outer=150 on a 1240-wide page.
+    // Default (recto): live x = inner = 225. A node at x=160 crosses the LEFT.
+    // start=verso (page 1 = verso): live x = outer = 150. The SAME node at x=160
+    // is now INSIDE on the left, but a node at x=140 would cross.
+    let probe = rect_at("probe", 160.0, 300.0, 400.0, 400.0);
+
+    // Default: page 1 recto, inner=225 → node at 160 is left of the live area.
+    let mut doc_default = doc_with(vec![], vec![book_page("p1", vec![probe.clone()])]);
+    doc_default.mirror_margins = Some(true);
+    let report_default = validate(&doc_default);
+    assert!(
+        has_margin_violation_for(&report_default, "probe"),
+        "recto page-1 default: node at x=160 must violate the inner(225) live edge; got {:?}",
+        codes(&report_default)
+    );
+
+    // start=verso: page 1 verso, outer=150 → node at 160 is now inside on the left.
+    let mut doc_verso = doc_with(vec![], vec![book_page("p1", vec![probe.clone()])]);
+    doc_verso.mirror_margins = Some(true);
+    doc_verso.page_parity_start = Some("verso".to_owned());
+    let report_verso = validate(&doc_verso);
+    assert!(
+        !has_margin_violation_for(&report_verso, "probe"),
+        "verso page-1: node at x=160 must sit inside the outer(150) live edge; got {:?}",
+        codes(&report_verso)
+    );
+}
+
+/// An explicit per-page `parity="recto"` override flips a page back even when
+/// `page-parity-start="verso"` would otherwise make it a verso.
+#[test]
+fn page_parity_override_flips_one_page_live_area() {
+    let probe = rect_at("probe", 160.0, 300.0, 400.0, 400.0);
+
+    let mut page = book_page("p1", vec![probe]);
+    page.parity = Some("recto".to_owned());
+    let mut doc = doc_with(vec![], vec![page]);
+    doc.mirror_margins = Some(true);
+    doc.page_parity_start = Some("verso".to_owned());
+    let report = validate(&doc);
+    // Override forces recto → inner=225 live edge → node at x=160 violates again.
+    assert!(
+        has_margin_violation_for(&report, "probe"),
+        "explicit parity=recto must restore the inner(225) live edge; got {:?}",
+        codes(&report)
     );
 }
 

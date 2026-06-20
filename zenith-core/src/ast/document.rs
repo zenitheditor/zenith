@@ -62,6 +62,14 @@ pub struct Page {
     /// print). These are non-printing page metadata, not rendering nodes; the
     /// validator advises when content crosses a fold line.
     pub folds: Vec<Fold>,
+    /// Optional explicit recto/verso parity OVERRIDE for this page. `Some("recto")`
+    /// or `Some("verso")` forces this page's parity regardless of its 1-based
+    /// position and the document `page_parity_start`. `None` (default) → parity is
+    /// derived from the page position and the document start parity. An invalid
+    /// value is preserved verbatim and surfaced as a validation warning
+    /// (`page.invalid_parity`); it then falls through to the derived parity. See
+    /// [`Document::page_is_recto`].
+    pub parity: Option<String>,
     /// Optional master-page reference. When `Some(id)` names a declared
     /// [`MasterDef`], the master's nodes (running heads, folios, TOC refs) are
     /// projected UNDER this page's own children at compile time — the master's
@@ -193,6 +201,15 @@ pub struct Document {
     /// order or PNG output. An invalid value is preserved verbatim and surfaced
     /// as a validation warning.
     pub page_progression: Option<String>,
+    /// Declared STARTING parity for page 1: `Some("recto")` (default behavior) or
+    /// `Some("verso")` (page 1 is a verso, shifting the whole recto/verso sequence
+    /// by one). `None` when the author omitted the attribute — page 1 is then a
+    /// recto, exactly as before. An invalid value is preserved verbatim and
+    /// surfaced as a validation warning (`document.invalid_page_parity_start`); it
+    /// then falls through to the default (page 1 = recto). This drives the
+    /// mirrored-margin binding side and the master/field running-head recto/verso
+    /// selection via [`Document::page_is_recto`].
+    pub page_parity_start: Option<String>,
     pub project: Option<Project>,
     /// Asset declarations; empty when the `assets` block is absent.
     pub assets: AssetBlock,
@@ -205,4 +222,163 @@ pub struct Document {
     /// absent. Projected onto pages via [`Page::master`].
     pub masters: Vec<MasterDef>,
     pub body: DocumentBody,
+}
+
+impl Document {
+    /// True when the given page (at its 1-based position in document order) is a
+    /// recto (right-hand) page; false for a verso (left-hand) page. This is the
+    /// SINGLE source of truth for page parity across the workspace (mirrored
+    /// margins + master/field running-head selection).
+    ///
+    /// Precedence (highest first):
+    /// 1. An explicit per-page [`Page::parity`] override (`"recto"`/`"verso"`).
+    ///    Any value other than `"verso"` (case-insensitive) — including an
+    ///    invalid one — is treated as recto, matching the validator's
+    ///    forward-compatible warning behavior.
+    /// 2. The document [`Document::page_parity_start`] offset: `"verso"`
+    ///    (case-insensitive) makes page 1 a verso and shifts the whole sequence
+    ///    by one; any other / absent value keeps the default.
+    /// 3. Default: page 1 is a recto — `page_index_1based % 2 == 1`, exactly the
+    ///    pre-feature behavior. With no parity attributes this returns
+    ///    `index % 2 == 1` byte-identically.
+    ///
+    /// Pure and deterministic.
+    pub fn page_is_recto(&self, page: &Page, page_index_1based: usize) -> bool {
+        if let Some(p) = page.parity.as_deref() {
+            // Explicit per-page override: "verso" → verso, anything else → recto.
+            return !p.eq_ignore_ascii_case("verso");
+        }
+        let base_recto = page_index_1based % 2 == 1;
+        match self.page_parity_start.as_deref() {
+            Some(s) if s.eq_ignore_ascii_case("verso") => !base_recto,
+            _ => base_recto,
+        }
+    }
+}
+
+#[cfg(test)]
+mod parity_tests {
+    use super::*;
+    use crate::ast::value::Dimension;
+    use crate::ast::value::Unit;
+
+    fn px(v: f64) -> Dimension {
+        Dimension {
+            value: v,
+            unit: Unit::Px,
+        }
+    }
+
+    fn page(id: &str, parity: Option<&str>) -> Page {
+        Page {
+            id: id.to_owned(),
+            name: None,
+            width: px(100.0),
+            height: px(100.0),
+            background: None,
+            bleed: None,
+            margin_inner: None,
+            margin_outer: None,
+            margin_top: None,
+            margin_bottom: None,
+            parity: parity.map(str::to_owned),
+            master: None,
+            safe_zones: Vec::new(),
+            folds: Vec::new(),
+            children: Vec::new(),
+            source_span: None,
+        }
+    }
+
+    fn doc(start: Option<&str>) -> Document {
+        Document {
+            version: 1,
+            colorspace: None,
+            mirror_margins: None,
+            page_progression: None,
+            page_parity_start: start.map(str::to_owned),
+            project: None,
+            assets: AssetBlock::default(),
+            tokens: TokenBlock::default(),
+            styles: StyleBlock::default(),
+            components: Vec::new(),
+            masters: Vec::new(),
+            body: DocumentBody {
+                id: "body".to_owned(),
+                title: None,
+                pages: Vec::new(),
+            },
+        }
+    }
+
+    #[test]
+    fn default_page_one_recto_page_two_verso() {
+        let d = doc(None);
+        assert!(d.page_is_recto(&page("p1", None), 1), "page 1 is recto");
+        assert!(!d.page_is_recto(&page("p2", None), 2), "page 2 is verso");
+        assert!(d.page_is_recto(&page("p3", None), 3), "page 3 is recto");
+    }
+
+    #[test]
+    fn start_verso_flips_the_sequence() {
+        let d = doc(Some("verso"));
+        assert!(!d.page_is_recto(&page("p1", None), 1), "page 1 is verso");
+        assert!(d.page_is_recto(&page("p2", None), 2), "page 2 is recto");
+    }
+
+    #[test]
+    fn start_recto_matches_default() {
+        let d = doc(Some("recto"));
+        assert!(d.page_is_recto(&page("p1", None), 1));
+        assert!(!d.page_is_recto(&page("p2", None), 2));
+    }
+
+    #[test]
+    fn page_override_verso_wins_over_start() {
+        // Default start (recto), but page 1 forced to verso.
+        let d = doc(None);
+        assert!(!d.page_is_recto(&page("p1", Some("verso")), 1));
+        // Even with start=verso, an explicit recto on page 1 forces recto.
+        let d2 = doc(Some("verso"));
+        assert!(d2.page_is_recto(&page("p1", Some("recto")), 1));
+    }
+
+    #[test]
+    fn page_override_recto_on_even_page() {
+        let d = doc(None);
+        assert!(
+            d.page_is_recto(&page("p2", Some("recto")), 2),
+            "page 2 forced recto"
+        );
+    }
+
+    #[test]
+    fn invalid_start_falls_back_to_default() {
+        let d = doc(Some("sideways"));
+        assert!(d.page_is_recto(&page("p1", None), 1), "page 1 stays recto");
+        assert!(!d.page_is_recto(&page("p2", None), 2));
+    }
+
+    #[test]
+    fn invalid_page_parity_treated_as_recto() {
+        let d = doc(None);
+        assert!(
+            d.page_is_recto(&page("p2", Some("nonsense")), 2),
+            "an invalid override is treated as recto"
+        );
+    }
+
+    #[test]
+    fn default_is_byte_identical_to_index_parity() {
+        // The regression guard: with no parity attrs anywhere, page_is_recto MUST
+        // equal `index % 2 == 1` for every index.
+        let d = doc(None);
+        for idx in 1..=64usize {
+            assert_eq!(
+                d.page_is_recto(&page("p", None), idx),
+                idx % 2 == 1,
+                "default parity must equal index%2==1 at index {idx}"
+            );
+        }
+    }
 }

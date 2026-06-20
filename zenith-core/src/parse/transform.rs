@@ -346,6 +346,14 @@ pub fn transform(doc: &KdlDocument) -> Result<Document, ParseError> {
         .or_else(|| optional_string_prop(zenith_node, "page_progression"))
         .map(str::to_owned);
 
+    // Optional starting-parity attribute (`page-parity-start="verso"`). Value
+    // validity ("recto"|"verso") is checked by the validator, not the parser, so
+    // an unrecognized value is preserved verbatim for a precise warning. Both the
+    // hyphenated and underscored spellings are accepted for forward-compat.
+    let page_parity_start = optional_string_prop(zenith_node, "page-parity-start")
+        .or_else(|| optional_string_prop(zenith_node, "page_parity_start"))
+        .map(str::to_owned);
+
     let children_doc = zenith_node.children().ok_or_else(|| {
         ParseError::spanless(
             ParseErrorCode::MissingZenithRoot,
@@ -402,6 +410,7 @@ pub fn transform(doc: &KdlDocument) -> Result<Document, ParseError> {
         colorspace,
         mirror_margins,
         page_progression,
+        page_parity_start,
         project,
         assets,
         tokens,
@@ -924,6 +933,11 @@ fn transform_page(node: &KdlNode) -> Result<Page, ParseError> {
     let margin_bottom = optional_dimension_prop(node, "margin-bottom")
         .or_else(|| optional_dimension_prop(node, "margin_bottom"));
 
+    // Optional explicit per-page parity override (`parity="verso"`). Value
+    // validity ("recto"|"verso") is checked by the validator, not the parser, so
+    // an unrecognized value is preserved verbatim for a precise warning.
+    let parity = optional_string_prop(node, "parity").map(str::to_owned);
+
     // Optional master-page reference (`master="m.body"`). Existence is checked by
     // the validator (master.unknown_reference), never the parser.
     let master = optional_string_prop(node, "master").map(str::to_owned);
@@ -958,6 +972,7 @@ fn transform_page(node: &KdlNode) -> Result<Page, ParseError> {
         margin_outer,
         margin_top,
         margin_bottom,
+        parity,
         master,
         safe_zones,
         folds,
