@@ -299,6 +299,7 @@ fn write_rect(r: &RectNode, out: &mut String, depth: usize) {
     write_opt_str(out, "stroke-linecap", &r.stroke_linecap);
     write_opt_property_value(out, "shadow", &r.shadow);
     write_opt_str(out, "blend-mode", &r.blend_mode);
+    write_opt_dimension(out, "blur", &r.blur);
     write_opt_f64(out, "opacity", &r.opacity);
     write_opt_bool(out, "visible", &r.visible);
     write_opt_bool(out, "locked", &r.locked);
@@ -347,6 +348,7 @@ fn write_image(i: &ImageNode, out: &mut String, depth: usize) {
     write_opt_object_position(out, "object-position-y", &i.object_position_y);
     write_opt_property_value(out, "shadow", &i.shadow);
     write_opt_str(out, "blend-mode", &i.blend_mode);
+    write_opt_dimension(out, "blur", &i.blur);
     write_opt_f64(out, "opacity", &i.opacity);
     write_opt_bool(out, "visible", &i.visible);
     write_opt_bool(out, "locked", &i.locked);
@@ -390,6 +392,7 @@ fn write_ellipse(e: &EllipseNode, out: &mut String, depth: usize) {
     write_opt_str(out, "stroke-linecap", &e.stroke_linecap);
     write_opt_property_value(out, "shadow", &e.shadow);
     write_opt_str(out, "blend-mode", &e.blend_mode);
+    write_opt_dimension(out, "blur", &e.blur);
     write_opt_f64(out, "opacity", &e.opacity);
     write_opt_bool(out, "visible", &e.visible);
     write_opt_bool(out, "locked", &e.locked);
@@ -470,6 +473,7 @@ fn write_frame(f: &FrameNode, out: &mut String, depth: usize) {
     write_opt_bool(out, "locked", &f.locked);
     write_opt_dimension(out, "rotate", &f.rotate);
     write_opt_str(out, "blend-mode", &f.blend_mode);
+    write_opt_dimension(out, "blur", &f.blur);
     write_opt_str(out, "style", &f.style);
 
     // Unknown properties in sorted key order (BTreeMap iteration is sorted).
@@ -506,6 +510,7 @@ fn write_group(g: &GroupNode, out: &mut String, depth: usize) {
     write_opt_bool(out, "locked", &g.locked);
     write_opt_dimension(out, "rotate", &g.rotate);
     write_opt_str(out, "blend-mode", &g.blend_mode);
+    write_opt_dimension(out, "blur", &g.blur);
     write_opt_str(out, "style", &g.style);
 
     // Unknown properties in sorted key order (BTreeMap iteration is sorted).
@@ -552,6 +557,7 @@ fn write_text(t: &TextNode, out: &mut String, depth: usize) {
     write_opt_property_value(out, "font-weight", &t.font_weight);
     write_opt_property_value(out, "shadow", &t.shadow);
     write_opt_str(out, "blend-mode", &t.blend_mode);
+    write_opt_dimension(out, "blur", &t.blur);
     write_opt_f64(out, "opacity", &t.opacity);
     write_opt_bool(out, "visible", &t.visible);
     write_opt_bool(out, "locked", &t.locked);

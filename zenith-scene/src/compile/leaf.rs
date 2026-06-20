@@ -198,20 +198,29 @@ pub(super) fn compile_rect(
         });
     }
 
-    // SHADOW bracket (innermost of the rotation, behind fill+stroke).
-    // Only opened once we are committed to emitting the draws below; the
-    // matching EndShadow rides at the arm's single tail.
-    let has_shadow = match rect
-        .shadow
+    // BLUR / SHADOW bracket (innermost, behind fill+stroke). Blur wins over
+    // shadow when both are set: only one capture bracket is opened at a time.
+    let blur_sigma = rect
+        .blur
         .as_ref()
-        .and_then(|p| resolve_property_shadow(p, resolved, &rect.id))
-    {
-        Some(shadows) => {
-            commands.push(SceneCommand::BeginShadow { shadows });
-            true
-        }
-        None => false,
-    };
+        .and_then(|d| dim_to_px(d.value, &d.unit))
+        .filter(|&s| s > 0.0);
+    let has_blur = blur_sigma.is_some();
+    if let Some(sigma) = blur_sigma {
+        commands.push(SceneCommand::BeginBlur { radius: sigma });
+    }
+    let has_shadow = !has_blur
+        && match rect
+            .shadow
+            .as_ref()
+            .and_then(|p| resolve_property_shadow(p, resolved, &rect.id))
+        {
+            Some(shadows) => {
+                commands.push(SceneCommand::BeginShadow { shadows });
+                true
+            }
+            None => false,
+        };
 
     // FILL (emitted first, under the stroke) — node-local prop overrides
     // style cascade.
@@ -372,6 +381,9 @@ pub(super) fn compile_rect(
     if has_shadow {
         commands.push(SceneCommand::EndShadow);
     }
+    if has_blur {
+        commands.push(SceneCommand::EndBlur);
+    }
 
     if blend.is_some() {
         commands.push(SceneCommand::PopLayer);
@@ -497,19 +509,28 @@ pub(super) fn compile_ellipse(
         });
     }
 
-    // SHADOW bracket (behind fill+stroke). Opened only when committed to
-    // drawing; EndShadow rides at the arm's single tail.
-    let has_shadow = match ellipse
-        .shadow
+    // BLUR / SHADOW bracket (behind fill+stroke). Blur wins when both set.
+    let blur_sigma = ellipse
+        .blur
         .as_ref()
-        .and_then(|p| resolve_property_shadow(p, resolved, &ellipse.id))
-    {
-        Some(shadows) => {
-            commands.push(SceneCommand::BeginShadow { shadows });
-            true
-        }
-        None => false,
-    };
+        .and_then(|d| dim_to_px(d.value, &d.unit))
+        .filter(|&s| s > 0.0);
+    let has_blur = blur_sigma.is_some();
+    if let Some(sigma) = blur_sigma {
+        commands.push(SceneCommand::BeginBlur { radius: sigma });
+    }
+    let has_shadow = !has_blur
+        && match ellipse
+            .shadow
+            .as_ref()
+            .and_then(|p| resolve_property_shadow(p, resolved, &ellipse.id))
+        {
+            Some(shadows) => {
+                commands.push(SceneCommand::BeginShadow { shadows });
+                true
+            }
+            None => false,
+        };
 
     // FILL (emitted first, under the stroke) — node-local prop overrides
     // style cascade.
@@ -590,6 +611,9 @@ pub(super) fn compile_ellipse(
 
     if has_shadow {
         commands.push(SceneCommand::EndShadow);
+    }
+    if has_blur {
+        commands.push(SceneCommand::EndBlur);
     }
 
     if blend.is_some() {

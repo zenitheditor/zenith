@@ -484,6 +484,13 @@ fn emit_command(
         // shadow layers are skipped. Documented honest limitation.
         SceneCommand::BeginShadow { .. } => {}
         SceneCommand::EndShadow => {}
+
+        // ── Gaussian blur capture ─────────────────────────────────────────
+        // v0 limitation: per-element Gaussian blur has no vector PDF equivalent.
+        // The bracketed ink passes straight through and paints crisp; only the
+        // blur is skipped. Documented honest limitation.
+        SceneCommand::BeginBlur { .. } => {}
+        SceneCommand::EndBlur => {}
     }
 }
 

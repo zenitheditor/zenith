@@ -2112,3 +2112,135 @@ fn rect_without_blend_mode_emits_no_layer() {
         cmds
     );
 }
+
+// ── Element gaussian blur ─────────────────────────────────────────────
+
+/// A rect with `blur=(px)8` must emit a `BeginBlur { radius: 8.0 }` … `EndBlur`
+/// bracket around its fill/stroke draws. The radius must match exactly.
+#[test]
+fn rect_with_blur_emits_begin_end_bracket() {
+    let src = r##"zenith version=1 {
+  project id="proj.bl1" name="Bl1"
+  tokens format="zenith-token-v1" {
+    token id="color.fill" type="color" value="#445566"
+  }
+  styles {}
+  document id="doc.bl1" title="Bl1" {
+    page id="page.bl1" w=(px)200 h=(px)200 {
+      rect id="rect.bl" x=(px)10 y=(px)10 w=(px)80 h=(px)60 fill=(token)"color.fill" blur=(px)8
+    }
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+    let cmds = &result.scene.commands;
+
+    // Locate the BeginBlur and check the radius.
+    let radius = cmds.iter().find_map(|c| match c {
+        SceneCommand::BeginBlur { radius } => Some(*radius),
+        _ => None,
+    });
+    assert_eq!(radius, Some(8.0), "BeginBlur radius must be 8.0: {cmds:?}");
+
+    // Exactly one Begin and one End.
+    let begins = cmds
+        .iter()
+        .filter(|c| matches!(c, SceneCommand::BeginBlur { .. }))
+        .count();
+    let ends = cmds
+        .iter()
+        .filter(|c| matches!(c, SceneCommand::EndBlur))
+        .count();
+    assert_eq!(begins, 1, "exactly one BeginBlur: {cmds:?}");
+    assert_eq!(ends, 1, "exactly one EndBlur: {cmds:?}");
+
+    // Begin must precede End and a fill must sit between them.
+    let begin_idx = cmds
+        .iter()
+        .position(|c| matches!(c, SceneCommand::BeginBlur { .. }))
+        .expect("begin index");
+    let end_idx = cmds
+        .iter()
+        .position(|c| matches!(c, SceneCommand::EndBlur))
+        .expect("end index");
+    assert!(begin_idx < end_idx, "Begin must precede End");
+    let has_fill = cmds
+        .get(begin_idx + 1..end_idx)
+        .map(|w| w.iter().any(|c| matches!(c, SceneCommand::FillRect { .. })))
+        .unwrap_or(false);
+    assert!(
+        has_fill,
+        "a fill must sit inside the blur bracket: {cmds:?}"
+    );
+}
+
+/// A rect WITHOUT `blur` must emit no `BeginBlur`/`EndBlur` — the command
+/// stream is byte-identical to the pre-blur behavior.
+#[test]
+fn rect_without_blur_emits_no_blur_bracket() {
+    let src = r##"zenith version=1 {
+  project id="proj.bl2" name="Bl2"
+  tokens format="zenith-token-v1" {
+    token id="color.fill" type="color" value="#445566"
+  }
+  styles {}
+  document id="doc.bl2" title="Bl2" {
+    page id="page.bl2" w=(px)200 h=(px)200 {
+      rect id="rect.nb" x=(px)10 y=(px)10 w=(px)80 h=(px)60 fill=(token)"color.fill"
+    }
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+    let cmds = &result.scene.commands;
+    assert!(
+        !cmds
+            .iter()
+            .any(|c| matches!(c, SceneCommand::BeginBlur { .. } | SceneCommand::EndBlur)),
+        "no blur attribute → no blur bracket: {cmds:?}"
+    );
+}
+
+/// When both `blur` and `shadow` are set on the same rect, blur wins:
+/// only a `BeginBlur`/`EndBlur` bracket is emitted and NO
+/// `BeginShadow`/`EndShadow` appears in the stream.
+#[test]
+fn blur_wins_over_shadow_when_both_set() {
+    let src = r##"zenith version=1 {
+  project id="proj.bl3" name="Bl3"
+  tokens format="zenith-token-v1" {
+    token id="color.fill" type="color" value="#445566"
+    token id="color.sh" type="color" value="#000000"
+    token id="shadow.s" type="shadow" {
+      layer dx=(px)2 dy=(px)2 blur=(px)4 color=(token)"color.sh"
+    }
+  }
+  styles {}
+  document id="doc.bl3" title="Bl3" {
+    page id="page.bl3" w=(px)200 h=(px)200 {
+      rect id="rect.bs" x=(px)10 y=(px)10 w=(px)80 h=(px)60 fill=(token)"color.fill" shadow=(token)"shadow.s" blur=(px)6
+    }
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+    let cmds = &result.scene.commands;
+
+    // Blur bracket present.
+    assert!(
+        cmds.iter()
+            .any(|c| matches!(c, SceneCommand::BeginBlur { .. })),
+        "BeginBlur must be emitted when blur wins: {cmds:?}"
+    );
+    // Shadow bracket absent.
+    assert!(
+        !cmds.iter().any(|c| matches!(
+            c,
+            SceneCommand::BeginShadow { .. } | SceneCommand::EndShadow
+        )),
+        "BeginShadow must NOT be emitted when blur wins: {cmds:?}"
+    );
+}

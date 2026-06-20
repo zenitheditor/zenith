@@ -43,7 +43,7 @@ use paths::{
 };
 use pixels::{f64_to_px, premultiplied_to_straight};
 use raster::decode_raster_image;
-use shadow::composite_shadows;
+use shadow::{composite_shadows, gaussian_blur_premul};
 
 // ── TinySkiaBackend ───────────────────────────────────────────────────────────
 
@@ -114,11 +114,19 @@ impl RasterBackend for TinySkiaBackend {
         // system fonts — only the registered faces from `fonts`.
         let mut svg_fontdb: Option<resvg::usvg::fontdb::Database> = None;
 
-        // Active offscreen shadow capture: the target pixmap that buffers the
-        // ink of a shadowed leaf node, plus the pending shadow specs to paint at
-        // the matching EndShadow. `None` means draws target the real canvas.
-        // v0 shadows are leaf-only and never nest (at most one active capture).
-        let mut capture: Option<(Pixmap, Vec<ShadowSpec>)> = None;
+        // The effect type associated with an active offscreen capture. Either a
+        // shadow (blurred shadow layers composited behind the crisp ink) or a
+        // Gaussian blur (the ink itself blurred in place). At most one capture
+        // is active at a time (leaf-only, never nests).
+        enum CaptureEffect {
+            Shadow(Vec<ShadowSpec>),
+            Blur(f64),
+        }
+
+        // Active offscreen capture: the target pixmap that buffers the ink of
+        // a shadowed or blurred leaf node. `None` means draws target the real
+        // canvas.
+        let mut capture: Option<(Pixmap, CaptureEffect)> = None;
 
         // Active compositing layers. Each entry is a full-page offscreen pixmap
         // that buffers the ink of a blend-mode node (or its children), plus the
@@ -180,25 +188,53 @@ impl RasterBackend for TinySkiaBackend {
                     if capture.is_none()
                         && let Some(offscreen) = Pixmap::new(width, height)
                     {
-                        capture = Some((offscreen, shadows.clone()));
+                        capture = Some((offscreen, CaptureEffect::Shadow(shadows.clone())));
                     }
                     continue;
                 }
 
-                // Close the active capture: paint the blurred shadow layers onto
-                // the real canvas, then composite the crisp ink on top.
+                // Close the active shadow capture: paint the blurred shadow
+                // layers onto the current target, then composite the crisp ink.
                 SceneCommand::EndShadow => {
-                    if let Some((ink, shadows)) = capture.take() {
-                        // The shadow composites into whatever target lies beneath
-                        // it: the innermost active layer if any, else the canvas.
-                        // (Resolution mirrors the draw target's layer-vs-canvas
-                        // choice; the shadow capture itself is the inner target
-                        // while open, so it is excluded here.)
+                    if let Some((ink, CaptureEffect::Shadow(shadows))) = capture.take() {
                         let shadow_target = layer_stack
                             .last_mut()
                             .map(|(pm, _, _)| pm)
                             .unwrap_or(&mut pixmap);
                         composite_shadows(shadow_target, &ink, &shadows, width, height);
+                    }
+                    continue;
+                }
+
+                // Open an offscreen capture for a Gaussian-blurred element.
+                // Mirrors the BeginShadow guard: leaf-only, no nesting, silently
+                // falls back to crisp draw on allocation failure.
+                SceneCommand::BeginBlur { radius } => {
+                    if capture.is_none()
+                        && let Some(offscreen) = Pixmap::new(width, height)
+                    {
+                        capture = Some((offscreen, CaptureEffect::Blur(*radius)));
+                    }
+                    continue;
+                }
+
+                // Close the active blur capture: blur the ink in place, then
+                // composite it onto the current target (layer or canvas).
+                SceneCommand::EndBlur => {
+                    if let Some((mut ink, CaptureEffect::Blur(sigma))) = capture.take() {
+                        gaussian_blur_premul(&mut ink, sigma);
+                        let blur_target = layer_stack
+                            .last_mut()
+                            .map(|(pm, _, _)| pm)
+                            .unwrap_or(&mut pixmap);
+                        blur_target.draw_pixmap(
+                            0,
+                            0,
+                            ink.as_ref(),
+                            &PixmapPaint::default(),
+                            Transform::identity(),
+                            None,
+                        );
                     }
                     continue;
                 }

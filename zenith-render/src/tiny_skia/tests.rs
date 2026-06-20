@@ -1668,3 +1668,109 @@ fn no_layer_scene_unchanged() {
         .expect("rasterize must succeed");
     assert_eq!(pixel(&img.rgba, img.width, 2, 2), (255, 0, 0, 255));
 }
+
+// ── Element gaussian blur ─────────────────────────────────────────────────
+
+/// A `BeginBlur { radius: 6.0 }` wrapping a `FillRect`, closed by `EndBlur`,
+/// must render deterministically and produce a visually softer result:
+/// (i) the render does not panic, (ii) runs are byte-identical, (iii) the
+/// blurred image has non-zero alpha outside the original rect (spread), and
+/// (iv) the center of the blurred rect has reduced alpha compared with
+/// the unblurred version (the blur spreads the ink outward).
+#[test]
+fn begin_end_blur_renders_deterministically_and_softens_ink() {
+    let build = || {
+        let mut scene = Scene::new(60.0, 60.0);
+        scene.commands.push(SceneCommand::BeginBlur { radius: 6.0 });
+        scene.commands.push(SceneCommand::FillRect {
+            x: 20.0,
+            y: 20.0,
+            w: 20.0,
+            h: 20.0,
+            color: Color::srgb(255, 0, 0, 255),
+        });
+        scene.commands.push(SceneCommand::EndBlur);
+        scene
+    };
+
+    let build_crisp = || {
+        let mut scene = Scene::new(60.0, 60.0);
+        // Same rect but NO blur bracket.
+        scene.commands.push(SceneCommand::FillRect {
+            x: 20.0,
+            y: 20.0,
+            w: 20.0,
+            h: 20.0,
+            color: Color::srgb(255, 0, 0, 255),
+        });
+        scene
+    };
+
+    let backend = TinySkiaBackend;
+    let provider = default_provider();
+
+    let img1 = backend
+        .rasterize(&build(), &provider, &no_assets())
+        .expect("rasterize must not panic");
+    let img2 = backend
+        .rasterize(&build(), &provider, &no_assets())
+        .expect("rasterize must not panic (second run)");
+    let img_crisp = backend
+        .rasterize(&build_crisp(), &provider, &no_assets())
+        .expect("crisp rasterize must not panic");
+
+    // (i) + (ii) Determinism: two blurred runs must be byte-identical.
+    assert_eq!(
+        img1.rgba, img2.rgba,
+        "blur render must be byte-identical across runs"
+    );
+
+    // (iii) Spread: a pixel just outside the original rect (x=18, inside
+    // the blur radius) must have non-zero alpha.
+    let (_, _, _, spread_a) = pixel(&img1.rgba, img1.width, 18, 30);
+    assert!(
+        spread_a > 0,
+        "blur must spread ink outside the original rect: alpha at (18,30) = {spread_a}"
+    );
+
+    // (iv) Softening: the center of the blurred rect must have lower alpha
+    // than the crisp version (blur dilutes the peak density).
+    let (_, _, _, blurred_center_a) = pixel(&img1.rgba, img1.width, 30, 30);
+    let (_, _, _, crisp_center_a) = pixel(&img_crisp.rgba, img_crisp.width, 30, 30);
+    assert!(
+        blurred_center_a < crisp_center_a,
+        "blur must reduce peak alpha at the rect center: blurred={blurred_center_a} crisp={crisp_center_a}"
+    );
+}
+
+/// A scene with NO `BeginBlur`/`EndBlur` must produce output byte-identical
+/// to what it produced before blur was introduced (no regression for
+/// blur-free documents).
+#[test]
+fn no_blur_command_scene_is_byte_identical() {
+    // Two independently built scenes with no blur.
+    let build = || {
+        let mut scene = Scene::new(20.0, 20.0);
+        scene.commands.push(SceneCommand::FillRect {
+            x: 5.0,
+            y: 5.0,
+            w: 10.0,
+            h: 10.0,
+            color: Color::srgb(0, 128, 255, 200),
+        });
+        scene
+    };
+
+    let backend = TinySkiaBackend;
+    let provider = default_provider();
+    let img1 = backend
+        .rasterize(&build(), &provider, &no_assets())
+        .expect("rasterize");
+    let img2 = backend
+        .rasterize(&build(), &provider, &no_assets())
+        .expect("rasterize");
+    assert_eq!(
+        img1.rgba, img2.rgba,
+        "non-blur scene must be byte-identical"
+    );
+}

@@ -137,7 +137,7 @@ fn boxes_for_gauss(sigma: f64) -> [u32; 3] {
 /// (premultiplied blur is correct for source-over compositing). All indexing is
 /// bounds-guarded; arithmetic uses `u32` running sums with fixed rounding, so
 /// the result is byte-identical across runs.
-fn gaussian_blur_premul(pm: &mut Pixmap, sigma: f64) {
+pub(super) fn gaussian_blur_premul(pm: &mut Pixmap, sigma: f64) {
     // Non-positive or non-finite sigma → no blur (NaN-safe: the `> 0.0` test is
     // false for NaN, so we return early).
     if !(sigma.is_finite() && sigma > 0.0) {

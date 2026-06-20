@@ -147,19 +147,28 @@ pub(super) fn compile_image(
         });
     }
 
-    // SHADOW bracket (behind the image ink, inside the rotation). Opened only
-    // here, where the DrawImage below is guaranteed to follow.
-    let has_shadow = match image
-        .shadow
+    // BLUR / SHADOW bracket (behind the image ink). Blur wins over shadow.
+    let blur_sigma = image
+        .blur
         .as_ref()
-        .and_then(|p| resolve_property_shadow(p, resolved, &image.id))
-    {
-        Some(shadows) => {
-            commands.push(SceneCommand::BeginShadow { shadows });
-            true
-        }
-        None => false,
-    };
+        .and_then(|d| dim_to_px(d.value, &d.unit))
+        .filter(|&s| s > 0.0);
+    let has_blur = blur_sigma.is_some();
+    if let Some(sigma) = blur_sigma {
+        commands.push(SceneCommand::BeginBlur { radius: sigma });
+    }
+    let has_shadow = !has_blur
+        && match image
+            .shadow
+            .as_ref()
+            .and_then(|p| resolve_property_shadow(p, resolved, &image.id))
+        {
+            Some(shadows) => {
+                commands.push(SceneCommand::BeginShadow { shadows });
+                true
+            }
+            None => false,
+        };
 
     // Resolve the optional source sub-rectangle. All four dimensions must
     // resolve to px; if any present-but-unresolvable unit is encountered, push
@@ -213,6 +222,9 @@ pub(super) fn compile_image(
 
     if has_shadow {
         commands.push(SceneCommand::EndShadow);
+    }
+    if has_blur {
+        commands.push(SceneCommand::EndBlur);
     }
 
     if blend.is_some() {

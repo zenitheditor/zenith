@@ -262,7 +262,10 @@ pub(super) fn walk_node(
             {
                 diagnostics.push(Diagnostic::warning(
                     "node.unknown_property",
-                    format!("rect '{}': blend-mode '{bm}' is not a recognized value", r.id),
+                    format!(
+                        "rect '{}': blend-mode '{bm}' is not a recognized value",
+                        r.id
+                    ),
                     r.source_span,
                     Some(r.id.clone()),
                 ));
@@ -312,6 +315,16 @@ pub(super) fn walk_node(
                 resolved_tokens,
                 diagnostics,
             );
+            if let Some(d) = r.blur.as_ref()
+                && d.value < 0.0
+            {
+                diagnostics.push(Diagnostic::error(
+                    "node.invalid_geometry",
+                    format!("rect '{}': blur must be >= 0", r.id),
+                    r.source_span,
+                    Some(r.id.clone()),
+                ));
+            }
 
             // Unknown properties.
             for prop_name in r.unknown_props.keys() {
@@ -456,7 +469,10 @@ pub(super) fn walk_node(
             {
                 diagnostics.push(Diagnostic::warning(
                     "node.unknown_property",
-                    format!("ellipse '{}': blend-mode '{bm}' is not a recognized value", e.id),
+                    format!(
+                        "ellipse '{}': blend-mode '{bm}' is not a recognized value",
+                        e.id
+                    ),
                     e.source_span,
                     Some(e.id.clone()),
                 ));
@@ -492,6 +508,16 @@ pub(super) fn walk_node(
                 resolved_tokens,
                 diagnostics,
             );
+            if let Some(d) = e.blur.as_ref()
+                && d.value < 0.0
+            {
+                diagnostics.push(Diagnostic::error(
+                    "node.invalid_geometry",
+                    format!("ellipse '{}': blur must be >= 0", e.id),
+                    e.source_span,
+                    Some(e.id.clone()),
+                ));
+            }
 
             // Unknown properties.
             for prop_name in e.unknown_props.keys() {
@@ -619,7 +645,10 @@ pub(super) fn walk_node(
             {
                 diagnostics.push(Diagnostic::warning(
                     "node.unknown_property",
-                    format!("text '{}': blend-mode '{bm}' is not a recognized value", t.id),
+                    format!(
+                        "text '{}': blend-mode '{bm}' is not a recognized value",
+                        t.id
+                    ),
                     t.source_span,
                     Some(t.id.clone()),
                 ));
@@ -730,6 +759,16 @@ pub(super) fn walk_node(
                 resolved_tokens,
                 diagnostics,
             );
+            if let Some(d) = t.blur.as_ref()
+                && d.value < 0.0
+            {
+                diagnostics.push(Diagnostic::error(
+                    "node.invalid_geometry",
+                    format!("text '{}': blur must be >= 0", t.id),
+                    t.source_span,
+                    Some(t.id.clone()),
+                ));
+            }
 
             // Per-span visual properties. Spans inherit the node id as their
             // subject so token refs in `span ... fill=(token)".." font-weight=..`
@@ -894,7 +933,10 @@ pub(super) fn walk_node(
             {
                 diagnostics.push(Diagnostic::warning(
                     "node.unknown_property",
-                    format!("frame '{}': blend-mode '{bm}' is not a recognized value", f.id),
+                    format!(
+                        "frame '{}': blend-mode '{bm}' is not a recognized value",
+                        f.id
+                    ),
                     f.source_span,
                     Some(f.id.clone()),
                 ));
@@ -940,6 +982,17 @@ pub(super) fn walk_node(
                 f.source_span,
                 diagnostics,
             );
+
+            if let Some(d) = f.blur.as_ref()
+                && d.value < 0.0
+            {
+                diagnostics.push(Diagnostic::error(
+                    "node.invalid_geometry",
+                    format!("frame '{}': blur must be >= 0", f.id),
+                    f.source_span,
+                    Some(f.id.clone()),
+                ));
+            }
 
             // Grid layout advisory: `layout="grid"` without a positive `columns`
             // defaults the scene to a single column. Non-fatal.
@@ -1017,7 +1070,10 @@ pub(super) fn walk_node(
             {
                 diagnostics.push(Diagnostic::warning(
                     "node.unknown_property",
-                    format!("group '{}': blend-mode '{bm}' is not a recognized value", g.id),
+                    format!(
+                        "group '{}': blend-mode '{bm}' is not a recognized value",
+                        g.id
+                    ),
                     g.source_span,
                     Some(g.id.clone()),
                 ));
@@ -1031,6 +1087,17 @@ pub(super) fn walk_node(
             );
 
             // Groups have NO required geometry — x/y/w/h are all advisory.
+
+            if let Some(d) = g.blur.as_ref()
+                && d.value < 0.0
+            {
+                diagnostics.push(Diagnostic::error(
+                    "node.invalid_geometry",
+                    format!("group '{}': blur must be >= 0", g.id),
+                    g.source_span,
+                    Some(g.id.clone()),
+                ));
+            }
 
             // Unknown properties.
             for prop_name in g.unknown_props.keys() {
@@ -1078,7 +1145,10 @@ pub(super) fn walk_node(
             {
                 diagnostics.push(Diagnostic::warning(
                     "node.unknown_property",
-                    format!("image '{}': blend-mode '{bm}' is not a recognized value", img.id),
+                    format!(
+                        "image '{}': blend-mode '{bm}' is not a recognized value",
+                        img.id
+                    ),
                     img.source_span,
                     Some(img.id.clone()),
                 ));
@@ -1257,6 +1327,16 @@ pub(super) fn walk_node(
                 resolved_tokens,
                 diagnostics,
             );
+            if let Some(d) = img.blur.as_ref()
+                && d.value < 0.0
+            {
+                diagnostics.push(Diagnostic::error(
+                    "node.invalid_geometry",
+                    format!("image '{}': blur must be >= 0", img.id),
+                    img.source_span,
+                    Some(img.id.clone()),
+                ));
+            }
 
             // Unknown properties.
             for prop_name in img.unknown_props.keys() {

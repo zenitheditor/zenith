@@ -1160,21 +1160,32 @@ fn render_chain_member(
         });
     }
 
-    let has_shadow = if assignment.lines.is_empty() {
-        false
-    } else {
-        match text
-            .shadow
-            .as_ref()
-            .and_then(|p| resolve_property_shadow(p, resolved, &text.id))
-        {
-            Some(shadows) => {
-                commands.push(SceneCommand::BeginShadow { shadows });
-                true
+    // BLUR / SHADOW bracket (innermost). Blur wins over shadow when both set.
+    let blur_sigma = text
+        .blur
+        .as_ref()
+        .and_then(|d| dim_to_px(d.value, &d.unit))
+        .filter(|&s| s > 0.0);
+    let has_blur = blur_sigma.is_some() && !assignment.lines.is_empty();
+    if has_blur && let Some(sigma) = blur_sigma {
+        commands.push(SceneCommand::BeginBlur { radius: sigma });
+    }
+    let has_shadow = !has_blur
+        && if assignment.lines.is_empty() {
+            false
+        } else {
+            match text
+                .shadow
+                .as_ref()
+                .and_then(|p| resolve_property_shadow(p, resolved, &text.id))
+            {
+                Some(shadows) => {
+                    commands.push(SceneCommand::BeginShadow { shadows });
+                    true
+                }
+                None => false,
             }
-            None => false,
-        }
-    };
+        };
 
     // Honor the node's direction for line layout. The chain pre-pass shapes the
     // source's spans with the source direction (see [`super::chain`]); here the
@@ -1206,6 +1217,9 @@ fn render_chain_member(
 
     if has_shadow {
         commands.push(SceneCommand::EndShadow);
+    }
+    if has_blur {
+        commands.push(SceneCommand::EndBlur);
     }
 
     if blend.is_some() {
@@ -2381,24 +2395,32 @@ pub(super) fn compile_text_sized(
         });
     }
 
-    // SHADOW bracket (behind the glyph runs + decorations). Opened only
-    // when there is ink to draw (at least one shaped span); EndShadow
-    // rides at the arm's single tail, before any PopTransform.
-    let has_shadow = if shaped_spans.is_empty() {
-        false
-    } else {
-        match text
-            .shadow
-            .as_ref()
-            .and_then(|p| resolve_property_shadow(p, resolved, &text.id))
-        {
-            Some(shadows) => {
-                commands.push(SceneCommand::BeginShadow { shadows });
-                true
+    // BLUR / SHADOW bracket. Blur wins over shadow when both set.
+    let blur_sigma = text
+        .blur
+        .as_ref()
+        .and_then(|d| dim_to_px(d.value, &d.unit))
+        .filter(|&s| s > 0.0);
+    let has_blur = blur_sigma.is_some() && !shaped_spans.is_empty();
+    if has_blur && let Some(sigma) = blur_sigma {
+        commands.push(SceneCommand::BeginBlur { radius: sigma });
+    }
+    let has_shadow = !has_blur
+        && if shaped_spans.is_empty() {
+            false
+        } else {
+            match text
+                .shadow
+                .as_ref()
+                .and_then(|p| resolve_property_shadow(p, resolved, &text.id))
+            {
+                Some(shadows) => {
+                    commands.push(SceneCommand::BeginShadow { shadows });
+                    true
+                }
+                None => false,
             }
-            None => false,
-        }
-    };
+        };
 
     // Tracks actual line count after emit; set by whichever path runs.
     // Used solely by the overflow="fit" check below.
@@ -2784,8 +2806,7 @@ pub(super) fn compile_text_sized(
                                 resolve_property_color(fp, resolved, diagnostics, &text.id)
                             })
                             .unwrap_or(Color::srgb(0, 0, 0, 255));
-                        marker_color.a =
-                            (marker_color.a as f64 * color_opacity).round() as u8;
+                        marker_color.a = (marker_color.a as f64 * color_opacity).round() as u8;
 
                         // Shape the marker string at the node's resolved
                         // font/weight/size (mirror `shape_drop_cap`). Take only
@@ -3050,6 +3071,9 @@ pub(super) fn compile_text_sized(
 
     if has_shadow {
         commands.push(SceneCommand::EndShadow);
+    }
+    if has_blur {
+        commands.push(SceneCommand::EndBlur);
     }
 
     if blend.is_some() {

@@ -123,6 +123,10 @@ pub struct ImageNode {
     /// Compositing blend mode: `"normal"` (default) or one of the 11 separable
     /// blends. `None`/`"normal"` render source-over (byte-identical).
     pub blend_mode: Option<String>,
+    /// Gaussian blur radius applied to the node's own rendered ink (sigma in
+    /// the declared unit, resolved to pixels at compile time). `None` / 0 →
+    /// no blur (byte-identical to having no attribute).
+    pub blur: Option<Dimension>,
     pub visible: Option<bool>,
     pub locked: Option<bool>,
     pub rotate: Option<Dimension>,
@@ -168,6 +172,10 @@ pub struct RectNode {
     /// blends (`multiply`, `screen`, `overlay`, …). `None`/`"normal"` render
     /// source-over (byte-identical to having no blend).
     pub blend_mode: Option<String>,
+    /// Gaussian blur radius applied to the node's own rendered ink (sigma in
+    /// the declared unit, resolved to pixels at compile time). `None` / 0 →
+    /// no blur (byte-identical to having no attribute).
+    pub blur: Option<Dimension>,
     pub opacity: Option<f64>,
     pub visible: Option<bool>,
     pub locked: Option<bool>,
@@ -247,6 +255,10 @@ pub struct EllipseNode {
     /// Compositing blend mode: `"normal"` (default) or one of the 11 separable
     /// blends. `None`/`"normal"` render source-over (byte-identical).
     pub blend_mode: Option<String>,
+    /// Gaussian blur radius applied to the node's own rendered ink (sigma in
+    /// the declared unit, resolved to pixels at compile time). `None` / 0 →
+    /// no blur (byte-identical to having no attribute).
+    pub blur: Option<Dimension>,
     pub opacity: Option<f64>,
     pub visible: Option<bool>,
     pub locked: Option<bool>,
@@ -301,6 +313,10 @@ pub struct TextNode {
     /// Compositing blend mode: `"normal"` (default) or one of the 11 separable
     /// blends. `None`/`"normal"` render source-over (byte-identical).
     pub blend_mode: Option<String>,
+    /// Gaussian blur radius applied to the node's own rendered ink (sigma in
+    /// the declared unit, resolved to pixels at compile time). `None` / 0 →
+    /// no blur (byte-identical to having no attribute).
+    pub blur: Option<Dimension>,
     pub opacity: Option<f64>,
     pub visible: Option<bool>,
     pub locked: Option<bool>,
@@ -509,6 +525,10 @@ pub struct FrameNode {
     /// Compositing blend mode: `"normal"` (default) or one of the 11 separable
     /// blends. `None`/`"normal"` render source-over (byte-identical).
     pub blend_mode: Option<String>,
+    /// Gaussian blur radius applied to the node's own rendered ink (sigma in
+    /// the declared unit, resolved to pixels at compile time). `None` / 0 →
+    /// no blur (byte-identical to having no attribute).
+    pub blur: Option<Dimension>,
     pub style: Option<String>,
     /// Child nodes in source order.
     pub children: Vec<Node>,
@@ -549,6 +569,10 @@ pub struct GroupNode {
     /// Compositing blend mode: `"normal"` (default) or one of the 11 separable
     /// blends. `None`/`"normal"` render source-over (byte-identical).
     pub blend_mode: Option<String>,
+    /// Gaussian blur radius applied to the node's own rendered ink (sigma in
+    /// the declared unit, resolved to pixels at compile time). `None` / 0 →
+    /// no blur (byte-identical to having no attribute).
+    pub blur: Option<Dimension>,
     pub style: Option<String>,
     /// Child nodes in source order.
     pub children: Vec<Node>,

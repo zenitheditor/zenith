@@ -1112,6 +1112,7 @@ pub(super) fn apply_group(
         locked: None,
         rotate: None,
         blend_mode: None,
+        blur: None,
         style: None,
         children: group_children,
         source_span: None,

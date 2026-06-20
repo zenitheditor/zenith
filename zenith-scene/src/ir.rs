@@ -513,6 +513,14 @@ pub enum SceneCommand {
     /// Close the active shadow capture: paint the blurred shadow layers, then
     /// composite the captured ink on top.
     EndShadow,
+    // ── Gaussian blur capture ─────────────────────────────────────────────
+    /// Open an offscreen capture of the following draw commands and apply a
+    /// Gaussian blur with `radius` (sigma in pixels) to the captured ink at
+    /// [`SceneCommand::EndBlur`]. `radius == 0` is a no-op (no capture opened).
+    BeginBlur { radius: f64 },
+    /// Close the active blur capture: blur the captured ink in place, then
+    /// composite it onto the current target.
+    EndBlur,
 }
 
 // ── Scene glyph ───────────────────────────────────────────────────────────────

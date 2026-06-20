@@ -128,6 +128,18 @@ pub(super) fn compile_frame(
         None => ctx.opacity * frame_opacity,
     };
 
+    // BLUR bracket (inside blend, wrapping clip+children). Opened here so the
+    // entire frame ink (clip + composited children) is blurred as a unit.
+    let blur_sigma = frame
+        .blur
+        .as_ref()
+        .and_then(|d| dim_to_px(d.value, &d.unit))
+        .filter(|&s| s > 0.0);
+    let has_blur = blur_sigma.is_some();
+    if let Some(sigma) = blur_sigma {
+        commands.push(SceneCommand::BeginBlur { radius: sigma });
+    }
+
     // Clip rectangle is the frame's own bbox.
     commands.push(SceneCommand::PushClip {
         x: frame_x,
@@ -205,6 +217,10 @@ pub(super) fn compile_frame(
     }
 
     commands.push(SceneCommand::PopClip);
+
+    if has_blur {
+        commands.push(SceneCommand::EndBlur);
+    }
 
     if blend.is_some() {
         commands.push(SceneCommand::PopLayer);
@@ -657,6 +673,18 @@ pub(super) fn compile_group(
         });
     }
 
+    // BLUR bracket (inside blend, around all children). The entire group ink
+    // (all children composited) is blurred as a unit.
+    let blur_sigma = group
+        .blur
+        .as_ref()
+        .and_then(|d| dim_to_px(d.value, &d.unit))
+        .filter(|&s| s > 0.0);
+    let has_blur = blur_sigma.is_some();
+    if let Some(sigma) = blur_sigma {
+        commands.push(SceneCommand::BeginBlur { radius: sigma });
+    }
+
     // Emit children in source order; the group itself produces no command.
     let child_ctx = RenderCtx {
         opacity: child_opacity,
@@ -679,6 +707,10 @@ pub(super) fn compile_group(
             field_ctx,
             child_ctx,
         );
+    }
+
+    if has_blur {
+        commands.push(SceneCommand::EndBlur);
     }
 
     if blend.is_some() {
@@ -764,6 +796,7 @@ pub(super) fn compile_instance(
         locked: instance.locked,
         rotate: None,
         blend_mode: None,
+        blur: None,
         style: None,
         children,
         source_span: instance.source_span,
