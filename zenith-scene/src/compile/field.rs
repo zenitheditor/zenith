@@ -13,7 +13,7 @@
 
 use std::collections::BTreeMap;
 
-use zenith_core::{FieldNode, Node, TextNode, TextSpan};
+use zenith_core::{Document, FieldNode, Node, TextNode, TextSpan};
 
 use super::util::px;
 
@@ -49,6 +49,19 @@ pub(crate) struct FieldCtx<'a> {
     /// A `page-count` field resolves to this value as a decimal string (the "M"
     /// in a "Slide N of M" footer, where `page-number` supplies N).
     pub(super) total_pages: usize,
+    /// 0-based index of THIS page within its section (page 1 of the section → 0).
+    /// `None` when the page belongs to no declared section.
+    pub(super) section_page_index: Option<usize>,
+    /// Total page count of THIS page's section. `None` when no section.
+    pub(super) section_page_count: Option<usize>,
+    /// The section's `folio_start` (first folio number; defaults to 1 when the
+    /// section omits it). `None` when no section.
+    pub(super) section_folio_start: Option<usize>,
+    /// The section's folio numbering style ("decimal"/"lower-roman"/"upper-roman").
+    /// `None` when no section or the section omits it.
+    pub(super) section_folio_style: Option<&'a str>,
+    /// The section's display name (for a `section-name` field). `None` when no section.
+    pub(super) section_name: Option<&'a str>,
 }
 
 /// Resolve a [`FieldNode`] against the page context into a concrete single-line
@@ -71,7 +84,7 @@ pub(super) fn resolve_field_to_text(field: &FieldNode, ctx: &FieldCtx) -> Option
     // Suppress numeric fields on the first page when requested.
     let is_numeric_type = matches!(
         field.field_type.as_str(),
-        "page-number" | "page-count" | "page-ref"
+        "page-number" | "page-count" | "page-ref" | "section-page-number" | "section-page-count"
     );
     if field.suppress_first.is_some_and(|v| v) && ctx.page_index_1based == 1 && is_numeric_type {
         return None;
@@ -100,6 +113,28 @@ pub(super) fn resolve_field_to_text(field: &FieldNode, ctx: &FieldCtx) -> Option
             let target = field.target.as_deref()?;
             let idx = ctx.page_index_by_node_id.get(target)?;
             (format_folio(*idx, style), "start")
+        }
+        "section-page-number" => {
+            // Resolve a section-relative folio. Effective style: field's own
+            // folio_style beats the section's, which beats decimal.
+            let rel = ctx.section_page_index?;
+            let folio_n = ctx.section_folio_start.unwrap_or(1) + rel;
+            let effective_style = style.or(ctx.section_folio_style);
+            (format_folio(folio_n, effective_style), "center")
+        }
+        "section-page-count" => {
+            // Render the total page count of this page's section.
+            let n = ctx.section_page_count?;
+            let effective_style = style.or(ctx.section_folio_style);
+            (format_folio(n, effective_style), "center")
+        }
+        "section-name" => {
+            // Render the section's human-readable name.
+            let name = ctx.section_name?;
+            if name.is_empty() {
+                return None;
+            }
+            (name.to_owned(), "center")
         }
         // Unknown field type → render nothing (the validator warns separately).
         _ => return None,
@@ -166,6 +201,95 @@ pub(super) fn resolve_field_to_text(field: &FieldNode, ctx: &FieldCtx) -> Option
         source_span: field.source_span,
         unknown_props: BTreeMap::new(),
     })
+}
+
+/// Per-page section assignment: the section this page belongs to and its
+/// position within that section. `Copy` because all string data is borrowed
+/// from the source `Document` (whose lifetime outlives the whole compile).
+#[derive(Clone, Copy)]
+pub(super) struct SectionAssignment<'a> {
+    /// 0-based index of this page within its section.
+    pub(super) page_index_in_section: usize,
+    /// Total number of pages in this section.
+    pub(super) page_count: usize,
+    /// First folio number for this section (1 when the section omits it).
+    pub(super) folio_start: usize,
+    /// Folio style declared on the section (`None` defaults to decimal).
+    pub(super) folio_style: Option<&'a str>,
+    /// Human-readable section name.
+    pub(super) name: &'a str,
+}
+
+/// Build a per-page section-assignment vector for the document.
+///
+/// Returns a `Vec` with one entry per page (indexed by 0-based page index,
+/// same length as `doc.body.pages`). Each entry is `Some(SectionAssignment)`
+/// when the page falls within a declared section range, or `None` when it
+/// precedes the first section (or the document declares no sections).
+///
+/// Algorithm:
+/// 1. Build a `page id → 0-based page index` map.
+/// 2. Resolve each section's start page to an index (skip sections whose
+///    `start_page` id is not found — the validator already flags these).
+/// 3. Stable-sort the resolved sections by start index ascending.
+/// 4. Walk sorted sections to compute `[start, end)` ranges, where `end` is
+///    the next section's start (or `doc.body.pages.len()` for the last).
+/// 5. Fill the output vector: pages in a range get an assignment; pages before
+///    the first section start get `None`.
+pub(super) fn build_section_assignments(doc: &Document) -> Vec<Option<SectionAssignment<'_>>> {
+    let total_pages = doc.body.pages.len();
+
+    // Build page-id → 0-based index map (ordered for determinism).
+    let page_index_map: BTreeMap<&str, usize> = doc
+        .body
+        .pages
+        .iter()
+        .enumerate()
+        .map(|(i, p)| (p.id.as_str(), i))
+        .collect();
+
+    // Resolve sections to (start_index, &SectionDef), skipping unknowns.
+    let mut resolved: Vec<(usize, &zenith_core::SectionDef)> = doc
+        .sections
+        .iter()
+        .filter_map(|sec| {
+            let idx = page_index_map.get(sec.start_page.as_str()).copied()?;
+            Some((idx, sec))
+        })
+        .collect();
+
+    // Stable-sort by start index (ties keep declaration order).
+    resolved.sort_by_key(|(idx, _)| *idx);
+
+    // Pre-allocate output with all None.
+    let mut out: Vec<Option<SectionAssignment<'_>>> = vec![None; total_pages];
+
+    for (i, &(start_idx, sec)) in resolved.iter().enumerate() {
+        // end_idx: next section's start, or end of doc.
+        let end_idx = resolved
+            .get(i + 1)
+            .map(|(next_start, _)| *next_start)
+            .unwrap_or(total_pages);
+
+        let page_count = end_idx.saturating_sub(start_idx);
+        let folio_start = sec.folio_start.unwrap_or(1);
+        let folio_style = sec.folio_style.as_deref();
+        let name = sec.name.as_str();
+
+        for page_idx in start_idx..end_idx {
+            if let Some(slot) = out.get_mut(page_idx) {
+                *slot = Some(SectionAssignment {
+                    page_index_in_section: page_idx - start_idx,
+                    page_count,
+                    folio_start,
+                    folio_style,
+                    name,
+                });
+            }
+        }
+    }
+
+    out
 }
 
 /// Build the document-wide `node id → 1-based page index` map for `page-ref`
@@ -525,6 +649,11 @@ mod tests {
             footnote_markers: &markers,
             node_boxes: &boxes,
             total_pages: 5,
+            section_page_index: None,
+            section_page_count: None,
+            section_folio_start: None,
+            section_folio_style: None,
+            section_name: None,
         };
         let text = resolve_field_to_text(&page_count_field(), &ctx)
             .expect("a page-count field must resolve to a text node");
@@ -757,6 +886,11 @@ mod tests {
             footnote_markers: markers,
             node_boxes: boxes,
             total_pages: total,
+            section_page_index: None,
+            section_page_count: None,
+            section_folio_start: None,
+            section_folio_style: None,
+            section_name: None,
         }
     }
 
@@ -890,5 +1024,379 @@ mod tests {
         let text = resolve_field_to_text(&field, &ctx)
             .expect("suppress-first must NOT suppress running-head on page 1");
         assert_eq!(span_text(&text), "Chapter One");
+    }
+
+    // ── build_section_assignments ─────────────────────────────────────────────
+
+    /// Build a minimal Document with N pages and the provided sections.
+    ///
+    /// Pages are given sequential ids "p0", "p1", … "pN-1". The document body
+    /// id is "body". Sections are appended in declaration order.
+    fn doc_with_pages_and_sections(
+        page_count: usize,
+        sections: Vec<zenith_core::SectionDef>,
+    ) -> Document {
+        use zenith_core::{KdlAdapter, KdlSource};
+        // Parse a minimal valid skeleton (no pages) and then patch it.
+        let mut doc = KdlAdapter
+            .parse(b"zenith version=1 { document id=\"d\" { } }")
+            .expect("minimal test document must parse");
+        for i in 0..page_count {
+            doc.body.pages.push(zenith_core::Page {
+                id: format!("p{i}"),
+                name: None,
+                width: px(100.0),
+                height: px(100.0),
+                background: None,
+                bleed: None,
+                margin_inner: None,
+                margin_outer: None,
+                margin_top: None,
+                margin_bottom: None,
+                baseline_grid: None,
+                parity: None,
+                master: None,
+                safe_zones: Vec::new(),
+                folds: Vec::new(),
+                children: Vec::new(),
+                source_span: None,
+            });
+        }
+        doc.sections = sections;
+        doc
+    }
+
+    fn make_section(
+        id: &str,
+        name: &str,
+        start_page: &str,
+        folio_start: Option<usize>,
+        folio_style: Option<&str>,
+    ) -> zenith_core::SectionDef {
+        zenith_core::SectionDef {
+            id: id.to_owned(),
+            name: name.to_owned(),
+            folio_start,
+            folio_style: folio_style.map(str::to_owned),
+            start_page: start_page.to_owned(),
+            source_span: None,
+        }
+    }
+
+    #[test]
+    fn build_section_assignments_two_sections_five_pages() {
+        // front matter: pages 0–1 (ids "p0","p1"), body: pages 2–4 ("p2","p3","p4")
+        let doc = doc_with_pages_and_sections(
+            5,
+            vec![
+                make_section(
+                    "sec.front",
+                    "Front Matter",
+                    "p0",
+                    Some(1),
+                    Some("lower-roman"),
+                ),
+                make_section("sec.body", "Body", "p2", Some(1), None),
+            ],
+        );
+        let assignments = build_section_assignments(&doc);
+        assert_eq!(assignments.len(), 5);
+
+        // Front matter pages
+        let a0 = assignments[0].expect("p0 must have an assignment");
+        assert_eq!(a0.page_index_in_section, 0);
+        assert_eq!(a0.page_count, 2);
+        assert_eq!(a0.folio_start, 1);
+        assert_eq!(a0.folio_style, Some("lower-roman"));
+        assert_eq!(a0.name, "Front Matter");
+
+        let a1 = assignments[1].expect("p1 must have an assignment");
+        assert_eq!(a1.page_index_in_section, 1);
+        assert_eq!(a1.page_count, 2);
+        assert_eq!(a1.name, "Front Matter");
+
+        // Body pages
+        let a2 = assignments[2].expect("p2 must have an assignment");
+        assert_eq!(a2.page_index_in_section, 0);
+        assert_eq!(a2.page_count, 3);
+        assert_eq!(a2.folio_start, 1);
+        assert_eq!(a2.folio_style, None);
+        assert_eq!(a2.name, "Body");
+
+        let a4 = assignments[4].expect("p4 must have an assignment");
+        assert_eq!(a4.page_index_in_section, 2);
+        assert_eq!(a4.page_count, 3);
+    }
+
+    #[test]
+    fn build_section_assignments_page_before_first_section_is_none() {
+        // Section starts at p2; pages p0 and p1 are before it → None.
+        let doc = doc_with_pages_and_sections(
+            4,
+            vec![make_section("sec.body", "Body", "p2", None, None)],
+        );
+        let assignments = build_section_assignments(&doc);
+        assert!(assignments[0].is_none(), "p0 is before the first section");
+        assert!(assignments[1].is_none(), "p1 is before the first section");
+        assert!(assignments[2].is_some(), "p2 starts the section");
+        assert!(assignments[3].is_some(), "p3 is in the section");
+    }
+
+    #[test]
+    fn build_section_assignments_unknown_start_page_is_skipped() {
+        // A section referencing a non-existent page id must be silently ignored.
+        let doc = doc_with_pages_and_sections(
+            2,
+            vec![make_section("sec.x", "X", "no-such-page", None, None)],
+        );
+        let assignments = build_section_assignments(&doc);
+        assert!(assignments[0].is_none());
+        assert!(assignments[1].is_none());
+    }
+
+    // ── resolve_field_to_text: section-page-number ────────────────────────────
+
+    fn section_field(field_type: &str, folio_style: Option<&str>) -> FieldNode {
+        FieldNode {
+            id: "sf".to_owned(),
+            name: None,
+            role: None,
+            field_type: field_type.to_owned(),
+            recto: None,
+            verso: None,
+            target: None,
+            folio_style: folio_style.map(str::to_owned),
+            suppress_first: None,
+            x: None,
+            y: None,
+            w: None,
+            h: None,
+            style: None,
+            fill: None,
+            font_family: None,
+            font_size: None,
+            opacity: None,
+            visible: None,
+            locked: None,
+            source_span: None,
+            unknown_props: BTreeMap::new(),
+        }
+    }
+
+    fn ctx_with_section<'a>(
+        page_1based: usize,
+        total: usize,
+        by_id: &'a BTreeMap<String, usize>,
+        markers: &'a BTreeMap<String, String>,
+        boxes: &'a BTreeMap<String, (f64, f64, f64, f64)>,
+        section_page_index: Option<usize>,
+        section_page_count: Option<usize>,
+        section_folio_start: Option<usize>,
+        section_folio_style: Option<&'a str>,
+        section_name: Option<&'a str>,
+    ) -> FieldCtx<'a> {
+        FieldCtx {
+            page_index_1based: page_1based,
+            is_recto: page_1based % 2 == 1,
+            live_area: None,
+            page_index_by_node_id: by_id,
+            footnote_markers: markers,
+            node_boxes: boxes,
+            total_pages: total,
+            section_page_index,
+            section_page_count,
+            section_folio_start,
+            section_folio_style,
+            section_name,
+        }
+    }
+
+    #[test]
+    fn section_page_number_first_body_page_is_1() {
+        let (by_id, markers, boxes) = make_ctx();
+        // 3rd page overall (page_1based=3), first page of body section (rel=0),
+        // folio_start=1 → folio = 1+0 = 1 → "1"
+        let ctx = ctx_with_section(
+            3,
+            5,
+            &by_id,
+            &markers,
+            &boxes,
+            Some(0),
+            Some(3),
+            Some(1),
+            None,
+            Some("Body"),
+        );
+        let field = section_field("section-page-number", None);
+        let text = resolve_field_to_text(&field, &ctx)
+            .expect("section-page-number on first body page must resolve");
+        assert_eq!(span_text(&text), "1");
+    }
+
+    #[test]
+    fn section_page_number_front_matter_second_page_lower_roman() {
+        let (by_id, markers, boxes) = make_ctx();
+        // 2nd front-matter page (rel=1, folio_start=1): folio = 1+1 = 2 → "ii"
+        let ctx = ctx_with_section(
+            2,
+            5,
+            &by_id,
+            &markers,
+            &boxes,
+            Some(1),
+            Some(2),
+            Some(1),
+            Some("lower-roman"),
+            Some("Front"),
+        );
+        let field = section_field("section-page-number", None);
+        let text = resolve_field_to_text(&field, &ctx)
+            .expect("section-page-number with lower-roman must resolve");
+        assert_eq!(span_text(&text), "ii");
+    }
+
+    #[test]
+    fn section_page_number_field_folio_style_overrides_section() {
+        // Field-level folio_style="upper-roman" beats section style="lower-roman".
+        let (by_id, markers, boxes) = make_ctx();
+        let ctx = ctx_with_section(
+            2,
+            5,
+            &by_id,
+            &markers,
+            &boxes,
+            Some(1),
+            Some(2),
+            Some(1),
+            Some("lower-roman"),
+            Some("Front"),
+        );
+        let field = section_field("section-page-number", Some("upper-roman"));
+        let text =
+            resolve_field_to_text(&field, &ctx).expect("field folio_style override must resolve");
+        // folio = 1+1 = 2 → "II" (upper-roman)
+        assert_eq!(span_text(&text), "II");
+    }
+
+    #[test]
+    fn section_page_number_no_section_returns_none() {
+        let (by_id, markers, boxes) = make_ctx();
+        let ctx = ctx_with_section(1, 5, &by_id, &markers, &boxes, None, None, None, None, None);
+        let field = section_field("section-page-number", None);
+        assert!(
+            resolve_field_to_text(&field, &ctx).is_none(),
+            "section-page-number with no section must return None"
+        );
+    }
+
+    #[test]
+    fn section_page_count_returns_section_count() {
+        let (by_id, markers, boxes) = make_ctx();
+        let ctx = ctx_with_section(
+            3,
+            5,
+            &by_id,
+            &markers,
+            &boxes,
+            Some(0),
+            Some(3),
+            Some(1),
+            None,
+            Some("Body"),
+        );
+        let field = section_field("section-page-count", None);
+        let text = resolve_field_to_text(&field, &ctx).expect("section-page-count must resolve");
+        assert_eq!(span_text(&text), "3");
+    }
+
+    #[test]
+    fn section_page_count_no_section_returns_none() {
+        let (by_id, markers, boxes) = make_ctx();
+        let ctx = ctx_with_section(1, 5, &by_id, &markers, &boxes, None, None, None, None, None);
+        let field = section_field("section-page-count", None);
+        assert!(
+            resolve_field_to_text(&field, &ctx).is_none(),
+            "section-page-count with no section must return None"
+        );
+    }
+
+    #[test]
+    fn section_name_returns_name() {
+        let (by_id, markers, boxes) = make_ctx();
+        let ctx = ctx_with_section(
+            3,
+            5,
+            &by_id,
+            &markers,
+            &boxes,
+            Some(0),
+            Some(3),
+            Some(1),
+            None,
+            Some("Chapter One"),
+        );
+        let field = section_field("section-name", None);
+        let text = resolve_field_to_text(&field, &ctx).expect("section-name must resolve");
+        assert_eq!(span_text(&text), "Chapter One");
+    }
+
+    #[test]
+    fn section_name_empty_returns_none() {
+        let (by_id, markers, boxes) = make_ctx();
+        let ctx = ctx_with_section(
+            1,
+            5,
+            &by_id,
+            &markers,
+            &boxes,
+            Some(0),
+            Some(1),
+            Some(1),
+            None,
+            Some(""),
+        );
+        let field = section_field("section-name", None);
+        assert!(
+            resolve_field_to_text(&field, &ctx).is_none(),
+            "section-name with empty name must return None"
+        );
+    }
+
+    #[test]
+    fn section_name_no_section_returns_none() {
+        let (by_id, markers, boxes) = make_ctx();
+        let ctx = ctx_with_section(1, 5, &by_id, &markers, &boxes, None, None, None, None, None);
+        let field = section_field("section-name", None);
+        assert!(
+            resolve_field_to_text(&field, &ctx).is_none(),
+            "section-name with no section must return None"
+        );
+    }
+
+    #[test]
+    fn suppress_first_hides_section_page_number_on_page_1() {
+        let (by_id, markers, boxes) = make_ctx();
+        // Document page 1 is also section page 0 (first page of front matter).
+        let mut ctx = ctx_with_section(
+            1,
+            5,
+            &by_id,
+            &markers,
+            &boxes,
+            Some(0),
+            Some(2),
+            Some(1),
+            None,
+            Some("Front"),
+        );
+        // Use page_index_1based = 1 to trigger suppress_first.
+        ctx.page_index_1based = 1;
+        let mut field = section_field("section-page-number", None);
+        field.suppress_first = Some(true);
+        assert!(
+            resolve_field_to_text(&field, &ctx).is_none(),
+            "suppress-first=true on page 1 must suppress section-page-number"
+        );
     }
 }

@@ -23,9 +23,9 @@ pub use ast::{
     EllipseNode, FieldNode, FootnoteNode, FrameNode, GradientKind, GradientLiteral,
     GradientStopRef, GroupNode, ImageNode, InstanceNode, LineNode, MasterDef, Node, ObjectPosition,
     Override, Page, Point, PolygonNode, PolylineNode, Project, PropertyValue, RectNode,
-    STYLE_RECOGNIZED_KEYS, SafeZone, SafeZoneType, ShadowLayerRef, ShadowLiteral, Span, Style,
-    StyleBlock, TextNode, TextSpan, Token, TokenBlock, TokenLiteral, TokenType, TokenValue, Unit,
-    UnknownNode, UnknownProperty, UnknownStyleProp, UnknownValue, canonicalize_style_key,
+    STYLE_RECOGNIZED_KEYS, SafeZone, SafeZoneType, SectionDef, ShadowLayerRef, ShadowLiteral, Span,
+    Style, StyleBlock, TextNode, TextSpan, Token, TokenBlock, TokenLiteral, TokenType, TokenValue,
+    Unit, UnknownNode, UnknownProperty, UnknownStyleProp, UnknownValue, canonicalize_style_key,
     dim_to_px,
 };
 pub use color::{

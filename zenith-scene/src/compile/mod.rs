@@ -39,7 +39,8 @@ use crate::ir::{Rect, Scene, SceneCommand};
 use chain::{ChainAssignments, resolve_chains_document};
 use container::{compile_frame, compile_group, compile_instance};
 use field::{
-    FieldCtx, build_node_boxes, build_page_index_map, compute_live_area, resolve_field_to_text,
+    FieldCtx, build_node_boxes, build_page_index_map, build_section_assignments, compute_live_area,
+    resolve_field_to_text,
 };
 use image::compile_image;
 use leaf::{compile_ellipse, compile_line, compile_polygon, compile_polyline, compile_rect};
@@ -391,6 +392,14 @@ pub fn compile_page(doc: &Document, fonts: &dyn FontProvider, page_index: usize)
     // without `text-exclusion`).
     let node_boxes = build_node_boxes(page);
 
+    // ── Step 7d: compute section assignments (document-wide, one-shot) ───
+    // Precompute once (outside any inner loop — this is the single page compile
+    // entry point): maps each 0-based page index to its section assignment.
+    // The lifetime of the returned assignments is tied to `doc`, which outlives
+    // the compile function.
+    let section_assignments = build_section_assignments(doc);
+    let section_assign = section_assignments.get(page_index).and_then(|opt| *opt);
+
     let field_ctx = FieldCtx {
         page_index_1based,
         is_recto,
@@ -399,6 +408,11 @@ pub fn compile_page(doc: &Document, fonts: &dyn FontProvider, page_index: usize)
         footnote_markers: &footnote_markers,
         node_boxes: &node_boxes,
         total_pages: doc.body.pages.len(),
+        section_page_index: section_assign.map(|a| a.page_index_in_section),
+        section_page_count: section_assign.map(|a| a.page_count),
+        section_folio_start: section_assign.map(|a| a.folio_start),
+        section_folio_style: section_assign.and_then(|a| a.folio_style),
+        section_name: section_assign.map(|a| a.name),
     };
 
     // ── Resolve the page baseline grid ───────────────────────────────────
