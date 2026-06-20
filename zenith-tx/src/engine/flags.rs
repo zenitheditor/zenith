@@ -25,6 +25,9 @@ fn node_visible_mut(node: &mut Node) -> Option<&mut Option<bool>> {
         Node::Polyline(n) => Some(&mut n.visible),
         Node::Instance(n) => Some(&mut n.visible),
         Node::Field(n) => Some(&mut n.visible),
+        // A footnote has no `visible` flag (it is auto-numbered page furniture);
+        // set_visible honestly surfaces tx.unsupported_property.
+        Node::Footnote(_) => None,
         Node::Unknown(_) => None,
     }
 }
@@ -45,6 +48,8 @@ fn node_locked_mut(node: &mut Node) -> Option<&mut Option<bool>> {
         Node::Polyline(n) => Some(&mut n.locked),
         Node::Instance(n) => Some(&mut n.locked),
         Node::Field(n) => Some(&mut n.locked),
+        // A footnote has no `locked` flag.
+        Node::Footnote(_) => None,
         Node::Unknown(_) => None,
     }
 }

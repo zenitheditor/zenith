@@ -432,6 +432,12 @@ pub fn validate(doc: &Document) -> ValidationReport {
             );
         }
 
+        // ── Footnote-ref resolution (structural) ──────────────────────────
+        // Collect this page's footnote ids (direct children only — footnotes are
+        // page-level furniture) and check every text span's `footnote-ref`
+        // against that set. An unresolved ref → Warning `footnote.unresolved_ref`.
+        check_footnote_refs(page, &mut diagnostics);
+
         // ── Safe-zone advisories ──────────────────────────────────────────
         // Only run when the page dimensions resolved; zone/node geometry is
         // compared in the same pixel space the off_canvas check uses.
@@ -520,9 +526,66 @@ pub(super) fn collect_local_ids(children: &[crate::ast::node::Node], out: &mut H
             Node::Field(n) => {
                 out.insert(n.id.clone());
             }
+            Node::Footnote(n) => {
+                out.insert(n.id.clone());
+            }
             Node::Unknown(_) => {}
         }
     }
+}
+
+/// Check every text span's `footnote-ref` on `page` against the page's set of
+/// footnote ids (the ids of the `footnote` DIRECT children of the page).
+///
+/// A span whose `footnote-ref` names no footnote on this page → Warning
+/// `footnote.unresolved_ref`. Footnotes are page-level furniture (only direct
+/// page children count); spans are searched in every text node, descending into
+/// `frame`/`group` containers in source order (deterministic).
+fn check_footnote_refs(page: &crate::ast::document::Page, diagnostics: &mut Vec<Diagnostic>) {
+    use crate::ast::node::Node;
+
+    // Page-local footnote ids (direct children only).
+    let mut footnote_ids: HashSet<&str> = HashSet::new();
+    for child in &page.children {
+        if let Node::Footnote(fnote) = child {
+            footnote_ids.insert(fnote.id.as_str());
+        }
+    }
+
+    fn walk(
+        children: &[crate::ast::node::Node],
+        footnote_ids: &HashSet<&str>,
+        diagnostics: &mut Vec<Diagnostic>,
+    ) {
+        use crate::ast::node::Node;
+        for child in children {
+            match child {
+                Node::Text(t) => {
+                    for span in &t.spans {
+                        if let Some(fref) = &span.footnote_ref
+                            && !footnote_ids.contains(fref.as_str())
+                        {
+                            diagnostics.push(Diagnostic::warning(
+                                "footnote.unresolved_ref",
+                                format!(
+                                    "text '{}': span footnote-ref '{}' matches no footnote \
+                                     on this page",
+                                    t.id, fref
+                                ),
+                                t.source_span,
+                                Some(t.id.clone()),
+                            ));
+                        }
+                    }
+                }
+                Node::Frame(f) => walk(&f.children, footnote_ids, diagnostics),
+                Node::Group(g) => walk(&g.children, footnote_ids, diagnostics),
+                _ => {}
+            }
+        }
+    }
+
+    walk(&page.children, &footnote_ids, diagnostics);
 }
 
 /// Register a single id; push `id.duplicate` if already seen.

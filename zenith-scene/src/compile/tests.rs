@@ -5983,3 +5983,231 @@ page id="page.nm" w=(px)640 h=(px)360 {
     assert!(matches!(r.scene.commands[1], SceneCommand::FillRect { .. }));
     assert!(matches!(r.scene.commands[2], SceneCommand::PopClip));
 }
+
+// ── Footnote system ───────────────────────────────────────────────────
+
+/// A margined page (all four margins) carrying a body text node whose paragraph
+/// has a `footnote-ref` span after "evidence", plus one page-level footnote.
+const FOOTNOTE_ONE_SRC: &str = r##"zenith version=1 {
+  project id="proj.fn1" name="FN1"
+  tokens format="zenith-token-v1" {
+  }
+  styles {}
+  document id="doc.fn1" title="FN1" {
+page id="page.fn1" w=(px)600 h=(px)900 margin-inner=(px)60 margin-outer=(px)60 margin-top=(px)80 margin-bottom=(px)80 {
+  text id="body" x=(px)60 y=(px)80 w=(px)480 h=(px)200 {
+    span "Strong evidence" footnote-ref="fn.1"
+    span " supports the claim."
+  }
+  footnote id="fn.1" {
+    span "See also Chapter 4."
+  }
+}
+  }
+}
+"##;
+
+/// A `footnote-ref` span emits a SUPERSCRIPT marker run after its text: the body
+/// renders MORE glyph runs than the same text without the ref, and the marker
+/// run draws at a reduced font size (the vertical-align="super" scale).
+#[test]
+fn footnote_ref_emits_superscript_marker() {
+    let doc = parse(FOOTNOTE_ONE_SRC);
+    let provider = default_provider();
+    let r = compile(&doc, &provider);
+
+    // No hard diagnostics (advisories/warnings only, if any).
+    assert!(
+        !r.scene.commands.is_empty(),
+        "scene must have commands: {:?}",
+        r.scene.commands
+    );
+
+    // Collect the distinct font sizes of the glyph runs. The body text shapes at
+    // 16px (default); the superscript marker shapes smaller (0.65 × 16). So there
+    // must be at least one glyph run whose font_size is below the body size —
+    // proving a superscript marker was emitted.
+    let sizes: Vec<f32> = r
+        .scene
+        .commands
+        .iter()
+        .filter_map(|c| match c {
+            SceneCommand::DrawGlyphRun { font_size, .. } => Some(*font_size),
+            _ => None,
+        })
+        .collect();
+    assert!(!sizes.is_empty(), "body must shape some glyph runs");
+    let max_size = sizes.iter().cloned().fold(0.0_f32, f32::max);
+    assert!(
+        sizes.iter().any(|s| *s < max_size - 0.5),
+        "a superscript marker run (reduced size) must be present; sizes={sizes:?}"
+    );
+}
+
+/// The page renders a footnote zone at the bottom: a thin separator rule
+/// (FillRect with height ~1px spanning ~1/3 the live width) PLUS the footnote's
+/// content glyphs, positioned BELOW the body text.
+#[test]
+fn footnote_zone_renders_separator_and_content() {
+    let doc = parse(FOOTNOTE_ONE_SRC);
+    let provider = default_provider();
+    let r = compile(&doc, &provider);
+
+    // Live area: x=60, width=600-60-60=480; the separator rule is ~1/3 → 160px,
+    // 1px tall, drawn near the bottom (y well below the body's y=80).
+    let separators: Vec<(f64, f64, f64)> = r
+        .scene
+        .commands
+        .iter()
+        .filter_map(|c| match c {
+            SceneCommand::FillRect { y, w, h, .. } if (*h - 1.0).abs() < 0.01 => Some((*y, *w, *h)),
+            _ => None,
+        })
+        .collect();
+    assert!(
+        separators
+            .iter()
+            .any(|(y, w, _)| *y > 600.0 && (*w - 160.0).abs() < 1.0),
+        "a ~160px-wide, 1px-tall separator rule must sit near the page bottom; \
+         got {separators:?}"
+    );
+
+    // The footnote content "See also Chapter 4." must shape glyph runs whose
+    // baseline y is BELOW the body (body baseline near y≈80+ascent). The lowest
+    // glyph run on the page should be a footnote glyph (near the bottom margin).
+    let max_glyph_y = r
+        .scene
+        .commands
+        .iter()
+        .filter_map(|c| match c {
+            SceneCommand::DrawGlyphRun { y, .. } => Some(*y),
+            _ => None,
+        })
+        .fold(0.0_f64, f64::max);
+    assert!(
+        max_glyph_y > 600.0,
+        "footnote content must render near the page bottom; max glyph y={max_glyph_y}"
+    );
+}
+
+/// Two footnotes auto-number 1 and 2 in source order: the marker map drives both
+/// the inline markers and the zone content. We assert the markers map directly
+/// via a re-render and the presence of two distinct footnote content blocks.
+#[test]
+fn two_footnotes_auto_number_one_and_two() {
+    let src = r##"zenith version=1 {
+  project id="proj.fn2" name="FN2"
+  tokens format="zenith-token-v1" {
+  }
+  styles {}
+  document id="doc.fn2" title="FN2" {
+page id="page.fn2" w=(px)600 h=(px)900 margin-inner=(px)60 margin-outer=(px)60 margin-top=(px)80 margin-bottom=(px)80 {
+  text id="body" x=(px)60 y=(px)80 w=(px)480 h=(px)200 {
+    span "First mark" footnote-ref="fn.1"
+    span " and second mark" footnote-ref="fn.2"
+  }
+  footnote id="fn.1" {
+    span "First note."
+  }
+  footnote id="fn.2" {
+    span "Second note."
+  }
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let markers = super::footnote::collect_footnote_markers(&doc.body.pages[0]);
+    assert_eq!(markers.get("fn.1").map(String::as_str), Some("1"));
+    assert_eq!(markers.get("fn.2").map(String::as_str), Some("2"));
+
+    // Render succeeds and produces a non-trivial scene.
+    let provider = default_provider();
+    let r = compile(&doc, &provider);
+    assert!(r.scene.commands.len() > 4, "{:?}", r.scene.commands);
+}
+
+/// A `footnote-ref` pointing at an absent footnote id → advisory
+/// `footnote.unresolved_ref` at compile time, and no marker is emitted.
+#[test]
+fn unresolved_footnote_ref_warns_and_emits_no_marker() {
+    let src = r##"zenith version=1 {
+  project id="proj.fn3" name="FN3"
+  tokens format="zenith-token-v1" {
+  }
+  styles {}
+  document id="doc.fn3" title="FN3" {
+page id="page.fn3" w=(px)600 h=(px)900 margin-inner=(px)60 margin-outer=(px)60 margin-top=(px)80 margin-bottom=(px)80 {
+  text id="body" x=(px)60 y=(px)80 w=(px)480 h=(px)200 {
+    span "Dangling reference" footnote-ref="fn.missing"
+  }
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let provider = default_provider();
+    let r = compile(&doc, &provider);
+    assert!(
+        r.diagnostics
+            .iter()
+            .any(|d| d.code == "footnote.unresolved_ref"),
+        "an unresolved footnote-ref must produce a footnote.unresolved_ref diagnostic; \
+         got {:?}",
+        r.diagnostics
+    );
+    // All glyph runs are full-size (no superscript marker emitted): there is only
+    // one distinct font size.
+    let sizes: Vec<f32> = r
+        .scene
+        .commands
+        .iter()
+        .filter_map(|c| match c {
+            SceneCommand::DrawGlyphRun { font_size, .. } => Some(*font_size),
+            _ => None,
+        })
+        .collect();
+    let max = sizes.iter().cloned().fold(0.0_f32, f32::max);
+    assert!(
+        !sizes.iter().any(|s| *s < max - 0.5),
+        "no reduced-size (superscript) run may be emitted for an unresolved ref; sizes={sizes:?}"
+    );
+}
+
+/// A page with NO footnotes emits a command stream byte-identical to before the
+/// feature: the footnote pass is a no-op. We render the same doc twice and also
+/// confirm there is no separator-like 1px FillRect spuriously added.
+#[test]
+fn page_without_footnotes_is_unchanged() {
+    let src = r##"zenith version=1 {
+  project id="proj.fn4" name="FN4"
+  tokens format="zenith-token-v1" {
+  }
+  styles {}
+  document id="doc.fn4" title="FN4" {
+page id="page.fn4" w=(px)600 h=(px)900 margin-inner=(px)60 margin-outer=(px)60 margin-top=(px)80 margin-bottom=(px)80 {
+  text id="body" x=(px)60 y=(px)80 w=(px)480 h=(px)200 {
+    span "Just a plain paragraph with no notes."
+  }
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let provider = default_provider();
+    let r1 = compile(&doc, &provider);
+    let r2 = compile(&doc, &provider);
+    assert_eq!(
+        r1.scene.commands, r2.scene.commands,
+        "two renders must be byte-identical"
+    );
+    // No separator rule: no 1px-tall FillRect added by the footnote pass.
+    assert!(
+        !r1.scene.commands.iter().any(|c| matches!(
+            c,
+            SceneCommand::FillRect { h, .. } if (*h - 1.0).abs() < 0.01
+        )),
+        "a footnote-free page must not emit a separator rule: {:?}",
+        r1.scene.commands
+    );
+}

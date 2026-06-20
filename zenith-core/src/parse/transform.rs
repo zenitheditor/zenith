@@ -15,9 +15,9 @@ use crate::ast::{
         SafeZoneType,
     },
     node::{
-        CodeNode, EllipseNode, FieldNode, FrameNode, GroupNode, ImageNode, InstanceNode, LineNode,
-        Node, ObjectPosition, Override, Point, PolygonNode, PolylineNode, RectNode, TextNode,
-        TextSpan, UnknownNode, UnknownProperty, UnknownValue,
+        CodeNode, EllipseNode, FieldNode, FootnoteNode, FrameNode, GroupNode, ImageNode,
+        InstanceNode, LineNode, Node, ObjectPosition, Override, Point, PolygonNode, PolylineNode,
+        RectNode, TextNode, TextSpan, UnknownNode, UnknownProperty, UnknownValue,
     },
     style::{Style, StyleBlock, UnknownStyleProp},
     token::{
@@ -1094,6 +1094,7 @@ fn transform_node(node: &KdlNode) -> Result<Node, ParseError> {
         "polyline" => transform_polyline(node).map(Node::Polyline),
         "instance" => transform_instance(node).map(Node::Instance),
         "field" => transform_field(node).map(Node::Field),
+        "footnote" => transform_footnote(node).map(Node::Footnote),
         _ => Ok(Node::Unknown(UnknownNode {
             kind: node.name().value().to_owned(),
             source_span: node_span(node),
@@ -1808,6 +1809,56 @@ fn transform_field(node: &KdlNode) -> Result<FieldNode, ParseError> {
     })
 }
 
+const FOOTNOTE_KNOWN_PROPS: &[&str] = &[
+    "id",
+    "name",
+    "role",
+    "marker",
+    "style",
+    "fill",
+    "font-family",
+    "font_family",
+    "font-size",
+    "font_size",
+];
+
+/// Transform a `footnote` node into a [`FootnoteNode`].
+///
+/// Reads the required `id`; the optional `marker` override; visual props
+/// (`style`/`fill`/`font-family`/`font-size`); and the content `span` children
+/// (the same span model a `text` node uses). A footnote has NO geometry.
+fn transform_footnote(node: &KdlNode) -> Result<FootnoteNode, ParseError> {
+    let id = required_string_prop(node, "id")?.to_owned();
+
+    let font_family = optional_property_value_aliased(node, "font-family", "font_family");
+    let font_size = optional_property_value_aliased(node, "font-size", "font_size");
+
+    let mut spans: Vec<TextSpan> = Vec::new();
+    if let Some(children) = node.children() {
+        for child in children.nodes() {
+            if child.name().value() == "span" {
+                spans.push(transform_span(child)?);
+            }
+        }
+    }
+
+    let unknown_props = collect_unknown_props(node, FOOTNOTE_KNOWN_PROPS);
+
+    Ok(FootnoteNode {
+        id,
+        name: optional_string_prop(node, "name").map(str::to_owned),
+        role: optional_string_prop(node, "role").map(str::to_owned),
+        marker: optional_string_prop(node, "marker").map(str::to_owned),
+        spans,
+        style: optional_string_prop(node, "style").map(str::to_owned),
+        fill: optional_property_value(node, "fill"),
+        font_family,
+        font_size,
+        source_span: node_span(node),
+        unknown_props,
+    })
+}
+
 fn transform_span(node: &KdlNode) -> Result<TextSpan, ParseError> {
     // First positional argument is the text content.
     let text = node
@@ -1835,6 +1886,8 @@ fn transform_span(node: &KdlNode) -> Result<TextSpan, ParseError> {
     let strikethrough = optional_bool_prop(node, "strikethrough");
     let vertical_align =
         optional_string_prop_aliased(node, "vertical-align", "vertical_align").map(str::to_owned);
+    let footnote_ref =
+        optional_string_prop_aliased(node, "footnote-ref", "footnote_ref").map(str::to_owned);
 
     Ok(TextSpan {
         text,
@@ -1844,5 +1897,6 @@ fn transform_span(node: &KdlNode) -> Result<TextSpan, ParseError> {
         underline,
         strikethrough,
         vertical_align,
+        footnote_ref,
     })
 }

@@ -32,6 +32,11 @@ pub(crate) struct FieldCtx<'a> {
     pub(super) is_recto: bool,
     pub(super) live_area: Option<(f64, f64, f64, f64)>,
     pub(super) page_index_by_node_id: &'a BTreeMap<String, usize>,
+    /// This page's footnote markers: `footnote_id → marker_string` (auto-number
+    /// or explicit override), in id order. A text span whose `footnote_ref` keys
+    /// into this map emits that marker as an inline superscript run. Empty when
+    /// the page declares no footnotes.
+    pub(super) footnote_markers: &'a BTreeMap<String, String>,
 }
 
 /// Resolve a [`FieldNode`] against the page context into a concrete single-line
@@ -116,6 +121,7 @@ pub(super) fn resolve_field_to_text(field: &FieldNode, ctx: &FieldCtx) -> Option
             underline: None,
             strikethrough: None,
             vertical_align: None,
+            footnote_ref: None,
         }],
         source_span: field.source_span,
         unknown_props: BTreeMap::new(),
@@ -166,6 +172,7 @@ fn node_id(node: &Node) -> Option<&str> {
         Node::Polyline(n) => Some(&n.id),
         Node::Instance(n) => Some(&n.id),
         Node::Field(n) => Some(&n.id),
+        Node::Footnote(n) => Some(&n.id),
         Node::Unknown(_) => None,
     }
 }

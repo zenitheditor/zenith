@@ -54,6 +54,9 @@ pub struct OpSpan {
     /// Vertical alignment (`"super"` / `"sub"`). `None` = baseline (inherit).
     #[serde(default)]
     pub vertical_align: Option<String>,
+    /// Footnote reference — the id of a page-level footnote. `None` = no ref.
+    #[serde(default)]
+    pub footnote_ref: Option<String>,
 }
 
 /// Insertion position for [`Op::AddNode`] within a container's children.

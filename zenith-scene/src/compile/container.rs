@@ -279,6 +279,8 @@ fn node_visible(node: &Node) -> Option<bool> {
         Node::Polyline(n) => n.visible,
         Node::Instance(n) => n.visible,
         Node::Field(n) => n.visible,
+        // A footnote has no `visible` flag.
+        Node::Footnote(_) => None,
         Node::Unknown(_) => None,
     }
 }
@@ -300,6 +302,7 @@ fn node_declared_w(node: &Node) -> Option<f64> {
         | Node::Polygon(_)
         | Node::Polyline(_)
         | Node::Instance(_)
+        | Node::Footnote(_)
         | Node::Unknown(_) => None,
     }?;
     dim_to_px(w.value, &w.unit)
@@ -321,6 +324,7 @@ fn node_declared_h(node: &Node) -> Option<f64> {
         | Node::Polygon(_)
         | Node::Polyline(_)
         | Node::Instance(_)
+        | Node::Footnote(_)
         | Node::Unknown(_) => None,
     }?;
     dim_to_px(h.value, &h.unit)
@@ -400,6 +404,7 @@ fn with_flow_box(node: &Node, x: f64, y: f64, w: f64, h: Option<f64>) -> Node {
         | Node::Polygon(_)
         | Node::Polyline(_)
         | Node::Instance(_)
+        | Node::Footnote(_)
         | Node::Unknown(_) => {}
     }
     out
@@ -665,6 +670,7 @@ fn set_node_fill(node: &mut Node, fill: PropertyValue) {
         Node::Polygon(n) => n.fill = Some(fill),
         Node::Polyline(n) => n.fill = Some(fill),
         Node::Field(n) => n.fill = Some(fill),
+        Node::Footnote(n) => n.fill = Some(fill),
         Node::Line(_)
         | Node::Frame(_)
         | Node::Group(_)
@@ -689,6 +695,8 @@ fn set_node_visible(node: &mut Node, v: bool) {
         Node::Polyline(n) => n.visible = Some(v),
         Node::Instance(n) => n.visible = Some(v),
         Node::Field(n) => n.visible = Some(v),
+        // A footnote has no `visible` flag; nothing to set.
+        Node::Footnote(_) => {}
         Node::Unknown(_) => {}
     }
 }
@@ -708,6 +716,7 @@ fn node_local_id(node: &Node) -> Option<&str> {
         Node::Polyline(n) => Some(&n.id),
         Node::Instance(n) => Some(&n.id),
         Node::Field(n) => Some(&n.id),
+        Node::Footnote(n) => Some(&n.id),
         Node::Unknown(_) => None,
     }
 }
@@ -748,6 +757,7 @@ fn prefix_node_id(node: &mut Node, prefix: &str) {
         Node::Polyline(n) => pre!(n.id),
         Node::Instance(n) => pre!(n.id),
         Node::Field(n) => pre!(n.id),
+        Node::Footnote(n) => pre!(n.id),
         Node::Unknown(_) => {}
     }
 }
@@ -944,7 +954,8 @@ fn group_children_center(children: &[Node], base_dx: f64, base_dy: f64) -> Optio
             // Instances have no authoritative bbox (their expanded subtree is
             // the geometry); a field's box is resolved at projection time, not
             // here; unknown nodes have no geometry — skip all three.
-            Node::Instance(_) | Node::Field(_) | Node::Unknown(_) => {}
+            // A footnote has no authored bbox (it renders in the footnote zone).
+            Node::Instance(_) | Node::Field(_) | Node::Footnote(_) | Node::Unknown(_) => {}
         }
     }
 

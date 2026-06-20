@@ -54,6 +54,13 @@ pub struct TextSpan {
     /// the span on the baseline at full size. See the scene `compile_text`
     /// super/subscript handling for the exact scale + baseline-shift factors.
     pub vertical_align: Option<String>,
+    /// Footnote reference — the id of a page-level [`FootnoteNode`]. When
+    /// `Some(id)`, the renderer emits the referenced footnote's auto-number as a
+    /// SUPERSCRIPT marker run immediately AFTER this span's text (reusing the
+    /// [`TextSpan::vertical_align`] `"super"` rendering: reduced size + raised
+    /// baseline). An id that names no footnote on the same page yields an
+    /// advisory `footnote.unresolved_ref` and no marker. KDL: `footnote-ref="fn.1"`.
+    pub footnote_ref: Option<String>,
 }
 
 /// How an `image` node aligns its content within the declared box when the
@@ -576,6 +583,44 @@ pub struct FieldNode {
     pub unknown_props: BTreeMap<String, UnknownProperty>,
 }
 
+/// A `footnote` node — page-level book-interior furniture that auto-numbers and
+/// renders in a reserved zone at the bottom of the page.
+///
+/// A footnote is NOT positioned by the author: it has NO `x`/`y`/`w`/`h`. At
+/// compile time every `footnote` that is a DIRECT child of a [`Page`] is
+/// collected in source order, auto-numbered `1..N` (a footnote that declares an
+/// explicit [`marker`](FootnoteNode::marker) uses that string instead of a
+/// number but still occupies a slot), and rendered stacked above the page's
+/// bottom margin with a separator rule. A [`TextSpan`] that carries a matching
+/// [`footnote_ref`](TextSpan::footnote_ref) gets the footnote's marker emitted
+/// inline as a superscript after its text.
+///
+/// KDL: `footnote id="fn.1" { span "See also Chapter 4." }`. The content is a
+/// list of [`TextSpan`]s (the same span model as a `text` node), so it inherits
+/// the text shaping/wrap path verbatim.
+#[derive(Debug, Clone, PartialEq)]
+pub struct FootnoteNode {
+    pub id: String,
+    pub name: Option<String>,
+    pub role: Option<String>,
+    /// Explicit marker override. When `Some(s)`, the footnote renders `s` as its
+    /// marker (both inline and in the zone) instead of its auto-number; the
+    /// footnote still occupies a numbering slot. `None` → use the auto-number.
+    pub marker: Option<String>,
+    /// The footnote's content spans (same model as a `text` node's spans).
+    pub spans: Vec<TextSpan>,
+    pub style: Option<String>,
+    /// Fill for the footnote content + the separator rule. `None` → a sensible
+    /// muted default for the rule and opaque black for the text.
+    pub fill: Option<PropertyValue>,
+    pub font_family: Option<PropertyValue>,
+    pub font_size: Option<PropertyValue>,
+    /// Source declaration span, when available.
+    pub source_span: Option<Span>,
+    /// Unknown properties preserved for forward-compat.
+    pub unknown_props: BTreeMap<String, UnknownProperty>,
+}
+
 /// A renderable content node within a page.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Node {
@@ -591,5 +636,6 @@ pub enum Node {
     Polyline(PolylineNode),
     Instance(InstanceNode),
     Field(FieldNode),
+    Footnote(FootnoteNode),
     Unknown(UnknownNode),
 }

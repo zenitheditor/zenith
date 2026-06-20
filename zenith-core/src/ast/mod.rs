@@ -14,9 +14,9 @@ pub use document::{
     ComponentDef, Document, DocumentBody, Fold, MasterDef, Page, Project, SafeZone, SafeZoneType,
 };
 pub use node::{
-    CodeNode, EllipseNode, FieldNode, FrameNode, GroupNode, ImageNode, InstanceNode, LineNode,
-    Node, ObjectPosition, Override, Point, PolygonNode, PolylineNode, RectNode, TextNode, TextSpan,
-    UnknownNode, UnknownProperty, UnknownValue,
+    CodeNode, EllipseNode, FieldNode, FootnoteNode, FrameNode, GroupNode, ImageNode, InstanceNode,
+    LineNode, Node, ObjectPosition, Override, Point, PolygonNode, PolylineNode, RectNode, TextNode,
+    TextSpan, UnknownNode, UnknownProperty, UnknownValue,
 };
 pub use span::Span;
 pub use style::{Style, StyleBlock, UnknownStyleProp};

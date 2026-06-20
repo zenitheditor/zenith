@@ -5,9 +5,9 @@
 use std::fmt::Write as _;
 
 use crate::ast::{
-    CodeNode, DocumentBody, EllipseNode, FieldNode, Fold, FrameNode, GroupNode, ImageNode,
-    InstanceNode, LineNode, Node, Override, Page, Point, PolygonNode, PolylineNode, RectNode,
-    SafeZone, SafeZoneType, TextNode, TextSpan,
+    CodeNode, DocumentBody, EllipseNode, FieldNode, Fold, FootnoteNode, FrameNode, GroupNode,
+    ImageNode, InstanceNode, LineNode, Node, Override, Page, Point, PolygonNode, PolylineNode,
+    RectNode, SafeZone, SafeZoneType, TextNode, TextSpan,
 };
 
 use super::{
@@ -161,6 +161,7 @@ fn write_node(node: &Node, out: &mut String, depth: usize) {
         Node::Polyline(p) => write_polyline(p, out, depth),
         Node::Instance(i) => write_instance(i, out, depth),
         Node::Field(f) => write_field(f, out, depth),
+        Node::Footnote(f) => write_footnote(f, out, depth),
         Node::Unknown(u) => write_unknown_node(u, out, depth),
     }
 }
@@ -549,8 +550,42 @@ fn write_span(span: &TextSpan, out: &mut String, depth: usize) {
     write_opt_bool(out, "underline", &span.underline);
     write_opt_bool(out, "strikethrough", &span.strikethrough);
     write_opt_str(out, "vertical-align", &span.vertical_align);
+    write_opt_str(out, "footnote-ref", &span.footnote_ref);
 
     out.push('\n');
+}
+
+fn write_footnote(f: &FootnoteNode, out: &mut String, depth: usize) {
+    indent(out, depth);
+    out.push_str("footnote");
+
+    // Canonical property order: id, name, role, marker, fill, font-family,
+    // font-size, style, then unknown props (sorted), then the span children.
+    out.push_str(" id=\"");
+    out.push_str(&f.id);
+    out.push('"');
+    write_opt_str(out, "name", &f.name);
+    write_opt_str(out, "role", &f.role);
+    write_opt_str(out, "marker", &f.marker);
+    write_opt_property_value(out, "fill", &f.fill);
+    write_opt_property_value(out, "font-family", &f.font_family);
+    write_opt_property_value(out, "font-size", &f.font_size);
+    write_opt_str(out, "style", &f.style);
+
+    // Unknown properties in sorted key order.
+    for (key, prop) in &f.unknown_props {
+        out.push(' ');
+        out.push_str(key);
+        out.push('=');
+        out.push_str(&fmt_unknown_value(&prop.value));
+    }
+
+    out.push_str(" {\n");
+    for span in &f.spans {
+        write_span(span, out, depth + 1);
+    }
+    indent(out, depth);
+    out.push_str("}\n");
 }
 
 fn write_code(c: &CodeNode, out: &mut String, depth: usize) {

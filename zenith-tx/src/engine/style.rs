@@ -26,6 +26,7 @@ fn node_fill_mut(node: &mut Node) -> Option<&mut Option<PropertyValue>> {
         Node::Polygon(n) => Some(&mut n.fill),
         Node::Polyline(n) => Some(&mut n.fill),
         Node::Field(n) => Some(&mut n.fill),
+        Node::Footnote(n) => Some(&mut n.fill),
         Node::Line(_)
         | Node::Frame(_)
         | Node::Group(_)
@@ -52,6 +53,7 @@ fn node_stroke_mut(node: &mut Node) -> Option<&mut Option<PropertyValue>> {
         | Node::Image(_)
         | Node::Instance(_)
         | Node::Field(_)
+        | Node::Footnote(_)
         | Node::Unknown(_) => None,
     }
 }
@@ -73,6 +75,7 @@ fn node_stroke_width_mut(node: &mut Node) -> Option<&mut Option<PropertyValue>> 
         | Node::Image(_)
         | Node::Instance(_)
         | Node::Field(_)
+        | Node::Footnote(_)
         | Node::Unknown(_) => None,
     }
 }
@@ -93,6 +96,8 @@ fn node_opacity_mut(node: &mut Node) -> Option<&mut Option<f64>> {
         Node::Polyline(n) => Some(&mut n.opacity),
         Node::Instance(n) => Some(&mut n.opacity),
         Node::Field(n) => Some(&mut n.opacity),
+        // A footnote has no `opacity` field.
+        Node::Footnote(_) => None,
         Node::Unknown(_) => None,
     }
 }
@@ -118,6 +123,7 @@ fn node_overflow_mut(node: &mut Node) -> Option<&mut Option<String>> {
         | Node::Polyline(_)
         | Node::Instance(_)
         | Node::Field(_)
+        | Node::Footnote(_)
         | Node::Unknown(_) => None,
     }
 }
@@ -407,6 +413,7 @@ pub(super) fn apply_replace_text(
                     underline: s.underline,
                     strikethrough: s.strikethrough,
                     vertical_align: s.vertical_align.clone(),
+                    footnote_ref: s.footnote_ref.clone(),
                 })
                 .collect();
             record_affected(node_id, affected);

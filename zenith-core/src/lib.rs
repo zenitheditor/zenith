@@ -20,12 +20,12 @@ pub mod validate;
 pub use asset::{AssetData, AssetProvider, BytesAssetProvider};
 pub use ast::{
     AssetBlock, AssetDecl, AssetKind, CodeNode, ComponentDef, Dimension, Document, DocumentBody,
-    EllipseNode, FieldNode, FrameNode, GradientLiteral, GradientStopRef, GroupNode, ImageNode,
-    InstanceNode, LineNode, MasterDef, Node, ObjectPosition, Override, Page, Point, PolygonNode,
-    PolylineNode, Project, PropertyValue, RectNode, SafeZone, SafeZoneType, ShadowLayerRef,
-    ShadowLiteral, Span, Style, StyleBlock, TextNode, TextSpan, Token, TokenBlock, TokenLiteral,
-    TokenType, TokenValue, Unit, UnknownNode, UnknownProperty, UnknownStyleProp, UnknownValue,
-    dim_to_px,
+    EllipseNode, FieldNode, FootnoteNode, FrameNode, GradientLiteral, GradientStopRef, GroupNode,
+    ImageNode, InstanceNode, LineNode, MasterDef, Node, ObjectPosition, Override, Page, Point,
+    PolygonNode, PolylineNode, Project, PropertyValue, RectNode, SafeZone, SafeZoneType,
+    ShadowLayerRef, ShadowLiteral, Span, Style, StyleBlock, TextNode, TextSpan, Token, TokenBlock,
+    TokenLiteral, TokenType, TokenValue, Unit, UnknownNode, UnknownProperty, UnknownStyleProp,
+    UnknownValue, dim_to_px,
 };
 pub use color::{
     Cmyk, cmyk_to_hex, cmyk_to_srgb, contrast_ratio, parse_cmyk, parse_rgb, relative_luminance,

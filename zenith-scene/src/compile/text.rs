@@ -5,7 +5,8 @@ use std::collections::BTreeMap;
 
 use zenith_core::{
     CodeNode, Diagnostic, FontProvider, FontStyle, PropertyValue, ResolvedToken, ResolvedValue,
-    Style, TextNode, TokenKind, builtin_color, dim_to_px, is_supported, scan, token_id_for_kind,
+    Style, TextNode, TextSpan, TokenKind, builtin_color, dim_to_px, is_supported, scan,
+    token_id_for_kind,
 };
 use zenith_layout::{RustybuzzEngine, ShapeRequest, TextLayoutEngine, ZenithGlyphRun};
 
@@ -556,6 +557,7 @@ pub(super) fn compile_text(
     commands: &mut Vec<SceneCommand>,
     diagnostics: &mut Vec<Diagnostic>,
     chains: &ChainAssignments,
+    footnote_markers: &BTreeMap<String, String>,
     ctx: RenderCtx,
 ) -> f64 {
     // Skip invisible text nodes.
@@ -626,6 +628,49 @@ pub(super) fn compile_text(
     if text.spans.iter().all(|s| s.text.is_empty()) {
         return 0.0;
     }
+
+    // ── Footnote inline markers ───────────────────────────────────────────
+    // Expand the node's spans into the EFFECTIVE span list: a span carrying a
+    // `footnote_ref` keeps its text, then is IMMEDIATELY followed by a synthetic
+    // SUPERSCRIPT marker span (the referenced footnote's marker string), reusing
+    // the vertical-align="super" path (reduced size + raised baseline). A ref that
+    // names no footnote on this page → advisory `footnote.unresolved_ref` + no
+    // marker. When no span carries a ref the effective list equals `text.spans`
+    // (byte-identical to before). The synthetic marker inherits the ref span's
+    // fill so it matches the marked word's color.
+    let effective_spans: Vec<TextSpan> = if text.spans.iter().any(|s| s.footnote_ref.is_some()) {
+        let mut out: Vec<TextSpan> = Vec::with_capacity(text.spans.len());
+        for span in &text.spans {
+            out.push(span.clone());
+            if let Some(fref) = &span.footnote_ref {
+                match footnote_markers.get(fref) {
+                    Some(marker) => out.push(TextSpan {
+                        text: marker.clone(),
+                        fill: span.fill.clone(),
+                        font_weight: None,
+                        italic: None,
+                        underline: None,
+                        strikethrough: None,
+                        vertical_align: Some("super".to_owned()),
+                        footnote_ref: None,
+                    }),
+                    None => diagnostics.push(Diagnostic::advisory(
+                        "footnote.unresolved_ref",
+                        format!(
+                            "text node '{}': span footnote-ref '{}' matches no footnote \
+                             on this page; no marker emitted",
+                            text.id, fref
+                        ),
+                        text.source_span,
+                        Some(text.id.clone()),
+                    )),
+                }
+            }
+        }
+        out
+    } else {
+        text.spans.clone()
+    };
 
     // Resolve font family with style cascade.
     // Priority: node-local font_family → style font-family → default "Noto Sans".
@@ -733,7 +778,7 @@ pub(super) fn compile_text(
     // off the run's baseline. `None` until a full-size span is shaped.
     let mut node_ascent: Option<f64> = None;
 
-    for span in &text.spans {
+    for span in &effective_spans {
         if span.text.is_empty() {
             continue;
         }

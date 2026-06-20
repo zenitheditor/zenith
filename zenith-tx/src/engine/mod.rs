@@ -349,6 +349,8 @@ fn node_is_locked(doc: &Document, id: &str) -> bool {
             Node::Polyline(n) => n.locked,
             Node::Instance(n) => n.locked,
             Node::Field(n) => n.locked,
+            // A footnote has no `locked` field; treat as unlocked.
+            Node::Footnote(_) => None,
             Node::Unknown(_) => None,
         }
     }
@@ -475,6 +477,7 @@ pub(super) fn node_id_of(node: &Node) -> Option<&str> {
         Node::Polyline(p) => Some(&p.id),
         Node::Instance(i) => Some(&i.id),
         Node::Field(f) => Some(&f.id),
+        Node::Footnote(f) => Some(&f.id),
         Node::Unknown(_) => None,
     }
 }
@@ -496,6 +499,7 @@ pub(super) fn node_kind_str(node: &Node) -> &'static str {
         Node::Polyline(_) => "polyline",
         Node::Instance(_) => "instance",
         Node::Field(_) => "field",
+        Node::Footnote(_) => "footnote",
         Node::Unknown(_) => "unknown",
     }
 }

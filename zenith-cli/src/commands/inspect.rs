@@ -299,6 +299,16 @@ fn build_node_entry(node: &Node) -> NodeEntry {
             locked: n.locked,
             children: vec![],
         },
+        Node::Footnote(n) => NodeEntry {
+            id: n.id.clone(),
+            kind: "footnote".into(),
+            // A footnote has NO geometry (the renderer positions it in the
+            // bottom zone); report no geometry, visible, or locked.
+            geometry: None,
+            visible: None,
+            locked: None,
+            children: vec![],
+        },
         Node::Unknown(n) => NodeEntry {
             id: String::new(),
             kind: n.kind.clone(),
@@ -355,6 +365,7 @@ fn node_id_str(node: &Node) -> &str {
         Node::Polyline(n) => &n.id,
         Node::Instance(n) => &n.id,
         Node::Field(n) => &n.id,
+        Node::Footnote(n) => &n.id,
         Node::Unknown(_) => "",
     }
 }

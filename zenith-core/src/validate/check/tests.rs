@@ -3722,6 +3722,106 @@ fn resolved_page_ref_target_does_not_warn() {
 }
 
 #[test]
+fn unresolved_footnote_ref_is_warning() {
+    let src = r##"zenith version=1 {
+  project id="p" name="P"
+  tokens format="zenith-token-v1" {
+  }
+  styles {}
+  document id="d" {
+    page id="pg" w=(px)400 h=(px)600 {
+      text id="body" x=(px)10 y=(px)10 w=(px)300 h=(px)100 {
+        span "Dangling" footnote-ref="fn.missing"
+      }
+    }
+  }
+}
+"##;
+    let doc = <crate::parse::KdlAdapter as crate::parse::KdlSource>::parse(
+        &crate::parse::KdlAdapter,
+        src.as_bytes(),
+    )
+    .expect("parse");
+    let report = validate(&doc);
+    assert!(
+        has_code(&report, "footnote.unresolved_ref"),
+        "a span footnote-ref to a missing footnote must warn; got {:?}",
+        codes(&report)
+    );
+}
+
+#[test]
+fn resolved_footnote_ref_does_not_warn_and_id_is_unique() {
+    let src = r##"zenith version=1 {
+  project id="p" name="P"
+  tokens format="zenith-token-v1" {
+  }
+  styles {}
+  document id="d" {
+    page id="pg" w=(px)400 h=(px)600 {
+      text id="body" x=(px)10 y=(px)10 w=(px)300 h=(px)100 {
+        span "Evidence" footnote-ref="fn.1"
+      }
+      footnote id="fn.1" {
+        span "See Chapter 4."
+      }
+    }
+  }
+}
+"##;
+    let doc = <crate::parse::KdlAdapter as crate::parse::KdlSource>::parse(
+        &crate::parse::KdlAdapter,
+        src.as_bytes(),
+    )
+    .expect("parse");
+    let report = validate(&doc);
+    assert!(
+        !has_code(&report, "footnote.unresolved_ref"),
+        "a span footnote-ref to a present footnote must not warn; got {:?}",
+        codes(&report)
+    );
+    // The footnote id participates in global id-uniqueness: no duplicate is
+    // flagged for a unique id, but a colliding id would be.
+    assert!(
+        !has_code(&report, "id.duplicate"),
+        "a unique footnote id must not be a duplicate; got {:?}",
+        codes(&report)
+    );
+}
+
+#[test]
+fn duplicate_footnote_id_is_flagged() {
+    let src = r##"zenith version=1 {
+  project id="p" name="P"
+  tokens format="zenith-token-v1" {
+  }
+  styles {}
+  document id="d" {
+    page id="pg" w=(px)400 h=(px)600 {
+      footnote id="dup" {
+        span "First."
+      }
+      footnote id="dup" {
+        span "Second."
+      }
+    }
+  }
+}
+"##;
+    let doc = <crate::parse::KdlAdapter as crate::parse::KdlSource>::parse(
+        &crate::parse::KdlAdapter,
+        src.as_bytes(),
+    )
+    .expect("parse");
+    let report = validate(&doc);
+    assert!(
+        has_code(&report, "id.duplicate"),
+        "a footnote id colliding with another node must be a duplicate; got {:?}",
+        codes(&report)
+    );
+}
+
+#[test]
 fn master_id_participates_in_global_uniqueness() {
     // A master id colliding with a page id is a duplicate-id error.
     let master = MasterDef {

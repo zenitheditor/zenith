@@ -63,10 +63,14 @@ fn node_geometry_mut(node: &mut Node) -> Option<GeometryMut<'_>> {
         // the four-slot bbox setter does not apply. A set_geometry on an instance
         // honestly surfaces tx.unsupported_property rather than silently dropping
         // the requested w/h.
+        // A footnote has NO x/y/w/h box (the renderer positions it in the
+        // footnote zone), so set_geometry does not apply — it honestly surfaces
+        // tx.unsupported_property rather than silently dropping the request.
         Node::Line(_)
         | Node::Polygon(_)
         | Node::Polyline(_)
         | Node::Instance(_)
+        | Node::Footnote(_)
         | Node::Unknown(_) => None,
     }
 }

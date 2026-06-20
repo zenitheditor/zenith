@@ -4,7 +4,7 @@
 
 use std::collections::{BTreeMap, HashSet};
 
-use crate::ast::node::{FieldNode, InstanceNode, Node, PolygonNode, PolylineNode};
+use crate::ast::node::{FieldNode, FootnoteNode, InstanceNode, Node, PolygonNode, PolylineNode};
 use crate::ast::value::{Dimension, Unit, dim_to_px};
 use crate::diagnostics::Diagnostic;
 use crate::tokens::ResolvedToken;
@@ -886,6 +886,17 @@ pub(super) fn walk_node(
             );
         }
 
+        Node::Footnote(footnote) => {
+            check_footnote(
+                footnote,
+                seen_ids,
+                referenced_token_ids,
+                resolved_tokens,
+                declared_style_ids,
+                diagnostics,
+            );
+        }
+
         Node::Unknown(u) => {
             diagnostics.push(Diagnostic::warning(
                 "node.unknown_kind",
@@ -988,7 +999,11 @@ pub(super) fn node_bbox(node: &Node, page_w: f64, page_h: f64) -> Option<(f64, f
         // expanded subtree (a translated group) is the renderable geometry. A
         // field's box defaults to the page live area at compile time (x/w may be
         // omitted), so there is no authored bbox to check against the page here.
-        Node::Group(_) | Node::Instance(_) | Node::Field(_) | Node::Unknown(_) => None,
+        Node::Group(_)
+        | Node::Instance(_)
+        | Node::Field(_)
+        | Node::Footnote(_)
+        | Node::Unknown(_) => None,
     }
 }
 
@@ -1045,6 +1060,7 @@ pub(super) fn node_role(node: &Node) -> Option<&str> {
         Node::Polyline(n) => n.role.as_deref(),
         Node::Instance(n) => n.role.as_deref(),
         Node::Field(n) => n.role.as_deref(),
+        Node::Footnote(n) => n.role.as_deref(),
         Node::Unknown(_) => None,
     }
 }
@@ -1064,6 +1080,7 @@ pub(super) fn node_id_and_span(node: &Node) -> (&str, Option<crate::ast::Span>) 
         Node::Polyline(n) => (&n.id, n.source_span),
         Node::Instance(n) => (&n.id, n.source_span),
         Node::Field(n) => (&n.id, n.source_span),
+        Node::Footnote(n) => (&n.id, n.source_span),
         Node::Unknown(n) => (&n.kind, n.source_span),
     }
 }
@@ -1515,6 +1532,96 @@ fn check_field(
             ),
             field.source_span,
             Some(field.id.clone()),
+        ));
+    }
+}
+
+/// Validate a [`FootnoteNode`]: id uniqueness, style ref, the content-span and
+/// node visual properties (fill/font-family/font-size, plus per-span fill/weight
+/// so raw visual literals are surfaced like any text), and unknown properties.
+///
+/// The structural `footnote.unresolved_ref` check (a span `footnote-ref` that
+/// names no footnote on the same page) is done at the PAGE level (it needs the
+/// page's footnote-id set), not here. A footnote has no geometry, so there are
+/// no geometry checks.
+fn check_footnote(
+    footnote: &FootnoteNode,
+    seen_ids: &mut HashSet<String>,
+    referenced_token_ids: &mut HashSet<String>,
+    resolved_tokens: &BTreeMap<String, ResolvedToken>,
+    declared_style_ids: &HashSet<String>,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    register_id(&footnote.id, seen_ids, diagnostics);
+    check_style_ref(
+        &footnote.id,
+        footnote.style.as_deref(),
+        declared_style_ids,
+        footnote.source_span,
+        diagnostics,
+    );
+
+    check_visual_prop(
+        &footnote.id,
+        "fill",
+        footnote.fill.as_ref(),
+        VisualExpect::Color,
+        referenced_token_ids,
+        resolved_tokens,
+        diagnostics,
+    );
+    check_visual_prop(
+        &footnote.id,
+        "font-family",
+        footnote.font_family.as_ref(),
+        VisualExpect::FontFamily,
+        referenced_token_ids,
+        resolved_tokens,
+        diagnostics,
+    );
+    check_visual_prop(
+        &footnote.id,
+        "font-size",
+        footnote.font_size.as_ref(),
+        VisualExpect::Dimension,
+        referenced_token_ids,
+        resolved_tokens,
+        diagnostics,
+    );
+
+    // Per-span visual props (mirror the text-node span checks) so token refs are
+    // registered and raw visual literals are flagged `token.raw_visual_literal`.
+    for span in &footnote.spans {
+        check_visual_prop(
+            &footnote.id,
+            "fill",
+            span.fill.as_ref(),
+            VisualExpect::Color,
+            referenced_token_ids,
+            resolved_tokens,
+            diagnostics,
+        );
+        check_visual_prop(
+            &footnote.id,
+            "font-weight",
+            span.font_weight.as_ref(),
+            VisualExpect::FontWeight,
+            referenced_token_ids,
+            resolved_tokens,
+            diagnostics,
+        );
+    }
+
+    for prop_name in footnote.unknown_props.keys() {
+        diagnostics.push(Diagnostic::warning(
+            "node.unknown_property",
+            format!(
+                "footnote '{}': unknown property '{}' (version-relative; \
+                 may be valid in a later schema version)",
+                footnote.id, prop_name
+            ),
+            footnote.source_span,
+            Some(footnote.id.clone()),
         ));
     }
 }

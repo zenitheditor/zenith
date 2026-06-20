@@ -201,6 +201,7 @@ fn strip_node_span(node: &mut crate::ast::Node) {
             }
         }
         Node::Field(f) => f.source_span = None,
+        Node::Footnote(f) => f.source_span = None,
         Node::Unknown(u) => u.source_span = None,
     }
 }
@@ -1880,6 +1881,88 @@ fn test_span_vertical_align_round_trip() {
         strip_spans(doc),
         strip_spans(reparsed),
         "span vertical-align must survive parse → format → parse"
+    );
+}
+
+/// **Footnote + span footnote-ref round-trip**: a page-level `footnote` node and
+/// a `span ... footnote-ref="fn.1"` both parse, format into the canonical text,
+/// and survive parse → format → parse.
+#[test]
+fn test_footnote_and_footnote_ref_round_trip() {
+    let src = r##"zenith version=1 {
+  project id="proj.fn" name="FN"
+  tokens format="zenith-token-v1" {
+  }
+  styles {
+  }
+  document id="doc.fn" title="FN" {
+    page id="page.one" w=(px)400 h=(px)600 {
+      text id="body" x=(px)10 y=(px)10 w=(px)300 h=(px)100 {
+        span "Strong evidence" footnote-ref="fn.1"
+        span " supports this."
+      }
+      footnote id="fn.1" {
+        span "See also Chapter 4."
+      }
+      footnote id="fn.2" marker="*" {
+        span "An annotated aside."
+      }
+    }
+  }
+}
+"##;
+    let adapter = KdlAdapter;
+    let doc = adapter.parse(src.as_bytes()).expect("parse");
+
+    let page = &doc.body.pages[0];
+    let crate::ast::Node::Text(text_node) = &page.children[0] else {
+        panic!("expected a text node first");
+    };
+    assert_eq!(
+        text_node.spans[0].footnote_ref.as_deref(),
+        Some("fn.1"),
+        "first span must carry footnote-ref fn.1"
+    );
+    assert_eq!(
+        text_node.spans[1].footnote_ref, None,
+        "second span must have no footnote-ref"
+    );
+
+    let crate::ast::Node::Footnote(fn1) = &page.children[1] else {
+        panic!("expected a footnote node second");
+    };
+    assert_eq!(fn1.id, "fn.1");
+    assert_eq!(fn1.marker, None, "fn.1 uses the auto-number");
+    assert_eq!(fn1.spans[0].text, "See also Chapter 4.");
+
+    let crate::ast::Node::Footnote(fn2) = &page.children[2] else {
+        panic!("expected a second footnote node");
+    };
+    assert_eq!(fn2.marker.as_deref(), Some("*"), "fn.2 has explicit marker");
+
+    // Canonical form preserves the footnote node + the span footnote-ref.
+    let formatted = format_document(&doc).expect("format");
+    let text = String::from_utf8(formatted).expect("utf8");
+    assert!(
+        text.contains("footnote id=\"fn.1\""),
+        "formatted output must carry the footnote node; got:\n{text}"
+    );
+    assert!(
+        text.contains("footnote-ref=\"fn.1\""),
+        "formatted output must carry the span footnote-ref; got:\n{text}"
+    );
+    assert!(
+        text.contains("marker=\"*\""),
+        "formatted output must carry the explicit marker; got:\n{text}"
+    );
+
+    let reparsed = adapter
+        .parse(text.as_bytes())
+        .expect("re-parse after format");
+    assert_eq!(
+        strip_spans(doc),
+        strip_spans(reparsed),
+        "footnote + footnote-ref must survive parse → format → parse"
     );
 }
 

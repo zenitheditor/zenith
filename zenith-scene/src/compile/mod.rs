@@ -19,6 +19,7 @@ mod chain;
 mod container;
 mod crop;
 mod field;
+mod footnote;
 mod image;
 mod leaf;
 mod paint;
@@ -77,6 +78,18 @@ pub(super) struct RenderCtx {
 
 impl RenderCtx {
     fn root() -> Self {
+        RenderCtx {
+            opacity: 1.0,
+            dx: 0.0,
+            dy: 0.0,
+        }
+    }
+
+    /// Identity context used by the footnote zone's scratch MEASURE pass: the
+    /// synthesized footnote text is compiled into a throwaway buffer at the
+    /// origin to read its laid-out height before the real (offset) emit. Same
+    /// fields as [`RenderCtx::root`].
+    pub(super) fn measure() -> Self {
         RenderCtx {
             opacity: 1.0,
             dx: 0.0,
@@ -341,11 +354,20 @@ pub fn compile_page(doc: &Document, fonts: &dyn FontProvider, page_index: usize)
     let is_recto = page_index_1based % 2 == 1;
     let mirror_margins = doc.mirror_margins.unwrap_or(false);
     let live_area = compute_live_area(page, page_w, page_h, is_recto, mirror_margins);
+
+    // ── Step 7b: collect this page's footnote markers ────────────────────
+    // Every `footnote` DIRECT child of the page is auto-numbered 1..N in source
+    // order (an explicit `marker` overrides the number but keeps its slot). The
+    // ordered map drives both the inline superscript markers (a text span's
+    // `footnote_ref` keys in) and the bottom-zone rendering below.
+    let footnote_markers = footnote::collect_footnote_markers(page);
+
     let field_ctx = FieldCtx {
         page_index_1based,
         is_recto,
         live_area,
         page_index_by_node_id: &page_index_by_node_id,
+        footnote_markers: &footnote_markers,
     };
 
     let root_ctx = if bleed > 0.0 {
@@ -403,6 +425,26 @@ pub fn compile_page(doc: &Document, fonts: &dyn FontProvider, page_index: usize)
         );
     }
 
+    // ── Step 7c: footnote zone (page furniture, above the bottom margin) ─
+    // Rendered AFTER the page's own children (so it paints on top of body
+    // content) but inside the media clip. Draws the separator rule plus the
+    // stacked, auto-numbered footnotes; warns on body/zone overlap. A page with
+    // no footnotes emits nothing here (byte-identical to before).
+    footnote::compile_footnote_zone(
+        page,
+        &footnote_markers,
+        live_area,
+        resolved,
+        &style_map,
+        fonts,
+        &engine,
+        &chains,
+        &field_ctx,
+        &mut scene.commands,
+        &mut diagnostics,
+        root_ctx,
+    );
+
     // ── Step 8: close the outermost clip ─────────────────────────────────
     scene.commands.push(SceneCommand::PopClip);
 
@@ -449,6 +491,7 @@ pub(super) fn node_role(node: &Node) -> Option<&str> {
         Node::Polyline(n) => n.role.as_deref(),
         Node::Instance(n) => n.role.as_deref(),
         Node::Field(n) => n.role.as_deref(),
+        Node::Footnote(n) => n.role.as_deref(),
         Node::Unknown(_) => None,
     }
 }
@@ -501,6 +544,7 @@ pub(super) fn compile_node(
             commands,
             diagnostics,
             chains,
+            field_ctx.footnote_markers,
             ctx,
         ),
         Node::Line(line) => {
@@ -570,6 +614,7 @@ pub(super) fn compile_node(
                     commands,
                     diagnostics,
                     chains,
+                    field_ctx.footnote_markers,
                     ctx,
                 );
             }
@@ -597,6 +642,15 @@ pub(super) fn compile_node(
             diagnostics,
             ctx,
         ),
+        Node::Footnote(_) => {
+            // Footnotes are NON-flowing page furniture: they carry no x/y/w/h
+            // and are NOT rendered in the normal z-order dispatch. The page-level
+            // footnote pass (`footnote::compile_footnote_zone`, run by
+            // `compile_page`) collects every page-level footnote in source order,
+            // auto-numbers them, and renders the bottom zone + separator. A
+            // footnote reached here (e.g. nested in a container) renders nothing.
+            0.0
+        }
         Node::Unknown(unknown) => {
             diagnostics.push(Diagnostic::advisory(
                 "scene.unsupported_node",
