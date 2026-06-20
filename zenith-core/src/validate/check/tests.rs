@@ -200,6 +200,10 @@ fn doc_with(tokens: Vec<Token>, pages: Vec<Page>) -> Document {
         mirror_margins: None,
         page_progression: None,
         page_parity_start: None,
+        margin_inner: None,
+        margin_outer: None,
+        margin_top: None,
+        margin_bottom: None,
         project: None,
         assets: AssetBlock::default(),
         tokens: TokenBlock {
@@ -1488,6 +1492,10 @@ fn doc_with_assets(assets: Vec<AssetDecl>) -> Document {
         mirror_margins: None,
         page_progression: None,
         page_parity_start: None,
+        margin_inner: None,
+        margin_outer: None,
+        margin_top: None,
+        margin_bottom: None,
         project: None,
         assets: AssetBlock {
             assets,
@@ -2128,6 +2136,10 @@ fn doc_with_styles(tokens: Vec<Token>, styles: Vec<Style>, pages: Vec<Page>) -> 
         mirror_margins: None,
         page_progression: None,
         page_parity_start: None,
+        margin_inner: None,
+        margin_outer: None,
+        margin_top: None,
+        margin_bottom: None,
         project: None,
         assets: AssetBlock::default(),
         tokens: TokenBlock {
@@ -3597,6 +3609,85 @@ fn margin_absent_skips_check() {
     assert!(
         !has_code(&report, "margin.violation"),
         "absent margins must skip the margin check; got {:?}",
+        codes(&report)
+    );
+}
+
+#[test]
+fn margin_document_default_cascades_to_bare_page() {
+    // The page declares NO margins, but the DOCUMENT sets all four defaults
+    // (inner 225, outer 150, top 210, bottom 240). The bare page inherits them,
+    // so its live area is computed and a node outside it trips margin.violation.
+    // recto live area: x∈[225, 1090]. A rect at x=100 crosses the left edge.
+    let mut doc = doc_with(
+        vec![],
+        vec![bounded_page(
+            "page.bare",
+            1240.0,
+            1754.0,
+            vec![rect_at("bleeds", 100.0, 300.0, 50.0, 50.0)],
+        )],
+    );
+    doc.mirror_margins = Some(true);
+    doc.margin_inner = Some(px(225.0));
+    doc.margin_outer = Some(px(150.0));
+    doc.margin_top = Some(px(210.0));
+    doc.margin_bottom = Some(px(240.0));
+    let report = validate(&doc);
+    assert!(
+        has_margin_violation_for(&report, "bleeds"),
+        "a bare page must inherit the document default margins; got {:?}",
+        codes(&report)
+    );
+}
+
+#[test]
+fn margin_page_inner_overrides_doc_default() {
+    // Doc default inner = 225; the page overrides inner = 100 (keeps doc
+    // outer/top/bottom). recto left inset becomes 100, so a rect at x=120 is now
+    // INSIDE the live area and must NOT violate — proving the per-page override
+    // wins over the doc default for inner only.
+    let mut page = bounded_page(
+        "page.over",
+        1240.0,
+        1754.0,
+        vec![rect_at("ok", 120.0, 300.0, 50.0, 50.0)],
+    );
+    page.margin_inner = Some(px(100.0));
+    let mut doc = doc_with(vec![], vec![page]);
+    doc.mirror_margins = Some(true);
+    doc.margin_inner = Some(px(225.0));
+    doc.margin_outer = Some(px(150.0));
+    doc.margin_top = Some(px(210.0));
+    doc.margin_bottom = Some(px(240.0));
+    let report = validate(&doc);
+    assert!(
+        !has_margin_violation_for(&report, "ok"),
+        "the page's own inner margin (100) must override the doc default (225); got {:?}",
+        codes(&report)
+    );
+}
+
+#[test]
+fn margin_doc_default_off_is_byte_identical_to_page_only() {
+    // Regression guard for the default-off path: a doc with page margins but NO
+    // document margins must produce EXACTLY the diagnostics it did before the
+    // cascade existed. We assert against an explicit per-page book page with no
+    // doc-level margins set.
+    let mut doc = doc_with(
+        vec![],
+        vec![book_page(
+            "page.recto",
+            vec![rect_at("bleeds", 100.0, 300.0, 50.0, 50.0)],
+        )],
+    );
+    doc.mirror_margins = Some(true);
+    // No doc-level margins set — the cascade reads the page's own values verbatim.
+    assert!(doc.margin_inner.is_none());
+    let report = validate(&doc);
+    assert!(
+        has_margin_violation_for(&report, "bleeds"),
+        "page-only margins must behave exactly as before; got {:?}",
         codes(&report)
     );
 }

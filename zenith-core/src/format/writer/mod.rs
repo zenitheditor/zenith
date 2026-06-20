@@ -237,6 +237,14 @@ fn write_document(doc: &Document, out: &mut String) {
     // canonical form round-trips (parse → format → parse is byte-stable).
     write_opt_str(out, "colorspace", &doc.colorspace);
     write_opt_bool(out, "mirror-margins", &doc.mirror_margins);
+    // Document-level default margins, grouped right after `mirror-margins` (the
+    // other margin doc attr). Canonical order: inner, outer, top, bottom — same
+    // order and spelling as on a page. Emitted only when set, so a document with
+    // no defaults round-trips byte-identically.
+    write_opt_dimension(out, "margin-inner", &doc.margin_inner);
+    write_opt_dimension(out, "margin-outer", &doc.margin_outer);
+    write_opt_dimension(out, "margin-top", &doc.margin_top);
+    write_opt_dimension(out, "margin-bottom", &doc.margin_bottom);
     write_opt_str(out, "page-progression", &doc.page_progression);
     write_opt_str(out, "page-parity-start", &doc.page_parity_start);
     out.push_str(" {\n");

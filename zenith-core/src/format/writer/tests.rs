@@ -2229,3 +2229,54 @@ fn test_page_parity_round_trip() {
         "page-parity-start + page parity must survive round-trip"
     );
 }
+
+/// **Document-level default margins round-trip**: the four `margin-*` attributes
+/// on the root `zenith` node parse, format into canonical text, and survive
+/// parse → format → parse.
+#[test]
+fn test_document_default_margins_round_trip() {
+    let src = r##"zenith version=1 mirror-margins=#true margin-inner=(px)225 margin-outer=(px)150 margin-top=(px)210 margin-bottom=(px)240 {
+  project id="proj.dm" name="DocMargins"
+  tokens format="zenith-token-v1" {
+  }
+  styles {
+  }
+  document id="doc.dm" title="DocMargins" {
+    page id="page.one" w=(px)1240 h=(px)1754 {
+    }
+  }
+}
+"##;
+    let adapter = KdlAdapter;
+    let doc = adapter.parse(src.as_bytes()).expect("parse");
+
+    assert_eq!(doc.margin_inner.as_ref().expect("inner").value, 225.0);
+    assert_eq!(doc.margin_outer.as_ref().expect("outer").value, 150.0);
+    assert_eq!(doc.margin_top.as_ref().expect("top").value, 210.0);
+    assert_eq!(doc.margin_bottom.as_ref().expect("bottom").value, 240.0);
+    // The page declares no margins — it inherits the document defaults.
+    assert_eq!(doc.body.pages[0].margin_inner, None);
+
+    let formatted = format_document(&doc).expect("format");
+    let text = String::from_utf8(formatted).expect("utf8");
+    for needle in [
+        "margin-inner=(px)225",
+        "margin-outer=(px)150",
+        "margin-top=(px)210",
+        "margin-bottom=(px)240",
+    ] {
+        assert!(
+            text.contains(needle),
+            "formatted output must carry `{needle}`; got:\n{text}"
+        );
+    }
+
+    let reparsed = adapter
+        .parse(text.as_bytes())
+        .expect("re-parse after format");
+    assert_eq!(
+        strip_spans(doc),
+        strip_spans(reparsed),
+        "document default margins must survive round-trip"
+    );
+}

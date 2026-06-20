@@ -494,6 +494,7 @@ pub fn validate(doc: &Document) -> ValidationReport {
             safezone::check_safe_zones(page, page_w, page_h, &mut diagnostics);
             fold::check_folds(page, page_w, page_h, &mut diagnostics);
             margin::check_margins(
+                doc,
                 page,
                 page_w,
                 page_h,

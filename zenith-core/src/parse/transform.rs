@@ -354,6 +354,19 @@ pub fn transform(doc: &KdlDocument) -> Result<Document, ParseError> {
         .or_else(|| optional_string_prop(zenith_node, "page_parity_start"))
         .map(str::to_owned);
 
+    // Optional DOCUMENT-LEVEL default book live-area margins. Same KDL syntax as
+    // on a page (`margin-inner=(px)225`); a page that omits its own margin
+    // inherits these via `Document::effective_margins`. Both hyphenated and
+    // underscored spellings are accepted for forward-compat.
+    let margin_inner = optional_dimension_prop(zenith_node, "margin-inner")
+        .or_else(|| optional_dimension_prop(zenith_node, "margin_inner"));
+    let margin_outer = optional_dimension_prop(zenith_node, "margin-outer")
+        .or_else(|| optional_dimension_prop(zenith_node, "margin_outer"));
+    let margin_top = optional_dimension_prop(zenith_node, "margin-top")
+        .or_else(|| optional_dimension_prop(zenith_node, "margin_top"));
+    let margin_bottom = optional_dimension_prop(zenith_node, "margin-bottom")
+        .or_else(|| optional_dimension_prop(zenith_node, "margin_bottom"));
+
     let children_doc = zenith_node.children().ok_or_else(|| {
         ParseError::spanless(
             ParseErrorCode::MissingZenithRoot,
@@ -411,6 +424,10 @@ pub fn transform(doc: &KdlDocument) -> Result<Document, ParseError> {
         mirror_margins,
         page_progression,
         page_parity_start,
+        margin_inner,
+        margin_outer,
+        margin_top,
+        margin_bottom,
         project,
         assets,
         tokens,

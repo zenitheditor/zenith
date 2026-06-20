@@ -34,7 +34,7 @@
 //! work). Nodes with `role="guide"` are exempt (guides intentionally live in the
 //! margins). The check is skipped entirely when any margin is absent.
 
-use crate::ast::document::Page;
+use crate::ast::document::{Document, Page};
 use crate::ast::value::dim_to_px;
 use crate::diagnostics::Diagnostic;
 
@@ -58,11 +58,18 @@ struct LiveArea {
 /// `page-parity-start` > default `index % 2 == 1`). This function never
 /// recomputes parity from the page index.
 ///
-/// Returns `None` when any of the four margins is absent or resolves to a
-/// non-pixel (pct/deg/unknown) unit — the caller then skips the check (no
+/// Returns `None` when any of the four EFFECTIVE margins is absent or resolves
+/// to a non-pixel (pct/deg/unknown) unit — the caller then skips the check (no
 /// panic, no diagnostic): margins are advisory and an unresolvable margin
 /// simply yields no live area to validate against.
+///
+/// Each side's effective margin is the page's own value when set, else the
+/// document-level default ([`Document::effective_margins`]) — the single source
+/// of truth for the document→page margin cascade. With no document margins set
+/// this reads exactly the page's own values, so the default-off path is
+/// byte-identical.
 fn live_area(
+    doc: &Document,
     page: &Page,
     page_w: f64,
     page_h: f64,
@@ -70,10 +77,11 @@ fn live_area(
     mirror_margins: bool,
     rtl: bool,
 ) -> Option<LiveArea> {
-    let inner_dim = page.margin_inner.as_ref()?;
-    let outer_dim = page.margin_outer.as_ref()?;
-    let top_dim = page.margin_top.as_ref()?;
-    let bottom_dim = page.margin_bottom.as_ref()?;
+    let (inner_opt, outer_opt, top_opt, bottom_opt) = doc.effective_margins(page);
+    let inner_dim = inner_opt.as_ref()?;
+    let outer_dim = outer_opt.as_ref()?;
+    let top_dim = top_opt.as_ref()?;
+    let bottom_dim = bottom_opt.as_ref()?;
 
     let inner = dim_to_px(inner_dim.value, &inner_dim.unit)?;
     let outer = dim_to_px(outer_dim.value, &outer_dim.unit)?;
@@ -111,6 +119,7 @@ fn live_area(
 /// absent/unresolvable, and skipped per-node for `role="guide"` nodes.
 #[allow(clippy::too_many_arguments)]
 pub(super) fn check_margins(
+    doc: &Document,
     page: &Page,
     page_w: f64,
     page_h: f64,
@@ -119,7 +128,7 @@ pub(super) fn check_margins(
     rtl: bool,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
-    let Some(area) = live_area(page, page_w, page_h, is_recto, mirror_margins, rtl) else {
+    let Some(area) = live_area(doc, page, page_w, page_h, is_recto, mirror_margins, rtl) else {
         // Some margin is absent or unresolvable — nothing to validate against.
         return;
     };

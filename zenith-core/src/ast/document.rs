@@ -210,6 +210,22 @@ pub struct Document {
     /// mirrored-margin binding side and the master/field running-head recto/verso
     /// selection via [`Document::page_is_recto`].
     pub page_parity_start: Option<String>,
+    /// Document-level DEFAULT book live-area inner (gutter/binding) margin. When
+    /// a [`Page`] omits its own [`Page::margin_inner`], it inherits this value.
+    /// `None` (default) → no document default; the page's own value (possibly
+    /// `None`) is used verbatim, so a document with no margins is byte-identical
+    /// to before this attribute existed. Same KDL syntax as on a page
+    /// (`margin-inner=(px)225`). See [`Document::effective_margins`].
+    pub margin_inner: Option<Dimension>,
+    /// Document-level DEFAULT book live-area outer (fore-edge) margin. Cascades
+    /// to a page that omits [`Page::margin_outer`]. See [`Document::margin_inner`].
+    pub margin_outer: Option<Dimension>,
+    /// Document-level DEFAULT book live-area top margin. Cascades to a page that
+    /// omits [`Page::margin_top`]. See [`Document::margin_inner`].
+    pub margin_top: Option<Dimension>,
+    /// Document-level DEFAULT book live-area bottom margin. Cascades to a page
+    /// that omits [`Page::margin_bottom`]. See [`Document::margin_inner`].
+    pub margin_bottom: Option<Dimension>,
     pub project: Option<Project>,
     /// Asset declarations; empty when the `assets` block is absent.
     pub assets: AssetBlock,
@@ -254,6 +270,39 @@ impl Document {
             _ => base_recto,
         }
     }
+
+    /// The page's EFFECTIVE book live-area margins, as
+    /// `(inner, outer, top, bottom)`: each side is the page's own value when set,
+    /// else the document-level default ([`Document::margin_inner`] etc.). This is
+    /// the SINGLE source of truth for the document→page margin cascade; every
+    /// live-area / margin computation reads margins through here so per-page
+    /// overrides and document defaults resolve identically everywhere.
+    ///
+    /// With no document margins set, this returns exactly the page's own values
+    /// (including `None`), so the default-off path is byte-identical to reading
+    /// `page.margin_*` directly. Pure and deterministic.
+    pub fn effective_margins(
+        &self,
+        page: &Page,
+    ) -> (
+        Option<Dimension>,
+        Option<Dimension>,
+        Option<Dimension>,
+        Option<Dimension>,
+    ) {
+        (
+            page.margin_inner
+                .clone()
+                .or_else(|| self.margin_inner.clone()),
+            page.margin_outer
+                .clone()
+                .or_else(|| self.margin_outer.clone()),
+            page.margin_top.clone().or_else(|| self.margin_top.clone()),
+            page.margin_bottom
+                .clone()
+                .or_else(|| self.margin_bottom.clone()),
+        )
+    }
 }
 
 #[cfg(test)]
@@ -297,6 +346,10 @@ mod parity_tests {
             mirror_margins: None,
             page_progression: None,
             page_parity_start: start.map(str::to_owned),
+            margin_inner: None,
+            margin_outer: None,
+            margin_top: None,
+            margin_bottom: None,
             project: None,
             assets: AssetBlock::default(),
             tokens: TokenBlock::default(),
@@ -366,6 +419,79 @@ mod parity_tests {
             d.page_is_recto(&page("p2", Some("nonsense")), 2),
             "an invalid override is treated as recto"
         );
+    }
+
+    #[test]
+    fn effective_margins_page_value_wins_when_both_set() {
+        let mut d = doc(None);
+        d.margin_inner = Some(px(10.0));
+        d.margin_outer = Some(px(20.0));
+        d.margin_top = Some(px(30.0));
+        d.margin_bottom = Some(px(40.0));
+        let mut p = page("p", None);
+        p.margin_inner = Some(px(1.0));
+        p.margin_outer = Some(px(2.0));
+        p.margin_top = Some(px(3.0));
+        p.margin_bottom = Some(px(4.0));
+        let (i, o, t, b) = d.effective_margins(&p);
+        assert_eq!(i, Some(px(1.0)));
+        assert_eq!(o, Some(px(2.0)));
+        assert_eq!(t, Some(px(3.0)));
+        assert_eq!(b, Some(px(4.0)));
+    }
+
+    #[test]
+    fn effective_margins_doc_default_used_when_page_none() {
+        let mut d = doc(None);
+        d.margin_inner = Some(px(10.0));
+        d.margin_outer = Some(px(20.0));
+        d.margin_top = Some(px(30.0));
+        d.margin_bottom = Some(px(40.0));
+        let p = page("p", None);
+        let (i, o, t, b) = d.effective_margins(&p);
+        assert_eq!(i, Some(px(10.0)));
+        assert_eq!(o, Some(px(20.0)));
+        assert_eq!(t, Some(px(30.0)));
+        assert_eq!(b, Some(px(40.0)));
+    }
+
+    #[test]
+    fn effective_margins_mixed_override() {
+        // Doc sets all four; page overrides only inner → page inner + doc rest.
+        let mut d = doc(None);
+        d.margin_inner = Some(px(10.0));
+        d.margin_outer = Some(px(20.0));
+        d.margin_top = Some(px(30.0));
+        d.margin_bottom = Some(px(40.0));
+        let mut p = page("p", None);
+        p.margin_inner = Some(px(99.0));
+        let (i, o, t, b) = d.effective_margins(&p);
+        assert_eq!(i, Some(px(99.0)));
+        assert_eq!(o, Some(px(20.0)));
+        assert_eq!(t, Some(px(30.0)));
+        assert_eq!(b, Some(px(40.0)));
+    }
+
+    #[test]
+    fn effective_margins_none_when_both_none() {
+        let d = doc(None);
+        let p = page("p", None);
+        assert_eq!(d.effective_margins(&p), (None, None, None, None));
+    }
+
+    #[test]
+    fn effective_margins_default_off_is_page_values_verbatim() {
+        // The regression guard: with NO doc margins, effective == page's own
+        // values exactly (including None), so the default-off path is identical.
+        let d = doc(None);
+        let mut p = page("p", None);
+        p.margin_inner = Some(px(225.0));
+        p.margin_top = Some(px(210.0));
+        let (i, o, t, b) = d.effective_margins(&p);
+        assert_eq!(i, p.margin_inner);
+        assert_eq!(o, p.margin_outer);
+        assert_eq!(t, p.margin_top);
+        assert_eq!(b, p.margin_bottom);
     }
 
     #[test]
