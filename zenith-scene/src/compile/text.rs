@@ -952,6 +952,33 @@ pub(super) fn compile_text(
         }
     }
 
+    // ── overflow="clip" warning ────────────────────────────────────────
+    // Clip mode (the default when `overflow` is absent) silently truncates
+    // ink at the box edge, which can hide content. Surface a non-fatal
+    // warning so the author knows text was clipped — mirrors the fit check
+    // but advisory, never a hard fail. `overflow="visible"` opts out (the
+    // overflow is intentional) and `overflow="fit"` is handled above.
+    if matches!(text.overflow.as_deref(), None | Some("clip"))
+        && let (Some(box_w), Some(box_h)) = (box_w_opt, box_h_opt)
+    {
+        const EPSILON: f64 = 0.5;
+        let content_height = fit_line_count as f64 * first_line_height;
+        let height_overflow = content_height > box_h + EPSILON;
+        let word_overflow = needs_wrap && fit_line_count == 1 && total_advance > box_w + EPSILON;
+        if height_overflow || word_overflow {
+            diagnostics.push(Diagnostic::warning(
+                "text.overflow",
+                format!(
+                    "text '{}': content is clipped at the box edge \
+                     (overflow=\"clip\"): needs ~{:.0}px height in {:.0}px box",
+                    text.id, content_height, box_h
+                ),
+                text.source_span,
+                Some(text.id.clone()),
+            ));
+        }
+    }
+
     if has_shadow {
         commands.push(SceneCommand::EndShadow);
     }

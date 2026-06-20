@@ -4687,6 +4687,62 @@ page id="page.fit1" w=(px)400 h=(px)400 {
     );
 }
 
+/// A text node with `overflow="clip"` whose long text overflows the small box
+/// must produce a `text.overflow` Warning (clipping silently truncates ink, so
+/// the author is told) — but still draw, and NOT hard-fail.
+#[test]
+fn overflow_clip_height_exceeded_emits_overflow_warning() {
+    let src = r##"zenith version=1 {
+  project id="proj.clip1" name="Clip Overflow"
+  tokens format="zenith-token-v1" {}
+  styles {}
+  document id="doc.clip1" title="Clip Overflow" {
+page id="page.clip1" w=(px)400 h=(px)400 {
+  text id="text.clipped" x=(px)10 y=(px)10 w=(px)60 h=(px)20 overflow="clip" {
+    span "The quick brown fox jumps over the lazy dog and keeps on going"
+  }
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+
+    let warns: Vec<_> = result
+        .diagnostics
+        .iter()
+        .filter(|d| d.code == "text.overflow")
+        .collect();
+    assert_eq!(
+        warns.len(),
+        1,
+        "expected exactly one text.overflow warning; got: {:?}",
+        result.diagnostics
+    );
+    assert_eq!(
+        warns[0].severity,
+        zenith_core::Severity::Warning,
+        "text.overflow must be Warning severity (not a hard fail)"
+    );
+    // No hard error from clip overflow.
+    assert!(
+        !result
+            .diagnostics
+            .iter()
+            .any(|d| d.code == "text.fit_failed"),
+        "clip overflow must NOT produce text.fit_failed"
+    );
+    // Glyph runs still emitted.
+    assert!(
+        result
+            .scene
+            .commands
+            .iter()
+            .any(|c| matches!(c, SceneCommand::DrawGlyphRun { .. })),
+        "glyph runs must still be emitted when clip overflows"
+    );
+}
+
 /// A text node with `overflow="fit"` whose text FITS within the box must
 /// produce NO `text.fit_failed` diagnostic.
 #[test]
