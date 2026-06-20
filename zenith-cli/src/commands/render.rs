@@ -291,7 +291,7 @@ pub fn to_png_spread(
 /// the same conditions
 /// are hard errors (exit code 2), and every font asset's bytes are verified
 /// against its declared `sha256` exactly like image and SVG assets.
-fn build_font_provider(
+pub(crate) fn build_font_provider(
     doc: &Document,
     project_dir: Option<&Path>,
     locked: bool,
@@ -367,7 +367,7 @@ fn build_font_provider(
 /// SVG asset must read successfully and its bytes must match its declared
 /// `sha256` (compared case-insensitively, trimmed); a read failure, a missing
 /// hash, or a mismatch is a hard error (exit code 2).
-fn build_asset_provider(
+pub(crate) fn build_asset_provider(
     doc: &Document,
     project_dir: &Path,
     locked: bool,

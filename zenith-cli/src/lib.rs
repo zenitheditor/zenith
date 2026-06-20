@@ -363,6 +363,56 @@ pub fn run() -> ExitCode {
             }
         }
 
+        Command::Merge(args) => {
+            // Read the template document.
+            let doc_src = match read_file(&args.doc) {
+                Ok(s) => s,
+                Err(msg) => {
+                    eprintln!("{}", msg);
+                    return ExitCode::from(2);
+                }
+            };
+
+            // Read the CSV file.
+            let csv_src = match read_file(&args.data) {
+                Ok(s) => s,
+                Err(msg) => {
+                    eprintln!("{}", msg);
+                    return ExitCode::from(2);
+                }
+            };
+
+            let project_dir = args.doc.parent();
+
+            match commands::merge::run(
+                &doc_src,
+                &csv_src,
+                project_dir,
+                &args.out_dir,
+                args.name_by.as_deref(),
+            ) {
+                Ok(report) => {
+                    println!(
+                        "wrote {} file(s) to '{}'",
+                        report.written.len(),
+                        args.out_dir.display()
+                    );
+                    for f in &report.failed {
+                        eprintln!("row {}: {}", f.row + 1, f.reason);
+                    }
+                    if report.failed.is_empty() {
+                        ExitCode::SUCCESS
+                    } else {
+                        ExitCode::from(1u8)
+                    }
+                }
+                Err(e) => {
+                    eprintln!("{}", e.message);
+                    ExitCode::from(e.exit_code)
+                }
+            }
+        }
+
         Command::Tx(args) => {
             // Read document source.
             let doc_src = match read_file(&args.path) {

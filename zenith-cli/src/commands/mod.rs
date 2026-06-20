@@ -7,6 +7,7 @@
 
 pub mod fmt;
 pub mod inspect;
+pub mod merge;
 pub mod render;
 pub mod tokens;
 pub mod tx;

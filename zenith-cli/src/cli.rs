@@ -34,6 +34,9 @@ pub enum Command {
 
     /// Print the node tree of a `.zen` document (read-only).
     Inspect(InspectArgs),
+
+    /// Mail-merge a `.zen` template with a CSV data file, writing one PNG per row.
+    Merge(MergeArgs),
 }
 
 /// Arguments for `zenith validate`.
@@ -100,6 +103,24 @@ pub struct InspectArgs {
     /// Emit machine-readable JSON instead of a human-readable tree.
     #[arg(long)]
     pub json: bool,
+}
+
+/// Arguments for `zenith merge`.
+#[derive(Debug, Args)]
+pub struct MergeArgs {
+    /// Template `.zen` document with role="data.<column>" text nodes.
+    pub doc: PathBuf,
+
+    /// CSV data file; header row names the columns.
+    pub data: PathBuf,
+
+    /// Directory to write one PNG per row into.
+    #[arg(long, value_name = "DIR")]
+    pub out_dir: PathBuf,
+
+    /// CSV column to name each output file by (default: row-NNNN.png).
+    #[arg(long, value_name = "COL")]
+    pub name_by: Option<String>,
 }
 
 /// Arguments for `zenith render`.
