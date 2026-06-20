@@ -701,6 +701,27 @@ pub enum Op {
         /// New literal value in string form appropriate for the token's existing type.
         value: String,
     },
+    /// Set one recognized visual property on a named style to a token reference.
+    ///
+    /// `property` is a style property key (`fill`, `stroke`, `stroke-width`,
+    /// `font-family`, `font-size`, `font-weight`, `line-height`, `radius`,
+    /// `padding`, `gap`, `stroke-alignment`); underscore spellings are accepted
+    /// and canonicalized. `value` is a token id, stored as
+    /// `PropertyValue::TokenRef`.
+    ///
+    /// Rejected with `tx.unknown_style` if no style with `style_id` exists, and
+    /// `tx.unsupported_property` if `property` is not a recognized style key.
+    /// Unknown/incompatible token refs are caught by post-validation
+    /// (`token.unknown_reference` / `token.incompatible_property`).
+    SetStyleProperty {
+        /// The id of the style definition to update (matches `style id="…"`).
+        style_id: String,
+        /// The style property key to set (e.g. `font-family`, `fill`).
+        /// Underscore spellings such as `font_family` are accepted.
+        property: String,
+        /// Token id to store as `PropertyValue::TokenRef` (e.g. `"font.body"`).
+        value: String,
+    },
 }
 
 fn default_anchor() -> String {

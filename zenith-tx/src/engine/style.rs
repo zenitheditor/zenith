@@ -2,7 +2,7 @@
 //! text-align, and text-replacement setters, plus the property accessors
 //! they use.
 
-use zenith_core::{Diagnostic, Document, Node, PropertyValue, TextSpan};
+use zenith_core::{Diagnostic, Document, Node, PropertyValue, TextSpan, canonicalize_style_key};
 
 use crate::op::OpSpan;
 
@@ -374,6 +374,54 @@ pub(super) fn apply_set_opacity(
                     ));
                 }
             }
+        }
+    }
+}
+
+// ── SetStyleProperty ─────────────────────────────────────────────────────────
+
+/// Set one recognized visual property on a named style to a token reference.
+///
+/// Canonicalizes `property` (accepting underscore forms), then looks up the
+/// style by `style_id`. On success, inserts `PropertyValue::TokenRef(value)`
+/// into the style's `properties` map under the canonical key and records the
+/// style id as affected. Emits `tx.unsupported_property` for unrecognized keys
+/// and `tx.unknown_style` when no style with `style_id` exists.
+pub(super) fn apply_set_style_property(
+    style_id: &str,
+    property: &str,
+    value: &str,
+    doc: &mut Document,
+    diagnostics: &mut Vec<Diagnostic>,
+    affected: &mut Vec<String>,
+) {
+    // Canonicalize the property key; reject immediately if not recognized.
+    let Some(canonical_key) = canonicalize_style_key(property) else {
+        diagnostics.push(Diagnostic::error(
+            "tx.unsupported_property",
+            format!("property {:?} is not a recognized style key", property),
+            None,
+            Some(style_id.to_owned()),
+        ));
+        return;
+    };
+
+    // Locate the style by id.
+    match doc.styles.styles.iter_mut().find(|s| s.id == style_id) {
+        None => {
+            diagnostics.push(Diagnostic::error(
+                "tx.unknown_style",
+                format!("style {:?} not found in document", style_id),
+                None,
+                Some(style_id.to_owned()),
+            ));
+        }
+        Some(style) => {
+            style.properties.insert(
+                canonical_key.to_owned(),
+                PropertyValue::TokenRef(value.to_owned()),
+            );
+            record_affected(style_id, affected);
         }
     }
 }

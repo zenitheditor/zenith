@@ -19,7 +19,7 @@ use crate::ast::{
         InstanceNode, LineNode, Node, ObjectPosition, Override, Point, PolygonNode, PolylineNode,
         RectNode, TextNode, TextSpan, UnknownNode, UnknownProperty, UnknownValue,
     },
-    style::{Style, StyleBlock, UnknownStyleProp},
+    style::{Style, StyleBlock, UnknownStyleProp, canonicalize_style_key},
     token::{
         GradientKind, GradientLiteral, GradientStopRef, ShadowLayerRef, ShadowLiteral, Token,
         TokenBlock, TokenLiteral, TokenType, TokenValue,
@@ -809,44 +809,6 @@ fn transform_shadow(node: &KdlNode) -> TokenValue {
 // ---------------------------------------------------------------------------
 // Styles
 // ---------------------------------------------------------------------------
-
-/// Canonical hyphenated keys for recognized style visual properties.
-///
-/// Underscore variants are normalized to these forms during parsing.
-const STYLE_RECOGNIZED_KEYS: &[&str] = &[
-    "fill",
-    "stroke",
-    "stroke-width",
-    "stroke-alignment",
-    "font-family",
-    "font-size",
-    "font-weight",
-    "line-height",
-    "radius",
-    "padding",
-    "gap",
-];
-
-/// Map underscore-spelled style child names to their canonical hyphenated form.
-///
-/// Returns `None` if the name is not in the recognized set (after
-/// normalization).
-fn canonicalize_style_key(name: &str) -> Option<&'static str> {
-    // Normalize underscore to hyphen for comparison.
-    let normalized: &str = match name {
-        "stroke_width" => "stroke-width",
-        "stroke_alignment" => "stroke-alignment",
-        "font_family" => "font-family",
-        "font_size" => "font-size",
-        "font_weight" => "font-weight",
-        "line_height" => "line-height",
-        other => other,
-    };
-    STYLE_RECOGNIZED_KEYS
-        .iter()
-        .copied()
-        .find(|&k| k == normalized)
-}
 
 fn transform_styles(node: &KdlNode) -> Result<StyleBlock, ParseError> {
     let source_span = node_span(node);

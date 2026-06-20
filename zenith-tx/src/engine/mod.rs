@@ -27,7 +27,8 @@ use structure::{
 };
 use style::{
     apply_replace_text, apply_set_fill, apply_set_opacity, apply_set_stroke,
-    apply_set_stroke_width, apply_set_text_align, apply_set_text_overflow,
+    apply_set_stroke_width, apply_set_style_property, apply_set_text_align,
+    apply_set_text_overflow,
 };
 use token::{apply_create_token, apply_update_token_value};
 
@@ -313,6 +314,13 @@ fn apply_op(
         Op::UpdateTokenValue { id, value } => {
             apply_update_token_value(id, value, doc, diagnostics, affected);
         }
+        Op::SetStyleProperty {
+            style_id,
+            property,
+            value,
+        } => {
+            apply_set_style_property(style_id, property, value, doc, diagnostics, affected);
+        }
     }
 }
 
@@ -366,7 +374,9 @@ fn op_lock_targets(op: &Op) -> Vec<&str> {
         | Op::AddAsset { .. }
         // Token ops mutate the token block, not the node tree; no per-node lock target.
         | Op::CreateToken { .. }
-        | Op::UpdateTokenValue { .. } => Vec::new(),
+        | Op::UpdateTokenValue { .. }
+        // Style ops mutate the styles block, not the node tree; no per-node lock target.
+        | Op::SetStyleProperty { .. } => Vec::new(),
     }
 }
 

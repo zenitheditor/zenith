@@ -19,7 +19,9 @@ pub use node::{
     TextSpan, UnknownNode, UnknownProperty, UnknownValue,
 };
 pub use span::Span;
-pub use style::{Style, StyleBlock, UnknownStyleProp};
+pub use style::{
+    STYLE_RECOGNIZED_KEYS, Style, StyleBlock, UnknownStyleProp, canonicalize_style_key,
+};
 pub use token::{
     GradientKind, GradientLiteral, GradientStopRef, ShadowLayerRef, ShadowLiteral, Token,
     TokenBlock, TokenLiteral, TokenType, TokenValue,

@@ -495,6 +495,28 @@ pub const TEXT_CODE_DOC: &str = r##"zenith version=1 {
   }
 }"##;
 
+/// Document with a `styles` block containing a named style with an existing
+/// property, plus a `fontFamily` token and a dimension token so post-validation
+/// passes when either is referenced from styles.
+pub const STYLE_PROP_DOC: &str = r##"zenith version=1 {
+  project id="proj" name="Test"
+  tokens format="zenith-token-v1" {
+    token id="font.body" type="fontFamily" value="Inter"
+    token id="size.md" type="dimension" value=(px)16
+    token id="color.accent" type="color" value="#3b82f6"
+  }
+  styles {
+    style id="s.heading" {
+      font-size (token)"size.md"
+    }
+  }
+  document id="doc1" title="T" {
+    page id="pg1" w=(px)400 h=(px)300 {
+      rect id="r1" x=(px)0 y=(px)0 w=(px)100 h=(px)100
+    }
+  }
+}"##;
+
 /// Three rects unevenly placed on the x axis: positions 0, 30, 100, widths 20.
 /// Span = (100+20) - 0 = 120. Σsizes = 60. gap = (120-60)/2 = 30.
 /// Distributed leading edges: 0, 0+20+30=50, 50+20+30=100.

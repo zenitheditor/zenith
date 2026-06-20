@@ -44,3 +44,43 @@ pub struct StyleBlock {
     /// Byte-range of the `styles` block in the source (for diagnostics).
     pub source_span: Option<Span>,
 }
+
+/// Canonical hyphenated keys for recognized style visual properties.
+///
+/// Underscore variants are normalized to these forms by
+/// [`canonicalize_style_key`] during parsing and transaction application.
+pub const STYLE_RECOGNIZED_KEYS: &[&str] = &[
+    "fill",
+    "stroke",
+    "stroke-width",
+    "stroke-alignment",
+    "font-family",
+    "font-size",
+    "font-weight",
+    "line-height",
+    "radius",
+    "padding",
+    "gap",
+];
+
+/// Map underscore-spelled style child names to their canonical hyphenated form.
+///
+/// Normalizes underscore variants (`stroke_width` → `stroke-width`, etc.) and
+/// returns the canonical key if it is in [`STYLE_RECOGNIZED_KEYS`], or `None`
+/// if the name is unrecognized after normalization.
+pub fn canonicalize_style_key(name: &str) -> Option<&'static str> {
+    // Normalize underscore to hyphen for comparison.
+    let normalized: &str = match name {
+        "stroke_width" => "stroke-width",
+        "stroke_alignment" => "stroke-alignment",
+        "font_family" => "font-family",
+        "font_size" => "font-size",
+        "font_weight" => "font-weight",
+        "line_height" => "line-height",
+        other => other,
+    };
+    STYLE_RECOGNIZED_KEYS
+        .iter()
+        .copied()
+        .find(|&k| k == normalized)
+}
