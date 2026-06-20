@@ -113,6 +113,7 @@ pub(super) fn resolve_field_to_text(field: &FieldNode, ctx: &FieldCtx) -> Option
         locked: field.locked,
         rotate: None,
         chain: None,
+        drop_cap_lines: None,
         spans: vec![TextSpan {
             text,
             fill: None,

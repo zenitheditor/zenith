@@ -519,6 +519,9 @@ fn write_text(t: &TextNode, out: &mut String, depth: usize) {
     write_opt_dimension(out, "rotate", &t.rotate);
     write_opt_str(out, "style", &t.style);
     write_opt_str(out, "chain", &t.chain);
+    if let Some(n) = t.drop_cap_lines {
+        let _ = write!(out, " drop-cap-lines={n}");
+    }
 
     // Unknown properties in sorted key order.
     for (key, prop) in &t.unknown_props {

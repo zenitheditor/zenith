@@ -572,6 +572,49 @@ fn test_text_chain_round_trip() {
     }
 }
 
+/// **drop-cap-lines round-trip**: a text node carrying `drop-cap-lines=3` must
+/// survive parse→format→parse, with the attr emitted on the text line and
+/// re-parsed back into the `drop_cap_lines` field.
+#[test]
+fn test_text_drop_cap_lines_round_trip() {
+    use crate::ast::Node;
+    let src = r##"zenith version=1 {
+  project id="proj.dc" name="DC"
+  tokens format="zenith-token-v1" {
+  }
+  styles {
+  }
+  document id="doc.dc" title="DC" {
+    page id="p" w=(px)100 h=(px)100 {
+      text id="t1" x=(px)0 y=(px)0 w=(px)80 h=(px)40 drop-cap-lines=3 {
+        span "Hello world"
+      }
+    }
+  }
+}
+"##;
+    let adapter = KdlAdapter;
+    let doc = adapter.parse(src.as_bytes()).expect("parse");
+    let out = format_document(&doc).expect("format");
+    let text = String::from_utf8(out).unwrap();
+
+    assert!(
+        text.contains(" drop-cap-lines=3"),
+        "drop-cap-lines attr must be emitted; got:\n{text}"
+    );
+
+    let doc2 = adapter.parse(text.as_bytes()).expect("re-parse");
+    let page = &doc2.body.pages[0];
+    match &page.children[0] {
+        Node::Text(t) => assert_eq!(
+            t.drop_cap_lines,
+            Some(3),
+            "drop-cap-lines must survive the format round-trip"
+        ),
+        other => panic!("expected Text, got {other:?}"),
+    }
+}
+
 /// **Gradient round-trip**: a gradient token (angle + 2 stops) must
 /// parse→format→parse byte-stably, emit the `stop` brace block, and a page
 /// background referencing it must NOT flag the stop colors as `token.unused`.

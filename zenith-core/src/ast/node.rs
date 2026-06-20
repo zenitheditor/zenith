@@ -244,6 +244,15 @@ pub struct TextNode {
     ///   fill; the whole chain is shaped with the FIRST member's resolved style.
     ///   Each box re-wraps to its OWN width, so line height stays uniform.
     pub chain: Option<String>,
+    /// Drop-cap initial: the FIRST grapheme of the paragraph is typeset large,
+    /// spanning `Some(n)` body lines at the top-left, with the first `n` body
+    /// lines wrapping to a narrower measure beside it and line `n+1` onward
+    /// returning to the full box width. `Some(0)` or `None` disables the drop
+    /// cap (rendered byte-identically to a node without the attribute). Honored
+    /// only on the single-box wrap path (a box with a width whose text overflows
+    /// it); chain/flow integration is a documented v0 follow-up. KDL:
+    /// `drop-cap-lines=3`.
+    pub drop_cap_lines: Option<u32>,
     /// Inline text spans.
     pub spans: Vec<TextSpan>,
     /// Source declaration span, when available.

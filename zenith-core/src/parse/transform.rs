@@ -1344,6 +1344,8 @@ const TEXT_KNOWN_PROPS: &[&str] = &[
     "locked",
     "rotate",
     "chain",
+    "drop-cap-lines",
+    "drop_cap_lines",
 ];
 
 fn transform_text(node: &KdlNode) -> Result<TextNode, ParseError> {
@@ -1352,6 +1354,8 @@ fn transform_text(node: &KdlNode) -> Result<TextNode, ParseError> {
     let font_family = optional_property_value_aliased(node, "font-family", "font_family");
     let font_size = optional_property_value_aliased(node, "font-size", "font_size");
     let font_weight = optional_property_value_aliased(node, "font-weight", "font_weight");
+    let drop_cap_lines = optional_u32_prop(node, "drop-cap-lines")
+        .or_else(|| optional_u32_prop(node, "drop_cap_lines"));
 
     let mut spans: Vec<TextSpan> = Vec::new();
     if let Some(children) = node.children() {
@@ -1386,6 +1390,7 @@ fn transform_text(node: &KdlNode) -> Result<TextNode, ParseError> {
         locked: optional_bool_prop(node, "locked"),
         rotate: optional_dimension_prop(node, "rotate"),
         chain: optional_string_prop(node, "chain").map(str::to_owned),
+        drop_cap_lines,
         spans,
         source_span: node_span(node),
         unknown_props,

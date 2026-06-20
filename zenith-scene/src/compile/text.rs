@@ -187,6 +187,69 @@ pub(super) fn pack_lines(tokens: Vec<WordToken>, box_w: f64, space_advance: f64)
     lines
 }
 
+/// Per-line width profile for the drop-cap wrap-around.
+///
+/// The first `narrow_count` lines are packed to `narrow_w` (they sit to the
+/// RIGHT of the drop-cap glyph); every line from index `narrow_count` onward is
+/// packed to `full_w` (the text has cleared the cap and returns to full measure).
+/// `pack_lines` is the degenerate case `narrow_count == 0`.
+#[derive(Clone, Copy)]
+pub(super) struct WidthProfile {
+    pub(super) narrow_w: f64,
+    pub(super) narrow_count: usize,
+    pub(super) full_w: f64,
+}
+
+impl WidthProfile {
+    /// The available width for the line at index `i` (0-based).
+    fn width_for(&self, line_index: usize) -> f64 {
+        if line_index < self.narrow_count {
+            self.narrow_w
+        } else {
+            self.full_w
+        }
+    }
+}
+
+/// Greedy-pack word tokens into lines using a per-line [`WidthProfile`] so the
+/// first `narrow_count` lines wrap to the narrow measure beside a drop cap and
+/// the remainder return to the full measure. The greedy algorithm matches
+/// [`pack_lines`] exactly when the profile is uniform (`narrow_count == 0` or
+/// `narrow_w == full_w`); the only difference is the per-line target width,
+/// re-read from the profile as each new line is opened.
+pub(super) fn pack_lines_variable(
+    tokens: Vec<WordToken>,
+    profile: WidthProfile,
+    space_advance: f64,
+) -> Vec<Line> {
+    let mut lines: Vec<Line> = Vec::new();
+    let mut cur: Vec<WordToken> = Vec::new();
+    let mut line_w: f64 = 0.0;
+    for tok in tokens {
+        // The width budget for the line currently being filled is the width for
+        // the NEXT line index (i.e. the line this word would land on).
+        let box_w = profile.width_for(lines.len());
+        if !cur.is_empty() && line_w + space_advance + tok.advance > box_w {
+            let content_w = line_w;
+            lines.push(Line {
+                words: std::mem::take(&mut cur),
+                content_w,
+            });
+            line_w = 0.0;
+        }
+        let gap = if cur.is_empty() { 0.0 } else { space_advance };
+        line_w += gap + tok.advance;
+        cur.push(tok);
+    }
+    if !cur.is_empty() {
+        lines.push(Line {
+            words: cur,
+            content_w: line_w,
+        });
+    }
+    lines
+}
+
 /// Emit decoration FillRects + DrawGlyphRun commands for a sequence of packed
 /// lines, stacked by `line_height`, with per-line horizontal `align`.
 ///
@@ -211,11 +274,50 @@ pub(super) fn emit_lines(
     justify_final_line: bool,
     commands: &mut Vec<SceneCommand>,
 ) {
+    // Uniform geometry: every line shares `text_x`/`box_w`. Delegates to the
+    // profiled emit with a constant per-line geometry so the two paths are one
+    // body (byte-identical to the historical single-width emit).
+    emit_lines_profiled(
+        lines,
+        |_| (text_x, box_w),
+        text_y,
+        align,
+        metrics,
+        font_size,
+        deco_thickness,
+        justify_final_line,
+        commands,
+    );
+}
+
+/// Per-line geometry resolver: maps a 0-based line index to its
+/// `(line_origin_x, line_box_width)`. The drop-cap path returns an indented
+/// origin + narrow width for the first `n` lines and `(text_x, full_w)` after;
+/// the uniform path returns the same `(text_x, box_w)` for every line.
+///
+/// This is the SINGLE emit body; [`emit_lines`] is the uniform special case.
+/// Alignment, decoration, and glyph emission are identical — only the per-line
+/// horizontal origin/measure are read from `geom`.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn emit_lines_profiled<F>(
+    lines: &[Line],
+    geom: F,
+    text_y: f64,
+    align: &str,
+    metrics: WordMetrics,
+    font_size: f32,
+    deco_thickness: f64,
+    justify_final_line: bool,
+    commands: &mut Vec<SceneCommand>,
+) where
+    F: Fn(usize) -> (f64, f64),
+{
     let ascent = metrics.ascent;
     let line_height = metrics.line_height;
     let space_advance = metrics.space_advance;
     let last_idx = lines.len().saturating_sub(1);
     for (i, line) in lines.iter().enumerate() {
+        let (text_x, box_w) = geom(i);
         let baseline_y = text_y + ascent + (i as f64) * line_height;
         let word_count = line.words.len();
 
@@ -539,6 +641,93 @@ pub(super) fn resolve_vertical_align(
         Some("sub") => ((full * VALIGN_SCALE) as f32, full * VALIGN_SUB_SHIFT),
         _ => (node_font_size, 0.0),
     }
+}
+
+/// Horizontal gap between the drop-cap glyph's right edge and the wrapped body
+/// text, as a fraction of the BODY font size. `0.25 ×` body size is a compact,
+/// deterministic default.
+const DROPCAP_GAP_FACTOR: f64 = 0.25;
+
+/// A shaped drop-cap initial ready for emission.
+struct DropCap {
+    /// The oversized shaped glyph run for the initial.
+    run: ZenithGlyphRun,
+    /// Ascent of the oversized run (cap top → baseline), in pixels.
+    ascent: f64,
+    /// Pen advance of the oversized run (used as the body indent base).
+    advance: f64,
+    /// Resolved node color the cap paints with.
+    color: Color,
+    /// Number of body lines the cap spans (the narrow-line count).
+    lines: usize,
+}
+
+/// The initial lifted out of the body for a drop cap, plus the donor span's
+/// visual attributes, BEFORE the oversized glyph is shaped.
+struct DropCapInitial {
+    ch: char,
+    color: Color,
+    style: FontStyle,
+}
+
+/// Lift the first character out of the body spans for a drop cap.
+///
+/// The first NON-EMPTY resolved span donates its leading `char` (the v0 grapheme
+/// unit — combining sequences are a documented follow-up); that span's text is
+/// rewritten WITHOUT the initial so the body wrap re-tokenizes only the
+/// remainder. Returns `None` (leaving the spans untouched) when no span carries
+/// a character, so an empty-text node with the attribute never panics and draws
+/// no cap. The donor color/style are captured for the cap glyph.
+fn take_drop_cap_initial(spans: &mut [ResolvedSpan]) -> Option<DropCapInitial> {
+    let donor = spans.iter_mut().find(|s| !s.text.is_empty())?;
+    let first = donor.text.chars().next()?;
+    // Strip the initial from the body (it is now drawn by the cap).
+    donor.text = donor.text.chars().skip(1).collect();
+    Some(DropCapInitial {
+        ch: first,
+        color: donor.color,
+        style: donor.style,
+    })
+}
+
+/// Shape a lifted [`DropCapInitial`] as an oversized glyph spanning `n` lines.
+///
+/// The cap is shaped at `n * line_height` (the real body line height, captured
+/// from the body shaping pass) so the glyph optically fills ~`n` body lines (its
+/// ascent is ≈ `0.75 ×` that). It paints in the donor span's color and the node
+/// family. `None` on a shaping failure → no cap, body unchanged.
+fn shape_drop_cap(
+    initial: &DropCapInitial,
+    families: &[String],
+    weight: u16,
+    line_height: f64,
+    n: u32,
+    engine: &RustybuzzEngine,
+    fonts: &dyn FontProvider,
+) -> Option<DropCap> {
+    let cap_size = (n as f64 * line_height) as f32;
+    let glyph = initial.ch.to_string();
+    let req = ShapeRequest {
+        text: &glyph,
+        families,
+        weight,
+        style: initial.style,
+        font_size: cap_size,
+    };
+    let run = engine
+        .shape_with_fallback(&req, fonts)
+        .ok()?
+        .into_iter()
+        .next()?;
+    let ascent = run.ascent as f64;
+    let advance = run.advance_width as f64;
+    Some(DropCap {
+        run,
+        ascent,
+        advance,
+        color: initial.color,
+        lines: n as usize,
+    })
 }
 
 /// Compile a `text` leaf node.
@@ -1006,7 +1195,7 @@ pub(super) fn compile_text(
         // member produce byte-identical command streams. Convert the resolved
         // `shaped_spans` to `ResolvedSpan` carriers, then shape → pack → emit.
         let base_weight = resolve_font_weight(node_weight_prop, resolved, 400);
-        let resolved_spans: Vec<ResolvedSpan> = shaped_spans
+        let mut resolved_spans: Vec<ResolvedSpan> = shaped_spans
             .iter()
             .map(|s| ResolvedSpan {
                 text: s.text.clone(),
@@ -1020,6 +1209,19 @@ pub(super) fn compile_text(
             })
             .collect();
 
+        // ── Drop cap (single-box wrap path only) ─────────────────────────
+        // Active when `drop-cap-lines >= 1` and the first body span carries at
+        // least one character. The FIRST char (a `char`, the v0 grapheme unit)
+        // is lifted out of the body here so the body wrap re-tokenizes only the
+        // remainder; the oversized cap glyph is shaped AFTER the body pass so it
+        // can use the real body `line_height`. When inactive, `dropcap_initial`
+        // stays `None` and the body packs/emits exactly as before
+        // (byte-identical).
+        let dropcap_initial: Option<(DropCapInitial, u32)> = match text.drop_cap_lines {
+            Some(n) if n >= 1 => take_drop_cap_initial(&mut resolved_spans).map(|init| (init, n)),
+            _ => None,
+        };
+
         let (tokens, metrics) = shape_words(
             &resolved_spans,
             &families,
@@ -1032,25 +1234,86 @@ pub(super) fn compile_text(
             text.source_span,
         );
 
-        let lines = pack_lines(tokens, box_w, metrics.space_advance);
+        // Shape the cap now that the body `line_height` is known.
+        let dropcap: Option<DropCap> = dropcap_initial.as_ref().and_then(|(init, n)| {
+            shape_drop_cap(
+                init,
+                &families,
+                base_weight,
+                metrics.line_height,
+                *n,
+                engine,
+                fonts,
+            )
+        });
 
-        // Record the actual line count for the overflow="fit" check below.
-        fit_line_count = lines.len();
+        if let Some(cap) = &dropcap {
+            // Gap between the drop cap's right edge and the wrapped body, as a
+            // fraction of the body font size (documented constant).
+            let gap = font_size as f64 * DROPCAP_GAP_FACTOR;
+            let indent = cap.advance + gap;
+            let n = cap.lines;
+            let profile = WidthProfile {
+                narrow_w: (box_w - indent).max(0.0),
+                narrow_count: n,
+                full_w: box_w,
+            };
 
-        emit_lines(
-            &lines,
-            text_x,
-            text_y,
-            box_w,
-            align,
-            metrics,
-            font_size,
-            deco_thickness,
-            // Single-box wrap: the batch's last line IS the paragraph's last
-            // line → leave it ragged under justify.
-            false,
-            commands,
-        );
+            let lines = pack_lines_variable(tokens, profile, metrics.space_advance);
+            fit_line_count = lines.len();
+
+            // Drop-cap baseline: the cap's top sits at the box top, so its
+            // baseline is one cap-ascent below `text_y`. Emit it ONCE at the
+            // box left edge, in the node's resolved color/family.
+            commands.push(SceneCommand::DrawGlyphRun {
+                x: text_x,
+                y: text_y + cap.ascent,
+                font_id: cap.run.font_id.clone(),
+                font_size: cap.run.font_size,
+                color: cap.color,
+                glyphs: run_to_scene_glyphs(&cap.run),
+            });
+
+            // Body wraps around: lines 0..n indented to the cap's right at the
+            // narrow measure; line n onward at the box left, full measure.
+            emit_lines_profiled(
+                &lines,
+                move |i| {
+                    if i < n {
+                        (text_x + indent, profile.narrow_w)
+                    } else {
+                        (text_x, box_w)
+                    }
+                },
+                text_y,
+                align,
+                metrics,
+                font_size,
+                deco_thickness,
+                false,
+                commands,
+            );
+        } else {
+            let lines = pack_lines(tokens, box_w, metrics.space_advance);
+
+            // Record the actual line count for the overflow="fit" check below.
+            fit_line_count = lines.len();
+
+            emit_lines(
+                &lines,
+                text_x,
+                text_y,
+                box_w,
+                align,
+                metrics,
+                font_size,
+                deco_thickness,
+                // Single-box wrap: the batch's last line IS the paragraph's last
+                // line → leave it ragged under justify.
+                false,
+                commands,
+            );
+        }
     }
 
     // ── overflow="fit" check ──────────────────────────────────────────

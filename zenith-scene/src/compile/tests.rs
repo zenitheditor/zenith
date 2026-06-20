@@ -6211,3 +6211,162 @@ page id="page.fn4" w=(px)600 h=(px)900 margin-inner=(px)60 margin-outer=(px)60 m
         r1.scene.commands
     );
 }
+
+// ── Drop cap with text wrap-around ────────────────────────────────────
+
+/// Build a wrapping body-paragraph document, optionally with `drop-cap-lines`.
+/// The body text is long enough to overflow the box width (forcing the wrap
+/// path). Returns the compiled scene's DrawGlyphRun list as `(x, y, font_size)`.
+fn dropcap_runs(drop_cap_lines: Option<u32>, body: &str) -> Vec<(f64, f64, f32)> {
+    let dc_attr = drop_cap_lines.map_or(String::new(), |n| format!(" drop-cap-lines={n}"));
+    let src = format!(
+        r##"zenith version=1 {{
+  project id="proj.dc" name="DC"
+  tokens format="zenith-token-v1" {{}}
+  styles {{}}
+  document id="doc.dc" title="DC" {{
+page id="page.dc" w=(px)1800 h=(px)2700 {{
+  text id="text.dc" x=(px)180 y=(px)600 w=(px)600 h=(px)1200 align="justify" font-size=(px)32{dc_attr} {{
+    span "{body}"
+  }}
+}}
+  }}
+}}
+"##
+    );
+    let doc = parse(&src);
+    let result = compile(&doc, &default_provider());
+    result
+        .scene
+        .commands
+        .iter()
+        .filter_map(|c| {
+            if let SceneCommand::DrawGlyphRun {
+                x, y, font_size, ..
+            } = c
+            {
+                Some((*x, *y, *font_size))
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
+const DROPCAP_BODY: &str = "The quick brown fox jumps over the lazy dog and then \
+continues running across the wide green meadow under a bright morning sky while \
+birds sing and the river flows gently past the old stone bridge nearby downstream.";
+
+/// With `drop-cap-lines=3`: an oversized initial glyph is emitted (its
+/// font_size is far larger than the 32px body), and the first three body lines
+/// are indented to the right of the box-left while the fourth line returns to
+/// the box-left edge.
+#[test]
+fn dropcap_emits_oversized_initial_and_indents_first_lines() {
+    let runs = dropcap_runs(Some(3), DROPCAP_BODY);
+    assert!(runs.len() > 4, "body must wrap to several lines: {runs:?}");
+
+    let body_font_size = 32.0_f32;
+    let box_left = 180.0_f64;
+
+    // The oversized cap is the FIRST emitted run (drawn before the body).
+    let (cap_x, _cap_y, cap_size) = runs[0];
+    assert!(
+        cap_size > body_font_size * 2.0,
+        "drop-cap font_size ({cap_size}) must be far larger than body ({body_font_size}); \
+         expected ≈ 3×line_height"
+    );
+    assert!(
+        (cap_x - box_left).abs() < 0.01,
+        "drop cap must sit at the box left edge ({box_left}); got {cap_x}"
+    );
+
+    // Body runs follow the cap. The first three text lines must be indented to
+    // the RIGHT of the box left; the next line must return to the box left.
+    // Collect body runs grouped by distinct baseline y (one x-origin per line).
+    let body: Vec<(f64, f64)> = runs[1..].iter().map(|&(x, y, _)| (x, y)).collect();
+    // Per-line minimum x keyed by baseline y (BTreeMap to keep order stable).
+    let mut line_min_x: std::collections::BTreeMap<i64, f64> = std::collections::BTreeMap::new();
+    for &(x, y) in &body {
+        let key = (y * 1000.0) as i64;
+        let e = line_min_x.entry(key).or_insert(x);
+        if x < *e {
+            *e = x;
+        }
+    }
+    let line_starts: Vec<f64> = line_min_x.values().copied().collect();
+    assert!(
+        line_starts.len() >= 4,
+        "need at least 4 body lines; got {}: {line_starts:?}",
+        line_starts.len()
+    );
+    for (i, &sx) in line_starts.iter().take(3).enumerate() {
+        assert!(
+            sx > box_left + 1.0,
+            "body line {i} must be indented right of box left ({box_left}); got {sx}"
+        );
+    }
+    assert!(
+        (line_starts[3] - box_left).abs() < 1.0,
+        "body line 4 must return to box left ({box_left}); got {}",
+        line_starts[3]
+    );
+}
+
+/// Without `drop-cap-lines` the command stream is byte-identical to a plain
+/// wrapped paragraph — the feature is fully opt-in.
+#[test]
+fn dropcap_absent_is_byte_identical() {
+    let dc_attr = "";
+    let _ = dc_attr;
+    let none_runs = dropcap_runs(None, DROPCAP_BODY);
+    // Re-render the SAME no-dropcap source twice → identical (determinism), and
+    // confirm the first run is body-sized (no oversized cap).
+    let none_runs2 = dropcap_runs(None, DROPCAP_BODY);
+    assert_eq!(
+        none_runs, none_runs2,
+        "no-dropcap render must be deterministic"
+    );
+    for (_, _, fs) in &none_runs {
+        assert!(
+            (*fs - 32.0).abs() < 0.01,
+            "no-dropcap node must emit only body-sized (32px) runs; got {fs}"
+        );
+    }
+}
+
+/// Empty body text + `drop-cap-lines` set → no panic, no oversized cap, no
+/// glyph runs at all (the empty-spans early return fires).
+#[test]
+fn dropcap_empty_text_no_panic_no_cap() {
+    let runs = dropcap_runs(Some(3), "");
+    assert!(
+        runs.is_empty(),
+        "empty text with drop-cap-lines must emit no glyph runs; got {runs:?}"
+    );
+}
+
+/// Two renders of a drop-cap document produce a byte-identical command stream.
+#[test]
+fn dropcap_two_run_byte_identical() {
+    let src = r##"zenith version=1 {
+  project id="proj.dcr" name="DCR"
+  tokens format="zenith-token-v1" {}
+  styles {}
+  document id="doc.dcr" title="DCR" {
+page id="page.dcr" w=(px)1800 h=(px)2700 {
+  text id="text.dcr" x=(px)180 y=(px)600 w=(px)600 h=(px)1200 align="justify" font-size=(px)32 drop-cap-lines=3 {
+    span "The quick brown fox jumps over the lazy dog and then keeps on running across the meadow."
+  }
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let r1 = compile(&doc, &default_provider());
+    let r2 = compile(&doc, &default_provider());
+    assert_eq!(
+        r1.scene.commands, r2.scene.commands,
+        "two drop-cap renders must be byte-identical"
+    );
+}
