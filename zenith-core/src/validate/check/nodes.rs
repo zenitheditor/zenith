@@ -78,20 +78,59 @@ pub(super) fn walk_node(
     // [0, 0, page_w, page_h]. This uses authored coordinates only — group
     // translation offsets are NOT accumulated (v0 advisory behavior; render-
     // time offset accumulation is a scene-compiler concern, not validation).
+    //
+    // When the node carries a non-zero `rotate` (deg), the check uses the
+    // axis-aligned bounding box (AABB) of the four rotated corners instead of
+    // the authored box. Unrotated nodes (no rotate or 0°) use the authored
+    // box unchanged, keeping byte-identical advisory behavior for those nodes.
     if let Some((page_w, page_h)) = page_px_bounds
         && let Some((nx, ny, nw, nh)) = node_bbox(node, page_w, page_h)
-        && (nx < 0.0 || ny < 0.0 || nx + nw > page_w || ny + nh > page_h)
     {
-        let (node_id, node_span) = node_id_and_span(node);
-        diagnostics.push(Diagnostic::advisory(
-            "off_canvas",
-            format!(
-                "node '{}' extends outside the page bounds (0, 0, {page_w}, {page_h})",
-                node_id
-            ),
-            node_span,
-            Some(node_id.to_owned()),
-        ));
+        // Compute the effective (ax, ay, aw, ah) used for the bounds check.
+        let (ax, ay, aw, ah) = match node_rotate_deg(node) {
+            Some(deg) if deg != 0.0 => {
+                // Rotate the four corners of the authored bbox around its center,
+                // then take the min/max to produce the rotated AABB.
+                let rad = deg.to_radians();
+                let cos = rad.cos();
+                let sin = rad.sin();
+                let cx = nx + nw / 2.0;
+                let cy = ny + nh / 2.0;
+                // Half-extents relative to center.
+                let hw = nw / 2.0;
+                let hh = nh / 2.0;
+                // Four corners in local space (relative to center).
+                let locals: [(f64, f64); 4] = [(-hw, -hh), (hw, -hh), (hw, hh), (-hw, hh)];
+                let mut min_x = f64::INFINITY;
+                let mut min_y = f64::INFINITY;
+                let mut max_x = f64::NEG_INFINITY;
+                let mut max_y = f64::NEG_INFINITY;
+                for (lx, ly) in locals {
+                    let rx = cx + lx * cos - ly * sin;
+                    let ry = cy + lx * sin + ly * cos;
+                    min_x = min_x.min(rx);
+                    min_y = min_y.min(ry);
+                    max_x = max_x.max(rx);
+                    max_y = max_y.max(ry);
+                }
+                (min_x, min_y, max_x - min_x, max_y - min_y)
+            }
+            // Unrotated (or no rotate field / non-deg unit): use authored box as-is.
+            _ => (nx, ny, nw, nh),
+        };
+
+        if ax < 0.0 || ay < 0.0 || ax + aw > page_w || ay + ah > page_h {
+            let (node_id, node_span) = node_id_and_span(node);
+            diagnostics.push(Diagnostic::advisory(
+                "off_canvas",
+                format!(
+                    "node '{}' extends outside the page bounds (0, 0, {page_w}, {page_h})",
+                    node_id
+                ),
+                node_span,
+                Some(node_id.to_owned()),
+            ));
+        }
     }
 
     match node {
@@ -1091,6 +1130,37 @@ fn points_bbox(
     } else {
         None
     }
+}
+
+/// Read the authored rotation of a node in degrees, if the node carries a
+/// `rotate` field and the stored unit is `Deg`.
+///
+/// Returns `Some(degrees)` for rotate-bearing node kinds when the stored unit
+/// is `Unit::Deg`. Returns `None` when the node has no `rotate` field, the
+/// field is absent (`None`), or the unit is not `Deg` (e.g. an exotic unit
+/// produced by forward-compat).
+///
+/// Covered (have a `rotate` field): `Rect`, `Ellipse`, `Frame`, `Image`,
+/// `Text`, `Code`, `Group`, `Polygon`, `Polyline`.
+/// Not covered: `Line`, `Instance`, `Field`, `Footnote`, `Unknown`.
+fn node_rotate_deg(node: &Node) -> Option<f64> {
+    let dim = match node {
+        Node::Rect(n) => n.rotate.as_ref(),
+        Node::Ellipse(n) => n.rotate.as_ref(),
+        Node::Frame(n) => n.rotate.as_ref(),
+        Node::Image(n) => n.rotate.as_ref(),
+        Node::Text(n) => n.rotate.as_ref(),
+        Node::Code(n) => n.rotate.as_ref(),
+        Node::Group(n) => n.rotate.as_ref(),
+        Node::Polygon(n) => n.rotate.as_ref(),
+        Node::Polyline(n) => n.rotate.as_ref(),
+        Node::Line(_)
+        | Node::Instance(_)
+        | Node::Field(_)
+        | Node::Footnote(_)
+        | Node::Unknown(_) => None,
+    }?;
+    (dim.unit == Unit::Deg).then_some(dim.value)
 }
 
 /// Extract the optional `role` attribute from any node variant.
