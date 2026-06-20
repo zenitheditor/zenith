@@ -162,6 +162,7 @@ fn from_json_reshape_ops_round_trip() {
                 y: None,
                 w: Some(200.0),
                 h: None,
+                rotate: None,
             }],
             permissions: Permissions::default(),
         }
@@ -491,6 +492,7 @@ fn set_geometry_on_locked_node_rejected() {
                 y: None,
                 w: None,
                 h: None,
+                rotate: None,
             },
         ],
         permissions: Permissions::default(),
@@ -526,6 +528,7 @@ fn set_geometry_on_locked_node_allowed_with_permission() {
                 y: None,
                 w: None,
                 h: None,
+                rotate: None,
             },
         ],
         permissions: Permissions {

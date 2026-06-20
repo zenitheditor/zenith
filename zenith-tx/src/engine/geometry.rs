@@ -77,19 +77,59 @@ fn node_geometry_mut(node: &mut Node) -> Option<GeometryMut<'_>> {
 
 // ── SetGeometry ───────────────────────────────────────────────────────────────
 
-#[allow(clippy::too_many_arguments)]
+/// Bundled geometry deltas passed to [`apply_set_geometry`].
+///
+/// Grouping these avoids pushing `apply_set_geometry` past the
+/// `clippy::too_many_arguments` threshold without using `#[allow]`.
+pub(super) struct GeometryDelta {
+    pub x: Option<f64>,
+    pub y: Option<f64>,
+    pub w: Option<f64>,
+    pub h: Option<f64>,
+    pub rotate: Option<f64>,
+}
+
+/// Return a mutable reference to a node's `rotate` slot, or `None` for node
+/// variants that do not carry a `rotate` field.
+///
+/// Supported: `Rect`, `Ellipse`, `Frame`, `Image`, `Text`, `Code`, `Group`,
+/// `Polygon`, `Polyline`.
+/// Unsupported: `Line`, `Instance`, `Field`, `Footnote`, `Unknown`.
+fn node_rotate_mut(node: &mut Node) -> Option<&mut Option<Dimension>> {
+    match node {
+        Node::Rect(n) => Some(&mut n.rotate),
+        Node::Ellipse(n) => Some(&mut n.rotate),
+        Node::Frame(n) => Some(&mut n.rotate),
+        Node::Image(n) => Some(&mut n.rotate),
+        Node::Text(n) => Some(&mut n.rotate),
+        Node::Code(n) => Some(&mut n.rotate),
+        Node::Group(n) => Some(&mut n.rotate),
+        Node::Polygon(n) => Some(&mut n.rotate),
+        Node::Polyline(n) => Some(&mut n.rotate),
+        // Line has no rotate field.
+        // Instance has no rotate field.
+        // Field has no rotate field.
+        // Footnote has no rotate field.
+        // Unknown has no rotate field.
+        Node::Line(_)
+        | Node::Instance(_)
+        | Node::Field(_)
+        | Node::Footnote(_)
+        | Node::Unknown(_) => None,
+    }
+}
+
 pub(super) fn apply_set_geometry(
     node_id: &str,
-    x: Option<f64>,
-    y: Option<f64>,
-    w: Option<f64>,
-    h: Option<f64>,
+    delta: GeometryDelta,
     doc: &mut Document,
     diagnostics: &mut Vec<Diagnostic>,
     affected: &mut Vec<String>,
 ) {
+    let GeometryDelta { x, y, w, h, rotate } = delta;
+
     // Early-out: if every field is None this is a no-op — emit advisory.
-    if x.is_none() && y.is_none() && w.is_none() && h.is_none() {
+    if x.is_none() && y.is_none() && w.is_none() && h.is_none() && rotate.is_none() {
         diagnostics.push(Diagnostic::advisory(
             "tx.noop",
             format!(
@@ -113,34 +153,64 @@ pub(super) fn apply_set_geometry(
         }
         Some(node) => {
             let kind = node_kind_str(node);
-            match node_geometry_mut(node) {
-                None => {
-                    diagnostics.push(Diagnostic::error(
-                        "tx.unsupported_property",
-                        format!(
-                            "set_geometry is not supported on a {} node (no x/y/w/h)",
-                            kind
-                        ),
-                        None,
-                        Some(node_id.to_owned()),
-                    ));
-                }
-                Some((nx, ny, nw, nh)) => {
-                    if let Some(v) = x {
-                        *nx = Some(px(v));
+
+            // Apply x/y/w/h only when the node supports bbox geometry.
+            // When x/y/w/h are all None but rotate is Some, we still proceed
+            // (no unsupported_property for the geometry side).
+            let has_geom_delta = x.is_some() || y.is_some() || w.is_some() || h.is_some();
+            if has_geom_delta {
+                match node_geometry_mut(node) {
+                    None => {
+                        diagnostics.push(Diagnostic::error(
+                            "tx.unsupported_property",
+                            format!(
+                                "set_geometry is not supported on a {} node (no x/y/w/h)",
+                                kind
+                            ),
+                            None,
+                            Some(node_id.to_owned()),
+                        ));
+                        return;
                     }
-                    if let Some(v) = y {
-                        *ny = Some(px(v));
+                    Some((nx, ny, nw, nh)) => {
+                        if let Some(v) = x {
+                            *nx = Some(px(v));
+                        }
+                        if let Some(v) = y {
+                            *ny = Some(px(v));
+                        }
+                        if let Some(v) = w {
+                            *nw = Some(px(v));
+                        }
+                        if let Some(v) = h {
+                            *nh = Some(px(v));
+                        }
                     }
-                    if let Some(v) = w {
-                        *nw = Some(px(v));
-                    }
-                    if let Some(v) = h {
-                        *nh = Some(px(v));
-                    }
-                    record_affected(node_id, affected);
                 }
             }
+
+            // Apply rotate when requested.
+            if let Some(r) = rotate {
+                match node_rotate_mut(node) {
+                    None => {
+                        diagnostics.push(Diagnostic::error(
+                            "tx.unsupported_property",
+                            format!("set_geometry: rotate is not supported on {} nodes", kind),
+                            None,
+                            Some(node_id.to_owned()),
+                        ));
+                        return;
+                    }
+                    Some(slot) => {
+                        *slot = Some(Dimension {
+                            value: r,
+                            unit: Unit::Deg,
+                        });
+                    }
+                }
+            }
+
+            record_affected(node_id, affected);
         }
     }
 }

@@ -224,21 +224,26 @@ pub enum Op {
         locked: bool,
     },
     /// Move and/or resize a bbox node by updating its `x`, `y`, `w`, `h`
-    /// geometry fields. All four fields are optional — only the fields present
-    /// in the JSON payload are changed; omitted fields are left untouched.
+    /// geometry fields, and optionally set its `rotate` angle. All five fields
+    /// are optional — only the fields present in the JSON payload are changed;
+    /// omitted fields are left untouched.
     ///
-    /// Values are in document pixels (`(px)` unit).
+    /// Values are in document pixels (`(px)` unit) for `x`/`y`/`w`/`h`.
+    /// `rotate` is in degrees (`(deg)` unit at storage; pass a raw `f64` here).
     ///
-    /// Supported nodes: `rect`, `ellipse`, `frame`, `image`.
-    /// Unsupported: `line` (uses x1/y1/x2/y2), `polygon`, `polyline` (no bbox),
-    /// `text`, `group`, `unknown` — yields `tx.unsupported_property`.
+    /// Supported nodes for x/y/w/h: `rect`, `ellipse`, `frame`, `image`,
+    /// `text`, `code`, `group`, `field`.
+    /// Supported nodes for rotate: `rect`, `ellipse`, `frame`, `image`, `text`,
+    /// `code`, `group`, `polygon`, `polyline`.
+    /// Unsupported for rotate: `line`, `instance`, `field`, `footnote`,
+    /// `unknown` — yields `tx.unsupported_property`.
     ///
-    /// If all four fields are omitted, an advisory `tx.noop` is emitted and no
+    /// If all five fields are omitted, an advisory `tx.noop` is emitted and no
     /// node is recorded as affected.
     ///
-    /// JSON example (partial — only x and w change):
+    /// JSON example (partial — only x, w, and rotate change):
     /// ```json
-    /// {"op":"set_geometry","node":"r","x":10,"w":200}
+    /// {"op":"set_geometry","node":"r","x":10,"w":200,"rotate":45}
     /// ```
     SetGeometry {
         /// The stable node `id` to target.
@@ -255,6 +260,9 @@ pub enum Op {
         /// New height in pixels. Omit to leave unchanged.
         #[serde(default)]
         h: Option<f64>,
+        /// New rotation in degrees. Omit to leave unchanged.
+        #[serde(default)]
+        rotate: Option<f64>,
     },
     /// Replace the entire vertex list of a `polygon` or `polyline` node.
     ///

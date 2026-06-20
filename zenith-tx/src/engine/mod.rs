@@ -18,7 +18,7 @@ mod style;
 
 use asset::{apply_add_asset, apply_set_asset};
 use flags::{apply_set_locked, apply_set_points, apply_set_visible};
-use geometry::{apply_align_nodes, apply_distribute_nodes, apply_set_geometry};
+use geometry::{GeometryDelta, apply_align_nodes, apply_distribute_nodes, apply_set_geometry};
 use structure::{
     ReorderKind, apply_add_node, apply_add_page, apply_delete_page, apply_duplicate_node,
     apply_duplicate_page, apply_group, apply_remove_node, apply_reorder, apply_reorder_pages,
@@ -185,8 +185,21 @@ fn apply_op(
             y,
             w,
             h,
+            rotate,
         } => {
-            apply_set_geometry(node_id, *x, *y, *w, *h, doc, diagnostics, affected);
+            apply_set_geometry(
+                node_id,
+                GeometryDelta {
+                    x: *x,
+                    y: *y,
+                    w: *w,
+                    h: *h,
+                    rotate: *rotate,
+                },
+                doc,
+                diagnostics,
+                affected,
+            );
         }
         Op::SetPoints {
             node: node_id,

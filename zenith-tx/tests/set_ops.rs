@@ -496,6 +496,7 @@ fn set_geometry_moves_rect() {
             y: None,
             w: Some(200.0),
             h: None,
+            rotate: None,
         }],
         permissions: Permissions::default(),
     };
@@ -539,6 +540,7 @@ fn set_geometry_unsupported_on_line() {
             y: None,
             w: None,
             h: None,
+            rotate: None,
         }],
         permissions: Permissions::default(),
     };
@@ -566,6 +568,7 @@ fn set_geometry_no_fields_is_noop() {
             y: None,
             w: None,
             h: None,
+            rotate: None,
         }],
         permissions: Permissions::default(),
     };
@@ -643,6 +646,7 @@ fn set_geometry_supported_on_code() {
             y: None,
             w: None,
             h: None,
+            rotate: None,
         }],
         permissions: Permissions::default(),
     };
@@ -668,6 +672,7 @@ fn set_geometry_supported_on_text() {
             y: None,
             w: None,
             h: None,
+            rotate: None,
         }],
         permissions: Permissions::default(),
     };
@@ -681,6 +686,62 @@ fn set_geometry_supported_on_text() {
         result.source_after
     );
     assert_ne!(result.source_after, result.source_before);
+}
+
+// ── SetGeometry rotate tests ─────────────────────────────────────────────
+
+#[test]
+fn set_geometry_rotate_on_image_accepted() {
+    let doc = parse(IMAGE_DOC);
+    let tx = Transaction {
+        ops: vec![Op::SetGeometry {
+            node: "pic".to_owned(),
+            x: None,
+            y: None,
+            w: None,
+            h: None,
+            rotate: Some(45.0),
+        }],
+        permissions: Permissions::default(),
+    };
+    let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
+
+    assert_eq!(result.status, TxStatus::Accepted);
+    assert_eq!(result.affected_node_ids, vec!["pic".to_owned()]);
+    assert!(
+        result.source_after.contains("rotate=(deg)45"),
+        "source_after must contain rotate=(deg)45; got:\n{}",
+        result.source_after
+    );
+    assert_ne!(result.source_before, result.source_after);
+}
+
+#[test]
+fn set_geometry_rotate_on_line_rejected() {
+    let doc = parse(LINE_DOC);
+    let tx = Transaction {
+        ops: vec![Op::SetGeometry {
+            node: "ln1".to_owned(),
+            x: None,
+            y: None,
+            w: None,
+            h: None,
+            rotate: Some(30.0),
+        }],
+        permissions: Permissions::default(),
+    };
+    let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
+
+    assert_eq!(result.status, TxStatus::Rejected);
+    assert!(
+        result
+            .diagnostics
+            .iter()
+            .any(|d| d.code == "tx.unsupported_property" && d.message.contains("line")),
+        "expected tx.unsupported_property mentioning \"line\"; got: {:?}",
+        result.diagnostics
+    );
+    assert_eq!(result.source_after, result.source_before);
 }
 
 // ── SetPoints tests ───────────────────────────────────────────────────────
