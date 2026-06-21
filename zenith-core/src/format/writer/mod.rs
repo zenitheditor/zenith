@@ -30,7 +30,7 @@ use std::fmt::Write as _;
 
 use crate::ast::{
     AssetBlock, AssetDecl, ComponentDef, Dimension, Document, MasterDef, ObjectPosition, Project,
-    PropertyValue, SectionDef, Unit, UnknownValue,
+    PropertyValue, SectionDef, Unit, UnknownProperty, UnknownValue,
 };
 use crate::error::FormatError;
 
@@ -58,7 +58,7 @@ use tokens::write_token_block;
 ///   floats emit without `.0`: `1` not `1.0`)
 /// - `Bool(b)` → KDL v2 boolean keyword (`#true` / `#false`)
 /// - `Null` → KDL v2 null keyword (`#null`)
-pub(super) fn fmt_unknown_value(v: &UnknownValue) -> String {
+fn fmt_unknown_value(v: &UnknownValue) -> String {
     match v {
         UnknownValue::String(s) => {
             let mut out = String::with_capacity(s.len() + 2);
@@ -71,6 +71,21 @@ pub(super) fn fmt_unknown_value(v: &UnknownValue) -> String {
         UnknownValue::Float(f) => fmt_f64(*f),
         UnknownValue::Bool(b) => (if *b { "#true" } else { "#false" }).to_owned(),
         UnknownValue::Null => "#null".to_owned(),
+    }
+}
+
+/// Serialize an [`UnknownProperty`]'s value, including its KDL type annotation
+/// when present, so that an annotated value round-trips byte-identically.
+///
+/// The annotation is emitted as a `(ty)` prefix in the value position, matching
+/// KDL v2 syntax `name=(type)value`:
+///
+/// - annotated → `(px)10`, `(token)"color.navy"`
+/// - unannotated → identical to [`fmt_unknown_value`]
+pub(super) fn fmt_unknown_property(p: &UnknownProperty) -> String {
+    match &p.ty {
+        Some(ty) => format!("({}){}", ty, fmt_unknown_value(&p.value)),
+        None => fmt_unknown_value(&p.value),
     }
 }
 
@@ -443,7 +458,7 @@ fn write_asset_decl(decl: &AssetDecl, out: &mut String, depth: usize) {
         out.push(' ');
         out.push_str(key);
         out.push('=');
-        out.push_str(&fmt_unknown_value(&prop.value));
+        out.push_str(&fmt_unknown_property(prop));
     }
 
     out.push('\n');

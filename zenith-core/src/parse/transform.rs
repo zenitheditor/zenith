@@ -316,6 +316,7 @@ fn collect_unknown_props(node: &KdlNode, known_keys: &[&str]) -> BTreeMap<String
                     key.to_owned(),
                     UnknownProperty {
                         value: kdl_value_to_unknown_value(entry.value()),
+                        ty: entry.ty().map(|id| id.value().to_owned()),
                     },
                 );
             }

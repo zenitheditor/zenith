@@ -730,6 +730,7 @@ fn unknown_property_on_rect_produces_warning() {
         "magic-glow".to_owned(),
         crate::ast::node::UnknownProperty {
             value: crate::ast::node::UnknownValue::String("true".to_owned()),
+            ty: None,
         },
     );
     let doc = doc_with(
@@ -933,6 +934,7 @@ fn group_unknown_property_warns() {
         "future-blend".to_owned(),
         crate::ast::node::UnknownProperty {
             value: crate::ast::node::UnknownValue::String("multiply".to_owned()),
+            ty: None,
         },
     );
     let doc = doc_with(
@@ -1393,6 +1395,7 @@ fn frame_unknown_property_warns() {
         "future-scroll".to_owned(),
         crate::ast::node::UnknownProperty {
             value: crate::ast::node::UnknownValue::Bool(true),
+            ty: None,
         },
     );
     let doc = doc_with(
@@ -1982,6 +1985,7 @@ fn asset_unknown_property_produces_warning() {
         "dpi".to_owned(),
         crate::ast::node::UnknownProperty {
             value: crate::ast::node::UnknownValue::Integer(96),
+            ty: None,
         },
     );
     let doc = doc_with_assets(vec![AssetDecl {
@@ -2948,6 +2952,7 @@ fn code_node_unknown_property_warns() {
                 "future-prop".to_owned(),
                 crate::ast::UnknownProperty {
                     value: crate::ast::UnknownValue::String("x".to_owned()),
+                    ty: None,
                 },
             );
             Node::Code(c)
@@ -5657,6 +5662,7 @@ fn table_cell_unknown_property_warns() {
         "future-cell-prop".to_owned(),
         crate::ast::node::UnknownProperty {
             value: crate::ast::node::UnknownValue::String("yes".to_owned()),
+            ty: None,
         },
     );
     let cell = TableCell {
@@ -5700,6 +5706,7 @@ fn table_row_unknown_property_warns() {
         "future-row-prop".to_owned(),
         crate::ast::node::UnknownProperty {
             value: crate::ast::node::UnknownValue::Integer(7),
+            ty: None,
         },
     );
     let rows = vec![TableRow {
@@ -5726,6 +5733,7 @@ fn table_column_unknown_property_warns() {
         "future-col-prop".to_owned(),
         crate::ast::node::UnknownProperty {
             value: crate::ast::node::UnknownValue::Bool(true),
+            ty: None,
         },
     );
     let columns = vec![

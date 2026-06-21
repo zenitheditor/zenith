@@ -23,11 +23,16 @@ pub enum UnknownValue {
 ///
 /// Storing the full `UnknownValue` variant keeps the AST lossless for
 /// round-trip: a boolean `magic=#true` round-trips back as a boolean, not
-/// as the string `"true"`.
+/// as the string `"true"`. Any KDL type annotation on the value (e.g. `px`
+/// from `(px)10`) is retained in `ty` so annotated values round-trip
+/// byte-identically.
 #[derive(Debug, Clone, PartialEq)]
 pub struct UnknownProperty {
     /// The typed representation of the KDL value.
     pub value: UnknownValue,
+    /// The KDL type annotation, if any (e.g. `px` from `(px)10`, `token` from
+    /// `(token)"color.navy"`). Preserved so annotated values round-trip losslessly.
+    pub ty: Option<String>,
 }
 
 /// A text content span — a run of text with optional inline style overrides.

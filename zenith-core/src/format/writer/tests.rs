@@ -1698,6 +1698,102 @@ fn test_unknown_property_all_types_round_trip() {
     );
 }
 
+/// **Unknown-property type-annotation round-trip**: KDL type annotations on
+/// unrecognized properties (e.g. `(px)42`, `(token)"color.brand"`) must be
+/// captured on parse, re-emitted in the value position on format, and survive
+/// a full parse→format→parse cycle byte-identically. Non-annotated unknown
+/// values must remain unchanged.
+#[test]
+fn test_unknown_property_type_annotation_round_trip() {
+    let src = r##"zenith version=1 {
+  project id="proj.ann" name="Ann"
+  tokens format="zenith-token-v1" {
+  }
+  styles {
+  }
+  document id="doc.ann" title="Ann" {
+    page id="p" w=(px)100 h=(px)100 {
+      rect id="r" x=(px)0 y=(px)0 w=(px)10 h=(px)10 mystery=(px)42 magic=(token)"color.brand" plain="hello" flag=#true
+    }
+  }
+}
+"##;
+    let adapter = KdlAdapter;
+    let doc1 = adapter.parse(src.as_bytes()).expect("parse 1");
+
+    let rect = match &doc1.body.pages[0].children[0] {
+        crate::ast::Node::Rect(r) => r,
+        other => panic!("expected Rect, got {other:?}"),
+    };
+
+    // Annotations captured on parse.
+    assert_eq!(
+        rect.unknown_props["mystery"].ty.as_deref(),
+        Some("px"),
+        "`(px)42` must capture ty = Some(\"px\")"
+    );
+    assert_eq!(
+        rect.unknown_props["mystery"].value,
+        crate::ast::UnknownValue::Integer(42),
+    );
+    assert_eq!(
+        rect.unknown_props["magic"].ty.as_deref(),
+        Some("token"),
+        "`(token)\"color.brand\"` must capture ty = Some(\"token\")"
+    );
+    assert_eq!(
+        rect.unknown_props["magic"].value,
+        crate::ast::UnknownValue::String("color.brand".to_owned()),
+    );
+    // Non-annotated unknown props have ty = None.
+    assert_eq!(
+        rect.unknown_props["plain"].ty, None,
+        "non-annotated `plain` must have ty = None"
+    );
+    assert_eq!(
+        rect.unknown_props["flag"].ty, None,
+        "non-annotated `flag` must have ty = None"
+    );
+
+    // Format → the annotation is emitted in the value position.
+    let formatted1 = format_document(&doc1).expect("format 1");
+    let text = String::from_utf8_lossy(&formatted1);
+    assert!(
+        text.contains("mystery=(px)42"),
+        "formatted output must contain `mystery=(px)42`, got:\n{text}"
+    );
+    assert!(
+        text.contains(r#"magic=(token)"color.brand""#),
+        "formatted output must contain `magic=(token)\"color.brand\"`, got:\n{text}"
+    );
+    assert!(
+        text.contains(r#"plain="hello""#),
+        "non-annotated `plain=\"hello\"` must be unchanged, got:\n{text}"
+    );
+    assert!(
+        text.contains("flag=#true"),
+        "non-annotated `flag=#true` must be unchanged, got:\n{text}"
+    );
+
+    // Re-parse → unknown_props (value + ty) are identical to the first parse.
+    let doc2 = adapter.parse(&formatted1).expect("parse 2 after format");
+    let rect2 = match &doc2.body.pages[0].children[0] {
+        crate::ast::Node::Rect(r) => r,
+        other => panic!("expected Rect in re-parsed doc, got {other:?}"),
+    };
+    assert_eq!(
+        rect.unknown_props, rect2.unknown_props,
+        "unknown_props (value + ty) must be byte-stable across parse→format→parse"
+    );
+
+    // Idempotence: format a second time → identical bytes.
+    let formatted2 = format_document(&doc2).expect("format 2");
+    assert_eq!(
+        formatted1, formatted2,
+        "format must be idempotent for annotated unknown properties"
+    );
+}
+
 /// **Forward-compat preservation**: an unknown property on a rect survives
 /// a format round-trip.
 #[test]

@@ -12,8 +12,8 @@ use crate::ast::{
 };
 
 use super::{
-    fmt_dimension, fmt_unknown_value, indent, write_opt_bool, write_opt_dimension, write_opt_f64,
-    write_opt_object_position, write_opt_property_value, write_opt_str,
+    fmt_dimension, fmt_unknown_property, indent, write_opt_bool, write_opt_dimension,
+    write_opt_f64, write_opt_object_position, write_opt_property_value, write_opt_str,
 };
 
 // ---------------------------------------------------------------------------
@@ -194,7 +194,7 @@ fn write_table_cell(c: &TableCell, out: &mut String, depth: usize) {
         out.push(' ');
         out.push_str(key);
         out.push('=');
-        out.push_str(&fmt_unknown_value(&prop.value));
+        out.push_str(&fmt_unknown_property(prop));
     }
 
     out.push_str(" {\n");
@@ -212,7 +212,7 @@ fn write_table_row(r: &TableRow, out: &mut String, depth: usize) {
         out.push(' ');
         out.push_str(key);
         out.push('=');
-        out.push_str(&fmt_unknown_value(&prop.value));
+        out.push_str(&fmt_unknown_property(prop));
     }
 
     out.push_str(" {\n");
@@ -265,7 +265,7 @@ fn write_table(t: &TableNode, out: &mut String, depth: usize) {
         out.push(' ');
         out.push_str(key);
         out.push('=');
-        out.push_str(&fmt_unknown_value(&prop.value));
+        out.push_str(&fmt_unknown_property(prop));
     }
 
     out.push_str(" {\n");
@@ -278,7 +278,7 @@ fn write_table(t: &TableNode, out: &mut String, depth: usize) {
             out.push(' ');
             out.push_str(key);
             out.push('=');
-            out.push_str(&fmt_unknown_value(&prop.value));
+            out.push_str(&fmt_unknown_property(prop));
         }
         out.push('\n');
     }
@@ -324,7 +324,7 @@ fn write_field(f: &FieldNode, out: &mut String, depth: usize) {
         out.push(' ');
         out.push_str(key);
         out.push('=');
-        out.push_str(&fmt_unknown_value(&prop.value));
+        out.push_str(&fmt_unknown_property(prop));
     }
 
     out.push('\n');
@@ -364,7 +364,7 @@ fn write_toc(t: &TocNode, out: &mut String, depth: usize) {
         out.push(' ');
         out.push_str(key);
         out.push('=');
-        out.push_str(&fmt_unknown_value(&prop.value));
+        out.push_str(&fmt_unknown_property(prop));
     }
 
     out.push('\n');
@@ -395,7 +395,7 @@ fn write_instance(i: &InstanceNode, out: &mut String, depth: usize) {
         out.push(' ');
         out.push_str(key);
         out.push('=');
-        out.push_str(&fmt_unknown_value(&prop.value));
+        out.push_str(&fmt_unknown_property(prop));
     }
 
     // Always emit a brace block (container style), even with no overrides, so
@@ -479,7 +479,7 @@ fn write_rect(r: &RectNode, out: &mut String, depth: usize) {
         out.push(' ');
         out.push_str(key);
         out.push('=');
-        out.push_str(&fmt_unknown_value(&prop.value));
+        out.push_str(&fmt_unknown_property(prop));
     }
 
     out.push('\n');
@@ -528,7 +528,7 @@ fn write_image(i: &ImageNode, out: &mut String, depth: usize) {
         out.push(' ');
         out.push_str(key);
         out.push('=');
-        out.push_str(&fmt_unknown_value(&prop.value));
+        out.push_str(&fmt_unknown_property(prop));
     }
 
     out.push('\n');
@@ -572,7 +572,7 @@ fn write_ellipse(e: &EllipseNode, out: &mut String, depth: usize) {
         out.push(' ');
         out.push_str(key);
         out.push('=');
-        out.push_str(&fmt_unknown_value(&prop.value));
+        out.push_str(&fmt_unknown_property(prop));
     }
 
     out.push('\n');
@@ -608,7 +608,7 @@ fn write_line(l: &LineNode, out: &mut String, depth: usize) {
         out.push(' ');
         out.push_str(key);
         out.push('=');
-        out.push_str(&fmt_unknown_value(&prop.value));
+        out.push_str(&fmt_unknown_property(prop));
     }
 
     out.push('\n');
@@ -646,7 +646,7 @@ fn write_connector(c: &ConnectorNode, out: &mut String, depth: usize) {
         out.push(' ');
         out.push_str(key);
         out.push('=');
-        out.push_str(&fmt_unknown_value(&prop.value));
+        out.push_str(&fmt_unknown_property(prop));
     }
 
     out.push('\n');
@@ -687,7 +687,7 @@ fn write_frame(f: &FrameNode, out: &mut String, depth: usize) {
         out.push(' ');
         out.push_str(key);
         out.push('=');
-        out.push_str(&fmt_unknown_value(&prop.value));
+        out.push_str(&fmt_unknown_property(prop));
     }
 
     out.push_str(" {\n");
@@ -724,7 +724,7 @@ fn write_group(g: &GroupNode, out: &mut String, depth: usize) {
         out.push(' ');
         out.push_str(key);
         out.push('=');
-        out.push_str(&fmt_unknown_value(&prop.value));
+        out.push_str(&fmt_unknown_property(prop));
     }
 
     out.push_str(" {\n");
@@ -791,7 +791,7 @@ fn write_text(t: &TextNode, out: &mut String, depth: usize) {
         out.push(' ');
         out.push_str(key);
         out.push('=');
-        out.push_str(&fmt_unknown_value(&prop.value));
+        out.push_str(&fmt_unknown_property(prop));
     }
 
     out.push_str(" {\n");
@@ -840,7 +840,7 @@ fn write_shape(s: &ShapeNode, out: &mut String, depth: usize) {
         out.push(' ');
         out.push_str(key);
         out.push('=');
-        out.push_str(&fmt_unknown_value(&prop.value));
+        out.push_str(&fmt_unknown_property(prop));
     }
 
     out.push_str(" {\n");
@@ -892,7 +892,7 @@ fn write_footnote(f: &FootnoteNode, out: &mut String, depth: usize) {
         out.push(' ');
         out.push_str(key);
         out.push('=');
-        out.push_str(&fmt_unknown_value(&prop.value));
+        out.push_str(&fmt_unknown_property(prop));
     }
 
     out.push_str(" {\n");
@@ -943,7 +943,7 @@ fn write_code(c: &CodeNode, out: &mut String, depth: usize) {
         out.push(' ');
         out.push_str(key);
         out.push('=');
-        out.push_str(&fmt_unknown_value(&prop.value));
+        out.push_str(&fmt_unknown_property(prop));
     }
 
     // The verbatim source is emitted as a single escaped `content` child line.
@@ -1001,7 +1001,7 @@ fn write_polygon(p: &PolygonNode, out: &mut String, depth: usize) {
         out.push(' ');
         out.push_str(key);
         out.push('=');
-        out.push_str(&fmt_unknown_value(&prop.value));
+        out.push_str(&fmt_unknown_property(prop));
     }
 
     // Points block: always emit braces (container style).
@@ -1039,7 +1039,7 @@ fn write_polyline(p: &PolylineNode, out: &mut String, depth: usize) {
         out.push(' ');
         out.push_str(key);
         out.push('=');
-        out.push_str(&fmt_unknown_value(&prop.value));
+        out.push_str(&fmt_unknown_property(prop));
     }
 
     // Points block.
