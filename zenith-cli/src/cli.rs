@@ -54,6 +54,38 @@ pub struct LibraryArgs {
 pub enum LibrarySub {
     /// List all resolved library packs (project + embedded presets) and items.
     List(LibraryListArgs),
+
+    /// Materialize a library item into a target `.zen` document.
+    Add(LibraryAddArgs),
+}
+
+/// Arguments for `zenith library add`.
+#[derive(Debug, Args)]
+pub struct LibraryAddArgs {
+    /// The item to add, as `<package>#<item>`, e.g. `@zenith/flowchart#decision`.
+    pub spec: String,
+
+    /// Target `.zen` document to materialize the item into (written in-place,
+    /// unless `--dry-run`). Its parent directory is the project dir whose
+    /// `libraries/*.zen` packs are resolved alongside the embedded presets.
+    #[arg(long, value_name = "FILE")]
+    pub into: PathBuf,
+
+    /// Id of the page in the target document to place the instance on.
+    #[arg(long, value_name = "ID")]
+    pub page: String,
+
+    /// Instance origin as `X,Y` in pixels (default `0,0`).
+    #[arg(long, value_name = "X,Y")]
+    pub at: Option<String>,
+
+    /// Override the generated instance id base (default: the item name).
+    #[arg(long, value_name = "ID")]
+    pub id: Option<String>,
+
+    /// Print the resulting source to stdout WITHOUT writing the file.
+    #[arg(long)]
+    pub dry_run: bool,
 }
 
 /// Arguments for `zenith library list`.

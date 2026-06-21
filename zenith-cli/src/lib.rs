@@ -425,6 +425,65 @@ pub fn run() -> ExitCode {
                 println!("{}", commands::library::list(&packs, list_args.json));
                 ExitCode::SUCCESS
             }
+
+            cli::LibrarySub::Add(add_args) => {
+                // Parse the optional `--at "X,Y"` origin up front.
+                let at = match parse_at_spec(add_args.at.as_deref()) {
+                    Ok(pair) => pair,
+                    Err(msg) => {
+                        eprintln!("{}", msg);
+                        return ExitCode::from(2);
+                    }
+                };
+
+                let target_src = match read_file(&add_args.into) {
+                    Ok(s) => s,
+                    Err(msg) => {
+                        eprintln!("{}", msg);
+                        return ExitCode::from(2);
+                    }
+                };
+
+                // The project dir is the --into file's parent directory.
+                let project_dir = add_args
+                    .into
+                    .parent()
+                    .filter(|p| !p.as_os_str().is_empty())
+                    .map(std::path::Path::to_path_buf);
+
+                match commands::library::add(
+                    &target_src,
+                    &add_args.spec,
+                    project_dir.as_deref(),
+                    &add_args.page,
+                    at,
+                    add_args.id.as_deref(),
+                ) {
+                    Ok(result) => {
+                        if add_args.dry_run {
+                            // Print the resulting source WITHOUT writing.
+                            match String::from_utf8(result.formatted) {
+                                Ok(s) => print!("{}", s),
+                                Err(_) => {
+                                    eprintln!("error: formatted output is not valid UTF-8");
+                                    return ExitCode::from(2);
+                                }
+                            }
+                        } else {
+                            if let Err(e) = std::fs::write(&add_args.into, &result.formatted) {
+                                eprintln!("error writing '{}': {}", add_args.into.display(), e);
+                                return ExitCode::from(2);
+                            }
+                            println!("{}", result.summary);
+                        }
+                        ExitCode::SUCCESS
+                    }
+                    Err(e) => {
+                        eprintln!("{}", e.message);
+                        ExitCode::from(e.exit_code)
+                    }
+                }
+            }
         },
 
         Command::Tx(args) => {
@@ -515,6 +574,32 @@ fn parse_spread_spec(spec: &str) -> Result<(usize, usize), String> {
         return Err(err());
     }
     Ok((a, b))
+}
+
+/// Parse an `--at` spec of the form `"X,Y"` (two finite floats) into `(x, y)`.
+///
+/// `None` (the flag was omitted) defaults to `(0.0, 0.0)`. Returns a human-
+/// readable error (never panics) when the value is not exactly two
+/// comma-separated finite numbers.
+fn parse_at_spec(spec: Option<&str>) -> Result<(f64, f64), String> {
+    let spec = match spec {
+        None => return Ok((0.0, 0.0)),
+        Some(s) => s,
+    };
+    let err = || {
+        format!(
+            "error: invalid --at value {:?} (expected two comma-separated \
+             numbers like \"120,80\")",
+            spec
+        )
+    };
+    let (x_str, y_str) = spec.split_once(',').ok_or_else(err)?;
+    let x: f64 = x_str.trim().parse().map_err(|_| err())?;
+    let y: f64 = y_str.trim().parse().map_err(|_| err())?;
+    if !x.is_finite() || !y.is_finite() {
+        return Err(err());
+    }
+    Ok((x, y))
 }
 
 /// Resolve the project directory for the library subsystem from an optional

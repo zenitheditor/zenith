@@ -19,9 +19,13 @@
 //! This module contains pure pack-loading/registry logic only; the CLI command
 //! that consumes it lives in [`crate::commands::library`].
 
+use std::collections::{BTreeMap, HashSet};
 use std::path::{Path, PathBuf};
 
-use zenith_core::{KdlAdapter, KdlSource};
+use zenith_core::{
+    AssetDecl, ComponentDef, Dimension, Document, InstanceNode, KdlAdapter, KdlSource, LibraryDef,
+    Node, ProvenanceDef, Style, Token, Unit,
+};
 
 /// Embedded preset packs, as `(pack_id, pack_source)` pairs.
 ///
@@ -214,6 +218,525 @@ fn source_rank(source: &PackSource) -> u8 {
     }
 }
 
+// ── Materialization (`library add`) ───────────────────────────────────────────
+
+/// An error produced while materializing a library item into a target document.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AddError {
+    /// Human-readable message describing the failure.
+    pub message: String,
+}
+
+impl AddError {
+    fn new(message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+        }
+    }
+}
+
+impl std::fmt::Display for AddError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.message)
+    }
+}
+
+impl std::error::Error for AddError {}
+
+/// The outcome of a successful [`materialize`] call.
+///
+/// All ids are the FINAL ids written into the target document, so the caller can
+/// build a deterministic human/JSON summary without re-deriving them.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AddOutcome {
+    /// The package id the item came from (e.g. `@zenith/flowchart`).
+    pub pkg_id: String,
+    /// The item name within the pack (e.g. `decision`).
+    pub item: String,
+    /// The namespaced target component id the item was copied to.
+    pub target_component_id: String,
+    /// The unique id of the inserted instance node.
+    pub instance_id: String,
+    /// The unique id of the recorded provenance entry.
+    pub provenance_id: String,
+    /// Non-fatal dependency-conflict warnings (a pack token/style/asset id that
+    /// already existed in the target with a DIFFERENT definition; the target's
+    /// existing definition was kept). Each entry is a `library.dependency_conflict`
+    /// human-readable line.
+    pub warnings: Vec<String>,
+}
+
+/// Parse a `pkg#item` spec into `(pkg_id, item)`.
+///
+/// # Errors
+///
+/// Returns [`AddError`] when the spec has no `#`, or either side is empty.
+pub fn parse_spec(spec: &str) -> Result<(String, String), AddError> {
+    let (pkg, item) = spec.split_once('#').ok_or_else(|| {
+        AddError::new(format!(
+            "malformed item spec {:?} (expected `<package>#<item>`, e.g. \
+             `@zenith/flowchart#decision`)",
+            spec
+        ))
+    })?;
+    if pkg.is_empty() || item.is_empty() {
+        return Err(AddError::new(format!(
+            "malformed item spec {:?} (both package and item must be non-empty, \
+             e.g. `@zenith/flowchart#decision`)",
+            spec
+        )));
+    }
+    Ok((pkg.to_owned(), item.to_owned()))
+}
+
+/// Load the FULL [`Document`] of a resolved pack.
+///
+/// [`resolve_packs`] only yields pack METADATA; materialization needs the pack's
+/// component/token/style/asset subtrees, so this re-reads and parses the pack's
+/// source: embedded presets from [`EMBEDDED_PACKS`], project packs from disk.
+///
+/// # Errors
+///
+/// Returns [`AddError`] when the embedded source for `pack.id` cannot be located,
+/// or when a project pack file cannot be read or parsed.
+pub fn load_pack_document(pack: &LibraryPack) -> Result<Document, AddError> {
+    let source = match &pack.source {
+        PackSource::Preset => EMBEDDED_PACKS
+            .iter()
+            .find(|(id, _)| *id == pack.id)
+            .map(|(_, src)| (*src).to_owned())
+            .ok_or_else(|| {
+                AddError::new(format!("embedded pack '{}' source not found", pack.id))
+            })?,
+        PackSource::Project(path) => std::fs::read_to_string(path).map_err(|e| {
+            AddError::new(format!("error reading pack '{}': {}", path.display(), e))
+        })?,
+    };
+    KdlAdapter
+        .parse(source.as_bytes())
+        .map_err(|e| AddError::new(format!("error parsing pack '{}': {}", pack.id, e)))
+}
+
+/// Sanitize a package id into a safe component-id fragment.
+///
+/// Replaces `@` and `/` (and any other non-`[A-Za-z0-9._-]` byte) with `.`,
+/// collapsing the result so `@zenith/flowchart` → `zenith.flowchart`.
+fn sanitize_pkg(pkg_id: &str) -> String {
+    let mut out = String::with_capacity(pkg_id.len());
+    let mut prev_dot = false;
+    for ch in pkg_id.chars() {
+        if ch.is_ascii_alphanumeric() || matches!(ch, '.' | '_' | '-') {
+            out.push(ch);
+            prev_dot = ch == '.';
+        } else {
+            // Collapse runs of separators (e.g. a leading '@') into a single '.'.
+            if !prev_dot && !out.is_empty() {
+                out.push('.');
+                prev_dot = true;
+            }
+        }
+    }
+    // Trim a trailing separator.
+    while out.ends_with('.') {
+        out.pop();
+    }
+    out
+}
+
+/// The namespaced target component id for a pack item, e.g.
+/// `lib.zenith.flowchart.decision`.
+fn target_component_id(pkg_id: &str, item: &str) -> String {
+    format!("lib.{}.{}", sanitize_pkg(pkg_id), item)
+}
+
+/// Recursively insert every id-bearing node id under `children` into `out`,
+/// descending into every container (group/frame/instance has no children, table
+/// cells do). Mirrors the validator's `collect_local_ids` but ALSO captures the
+/// `Unknown` node id when present (forward-compat: an unknown node may still be
+/// addressable), so dedup never accidentally reuses a taken id.
+fn collect_node_ids(children: &[Node], out: &mut HashSet<String>) {
+    for child in children {
+        match child {
+            Node::Rect(n) => {
+                out.insert(n.id.clone());
+            }
+            Node::Ellipse(n) => {
+                out.insert(n.id.clone());
+            }
+            Node::Line(n) => {
+                out.insert(n.id.clone());
+            }
+            Node::Text(n) => {
+                out.insert(n.id.clone());
+            }
+            Node::Code(n) => {
+                out.insert(n.id.clone());
+            }
+            Node::Image(n) => {
+                out.insert(n.id.clone());
+            }
+            Node::Polygon(n) => {
+                out.insert(n.id.clone());
+            }
+            Node::Polyline(n) => {
+                out.insert(n.id.clone());
+            }
+            Node::Frame(n) => {
+                out.insert(n.id.clone());
+                collect_node_ids(&n.children, out);
+            }
+            Node::Group(n) => {
+                out.insert(n.id.clone());
+                collect_node_ids(&n.children, out);
+            }
+            Node::Instance(n) => {
+                out.insert(n.id.clone());
+            }
+            Node::Field(n) => {
+                out.insert(n.id.clone());
+            }
+            Node::Toc(n) => {
+                out.insert(n.id.clone());
+            }
+            Node::Footnote(n) => {
+                out.insert(n.id.clone());
+            }
+            Node::Table(n) => {
+                out.insert(n.id.clone());
+                for row in &n.rows {
+                    for cell in &row.cells {
+                        collect_node_ids(&cell.children, out);
+                    }
+                }
+            }
+            Node::Shape(n) => {
+                out.insert(n.id.clone());
+            }
+            Node::Connector(n) => {
+                out.insert(n.id.clone());
+            }
+            Node::Unknown(n) => {
+                if let Some(id) = &n.id {
+                    out.insert(id.clone());
+                }
+                collect_node_ids(&n.children, out);
+            }
+        }
+    }
+}
+
+/// Collect EVERY id declared anywhere in `doc` into one set, used to generate
+/// unique instance/provenance ids that cannot collide with anything in the
+/// target: every node id (recursively, across pages, masters, and components),
+/// plus all block-level ids (tokens, styles, assets, libraries, components,
+/// masters, sections, provenance, pages, the document id, and the project id).
+///
+/// Deterministic and side-effect-free.
+pub fn collect_all_ids(doc: &Document) -> HashSet<String> {
+    let mut ids = HashSet::new();
+
+    if let Some(project) = &doc.project {
+        ids.insert(project.id.clone());
+    }
+    ids.insert(doc.body.id.clone());
+
+    for t in &doc.tokens.tokens {
+        ids.insert(t.id.clone());
+    }
+    for s in &doc.styles.styles {
+        ids.insert(s.id.clone());
+    }
+    for a in &doc.assets.assets {
+        ids.insert(a.id.clone());
+    }
+    for l in &doc.libraries {
+        ids.insert(l.id.clone());
+    }
+    for p in &doc.provenance {
+        ids.insert(p.id.clone());
+    }
+    for s in &doc.sections {
+        ids.insert(s.id.clone());
+    }
+
+    for comp in &doc.components {
+        ids.insert(comp.id.clone());
+        collect_node_ids(&comp.children, &mut ids);
+    }
+    for master in &doc.masters {
+        ids.insert(master.id.clone());
+        collect_node_ids(&master.children, &mut ids);
+    }
+    for page in &doc.body.pages {
+        ids.insert(page.id.clone());
+        collect_node_ids(&page.children, &mut ids);
+    }
+
+    ids
+}
+
+/// Deterministically pick `base`, or `base.1`, `base.2`, … — the first variant
+/// not present in `taken`.
+fn unique_id(base: &str, taken: &HashSet<String>) -> String {
+    if !taken.contains(base) {
+        return base.to_owned();
+    }
+    let mut n = 1u64;
+    loop {
+        let candidate = format!("{}.{}", base, n);
+        if !taken.contains(&candidate) {
+            return candidate;
+        }
+        n += 1;
+    }
+}
+
+/// A pixel [`Dimension`].
+fn px(value: f64) -> Dimension {
+    Dimension {
+        value,
+        unit: Unit::Px,
+    }
+}
+
+/// Materialize the pack item `pkg_id#item` into `target` at `(at_x, at_y)` on the
+/// page `page_id`, returning the [`AddOutcome`] describing what was added.
+///
+/// This is the PURE core of `library add`: it mutates the parsed `target`
+/// [`Document`] in place and performs NO filesystem or process I/O (the caller
+/// resolves the pack set, reads files, formats, and writes). Steps:
+///
+/// 1. Resolve the FIRST pack in `packs` whose id == `pkg_id` (project shadows
+///    preset); load its full [`Document`] and find the `ComponentDef` == `item`.
+/// 2. Copy that component into `target` under a namespaced id
+///    (`lib.<sanitized-pkg>.<item>`), REUSING an existing copy if present (dedup).
+///    Child ids are left untouched (instance expansion prefixes them at compile).
+/// 3. Copy ALL of the pack's tokens/styles/assets into `target`, deduping by id;
+///    a same-id-but-different-definition collision keeps the target's existing
+///    one and records a `library.dependency_conflict` warning.
+/// 4. Generate a unique instance id (base = `id_base`) against ALL target ids,
+///    insert an [`InstanceNode`] referencing the copied component onto the page.
+/// 5. Record a `libraries` entry for `pkg_id` (if absent) and a unique
+///    `provenance` record linking the instance to the item.
+///
+/// # Errors
+///
+/// Returns [`AddError`] when the package or item is unknown (the message lists
+/// the available options), or the page id is not found.
+pub fn materialize(
+    target: &mut Document,
+    packs: &[LibraryPack],
+    pkg_id: &str,
+    item: &str,
+    page_id: &str,
+    id_base: &str,
+    at: (f64, f64),
+) -> Result<AddOutcome, AddError> {
+    let (at_x, at_y) = at;
+    // 1. Resolve the pack + load its document. ────────────────────────────────
+    let pack = packs.iter().find(|p| p.id == pkg_id).ok_or_else(|| {
+        let mut available: Vec<&str> = packs.iter().map(|p| p.id.as_str()).collect();
+        available.sort_unstable();
+        available.dedup();
+        AddError::new(format!(
+            "unknown library package '{}' (available: {})",
+            pkg_id,
+            if available.is_empty() {
+                "none".to_owned()
+            } else {
+                available.join(", ")
+            }
+        ))
+    })?;
+
+    let pack_doc = load_pack_document(pack)?;
+
+    let comp = pack_doc
+        .components
+        .iter()
+        .find(|c| c.id == item)
+        .ok_or_else(|| {
+            let available: Vec<&str> = pack_doc.components.iter().map(|c| c.id.as_str()).collect();
+            AddError::new(format!(
+                "unknown item '{}' in package '{}' (available: {})",
+                item,
+                pkg_id,
+                if available.is_empty() {
+                    "none".to_owned()
+                } else {
+                    available.join(", ")
+                }
+            ))
+        })?;
+
+    // Verify the target page exists BEFORE mutating anything, so an unknown page
+    // leaves the target document untouched.
+    if !target.body.pages.iter().any(|p| p.id == page_id) {
+        let available: Vec<&str> = target.body.pages.iter().map(|p| p.id.as_str()).collect();
+        return Err(AddError::new(format!(
+            "page '{}' not found in target document (available: {})",
+            page_id,
+            if available.is_empty() {
+                "none".to_owned()
+            } else {
+                available.join(", ")
+            }
+        )));
+    }
+
+    let mut warnings: Vec<String> = Vec::new();
+
+    // 2. Copy the component (dedup by namespaced id). ──────────────────────────
+    let comp_id = target_component_id(pkg_id, item);
+    if !target.components.iter().any(|c| c.id == comp_id) {
+        target.components.push(ComponentDef {
+            id: comp_id.clone(),
+            children: comp.children.clone(),
+            source_span: None,
+        });
+    }
+
+    // 3. Copy dependency tokens/styles/assets (dedup by id). ───────────────────
+    // Ensure the target's tokens block has a format (adopt the pack's when empty).
+    if target.tokens.format.is_empty() {
+        target.tokens.format = pack_doc.tokens.format.clone();
+    }
+    copy_tokens(
+        &pack_doc.tokens.tokens,
+        &mut target.tokens.tokens,
+        &mut warnings,
+    );
+    copy_styles(
+        &pack_doc.styles.styles,
+        &mut target.styles.styles,
+        &mut warnings,
+    );
+    copy_assets(
+        &pack_doc.assets.assets,
+        &mut target.assets.assets,
+        &mut warnings,
+    );
+
+    // 4. Generate a unique instance id + insert the instance on the page. ──────
+    let mut all_ids = collect_all_ids(target);
+    let instance_id = unique_id(id_base, &all_ids);
+    all_ids.insert(instance_id.clone());
+
+    let instance = InstanceNode {
+        id: instance_id.clone(),
+        name: None,
+        role: None,
+        component: comp_id.clone(),
+        x: Some(px(at_x)),
+        y: Some(px(at_y)),
+        opacity: None,
+        visible: None,
+        locked: None,
+        overrides: Vec::new(),
+        source_span: None,
+        unknown_props: BTreeMap::new(),
+    };
+
+    // The page is guaranteed to exist (checked above); push the instance at the
+    // end of its children = top of z-order.
+    if let Some(page) = target.body.pages.iter_mut().find(|p| p.id == page_id) {
+        page.children.push(Node::Instance(instance));
+    }
+
+    // 5. Record libraries + provenance. ────────────────────────────────────────
+    let provenance_id = unique_id(&format!("prov.{}", instance_id), &all_ids);
+
+    if !target.libraries.iter().any(|l| l.id == pkg_id) {
+        target.libraries.push(LibraryDef {
+            id: pkg_id.to_owned(),
+            version: pack.version.clone(),
+            hash: None,
+            source_span: None,
+            unknown_props: BTreeMap::new(),
+        });
+    }
+
+    target.provenance.push(ProvenanceDef {
+        id: provenance_id.clone(),
+        node: instance_id.clone(),
+        library: pkg_id.to_owned(),
+        item: Some(item.to_owned()),
+        linked: Some(true),
+        source_span: None,
+        unknown_props: BTreeMap::new(),
+    });
+
+    Ok(AddOutcome {
+        pkg_id: pkg_id.to_owned(),
+        item: item.to_owned(),
+        target_component_id: comp_id,
+        instance_id,
+        provenance_id,
+        warnings,
+    })
+}
+
+/// Copy pack tokens into `target` tokens, deduping by id; a same-id-different-
+/// value collision keeps the existing token and records a conflict warning.
+fn copy_tokens(pack: &[Token], target: &mut Vec<Token>, warnings: &mut Vec<String>) {
+    for tok in pack {
+        match target.iter().find(|t| t.id == tok.id) {
+            // Compare by semantic fields only (type + value); `source_span`
+            // differs between parses and is not a real conflict.
+            Some(existing)
+                if existing.token_type != tok.token_type || existing.value != tok.value =>
+            {
+                warnings.push(dependency_conflict("token", &tok.id));
+            }
+            Some(_) => {}
+            None => target.push(tok.clone()),
+        }
+    }
+}
+
+/// Copy pack styles into `target` styles, deduping by id (see [`copy_tokens`]).
+fn copy_styles(pack: &[Style], target: &mut Vec<Style>, warnings: &mut Vec<String>) {
+    for st in pack {
+        match target.iter().find(|t| t.id == st.id) {
+            Some(existing) if existing.properties != st.properties => {
+                warnings.push(dependency_conflict("style", &st.id));
+            }
+            Some(_) => {}
+            None => target.push(st.clone()),
+        }
+    }
+}
+
+/// Copy pack assets into `target` assets, deduping by id (see [`copy_tokens`]).
+///
+/// Conflict detection compares `kind`, `src`, AND `sha256`: a same-id asset
+/// with a different SHA-256 digest is a real semantic conflict (same path,
+/// different content integrity assertion) and warrants a dependency warning.
+fn copy_assets(pack: &[AssetDecl], target: &mut Vec<AssetDecl>, warnings: &mut Vec<String>) {
+    for asset in pack {
+        match target.iter().find(|a| a.id == asset.id) {
+            Some(existing)
+                if existing.kind != asset.kind
+                    || existing.src != asset.src
+                    || existing.sha256 != asset.sha256 =>
+            {
+                warnings.push(dependency_conflict("asset", &asset.id));
+            }
+            Some(_) => {}
+            None => target.push(asset.clone()),
+        }
+    }
+}
+
+/// A `library.dependency_conflict` warning line for a kept-existing dependency.
+fn dependency_conflict(kind: &str, id: &str) -> String {
+    format!(
+        "library.dependency_conflict: {} '{}' already exists in the target with a \
+         different definition; kept the existing one",
+        kind, id
+    )
+}
+
 // ── Tests ───────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -222,6 +745,320 @@ mod tests {
     use zenith_core::validate;
 
     const FLOWCHART_SRC: &str = include_str!("../../assets/libraries/zenith-flowchart.zen");
+
+    /// A minimal target document with a single empty page `pg`.
+    const TARGET_SRC: &str = r#"zenith version=1 {
+  project id="proj.x" name="Target"
+  tokens format="zenith-token-v1" {}
+  styles {}
+  document id="d" title="x" {
+    page id="pg" w=(px)800 h=(px)600 {}
+  }
+}
+"#;
+
+    fn parse_target() -> Document {
+        KdlAdapter
+            .parse(TARGET_SRC.as_bytes())
+            .expect("target parses")
+    }
+
+    fn hard_errors(doc: &Document) -> Vec<String> {
+        validate(doc)
+            .diagnostics
+            .into_iter()
+            .filter(|d| d.severity == zenith_core::Severity::Error)
+            .map(|d| format!("{}: {}", d.code, d.message))
+            .collect()
+    }
+
+    fn first_page_instance_ids(doc: &Document) -> Vec<String> {
+        doc.body.pages[0]
+            .children
+            .iter()
+            .filter_map(|n| match n {
+                Node::Instance(i) => Some(i.id.clone()),
+                _ => None,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn sanitize_pkg_strips_at_and_slash() {
+        assert_eq!(sanitize_pkg("@zenith/flowchart"), "zenith.flowchart");
+        assert_eq!(
+            target_component_id("@zenith/flowchart", "decision"),
+            "lib.zenith.flowchart.decision"
+        );
+    }
+
+    #[test]
+    fn parse_spec_splits_pkg_and_item() {
+        assert_eq!(
+            parse_spec("@zenith/flowchart#decision").expect("ok"),
+            ("@zenith/flowchart".to_owned(), "decision".to_owned())
+        );
+    }
+
+    #[test]
+    fn parse_spec_rejects_malformed() {
+        assert!(parse_spec("no-hash").is_err());
+        assert!(parse_spec("#item").is_err());
+        assert!(parse_spec("pkg#").is_err());
+    }
+
+    #[test]
+    fn materialize_adds_component_tokens_style_instance_provenance() {
+        let mut target = parse_target();
+        let packs = resolve_packs(None);
+        let outcome = materialize(
+            &mut target,
+            &packs,
+            "@zenith/flowchart",
+            "decision",
+            "pg",
+            "decision",
+            (10.0, 20.0),
+        )
+        .expect("materialize ok");
+
+        // Component copied under namespaced id.
+        assert_eq!(outcome.target_component_id, "lib.zenith.flowchart.decision");
+        assert!(
+            target
+                .components
+                .iter()
+                .any(|c| c.id == "lib.zenith.flowchart.decision"),
+            "component copied"
+        );
+        // Child ids are NOT rewritten (still local `shape`).
+        let comp = target
+            .components
+            .iter()
+            .find(|c| c.id == "lib.zenith.flowchart.decision")
+            .unwrap();
+        assert!(matches!(comp.children.first(), Some(Node::Shape(s)) if s.id == "shape"));
+
+        // Dep tokens + style copied.
+        assert!(target.tokens.tokens.iter().any(|t| t.id == "lib.flow.fill"));
+        assert!(
+            target
+                .tokens
+                .tokens
+                .iter()
+                .any(|t| t.id == "lib.flow.dec.fill")
+        );
+        assert!(
+            target
+                .styles
+                .styles
+                .iter()
+                .any(|s| s.id == "lib.flow.label")
+        );
+        assert_eq!(target.tokens.format, "zenith-token-v1");
+
+        // Instance inserted on the page referencing the component.
+        let inst = target.body.pages[0]
+            .children
+            .iter()
+            .find_map(|n| match n {
+                Node::Instance(i) => Some(i),
+                _ => None,
+            })
+            .expect("instance inserted");
+        assert_eq!(inst.id, "decision");
+        assert_eq!(inst.component, "lib.zenith.flowchart.decision");
+        assert_eq!(inst.x, Some(px(10.0)));
+        assert_eq!(inst.y, Some(px(20.0)));
+
+        // Library + provenance recorded.
+        assert!(target.libraries.iter().any(|l| l.id == "@zenith/flowchart"));
+        let prov = target
+            .provenance
+            .iter()
+            .find(|p| p.node == "decision")
+            .expect("provenance recorded");
+        assert_eq!(prov.library, "@zenith/flowchart");
+        assert_eq!(prov.item.as_deref(), Some("decision"));
+        assert_eq!(prov.linked, Some(true));
+        assert_eq!(outcome.provenance_id, prov.id);
+        assert!(outcome.warnings.is_empty());
+
+        // Validates clean.
+        assert!(
+            hard_errors(&target).is_empty(),
+            "errors: {:?}",
+            hard_errors(&target)
+        );
+    }
+
+    #[test]
+    fn materialize_round_trips_format_parse() {
+        let mut target = parse_target();
+        let packs = resolve_packs(None);
+        materialize(
+            &mut target,
+            &packs,
+            "@zenith/flowchart",
+            "decision",
+            "pg",
+            "decision",
+            (0.0, 0.0),
+        )
+        .expect("materialize ok");
+        let bytes = KdlAdapter.format(&target).expect("format");
+        let reparsed = KdlAdapter.parse(&bytes).expect("reparse");
+        let bytes2 = KdlAdapter.format(&reparsed).expect("format2");
+        assert_eq!(bytes, bytes2, "format→parse→format is stable");
+    }
+
+    #[test]
+    fn double_add_dedups_component_unique_instance_two_provenance() {
+        let mut target = parse_target();
+        let packs = resolve_packs(None);
+        let o1 = materialize(
+            &mut target,
+            &packs,
+            "@zenith/flowchart",
+            "decision",
+            "pg",
+            "decision",
+            (0.0, 0.0),
+        )
+        .expect("first add");
+        let o2 = materialize(
+            &mut target,
+            &packs,
+            "@zenith/flowchart",
+            "decision",
+            "pg",
+            "decision",
+            (0.0, 0.0),
+        )
+        .expect("second add");
+
+        // Component copied exactly once.
+        assert_eq!(
+            target
+                .components
+                .iter()
+                .filter(|c| c.id == "lib.zenith.flowchart.decision")
+                .count(),
+            1
+        );
+        // Tokens not duplicated.
+        assert_eq!(
+            target
+                .tokens
+                .tokens
+                .iter()
+                .filter(|t| t.id == "lib.flow.fill")
+                .count(),
+            1
+        );
+        // Unique instance ids.
+        assert_eq!(o1.instance_id, "decision");
+        assert_eq!(o2.instance_id, "decision.1");
+        assert_eq!(
+            first_page_instance_ids(&target),
+            vec!["decision", "decision.1"]
+        );
+        // Two provenance records.
+        assert_eq!(target.provenance.len(), 2);
+        assert_ne!(o1.provenance_id, o2.provenance_id);
+        // One library entry only.
+        assert_eq!(
+            target
+                .libraries
+                .iter()
+                .filter(|l| l.id == "@zenith/flowchart")
+                .count(),
+            1
+        );
+        assert!(hard_errors(&target).is_empty());
+    }
+
+    #[test]
+    fn materialize_unknown_page_errors_and_does_not_mutate() {
+        let mut target = parse_target();
+        let before = target.clone();
+        let packs = resolve_packs(None);
+        let err = materialize(
+            &mut target,
+            &packs,
+            "@zenith/flowchart",
+            "decision",
+            "nope",
+            "decision",
+            (0.0, 0.0),
+        )
+        .expect_err("unknown page errors");
+        assert!(
+            err.message.contains("page 'nope' not found"),
+            "msg: {}",
+            err.message
+        );
+        assert_eq!(target, before, "target untouched on page error");
+    }
+
+    #[test]
+    fn materialize_unknown_pkg_errors_with_available() {
+        let mut target = parse_target();
+        let packs = resolve_packs(None);
+        let err = materialize(
+            &mut target,
+            &packs,
+            "@no/such",
+            "decision",
+            "pg",
+            "decision",
+            (0.0, 0.0),
+        )
+        .expect_err("unknown pkg errors");
+        assert!(
+            err.message.contains("@zenith/flowchart"),
+            "lists available: {}",
+            err.message
+        );
+    }
+
+    #[test]
+    fn materialize_unknown_item_errors_with_available() {
+        let mut target = parse_target();
+        let packs = resolve_packs(None);
+        let err = materialize(
+            &mut target,
+            &packs,
+            "@zenith/flowchart",
+            "nope",
+            "pg",
+            "decision",
+            (0.0, 0.0),
+        )
+        .expect_err("unknown item errors");
+        assert!(
+            err.message.contains("process"),
+            "lists available items: {}",
+            err.message
+        );
+    }
+
+    #[test]
+    fn materialize_id_override_used_as_base() {
+        let mut target = parse_target();
+        let packs = resolve_packs(None);
+        let o = materialize(
+            &mut target,
+            &packs,
+            "@zenith/flowchart",
+            "decision",
+            "pg",
+            "my.node",
+            (0.0, 0.0),
+        )
+        .expect("ok");
+        assert_eq!(o.instance_id, "my.node");
+    }
 
     #[test]
     fn parse_embedded_flowchart_identity_and_items() {
