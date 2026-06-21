@@ -24,9 +24,10 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::path::{Path, PathBuf};
 
 use zenith_core::{
-    AssetDecl, ComponentDef, Dimension, Document, InstanceNode, KdlAdapter, KdlSource, LibraryDef,
-    Node, ProvenanceDef, Style, Token, TokenLiteral, TokenType, TokenValue, Unit,
+    ActionDef, AssetDecl, ComponentDef, Dimension, Document, InstanceNode, KdlAdapter, KdlSource,
+    LibraryDef, Node, ProvenanceDef, Style, Token, TokenLiteral, TokenType, TokenValue, Unit,
 };
+use zenith_tx::{Transaction, TxResult, TxStatus, run_transaction};
 
 /// Embedded preset packs, as `(pack_id, pack_source)` pairs.
 ///
@@ -1039,6 +1040,205 @@ fn dependency_conflict(kind: &str, id: &str) -> String {
     )
 }
 
+// ── Action materialization (`library add` of an action item) ─────────────────
+
+/// The outcome of a successful [`materialize_action`] call.
+///
+/// All ids are the FINAL ids written into the target document. When
+/// `tx_result.status == Rejected` the function still returns `Ok` but
+/// `final_source` and `provenance_id` are `None` and no document mutation was
+/// recorded.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ActionAddOutcome {
+    /// The package id the item came from (e.g. `@test/actions`).
+    pub pkg_id: String,
+    /// The item name within the pack (e.g. `apply-brand-kit`).
+    pub item: String,
+    /// The transaction result (status, diagnostics, source_before/after,
+    /// affected_node_ids).
+    pub tx_result: TxResult,
+    /// The fully-formatted new document source: tx applied, action copied in,
+    /// library import added, and provenance recorded. `None` when the tx was
+    /// Rejected.
+    pub final_source: Option<String>,
+    /// The recorded provenance entry id. `None` when the tx was Rejected.
+    pub provenance_id: Option<String>,
+    /// Non-fatal warnings (e.g. action id already present with different
+    /// metadata).
+    pub warnings: Vec<String>,
+}
+
+/// Materialize the action item `pkg_id#action_id` against `target_src`,
+/// returning the [`ActionAddOutcome`] describing what happened.
+///
+/// This is the PURE core of a `library add` for an ACTION item: it produces a
+/// new document source string and performs NO filesystem or process I/O.
+/// Steps:
+///
+/// 1. Resolve the FIRST pack in `packs` whose id == `pkg_id`; load its full
+///    [`Document`] and find the [`ActionDef`] whose id == `action_id`.
+/// 2. Parse `target_src` into a [`Document`].
+/// 3. Parse the action's `tx_json` into a [`Transaction`].
+/// 4. Run the transaction against the target.  If the result is Rejected,
+///    return immediately with `final_source: None` and `provenance_id: None`.
+/// 5. Re-parse `tx_result.source_after` and:
+///    - Copy the [`ActionDef`] into `result_doc.actions` (dedup by id;
+///      same-id-different-content keeps the existing one and records a
+///      warning).
+///    - Add a `libraries` import for `pkg_id` (dedup by id; conflict warning
+///      on mismatch, using the pack's version — mirror `materialize_token`).
+///    - Generate a unique provenance id (via [`unique_id`]/[`collect_all_ids`])
+///      and push a [`ProvenanceDef`] whose `node` is the action id.
+/// 6. Format the result document and return the full outcome.
+///
+/// # Errors
+///
+/// Returns [`AddError`] when the package or item is unknown (the message lists
+/// the available options), the target or the tx envelope cannot be parsed, or
+/// the formatted output cannot be produced.
+pub fn materialize_action(
+    target_src: &str,
+    packs: &[LibraryPack],
+    pkg_id: &str,
+    action_id: &str,
+) -> Result<ActionAddOutcome, AddError> {
+    // 1. Resolve the pack + load its document. ────────────────────────────────
+    let pack = packs.iter().find(|p| p.id == pkg_id).ok_or_else(|| {
+        let mut available: Vec<&str> = packs.iter().map(|p| p.id.as_str()).collect();
+        available.sort_unstable();
+        available.dedup();
+        AddError::new(format!(
+            "unknown library package '{}' (available: {})",
+            pkg_id,
+            if available.is_empty() {
+                "none".to_owned()
+            } else {
+                available.join(", ")
+            }
+        ))
+    })?;
+
+    let pack_doc = load_pack_document(pack)?;
+
+    let pack_action = pack_doc
+        .actions
+        .iter()
+        .find(|a| a.id == action_id)
+        .ok_or_else(|| {
+            let available: Vec<&str> = pack_doc.actions.iter().map(|a| a.id.as_str()).collect();
+            AddError::new(format!(
+                "unknown action item '{}' in package '{}' (available: {})",
+                action_id,
+                pkg_id,
+                if available.is_empty() {
+                    "none".to_owned()
+                } else {
+                    available.join(", ")
+                }
+            ))
+        })?;
+
+    // 2. Parse the target document. ────────────────────────────────────────────
+    let target_doc = KdlAdapter
+        .parse(target_src.as_bytes())
+        .map_err(|e| AddError::new(format!("error parsing target document: {}", e)))?;
+
+    // 3. Parse the action's tx envelope. ──────────────────────────────────────
+    let tx = Transaction::from_json(&pack_action.tx_json).map_err(|e| {
+        AddError::new(format!(
+            "malformed tx-script in action '{}': {}",
+            action_id, e
+        ))
+    })?;
+
+    // 4. Run the transaction. ──────────────────────────────────────────────────
+    let tx_result = run_transaction(&target_doc, &tx)
+        .map_err(|e| AddError::new(format!("transaction error: {}", e)))?;
+
+    // Rejected → return immediately; the CLI layer decides what to show the user.
+    match &tx_result.status {
+        TxStatus::Rejected => {
+            return Ok(ActionAddOutcome {
+                pkg_id: pkg_id.to_owned(),
+                item: action_id.to_owned(),
+                tx_result,
+                final_source: None,
+                provenance_id: None,
+                warnings: vec![],
+            });
+        }
+        TxStatus::Accepted | TxStatus::AcceptedWithWarnings => {}
+    }
+
+    // 5. Re-parse the post-tx source and record the action + library + provenance.
+    let mut result_doc = KdlAdapter
+        .parse(tx_result.source_after.as_bytes())
+        .map_err(|e| {
+            AddError::new(format!(
+                "internal error: could not re-parse transaction output: {}",
+                e
+            ))
+        })?;
+
+    let mut warnings: Vec<String> = Vec::new();
+
+    // Copy the ActionDef (dedup by id; conflict on same-id different content).
+    match result_doc.actions.iter().find(|a| a.id == action_id) {
+        Some(existing) if existing.tx_json != pack_action.tx_json => {
+            warnings.push(dependency_conflict("action", action_id));
+        }
+        Some(_) => {}
+        None => result_doc.actions.push(ActionDef {
+            id: pack_action.id.clone(),
+            label: pack_action.label.clone(),
+            version: pack_action.version.clone(),
+            tx_json: pack_action.tx_json.clone(),
+            source_span: None,
+            unknown_props: BTreeMap::new(),
+        }),
+    }
+
+    // Add the libraries import (mirror materialize_token exactly). ─────────────
+    if !result_doc.libraries.iter().any(|l| l.id == pkg_id) {
+        result_doc.libraries.push(LibraryDef {
+            id: pkg_id.to_owned(),
+            version: pack.version.clone(),
+            hash: None,
+            source_span: None,
+            unknown_props: BTreeMap::new(),
+        });
+    }
+
+    // Generate a unique provenance id and push the record. ────────────────────
+    let all_ids = collect_all_ids(&result_doc);
+    let provenance_id = unique_id(&format!("prov.{}", action_id), &all_ids);
+    result_doc.provenance.push(ProvenanceDef {
+        id: provenance_id.clone(),
+        node: action_id.to_owned(),
+        library: pkg_id.to_owned(),
+        item: Some(action_id.to_owned()),
+        linked: Some(true),
+        source_span: None,
+        unknown_props: BTreeMap::new(),
+    });
+
+    // 6. Format the final document. ────────────────────────────────────────────
+    let final_bytes = KdlAdapter
+        .format(&result_doc)
+        .map_err(|e| AddError::new(format!("error formatting result document: {}", e)))?;
+    let final_source = String::from_utf8(final_bytes)
+        .map_err(|e| AddError::new(format!("error encoding result document: {}", e)))?;
+
+    Ok(ActionAddOutcome {
+        pkg_id: pkg_id.to_owned(),
+        item: action_id.to_owned(),
+        tx_result,
+        final_source: Some(final_source),
+        provenance_id: Some(provenance_id),
+        warnings,
+    })
+}
+
 // ── Tests ───────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -1701,5 +1901,246 @@ mod tests {
         let ids: Vec<_> = packs.iter().map(|p| &p.id).collect();
         let sorted_ids: Vec<_> = sorted.iter().map(|p| &p.id).collect();
         assert_eq!(ids, sorted_ids);
+    }
+
+    // ── materialize_action tests ─────────────────────────────────────────────
+
+    /// A minimal action pack that updates a single color token `color.brand`.
+    const ACTION_PACK_SRC_UPDATE: &str = r##"zenith version=1 {
+  project id="@test/brandkit" name="Brand Kit"
+  libraries { library id="@test/brandkit" version="2.0.0" }
+  actions {
+    action id="apply-brand-color" label="Apply Brand Color" {
+      tx "{\"ops\":[{\"op\":\"update_token_value\",\"id\":\"color.brand\",\"value\":\"#e11d48\"}]}"
+    }
+  }
+  document id="d" title="x" {
+    page id="pg" w=(px)100 h=(px)100 {
+    }
+  }
+}
+"##;
+
+    /// A target doc that declares the `color.brand` token the action touches.
+    const ACTION_TARGET_SRC: &str = r##"zenith version=1 {
+  project id="proj.x" name="Target"
+  tokens format="zenith-token-v1" {
+    token id="color.brand" type="color" value="#111111"
+  }
+  styles {}
+  document id="d" title="x" {
+    page id="pg" w=(px)800 h=(px)600 {}
+  }
+}
+"##;
+
+    /// Build a project-backed [`LibraryPack`] from inline `.zen` source by
+    /// writing it to a temp file, so [`load_pack_document`] can re-read it.
+    /// The returned [`tempfile::TempDir`] must be kept alive for the duration of
+    /// the test (dropping it deletes the backing file).
+    fn pack_from_src(src: &str) -> (tempfile::TempDir, LibraryPack) {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("pack.zen");
+        std::fs::write(&path, src).expect("write pack");
+        let pack = parse_pack(src, PackSource::Project(path)).expect("pack parses");
+        (dir, pack)
+    }
+
+    #[test]
+    fn materialize_action_accepted_updates_token_records_action_library_provenance() {
+        let (_dir, pack) = pack_from_src(ACTION_PACK_SRC_UPDATE);
+        let packs = vec![pack];
+        let outcome = materialize_action(
+            ACTION_TARGET_SRC,
+            &packs,
+            "@test/brandkit",
+            "apply-brand-color",
+        )
+        .expect("materialize_action ok");
+
+        // Status is Accepted or AcceptedWithWarnings.
+        assert!(
+            matches!(
+                outcome.tx_result.status,
+                TxStatus::Accepted | TxStatus::AcceptedWithWarnings
+            ),
+            "expected Accepted/AcceptedWithWarnings, got {:?}",
+            outcome.tx_result.status
+        );
+
+        let final_src = outcome
+            .final_source
+            .expect("final_source must be Some on Accepted");
+        let provenance_id = outcome.provenance_id.expect("provenance_id must be Some");
+
+        // The updated token value is present in the output.
+        assert!(
+            final_src.contains("#e11d48"),
+            "updated value must appear in final_source; got:\n{}",
+            final_src
+        );
+
+        // An `actions` block with the action id is present.
+        assert!(
+            final_src.contains("apply-brand-color"),
+            "action id must appear in final_source; got:\n{}",
+            final_src
+        );
+
+        // A libraries import for the pack is present.
+        assert!(
+            final_src.contains("@test/brandkit"),
+            "library import must appear in final_source; got:\n{}",
+            final_src
+        );
+
+        // A provenance record referencing the action id is present.
+        assert!(
+            final_src.contains(&provenance_id),
+            "provenance id must appear in final_source"
+        );
+
+        // Re-parse and validate the final source — must have no hard errors.
+        let reparsed = KdlAdapter
+            .parse(final_src.as_bytes())
+            .expect("final_source must re-parse");
+        assert!(
+            hard_errors(&reparsed).is_empty(),
+            "final_source must validate clean; errors: {:?}",
+            hard_errors(&reparsed)
+        );
+
+        // Confirm the action + library + provenance appear in the parsed tree.
+        assert!(
+            reparsed.actions.iter().any(|a| a.id == "apply-brand-color"),
+            "action must be in parsed actions"
+        );
+        assert!(
+            reparsed.libraries.iter().any(|l| l.id == "@test/brandkit"),
+            "library must be in parsed libraries"
+        );
+        assert!(
+            reparsed
+                .provenance
+                .iter()
+                .any(|p| p.node == "apply-brand-color"),
+            "provenance node must be the action id"
+        );
+
+        // No warnings on a clean apply.
+        assert!(
+            outcome.warnings.is_empty(),
+            "unexpected warnings: {:?}",
+            outcome.warnings
+        );
+    }
+
+    #[test]
+    fn materialize_action_rejected_when_token_not_found() {
+        /// A pack that references a non-existent token id.
+        const REJECT_PACK_SRC: &str = r##"zenith version=1 {
+  project id="@test/reject" name="Reject Test"
+  libraries { library id="@test/reject" version="1.0.0" }
+  actions {
+    action id="no-such-token" {
+      tx "{\"ops\":[{\"op\":\"update_token_value\",\"id\":\"does.not.exist\",\"value\":\"#fff\"}]}"
+    }
+  }
+  document id="d" title="x" {
+    page id="pg" w=(px)100 h=(px)100 {}
+  }
+}
+"##;
+        let (_dir, pack) = pack_from_src(REJECT_PACK_SRC);
+        let packs = vec![pack];
+        let outcome =
+            materialize_action(ACTION_TARGET_SRC, &packs, "@test/reject", "no-such-token")
+                .expect("materialize_action itself must succeed (rejected tx is not an Err)");
+
+        assert_eq!(
+            outcome.tx_result.status,
+            TxStatus::Rejected,
+            "tx must be Rejected"
+        );
+        assert!(
+            outcome.final_source.is_none(),
+            "final_source must be None on Rejected"
+        );
+        assert!(
+            outcome.provenance_id.is_none(),
+            "provenance_id must be None on Rejected"
+        );
+    }
+
+    #[test]
+    fn materialize_action_unknown_pkg_errors_with_available() {
+        let (_dir, pack) = pack_from_src(ACTION_PACK_SRC_UPDATE);
+        let packs = vec![pack];
+        let err = materialize_action(ACTION_TARGET_SRC, &packs, "@no/such", "apply-brand-color")
+            .expect_err("unknown pkg errors");
+        assert!(
+            err.message.contains("unknown library package"),
+            "msg: {}",
+            err.message
+        );
+        assert!(
+            err.message.contains("@test/brandkit"),
+            "must list available packages; msg: {}",
+            err.message
+        );
+    }
+
+    #[test]
+    fn materialize_action_unknown_action_errors_with_available() {
+        let (_dir, pack) = pack_from_src(ACTION_PACK_SRC_UPDATE);
+        let packs = vec![pack];
+        let err = materialize_action(
+            ACTION_TARGET_SRC,
+            &packs,
+            "@test/brandkit",
+            "no-such-action",
+        )
+        .expect_err("unknown action errors");
+        assert!(
+            err.message.contains("unknown action item"),
+            "msg: {}",
+            err.message
+        );
+        assert!(
+            err.message.contains("apply-brand-color"),
+            "must list available actions; msg: {}",
+            err.message
+        );
+    }
+
+    #[test]
+    fn materialize_action_malformed_tx_json_errors() {
+        const MALFORMED_PACK_SRC: &str = r#"zenith version=1 {
+  project id="@test/malformed" name="Malformed"
+  libraries { library id="@test/malformed" version="1.0.0" }
+  actions {
+    action id="bad-action" {
+      tx "not valid json"
+    }
+  }
+  document id="d" title="x" {
+    page id="pg" w=(px)100 h=(px)100 {}
+  }
+}
+"#;
+        let (_dir, pack) = pack_from_src(MALFORMED_PACK_SRC);
+        let packs = vec![pack];
+        let err = materialize_action(ACTION_TARGET_SRC, &packs, "@test/malformed", "bad-action")
+            .expect_err("malformed tx_json must error");
+        assert!(
+            err.message.contains("malformed tx-script"),
+            "msg: {}",
+            err.message
+        );
+        assert!(
+            err.message.contains("bad-action"),
+            "error must name the action; msg: {}",
+            err.message
+        );
     }
 }
