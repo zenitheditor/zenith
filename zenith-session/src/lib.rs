@@ -9,6 +9,7 @@
 //! - [`datadir`] — platform data-directory resolution
 //! - [`docid`] — ULID document-identity minting
 //! - [`error`] — [`SessionError`] (the single error type for this crate)
+//! - [`gc`] — object garbage collection ([`gc`])
 //! - [`identity`] — document-identity reconciliation ([`reconcile`])
 //! - [`layout`] — [`StorePaths`] pure path builders
 //! - [`manifest`] — [`HistoryRecord`] schema and append-only JSONL manifest I/O
@@ -22,6 +23,7 @@ pub mod adapter;
 pub mod datadir;
 pub mod docid;
 pub mod error;
+pub mod gc;
 pub mod identity;
 pub mod layout;
 pub mod manifest;
@@ -34,6 +36,7 @@ pub mod tier2;
 pub use datadir::{resolve_data_dir, resolve_data_dir_with};
 pub use docid::mint_ulid;
 pub use error::SessionError;
+pub use gc::{GcReport, gc};
 pub use identity::{DocMeta, Outcome, Reconciled, reconcile};
 pub use layout::StorePaths;
 pub use manifest::{HistoryRecord, append_record, read_records};
