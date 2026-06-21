@@ -1318,6 +1318,7 @@ name = "zenith-session"
 version = "0.0.0"
 dependencies = [
  "dirs",
+ "getrandom 0.4.3",
  "tempfile",
 ]
 

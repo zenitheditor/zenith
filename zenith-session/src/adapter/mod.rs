@@ -8,4 +8,4 @@ pub mod rng;
 
 pub use clock::{Clock, FakeClock, OsClock};
 pub use fs::{Fs, MemFs, OsFs};
-pub use rng::{FakeRng, Rng};
+pub use rng::{FakeRng, OsRng, Rng};
