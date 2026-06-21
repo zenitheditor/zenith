@@ -1,7 +1,7 @@
 mod common;
 use common::*;
 use zenith_core::default_provider;
-use zenith_scene::ir::{LineCap, SceneCommand};
+use zenith_scene::ir::{LineCap, SceneCommand, StrokeAlign};
 use zenith_scene::{CompileResult, compile};
 
 // ── Minimal single-rect document ──────────────────────────────────────
@@ -736,14 +736,103 @@ page id="page.p1" w=(px)320 h=(px)200 {
             closed,
             color,
             stroke_width,
+            align,
+            fill_even_odd,
         } => {
             assert_eq!(points.len(), 6);
             assert!(closed, "polygon stroke must be closed");
             assert_eq!(color.r, 0, "stroke color must be black");
             assert!((stroke_width - 2.0).abs() < 1e-9);
+            assert_eq!(
+                *align,
+                StrokeAlign::Center,
+                "absent stroke-alignment must default to Center"
+            );
+            assert!(!fill_even_odd, "default fill rule is nonzero");
         }
         other => panic!("cmd[2] must be StrokePolyline, got {other:?}"),
     }
+}
+
+// ── polygon: stroke-alignment="inside" → StrokePolyline.align == Inside ─
+
+#[test]
+fn polygon_stroke_alignment_inside() {
+    let src = r##"zenith version=1 {
+  project id="proj.sa1" name="SA1"
+  tokens format="zenith-token-v1" {
+token id="color.stroke" type="color" value="#000000"
+  }
+  styles {}
+  document id="doc.sa1" title="SA1" {
+page id="page.sa1" w=(px)200 h=(px)200 {
+  polygon id="poly.in" stroke=(token)"color.stroke" stroke-width=(px)6 stroke-alignment="inside" {
+    point x=(px)100 y=(px)20
+    point x=(px)180 y=(px)180
+    point x=(px)20 y=(px)180
+  }
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+
+    let sp = result.scene.commands.iter().find_map(|c| match c {
+        SceneCommand::StrokePolyline {
+            align,
+            fill_even_odd,
+            closed,
+            ..
+        } => Some((*align, *fill_even_odd, *closed)),
+        _ => None,
+    });
+    assert_eq!(
+        sp,
+        Some((StrokeAlign::Inside, false, true)),
+        "stroke-alignment=inside must set align=Inside, closed=true, fill_even_odd matches nonzero default"
+    );
+}
+
+// ── polygon: stroke-alignment="outside" + evenodd → align=Outside, fill_even_odd=true ─
+
+#[test]
+fn polygon_stroke_alignment_outside_evenodd() {
+    let src = r##"zenith version=1 {
+  project id="proj.sa2" name="SA2"
+  tokens format="zenith-token-v1" {
+token id="color.stroke" type="color" value="#000000"
+  }
+  styles {}
+  document id="doc.sa2" title="SA2" {
+page id="page.sa2" w=(px)200 h=(px)200 {
+  polygon id="poly.out" stroke=(token)"color.stroke" stroke-width=(px)6 stroke-alignment="outside" fill-rule="evenodd" {
+    point x=(px)100 y=(px)10
+    point x=(px)40 y=(px)180
+    point x=(px)190 y=(px)60
+    point x=(px)10 y=(px)60
+    point x=(px)160 y=(px)180
+  }
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+
+    let sp = result.scene.commands.iter().find_map(|c| match c {
+        SceneCommand::StrokePolyline {
+            align,
+            fill_even_odd,
+            ..
+        } => Some((*align, *fill_even_odd)),
+        _ => None,
+    });
+    assert_eq!(
+        sp,
+        Some((StrokeAlign::Outside, true)),
+        "stroke-alignment=outside + fill-rule=evenodd must set align=Outside, fill_even_odd=true"
+    );
 }
 
 // ── polygon: fill-rule="evenodd" → FillPolygon.even_odd == true ───────
@@ -822,9 +911,19 @@ page id="page.pl1" w=(px)320 h=(px)200 {
     );
 
     match &cmds[1] {
-        SceneCommand::StrokePolyline { points, closed, .. } => {
+        SceneCommand::StrokePolyline {
+            points,
+            closed,
+            align,
+            ..
+        } => {
             assert_eq!(points.len(), 6, "3 points × 2 = 6 flat coords");
             assert!(!closed, "polyline stroke must NOT be closed");
+            assert_eq!(
+                *align,
+                StrokeAlign::Center,
+                "polyline (open path) must always be Center-aligned"
+            );
         }
         other => panic!("cmd[1] must be StrokePolyline, got {other:?}"),
     }

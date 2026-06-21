@@ -13,7 +13,7 @@
 
 use pdf_writer::Content;
 use zenith_core::{AssetProvider, FontProvider};
-use zenith_scene::{Color, FitMode, ImageClip, Scene, SceneCommand};
+use zenith_scene::{Color, FitMode, ImageClip, Scene, SceneCommand, StrokeAlign};
 
 use super::color;
 use super::geometry::{GlyphPen, ellipse_path, poly_path, rounded_rect_path};
@@ -66,8 +66,9 @@ pub(super) fn translate(
     // user space (bottom-left, y-up). 1 scene px == 1 PDF unit.
     content.transform([1.0, 0.0, 0.0, -1.0, 0.0, scene.height as f32]);
 
+    let page = (scene.width, scene.height);
     for cmd in &scene.commands {
-        emit_command(&mut content, &mut res, cmd, fonts, assets);
+        emit_command(&mut content, &mut res, cmd, page, fonts, assets);
     }
 
     (content, res)
@@ -87,6 +88,7 @@ fn emit_command(
     content: &mut Content,
     res: &mut PageResources,
     cmd: &SceneCommand,
+    page: (f64, f64),
     fonts: &dyn FontProvider,
     assets: &dyn AssetProvider,
 ) {
@@ -272,18 +274,77 @@ fn emit_command(
             color,
             stroke_width,
             closed,
+            align,
+            fill_even_odd,
         } => {
             if points.len() < 4 || points.iter().any(|v| !v.is_finite()) || !finite(*stroke_width) {
                 return;
             }
+
+            // Aligned stroke (Inside/Outside on a CLOSED polygon): draw at 2× width
+            // and clip to the fill region (Inside) or its complement (Outside) so a
+            // full-width stroke sits flush against the boundary. Center / open paths
+            // are unchanged.
+            let aligned = *closed && !matches!(align, StrokeAlign::Center);
+
             content.save_state();
             apply_alpha(content, res, color);
             color::set_stroke(content, color);
-            content.set_line_width(*stroke_width as f32);
-            if poly_path(content, points, *closed) {
-                content.stroke();
+
+            if aligned {
+                // 1. Install the alignment clip from the polygon fill path.
+                match align {
+                    StrokeAlign::Inside => {
+                        // Clip = polygon interior (per fill rule).
+                        if !poly_path(content, points, true) {
+                            content.end_path();
+                            content.restore_state();
+                            return;
+                        }
+                        if *fill_even_odd {
+                            content.clip_even_odd();
+                        } else {
+                            content.clip_nonzero();
+                        }
+                        content.end_path();
+                    }
+                    StrokeAlign::Outside => {
+                        // Clip = (generous outer rect) minus polygon interior, via the
+                        // even-odd rule on the combined subpaths → the exterior region.
+                        let (pw, ph) = page;
+                        let m = pw.max(ph).max(1.0); // generous margin past the page
+                        content.move_to(-m as f32, -m as f32);
+                        content.line_to((pw + m) as f32, -m as f32);
+                        content.line_to((pw + m) as f32, (ph + m) as f32);
+                        content.line_to(-m as f32, (ph + m) as f32);
+                        content.close_path();
+                        if !poly_path(content, points, true) {
+                            content.end_path();
+                            content.restore_state();
+                            return;
+                        }
+                        content.clip_even_odd();
+                        content.end_path();
+                    }
+                    // `aligned` is only true when align != Center, so this arm is dead;
+                    // kept (no wildcard) for exhaustiveness. A no-op is the safe fallback
+                    // — it simply leaves the clip unchanged.
+                    StrokeAlign::Center => {}
+                }
+                // 2. Stroke the path at 2× width inside the clip.
+                content.set_line_width((*stroke_width * 2.0) as f32);
+                if poly_path(content, points, true) {
+                    content.stroke();
+                } else {
+                    content.end_path();
+                }
             } else {
-                content.end_path();
+                content.set_line_width(*stroke_width as f32);
+                if poly_path(content, points, *closed) {
+                    content.stroke();
+                } else {
+                    content.end_path();
+                }
             }
             content.restore_state();
         }

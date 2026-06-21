@@ -11,7 +11,7 @@ use zenith_core::{
     ResolvedToken, Span, Style, dim_to_px,
 };
 
-use crate::ir::{LineCap, SceneCommand};
+use crate::ir::{LineCap, SceneCommand, StrokeAlign};
 
 use super::RenderCtx;
 use super::paint::{
@@ -974,11 +974,21 @@ pub(super) fn compile_polygon(
             .clone()
             .or_else(|| style_prop(&poly.style, style_map, "stroke-width").cloned());
         let stroke_width = resolve_property_dimension_px(&sw, resolved, 1.0);
+        // stroke-alignment: "inside"/"outside" shift the stroke off the path
+        // boundary; anything else (incl. "center", None, or an invalid value)
+        // falls back to Center. Validation emits the warning for bad values.
+        let align = match poly.stroke_alignment.as_deref() {
+            Some("inside") => StrokeAlign::Inside,
+            Some("outside") => StrokeAlign::Outside,
+            _ => StrokeAlign::Center,
+        };
         commands.push(SceneCommand::StrokePolyline {
             points: flat_points,
             color,
             stroke_width,
             closed: true,
+            align,
+            fill_even_odd: even_odd,
         });
     }
 
@@ -1074,6 +1084,9 @@ pub(super) fn compile_polyline(
             color,
             stroke_width,
             closed: false,
+            // polyline is an open path: alignment never applies.
+            align: StrokeAlign::Center,
+            fill_even_odd: false,
         });
     }
 

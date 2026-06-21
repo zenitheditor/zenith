@@ -2436,6 +2436,87 @@ fn polygon_unknown_fill_rule_warns() {
     assert!(!report.has_errors());
 }
 
+// ── polygon: invalid stroke-alignment warns; valid does not ───────────
+
+#[test]
+fn polygon_invalid_stroke_alignment_warns() {
+    let doc = doc_with(
+        vec![],
+        vec![minimal_page(
+            "page.sa",
+            vec![Node::Polygon(PolygonNode {
+                id: "poly.sa".to_owned(),
+                name: None,
+                role: None,
+                fill: None,
+                stroke: None,
+                stroke_width: None,
+                stroke_alignment: Some("middle".to_owned()), // invalid
+                fill_rule: None,
+                opacity: None,
+                visible: None,
+                locked: None,
+                rotate: None,
+                style: None,
+                points: tri_points(),
+                source_span: None,
+                unknown_props: BTreeMap::new(),
+            })],
+        )],
+    );
+    let report = validate(&doc);
+    let diag = report
+        .diagnostics
+        .iter()
+        .find(|d| d.code == "node.unknown_property")
+        .expect("expected node.unknown_property warning for bad stroke-alignment");
+    assert_eq!(diag.severity, Severity::Warning);
+    assert!(
+        diag.message.contains("stroke-alignment"),
+        "message must mention stroke-alignment; got: {}",
+        diag.message
+    );
+    assert!(!report.has_errors());
+}
+
+#[test]
+fn polygon_valid_stroke_alignment_no_warn() {
+    for value in ["inside", "center", "outside"] {
+        let doc = doc_with(
+            vec![],
+            vec![minimal_page(
+                "page.sa",
+                vec![Node::Polygon(PolygonNode {
+                    id: "poly.sa".to_owned(),
+                    name: None,
+                    role: None,
+                    fill: None,
+                    stroke: None,
+                    stroke_width: None,
+                    stroke_alignment: Some(value.to_owned()),
+                    fill_rule: None,
+                    opacity: None,
+                    visible: None,
+                    locked: None,
+                    rotate: None,
+                    style: None,
+                    points: tri_points(),
+                    source_span: None,
+                    unknown_props: BTreeMap::new(),
+                })],
+            )],
+        );
+        let report = validate(&doc);
+        assert!(
+            !report.diagnostics.iter().any(
+                |d| d.code == "node.unknown_property" && d.message.contains("stroke-alignment")
+            ),
+            "valid stroke-alignment '{value}' must not warn; codes: {:?}",
+            codes(&report)
+        );
+    }
+}
+
 // ── Style validation tests ─────────────────────────────────────────────
 
 use crate::ast::style::{Style, UnknownStyleProp};

@@ -2158,6 +2158,22 @@ fn check_polygon(
         ));
     }
 
+    // stroke-alignment: only "inside", "center", "outside" are valid.
+    if let Some(sa) = &poly.stroke_alignment
+        && !matches!(sa.as_str(), "inside" | "center" | "outside")
+    {
+        diagnostics.push(Diagnostic::warning(
+            "node.unknown_property",
+            format!(
+                "polygon '{}': unrecognized stroke-alignment '{}' (version-relative; \
+                 allowed values are inside, center, outside)",
+                poly.id, sa
+            ),
+            poly.source_span,
+            Some(poly.id.clone()),
+        ));
+    }
+
     // Unknown properties.
     for prop_name in poly.unknown_props.keys() {
         diagnostics.push(Diagnostic::warning(

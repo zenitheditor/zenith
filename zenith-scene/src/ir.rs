@@ -24,6 +24,25 @@ pub enum LineCap {
     Square,
 }
 
+// ── StrokeAlign ─────────────────────────────────────────────────────────────────
+
+/// Stroke alignment relative to a closed polygon's boundary.
+///
+/// `Center` (the default) strokes centered on the path — identical to the prior
+/// IR and the only alignment valid for open polylines. `Inside`/`Outside` shift
+/// the visible stroke fully inside / outside the fill boundary; the renderer
+/// implements them via a fill-region clip mask, so self-intersecting shapes
+/// (stars) and rotation are handled without geometry offsetting. Serialized in
+/// lowercase JSON to match the KDL `stroke-alignment` attribute values.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum StrokeAlign {
+    #[default]
+    Center,
+    Inside,
+    Outside,
+}
+
 // ── BlendMode ─────────────────────────────────────────────────────────────────
 
 /// Compositing blend mode for a layer's ink onto what lies beneath it.
@@ -233,6 +252,10 @@ pub enum ImageClip {
     RoundedRect { radius: f64 },
 }
 
+fn is_center(a: &StrokeAlign) -> bool {
+    matches!(a, StrokeAlign::Center)
+}
+
 // ── Scene commands ────────────────────────────────────────────────────────────
 
 /// A single display-list command in the scene.
@@ -416,6 +439,16 @@ pub enum SceneCommand {
         /// When `true`, the path is closed before stroking (polygon outline).
         #[serde(default)]
         closed: bool,
+        /// Stroke alignment relative to the closed-path boundary. Only meaningful
+        /// when `closed` is `true`; `Center` is the open-path/default behavior.
+        /// Skipped in JSON when `Center` so existing scenes serialize byte-identically.
+        #[serde(default, skip_serializing_if = "is_center")]
+        align: StrokeAlign,
+        /// Fill rule of the clip region used for `Inside`/`Outside` alignment.
+        /// `true` = even-odd, `false` = nonzero. Only meaningful when
+        /// `align != Center` and `closed` is `true`.
+        #[serde(default, skip_serializing_if = "is_false")]
+        fill_even_odd: bool,
     },
     // ── Asset commands ────────────────────────────────────────────────────
     /// Draw a raster image asset clipped to its declared box.

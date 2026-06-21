@@ -20,7 +20,7 @@ use tiny_skia::{
 use zenith_core::{AssetKind, AssetProvider, FontProvider};
 use zenith_scene::{
     BlendMode as IrBlendMode, FitMode, ImageClip, LineCap as IrLineCap, Scene, SceneCommand,
-    ShadowSpec,
+    ShadowSpec, StrokeAlign,
 };
 
 use crate::backend::{RasterBackend, RasterImage};
@@ -39,7 +39,8 @@ pub(crate) use raster::decode_raster_image as decode_raster_to_pixmap;
 
 use gradient::gradient_shader;
 use paths::{
-    GlyphOutlinePen, build_poly_path, build_rounded_rect_path, clip_mask, intersect_rects,
+    GlyphOutlinePen, build_align_mask, build_poly_path, build_rounded_rect_path, clip_mask,
+    intersect_rects,
 };
 use pixels::{f64_to_px, premultiplied_to_straight};
 use raster::decode_raster_image;
@@ -982,6 +983,8 @@ impl RasterBackend for TinySkiaBackend {
                     color,
                     stroke_width,
                     closed,
+                    align,
+                    fill_even_odd,
                 } => {
                     // Guard: need at least 2 points (4 coordinates).
                     if points.len() < 4 {
@@ -1006,17 +1009,47 @@ impl RasterBackend for TinySkiaBackend {
                         Some(m) => m,
                     };
 
-                    // Stroke defaults: Butt cap, Miter join, miter_limit 4 — normative v0.
-                    let stroke = Stroke {
-                        width: *stroke_width as f32,
-                        ..Default::default()
-                    };
-
                     let mut paint = Paint::default();
                     paint.set_color_rgba8(color.r, color.g, color.b, color.a);
                     paint.anti_alias = true;
 
-                    target.stroke_path(&path, &paint, &stroke, current_ts, mask.as_ref());
+                    // Aligned stroke (Inside/Outside on a CLOSED polygon): draw at
+                    // 2× width centered on the path and clip with a fill-region mask
+                    // so exactly the inside (or outside) half survives. Building this
+                    // mask can fail on degenerate sizes / paths — fall back to the
+                    // centered branch rather than skip or panic.
+                    let aligned_mask: Option<Mask> = match align {
+                        StrokeAlign::Center => None,
+                        StrokeAlign::Inside | StrokeAlign::Outside if *closed => build_align_mask(
+                            points,
+                            *align,
+                            *fill_even_odd,
+                            effective_clip,
+                            width,
+                            height,
+                            current_ts,
+                        ),
+                        // Inside/Outside on an open path is meaningless: center.
+                        StrokeAlign::Inside | StrokeAlign::Outside => None,
+                    };
+
+                    let stroke_width_px = if aligned_mask.is_some() {
+                        (*stroke_width * 2.0) as f32
+                    } else {
+                        *stroke_width as f32
+                    };
+                    // Stroke defaults: Butt cap, Miter join, miter_limit 4 — normative v0.
+                    let stroke = Stroke {
+                        width: stroke_width_px,
+                        ..Default::default()
+                    };
+
+                    let draw_mask: Option<&Mask> = match &aligned_mask {
+                        Some(m) => Some(m),
+                        None => mask.as_ref(),
+                    };
+
+                    target.stroke_path(&path, &paint, &stroke, current_ts, draw_mask);
                 }
 
                 SceneCommand::StrokeRect {
@@ -1436,7 +1469,7 @@ fn map_line_cap(lc: Option<IrLineCap>) -> LineCap {
         Some(IrLineCap::Round) => LineCap::Round,
         Some(IrLineCap::Square) => LineCap::Square,
         // Butt or absent — matches Stroke::default().line_cap.
-        _ => LineCap::Butt,
+        Some(IrLineCap::Butt) | None => LineCap::Butt,
     }
 }
 

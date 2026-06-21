@@ -10,7 +10,7 @@ use zenith_core::{AssetKind, BytesAssetProvider, FontStyle, default_provider};
 use zenith_layout::{RustybuzzEngine, ShapeRequest, TextDirection, TextLayoutEngine};
 use zenith_scene::{
     BlendMode, Color, FitMode, GradientPaint, GradientStop, ImageClip, Scene, SceneCommand,
-    SceneGlyph, ShadowSpec, SrcRect,
+    SceneGlyph, ShadowSpec, SrcRect, StrokeAlign,
 };
 
 use crate::backend::RasterBackend;
@@ -563,6 +563,8 @@ fn stroke_polyline_renders() {
         color,
         stroke_width: 4.0,
         closed: false,
+        align: StrokeAlign::Center,
+        fill_even_odd: false,
     });
     scene.commands.push(SceneCommand::PopClip);
 

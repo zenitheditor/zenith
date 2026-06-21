@@ -3,6 +3,7 @@
 //! outline pen.
 
 use tiny_skia::{FillRule, Mask, Path, PathBuilder, Rect, Transform};
+use zenith_scene::StrokeAlign;
 
 /// Build a clip `Mask` from the current effective clip rectangle.
 ///
@@ -30,6 +31,67 @@ pub(super) fn clip_mask(
     // AA off: the clip is an axis-aligned rect and must be exact.
     mask.fill_path(&clip_path, FillRule::Winding, false, Transform::identity());
     Some(Some(mask))
+}
+
+/// Build the clip `Mask` for an `Inside`/`Outside`-aligned polygon stroke.
+///
+/// The stroke is drawn at 2× width centered on the path; this mask keeps only
+/// the half that lies inside (`Inside`) or outside (`Outside`) the polygon's
+/// fill region, yielding a full-width stroke flush against the boundary. The
+/// fill region is rasterized using the polygon's fill rule (`fill_even_odd`),
+/// anti-aliased, under `device_ts` so it lands in the same device space as the
+/// stroke (rotation handled). For `Outside`, the mask is inverted.
+///
+/// When the effective frame clip is a real sub-page rect (not the whole pixmap),
+/// the alignment mask is additionally intersected with that rect so frame
+/// clipping still applies.
+///
+/// Returns `None` on any degenerate input (mask allocation failure, empty path).
+/// The caller must fall back to centered stroking in that case — never panic.
+pub(super) fn build_align_mask(
+    points: &[f64],
+    align: StrokeAlign,
+    fill_even_odd: bool,
+    effective_clip: (f64, f64, f64, f64),
+    width: u32,
+    height: u32,
+    device_ts: Transform,
+) -> Option<Mask> {
+    // Inside/Outside only — Center never reaches here.
+    let invert = match align {
+        StrokeAlign::Inside => false,
+        StrokeAlign::Outside => true,
+        StrokeAlign::Center => return None,
+    };
+
+    let fill_path = build_poly_path(points, true)?;
+    let mut mask = Mask::new(width, height)?;
+    let fill_rule = if fill_even_odd {
+        FillRule::EvenOdd
+    } else {
+        FillRule::Winding
+    };
+    mask.fill_path(&fill_path, fill_rule, true, device_ts);
+    if invert {
+        mask.invert();
+    }
+
+    // Intersect with the frame clip rect when it is a real sub-page clip.
+    let pixmap_bounds = (0.0, 0.0, f64::from(width), f64::from(height));
+    if let Some((cx, cy, cx2, cy2)) = intersect_rects(effective_clip, pixmap_bounds) {
+        let full_page =
+            cx <= 0.0 && cy <= 0.0 && cx2 >= f64::from(width) && cy2 >= f64::from(height);
+        if !full_page
+            && let Some(rect) =
+                Rect::from_xywh(cx as f32, cy as f32, (cx2 - cx) as f32, (cy2 - cy) as f32)
+        {
+            let clip_path = PathBuilder::from_rect(rect);
+            // effective_clip is device-space → identity transform, AA off (exact rect).
+            mask.intersect_path(&clip_path, FillRule::Winding, false, Transform::identity());
+        }
+    }
+
+    Some(mask)
 }
 
 /// Intersect two axis-aligned rectangles expressed as `(x, y, x2, y2)`.
