@@ -19,12 +19,12 @@
 //! This module contains pure pack-loading/registry logic only; the CLI command
 //! that consumes it lives in [`crate::commands::library`].
 
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::path::{Path, PathBuf};
 
 use zenith_core::{
     AssetDecl, ComponentDef, Dimension, Document, InstanceNode, KdlAdapter, KdlSource, LibraryDef,
-    Node, ProvenanceDef, Style, Token, Unit,
+    Node, ProvenanceDef, Style, Token, TokenLiteral, TokenType, TokenValue, Unit,
 };
 
 /// Embedded preset packs, as `(pack_id, pack_source)` pairs.
@@ -34,10 +34,16 @@ use zenith_core::{
 /// fonts are bundled in `zenith-core`). The `pack_id` is the expected package
 /// id and is used only for diagnostics/lookup convenience; the authoritative id
 /// is parsed from the pack's own `library` self-entry.
-pub const EMBEDDED_PACKS: &[(&str, &str)] = &[(
-    "@zenith/flowchart",
-    include_str!("../../assets/libraries/zenith-flowchart.zen"),
-)];
+pub const EMBEDDED_PACKS: &[(&str, &str)] = &[
+    (
+        "@zenith/flowchart",
+        include_str!("../../assets/libraries/zenith-flowchart.zen"),
+    ),
+    (
+        "@zenith/filters",
+        include_str!("../../assets/libraries/zenith-filters.zen"),
+    ),
+];
 
 /// Where a [`LibraryPack`] was loaded from.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -58,7 +64,39 @@ impl PackSource {
     }
 }
 
-/// A loaded library pack: its identity plus the ids of the items it provides.
+/// What kind of thing a pack item is.
+///
+/// A pack exports COMPONENT items (materialized as an instance on a page) and
+/// TOKEN items (filter tokens, copied into the target's tokens block with their
+/// color-token dependencies — no instance, no page required).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ItemKind {
+    /// A component item, addressed `<pkg>#<component-id>`.
+    Component,
+    /// A filter-token item, addressed `<pkg>#<token-id>`.
+    Token,
+}
+
+impl ItemKind {
+    /// A short, stable label for human/JSON output: `"component"` or `"token"`.
+    pub fn label(&self) -> &'static str {
+        match self {
+            ItemKind::Component => "component",
+            ItemKind::Token => "token",
+        }
+    }
+}
+
+/// A single exported item of a [`LibraryPack`]: its id plus its kind.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PackItem {
+    /// The item id (a component id or a filter-token id).
+    pub id: String,
+    /// Whether the item is a component or a filter token.
+    pub kind: ItemKind,
+}
+
+/// A loaded library pack: its identity plus the items it provides.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LibraryPack {
     /// The package id, parsed from the pack's `library` self-entry.
@@ -67,8 +105,9 @@ pub struct LibraryPack {
     pub version: Option<String>,
     /// Where the pack came from.
     pub source: PackSource,
-    /// The item ids (component ids) the pack provides, in source order.
-    pub items: Vec<String>,
+    /// The items the pack provides: component ids first (in source order),
+    /// then filter-token ids (in source order).
+    pub items: Vec<PackItem>,
 }
 
 /// An error produced while parsing a pack.
@@ -102,7 +141,9 @@ impl std::error::Error for PackError {}
 /// sole entry is used. A pack with no identifying library self-entry is an error
 /// (a pack MUST declare its identity).
 ///
-/// Items are the document's component ids in source order.
+/// Items are the document's component ids in source order, followed by its
+/// FILTER token ids in source order. (Only filter tokens are exported items;
+/// color/dimension tokens are dependencies, not items.)
 ///
 /// # Errors
 ///
@@ -131,7 +172,26 @@ pub fn parse_pack(source: &str, source_kind: PackSource) -> Result<LibraryPack, 
         )
     })?;
 
-    let items = doc.components.iter().map(|c| c.id.clone()).collect();
+    // Component items first (source order), then filter-token items (source
+    // order). A token is an exported item only when it is a filter token.
+    let mut items: Vec<PackItem> = doc
+        .components
+        .iter()
+        .map(|c| PackItem {
+            id: c.id.clone(),
+            kind: ItemKind::Component,
+        })
+        .collect();
+    items.extend(
+        doc.tokens
+            .tokens
+            .iter()
+            .filter(|t| t.token_type == TokenType::Filter)
+            .map(|t| PackItem {
+                id: t.id.clone(),
+                kind: ItemKind::Token,
+            }),
+    );
 
     Ok(LibraryPack {
         id: self_entry.id.clone(),
@@ -676,6 +736,213 @@ pub fn materialize(
     })
 }
 
+// ── Token materialization (`library add` of a filter-token item) ──────────────
+
+/// The outcome of a successful [`materialize_token`] call.
+///
+/// All ids are the FINAL ids written into the target document. The filter-token
+/// id is kept VERBATIM (e.g. `noir`), so the user can apply it via
+/// `filter=(token)"noir"`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TokenAddOutcome {
+    /// The package id the item came from (e.g. `@zenith/filters`).
+    pub pkg_id: String,
+    /// The item name within the pack (e.g. `noir`).
+    pub item: String,
+    /// The copied filter-token id (kept as-is, e.g. `noir`).
+    pub token_id: String,
+    /// Color-token deps copied alongside the filter token (sorted, deduped).
+    pub dep_token_ids: Vec<String>,
+    /// The unique id of the recorded provenance entry.
+    pub provenance_id: String,
+    /// Non-fatal dependency-conflict warnings (see [`AddOutcome::warnings`]).
+    pub warnings: Vec<String>,
+}
+
+/// Collect the transitive token DEPS of `filter_token` among `pack_tokens`.
+///
+/// A filter token references color tokens only through its `Duotone` ops'
+/// `shadow`/`highlight` ids. Each referenced id is followed through any
+/// `TokenValue::Reference` alias chain to a fixpoint (cycle-guarded by a visited
+/// set), so the full closure of dependency token ids is returned. The filter
+/// token itself is NOT included. For non-duotone filters the result is empty.
+///
+/// Deterministic: returns a [`BTreeSet`] (sorted, deduped).
+fn collect_filter_dep_ids(filter_token: &Token, pack_tokens: &[Token]) -> BTreeSet<String> {
+    // Seed: the direct color-token ids referenced by duotone ops.
+    let mut seeds: Vec<String> = Vec::new();
+    if let TokenValue::Literal(TokenLiteral::Filter(lit)) = &filter_token.value {
+        for op in &lit.ops {
+            if op.kind == zenith_core::FilterKind::Duotone {
+                if let Some(s) = &op.shadow {
+                    seeds.push(s.clone());
+                }
+                if let Some(h) = &op.highlight {
+                    seeds.push(h.clone());
+                }
+            }
+        }
+    }
+
+    let mut deps: BTreeSet<String> = BTreeSet::new();
+    let mut stack: Vec<String> = seeds;
+    while let Some(id) = stack.pop() {
+        // `insert` returns false if already present → fixpoint / cycle guard.
+        if !deps.insert(id.clone()) {
+            continue;
+        }
+        // Follow an alias chain: if the dep token is itself a reference, the
+        // referenced target is also a dependency.
+        if let Some(tok) = pack_tokens.iter().find(|t| t.id == id)
+            && let TokenValue::Reference { token_id } = &tok.value
+        {
+            stack.push(token_id.clone());
+        }
+    }
+    deps
+}
+
+/// Materialize the filter-token item `pkg_id#item` into `target`, returning the
+/// [`TokenAddOutcome`] describing what was added.
+///
+/// This is the PURE core of a `library add` for a TOKEN item: it mutates the
+/// parsed `target` [`Document`] in place and performs NO filesystem or process
+/// I/O. Unlike [`materialize`], it inserts NO instance and requires NO page.
+/// Steps:
+///
+/// 1. Resolve the FIRST pack in `packs` whose id == `pkg_id` (project shadows
+///    preset); load its full [`Document`].
+/// 2. Find the FILTER token whose id == `item`.
+/// 3. Collect the filter token's transitive color-token deps
+///    ([`collect_filter_dep_ids`]).
+/// 4. Ensure the target's tokens block has a format (adopt the pack's when empty).
+/// 5. Copy the dep tokens THEN the filter token into the target (dedup by id +
+///    conflict warnings, via the shared [`copy_tokens`]).
+/// 6. Record a `libraries` entry for `pkg_id` (if absent).
+/// 7. Record a unique `provenance` record whose `node` is the filter-token id —
+///    skipped if an identical `(node, library, item)` provenance already exists.
+///
+/// # Errors
+///
+/// Returns [`AddError`] when the package or item is unknown (the message lists
+/// the available options).
+pub fn materialize_token(
+    target: &mut Document,
+    packs: &[LibraryPack],
+    pkg_id: &str,
+    item: &str,
+    id_base: &str,
+) -> Result<TokenAddOutcome, AddError> {
+    // 1. Resolve the pack + load its document. ────────────────────────────────
+    let pack = packs.iter().find(|p| p.id == pkg_id).ok_or_else(|| {
+        let mut available: Vec<&str> = packs.iter().map(|p| p.id.as_str()).collect();
+        available.sort_unstable();
+        available.dedup();
+        AddError::new(format!(
+            "unknown library package '{}' (available: {})",
+            pkg_id,
+            if available.is_empty() {
+                "none".to_owned()
+            } else {
+                available.join(", ")
+            }
+        ))
+    })?;
+
+    let pack_doc = load_pack_document(pack)?;
+
+    // 2. Find the FILTER token named `item`. ───────────────────────────────────
+    let filter_token = pack_doc
+        .tokens
+        .tokens
+        .iter()
+        .find(|t| t.id == item && t.token_type == TokenType::Filter)
+        .ok_or_else(|| {
+            let available: Vec<&str> = pack_doc
+                .tokens
+                .tokens
+                .iter()
+                .filter(|t| t.token_type == TokenType::Filter)
+                .map(|t| t.id.as_str())
+                .collect();
+            AddError::new(format!(
+                "unknown filter token '{}' in package '{}' (available: {})",
+                item,
+                pkg_id,
+                if available.is_empty() {
+                    "none".to_owned()
+                } else {
+                    available.join(", ")
+                }
+            ))
+        })?;
+
+    let mut warnings: Vec<String> = Vec::new();
+
+    // 3. Collect transitive color-token deps. ──────────────────────────────────
+    let dep_ids = collect_filter_dep_ids(filter_token, &pack_doc.tokens.tokens);
+
+    // 4. Ensure the target's tokens block has a format. ────────────────────────
+    if target.tokens.format.is_empty() {
+        target.tokens.format = pack_doc.tokens.format.clone();
+    }
+
+    // 5. Copy deps THEN the filter token (shared dedup + conflict logic). ───────
+    let mut to_copy: Vec<Token> = Vec::with_capacity(dep_ids.len() + 1);
+    for dep_id in &dep_ids {
+        if let Some(tok) = pack_doc.tokens.tokens.iter().find(|t| &t.id == dep_id) {
+            to_copy.push(tok.clone());
+        }
+    }
+    to_copy.push(filter_token.clone());
+    copy_tokens(&to_copy, &mut target.tokens.tokens, &mut warnings);
+
+    // 6. Record the libraries import entry. ────────────────────────────────────
+    if !target.libraries.iter().any(|l| l.id == pkg_id) {
+        target.libraries.push(LibraryDef {
+            id: pkg_id.to_owned(),
+            version: pack.version.clone(),
+            hash: None,
+            source_span: None,
+            unknown_props: BTreeMap::new(),
+        });
+    }
+
+    // 7. Record provenance (dedup identical node+library+item). ────────────────
+    let token_id = item.to_owned();
+    let provenance_id = if let Some(existing) = target
+        .provenance
+        .iter()
+        .find(|p| p.node == token_id && p.library == pkg_id && p.item.as_deref() == Some(item))
+    {
+        // An identical provenance already links this token to its origin; reuse
+        // its id rather than appending a redundant duplicate record.
+        existing.id.clone()
+    } else {
+        let all_ids = collect_all_ids(target);
+        let provenance_id = unique_id(&format!("prov.{}", id_base), &all_ids);
+        target.provenance.push(ProvenanceDef {
+            id: provenance_id.clone(),
+            node: token_id.clone(),
+            library: pkg_id.to_owned(),
+            item: Some(item.to_owned()),
+            linked: Some(true),
+            source_span: None,
+            unknown_props: BTreeMap::new(),
+        });
+        provenance_id
+    };
+
+    Ok(TokenAddOutcome {
+        pkg_id: pkg_id.to_owned(),
+        item: item.to_owned(),
+        token_id,
+        dep_token_ids: dep_ids.into_iter().collect(),
+        provenance_id,
+        warnings,
+    })
+}
+
 /// Copy pack tokens into `target` tokens, deduping by id; a same-id-different-
 /// value collision keeps the existing token and records a conflict warning.
 fn copy_tokens(pack: &[Token], target: &mut Vec<Token>, warnings: &mut Vec<String>) {
@@ -1066,7 +1333,199 @@ mod tests {
         assert_eq!(pack.id, "@zenith/flowchart");
         assert_eq!(pack.version.as_deref(), Some("1.0.0"));
         assert_eq!(pack.source, PackSource::Preset);
-        assert_eq!(pack.items, vec!["process", "decision", "terminator"]);
+        assert_eq!(
+            pack.items,
+            vec![
+                PackItem {
+                    id: "process".to_owned(),
+                    kind: ItemKind::Component
+                },
+                PackItem {
+                    id: "decision".to_owned(),
+                    kind: ItemKind::Component
+                },
+                PackItem {
+                    id: "terminator".to_owned(),
+                    kind: ItemKind::Component
+                },
+            ]
+        );
+    }
+
+    const FILTERS_SRC: &str = include_str!("../../assets/libraries/zenith-filters.zen");
+
+    #[test]
+    fn parse_embedded_filters_lists_filter_token_items() {
+        let pack = parse_pack(FILTERS_SRC, PackSource::Preset).expect("filters pack parses");
+        assert_eq!(pack.id, "@zenith/filters");
+        assert_eq!(pack.version.as_deref(), Some("1.0.0"));
+
+        // Filter tokens are items; color dep tokens are NOT.
+        assert!(pack.items.contains(&PackItem {
+            id: "noir".to_owned(),
+            kind: ItemKind::Token
+        }));
+        assert!(pack.items.contains(&PackItem {
+            id: "duotone-gold".to_owned(),
+            kind: ItemKind::Token
+        }));
+        // Color dep tokens are dependencies, not exported items.
+        assert!(
+            !pack
+                .items
+                .iter()
+                .any(|i| i.id == "lib.filters.duo.gold.shadow"),
+            "color dep tokens must not be items"
+        );
+        // The filters pack ships no components, so every item is a token.
+        assert!(pack.items.iter().all(|i| i.kind == ItemKind::Token));
+    }
+
+    #[test]
+    fn collect_filter_dep_ids_duotone_and_simple() {
+        let pack = load_pack_document(&parse_pack(FILTERS_SRC, PackSource::Preset).expect("pack"))
+            .expect("pack doc");
+
+        let gold = pack
+            .tokens
+            .tokens
+            .iter()
+            .find(|t| t.id == "duotone-gold")
+            .expect("duotone-gold present");
+        let deps = collect_filter_dep_ids(gold, &pack.tokens.tokens);
+        let deps: Vec<String> = deps.into_iter().collect();
+        assert_eq!(
+            deps,
+            vec![
+                "lib.filters.duo.gold.highlight".to_owned(),
+                "lib.filters.duo.gold.shadow".to_owned(),
+            ]
+        );
+
+        let noir = pack
+            .tokens
+            .tokens
+            .iter()
+            .find(|t| t.id == "noir")
+            .expect("noir present");
+        assert!(
+            collect_filter_dep_ids(noir, &pack.tokens.tokens).is_empty(),
+            "non-duotone filters have no token deps"
+        );
+    }
+
+    #[test]
+    fn materialize_token_copies_filter_and_deps_records_provenance() {
+        let mut target = parse_target();
+        let packs = resolve_packs(None);
+        let outcome = materialize_token(
+            &mut target,
+            &packs,
+            "@zenith/filters",
+            "duotone-gold",
+            "duotone-gold",
+        )
+        .expect("materialize_token ok");
+
+        // Filter token + its two color deps copied.
+        assert!(target.tokens.tokens.iter().any(|t| t.id == "duotone-gold"));
+        assert!(
+            target
+                .tokens
+                .tokens
+                .iter()
+                .any(|t| t.id == "lib.filters.duo.gold.shadow")
+        );
+        assert!(
+            target
+                .tokens
+                .tokens
+                .iter()
+                .any(|t| t.id == "lib.filters.duo.gold.highlight")
+        );
+        assert_eq!(
+            outcome.dep_token_ids,
+            vec![
+                "lib.filters.duo.gold.highlight".to_owned(),
+                "lib.filters.duo.gold.shadow".to_owned(),
+            ]
+        );
+        assert_eq!(outcome.token_id, "duotone-gold");
+
+        // Library + provenance recorded; provenance.node is the TOKEN id.
+        assert!(target.libraries.iter().any(|l| l.id == "@zenith/filters"));
+        let prov = target
+            .provenance
+            .iter()
+            .find(|p| p.node == "duotone-gold")
+            .expect("provenance recorded");
+        assert_eq!(prov.library, "@zenith/filters");
+        assert_eq!(prov.item.as_deref(), Some("duotone-gold"));
+        assert_eq!(outcome.provenance_id, prov.id);
+
+        assert!(
+            hard_errors(&target).is_empty(),
+            "errors: {:?}",
+            hard_errors(&target)
+        );
+    }
+
+    #[test]
+    fn materialize_token_simple_filter_no_deps() {
+        let mut target = parse_target();
+        let packs = resolve_packs(None);
+        let outcome = materialize_token(&mut target, &packs, "@zenith/filters", "noir", "noir")
+            .expect("materialize_token ok");
+        assert!(target.tokens.tokens.iter().any(|t| t.id == "noir"));
+        assert!(outcome.dep_token_ids.is_empty());
+        assert!(hard_errors(&target).is_empty());
+    }
+
+    #[test]
+    fn materialize_token_double_add_dedups_token_and_provenance() {
+        let mut target = parse_target();
+        let packs = resolve_packs(None);
+        let o1 = materialize_token(&mut target, &packs, "@zenith/filters", "noir", "noir")
+            .expect("first");
+        let o2 = materialize_token(&mut target, &packs, "@zenith/filters", "noir", "noir")
+            .expect("second");
+
+        // Token copied exactly once.
+        assert_eq!(
+            target
+                .tokens
+                .tokens
+                .iter()
+                .filter(|t| t.id == "noir")
+                .count(),
+            1
+        );
+        // Identical provenance is not duplicated.
+        assert_eq!(target.provenance.len(), 1);
+        assert_eq!(o1.provenance_id, o2.provenance_id);
+        // One library entry only.
+        assert_eq!(
+            target
+                .libraries
+                .iter()
+                .filter(|l| l.id == "@zenith/filters")
+                .count(),
+            1
+        );
+        assert!(hard_errors(&target).is_empty());
+    }
+
+    #[test]
+    fn materialize_token_unknown_item_errors_with_available() {
+        let mut target = parse_target();
+        let packs = resolve_packs(None);
+        let err = materialize_token(&mut target, &packs, "@zenith/filters", "nope", "nope")
+            .expect_err("unknown filter token errors");
+        assert!(
+            err.message.contains("noir"),
+            "lists available: {}",
+            err.message
+        );
     }
 
     #[test]

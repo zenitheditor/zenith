@@ -1,0 +1,56 @@
+zenith version=1 {
+  project id="@zenith/filters" name="Zenith Filters"
+  assets {
+  }
+  libraries {
+    library id="@zenith/filters" version="1.0.0"
+  }
+  tokens format="zenith-token-v1" {
+    token id="lib.filters.duo.gold.shadow" type="color" value="#1e1b4b"
+    token id="lib.filters.duo.gold.highlight" type="color" value="#fbbf24"
+    token id="lib.filters.duo.cyan.shadow" type="color" value="#082f49"
+    token id="lib.filters.duo.cyan.highlight" type="color" value="#67e8f9"
+    token id="grayscale" type="filter" {
+      grayscale
+    }
+    token id="invert" type="filter" {
+      invert
+    }
+    token id="sepia" type="filter" {
+      sepia
+    }
+    token id="noir" type="filter" {
+      grayscale
+      contrast amount=1.35
+    }
+    token id="vintage" type="filter" {
+      sepia amount=0.65
+      contrast amount=1.1
+      brightness amount=1.05
+    }
+    token id="cool" type="filter" {
+      hue-rotate amount=200
+      saturate amount=1.2
+    }
+    token id="warm" type="filter" {
+      hue-rotate amount=-18
+      saturate amount=1.3
+    }
+    token id="vivid" type="filter" {
+      saturate amount=1.6
+      contrast amount=1.1
+    }
+    token id="duotone-gold" type="filter" {
+      duotone shadow=(token)"lib.filters.duo.gold.shadow" highlight=(token)"lib.filters.duo.gold.highlight"
+    }
+    token id="duotone-cyan" type="filter" {
+      duotone shadow=(token)"lib.filters.duo.cyan.shadow" highlight=(token)"lib.filters.duo.cyan.highlight"
+    }
+  }
+  styles {
+  }
+  document id="pack.preview" title="Zenith Filters" {
+    page id="pack.pg" name="Preview" w=(px)100 h=(px)100 {
+    }
+  }
+}

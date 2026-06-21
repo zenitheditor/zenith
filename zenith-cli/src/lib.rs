@@ -455,7 +455,7 @@ pub fn run() -> ExitCode {
                     &target_src,
                     &add_args.spec,
                     project_dir.as_deref(),
-                    &add_args.page,
+                    add_args.page.as_deref(),
                     at,
                     add_args.id.as_deref(),
                 ) {

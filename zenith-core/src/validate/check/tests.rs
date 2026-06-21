@@ -6059,6 +6059,25 @@ fn provenance_unknown_node_is_error() {
 }
 
 #[test]
+fn provenance_node_may_be_a_declared_token() {
+    // A provenance record whose `node` is a declared TOKEN id (a token imported
+    // from a library) validates clean — the target need not be a node.
+    let prov = minimal_provenance("prov.noir", "noir", "@zenith/filters");
+    let mut doc = doc_with_provenance(
+        vec![prov],
+        vec![minimal_library("@zenith/filters")],
+        vec![minimal_rect("btn", None)],
+    );
+    doc.tokens.tokens.push(color_token_hex("noir", "#000000"));
+    let report = validate(&doc);
+    assert!(
+        !has_code(&report, "provenance.unknown_node"),
+        "a provenance record targeting a declared token must not error; got {:?}",
+        codes(&report)
+    );
+}
+
+#[test]
 fn provenance_unknown_library_is_error() {
     let prov = minimal_provenance("prov.btn", "btn", "@nope/x");
     let doc = doc_with_provenance(

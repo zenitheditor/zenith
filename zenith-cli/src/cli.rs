@@ -72,8 +72,10 @@ pub struct LibraryAddArgs {
     pub into: PathBuf,
 
     /// Id of the page in the target document to place the instance on.
+    ///
+    /// Required only for COMPONENT items; TOKEN items (filter tokens) ignore it.
     #[arg(long, value_name = "ID")]
-    pub page: String,
+    pub page: Option<String>,
 
     /// Instance origin as `X,Y` in pixels (default `0,0`).
     #[arg(long, value_name = "X,Y")]

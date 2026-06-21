@@ -1,9 +1,9 @@
-//! Pure logic for `zenith library list`.
+//! Pure logic for `zenith library list` and `zenith library add`.
 //!
-//! The registry/resolver lives in [`crate::library`]; this module only turns a
-//! resolved set of packs into stdout text (human-readable or `--json`). It
-//! operates on an already-resolved `&[LibraryPack]`, so it never touches the
-//! filesystem itself — the dispatcher resolves the project directory and calls
+//! The registry/resolver lives in [`crate::library`]; this module turns a
+//! resolved set of packs into stdout text ([`list`]) and materializes library
+//! items into target documents ([`add`]). Neither function touches the
+//! filesystem — the dispatcher reads/writes files and calls
 //! [`crate::library::resolve_packs`].
 
 use std::path::Path;
@@ -11,7 +11,7 @@ use std::path::Path;
 use zenith_core::{KdlAdapter, KdlSource, Severity, validate};
 
 use crate::commands::serialize_pretty;
-use crate::library::{LibraryPack, parse_spec, resolve_packs};
+use crate::library::{ItemKind, LibraryPack, parse_spec, resolve_packs};
 
 /// JSON shape for `library list --json`.
 #[derive(Debug, serde::Serialize)]
@@ -26,7 +26,14 @@ struct PackJson<'a> {
     id: &'a str,
     version: Option<&'a str>,
     source: &'static str,
-    items: Vec<&'a str>,
+    items: Vec<PackItemJson<'a>>,
+}
+
+/// A single exported item in the `--json` output: its id and kind.
+#[derive(Debug, serde::Serialize)]
+struct PackItemJson<'a> {
+    id: &'a str,
+    kind: &'static str,
 }
 
 /// Render the resolved `packs` for `library list`.
@@ -47,7 +54,14 @@ pub fn list(packs: &[LibraryPack], json: bool) -> String {
                     id: &p.id,
                     version: p.version.as_deref(),
                     source: p.source.label(),
-                    items: p.items.iter().map(String::as_str).collect(),
+                    items: p
+                        .items
+                        .iter()
+                        .map(|it| PackItemJson {
+                            id: it.id.as_str(),
+                            kind: it.kind.label(),
+                        })
+                        .collect(),
                 })
                 .collect(),
         };
@@ -72,7 +86,7 @@ fn format_human(packs: &[LibraryPack]) -> String {
             pack.source.label()
         ));
         for item in &pack.items {
-            lines.push(format!("  #{}", item));
+            lines.push(format!("  #{} ({})", item.id, item.kind.label()));
         }
     }
     lines.join("\n")
@@ -122,15 +136,19 @@ pub struct AddResult {
 /// dep tokens/styles/assets (dedup) → unique instance id → insert instance →
 /// record libraries + provenance → validate → format.
 ///
+/// `page` is required only for COMPONENT items (which materialize as an instance
+/// on a page); TOKEN items (filter tokens) ignore it.
+///
 /// # Errors
 ///
 /// Returns [`AddCmdErr`] on a malformed spec, parse/format failure, unknown
-/// package/item, missing page, or a post-mutation validation that has hard errors.
+/// package/item, a missing page (for a component item), or a post-mutation
+/// validation that has hard errors.
 pub fn add(
     target_src: &str,
     spec: &str,
     project_dir: Option<&Path>,
-    page: &str,
+    page: Option<&str>,
     at: (f64, f64),
     id_override: Option<&str>,
 ) -> Result<AddResult, AddCmdErr> {
@@ -141,14 +159,83 @@ pub fn add(
         .map_err(|e| AddCmdErr::new(format!("parse error: {}", e.message), 2))?;
 
     let packs = resolve_packs(project_dir);
-
     let id_base = id_override.unwrap_or(item.as_str());
-    let outcome =
-        crate::library::materialize(&mut target, &packs, &pkg_id, &item, page, id_base, at)
-            .map_err(|e| AddCmdErr::new(e.message, 2))?;
 
-    // Validate the mutated document: hard errors abort with no write.
-    let report = validate(&target);
+    // Determine the item kind from the resolved pack's exported items. An unknown
+    // pkg/item falls through to a `materialize*` call, which yields a precise
+    // "unknown package/item" diagnostic.
+    let item_kind = packs
+        .iter()
+        .find(|p| p.id == pkg_id)
+        .and_then(|p| p.items.iter().find(|it| it.id == item))
+        .map(|it| it.kind);
+
+    let summary = match item_kind {
+        Some(ItemKind::Token) => {
+            // TOKEN item: copy the filter token + color deps; no instance, no page.
+            let outcome =
+                crate::library::materialize_token(&mut target, &packs, &pkg_id, &item, id_base)
+                    .map_err(|e| AddCmdErr::new(e.message, 2))?;
+            let deps = if outcome.dep_token_ids.is_empty() {
+                "none".to_owned()
+            } else {
+                outcome.dep_token_ids.join(", ")
+            };
+            let mut summary = String::new();
+            summary.push_str(&format!(
+                "added {}#{} as filter token '{}'\n",
+                outcome.pkg_id, outcome.item, outcome.token_id
+            ));
+            summary.push_str(&format!(
+                "  apply with: filter=(token)\"{}\"\n",
+                outcome.token_id
+            ));
+            summary.push_str(&format!("  dependencies: {}\n", deps));
+            summary.push_str(&format!("  provenance: {}", outcome.provenance_id));
+            for w in &outcome.warnings {
+                summary.push_str(&format!("\n  warning: {}", w));
+            }
+            summary
+        }
+        // COMPONENT item (or unknown). A real component requires `--page`. For an
+        // unknown pkg/item (`None`), skip the page requirement and let
+        // `materialize` emit the precise "unknown package/item" diagnostic — it
+        // checks pkg/item BEFORE page, so an empty page never masks that error.
+        Some(ItemKind::Component) | None => {
+            let page = match item_kind {
+                Some(ItemKind::Component) => page.ok_or_else(|| {
+                    AddCmdErr::new(
+                        "page is required to add a component item (use --page <id>)",
+                        2,
+                    )
+                })?,
+                _ => page.unwrap_or(""),
+            };
+            let outcome =
+                crate::library::materialize(&mut target, &packs, &pkg_id, &item, page, id_base, at)
+                    .map_err(|e| AddCmdErr::new(e.message, 2))?;
+            let mut summary = String::new();
+            summary.push_str(&format!(
+                "added {}#{} as instance '{}' on page '{}'\n",
+                outcome.pkg_id, outcome.item, outcome.instance_id, page
+            ));
+            summary.push_str(&format!("  component: {}\n", outcome.target_component_id));
+            summary.push_str(&format!("  provenance: {}", outcome.provenance_id));
+            for w in &outcome.warnings {
+                summary.push_str(&format!("\n  warning: {}", w));
+            }
+            summary
+        }
+    };
+
+    let formatted = validate_and_format(&target)?;
+    Ok(AddResult { formatted, summary })
+}
+
+/// Validate the mutated `target` (hard errors abort with no write) then format it
+/// to canonical bytes. Shared by the component and token `add` branches.
+fn validate_and_format(target: &zenith_core::Document) -> Result<Vec<u8>, AddCmdErr> {
+    let report = validate(target);
     let errors: Vec<String> = report
         .diagnostics
         .iter()
@@ -165,23 +252,9 @@ pub fn add(
             1,
         ));
     }
-
-    let formatted = KdlAdapter
-        .format(&target)
-        .map_err(|e| AddCmdErr::new(format!("format error: {}", e.message), 2))?;
-
-    let mut summary = String::new();
-    summary.push_str(&format!(
-        "added {}#{} as instance '{}' on page '{}'\n",
-        outcome.pkg_id, outcome.item, outcome.instance_id, page
-    ));
-    summary.push_str(&format!("  component: {}\n", outcome.target_component_id));
-    summary.push_str(&format!("  provenance: {}", outcome.provenance_id));
-    for w in &outcome.warnings {
-        summary.push_str(&format!("\n  warning: {}", w));
-    }
-
-    Ok(AddResult { formatted, summary })
+    KdlAdapter
+        .format(target)
+        .map_err(|e| AddCmdErr::new(format!("format error: {}", e.message), 2))
 }
 
 // ── Tests ───────────────────────────────────────────────────────────────────
@@ -197,9 +270,17 @@ mod tests {
         let out = list(&packs, false);
         assert!(out.contains("@zenith/flowchart"), "got: {}", out);
         assert!(out.contains("[preset]"), "got: {}", out);
-        assert!(out.contains("#process"), "got: {}", out);
-        assert!(out.contains("#decision"), "got: {}", out);
-        assert!(out.contains("#terminator"), "got: {}", out);
+        assert!(out.contains("#process (component)"), "got: {}", out);
+        assert!(out.contains("#decision (component)"), "got: {}", out);
+        assert!(out.contains("#terminator (component)"), "got: {}", out);
+    }
+
+    #[test]
+    fn human_lists_filters_with_token_items() {
+        let packs = resolve_packs(None);
+        let out = list(&packs, false);
+        assert!(out.contains("@zenith/filters"), "got: {}", out);
+        assert!(out.contains("#noir (token)"), "got: {}", out);
     }
 
     #[test]
@@ -215,13 +296,13 @@ mod tests {
             .expect("flowchart pack present");
         assert_eq!(flow["version"], "1.0.0");
         assert_eq!(flow["source"], "preset");
-        let items: Vec<&str> = flow["items"]
-            .as_array()
-            .expect("items array")
-            .iter()
-            .filter_map(|v| v.as_str())
-            .collect();
-        assert_eq!(items, vec!["process", "decision", "terminator"]);
+        let items = flow["items"].as_array().expect("items array");
+        let ids: Vec<&str> = items.iter().filter_map(|v| v["id"].as_str()).collect();
+        assert_eq!(ids, vec!["process", "decision", "terminator"]);
+        assert!(
+            items.iter().all(|v| v["kind"] == "component"),
+            "all flowchart items are components"
+        );
     }
 
     #[test]
@@ -260,7 +341,7 @@ mod tests {
             TARGET_SRC,
             "@zenith/flowchart#decision",
             None,
-            "pg",
+            Some("pg"),
             (120.0, 80.0),
             None,
         )
@@ -302,7 +383,7 @@ mod tests {
 
     #[test]
     fn add_malformed_spec_errors() {
-        let err = add(TARGET_SRC, "no-hash", None, "pg", (0.0, 0.0), None)
+        let err = add(TARGET_SRC, "no-hash", None, Some("pg"), (0.0, 0.0), None)
             .expect_err("malformed spec errors");
         assert_eq!(err.exit_code, 2);
     }
@@ -313,7 +394,7 @@ mod tests {
             TARGET_SRC,
             "@zenith/flowchart#decision",
             None,
-            "nope",
+            Some("nope"),
             (0.0, 0.0),
             None,
         )
@@ -331,7 +412,7 @@ mod tests {
             TARGET_SRC,
             "@no/such#decision",
             None,
-            "pg",
+            Some("pg"),
             (0.0, 0.0),
             None,
         )
@@ -341,7 +422,7 @@ mod tests {
             TARGET_SRC,
             "@zenith/flowchart#nope",
             None,
-            "pg",
+            Some("pg"),
             (0.0, 0.0),
             None,
         )
@@ -357,7 +438,7 @@ mod tests {
             TARGET_SRC,
             "@zenith/flowchart#process",
             None,
-            "pg",
+            Some("pg"),
             (0.0, 0.0),
             None,
         )
@@ -366,11 +447,104 @@ mod tests {
             TARGET_SRC,
             "@zenith/flowchart#process",
             None,
-            "pg",
+            Some("pg"),
             (0.0, 0.0),
             None,
         )
         .expect("b");
         assert_eq!(a.formatted, b.formatted, "add is deterministic + pure");
+    }
+
+    #[test]
+    fn add_filter_token_then_apply_compiles() {
+        let result = add(
+            TARGET_SRC,
+            "@zenith/filters#noir",
+            None,
+            None,
+            (0.0, 0.0),
+            None,
+        )
+        .expect("add filter token ok");
+
+        // Result reparses + validates clean.
+        let src = String::from_utf8(result.formatted).expect("utf8");
+        let doc = KdlAdapter.parse(src.as_bytes()).expect("reparse");
+        let errors: Vec<_> = validate(&doc)
+            .diagnostics
+            .into_iter()
+            .filter(|d| d.severity == Severity::Error)
+            .collect();
+        assert!(errors.is_empty(), "errors: {:?}", errors);
+
+        // Summary mentions how to apply the token.
+        assert!(
+            result.summary.contains("filter=(token)\"noir\""),
+            "summary: {}",
+            result.summary
+        );
+
+        // The added token can be applied to a rect: add it into a target that
+        // already carries a rect referencing `filter=(token)"noir"`, then assert
+        // the result validates clean and compiles to scene commands.
+        const TARGET_WITH_RECT: &str = r#"zenith version=1 {
+  project id="proj.x" name="Target"
+  tokens format="zenith-token-v1" {}
+  styles {}
+  document id="d" title="x" {
+    page id="pg" w=(px)800 h=(px)600 {
+      rect id="r" x=(px)10 y=(px)10 w=(px)100 h=(px)100 filter=(token)"noir"
+    }
+  }
+}
+"#;
+        let applied = add(
+            TARGET_WITH_RECT,
+            "@zenith/filters#noir",
+            None,
+            None,
+            (0.0, 0.0),
+            None,
+        )
+        .expect("add into rect target ok");
+        let applied_src = String::from_utf8(applied.formatted).expect("utf8");
+        let applied_doc = KdlAdapter
+            .parse(applied_src.as_bytes())
+            .expect("reparse applied");
+        let applied_errors: Vec<_> = validate(&applied_doc)
+            .diagnostics
+            .into_iter()
+            .filter(|d| d.severity == Severity::Error)
+            .collect();
+        assert!(
+            applied_errors.is_empty(),
+            "applied errors: {:?}",
+            applied_errors
+        );
+        let artifact =
+            crate::commands::render::to_scene_json(&applied_src, None, 1).expect("compile ok");
+        let scene: serde_json::Value =
+            serde_json::from_str(&artifact.json).expect("scene json parses");
+        let commands = scene["commands"].as_array().expect("commands array");
+        assert!(!commands.is_empty(), "applied filter compiles to commands");
+    }
+
+    #[test]
+    fn add_component_without_page_errors() {
+        let err = add(
+            TARGET_SRC,
+            "@zenith/flowchart#decision",
+            None,
+            None,
+            (0.0, 0.0),
+            None,
+        )
+        .expect_err("component without page errors");
+        assert_eq!(err.exit_code, 2);
+        assert!(
+            err.message.contains("--page"),
+            "msg should ask for --page: {}",
+            err.message
+        );
     }
 }
