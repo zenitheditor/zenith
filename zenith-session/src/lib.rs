@@ -12,6 +12,7 @@
 //! - [`identity`] — document-identity reconciliation ([`reconcile`])
 //! - [`layout`] — [`StorePaths`] pure path builders
 //! - [`manifest`] — [`HistoryRecord`] schema and append-only JSONL manifest I/O
+//! - [`session`] — Tier-1 ephemeral session: snapshot DAG with HEAD + redo stack
 //! - [`store`] — content-addressed object store (SHA-256 + DEFLATE)
 
 pub mod adapter;
@@ -21,6 +22,7 @@ pub mod error;
 pub mod identity;
 pub mod layout;
 pub mod manifest;
+pub mod session;
 pub mod store;
 
 pub use datadir::{resolve_data_dir, resolve_data_dir_with};
@@ -29,4 +31,5 @@ pub use error::SessionError;
 pub use identity::{DocMeta, Outcome, Reconciled, reconcile};
 pub use layout::StorePaths;
 pub use manifest::{HistoryRecord, append_record, read_records};
+pub use session::{RecordOutcome, SessionState, current_content, record_state};
 pub use store::{get_object, has_object, object_hash, put_object};
