@@ -320,6 +320,10 @@ fn strip_spans(mut doc: crate::ast::Document) -> crate::ast::Document {
     for section in &mut doc.sections {
         section.source_span = None;
     }
+    // Provenance
+    for prov in &mut doc.provenance {
+        prov.source_span = None;
+    }
     // Pages and nodes
     for page in &mut doc.body.pages {
         page.source_span = None;
@@ -3449,6 +3453,99 @@ fn test_libraries_round_trip() {
         strip_spans(doc).libraries,
         strip_spans(reparsed).libraries,
         "libraries must survive a parse → format → parse round-trip (idempotent)"
+    );
+}
+
+// ── provenance: parse, serialize, and round-trip ──────────────────────
+
+/// **Serialize round-trip**: parse a doc with a `provenance` block (two origin
+/// records, one carrying every field + an annotated unknown prop) plus a
+/// matching `libraries` block and the referenced nodes → format → re-parse →
+/// provenance identical (spans stripped). Also assert all fields are emitted,
+/// the block comes AFTER `sections`, and the annotated unknown prop survives.
+/// Mirrors `test_libraries_round_trip`.
+#[test]
+fn test_provenance_round_trip() {
+    let src = r##"zenith version=1 {
+  project id="proj.prov" name="PROV"
+  libraries {
+    library id="@acme/brand-kit" version="1.4.0"
+  }
+  tokens format="zenith-token-v1" {
+  }
+  styles {
+  }
+  sections {
+    section id="sec.body" name="Body" start-page="pg1"
+  }
+  provenance {
+    origin id="prov.btn" node="btn" library="@acme/brand-kit" item="button" linked=#true registry=(token)"x"
+    origin id="prov.x" node="x" library="@acme/brand-kit"
+  }
+  document id="doc.prov" title="PROV" {
+    page id="pg1" w=(px)640 h=(px)360 {
+      rect id="btn" x=(px)0 y=(px)0 w=(px)10 h=(px)10 fill=(token)"c"
+      rect id="x" x=(px)0 y=(px)0 w=(px)10 h=(px)10 fill=(token)"c"
+    }
+  }
+}
+"##;
+    let adapter = KdlAdapter;
+    let doc = adapter.parse(src.as_bytes()).expect("parse");
+
+    assert_eq!(doc.provenance.len(), 2, "expected 2 provenance records");
+    let btn = &doc.provenance[0];
+    assert_eq!(btn.id, "prov.btn");
+    assert_eq!(btn.node, "btn");
+    assert_eq!(btn.library, "@acme/brand-kit");
+    assert_eq!(btn.item.as_deref(), Some("button"));
+    assert_eq!(btn.linked, Some(true));
+    let registry = btn
+        .unknown_props
+        .get("registry")
+        .expect("annotated unknown prop must be preserved");
+    assert_eq!(
+        registry.ty.as_deref(),
+        Some("token"),
+        "unknown prop annotation must survive"
+    );
+    let x = &doc.provenance[1];
+    assert_eq!(x.item, None);
+    assert_eq!(x.linked, None);
+
+    let formatted = format_document(&doc).expect("format");
+    let formatted_str = String::from_utf8(formatted.clone()).expect("utf8");
+
+    assert!(
+        formatted_str.contains(
+            r#"origin id="prov.btn" node="btn" library="@acme/brand-kit" item="button" linked=#true"#
+        ),
+        "formatted output must contain the full btn origin line; got:\n{formatted_str}"
+    );
+    assert!(
+        formatted_str.contains(r#"origin id="prov.x" node="x" library="@acme/brand-kit""#),
+        "formatted output must contain the minimal x origin line; got:\n{formatted_str}"
+    );
+    assert!(
+        formatted_str.contains(r#"registry=(token)"x""#),
+        "annotated unknown prop must round-trip; got:\n{formatted_str}"
+    );
+    // Canonical order: sections, then provenance, then document.
+    let sections_at = formatted_str.find("sections {").expect("sections block");
+    let prov_at = formatted_str
+        .find("provenance {")
+        .expect("provenance block");
+    let doc_at = formatted_str.find("document ").expect("document block");
+    assert!(
+        sections_at < prov_at && prov_at < doc_at,
+        "provenance must be emitted after sections and before document; got:\n{formatted_str}"
+    );
+
+    let reparsed = adapter.parse(&formatted).expect("re-parse");
+    assert_eq!(
+        strip_spans(doc).provenance,
+        strip_spans(reparsed).provenance,
+        "provenance must survive a parse → format → parse round-trip (idempotent)"
     );
 }
 

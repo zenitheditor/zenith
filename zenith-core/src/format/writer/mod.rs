@@ -6,7 +6,7 @@
 //! Rules (from doc 08 and doc 16):
 //! - Two-space indentation per nesting level.
 //! - Root `zenith` node at column 0.
-//! - Child order under `zenith`: project, assets, libraries, tokens, styles, components, masters, sections, document.
+//! - Child order under `zenith`: project, assets, libraries, tokens, styles, components, masters, sections, provenance, document.
 //! - Structural containers (`tokens`, `styles`, `document`, `page`) always emit
 //!   a brace block, even when empty.
 //! - Leaf nodes (`project`, a `rect` with no children) emit a single line.
@@ -31,7 +31,8 @@ use std::fmt::Write as _;
 
 use crate::ast::{
     AssetBlock, AssetDecl, ComponentDef, Dimension, Document, LibraryDef, MasterDef,
-    ObjectPosition, Project, PropertyValue, SectionDef, Unit, UnknownProperty, UnknownValue,
+    ObjectPosition, Project, PropertyValue, ProvenanceDef, SectionDef, Unit, UnknownProperty,
+    UnknownValue,
 };
 use crate::error::FormatError;
 
@@ -270,7 +271,7 @@ fn write_document(doc: &Document, out: &mut String) {
     write_opt_str(out, "page-parity-start", &doc.page_parity_start);
     out.push_str(" {\n");
 
-    // Child order: project, assets, libraries, tokens, styles, components, masters, sections, document.
+    // Child order: project, assets, libraries, tokens, styles, components, masters, sections, provenance, document.
     if let Some(proj) = &doc.project {
         write_project(proj, out, 1);
     }
@@ -281,6 +282,7 @@ fn write_document(doc: &Document, out: &mut String) {
     write_component_block(&doc.components, out, 1);
     write_master_block(&doc.masters, out, 1);
     write_section_block(&doc.sections, out, 1);
+    write_provenance_block(&doc.provenance, out, 1);
     write_document_body(&doc.body, out, 1);
 
     out.push('}');
@@ -499,6 +501,52 @@ fn write_library_block(libraries: &[LibraryDef], out: &mut String, depth: usize)
             out.push_str(hash);
             out.push('"');
         }
+        // Unknown properties in sorted key order (BTreeMap iteration is sorted).
+        for (key, prop) in &def.unknown_props {
+            out.push(' ');
+            out.push_str(key);
+            out.push('=');
+            out.push_str(&fmt_unknown_property(prop));
+        }
+        out.push('\n');
+    }
+    indent(out, depth);
+    out.push_str("}\n");
+}
+
+// ---------------------------------------------------------------------------
+// Provenance
+// ---------------------------------------------------------------------------
+
+/// Emit the `provenance { … }` block.
+///
+/// Stable position: after `sections`, before `document`. Emitted ONLY when at
+/// least one origin record is declared, so documents without provenance keep
+/// their existing canonical form (and round-trip) unchanged. Each record emits a
+/// single leaf line: `origin id="…" node="…" library="…"`, then optional
+/// `item="…"` and `linked=#true`/`#false` when set, then any unknown props in
+/// BTreeMap key order. Mirrors [`write_library_block`].
+fn write_provenance_block(provenance: &[ProvenanceDef], out: &mut String, depth: usize) {
+    if provenance.is_empty() {
+        return;
+    }
+    indent(out, depth);
+    out.push_str("provenance {\n");
+    for def in provenance {
+        indent(out, depth + 1);
+        out.push_str("origin id=\"");
+        out.push_str(&def.id);
+        out.push_str("\" node=\"");
+        out.push_str(&def.node);
+        out.push_str("\" library=\"");
+        out.push_str(&def.library);
+        out.push('"');
+        if let Some(item) = &def.item {
+            out.push_str(" item=\"");
+            out.push_str(item);
+            out.push('"');
+        }
+        write_opt_bool(out, "linked", &def.linked);
         // Unknown properties in sorted key order (BTreeMap iteration is sorted).
         for (key, prop) in &def.unknown_props {
             out.push(' ');

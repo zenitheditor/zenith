@@ -4,6 +4,7 @@ pub mod asset;
 pub mod document;
 pub mod library;
 pub mod node;
+pub mod provenance;
 pub mod span;
 pub mod style;
 pub mod token;
@@ -22,6 +23,7 @@ pub use node::{
     RectNode, ShapeNode, TableCell, TableColumn, TableNode, TableRow, TextNode, TextSpan, TocNode,
     UnknownNode, UnknownProperty, UnknownValue,
 };
+pub use provenance::ProvenanceDef;
 pub use span::Span;
 pub use style::{
     STYLE_RECOGNIZED_KEYS, Style, StyleBlock, UnknownStyleProp, canonicalize_style_key,

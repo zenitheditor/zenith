@@ -298,6 +298,7 @@ fn doc_with(tokens: Vec<Token>, pages: Vec<Page>) -> Document {
         components: Vec::new(),
         masters: Vec::new(),
         sections: Vec::new(),
+        provenance: Vec::new(),
         body: DocumentBody {
             id: "doc.main".to_owned(),
             title: None,
@@ -1909,6 +1910,7 @@ fn doc_with_assets(assets: Vec<AssetDecl>) -> Document {
         components: Vec::new(),
         masters: Vec::new(),
         sections: Vec::new(),
+        provenance: Vec::new(),
         body: DocumentBody {
             id: "doc.asset-test".to_owned(),
             title: None,
@@ -2936,6 +2938,7 @@ fn doc_with_styles(tokens: Vec<Token>, styles: Vec<Style>, pages: Vec<Page>) -> 
         components: Vec::new(),
         masters: Vec::new(),
         sections: Vec::new(),
+        provenance: Vec::new(),
         body: DocumentBody {
             id: "doc.main".to_owned(),
             title: None,
@@ -5959,5 +5962,152 @@ fn library_unknown_property_produces_warning() {
         .find(|d| d.code == "library.unknown_property")
         .expect("should exist");
     assert_eq!(diag.severity, Severity::Warning);
+    assert!(!report.has_errors());
+}
+
+// ── provenance: cross-reference validation ────────────────────────────
+
+use crate::ast::provenance::ProvenanceDef;
+
+/// A document with the given provenance records, libraries, and page children.
+/// The page (id "p1") carries `children`, so node refs can resolve.
+fn doc_with_provenance(
+    provenance: Vec<ProvenanceDef>,
+    libraries: Vec<LibraryDef>,
+    children: Vec<Node>,
+) -> Document {
+    let mut doc = doc_with(vec![], vec![minimal_page("p1", children)]);
+    doc.libraries = libraries;
+    doc.provenance = provenance;
+    doc
+}
+
+fn minimal_provenance(id: &str, node: &str, library: &str) -> ProvenanceDef {
+    ProvenanceDef {
+        id: id.to_owned(),
+        node: node.to_owned(),
+        library: library.to_owned(),
+        item: None,
+        linked: None,
+        source_span: None,
+        unknown_props: BTreeMap::new(),
+    }
+}
+
+#[test]
+fn clean_provenance_record_no_diagnostics() {
+    // node "btn" exists on the page; library "@acme/brand-kit" is declared.
+    let prov = ProvenanceDef {
+        id: "prov.btn".to_owned(),
+        node: "btn".to_owned(),
+        library: "@acme/brand-kit".to_owned(),
+        item: Some("button".to_owned()),
+        linked: Some(true),
+        source_span: None,
+        unknown_props: BTreeMap::new(),
+    };
+    let doc = doc_with_provenance(
+        vec![prov],
+        vec![minimal_library("@acme/brand-kit")],
+        vec![minimal_rect("btn", None)],
+    );
+    let report = validate(&doc);
+    assert!(
+        report.diagnostics.is_empty(),
+        "a fully-resolved provenance record must produce no diagnostics; got: {:?}",
+        codes(&report)
+    );
+    assert!(!report.has_errors());
+}
+
+#[test]
+fn provenance_unknown_node_is_error() {
+    let prov = minimal_provenance("prov.ghost", "ghost", "@acme/brand-kit");
+    let doc = doc_with_provenance(
+        vec![prov],
+        vec![minimal_library("@acme/brand-kit")],
+        vec![minimal_rect("btn", None)],
+    );
+    let report = validate(&doc);
+    assert!(
+        has_code(&report, "provenance.unknown_node"),
+        "a provenance record referencing a non-existent node must error; got {:?}",
+        codes(&report)
+    );
+    assert!(report.has_errors());
+}
+
+#[test]
+fn provenance_unknown_library_is_error() {
+    let prov = minimal_provenance("prov.btn", "btn", "@nope/x");
+    let doc = doc_with_provenance(
+        vec![prov],
+        vec![minimal_library("@acme/brand-kit")],
+        vec![minimal_rect("btn", None)],
+    );
+    let report = validate(&doc);
+    assert!(
+        has_code(&report, "provenance.unknown_library"),
+        "a provenance record referencing an undeclared library must error; got {:?}",
+        codes(&report)
+    );
+    assert!(report.has_errors());
+}
+
+#[test]
+fn provenance_duplicate_id_is_error() {
+    let a = minimal_provenance("prov.dup", "btn", "@acme/brand-kit");
+    let b = minimal_provenance("prov.dup", "btn", "@acme/brand-kit"); // duplicate id
+    let doc = doc_with_provenance(
+        vec![a, b],
+        vec![minimal_library("@acme/brand-kit")],
+        vec![minimal_rect("btn", None)],
+    );
+    let report = validate(&doc);
+    assert!(
+        has_code(&report, "id.duplicate"),
+        "two provenance records sharing an id must trigger id.duplicate; got {:?}",
+        codes(&report)
+    );
+    assert!(report.has_errors());
+}
+
+#[test]
+fn provenance_unknown_property_produces_warning() {
+    let mut unknown_props = BTreeMap::new();
+    unknown_props.insert(
+        "registry".to_owned(),
+        crate::ast::node::UnknownProperty {
+            value: crate::ast::node::UnknownValue::String("x".to_owned()),
+            ty: Some("token".to_owned()),
+        },
+    );
+    let prov = ProvenanceDef {
+        id: "prov.btn".to_owned(),
+        node: "btn".to_owned(),
+        library: "@acme/brand-kit".to_owned(),
+        item: None,
+        linked: None,
+        source_span: None,
+        unknown_props,
+    };
+    let doc = doc_with_provenance(
+        vec![prov],
+        vec![minimal_library("@acme/brand-kit")],
+        vec![minimal_rect("btn", None)],
+    );
+    let report = validate(&doc);
+    assert!(
+        has_code(&report, "provenance.unknown_property"),
+        "an unknown prop on an origin must warn; got {:?}",
+        codes(&report)
+    );
+    let diag = report
+        .diagnostics
+        .iter()
+        .find(|d| d.code == "provenance.unknown_property")
+        .expect("should exist");
+    assert_eq!(diag.severity, Severity::Warning);
+    // The unknown-property warning is not itself an error; node + library resolve.
     assert!(!report.has_errors());
 }

@@ -45,6 +45,7 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 use crate::ast::asset::{AssetDecl, AssetKind};
 use crate::ast::document::Document;
 use crate::ast::library::LibraryDef;
+use crate::ast::provenance::ProvenanceDef;
 use crate::ast::style::{Style, StyleBlock};
 use crate::ast::value::{PropertyValue, Unit, dim_to_px};
 use crate::color::parse_rgb;
@@ -212,6 +213,12 @@ pub fn validate(doc: &Document) -> ValidationReport {
     // Declared master ids, collected once so the page walk can validate that
     // every `page master="..."` references a declared master.
     let declared_master_ids: HashSet<String> = doc.masters.iter().map(|m| m.id.clone()).collect();
+
+    // Declared library ids, collected once so each provenance `origin` record can
+    // validate that its `library="..."` references a library declared in the
+    // `libraries` block.
+    let declared_library_ids: HashSet<String> =
+        doc.libraries.iter().map(|l| l.id.clone()).collect();
 
     // Document-wide set of every node id (across pages, masters, and components),
     // used to resolve a `page-ref` field's `target`. Ordered iteration is not
@@ -388,6 +395,16 @@ pub fn validate(doc: &Document) -> ValidationReport {
                 Some(section.id.clone()),
             ));
         }
+    }
+
+    // ── Provenance records ────────────────────────────────────────────────
+    // Each `origin` id participates in the GLOBAL id-uniqueness set. The record
+    // cross-references a document node id AND a declared library id, both of
+    // which must exist (`all_node_ids` is fully built above, before the page
+    // walk; `declared_library_ids` is collected alongside it).
+    for prov in &doc.provenance {
+        register_id(&prov.id, &mut seen_ids, &mut diagnostics);
+        validate_provenance_def(prov, &all_node_ids, &declared_library_ids, &mut diagnostics);
     }
 
     // ── Document body id ──────────────────────────────────────────────────
@@ -905,6 +922,55 @@ fn validate_library_decl(decl: &LibraryDef, diagnostics: &mut Vec<Diagnostic>) {
             ),
             decl.source_span,
             Some(decl.id.clone()),
+        ));
+    }
+}
+
+/// Validate a single [`ProvenanceDef`] beyond ID uniqueness:
+/// - `node` must reference an existing document node → `provenance.unknown_node`
+///   (Error). Mirrors `master.unknown_reference`.
+/// - `library` must reference a library declared in the `libraries` block →
+///   `provenance.unknown_library` (Error).
+/// - unknown properties → `provenance.unknown_property` (Warning).
+fn validate_provenance_def(
+    prov: &ProvenanceDef,
+    all_node_ids: &HashSet<String>,
+    declared_library_ids: &HashSet<String>,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    if !all_node_ids.contains(&prov.node) {
+        diagnostics.push(Diagnostic::error(
+            "provenance.unknown_node",
+            format!(
+                "provenance '{}': references node '{}' which does not exist",
+                prov.id, prov.node
+            ),
+            prov.source_span,
+            Some(prov.id.clone()),
+        ));
+    }
+    if !declared_library_ids.contains(&prov.library) {
+        diagnostics.push(Diagnostic::error(
+            "provenance.unknown_library",
+            format!(
+                "provenance '{}': references library '{}' which is not declared in the \
+                 libraries block",
+                prov.id, prov.library
+            ),
+            prov.source_span,
+            Some(prov.id.clone()),
+        ));
+    }
+    for prop_name in prov.unknown_props.keys() {
+        diagnostics.push(Diagnostic::warning(
+            "provenance.unknown_property",
+            format!(
+                "provenance '{}': unknown property '{}' (version-relative; \
+                 may be valid in a later schema version)",
+                prov.id, prop_name
+            ),
+            prov.source_span,
+            Some(prov.id.clone()),
         ));
     }
 }

@@ -4,6 +4,7 @@ use super::Span;
 use super::asset::AssetBlock;
 use super::library::LibraryDef;
 use super::node::Node;
+use super::provenance::ProvenanceDef;
 use super::style::StyleBlock;
 use super::token::TokenBlock;
 use super::value::Dimension;
@@ -291,6 +292,15 @@ pub struct Document {
     /// analogous to PDF PageLabels. Declaration order is preserved; range
     /// computation (sorting by page index) is deferred to the field-resolution unit.
     pub sections: Vec<SectionDef>,
+    /// Per-node origin records; empty when the `provenance` block is absent. Each
+    /// entry records where a document node came from: the node id it describes,
+    /// the declared library/package it originated from, the optional item name,
+    /// and an optional link state. Both the node id and the library id are
+    /// cross-validated against the document (the node must exist; the library
+    /// must be declared in the `libraries` block). Declaration order is preserved.
+    /// This is metadata about nodes — the engine round-trips and validates it but
+    /// does not act on the link state.
+    pub provenance: Vec<ProvenanceDef>,
     pub body: DocumentBody,
 }
 
@@ -415,6 +425,7 @@ mod parity_tests {
             components: Vec::new(),
             masters: Vec::new(),
             sections: Vec::new(),
+            provenance: Vec::new(),
             body: DocumentBody {
                 id: "body".to_owned(),
                 title: None,

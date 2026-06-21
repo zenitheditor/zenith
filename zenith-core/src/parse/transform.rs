@@ -21,6 +21,7 @@ use crate::ast::{
         PolylineNode, RectNode, ShapeNode, TableCell, TableColumn, TableNode, TableRow, TextNode,
         TextSpan, TocNode, UnknownNode, UnknownProperty, UnknownValue,
     },
+    provenance::ProvenanceDef,
     style::{Style, StyleBlock, UnknownStyleProp, canonicalize_style_key},
     token::{
         GradientKind, GradientLiteral, GradientStopRef, ShadowLayerRef, ShadowLiteral, Token,
@@ -410,6 +411,7 @@ pub fn transform(doc: &KdlDocument) -> Result<Document, ParseError> {
     let mut components: Vec<ComponentDef> = Vec::new();
     let mut masters: Vec<MasterDef> = Vec::new();
     let mut sections: Vec<SectionDef> = Vec::new();
+    let mut provenance: Vec<ProvenanceDef> = Vec::new();
     let mut body: Option<DocumentBody> = None;
 
     for child in children_doc.nodes() {
@@ -437,6 +439,9 @@ pub fn transform(doc: &KdlDocument) -> Result<Document, ParseError> {
             }
             "sections" => {
                 sections = transform_sections(child)?;
+            }
+            "provenance" => {
+                provenance = transform_provenance(child)?;
             }
             "document" => {
                 body = Some(transform_document_body(child)?);
@@ -474,6 +479,7 @@ pub fn transform(doc: &KdlDocument) -> Result<Document, ParseError> {
         components,
         masters,
         sections,
+        provenance,
         body,
     })
 }
@@ -589,6 +595,48 @@ fn transform_library_def(node: &KdlNode) -> Result<LibraryDef, ParseError> {
         id,
         version,
         hash,
+        source_span,
+        unknown_props,
+    })
+}
+
+// ---------------------------------------------------------------------------
+// Provenance
+// ---------------------------------------------------------------------------
+
+const PROVENANCE_KNOWN_PROPS: &[&str] = &["id", "node", "library", "item", "linked"];
+
+/// Transform the document-level `provenance { … }` block into a list of
+/// [`ProvenanceDef`]. Each `origin id="…" node="…" library="…" …` is a leaf
+/// marker (it takes no children); non-`origin` children inside the block are
+/// silently ignored (forward-compat). Mirrors [`transform_libraries`].
+fn transform_provenance(node: &KdlNode) -> Result<Vec<ProvenanceDef>, ParseError> {
+    let mut defs: Vec<ProvenanceDef> = Vec::new();
+    if let Some(children) = node.children() {
+        for child in children.nodes() {
+            if child.name().value() == "origin" {
+                defs.push(transform_provenance_def(child)?);
+            }
+        }
+    }
+    Ok(defs)
+}
+
+fn transform_provenance_def(node: &KdlNode) -> Result<ProvenanceDef, ParseError> {
+    let id = required_string_prop(node, "id")?.to_owned();
+    let document_node = required_string_prop(node, "node")?.to_owned();
+    let library = required_string_prop(node, "library")?.to_owned();
+    let item = optional_string_prop(node, "item").map(str::to_owned);
+    let linked = optional_bool_prop(node, "linked");
+    let unknown_props = collect_unknown_props(node, PROVENANCE_KNOWN_PROPS);
+    let source_span = node_span(node);
+
+    Ok(ProvenanceDef {
+        id,
+        node: document_node,
+        library,
+        item,
+        linked,
         source_span,
         unknown_props,
     })
