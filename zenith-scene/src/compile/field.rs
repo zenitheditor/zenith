@@ -339,6 +339,7 @@ fn index_nodes(children: &[Node], page_index_1based: usize, map: &mut BTreeMap<S
             | Node::Field(_)
             | Node::Toc(_)
             | Node::Footnote(_)
+            | Node::Shape(_)
             | Node::Unknown(_) => {}
         }
     }
@@ -407,6 +408,7 @@ fn collect_node_boxes(
             | Node::Field(_)
             | Node::Toc(_)
             | Node::Footnote(_)
+            | Node::Shape(_)
             | Node::Unknown(_) => {}
         }
     }
@@ -440,6 +442,7 @@ fn node_rect(node: &Node) -> Option<(f64, f64, f64, f64)> {
         Node::Field(n) => rect(&n.x, &n.y, &n.w, &n.h),
         Node::Toc(n) => rect(&n.x, &n.y, &n.w, &n.h),
         Node::Table(n) => rect(&n.x, &n.y, &n.w, &n.h),
+        Node::Shape(n) => rect(&n.x, &n.y, &n.w, &n.h),
         // An `instance` has no intrinsic w/h (its box is the expanded subtree),
         // and line/polygon/polyline have no rectangular box — none can serve as a
         // rectangular exclusion, so they are skipped.
@@ -470,6 +473,7 @@ fn node_id(node: &Node) -> Option<&str> {
         Node::Toc(n) => Some(&n.id),
         Node::Footnote(n) => Some(&n.id),
         Node::Table(n) => Some(&n.id),
+        Node::Shape(n) => Some(&n.id),
         Node::Unknown(_) => None,
     }
 }

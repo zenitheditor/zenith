@@ -443,6 +443,60 @@ pub struct TextNode {
     pub unknown_props: BTreeMap<String, UnknownProperty>,
 }
 
+/// A `shape` node — a COMPOUND node: a background box that OWNS a centered text
+/// label (like a flowchart process box).
+///
+/// Structurally this mirrors [`TextNode`]: it carries box geometry + visual
+/// properties AND a list of owned label [`TextSpan`]s (NOT child `Node`s). The
+/// background primitive emitted depends on [`ShapeNode::kind`]
+/// (`process`/`decision`/`terminator`/`ellipse`, default `process`). The owned
+/// label text is centered inside the box (label rendering is a later unit).
+#[derive(Debug, Clone, PartialEq)]
+pub struct ShapeNode {
+    pub id: String,
+    pub name: Option<String>,
+    pub role: Option<String>,
+    pub x: Option<Dimension>,
+    pub y: Option<Dimension>,
+    pub w: Option<Dimension>,
+    pub h: Option<Dimension>,
+    /// Shape kind string (`process`/`decision`/`terminator`/`ellipse`).
+    /// Validated, not enum-typed, so unknown values survive for forward-compat.
+    /// Absent or unrecognized is treated as `"process"` at compile time.
+    pub kind: Option<String>,
+    pub fill: Option<PropertyValue>,
+    pub stroke: Option<PropertyValue>,
+    pub stroke_width: Option<PropertyValue>,
+    /// Corner radius for the `process` rounded-rect (token-required dimension).
+    pub radius: Option<PropertyValue>,
+    /// Stroke alignment (`inside`/`center`/`outside`), same model as `rect`.
+    pub stroke_alignment: Option<String>,
+    /// Text inset inside the box (token-required dimension). Carried; applied to
+    /// the owned label in a later unit.
+    pub padding: Option<PropertyValue>,
+    /// Horizontal label alignment in the box (`start`/`center`/`end`). Carried;
+    /// applied to the owned label in a later unit.
+    pub h_align: Option<String>,
+    /// Vertical label alignment in the box (`top`/`middle`/`bottom`). Carried;
+    /// applied to the owned label in a later unit.
+    pub v_align: Option<String>,
+    /// Style ref for the owned label text. Carried; applied in a later unit.
+    pub text_style: Option<String>,
+    /// The owned label spans (same model as a `text` node's spans). Carried +
+    /// parsed/formatted/validated now; rendered in a later unit.
+    pub spans: Vec<TextSpan>,
+    /// Box style ref.
+    pub style: Option<String>,
+    pub opacity: Option<f64>,
+    pub visible: Option<bool>,
+    pub locked: Option<bool>,
+    pub rotate: Option<Dimension>,
+    /// Source declaration span, when available.
+    pub source_span: Option<Span>,
+    /// Unknown properties preserved for forward-compat.
+    pub unknown_props: BTreeMap<String, UnknownProperty>,
+}
+
 /// A `code` node — a multi-line MONOSPACE text block.
 ///
 /// Structurally this mirrors [`TextNode`] but carries a single verbatim source
@@ -1038,5 +1092,9 @@ pub enum Node {
     // columns/rows/cells). Boxing keeps `Node` compact for the
     // `large_enum_variant` lint, mirroring `Rect`/`Text`.
     Table(Box<TableNode>),
+    // Boxed: `ShapeNode` is large (box geometry + visual fields + owned label
+    // spans). Boxing keeps `Node` compact for the `large_enum_variant` lint,
+    // mirroring `Rect`/`Text`/`Table`.
+    Shape(Box<ShapeNode>),
     Unknown(UnknownNode),
 }

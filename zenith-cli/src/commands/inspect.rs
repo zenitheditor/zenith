@@ -335,6 +335,16 @@ fn build_node_entry(node: &Node) -> NodeEntry {
                 .map(build_node_entry)
                 .collect(),
         },
+        Node::Shape(n) => NodeEntry {
+            id: n.id.clone(),
+            kind: "shape".into(),
+            geometry: bbox_geom(n.x.as_ref(), n.y.as_ref(), n.w.as_ref(), n.h.as_ref()),
+            visible: n.visible,
+            locked: n.locked,
+            // A shape owns label spans (TextSpans), not child Nodes, so it has
+            // no child entries in the inspect tree.
+            children: vec![],
+        },
         Node::Unknown(n) => NodeEntry {
             id: String::new(),
             kind: n.kind.clone(),
@@ -404,6 +414,7 @@ fn node_id_str(node: &Node) -> &str {
         Node::Toc(n) => &n.id,
         Node::Footnote(n) => &n.id,
         Node::Table(n) => &n.id,
+        Node::Shape(n) => &n.id,
         Node::Unknown(_) => "",
     }
 }

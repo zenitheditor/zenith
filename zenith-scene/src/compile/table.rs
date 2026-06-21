@@ -1202,6 +1202,7 @@ fn child_declared_box(node: &zenith_core::Node) -> (Option<f64>, Option<f64>) {
         Node::Field(n) => (px(&n.w), px(&n.h)),
         Node::Toc(n) => (px(&n.w), px(&n.h)),
         Node::Table(n) => (px(&n.w), px(&n.h)),
+        Node::Shape(n) => (px(&n.w), px(&n.h)),
         Node::Line(_)
         | Node::Polygon(_)
         | Node::Polyline(_)

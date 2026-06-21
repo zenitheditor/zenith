@@ -7,7 +7,8 @@ use std::fmt::Write as _;
 use crate::ast::{
     CodeNode, DocumentBody, EllipseNode, FieldNode, Fold, FootnoteNode, FrameNode, GroupNode,
     ImageNode, InstanceNode, LineNode, Node, Override, Page, Point, PolygonNode, PolylineNode,
-    RectNode, SafeZone, SafeZoneType, TableCell, TableNode, TableRow, TextNode, TextSpan, TocNode,
+    RectNode, SafeZone, SafeZoneType, ShapeNode, TableCell, TableNode, TableRow, TextNode,
+    TextSpan, TocNode,
 };
 
 use super::{
@@ -166,6 +167,7 @@ fn write_node(node: &Node, out: &mut String, depth: usize) {
         Node::Toc(t) => write_toc(t, out, depth),
         Node::Footnote(f) => write_footnote(f, out, depth),
         Node::Table(t) => write_table(t, out, depth),
+        Node::Shape(s) => write_shape(s, out, depth),
         Node::Unknown(u) => write_unknown_node(u, out, depth),
     }
 }
@@ -755,6 +757,55 @@ fn write_text(t: &TextNode, out: &mut String, depth: usize) {
 
     out.push_str(" {\n");
     for span in &t.spans {
+        write_span(span, out, depth + 1);
+    }
+    indent(out, depth);
+    out.push_str("}\n");
+}
+
+fn write_shape(s: &ShapeNode, out: &mut String, depth: usize) {
+    indent(out, depth);
+    out.push_str("shape");
+
+    // Canonical property order: id, name, role, x, y, w, h, kind, fill, stroke,
+    // stroke-width, radius, stroke-alignment, padding, h-align, v-align,
+    // text-style, style, opacity, visible, locked, rotate, then unknown props
+    // (sorted), then the span children.
+    out.push_str(" id=\"");
+    out.push_str(&s.id);
+    out.push('"');
+    write_opt_str(out, "name", &s.name);
+    write_opt_str(out, "role", &s.role);
+    write_opt_dimension(out, "x", &s.x);
+    write_opt_dimension(out, "y", &s.y);
+    write_opt_dimension(out, "w", &s.w);
+    write_opt_dimension(out, "h", &s.h);
+    write_opt_str(out, "kind", &s.kind);
+    write_opt_property_value(out, "fill", &s.fill);
+    write_opt_property_value(out, "stroke", &s.stroke);
+    write_opt_property_value(out, "stroke-width", &s.stroke_width);
+    write_opt_property_value(out, "radius", &s.radius);
+    write_opt_str(out, "stroke-alignment", &s.stroke_alignment);
+    write_opt_property_value(out, "padding", &s.padding);
+    write_opt_str(out, "h-align", &s.h_align);
+    write_opt_str(out, "v-align", &s.v_align);
+    write_opt_str(out, "text-style", &s.text_style);
+    write_opt_str(out, "style", &s.style);
+    write_opt_f64(out, "opacity", &s.opacity);
+    write_opt_bool(out, "visible", &s.visible);
+    write_opt_bool(out, "locked", &s.locked);
+    write_opt_dimension(out, "rotate", &s.rotate);
+
+    // Unknown properties in sorted key order.
+    for (key, prop) in &s.unknown_props {
+        out.push(' ');
+        out.push_str(key);
+        out.push('=');
+        out.push_str(&fmt_unknown_value(&prop.value));
+    }
+
+    out.push_str(" {\n");
+    for span in &s.spans {
         write_span(span, out, depth + 1);
     }
     indent(out, depth);

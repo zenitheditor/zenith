@@ -720,6 +720,9 @@ pub(super) fn collect_local_ids(children: &[crate::ast::node::Node], out: &mut H
                     }
                 }
             }
+            Node::Shape(n) => {
+                out.insert(n.id.clone());
+            }
             Node::Unknown(_) => {}
         }
     }

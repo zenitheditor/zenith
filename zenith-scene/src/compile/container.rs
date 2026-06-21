@@ -455,6 +455,7 @@ fn node_visible(node: &Node) -> Option<bool> {
         Node::Field(n) => n.visible,
         Node::Toc(n) => n.visible,
         Node::Table(n) => n.visible,
+        Node::Shape(n) => n.visible,
         // A footnote has no `visible` flag.
         Node::Footnote(_) => None,
         Node::Unknown(_) => None,
@@ -476,6 +477,7 @@ fn node_declared_w(node: &Node) -> Option<f64> {
         Node::Field(n) => n.w.as_ref(),
         Node::Toc(n) => n.w.as_ref(),
         Node::Table(n) => n.w.as_ref(),
+        Node::Shape(n) => n.w.as_ref(),
         Node::Line(_)
         | Node::Polygon(_)
         | Node::Polyline(_)
@@ -500,6 +502,7 @@ fn node_declared_h(node: &Node) -> Option<f64> {
         Node::Field(n) => n.h.as_ref(),
         Node::Toc(n) => n.h.as_ref(),
         Node::Table(n) => n.h.as_ref(),
+        Node::Shape(n) => n.h.as_ref(),
         Node::Line(_)
         | Node::Polygon(_)
         | Node::Polyline(_)
@@ -584,6 +587,12 @@ fn with_flow_box(node: &Node, x: f64, y: f64, w: f64, h: Option<f64>) -> Node {
             n.h = h_dim;
         }
         Node::Table(n) => {
+            n.x = px(x);
+            n.y = px(y);
+            n.w = px(w);
+            n.h = h_dim;
+        }
+        Node::Shape(n) => {
             n.x = px(x);
             n.y = px(y);
             n.w = px(w);
@@ -909,6 +918,7 @@ fn set_node_fill(node: &mut Node, fill: PropertyValue) {
         Node::Toc(n) => n.fill = Some(fill),
         Node::Footnote(n) => n.fill = Some(fill),
         Node::Table(n) => n.fill = Some(fill),
+        Node::Shape(n) => n.fill = Some(fill),
         Node::Line(_)
         | Node::Frame(_)
         | Node::Group(_)
@@ -935,6 +945,7 @@ fn set_node_visible(node: &mut Node, v: bool) {
         Node::Field(n) => n.visible = Some(v),
         Node::Toc(n) => n.visible = Some(v),
         Node::Table(n) => n.visible = Some(v),
+        Node::Shape(n) => n.visible = Some(v),
         // A footnote has no `visible` flag; nothing to set.
         Node::Footnote(_) => {}
         Node::Unknown(_) => {}
@@ -959,6 +970,7 @@ fn node_local_id(node: &Node) -> Option<&str> {
         Node::Toc(n) => Some(&n.id),
         Node::Footnote(n) => Some(&n.id),
         Node::Table(n) => Some(&n.id),
+        Node::Shape(n) => Some(&n.id),
         Node::Unknown(_) => None,
     }
 }
@@ -1009,6 +1021,7 @@ fn prefix_node_id(node: &mut Node, prefix: &str) {
         Node::Toc(n) => pre!(n.id),
         Node::Footnote(n) => pre!(n.id),
         Node::Table(n) => pre!(n.id),
+        Node::Shape(n) => pre!(n.id),
         Node::Unknown(_) => {}
     }
 }
@@ -1203,6 +1216,20 @@ fn group_children_center(children: &[Node], base_dx: f64, base_dy: f64) -> Optio
                 expand!(base_dx + x, base_dy + y, w, h);
             }
             Node::Table(n) => {
+                let (Some(xd), Some(yd), Some(wd), Some(hd)) = (&n.x, &n.y, &n.w, &n.h) else {
+                    continue;
+                };
+                let (Some(x), Some(y), Some(w), Some(h)) = (
+                    dim_to_px(xd.value, &xd.unit),
+                    dim_to_px(yd.value, &yd.unit),
+                    dim_to_px(wd.value, &wd.unit),
+                    dim_to_px(hd.value, &hd.unit),
+                ) else {
+                    continue;
+                };
+                expand!(base_dx + x, base_dy + y, w, h);
+            }
+            Node::Shape(n) => {
                 let (Some(xd), Some(yd), Some(wd), Some(hd)) = (&n.x, &n.y, &n.w, &n.h) else {
                     continue;
                 };

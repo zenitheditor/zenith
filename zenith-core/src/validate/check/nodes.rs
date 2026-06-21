@@ -1804,6 +1804,199 @@ pub(super) fn walk_node(
             }
         }
 
+        Node::Shape(s) => {
+            register_id(&s.id, seen_ids, diagnostics);
+            check_style_ref(
+                &s.id,
+                s.style.as_deref(),
+                declared_style_ids,
+                s.source_span,
+                diagnostics,
+            );
+            check_style_ref(
+                &s.id,
+                s.text_style.as_deref(),
+                declared_style_ids,
+                s.source_span,
+                diagnostics,
+            );
+
+            // Required geometry: x, y, w, h must all be present.
+            check_optional_dim(
+                &s.id,
+                "x",
+                s.x.as_ref(),
+                geom_required,
+                s.source_span,
+                diagnostics,
+            );
+            check_optional_dim(
+                &s.id,
+                "y",
+                s.y.as_ref(),
+                geom_required,
+                s.source_span,
+                diagnostics,
+            );
+            check_optional_dim(
+                &s.id,
+                "w",
+                s.w.as_ref(),
+                geom_required,
+                s.source_span,
+                diagnostics,
+            );
+            check_optional_dim(
+                &s.id,
+                "h",
+                s.h.as_ref(),
+                geom_required,
+                s.source_span,
+                diagnostics,
+            );
+
+            // Visual properties — all token-required.
+            check_visual_prop(
+                &s.id,
+                "fill",
+                s.fill.as_ref(),
+                VisualExpect::Color,
+                referenced_token_ids,
+                resolved_tokens,
+                diagnostics,
+            );
+            check_visual_prop(
+                &s.id,
+                "stroke",
+                s.stroke.as_ref(),
+                VisualExpect::Color,
+                referenced_token_ids,
+                resolved_tokens,
+                diagnostics,
+            );
+            check_visual_prop(
+                &s.id,
+                "stroke-width",
+                s.stroke_width.as_ref(),
+                VisualExpect::Dimension,
+                referenced_token_ids,
+                resolved_tokens,
+                diagnostics,
+            );
+            check_visual_prop(
+                &s.id,
+                "radius",
+                s.radius.as_ref(),
+                VisualExpect::Dimension,
+                referenced_token_ids,
+                resolved_tokens,
+                diagnostics,
+            );
+            check_visual_prop(
+                &s.id,
+                "padding",
+                s.padding.as_ref(),
+                VisualExpect::Dimension,
+                referenced_token_ids,
+                resolved_tokens,
+                diagnostics,
+            );
+
+            // Enum-value checks (Warnings on unrecognized values, not errors).
+            if let Some(k) = s.kind.as_deref()
+                && !matches!(k, "process" | "decision" | "terminator" | "ellipse")
+            {
+                diagnostics.push(Diagnostic::warning(
+                    "shape.unknown_kind",
+                    format!(
+                        "shape '{}': kind '{k}' is not one of \
+                         process/decision/terminator/ellipse",
+                        s.id
+                    ),
+                    s.source_span,
+                    Some(s.id.clone()),
+                ));
+            }
+            if let Some(sa) = s.stroke_alignment.as_deref()
+                && !matches!(sa, "inside" | "center" | "outside")
+            {
+                diagnostics.push(Diagnostic::warning(
+                    "shape.invalid_stroke_alignment",
+                    format!(
+                        "shape '{}': stroke-alignment '{sa}' is not one of \
+                         inside/center/outside",
+                        s.id
+                    ),
+                    s.source_span,
+                    Some(s.id.clone()),
+                ));
+            }
+            if let Some(ha) = s.h_align.as_deref()
+                && !matches!(ha, "start" | "center" | "end")
+            {
+                diagnostics.push(Diagnostic::warning(
+                    "shape.invalid_h_align",
+                    format!(
+                        "shape '{}': h-align '{ha}' is not one of start/center/end",
+                        s.id
+                    ),
+                    s.source_span,
+                    Some(s.id.clone()),
+                ));
+            }
+            if let Some(va) = s.v_align.as_deref()
+                && !matches!(va, "top" | "middle" | "bottom")
+            {
+                diagnostics.push(Diagnostic::warning(
+                    "shape.invalid_v_align",
+                    format!(
+                        "shape '{}': v-align '{va}' is not one of top/middle/bottom",
+                        s.id
+                    ),
+                    s.source_span,
+                    Some(s.id.clone()),
+                ));
+            }
+
+            // Per-span visual properties (mirrors Node::Text). Registers token
+            // refs so they are not falsely flagged as unused, and type-checks
+            // fill/font-weight on each span.
+            for span in &s.spans {
+                check_visual_prop(
+                    &s.id,
+                    "fill",
+                    span.fill.as_ref(),
+                    VisualExpect::Color,
+                    referenced_token_ids,
+                    resolved_tokens,
+                    diagnostics,
+                );
+                check_visual_prop(
+                    &s.id,
+                    "font-weight",
+                    span.font_weight.as_ref(),
+                    VisualExpect::FontWeight,
+                    referenced_token_ids,
+                    resolved_tokens,
+                    diagnostics,
+                );
+            }
+
+            // Unknown properties.
+            for prop_name in s.unknown_props.keys() {
+                diagnostics.push(Diagnostic::warning(
+                    "node.unknown_property",
+                    format!(
+                        "shape '{}': unknown property '{}' (version-relative; \
+                         may be valid in a later schema version)",
+                        s.id, prop_name
+                    ),
+                    s.source_span,
+                    Some(s.id.clone()),
+                ));
+            }
+        }
+
         Node::Unknown(u) => {
             diagnostics.push(Diagnostic::warning(
                 "node.unknown_kind",
@@ -1934,6 +2127,13 @@ pub(super) fn node_bbox(node: &Node, page_w: f64, page_h: f64) -> Option<(f64, f
             let h = resolve_axis(n.h.as_ref()?, page_h)?;
             Some((x, y, w, h))
         }
+        Node::Shape(n) => {
+            let x = resolve_axis(n.x.as_ref()?, page_w)?;
+            let y = resolve_axis(n.y.as_ref()?, page_h)?;
+            let w = resolve_axis(n.w.as_ref()?, page_w)?;
+            let h = resolve_axis(n.h.as_ref()?, page_h)?;
+            Some((x, y, w, h))
+        }
         Node::Group(_)
         | Node::Instance(_)
         | Node::Field(_)
@@ -1986,7 +2186,7 @@ fn points_bbox(
 /// produced by forward-compat).
 ///
 /// Covered (have a `rotate` field): `Rect`, `Ellipse`, `Frame`, `Image`,
-/// `Text`, `Code`, `Group`, `Polygon`, `Polyline`.
+/// `Text`, `Code`, `Group`, `Polygon`, `Polyline`, `Table`, `Shape`.
 /// Not covered: `Line`, `Instance`, `Field`, `Footnote`, `Unknown`.
 fn node_rotate_deg(node: &Node) -> Option<f64> {
     let dim = match node {
@@ -2000,6 +2200,7 @@ fn node_rotate_deg(node: &Node) -> Option<f64> {
         Node::Polygon(n) => n.rotate.as_ref(),
         Node::Polyline(n) => n.rotate.as_ref(),
         Node::Table(n) => n.rotate.as_ref(),
+        Node::Shape(n) => n.rotate.as_ref(),
         Node::Line(_)
         | Node::Instance(_)
         | Node::Field(_)
@@ -2032,6 +2233,7 @@ pub(super) fn node_role(node: &Node) -> Option<&str> {
         Node::Toc(n) => n.role.as_deref(),
         Node::Footnote(n) => n.role.as_deref(),
         Node::Table(n) => n.role.as_deref(),
+        Node::Shape(n) => n.role.as_deref(),
         Node::Unknown(_) => None,
     }
 }
@@ -2054,6 +2256,7 @@ pub(super) fn node_id_and_span(node: &Node) -> (&str, Option<crate::ast::Span>) 
         Node::Toc(n) => (&n.id, n.source_span),
         Node::Footnote(n) => (&n.id, n.source_span),
         Node::Table(n) => (&n.id, n.source_span),
+        Node::Shape(n) => (&n.id, n.source_span),
         Node::Unknown(n) => (&n.kind, n.source_span),
     }
 }

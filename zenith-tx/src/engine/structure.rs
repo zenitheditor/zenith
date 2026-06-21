@@ -520,6 +520,10 @@ fn node_set_id(node: &mut Node, new_id: String) -> bool {
             f.id = new_id;
             true
         }
+        Node::Shape(s) => {
+            s.id = new_id;
+            true
+        }
         // Containers (and the container-ish instance) are handled by the v0
         // guard in apply_duplicate_node; Unknown nodes have no id field and are
         // never reached here.
@@ -703,7 +707,8 @@ fn node_set_id_any(node: &mut Node, new_id: String) {
         | Node::Polyline(_)
         | Node::Field(_)
         | Node::Toc(_)
-        | Node::Footnote(_) => {
+        | Node::Footnote(_)
+        | Node::Shape(_) => {
             node_set_id(node, new_id);
         }
         Node::Unknown(_) => {}

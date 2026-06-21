@@ -46,7 +46,9 @@ use field::{
     resolve_field_to_text,
 };
 use image::compile_image;
-use leaf::{compile_ellipse, compile_line, compile_polygon, compile_polyline, compile_rect};
+use leaf::{
+    compile_ellipse, compile_line, compile_polygon, compile_polyline, compile_rect, compile_shape,
+};
 use paint::{resolve_property_color, resolve_property_gradient};
 use table::compile_table;
 use table_flow::{TableFlowAssignments, resolve_table_flows};
@@ -568,6 +570,7 @@ pub(super) fn node_role(node: &Node) -> Option<&str> {
         Node::Toc(n) => n.role.as_deref(),
         Node::Footnote(n) => n.role.as_deref(),
         Node::Table(n) => n.role.as_deref(),
+        Node::Shape(n) => n.role.as_deref(),
         Node::Unknown(_) => None,
     }
 }
@@ -763,6 +766,10 @@ pub(super) fn compile_node(
                 field_ctx,
                 ctx,
             );
+            0.0
+        }
+        Node::Shape(shape) => {
+            compile_shape(shape, resolved, style_map, commands, diagnostics, ctx);
             0.0
         }
         Node::Footnote(_) => {

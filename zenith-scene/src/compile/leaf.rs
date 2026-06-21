@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 
 use zenith_core::{
     Diagnostic, EllipseNode, LineNode, Point, PolygonNode, PolylineNode, PropertyValue, RectNode,
-    ResolvedToken, Span, Style, dim_to_px,
+    ResolvedToken, ShapeNode, Span, Style, dim_to_px,
 };
 
 use crate::ir::{LineCap, SceneCommand, StrokeAlign};
@@ -1128,4 +1128,418 @@ fn flat_points_centroid_center(flat: &[f64]) -> (f64, f64) {
         return (0.0, 0.0);
     }
     ((min_x + max_x) / 2.0, (min_y + max_y) / 2.0)
+}
+
+/// Compile a `shape` compound node — UNIT 1: BACKGROUND ONLY.
+///
+/// Emits the background primitive selected by [`ShapeNode::kind`] (default
+/// `"process"` when absent or unrecognized):
+/// - `process`   → rounded rect (`FillRoundedRect` + `StrokeRoundedRect`), using
+///   `radius`; a plain `FillRect`/`StrokeRect` when `radius` is absent/0.
+/// - `terminator`→ rounded rect with corner radius = `h/2` (pill).
+/// - `ellipse`   → `FillEllipse` + `StrokeEllipse`.
+/// - `decision`  → 4-point diamond polygon (`FillPolygon` + closed
+///   `StrokePolyline`) built from the bbox mid-edges.
+///
+/// The owned label spans are NOT rendered in this unit (a later unit handles the
+/// centered text). `opacity`/`visible`/`rotate` are honored exactly as
+/// `compile_rect` does; `stroke_alignment` insets the rounded-rect/ellipse box
+/// the same way `compile_rect` handles it. For the decision diamond the stroke
+/// is left centered in U1.
+pub(super) fn compile_shape(
+    shape: &ShapeNode,
+    resolved: &BTreeMap<String, ResolvedToken>,
+    style_map: &BTreeMap<&str, &Style>,
+    commands: &mut Vec<SceneCommand>,
+    diagnostics: &mut Vec<Diagnostic>,
+    ctx: RenderCtx,
+) {
+    // Skip invisible shapes.
+    if shape.visible == Some(false) {
+        return;
+    }
+
+    // Resolve geometry — all four are required; skip if any is absent or uses
+    // an unsupported unit.
+    let (Some(x_dim), Some(y_dim), Some(w_dim), Some(h_dim)) =
+        (&shape.x, &shape.y, &shape.w, &shape.h)
+    else {
+        diagnostics.push(Diagnostic::advisory(
+            "scene.missing_geometry",
+            format!(
+                "shape '{}' is missing one or more geometry properties (x, y, w, h); \
+                 skipped",
+                shape.id
+            ),
+            shape.source_span,
+            Some(shape.id.clone()),
+        ));
+        return;
+    };
+
+    let Some(x_raw) = dim_to_px(x_dim.value, &x_dim.unit) else {
+        diagnostics.push(unsupported_unit_diag(
+            "shape",
+            &shape.id,
+            "x",
+            shape.source_span,
+        ));
+        return;
+    };
+    let Some(y_raw) = dim_to_px(y_dim.value, &y_dim.unit) else {
+        diagnostics.push(unsupported_unit_diag(
+            "shape",
+            &shape.id,
+            "y",
+            shape.source_span,
+        ));
+        return;
+    };
+    let Some(w) = dim_to_px(w_dim.value, &w_dim.unit) else {
+        diagnostics.push(unsupported_unit_diag(
+            "shape",
+            &shape.id,
+            "w",
+            shape.source_span,
+        ));
+        return;
+    };
+    let Some(h) = dim_to_px(h_dim.value, &h_dim.unit) else {
+        diagnostics.push(unsupported_unit_diag(
+            "shape",
+            &shape.id,
+            "h",
+            shape.source_span,
+        ));
+        return;
+    };
+
+    // Apply group translation offset.
+    let x = x_raw + ctx.dx;
+    let y = y_raw + ctx.dy;
+
+    // Apply node opacity then cascade ctx.opacity on top (matches compile_rect).
+    let node_opacity = shape.opacity.unwrap_or(1.0).clamp(0.0, 1.0);
+    let color_op = node_opacity * ctx.opacity;
+
+    // Resolve fill / stroke once (node-local prop overrides style cascade).
+    let fill_prop = shape
+        .fill
+        .as_ref()
+        .or_else(|| style_prop(&shape.style, style_map, "fill"));
+    let stroke_prop = shape
+        .stroke
+        .as_ref()
+        .or_else(|| style_prop(&shape.style, style_map, "stroke"));
+    let stroke_width = {
+        let sw = shape
+            .stroke_width
+            .clone()
+            .or_else(|| style_prop(&shape.style, style_map, "stroke-width").cloned());
+        resolve_property_dimension_px(&sw, resolved, 1.0)
+    };
+
+    // Rotation bracket (outermost). PushTransform only when rotate ≠ 0.
+    let rot = rotation_degrees(shape.rotate.as_ref());
+    if let Some(angle) = rot {
+        let cx = x + w / 2.0;
+        let cy = y + h / 2.0;
+        commands.push(SceneCommand::PushTransform {
+            angle_deg: angle,
+            cx,
+            cy,
+        });
+    }
+
+    // Background primitive by kind (default "process").
+    match shape.kind.as_deref() {
+        Some("ellipse") => {
+            emit_shape_ellipse(
+                shape,
+                resolved,
+                diagnostics,
+                commands,
+                x,
+                y,
+                w,
+                h,
+                color_op,
+                fill_prop,
+                stroke_prop,
+                stroke_width,
+            );
+        }
+        Some("decision") => {
+            emit_shape_decision(
+                shape,
+                resolved,
+                diagnostics,
+                commands,
+                x,
+                y,
+                w,
+                h,
+                color_op,
+                fill_prop,
+                stroke_prop,
+                stroke_width,
+            );
+        }
+        Some("terminator") => {
+            // Pill: corner radius = h/2.
+            emit_shape_rounded_rect(
+                shape,
+                resolved,
+                diagnostics,
+                commands,
+                x,
+                y,
+                w,
+                h,
+                h / 2.0,
+                color_op,
+                fill_prop,
+                stroke_prop,
+                stroke_width,
+            );
+        }
+        // "process" (default) and any unrecognized value: rounded rect using
+        // `radius` (0 → plain rect).
+        _ => {
+            let radius_prop = shape
+                .radius
+                .clone()
+                .or_else(|| style_prop(&shape.style, style_map, "radius").cloned());
+            let radius = resolve_property_dimension_px(&radius_prop, resolved, 0.0);
+            emit_shape_rounded_rect(
+                shape,
+                resolved,
+                diagnostics,
+                commands,
+                x,
+                y,
+                w,
+                h,
+                radius,
+                color_op,
+                fill_prop,
+                stroke_prop,
+                stroke_width,
+            );
+        }
+    }
+
+    if rot.is_some() {
+        commands.push(SceneCommand::PopTransform);
+    }
+}
+
+/// Emit the rounded-rect (or plain-rect when `radius <= 0`) background for a
+/// `process`/`terminator` shape. Stroke alignment insets the stroked box like
+/// `compile_rect`.
+#[allow(clippy::too_many_arguments)]
+fn emit_shape_rounded_rect(
+    shape: &ShapeNode,
+    resolved: &BTreeMap<String, ResolvedToken>,
+    diagnostics: &mut Vec<Diagnostic>,
+    commands: &mut Vec<SceneCommand>,
+    x: f64,
+    y: f64,
+    w: f64,
+    h: f64,
+    radius: f64,
+    color_op: f64,
+    fill_prop: Option<&PropertyValue>,
+    stroke_prop: Option<&PropertyValue>,
+    stroke_width: f64,
+) {
+    let is_rounded = radius > 0.0;
+
+    // FILL (emitted first, under the stroke).
+    if let Some(fill_prop) = fill_prop
+        && let Some(mut color) = resolve_property_color(fill_prop, resolved, diagnostics, &shape.id)
+    {
+        color.a = (color.a as f64 * color_op).round() as u8;
+        if is_rounded {
+            commands.push(SceneCommand::FillRoundedRect {
+                x,
+                y,
+                w,
+                h,
+                radius,
+                radii: None,
+                color,
+            });
+        } else {
+            commands.push(SceneCommand::FillRect { x, y, w, h, color });
+        }
+    }
+
+    // STROKE (emitted on top of fill). Only when both stroke and width apply.
+    if let Some(stroke_prop) = stroke_prop
+        && let Some(mut color) =
+            resolve_property_color(stroke_prop, resolved, diagnostics, &shape.id)
+    {
+        color.a = (color.a as f64 * color_op).round() as u8;
+        let half = stroke_width / 2.0;
+        let adjust_inside = |v: f64| if v > 0.0 { (v - half).max(0.0) } else { 0.0 };
+        let adjust_outside = |v: f64| if v > 0.0 { v + half } else { 0.0 };
+        let (sx, sy, sw_geom, sh_geom, sradius) = match shape.stroke_alignment.as_deref() {
+            Some("inside") => (
+                x + half,
+                y + half,
+                w - stroke_width,
+                h - stroke_width,
+                adjust_inside(radius),
+            ),
+            Some("outside") => (
+                x - half,
+                y - half,
+                w + stroke_width,
+                h + stroke_width,
+                adjust_outside(radius),
+            ),
+            // "center" (default) and any unrecognized value.
+            _ => (x, y, w, h, radius),
+        };
+        let stroke_is_rounded = sradius > 0.0;
+        if sw_geom > 0.0 && sh_geom > 0.0 {
+            if stroke_is_rounded {
+                commands.push(SceneCommand::StrokeRoundedRect {
+                    x: sx,
+                    y: sy,
+                    w: sw_geom,
+                    h: sh_geom,
+                    radius: sradius,
+                    radii: None,
+                    color,
+                    stroke_width,
+                    stroke_dash: None,
+                    stroke_gap: None,
+                    stroke_linecap: None,
+                });
+            } else {
+                commands.push(SceneCommand::StrokeRect {
+                    x: sx,
+                    y: sy,
+                    w: sw_geom,
+                    h: sh_geom,
+                    color,
+                    stroke_width,
+                    stroke_dash: None,
+                    stroke_gap: None,
+                    stroke_linecap: None,
+                });
+            }
+        }
+    }
+}
+
+/// Emit an ellipse background (mirrors `compile_ellipse`'s fill/stroke emit).
+/// Stroke alignment is not modeled for the ellipse (centered, like `ellipse`).
+#[allow(clippy::too_many_arguments)]
+fn emit_shape_ellipse(
+    shape: &ShapeNode,
+    resolved: &BTreeMap<String, ResolvedToken>,
+    diagnostics: &mut Vec<Diagnostic>,
+    commands: &mut Vec<SceneCommand>,
+    x: f64,
+    y: f64,
+    w: f64,
+    h: f64,
+    color_op: f64,
+    fill_prop: Option<&PropertyValue>,
+    stroke_prop: Option<&PropertyValue>,
+    stroke_width: f64,
+) {
+    if let Some(fill_prop) = fill_prop
+        && let Some(mut color) = resolve_property_color(fill_prop, resolved, diagnostics, &shape.id)
+    {
+        color.a = (color.a as f64 * color_op).round() as u8;
+        commands.push(SceneCommand::FillEllipse {
+            x,
+            y,
+            w,
+            h,
+            rx: None,
+            ry: None,
+            color,
+        });
+    }
+
+    if let Some(stroke_prop) = stroke_prop
+        && let Some(mut color) =
+            resolve_property_color(stroke_prop, resolved, diagnostics, &shape.id)
+    {
+        color.a = (color.a as f64 * color_op).round() as u8;
+        commands.push(SceneCommand::StrokeEllipse {
+            x,
+            y,
+            w,
+            h,
+            rx: None,
+            ry: None,
+            color,
+            stroke_width,
+            stroke_dash: None,
+            stroke_gap: None,
+            stroke_linecap: None,
+        });
+    }
+}
+
+/// Emit a 4-point diamond polygon background for a `decision` shape (mirrors
+/// `compile_polygon`'s emit). The diamond vertices are the bbox mid-edges:
+/// top-mid, right-mid, bottom-mid, left-mid. Stroke is centered in U1.
+#[allow(clippy::too_many_arguments)]
+fn emit_shape_decision(
+    shape: &ShapeNode,
+    resolved: &BTreeMap<String, ResolvedToken>,
+    diagnostics: &mut Vec<Diagnostic>,
+    commands: &mut Vec<SceneCommand>,
+    x: f64,
+    y: f64,
+    w: f64,
+    h: f64,
+    color_op: f64,
+    fill_prop: Option<&PropertyValue>,
+    stroke_prop: Option<&PropertyValue>,
+    stroke_width: f64,
+) {
+    let flat_points = vec![
+        x + w / 2.0,
+        y, // top-mid
+        x + w,
+        y + h / 2.0, // right-mid
+        x + w / 2.0,
+        y + h, // bottom-mid
+        x,
+        y + h / 2.0, // left-mid
+    ];
+
+    if let Some(fill_prop) = fill_prop
+        && let Some(mut color) = resolve_property_color(fill_prop, resolved, diagnostics, &shape.id)
+    {
+        color.a = (color.a as f64 * color_op).round() as u8;
+        commands.push(SceneCommand::FillPolygon {
+            points: flat_points.clone(),
+            color,
+            even_odd: false,
+        });
+    }
+
+    if let Some(stroke_prop) = stroke_prop
+        && let Some(mut color) =
+            resolve_property_color(stroke_prop, resolved, diagnostics, &shape.id)
+    {
+        color.a = (color.a as f64 * color_op).round() as u8;
+        commands.push(SceneCommand::StrokePolyline {
+            points: flat_points,
+            color,
+            stroke_width,
+            closed: true,
+            align: StrokeAlign::Center,
+            fill_even_odd: false,
+        });
+    }
 }

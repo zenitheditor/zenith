@@ -2585,3 +2585,197 @@ fn stroke_outer_emits_second_stroke_rect_at_outset() {
         result_without.scene.commands
     );
 }
+
+// ── shape node: kind → background primitive mapping (U1, background-only) ──
+//
+// U1 of the `shape` node emits ONLY the background primitive (no text/glyph
+// yet). These tests assert the kind → primitive mapping in `compile_shape`
+// and that NO DrawGlyphRun is emitted. They reuse the same harness as the rect
+// tests above: `parse(src)` (common) → `compile(&doc, &default_provider())` →
+// inspect `result.scene.commands`.
+
+/// `kind="process"` WITH a radius token → rounded-rect fill + stroke.
+#[test]
+fn shape_process_with_radius_emits_rounded_rect() {
+    let src = r##"zenith version=1 {
+  project id="proj.shp" name="SHP"
+  tokens format="zenith-token-v1" {
+token id="color.fill" type="color" value="#dbeafe"
+token id="color.line" type="color" value="#1e3a8a"
+token id="size.stroke" type="dimension" value=(px)2
+token id="size.radius" type="dimension" value=(px)8
+  }
+  styles {}
+  document id="doc.shp" title="SHP" {
+page id="page.shp" w=(px)640 h=(px)360 {
+  shape id="s1" x=(px)40 y=(px)40 w=(px)200 h=(px)120 kind="process" fill=(token)"color.fill" stroke=(token)"color.line" stroke-width=(token)"size.stroke" radius=(token)"size.radius"
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+    let cmds = &result.scene.commands;
+
+    assert!(
+        cmds.iter()
+            .any(|c| matches!(c, SceneCommand::FillRoundedRect { .. })),
+        "process shape with radius must emit FillRoundedRect; got: {cmds:?}"
+    );
+    assert!(
+        cmds.iter()
+            .any(|c| matches!(c, SceneCommand::StrokeRoundedRect { .. })),
+        "process shape with radius must emit StrokeRoundedRect; got: {cmds:?}"
+    );
+    assert!(
+        !cmds
+            .iter()
+            .any(|c| matches!(c, SceneCommand::DrawGlyphRun { .. })),
+        "U1 shape is background-only — no DrawGlyphRun; got: {cmds:?}"
+    );
+}
+
+/// `kind="process"` WITHOUT a radius → plain rect fill + stroke.
+#[test]
+fn shape_process_without_radius_emits_plain_rect() {
+    let src = r##"zenith version=1 {
+  project id="proj.shp" name="SHP"
+  tokens format="zenith-token-v1" {
+token id="color.fill" type="color" value="#dbeafe"
+token id="color.line" type="color" value="#1e3a8a"
+token id="size.stroke" type="dimension" value=(px)2
+  }
+  styles {}
+  document id="doc.shp" title="SHP" {
+page id="page.shp" w=(px)640 h=(px)360 {
+  shape id="s1" x=(px)40 y=(px)40 w=(px)200 h=(px)120 kind="process" fill=(token)"color.fill" stroke=(token)"color.line" stroke-width=(token)"size.stroke"
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+    let cmds = &result.scene.commands;
+
+    assert!(
+        cmds.iter()
+            .any(|c| matches!(c, SceneCommand::FillRect { .. })),
+        "process shape without radius must emit FillRect; got: {cmds:?}"
+    );
+    assert!(
+        cmds.iter()
+            .any(|c| matches!(c, SceneCommand::StrokeRect { .. })),
+        "process shape without radius must emit StrokeRect; got: {cmds:?}"
+    );
+    assert!(
+        !cmds
+            .iter()
+            .any(|c| matches!(c, SceneCommand::FillRoundedRect { .. })),
+        "process shape without radius must NOT emit a rounded rect; got: {cmds:?}"
+    );
+    assert!(
+        !cmds
+            .iter()
+            .any(|c| matches!(c, SceneCommand::DrawGlyphRun { .. })),
+        "U1 shape is background-only — no DrawGlyphRun; got: {cmds:?}"
+    );
+}
+
+/// `kind="ellipse"` → ellipse fill + stroke.
+#[test]
+fn shape_ellipse_emits_ellipse() {
+    let src = r##"zenith version=1 {
+  project id="proj.shp" name="SHP"
+  tokens format="zenith-token-v1" {
+token id="color.fill" type="color" value="#dbeafe"
+token id="color.line" type="color" value="#1e3a8a"
+token id="size.stroke" type="dimension" value=(px)2
+  }
+  styles {}
+  document id="doc.shp" title="SHP" {
+page id="page.shp" w=(px)640 h=(px)360 {
+  shape id="s1" x=(px)40 y=(px)40 w=(px)200 h=(px)120 kind="ellipse" fill=(token)"color.fill" stroke=(token)"color.line" stroke-width=(token)"size.stroke"
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+    let cmds = &result.scene.commands;
+
+    assert!(
+        cmds.iter()
+            .any(|c| matches!(c, SceneCommand::FillEllipse { .. })),
+        "ellipse shape must emit FillEllipse; got: {cmds:?}"
+    );
+    assert!(
+        cmds.iter()
+            .any(|c| matches!(c, SceneCommand::StrokeEllipse { .. })),
+        "ellipse shape must emit StrokeEllipse; got: {cmds:?}"
+    );
+    assert!(
+        !cmds
+            .iter()
+            .any(|c| matches!(c, SceneCommand::DrawGlyphRun { .. })),
+        "U1 shape is background-only — no DrawGlyphRun; got: {cmds:?}"
+    );
+}
+
+/// `kind="decision"` → diamond polygon fill + closed polyline stroke. The
+/// polygon has 4 vertices at the bbox edge midpoints (top, right, bottom, left).
+#[test]
+fn shape_decision_emits_diamond_polygon() {
+    let src = r##"zenith version=1 {
+  project id="proj.shp" name="SHP"
+  tokens format="zenith-token-v1" {
+token id="color.fill" type="color" value="#dbeafe"
+token id="color.line" type="color" value="#1e3a8a"
+token id="size.stroke" type="dimension" value=(px)2
+  }
+  styles {}
+  document id="doc.shp" title="SHP" {
+page id="page.shp" w=(px)640 h=(px)360 {
+  shape id="s1" x=(px)40 y=(px)40 w=(px)200 h=(px)120 kind="decision" fill=(token)"color.fill" stroke=(token)"color.line" stroke-width=(token)"size.stroke"
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+    let cmds = &result.scene.commands;
+
+    // Expected diamond vertices for bbox x=40 y=40 w=200 h=120:
+    // top-mid (140, 40), right-mid (240, 100), bottom-mid (140, 160), left-mid (40, 100).
+    let expected = vec![140.0, 40.0, 240.0, 100.0, 140.0, 160.0, 40.0, 100.0];
+
+    let fill = cmds
+        .iter()
+        .find_map(|c| match c {
+            SceneCommand::FillPolygon { points, .. } => Some(points),
+            _ => None,
+        })
+        .unwrap_or_else(|| panic!("decision shape must emit FillPolygon; got: {cmds:?}"));
+    assert_eq!(
+        fill.len(),
+        8,
+        "diamond polygon must have 4 points (8 flat coords); got: {fill:?}"
+    );
+    assert_eq!(*fill, expected, "fill polygon must be the bbox diamond");
+
+    let stroke_closed = cmds.iter().any(|c| {
+        matches!(
+            c,
+            SceneCommand::StrokePolyline { points, closed: true, .. } if *points == expected
+        )
+    });
+    assert!(
+        stroke_closed,
+        "decision shape must emit a closed StrokePolyline diamond; got: {cmds:?}"
+    );
+    assert!(
+        !cmds
+            .iter()
+            .any(|c| matches!(c, SceneCommand::DrawGlyphRun { .. })),
+        "U1 shape is background-only — no DrawGlyphRun; got: {cmds:?}"
+    );
+}

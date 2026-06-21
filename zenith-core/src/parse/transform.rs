@@ -17,8 +17,8 @@ use crate::ast::{
     node::{
         CodeNode, EllipseNode, FieldNode, FootnoteNode, FrameNode, GroupNode, ImageNode,
         InstanceNode, LineNode, Node, ObjectPosition, Override, Point, PolygonNode, PolylineNode,
-        RectNode, TableCell, TableColumn, TableNode, TableRow, TextNode, TextSpan, TocNode,
-        UnknownNode, UnknownProperty, UnknownValue,
+        RectNode, ShapeNode, TableCell, TableColumn, TableNode, TableRow, TextNode, TextSpan,
+        TocNode, UnknownNode, UnknownProperty, UnknownValue,
     },
     style::{Style, StyleBlock, UnknownStyleProp, canonicalize_style_key},
     token::{
@@ -1184,6 +1184,85 @@ fn transform_children(node: &KdlNode) -> Result<Vec<Node>, ParseError> {
 // Renderable nodes
 // ---------------------------------------------------------------------------
 
+const SHAPE_KNOWN_PROPS: &[&str] = &[
+    "id",
+    "name",
+    "role",
+    "x",
+    "y",
+    "w",
+    "h",
+    "kind",
+    "fill",
+    "stroke",
+    "stroke-width",
+    "stroke_width",
+    "radius",
+    "stroke-alignment",
+    "stroke_alignment",
+    "padding",
+    "h-align",
+    "h_align",
+    "v-align",
+    "v_align",
+    "text-style",
+    "text_style",
+    "style",
+    "opacity",
+    "visible",
+    "locked",
+    "rotate",
+];
+
+fn transform_shape(node: &KdlNode) -> Result<ShapeNode, ParseError> {
+    let id = required_string_prop(node, "id")?.to_owned();
+
+    let mut spans: Vec<TextSpan> = Vec::new();
+    if let Some(children) = node.children() {
+        for child in children.nodes() {
+            if child.name().value() == "span" {
+                spans.push(transform_span(child)?);
+            }
+        }
+    }
+
+    let unknown_props = collect_unknown_props(node, SHAPE_KNOWN_PROPS);
+
+    Ok(ShapeNode {
+        id,
+        name: optional_string_prop(node, "name").map(str::to_owned),
+        role: optional_string_prop(node, "role").map(str::to_owned),
+        x: optional_dimension_prop(node, "x"),
+        y: optional_dimension_prop(node, "y"),
+        w: optional_dimension_prop(node, "w"),
+        h: optional_dimension_prop(node, "h"),
+        kind: optional_string_prop(node, "kind").map(str::to_owned),
+        fill: optional_property_value(node, "fill"),
+        stroke: optional_property_value(node, "stroke"),
+        stroke_width: optional_property_value_aliased(node, "stroke-width", "stroke_width"),
+        radius: optional_property_value(node, "radius"),
+        stroke_alignment: optional_string_prop_aliased(
+            node,
+            "stroke-alignment",
+            "stroke_alignment",
+        )
+        .map(str::to_owned),
+        padding: optional_property_value(node, "padding"),
+        h_align: optional_string_prop_aliased(node, "h-align", "h_align").map(str::to_owned),
+        v_align: optional_string_prop_aliased(node, "v-align", "v_align").map(str::to_owned),
+        text_style: optional_string_prop_aliased(node, "text-style", "text_style")
+            .map(str::to_owned),
+        spans,
+        style: optional_string_prop(node, "style").map(str::to_owned),
+        opacity: optional_f64_prop(node, "opacity"),
+        visible: optional_bool_prop(node, "visible"),
+        locked: optional_bool_prop(node, "locked"),
+        rotate: optional_dimension_prop(node, "rotate"),
+        source_span: node_span(node),
+        unknown_props,
+    })
+}
+
 fn transform_node(node: &KdlNode) -> Result<Node, ParseError> {
     match node.name().value() {
         "rect" => transform_rect(node).map(|r| Node::Rect(Box::new(r))),
@@ -1201,6 +1280,7 @@ fn transform_node(node: &KdlNode) -> Result<Node, ParseError> {
         "toc" => transform_toc(node).map(Node::Toc),
         "footnote" => transform_footnote(node).map(Node::Footnote),
         "table" => transform_table(node).map(|t| Node::Table(Box::new(t))),
+        "shape" => transform_shape(node).map(|s| Node::Shape(Box::new(s))),
         _ => Ok(Node::Unknown(UnknownNode {
             kind: node.name().value().to_owned(),
             source_span: node_span(node),

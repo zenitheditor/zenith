@@ -215,6 +215,7 @@ fn collect_entries(
             | Node::Field(_)
             | Node::Toc(_)
             | Node::Footnote(_)
+            | Node::Shape(_)
             | Node::Unknown(_) => {}
         }
     }

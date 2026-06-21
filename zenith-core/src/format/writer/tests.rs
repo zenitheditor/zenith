@@ -380,6 +380,7 @@ fn strip_node_span(node: &mut crate::ast::Node) {
                 }
             }
         }
+        Node::Shape(s) => s.source_span = None,
         Node::Unknown(u) => u.source_span = None,
     }
 }
@@ -3267,5 +3268,80 @@ fn test_sections_round_trip() {
         strip_spans(doc).sections,
         strip_spans(reparsed).sections,
         "sections must survive a parse → format → parse round-trip"
+    );
+}
+
+/// **shape parse + format round-trip**: a `kind="decision"` shape carrying
+/// geometry, token-ref fill/stroke/stroke-width/radius, stroke-alignment, h/v
+/// align, a text-style ref, and a `span` label parses into a `Node::Shape`, is
+/// re-emitted with all key attributes (and the span), and survives a parse →
+/// format → parse round-trip (spans excluded). Mirrors
+/// `test_table_parse_format_round_trip`.
+#[test]
+fn test_shape_parse_format_round_trip() {
+    let src = r##"zenith version=1 {
+  project id="proj.shp" name="SHP"
+  tokens format="zenith-token-v1" {
+    token id="color.fill" type="color" value="#dbeafe"
+    token id="color.line" type="color" value="#1e3a8a"
+    token id="size.stroke" type="dimension" value=(px)2
+    token id="size.radius" type="dimension" value=(px)8
+  }
+  styles {
+  }
+  document id="doc.shp" title="SHP" {
+    page id="page.shp" w=(px)640 h=(px)360 {
+      shape id="s1" x=(px)40 y=(px)40 w=(px)200 h=(px)120 kind="decision" fill=(token)"color.fill" stroke=(token)"color.line" stroke-width=(token)"size.stroke" radius=(token)"size.radius" stroke-alignment="inside" h-align="center" v-align="middle" text-style="label.body" {
+        span "Label"
+      }
+    }
+  }
+}
+"##;
+    let adapter = KdlAdapter;
+    let doc = adapter.parse(src.as_bytes()).expect("parse must succeed");
+    let shape = match &doc.body.pages[0].children[0] {
+        Node::Shape(s) => s,
+        other => panic!("expected Shape node, got {other:?}"),
+    };
+    assert_eq!(shape.id, "s1");
+    assert_eq!(shape.kind.as_deref(), Some("decision"));
+    assert_eq!(shape.stroke_alignment.as_deref(), Some("inside"));
+    assert_eq!(shape.h_align.as_deref(), Some("center"));
+    assert_eq!(shape.v_align.as_deref(), Some("middle"));
+    assert_eq!(shape.text_style.as_deref(), Some("label.body"));
+    assert_eq!(shape.spans.len(), 1);
+    assert_eq!(shape.spans[0].text, "Label");
+
+    // Format must re-emit the shape with its key attributes and the span.
+    let formatted = format_document(&doc).expect("format must succeed");
+    let formatted_str = String::from_utf8_lossy(&formatted);
+    for needle in [
+        r#"shape id="s1""#,
+        r#"kind="decision""#,
+        r#"fill=(token)"color.fill""#,
+        r#"stroke=(token)"color.line""#,
+        r#"stroke-width=(token)"size.stroke""#,
+        r#"radius=(token)"size.radius""#,
+        r#"stroke-alignment="inside""#,
+        r#"h-align="center""#,
+        r#"v-align="middle""#,
+        r#"text-style="label.body""#,
+        r#"span "Label""#,
+    ] {
+        assert!(
+            formatted_str.contains(needle),
+            "formatted output must contain {needle:?}; got:\n{formatted_str}"
+        );
+    }
+
+    // Round-trip: parse → format → parse must yield the same AST (spans excluded).
+    let doc2 = adapter
+        .parse(&formatted)
+        .expect("re-parse after format must succeed");
+    assert_eq!(
+        strip_spans(doc).body.pages[0].children,
+        strip_spans(doc2).body.pages[0].children,
+        "shape must survive a parse → format → parse round-trip"
     );
 }

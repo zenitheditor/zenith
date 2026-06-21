@@ -59,6 +59,8 @@ fn node_geometry_mut(node: &mut Node) -> Option<GeometryMut<'_>> {
         Node::Toc(t) => Some((&mut t.x, &mut t.y, &mut t.w, &mut t.h)),
         // A table carries a real x/y/w/h box.
         Node::Table(t) => Some((&mut t.x, &mut t.y, &mut t.w, &mut t.h)),
+        // A shape carries a real x/y/w/h background box.
+        Node::Shape(s) => Some((&mut s.x, &mut s.y, &mut s.w, &mut s.h)),
         // `Instance` is excluded: it carries only an x/y origin, no w/h box, so
         // the four-slot bbox setter does not apply. A set_geometry on an instance
         // honestly surfaces tx.unsupported_property rather than silently dropping
@@ -107,6 +109,7 @@ fn node_rotate_mut(node: &mut Node) -> Option<&mut Option<Dimension>> {
         Node::Polygon(n) => Some(&mut n.rotate),
         Node::Polyline(n) => Some(&mut n.rotate),
         Node::Table(n) => Some(&mut n.rotate),
+        Node::Shape(n) => Some(&mut n.rotate),
         // Line has no rotate field.
         // Instance has no rotate field.
         // Field has no rotate field.
@@ -234,6 +237,7 @@ fn read_geometry_px(node: &Node) -> Option<(f64, f64, f64, f64)> {
         Node::Text(t) => (t.x.as_ref(), t.y.as_ref(), t.w.as_ref(), t.h.as_ref()),
         Node::Code(c) => (c.x.as_ref(), c.y.as_ref(), c.w.as_ref(), c.h.as_ref()),
         Node::Group(g) => (g.x.as_ref(), g.y.as_ref(), g.w.as_ref(), g.h.as_ref()),
+        Node::Shape(s) => (s.x.as_ref(), s.y.as_ref(), s.w.as_ref(), s.h.as_ref()),
         _ => return None,
     };
     let resolve = |d: Option<&Dimension>| -> Option<f64> {

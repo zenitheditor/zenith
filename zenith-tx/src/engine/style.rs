@@ -31,6 +31,7 @@ fn node_fill_mut(node: &mut Node) -> Option<&mut Option<PropertyValue>> {
         Node::Toc(n) => Some(&mut n.fill),
         Node::Footnote(n) => Some(&mut n.fill),
         Node::Table(n) => Some(&mut n.fill),
+        Node::Shape(n) => Some(&mut n.fill),
         Node::Line(_)
         | Node::Frame(_)
         | Node::Group(_)
@@ -50,6 +51,7 @@ fn node_stroke_mut(node: &mut Node) -> Option<&mut Option<PropertyValue>> {
         Node::Polygon(n) => Some(&mut n.stroke),
         Node::Polyline(n) => Some(&mut n.stroke),
         Node::Ellipse(n) => Some(&mut n.stroke),
+        Node::Shape(n) => Some(&mut n.stroke),
         Node::Text(_)
         | Node::Code(_)
         | Node::Frame(_)
@@ -74,6 +76,7 @@ fn node_stroke_width_mut(node: &mut Node) -> Option<&mut Option<PropertyValue>> 
         Node::Polygon(n) => Some(&mut n.stroke_width),
         Node::Polyline(n) => Some(&mut n.stroke_width),
         Node::Ellipse(n) => Some(&mut n.stroke_width),
+        Node::Shape(n) => Some(&mut n.stroke_width),
         Node::Text(_)
         | Node::Code(_)
         | Node::Frame(_)
@@ -106,6 +109,7 @@ fn node_opacity_mut(node: &mut Node) -> Option<&mut Option<f64>> {
         Node::Field(n) => Some(&mut n.opacity),
         Node::Toc(n) => Some(&mut n.opacity),
         Node::Table(n) => Some(&mut n.opacity),
+        Node::Shape(n) => Some(&mut n.opacity),
         // A footnote has no `opacity` field.
         Node::Footnote(_) => None,
         Node::Unknown(_) => None,
@@ -136,6 +140,7 @@ fn node_overflow_mut(node: &mut Node) -> Option<&mut Option<String>> {
         | Node::Toc(_)
         | Node::Footnote(_)
         | Node::Table(_)
+        | Node::Shape(_)
         | Node::Unknown(_) => None,
     }
 }
@@ -543,6 +548,7 @@ fn collect_text_entries(children: &[Node], out: &mut Vec<(String, bool)>) {
             | Node::Field(_)
             | Node::Toc(_)
             | Node::Footnote(_)
+            | Node::Shape(_)
             | Node::Unknown(_) => {}
         }
     }

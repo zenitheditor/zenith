@@ -13,8 +13,8 @@ use crate::ast::document::{
 };
 use crate::ast::node::ImageNode;
 use crate::ast::node::{
-    CodeNode, EllipseNode, FieldNode, FrameNode, GroupNode, LineNode, Node, RectNode, TextNode,
-    TocNode, UnknownNode,
+    CodeNode, EllipseNode, FieldNode, FrameNode, GroupNode, LineNode, Node, RectNode, ShapeNode,
+    TextNode, TextSpan, TocNode, UnknownNode,
 };
 use crate::ast::style::StyleBlock;
 use crate::ast::token::{Token, TokenBlock, TokenLiteral, TokenType, TokenValue};
@@ -207,6 +207,48 @@ fn minimal_code(id: &str, fill: Option<PropertyValue>) -> Node {
         source_span: None,
         unknown_props: BTreeMap::new(),
     })
+}
+
+/// A geometry-complete `shape` with one label span. Enum-valued attributes
+/// (`kind`, `h_align`) are caller-supplied so tests can drive the enum-warning
+/// paths in `compile`/`validate`.
+fn minimal_shape(id: &str, kind: Option<&str>, h_align: Option<&str>) -> Node {
+    Node::Shape(Box::new(ShapeNode {
+        id: id.to_owned(),
+        name: None,
+        role: None,
+        x: Some(px(0.0)),
+        y: Some(px(0.0)),
+        w: Some(px(200.0)),
+        h: Some(px(120.0)),
+        kind: kind.map(str::to_owned),
+        fill: None,
+        stroke: None,
+        stroke_width: None,
+        radius: None,
+        stroke_alignment: None,
+        padding: None,
+        h_align: h_align.map(str::to_owned),
+        v_align: None,
+        text_style: None,
+        spans: vec![TextSpan {
+            text: "Label".to_owned(),
+            fill: None,
+            font_weight: None,
+            italic: None,
+            underline: None,
+            strikethrough: None,
+            vertical_align: None,
+            footnote_ref: None,
+        }],
+        style: None,
+        opacity: None,
+        visible: None,
+        locked: None,
+        rotate: None,
+        source_span: None,
+        unknown_props: BTreeMap::new(),
+    }))
 }
 
 fn minimal_page(id: &str, children: Vec<Node>) -> Page {
@@ -2268,6 +2310,82 @@ fn polyline_too_few_points_insufficient() {
         codes(&report)
     );
     assert!(report.has_errors());
+}
+
+// ── shape: unknown kind → shape.unknown_kind (Warning) ────────────────
+
+#[test]
+fn shape_invalid_kind_warns() {
+    let doc = doc_with(
+        vec![],
+        vec![minimal_page(
+            "page.one",
+            vec![minimal_shape("s.bad", Some("bogus"), None)],
+        )],
+    );
+    let report = validate(&doc);
+    assert!(
+        has_code(&report, "shape.unknown_kind"),
+        "codes: {:?}",
+        codes(&report)
+    );
+}
+
+#[test]
+fn shape_valid_kind_does_not_warn() {
+    for kind in ["process", "decision", "terminator", "ellipse"] {
+        let doc = doc_with(
+            vec![],
+            vec![minimal_page(
+                "page.one",
+                vec![minimal_shape("s.ok", Some(kind), None)],
+            )],
+        );
+        let report = validate(&doc);
+        assert!(
+            !has_code(&report, "shape.unknown_kind"),
+            "kind {kind:?} must not warn; codes: {:?}",
+            codes(&report)
+        );
+    }
+}
+
+// ── shape: invalid h-align → shape.invalid_h_align (Warning) ───────────
+
+#[test]
+fn shape_invalid_h_align_warns() {
+    let doc = doc_with(
+        vec![],
+        vec![minimal_page(
+            "page.one",
+            vec![minimal_shape("s.bad", Some("process"), Some("sideways"))],
+        )],
+    );
+    let report = validate(&doc);
+    assert!(
+        has_code(&report, "shape.invalid_h_align"),
+        "codes: {:?}",
+        codes(&report)
+    );
+}
+
+#[test]
+fn shape_valid_h_align_does_not_warn() {
+    for h in ["start", "center", "end"] {
+        let doc = doc_with(
+            vec![],
+            vec![minimal_page(
+                "page.one",
+                vec![minimal_shape("s.ok", Some("process"), Some(h))],
+            )],
+        );
+        let report = validate(&doc);
+        assert!(
+            !has_code(&report, "shape.invalid_h_align"),
+            "h-align {h:?} must not warn; codes: {:?}",
+            codes(&report)
+        );
+    }
 }
 
 // ── polygon: point with missing y → node.missing_geometry ─────────────
