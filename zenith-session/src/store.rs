@@ -64,19 +64,34 @@ pub fn put_object(
     content: &[u8],
 ) -> Result<String, SessionError> {
     let hash = object_hash(content);
-    if has_object(fs, paths, doc_id, &hash) {
-        return Ok(hash);
+    put_object_with_hash(fs, paths, doc_id, content, &hash)?;
+    Ok(hash)
+}
+
+/// Store `content` at the already-computed address `hash`. Idempotent / dedup'd:
+/// if the object already exists it is NOT rewritten. Callers that have already
+/// hashed `content` (e.g. for a dedup check) use this to avoid hashing twice;
+/// `hash` MUST equal `object_hash(content)`.
+pub fn put_object_with_hash(
+    fs: &impl Fs,
+    paths: &StorePaths,
+    doc_id: &str,
+    content: &[u8],
+    hash: &str,
+) -> Result<(), SessionError> {
+    if has_object(fs, paths, doc_id, hash) {
+        return Ok(());
     }
     let mut encoder = ZlibEncoder::new(Vec::new(), Compression::default());
     encoder.write_all(content).map_err(SessionError::from)?;
     let compressed = encoder.finish().map_err(SessionError::from)?;
-    let path = object_path(paths, doc_id, &hash)?;
+    let path = object_path(paths, doc_id, hash)?;
     let shard_dir = path
         .parent()
         .ok_or_else(|| SessionError::new("object path has no parent directory"))?;
     fs.create_dir_all(shard_dir)?;
     fs.write(&path, &compressed)?;
-    Ok(hash)
+    Ok(())
 }
 
 /// Load and decompress the object addressed by `hash` for `doc_id`.
@@ -129,6 +144,20 @@ mod tests {
         let hash = put_object(&fs, &paths, "doc1", b"some content").unwrap();
         let got = get_object(&fs, &paths, "doc1", &hash).unwrap();
         assert_eq!(got, b"some content");
+    }
+
+    #[test]
+    fn put_with_hash_matches_put_object() {
+        let (fs, paths) = setup();
+        let content = b"precomputed-hash content";
+        let hash = object_hash(content);
+        put_object_with_hash(&fs, &paths, "doc1", content, &hash).unwrap();
+        // Same address, same readback as the hashing put_object would produce.
+        assert!(has_object(&fs, &paths, "doc1", &hash));
+        assert_eq!(get_object(&fs, &paths, "doc1", &hash).unwrap(), content);
+        // Idempotent: a second call is a no-op and still succeeds.
+        put_object_with_hash(&fs, &paths, "doc1", content, &hash).unwrap();
+        assert_eq!(get_object(&fs, &paths, "doc1", &hash).unwrap(), content);
     }
 
     #[test]

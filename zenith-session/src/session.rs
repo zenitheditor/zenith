@@ -15,7 +15,7 @@ use crate::adapter::{Clock, Fs, Rng};
 use crate::error::SessionError;
 use crate::layout::StorePaths;
 use crate::manifest::{HistoryRecord, append_record, read_records};
-use crate::store::{get_object, object_hash, put_object};
+use crate::store::{get_object, object_hash, put_object_with_hash};
 
 // ── Persisted pointer state ────────────────────────────────────────────────────
 
@@ -118,12 +118,13 @@ pub fn record_state(
         return Ok(RecordOutcome::Unchanged);
     }
 
-    // Store the object (dedups bytes) and append a new record.
-    let hash = put_object(fs, paths, doc_id, content)?;
+    // Store the object (dedups bytes) and append a new record. The address is
+    // the hash we already computed for the dedup check above.
+    put_object_with_hash(fs, paths, doc_id, content, &new_hash)?;
     let seq = u64::try_from(records.len())
         .map_err(|_| SessionError::new("session record count exceeds u64"))?;
     let id = format!("r{seq}");
-    let mut rec = HistoryRecord::new(id.clone(), seq, state.head.clone(), hash);
+    let mut rec = HistoryRecord::new(id.clone(), seq, state.head.clone(), new_hash);
     rec.op_kind = op_kind.map(str::to_owned);
     rec.timestamp_ms = clock
         .now()

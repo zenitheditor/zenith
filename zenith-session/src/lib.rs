@@ -15,6 +15,7 @@
 //! - [`revspec`] — revision-spec resolver: map a human/agent revspec string to a record id
 //! - [`session`] — Tier-1 ephemeral session: snapshot DAG with HEAD + redo stack
 //! - [`store`] — content-addressed object store (SHA-256 + DEFLATE)
+//! - [`tier2`] — Tier-2 durable version history: bounded flat list in `versions.jsonl`
 
 pub mod adapter;
 pub mod datadir;
@@ -26,6 +27,7 @@ pub mod manifest;
 pub mod revspec;
 pub mod session;
 pub mod store;
+pub mod tier2;
 
 pub use datadir::{resolve_data_dir, resolve_data_dir_with};
 pub use docid::mint_ulid;
@@ -37,4 +39,8 @@ pub use revspec::{resolve_revspec, resolve_revspec_for};
 pub use session::{
     RecordOutcome, SessionState, clear_session, current_content, record_state, redo, undo,
 };
-pub use store::{get_object, has_object, object_hash, put_object};
+pub use store::{get_object, has_object, object_hash, put_object, put_object_with_hash};
+pub use tier2::{
+    VersionOutcome, list_versions, record_version, resolve_version, restore_content,
+    version_content,
+};
