@@ -17,6 +17,7 @@
 
 pub mod cli;
 pub mod commands;
+pub mod history;
 pub mod json_types;
 pub mod library;
 
@@ -470,7 +471,15 @@ pub fn run() -> ExitCode {
                                 }
                             }
                         } else {
-                            if let Err(e) = std::fs::write(&add_args.into, &result.formatted) {
+                            let recorded = history::record_edit(
+                                &result.formatted,
+                                &add_args.into,
+                                "library.add",
+                            );
+                            if let Some(w) = &recorded.warning {
+                                eprintln!("warning: {w}");
+                            }
+                            if let Err(e) = std::fs::write(&add_args.into, &recorded.bytes) {
                                 eprintln!("error writing '{}': {}", add_args.into.display(), e);
                                 return ExitCode::from(2);
                             }
@@ -522,12 +531,19 @@ pub fn run() -> ExitCode {
             }
 
             // Apply: persist source_after if requested and not rejected.
-            if args.apply
-                && outcome.exit_code != 1
-                && let Err(e) = std::fs::write(&args.path, outcome.result.source_after.as_bytes())
-            {
-                eprintln!("error writing '{}': {}", args.path.display(), e);
-                return ExitCode::from(2);
+            if args.apply && outcome.exit_code != 1 {
+                let recorded = history::record_edit(
+                    outcome.result.source_after.as_bytes(),
+                    &args.path,
+                    "tx.apply",
+                );
+                if let Some(w) = &recorded.warning {
+                    eprintln!("warning: {w}");
+                }
+                if let Err(e) = std::fs::write(&args.path, &recorded.bytes) {
+                    eprintln!("error writing '{}': {}", args.path.display(), e);
+                    return ExitCode::from(2);
+                }
             }
 
             ExitCode::from(outcome.exit_code)

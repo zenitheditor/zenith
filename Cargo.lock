@@ -1268,6 +1268,7 @@ dependencies = [
  "zenith-layout",
  "zenith-render",
  "zenith-scene",
+ "zenith-session",
  "zenith-tx",
 ]
 

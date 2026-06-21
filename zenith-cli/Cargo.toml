@@ -11,6 +11,7 @@ zenith-layout = { path = "../zenith-layout" }
 zenith-tx = { path = "../zenith-tx" }
 zenith-scene = { path = "../zenith-scene" }
 zenith-render = { path = "../zenith-render" }
+zenith-session = { path = "../zenith-session" }
 clap = { version = "4", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
