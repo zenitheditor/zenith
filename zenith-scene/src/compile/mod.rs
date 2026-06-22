@@ -49,8 +49,8 @@ use field::{
 };
 use image::compile_image;
 use leaf::{
-    compile_connector, compile_ellipse, compile_line, compile_polygon, compile_polyline,
-    compile_rect, compile_shape,
+    ConnectorEnv, ShapeCompileEnv, compile_connector, compile_ellipse, compile_line,
+    compile_polygon, compile_polyline, compile_rect, compile_shape,
 };
 use paint::{resolve_property_color, resolve_property_gradient};
 use table::compile_table;
@@ -820,29 +820,33 @@ pub(super) fn compile_node(
         Node::Shape(shape) => {
             compile_shape(
                 shape,
-                resolved,
-                style_map,
-                fonts,
-                engine,
                 commands,
                 diagnostics,
-                chains,
-                field_ctx.footnote_markers,
-                field_ctx.node_boxes,
-                anchors,
-                ctx,
+                ShapeCompileEnv {
+                    resolved,
+                    style_map,
+                    fonts,
+                    engine,
+                    chains,
+                    footnote_markers: field_ctx.footnote_markers,
+                    node_boxes: field_ctx.node_boxes,
+                    anchors,
+                    ctx,
+                },
             );
             0.0
         }
         Node::Connector(connector) => {
             compile_connector(
                 connector,
-                resolved,
-                style_map,
                 commands,
                 diagnostics,
-                field_ctx.node_boxes,
-                ctx,
+                ConnectorEnv {
+                    resolved,
+                    style_map,
+                    node_boxes: field_ctx.node_boxes,
+                    ctx,
+                },
             );
             0.0
         }
