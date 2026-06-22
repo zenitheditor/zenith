@@ -13,6 +13,7 @@ use crate::result::{TxError, TxResult, TxStatus};
 mod asset;
 mod flags;
 mod geometry;
+mod recipe;
 mod structure;
 mod style;
 mod token;
@@ -23,6 +24,7 @@ use geometry::{
     GeometryDelta, apply_align_nodes, apply_align_to_edge, apply_distribute_nodes,
     apply_set_geometry,
 };
+use recipe::{RecipeScalars, apply_create_recipe, apply_delete_recipe, apply_update_recipe};
 use structure::{
     ReorderKind, apply_add_node, apply_add_page, apply_delete_page, apply_duplicate_node,
     apply_duplicate_page, apply_group, apply_remove_node, apply_reorder, apply_reorder_pages,
@@ -340,6 +342,53 @@ fn apply_op(
         Op::AlignToEdge { node, edge, margin } => {
             apply_align_to_edge(node, edge, *margin, doc, diagnostics, affected);
         }
+        Op::CreateRecipe {
+            id,
+            kind,
+            seed,
+            generator,
+            bounds,
+            detached,
+        } => {
+            apply_create_recipe(
+                RecipeScalars {
+                    id,
+                    kind,
+                    seed: *seed,
+                    generator: generator.as_deref(),
+                    bounds: bounds.as_deref(),
+                    detached: *detached,
+                },
+                doc,
+                diagnostics,
+                affected,
+            );
+        }
+        Op::UpdateRecipe {
+            id,
+            kind,
+            seed,
+            generator,
+            bounds,
+            detached,
+        } => {
+            apply_update_recipe(
+                RecipeScalars {
+                    id,
+                    kind,
+                    seed: *seed,
+                    generator: generator.as_deref(),
+                    bounds: bounds.as_deref(),
+                    detached: *detached,
+                },
+                doc,
+                diagnostics,
+                affected,
+            );
+        }
+        Op::DeleteRecipe { id } => {
+            apply_delete_recipe(id, doc, diagnostics, affected);
+        }
     }
 }
 
@@ -403,7 +452,11 @@ fn op_lock_targets(op: &Op) -> Vec<&str> {
         | Op::CreateToken { .. }
         | Op::UpdateTokenValue { .. }
         // Style ops mutate the styles block, not the node tree; no per-node lock target.
-        | Op::SetStyleProperty { .. } => Vec::new(),
+        | Op::SetStyleProperty { .. }
+        // Recipe ops mutate the recipes block, not the node tree; no per-node lock target.
+        | Op::CreateRecipe { .. }
+        | Op::UpdateRecipe { .. }
+        | Op::DeleteRecipe { .. } => Vec::new(),
     }
 }
 

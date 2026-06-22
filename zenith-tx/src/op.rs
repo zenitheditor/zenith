@@ -801,6 +801,77 @@ pub enum Op {
         #[serde(default)]
         margin: f64,
     },
+    /// Create a new recipe entry in the document's `recipes` block.
+    ///
+    /// Appends a new [`RecipeDef`] with the given scalar fields and empty
+    /// `params`, `palette`, `expanded`, and `unknown_props`; `source_span` is
+    /// `None`. Eagerly rejected with `tx.duplicate_id` if a recipe with `id`
+    /// already exists.
+    ///
+    /// JSON example:
+    /// ```json
+    /// {"op":"create_recipe","id":"recipe.scatter","kind":"scatter","seed":42}
+    /// ```
+    CreateRecipe {
+        /// Globally unique recipe id (e.g. `"recipe.scatter"`).
+        id: String,
+        /// Generator kind string (e.g. `"scatter"`, `"aurora"`).
+        kind: String,
+        /// Optional integer seed for deterministic generation.
+        #[serde(default)]
+        seed: Option<i64>,
+        /// Optional generator version/hash string (e.g. `"aurora@1"`).
+        #[serde(default)]
+        generator: Option<String>,
+        /// Optional frame/page id this recipe applies within.
+        #[serde(default)]
+        bounds: Option<String>,
+        /// Optional detach state: `true` = detached, `false` = linked.
+        #[serde(default)]
+        detached: Option<bool>,
+    },
+    /// Replace the scalar fields of an existing recipe, preserving its
+    /// `params`, `palette`, `expanded`, and `unknown_props`.
+    ///
+    /// The fields `kind`, `seed`, `generator`, `bounds`, and `detached` are
+    /// replaced with the op's values. `None` for any `Option` field makes that
+    /// field absent on the recipe. Rejected with `tx.unknown_recipe` if no
+    /// recipe with `id` exists.
+    ///
+    /// JSON example:
+    /// ```json
+    /// {"op":"update_recipe","id":"recipe.scatter","kind":"scatter","detached":true}
+    /// ```
+    UpdateRecipe {
+        /// The id of the recipe to update.
+        id: String,
+        /// New generator kind string.
+        kind: String,
+        /// New seed value; `null`/absent clears the field.
+        #[serde(default)]
+        seed: Option<i64>,
+        /// New generator version/hash; `null`/absent clears the field.
+        #[serde(default)]
+        generator: Option<String>,
+        /// New bounds frame/page id; `null`/absent clears the field.
+        #[serde(default)]
+        bounds: Option<String>,
+        /// New detach state; `null`/absent clears the field.
+        #[serde(default)]
+        detached: Option<bool>,
+    },
+    /// Remove a recipe from the document's `recipes` block by id.
+    ///
+    /// Rejected with `tx.unknown_recipe` if no recipe with `id` exists.
+    ///
+    /// JSON example:
+    /// ```json
+    /// {"op":"delete_recipe","id":"recipe.scatter"}
+    /// ```
+    DeleteRecipe {
+        /// The id of the recipe to remove.
+        id: String,
+    },
 }
 
 fn default_anchor() -> String {
