@@ -57,9 +57,9 @@ use crate::ir::Color;
 use super::paint::resolve_property_color;
 use super::style_prop;
 use super::text::{
-    HyphenationContext, Line, ResolvedSpan, WordMetrics, en_us_hyphenator, flatten_lines_to_tokens,
-    pack_lines, resolve_family_with_fallback, resolve_font_family_name, resolve_font_weight,
-    resolve_vertical_align, shape_words,
+    HyphenationContext, Line, NodeShape, ResolvedSpan, ShapeEnv, WordMetrics, en_us_hyphenator,
+    flatten_lines_to_tokens, pack_lines, resolve_family_with_fallback, resolve_font_family_name,
+    resolve_font_weight, resolve_vertical_align, shape_words,
 };
 use super::util::resolve_property_dimension_px;
 
@@ -303,14 +303,15 @@ fn distribute_chains(
         let (tokens, metrics) = shape_words(
             &spans,
             &families,
-            font_size,
-            base_weight,
-            engine,
-            fonts,
+            NodeShape {
+                font_size,
+                base_weight,
+                direction,
+            },
+            ShapeEnv { engine, fonts },
             diagnostics,
             &src.id,
             src.source_span,
-            direction,
         );
 
         // Opt-in hyphenation for the whole chain, read from the source node.

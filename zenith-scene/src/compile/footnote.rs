@@ -40,7 +40,7 @@ use super::chain::ChainAssignments;
 use super::field::FieldCtx;
 use super::paint::resolve_property_color;
 use super::style_prop;
-use super::text::compile_text;
+use super::text::{TextCompileEnv, compile_text};
 use super::util::{px, resolve_property_dimension_px};
 
 /// The gap (px) between stacked footnotes in the zone.
@@ -214,6 +214,18 @@ pub(super) fn compile_footnote_zone(
     // content height (line_count × line_height), reusing the exact wrap +
     // measurement path the real emit uses. Heights are summed (plus gaps) to
     // place the zone top, then footnotes are emitted top-down from there.
+    // Footnotes never use text-runaround exclusion, so the node-box map is empty.
+    let empty_node_boxes: BTreeMap<String, (f64, f64, f64, f64)> = BTreeMap::new();
+    let text_env = TextCompileEnv {
+        resolved,
+        style_map,
+        fonts,
+        engine,
+        chains,
+        footnote_markers: markers,
+        node_boxes: &empty_node_boxes,
+        anchors,
+    };
     let mut heights: Vec<f64> = Vec::with_capacity(footnotes.len());
     for fnote in &footnotes {
         let marker = markers.get(&fnote.id).map(String::as_str).unwrap_or("?");
@@ -222,17 +234,9 @@ pub(super) fn compile_footnote_zone(
         let mut scratch_diags: Vec<Diagnostic> = Vec::new();
         let h = compile_text(
             &text,
-            resolved,
-            style_map,
-            fonts,
-            engine,
+            text_env,
             &mut scratch,
             &mut scratch_diags,
-            chains,
-            markers,
-            // Footnotes never use text-runaround exclusion.
-            &BTreeMap::new(),
-            anchors,
             RenderCtx::measure(),
         );
         // A footnote that measured to zero height (e.g. all-empty content) still
@@ -310,21 +314,7 @@ pub(super) fn compile_footnote_zone(
     for (fnote, h) in footnotes.iter().zip(heights.iter()) {
         let marker = markers.get(&fnote.id).map(String::as_str).unwrap_or("?");
         let text = synth_footnote_text(fnote, marker, live_x, cursor_y, live_w);
-        compile_text(
-            &text,
-            resolved,
-            style_map,
-            fonts,
-            engine,
-            commands,
-            diagnostics,
-            chains,
-            markers,
-            // Footnotes never use text-runaround exclusion.
-            &BTreeMap::new(),
-            anchors,
-            ctx,
-        );
+        compile_text(&text, text_env, commands, diagnostics, ctx);
         cursor_y += h + FOOTNOTE_GAP;
     }
 

@@ -24,7 +24,9 @@ use super::paint::{
     resolve_property_shadow,
 };
 use super::style_prop;
-use super::text::{MeasureEnv, compile_text, measure_text_wrapped_height, resolve_text_families};
+use super::text::{
+    MeasureEnv, TextCompileEnv, compile_text, measure_text_wrapped_height, resolve_text_families,
+};
 use super::util::{
     blend_mode_ir, missing_geometry_diag, px, resolve_anchored_axis, resolve_property_dimension_px,
     rotation_degrees, unsupported_unit_diag,
@@ -1794,16 +1796,18 @@ fn emit_shape_label(
     };
     let _ = compile_text(
         &synth,
-        resolved,
-        style_map,
-        fonts,
-        engine,
+        TextCompileEnv {
+            resolved,
+            style_map,
+            fonts,
+            engine,
+            chains,
+            footnote_markers,
+            node_boxes,
+            anchors,
+        },
         commands,
         diagnostics,
-        chains,
-        footnote_markers,
-        node_boxes,
-        anchors,
         label_ctx,
     );
 }

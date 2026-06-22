@@ -55,7 +55,7 @@ use leaf::{
 use paint::{resolve_property_color, resolve_property_gradient};
 use table::compile_table;
 use table_flow::{TableFlowAssignments, resolve_table_flows};
-use text::{compile_code, compile_text};
+use text::{TextCompileEnv, compile_code, compile_text};
 use toc::resolve_toc_to_text;
 
 /// Compile-time lookup of component definitions by id. Threaded through the
@@ -647,16 +647,18 @@ pub(super) fn compile_node(
         }
         Node::Text(text) => compile_text(
             text,
-            resolved,
-            style_map,
-            fonts,
-            engine,
+            TextCompileEnv {
+                resolved,
+                style_map,
+                fonts,
+                engine,
+                chains,
+                footnote_markers: field_ctx.footnote_markers,
+                node_boxes: field_ctx.node_boxes,
+                anchors,
+            },
             commands,
             diagnostics,
-            chains,
-            field_ctx.footnote_markers,
-            field_ctx.node_boxes,
-            anchors,
             ctx,
         ),
         Node::Line(line) => {
@@ -725,16 +727,18 @@ pub(super) fn compile_node(
             if let Some(text_node) = resolve_field_to_text(field, field_ctx) {
                 compile_text(
                     &text_node,
-                    resolved,
-                    style_map,
-                    fonts,
-                    engine,
+                    TextCompileEnv {
+                        resolved,
+                        style_map,
+                        fonts,
+                        engine,
+                        chains,
+                        footnote_markers: field_ctx.footnote_markers,
+                        node_boxes: field_ctx.node_boxes,
+                        anchors,
+                    },
                     commands,
                     diagnostics,
-                    chains,
-                    field_ctx.footnote_markers,
-                    field_ctx.node_boxes,
-                    anchors,
                     ctx,
                 );
             }
@@ -750,16 +754,18 @@ pub(super) fn compile_node(
             {
                 compile_text(
                     &text_node,
-                    resolved,
-                    style_map,
-                    fonts,
-                    engine,
+                    TextCompileEnv {
+                        resolved,
+                        style_map,
+                        fonts,
+                        engine,
+                        chains,
+                        footnote_markers: field_ctx.footnote_markers,
+                        node_boxes: field_ctx.node_boxes,
+                        anchors,
+                    },
                     commands,
                     diagnostics,
-                    chains,
-                    field_ctx.footnote_markers,
-                    field_ctx.node_boxes,
-                    anchors,
                     ctx,
                 );
             }
@@ -779,13 +785,18 @@ pub(super) fn compile_node(
         }
         Node::Code(code) => compile_code(
             code,
-            resolved,
-            style_map,
-            fonts,
-            engine,
+            TextCompileEnv {
+                resolved,
+                style_map,
+                fonts,
+                engine,
+                chains,
+                footnote_markers: field_ctx.footnote_markers,
+                node_boxes: field_ctx.node_boxes,
+                anchors,
+            },
             commands,
             diagnostics,
-            anchors,
             ctx,
         ),
         Node::Table(table) => {
