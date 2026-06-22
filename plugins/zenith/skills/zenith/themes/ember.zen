@@ -1,0 +1,50 @@
+// @zenith/theme.ember — warm dark, amber-gold with green accents
+// scheme: dark | depth: 1 | noise: 1 (1 = apply grain-overlay recipe; see references/recipes.md)
+zenith version=1 {
+  project id="@zenith/theme.ember" name="Theme: ember"
+  tokens format="zenith-token-v1" {
+    token id="color.base.100" type="color" value="#0b0908"
+    token id="color.base.200" type="color" value="#1b1816"
+    token id="color.base.300" type="color" value="#272322"
+    token id="color.base.content" type="color" value="#f5f5f4"
+    token id="color.primary" type="color" value="#fcb700"
+    token id="color.primary.content" type="color" value="#431700"
+    token id="color.secondary" type="color" value="#01df72"
+    token id="color.secondary.content" type="color" value="#022d14"
+    token id="color.accent" type="color" value="#99e600"
+    token id="color.accent.content" type="color" value="#182d02"
+    token id="color.neutral" type="color" value="#433f3a"
+    token id="color.neutral.content" type="color" value="#f8f8f8"
+    token id="color.info" type="color" value="#135bf9"
+    token id="color.info.content" type="color" value="#eff6ff"
+    token id="color.success" type="color" value="#00a43b"
+    token id="color.success.content" type="color" value="#effcf3"
+    token id="color.warning" type="color" value="#f34700"
+    token id="color.warning.content" type="color" value="#fff7ed"
+    token id="color.error" type="color" value="#e50076"
+    token id="color.error.content" type="color" value="#fcf2f8"
+    token id="radius.box" type="dimension" value=(px)32
+    token id="radius.field" type="dimension" value=(px)0
+    token id="radius.selector" type="dimension" value=(px)32
+    token id="border.width" type="dimension" value=(px)1
+    token id="space.unit" type="dimension" value=(px)4
+    token id="font.heading" type="fontFamily" value="Noto Sans"
+    token id="font.body" type="fontFamily" value="Noto Sans"
+    token id="size.h1" type="dimension" value=(px)64
+    token id="size.h2" type="dimension" value=(px)40
+    token id="size.body" type="dimension" value=(px)28
+    token id="size.caption" type="dimension" value=(px)18
+    token id="color.shadow" type="color" value="#0000002a"
+    token id="shadow.depth" type="shadow" { layer dx=(px)0 dy=(px)8 blur=(px)24 color=(token)"color.shadow" }
+  }
+  styles {}
+  document id="theme.ember.preview" title="Theme ember" {
+    page id="pg" w=(px)760 h=(px)220 background=(token)"color.base.100" {
+      text id="t.title" x=(px)40 y=(px)28 w=(px)680 h=(px)52 fill=(token)"color.base.content" font-family=(token)"font.heading" font-size=(token)"size.h2" { span "ember" }
+      rect id="sw.primary" x=(px)40 y=(px)104 w=(px)160 h=(px)84 fill=(token)"color.primary" radius=(token)"radius.box" shadow=(token)"shadow.depth"
+      rect id="sw.secondary" x=(px)220 y=(px)104 w=(px)160 h=(px)84 fill=(token)"color.secondary" radius=(token)"radius.box" shadow=(token)"shadow.depth"
+      rect id="sw.accent" x=(px)400 y=(px)104 w=(px)160 h=(px)84 fill=(token)"color.accent" radius=(token)"radius.box" shadow=(token)"shadow.depth"
+      rect id="sw.neutral" x=(px)580 y=(px)104 w=(px)160 h=(px)84 fill=(token)"color.neutral" radius=(token)"radius.box" shadow=(token)"shadow.depth"
+    }
+  }
+}

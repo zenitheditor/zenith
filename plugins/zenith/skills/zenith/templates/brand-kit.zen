@@ -1,0 +1,16 @@
+zenith version=1 {
+  project id="@brand/kit" name="Brand Kit"
+  assets {}
+  libraries {
+    library id="@brand/kit" version="1.0.0"
+  }
+  actions {
+    action id="apply-brand" label="Apply brand palette" version="1.0.0" {
+      tx "{\"ops\":[{\"op\":\"update_token_value\",\"id\":\"color.brand\",\"value\":\"#e11d48\"},{\"op\":\"update_token_value\",\"id\":\"color.accent\",\"value\":\"#3b82f6\"},{\"op\":\"update_token_value\",\"id\":\"color.ink\",\"value\":\"#0f172a\"}]}"
+    }
+  }
+  styles {}
+  document id="pack.preview" title="Brand Kit" {
+    page id="pack.pg" name="Preview" w=(px)100 h=(px)100 {}
+  }
+}

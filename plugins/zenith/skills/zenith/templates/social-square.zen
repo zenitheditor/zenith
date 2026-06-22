@@ -1,0 +1,23 @@
+zenith version=1 {
+  project id="proj.social" name="Social Square Starter"
+  tokens format="zenith-token-v1" {
+    token id="color.bg" type="color" value="#0b1020"
+    token id="color.ink" type="color" value="#f8fafc"
+    token id="color.brand" type="color" value="#e11d48"
+    token id="font.heading" type="fontFamily" value="Noto Sans"
+    token id="size.h1" type="dimension" value=(px)84
+    token id="size.body" type="dimension" value=(px)34
+  }
+  styles {}
+  document id="doc.social" title="Social Square Starter" {
+    page id="page.main" w=(px)1080 h=(px)1080 background=(token)"color.bg" {
+      rect id="accent.bar" x=(px)96 y=(px)160 w=(px)160 h=(px)16 fill=(token)"color.brand"
+      text id="hero.title" x=(px)96 y=(px)220 w=(px)888 h=(px)420 fill=(token)"color.ink" font-family=(token)"font.heading" font-size=(token)"size.h1" {
+        span "Replace this headline"
+      }
+      text id="cta.note" x=(px)96 y=(px)900 w=(px)888 h=(px)80 fill=(token)"color.ink" font-family=(token)"font.heading" font-size=(token)"size.body" {
+        span "yourdomain.com"
+      }
+    }
+  }
+}

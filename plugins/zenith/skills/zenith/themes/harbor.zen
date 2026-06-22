@@ -1,0 +1,48 @@
+// @zenith/theme.harbor — dark navy with warm amber and sky accents
+// scheme: dark | depth: 0 | noise: 1 (1 = apply grain-overlay recipe; see references/recipes.md)
+zenith version=1 {
+  project id="@zenith/theme.harbor" name="Theme: harbor"
+  tokens format="zenith-token-v1" {
+    token id="color.base.100" type="color" value="#010515"
+    token id="color.base.200" type="color" value="#0d1529"
+    token id="color.base.300" type="color" value="#1a273a"
+    token id="color.base.content" type="color" value="#eef2f6"
+    token id="color.primary" type="color" value="#ffb667"
+    token id="color.primary.content" type="color" value="#421104"
+    token id="color.secondary" type="color" value="#ffb667"
+    token id="color.secondary.content" type="color" value="#421104"
+    token id="color.accent" type="color" value="#71d1fe"
+    token id="color.accent.content" type="color" value="#042e49"
+    token id="color.neutral" type="color" value="#1a273a"
+    token id="color.neutral.content" type="color" value="#f7f9fa"
+    token id="color.info" type="color" value="#00d0ef"
+    token id="color.info.content" type="color" value="#053344"
+    token id="color.success" type="color" value="#00d390"
+    token id="color.success.content" type="color" value="#002c21"
+    token id="color.warning" type="color" value="#fdc700"
+    token id="color.warning.content" type="color" value="#411e03"
+    token id="color.error" type="color" value="#ff6266"
+    token id="color.error.content" type="color" value="#440607"
+    token id="radius.box" type="dimension" value=(px)16
+    token id="radius.field" type="dimension" value=(px)8
+    token id="radius.selector" type="dimension" value=(px)32
+    token id="border.width" type="dimension" value=(px)2
+    token id="space.unit" type="dimension" value=(px)4
+    token id="font.heading" type="fontFamily" value="Noto Sans"
+    token id="font.body" type="fontFamily" value="Noto Sans"
+    token id="size.h1" type="dimension" value=(px)64
+    token id="size.h2" type="dimension" value=(px)40
+    token id="size.body" type="dimension" value=(px)28
+    token id="size.caption" type="dimension" value=(px)18
+  }
+  styles {}
+  document id="theme.harbor.preview" title="Theme harbor" {
+    page id="pg" w=(px)760 h=(px)220 background=(token)"color.base.100" {
+      text id="t.title" x=(px)40 y=(px)28 w=(px)680 h=(px)52 fill=(token)"color.base.content" font-family=(token)"font.heading" font-size=(token)"size.h2" { span "harbor" }
+      rect id="sw.primary" x=(px)40 y=(px)104 w=(px)160 h=(px)84 fill=(token)"color.primary" radius=(token)"radius.box"
+      rect id="sw.secondary" x=(px)220 y=(px)104 w=(px)160 h=(px)84 fill=(token)"color.secondary" radius=(token)"radius.box"
+      rect id="sw.accent" x=(px)400 y=(px)104 w=(px)160 h=(px)84 fill=(token)"color.accent" radius=(token)"radius.box"
+      rect id="sw.neutral" x=(px)580 y=(px)104 w=(px)160 h=(px)84 fill=(token)"color.neutral" radius=(token)"radius.box"
+    }
+  }
+}

@@ -1,0 +1,48 @@
+// @zenith/theme.pine — dark emerald/teal, minimal and flat
+// scheme: dark | depth: 0 | noise: 0 (1 = apply grain-overlay recipe; see references/recipes.md)
+zenith version=1 {
+  project id="@zenith/theme.pine" name="Theme: pine"
+  tokens format="zenith-token-v1" {
+    token id="color.base.100" type="color" value="#030712"
+    token id="color.base.200" type="color" value="#101828"
+    token id="color.base.300" type="color" value="#1c2737"
+    token id="color.base.content" type="color" value="#f1f2f4"
+    token id="color.primary" type="color" value="#00d390"
+    token id="color.primary.content" type="color" value="#002c21"
+    token id="color.secondary" type="color" value="#00d3bb"
+    token id="color.secondary.content" type="color" value="#002d2c"
+    token id="color.accent" type="color" value="#979fad"
+    token id="color.accent.content" type="color" value="#030712"
+    token id="color.neutral" type="color" value="#485363"
+    token id="color.neutral.content" type="color" value="#f7f8fa"
+    token id="color.info" type="color" value="#00d0ef"
+    token id="color.info.content" type="color" value="#053344"
+    token id="color.success" type="color" value="#00d3bb"
+    token id="color.success.content" type="color" value="#002d2c"
+    token id="color.warning" type="color" value="#fdc700"
+    token id="color.warning.content" type="color" value="#411e03"
+    token id="color.error" type="color" value="#f861b4"
+    token id="color.error.content" type="color" value="#500323"
+    token id="radius.box" type="dimension" value=(px)8
+    token id="radius.field" type="dimension" value=(px)0
+    token id="radius.selector" type="dimension" value=(px)8
+    token id="border.width" type="dimension" value=(px)1
+    token id="space.unit" type="dimension" value=(px)4
+    token id="font.heading" type="fontFamily" value="Noto Sans"
+    token id="font.body" type="fontFamily" value="Noto Sans"
+    token id="size.h1" type="dimension" value=(px)64
+    token id="size.h2" type="dimension" value=(px)40
+    token id="size.body" type="dimension" value=(px)28
+    token id="size.caption" type="dimension" value=(px)18
+  }
+  styles {}
+  document id="theme.pine.preview" title="Theme pine" {
+    page id="pg" w=(px)760 h=(px)220 background=(token)"color.base.100" {
+      text id="t.title" x=(px)40 y=(px)28 w=(px)680 h=(px)52 fill=(token)"color.base.content" font-family=(token)"font.heading" font-size=(token)"size.h2" { span "pine" }
+      rect id="sw.primary" x=(px)40 y=(px)104 w=(px)160 h=(px)84 fill=(token)"color.primary" radius=(token)"radius.box"
+      rect id="sw.secondary" x=(px)220 y=(px)104 w=(px)160 h=(px)84 fill=(token)"color.secondary" radius=(token)"radius.box"
+      rect id="sw.accent" x=(px)400 y=(px)104 w=(px)160 h=(px)84 fill=(token)"color.accent" radius=(token)"radius.box"
+      rect id="sw.neutral" x=(px)580 y=(px)104 w=(px)160 h=(px)84 fill=(token)"color.neutral" radius=(token)"radius.box"
+    }
+  }
+}
