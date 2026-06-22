@@ -7,15 +7,14 @@ use zenith_core::{Diagnostic, GroupNode, Node, Point, dim_to_px};
 use crate::ir::SceneCommand;
 
 use super::super::util::{blend_mode_ir, rotation_degrees};
-use super::super::{RenderCtx, compile_node};
-use super::ContainerCtx;
+use super::super::{NodeCtx, RenderCtx, compile_node};
 
 // NOTE: compile_group → compile_node → compile_group recursion has no depth
 // guard.  Pathologically deep group trees can overflow the stack.  This is a
 // known v0 limitation; a guard will be added when nested documents are tested.
 pub(in crate::compile) fn compile_group(
     group: &GroupNode,
-    cx: ContainerCtx,
+    cx: NodeCtx,
     commands: &mut Vec<SceneCommand>,
     diagnostics: &mut Vec<Diagnostic>,
     ctx: RenderCtx,
@@ -122,21 +121,7 @@ pub(in crate::compile) fn compile_group(
         baseline_grid: ctx.baseline_grid,
     };
     for child in &group.children {
-        compile_node(
-            child,
-            cx.resolved,
-            cx.style_map,
-            cx.components,
-            cx.fonts,
-            cx.engine,
-            commands,
-            diagnostics,
-            cx.chains,
-            cx.flows,
-            cx.anchors,
-            cx.field_ctx,
-            child_ctx,
-        );
+        compile_node(child, cx, commands, diagnostics, child_ctx);
     }
 
     if has_blur {

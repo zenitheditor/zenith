@@ -18,7 +18,7 @@ use super::super::paint::resolve_property_color;
 use super::super::table_flow::TableFlowAssignments;
 use super::super::text::{MeasureEnv, measure_text_wrapped_height};
 use super::super::util::resolve_property_dimension_px;
-use super::super::{ComponentMap, RenderCtx, compile_node};
+use super::super::{ComponentMap, NodeCtx, RenderCtx, compile_node};
 
 use super::collapse::{EdgeKey, EdgeStyle, accumulate_cell_edges, resolve_border_width};
 use super::layout::{
@@ -61,6 +61,23 @@ impl<'a> TableEmitCtx<'a> {
             style_map: self.style_map,
             fonts: self.fonts,
             engine: self.engine,
+        }
+    }
+
+    /// The shared immutable node-compile context for descendant `compile_node`
+    /// calls (cell children). Carries the same nine borrows as this struct minus
+    /// the table node itself.
+    fn node_ctx(&self) -> NodeCtx<'a> {
+        NodeCtx {
+            resolved: self.resolved,
+            style_map: self.style_map,
+            components: self.components,
+            fonts: self.fonts,
+            engine: self.engine,
+            chains: self.chains,
+            flows: self.flows,
+            anchors: self.anchors,
+            field_ctx: self.field_ctx,
         }
     }
 }
@@ -404,6 +421,7 @@ fn emit_cell_children(
     ctx: RenderCtx,
 ) {
     let table = cx.table;
+    let node_cx = cx.node_ctx();
     let pad = cell_emit.pad;
     let opacity = cell_emit.opacity;
     let is_header = cell_emit.is_header;
@@ -507,21 +525,7 @@ fn emit_cell_children(
                 dy: content_y + v_offset,
                 baseline_grid: ctx.baseline_grid,
             };
-            let _ = compile_node(
-                &effective_child,
-                cx.resolved,
-                cx.style_map,
-                cx.components,
-                cx.fonts,
-                cx.engine,
-                commands,
-                diagnostics,
-                cx.chains,
-                cx.flows,
-                cx.anchors,
-                cx.field_ctx,
-                child_ctx,
-            );
+            let _ = compile_node(&effective_child, node_cx, commands, diagnostics, child_ctx);
             continue;
         }
 
@@ -543,21 +547,7 @@ fn emit_cell_children(
             dy: content_y + dy_align,
             baseline_grid: ctx.baseline_grid,
         };
-        let _ = compile_node(
-            child,
-            cx.resolved,
-            cx.style_map,
-            cx.components,
-            cx.fonts,
-            cx.engine,
-            commands,
-            diagnostics,
-            cx.chains,
-            cx.flows,
-            cx.anchors,
-            cx.field_ctx,
-            child_ctx,
-        );
+        let _ = compile_node(child, node_cx, commands, diagnostics, child_ctx);
     }
 
     commands.push(SceneCommand::PopClip);

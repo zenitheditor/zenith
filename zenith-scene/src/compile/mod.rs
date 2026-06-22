@@ -19,6 +19,7 @@ mod anchor;
 mod chain;
 mod container;
 mod crop;
+mod ctx;
 mod field;
 mod footnote;
 mod image;
@@ -33,16 +34,17 @@ mod util;
 use std::collections::BTreeMap;
 
 use zenith_core::{
-    ComponentDef, Diagnostic, Document, FontProvider, MasterDef, Node, PropertyValue,
-    ResolvedToken, Style, dim_to_px, resolve_tokens,
+    ComponentDef, Diagnostic, Document, FontProvider, MasterDef, Node, PropertyValue, Style,
+    dim_to_px, resolve_tokens,
 };
 use zenith_layout::RustybuzzEngine;
 
 use crate::ir::{Rect, Scene, SceneCommand};
 
-use anchor::{AnchorMap, build_anchor_map};
-use chain::{ChainAssignments, resolve_chains_document};
-use container::{ContainerCtx, compile_frame, compile_group, compile_instance};
+use anchor::build_anchor_map;
+use chain::resolve_chains_document;
+use container::{compile_frame, compile_group, compile_instance};
+pub(in crate::compile) use ctx::NodeCtx;
 use field::{
     FieldCtx, build_node_boxes, build_page_index_map, build_section_assignments, compute_live_area,
     resolve_field_to_text,
@@ -54,7 +56,7 @@ use leaf::{
 };
 use paint::{resolve_property_color, resolve_property_gradient};
 use table::{TableEmitCtx, compile_table};
-use table_flow::{TableFlowAssignments, resolve_table_flows};
+use table_flow::resolve_table_flows;
 use text::{TextCompileEnv, compile_code, compile_text};
 use toc::resolve_toc_to_text;
 
@@ -437,6 +439,21 @@ pub fn compile_page(doc: &Document, fonts: &dyn FontProvider, page_index: usize)
         section_name: section_assign.map(|a| a.name),
     };
 
+    // Bundle the page-wide immutable lookups once; threaded read-only into every
+    // top-level `compile_node` (master projection + page children) and cascaded
+    // unchanged down the container/table recursion.
+    let node_cx = NodeCtx {
+        resolved,
+        style_map: &style_map,
+        components: &component_map,
+        fonts,
+        engine: &engine,
+        chains: &chains,
+        flows: &flows,
+        anchors: &anchors,
+        field_ctx: &field_ctx,
+    };
+
     // ── Resolve the page baseline grid ───────────────────────────────────
     // A page may declare `baseline-grid=(px)14`. When it resolves to a positive
     // pixel value `g`, every text node on this page snaps its line baselines
@@ -477,17 +494,9 @@ pub fn compile_page(doc: &Document, fonts: &dyn FontProvider, page_index: usize)
         for node in &projected {
             compile_node(
                 node,
-                resolved,
-                &style_map,
-                &component_map,
-                fonts,
-                &engine,
+                node_cx,
                 &mut scene.commands,
                 &mut diagnostics,
-                &chains,
-                &flows,
-                &anchors,
-                &field_ctx,
                 root_ctx,
             );
         }
@@ -497,17 +506,9 @@ pub fn compile_page(doc: &Document, fonts: &dyn FontProvider, page_index: usize)
     for node in &page.children {
         compile_node(
             node,
-            resolved,
-            &style_map,
-            &component_map,
-            fonts,
-            &engine,
+            node_cx,
             &mut scene.commands,
             &mut diagnostics,
-            &chains,
-            &flows,
-            &anchors,
-            &field_ctx,
             root_ctx,
         );
     }
@@ -600,20 +601,11 @@ pub(super) fn node_role(node: &Node) -> Option<&str> {
 /// kind returns `0.0`. The absolute-positioning callers ignore this value, so
 /// command output is unchanged; only the flow-layout path in [`container`]
 /// consumes it to advance its vertical cursor.
-#[allow(clippy::too_many_arguments)]
-pub(super) fn compile_node(
+pub(in crate::compile) fn compile_node(
     node: &Node,
-    resolved: &BTreeMap<String, ResolvedToken>,
-    style_map: &BTreeMap<&str, &Style>,
-    components: &ComponentMap,
-    fonts: &dyn FontProvider,
-    engine: &RustybuzzEngine,
+    cx: NodeCtx,
     commands: &mut Vec<SceneCommand>,
     diagnostics: &mut Vec<Diagnostic>,
-    chains: &ChainAssignments,
-    flows: &TableFlowAssignments,
-    anchors: &AnchorMap,
-    field_ctx: &FieldCtx,
     ctx: RenderCtx,
 ) -> f64 {
     // Non-printing guide nodes (`role="guide"`) are excluded from render output
@@ -622,9 +614,7 @@ pub(super) fn compile_node(
         return 0.0;
     }
 
-    // Bundle the shared immutable borrows for the container compilers; the
-    // mutable sinks (`commands`/`diagnostics`) and `ctx` cascade stay explicit.
-    let container_cx = ContainerCtx {
+    let NodeCtx {
         resolved,
         style_map,
         components,
@@ -634,7 +624,7 @@ pub(super) fn compile_node(
         flows,
         anchors,
         field_ctx,
-    };
+    } = cx;
 
     match node {
         Node::Rect(rect) => {
@@ -682,15 +672,15 @@ pub(super) fn compile_node(
             0.0
         }
         Node::Frame(frame) => {
-            compile_frame(frame, container_cx, commands, diagnostics, ctx);
+            compile_frame(frame, cx, commands, diagnostics, ctx);
             0.0
         }
         Node::Group(group) => {
-            compile_group(group, container_cx, commands, diagnostics, ctx);
+            compile_group(group, cx, commands, diagnostics, ctx);
             0.0
         }
         Node::Instance(instance) => {
-            compile_instance(instance, container_cx, commands, diagnostics, ctx);
+            compile_instance(instance, cx, commands, diagnostics, ctx);
             0.0
         }
         Node::Field(field) => {

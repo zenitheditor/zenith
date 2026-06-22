@@ -8,8 +8,7 @@ use crate::ir::SceneCommand;
 use super::super::util::{
     blend_mode_ir, resolve_property_dimension_px, rotation_degrees, unsupported_unit_diag,
 };
-use super::super::{RenderCtx, compile_node, style_prop};
-use super::ContainerCtx;
+use super::super::{NodeCtx, RenderCtx, compile_node, style_prop};
 use super::flow::{node_declared_h, node_declared_w, node_skipped_in_flow, with_flow_box};
 
 /// The already-resolved frame box in page coordinates (pixels), passed to the
@@ -26,7 +25,7 @@ struct FrameBox {
 // guard, consistent with the compile_group limitation in v0.
 pub(in crate::compile) fn compile_frame(
     frame: &FrameNode,
-    cx: ContainerCtx,
+    cx: NodeCtx,
     commands: &mut Vec<SceneCommand>,
     diagnostics: &mut Vec<Diagnostic>,
     ctx: RenderCtx,
@@ -188,21 +187,7 @@ pub(in crate::compile) fn compile_frame(
         _ => {
             // Absolute (clip-only) model: children render at their own page coords.
             for child in &frame.children {
-                compile_node(
-                    child,
-                    cx.resolved,
-                    cx.style_map,
-                    cx.components,
-                    cx.fonts,
-                    cx.engine,
-                    commands,
-                    diagnostics,
-                    cx.chains,
-                    cx.flows,
-                    cx.anchors,
-                    cx.field_ctx,
-                    child_ctx,
-                );
+                compile_node(child, cx, commands, diagnostics, child_ctx);
             }
         }
     }
@@ -224,7 +209,7 @@ pub(in crate::compile) fn compile_frame(
 }
 
 /// Resolve `padding` and `gap` from a frame's style; both default to `0.0`.
-fn frame_pad_gap(frame: &FrameNode, cx: ContainerCtx) -> (f64, f64) {
+fn frame_pad_gap(frame: &FrameNode, cx: NodeCtx) -> (f64, f64) {
     let pad = resolve_property_dimension_px(
         &style_prop(&frame.style, cx.style_map, "padding").cloned(),
         cx.resolved,
@@ -250,7 +235,7 @@ fn frame_pad_gap(frame: &FrameNode, cx: ContainerCtx) -> (f64, f64) {
 fn compile_frame_flow(
     frame: &FrameNode,
     fbox: FrameBox,
-    cx: ContainerCtx,
+    cx: NodeCtx,
     commands: &mut Vec<SceneCommand>,
     diagnostics: &mut Vec<Diagnostic>,
     child_ctx: RenderCtx,
@@ -291,21 +276,7 @@ fn compile_frame_flow(
         // Inject the absolute box onto a clone; compile with the SAME ctx
         // (dx/dy unchanged — injected coords are absolute page coords).
         let positioned = with_flow_box(child, content_left, cursor_y, child_w, declared_h);
-        let measured_h = compile_node(
-            &positioned,
-            cx.resolved,
-            cx.style_map,
-            cx.components,
-            cx.fonts,
-            cx.engine,
-            commands,
-            diagnostics,
-            cx.chains,
-            cx.flows,
-            cx.anchors,
-            cx.field_ctx,
-            child_ctx,
-        );
+        let measured_h = compile_node(&positioned, cx, commands, diagnostics, child_ctx);
 
         // Advance by the declared height when present, otherwise the measured
         // intrinsic height read back from the compile.
@@ -339,7 +310,7 @@ fn compile_frame_flow(
 fn compile_frame_grid(
     frame: &FrameNode,
     fbox: FrameBox,
-    cx: ContainerCtx,
+    cx: NodeCtx,
     commands: &mut Vec<SceneCommand>,
     diagnostics: &mut Vec<Diagnostic>,
     child_ctx: RenderCtx,
@@ -387,20 +358,6 @@ fn compile_frame_grid(
         // with fit="cover" fills its cell. Compile at absolute page coords
         // (dx/dy unchanged). The measured height is ignored — cells are fixed.
         let positioned = with_flow_box(child, cell_x, cell_y, col_w, Some(row_h));
-        let _ = compile_node(
-            &positioned,
-            cx.resolved,
-            cx.style_map,
-            cx.components,
-            cx.fonts,
-            cx.engine,
-            commands,
-            diagnostics,
-            cx.chains,
-            cx.flows,
-            cx.anchors,
-            cx.field_ctx,
-            child_ctx,
-        );
+        let _ = compile_node(&positioned, cx, commands, diagnostics, child_ctx);
     }
 }

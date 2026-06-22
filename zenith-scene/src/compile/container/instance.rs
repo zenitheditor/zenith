@@ -9,8 +9,7 @@ use zenith_core::{Diagnostic, GroupNode, InstanceNode, Node, Override, PropertyV
 
 use crate::ir::SceneCommand;
 
-use super::super::RenderCtx;
-use super::ContainerCtx;
+use super::super::{NodeCtx, RenderCtx};
 use super::group::compile_group;
 
 /// Compile an `instance` node by expanding its referenced component subtree.
@@ -29,7 +28,7 @@ use super::group::compile_group;
 ///    than duplicating it; the instance itself emits no command.
 pub(in crate::compile) fn compile_instance(
     instance: &InstanceNode,
-    cx: ContainerCtx,
+    cx: NodeCtx,
     commands: &mut Vec<SceneCommand>,
     diagnostics: &mut Vec<Diagnostic>,
     ctx: RenderCtx,
