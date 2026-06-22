@@ -221,6 +221,7 @@ pub(in crate::compile) fn compile_footnote_zone(
             | Node::Table(_)
             | Node::Shape(_)
             | Node::Connector(_)
+            | Node::Pattern(_)
             | Node::Unknown(_) => None,
         })
         .collect();
@@ -403,6 +404,7 @@ fn node_bottom_box(node: &Node) -> Option<(f64, f64, f64, f64, String)> {
         | Node::Toc(_)
         | Node::Footnote(_)
         | Node::Connector(_)
+        | Node::Pattern(_)
         | Node::Unknown(_) => return None,
     };
     let xd = x.as_ref()?;

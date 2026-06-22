@@ -348,6 +348,17 @@ fn anchor_fields(node: &Node) -> Option<AnchorFields<'_>> {
             w: n.w.as_ref(),
             h: n.h.as_ref(),
         },
+        Node::Pattern(n) => AnchorFields {
+            id: n.id.as_str(),
+            anchor: n.anchor.as_deref(),
+            anchor_zone: n.anchor_zone.as_deref(),
+            anchor_sibling: n.anchor_sibling.as_deref(),
+            anchor_parent: n.anchor_parent,
+            x: n.x.as_ref(),
+            y: n.y.as_ref(),
+            w: n.w.as_ref(),
+            h: n.h.as_ref(),
+        },
         // Nodes that never carry an `anchor` property are listed explicitly so
         // that adding a future node kind forces a decision here rather than
         // silently falling through.
@@ -476,6 +487,7 @@ fn collect_anchor(
         | Node::Toc(_)
         | Node::Footnote(_)
         | Node::Table(_)
+        | Node::Pattern(_)
         | Node::Unknown(_) => {}
     }
 }

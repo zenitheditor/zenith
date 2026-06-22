@@ -5,7 +5,8 @@ use crate::ast::value::PropertyValue;
 
 use super::container::{FrameNode, GroupNode, TableNode};
 use super::leaf::{
-    CodeNode, EllipseNode, ImageNode, LineNode, PolygonNode, PolylineNode, RectNode, TextNode,
+    CodeNode, EllipseNode, ImageNode, LineNode, PatternNode, PolygonNode, PolylineNode, RectNode,
+    TextNode,
 };
 use super::special::{
     ConnectorNode, FieldNode, FootnoteNode, InstanceNode, ShapeNode, TocNode, UnknownNode,
@@ -137,4 +138,8 @@ pub enum Node {
     // lossless forward-compat round-trip. Boxing keeps `Node` compact for the
     // `large_enum_variant` lint, mirroring `Rect`/`Text`/`Table`/`Shape`.
     Unknown(Box<UnknownNode>),
+    // Boxed: `PatternNode` carries the full common-field spread plus a boxed
+    // motif. Boxing keeps `Node` compact for the `large_enum_variant` lint,
+    // mirroring `Rect`/`Text`/`Table`/`Shape`.
+    Pattern(Box<PatternNode>),
 }

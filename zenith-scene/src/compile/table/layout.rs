@@ -242,6 +242,7 @@ fn cell_natural_width(
             | Node::Table(_)
             | Node::Shape(_)
             | Node::Connector(_)
+            | Node::Pattern(_)
             | Node::Unknown(_)) => child_declared_box(other).0.unwrap_or(0.0),
         };
         widest = widest.max(w);
@@ -295,6 +296,7 @@ fn cell_content_height(
             | Node::Table(_)
             | Node::Shape(_)
             | Node::Connector(_)
+            | Node::Pattern(_)
             | Node::Unknown(_)) => child_declared_box(other).1.unwrap_or(0.0),
         };
         tallest = tallest.max(h);

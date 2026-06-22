@@ -152,6 +152,7 @@ fn collect_chains<'a>(
             | Node::Toc(_)
             | Node::Shape(_)
             | Node::Connector(_)
+            | Node::Pattern(_)
             | Node::Unknown(_) => {}
         }
     }

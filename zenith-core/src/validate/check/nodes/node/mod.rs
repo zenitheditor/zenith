@@ -15,7 +15,9 @@ mod special;
 mod text;
 
 pub(in crate::validate::check) use container::{check_frame, check_group, check_table};
-pub(in crate::validate::check) use leaf::{check_code, check_ellipse, check_line, check_rect};
+pub(in crate::validate::check) use leaf::{
+    check_code, check_ellipse, check_line, check_pattern, check_rect,
+};
 pub(in crate::validate::check) use shape::{check_connector, check_shape, check_unknown};
 pub(in crate::validate::check) use special::{
     check_field, check_footnote, check_instance, check_polygon, check_polyline, check_toc,

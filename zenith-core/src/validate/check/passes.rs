@@ -89,6 +89,9 @@ pub(in crate::validate::check) fn collect_local_ids(
             Node::Connector(n) => {
                 out.insert(n.id.clone());
             }
+            Node::Pattern(n) => {
+                out.insert(n.id.clone());
+            }
             Node::Unknown(_) => {}
         }
     }
@@ -187,6 +190,7 @@ pub(in crate::validate::check) fn check_footnote_refs(
                 | Node::Toc(_)
                 | Node::Footnote(_)
                 | Node::Connector(_)
+                | Node::Pattern(_)
                 | Node::Unknown(_) => {}
             }
         }

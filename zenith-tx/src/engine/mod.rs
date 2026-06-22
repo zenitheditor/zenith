@@ -484,6 +484,7 @@ fn node_is_locked(doc: &Document, id: &str) -> bool {
             Node::Table(n) => n.locked,
             Node::Shape(n) => n.locked,
             Node::Connector(n) => n.locked,
+            Node::Pattern(n) => n.locked,
             // A footnote has no `locked` field; treat as unlocked.
             Node::Footnote(_) => None,
             Node::Unknown(_) => None,
@@ -527,7 +528,8 @@ pub(super) fn subtree_contains(node: &Node, id: &str) -> bool {
         | Node::Footnote(_)
         | Node::Toc(_)
         | Node::Shape(_)
-        | Node::Connector(_) => false,
+        | Node::Connector(_)
+        | Node::Pattern(_) => false,
     }
 }
 
@@ -611,7 +613,8 @@ fn find_in_children_any_mut<'a>(children: &'a mut [Node], id: &str) -> Option<&'
             | Node::Footnote(_)
             | Node::Toc(_)
             | Node::Shape(_)
-            | Node::Connector(_) => None,
+            | Node::Connector(_)
+            | Node::Pattern(_) => None,
         }
     });
 
@@ -648,6 +651,7 @@ fn find_in_children_any_mut<'a>(children: &'a mut [Node], id: &str) -> Option<&'
             | Some(Node::Toc(_))
             | Some(Node::Shape(_))
             | Some(Node::Connector(_))
+            | Some(Node::Pattern(_))
             | None => None,
         },
     }
@@ -697,7 +701,8 @@ pub(super) fn find_node_shared<'a>(children: &'a [Node], id: &str) -> Option<&'a
             | Node::Footnote(_)
             | Node::Toc(_)
             | Node::Shape(_)
-            | Node::Connector(_) => {}
+            | Node::Connector(_)
+            | Node::Pattern(_) => {}
         }
     }
     None
@@ -723,6 +728,7 @@ pub(super) fn node_id_of(node: &Node) -> Option<&str> {
         Node::Table(t) => Some(&t.id),
         Node::Shape(s) => Some(&s.id),
         Node::Connector(c) => Some(&c.id),
+        Node::Pattern(p) => Some(&p.id),
         Node::Unknown(u) => u.id.as_deref(),
     }
 }
@@ -749,6 +755,7 @@ pub(super) fn node_kind_str(node: &Node) -> &'static str {
         Node::Table(_) => "table",
         Node::Shape(_) => "shape",
         Node::Connector(_) => "connector",
+        Node::Pattern(_) => "pattern",
         Node::Unknown(_) => "unknown",
     }
 }

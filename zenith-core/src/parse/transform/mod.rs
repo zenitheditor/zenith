@@ -16,6 +16,7 @@ mod document;
 mod helpers;
 mod leaf;
 mod node;
+mod pattern;
 mod special;
 mod tokens;
 

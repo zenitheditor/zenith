@@ -23,7 +23,7 @@ use crate::error::{ParseError, ParseErrorCode};
 
 use super::helpers::{
     collect_unknown_props, entry_to_dimension, entry_to_property_value, node_span,
-    optional_bool_prop, optional_dimension_prop, optional_string_prop,
+    optional_bool_prop, optional_dimension_prop, optional_i64_prop, optional_string_prop,
     optional_string_prop_aliased, optional_u32_prop, required_string_prop,
     required_string_prop_aliased, required_u32_prop,
 };
@@ -546,15 +546,8 @@ fn transform_recipe_def(node: &KdlNode) -> Result<RecipeDef, ParseError> {
     let id = required_string_prop(node, "id")?.to_owned();
     let kind = required_string_prop(node, "kind")?.to_owned();
 
-    // Optional integer seed: read KdlValue::Integer directly as i64 (not u32,
-    // since negative seeds are valid). Non-integer or absent values yield None.
-    let seed = node.get("seed").and_then(|v| {
-        if let KdlValue::Integer(n) = v {
-            i64::try_from(*n).ok()
-        } else {
-            None
-        }
-    });
+    // Optional integer seed: negative seeds are valid, so read as i64 not u32.
+    let seed = optional_i64_prop(node, "seed");
 
     let generator = optional_string_prop(node, "generator").map(str::to_owned);
     let bounds = optional_string_prop(node, "bounds").map(str::to_owned);

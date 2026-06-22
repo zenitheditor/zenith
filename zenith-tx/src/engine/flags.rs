@@ -29,6 +29,7 @@ fn node_visible_mut(node: &mut Node) -> Option<&mut Option<bool>> {
         Node::Table(n) => Some(&mut n.visible),
         Node::Shape(n) => Some(&mut n.visible),
         Node::Connector(n) => Some(&mut n.visible),
+        Node::Pattern(n) => Some(&mut n.visible),
         // A footnote has no `visible` flag (it is auto-numbered page furniture);
         // set_visible honestly surfaces tx.unsupported_property.
         Node::Footnote(_) => None,
@@ -56,6 +57,7 @@ fn node_locked_mut(node: &mut Node) -> Option<&mut Option<bool>> {
         Node::Table(n) => Some(&mut n.locked),
         Node::Shape(n) => Some(&mut n.locked),
         Node::Connector(n) => Some(&mut n.locked),
+        Node::Pattern(n) => Some(&mut n.locked),
         // A footnote has no `locked` flag.
         Node::Footnote(_) => None,
         Node::Unknown(_) => None,
@@ -83,6 +85,7 @@ fn node_points_mut(node: &mut Node) -> Option<&mut Vec<Point>> {
         | Node::Table(_)
         | Node::Shape(_)
         | Node::Connector(_)
+        | Node::Pattern(_)
         | Node::Unknown(_) => None,
     }
 }

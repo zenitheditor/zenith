@@ -89,6 +89,10 @@ fn node_set_id(node: &mut Node, new_id: String) -> bool {
             c.id = new_id;
             true
         }
+        Node::Pattern(p) => {
+            p.id = new_id;
+            true
+        }
         // Containers (and the container-ish instance) are handled by the v0
         // guard in apply_duplicate_node. An Unknown node's id lives in an
         // `Option<String>` (not the leaf `id: String` this setter writes); its
@@ -151,7 +155,8 @@ fn duplicate_in_children(children: &mut Vec<Node>, id: &str, new_id: &str) -> bo
             | Node::Footnote(_)
             | Node::Toc(_)
             | Node::Shape(_)
-            | Node::Connector(_) => Vec::new(),
+            | Node::Connector(_)
+            | Node::Pattern(_) => Vec::new(),
         };
         for list in lists {
             if duplicate_in_children(list, id, new_id) {
@@ -268,7 +273,8 @@ fn suffix_ids_in_children(children: &mut [Node], id_suffix: &str) {
             | Node::Footnote(_)
             | Node::Toc(_)
             | Node::Shape(_)
-            | Node::Connector(_) => {}
+            | Node::Connector(_)
+            | Node::Pattern(_) => {}
         }
     }
 }
@@ -304,7 +310,8 @@ fn node_set_id_any(node: &mut Node, new_id: String) {
         | Node::Toc(_)
         | Node::Footnote(_)
         | Node::Shape(_)
-        | Node::Connector(_) => {
+        | Node::Connector(_)
+        | Node::Pattern(_) => {
             node_set_id(node, new_id);
         }
         // An unknown node is id-bearing when authored with an `id` attribute;

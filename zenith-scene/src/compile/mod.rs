@@ -587,6 +587,7 @@ pub(super) fn node_role(node: &Node) -> Option<&str> {
         Node::Table(n) => n.role.as_deref(),
         Node::Shape(n) => n.role.as_deref(),
         Node::Connector(n) => n.role.as_deref(),
+        Node::Pattern(n) => n.role.as_deref(),
         Node::Unknown(_) => None,
     }
 }
@@ -814,6 +815,10 @@ pub(in crate::compile) fn compile_node(
                     ctx,
                 },
             );
+            0.0
+        }
+        Node::Pattern(_) => {
+            // pattern expansion is not yet implemented; the node renders nothing.
             0.0
         }
         Node::Footnote(_) => {

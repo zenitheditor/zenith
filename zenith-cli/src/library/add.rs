@@ -227,6 +227,9 @@ fn collect_node_ids(children: &[Node], out: &mut BTreeSet<String>) {
             Node::Connector(n) => {
                 out.insert(n.id.clone());
             }
+            Node::Pattern(n) => {
+                out.insert(n.id.clone());
+            }
             Node::Unknown(n) => {
                 if let Some(id) = &n.id {
                     out.insert(id.clone());

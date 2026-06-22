@@ -13,6 +13,7 @@ use super::leaf::{
     transform_code, transform_ellipse, transform_image, transform_line, transform_polygon,
     transform_polyline, transform_rect, transform_text,
 };
+use super::pattern::transform_pattern;
 use super::special::{
     transform_connector, transform_field, transform_footnote, transform_shape, transform_toc,
 };
@@ -36,6 +37,7 @@ pub(super) fn transform_node(node: &KdlNode) -> Result<Node, ParseError> {
         "table" => transform_table(node).map(|t| Node::Table(Box::new(t))),
         "shape" => transform_shape(node).map(|s| Node::Shape(Box::new(s))),
         "connector" => transform_connector(node).map(|c| Node::Connector(Box::new(c))),
+        "pattern" => transform_pattern(node).map(|p| Node::Pattern(Box::new(p))),
         _ => Ok(Node::Unknown(Box::new(UnknownNode {
             kind: node.name().value().to_owned(),
             id: optional_string_prop(node, "id").map(str::to_owned),

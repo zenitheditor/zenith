@@ -14,7 +14,8 @@ pub use anchor::{Anchor, anchor_xy, parse_anchor};
 pub use common::{Node, ObjectPosition, Point, TextSpan, UnknownProperty, UnknownValue};
 pub use container::{FrameNode, GroupNode, TableCell, TableColumn, TableNode, TableRow};
 pub use leaf::{
-    CodeNode, EllipseNode, ImageNode, LineNode, PolygonNode, PolylineNode, RectNode, TextNode,
+    CodeNode, EllipseNode, ImageNode, LineNode, PatternNode, PolygonNode, PolylineNode, RectNode,
+    TextNode,
 };
 pub use special::{
     ConnectorNode, FieldNode, FootnoteNode, InstanceNode, Override, ShapeNode, TocNode, UnknownNode,

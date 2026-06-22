@@ -19,8 +19,8 @@ pub(in crate::format::writer) use document::write_document_body;
 
 use container::{write_frame, write_group, write_table};
 use leaf::{
-    write_code, write_ellipse, write_image, write_line, write_polygon, write_polyline, write_rect,
-    write_text,
+    write_code, write_ellipse, write_image, write_line, write_pattern, write_polygon,
+    write_polyline, write_rect, write_text,
 };
 use special::{
     write_connector, write_field, write_footnote, write_instance, write_shape, write_toc,
@@ -48,6 +48,7 @@ pub(super) fn write_node(node: &Node, out: &mut String, depth: usize) {
         Node::Shape(s) => write_shape(s, out, depth),
         Node::Connector(c) => write_connector(c, out, depth),
         Node::Unknown(u) => write_unknown_node(u, out, depth),
+        Node::Pattern(p) => write_pattern(p, out, depth),
     }
 }
 

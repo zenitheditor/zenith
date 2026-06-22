@@ -369,6 +369,14 @@ fn build_node_entry(node: &Node) -> NodeEntry {
             locked: n.locked,
             children: vec![],
         },
+        Node::Pattern(n) => NodeEntry {
+            id: n.id.clone(),
+            kind: "pattern".into(),
+            geometry: bbox_geom(n.x.as_ref(), n.y.as_ref(), n.w.as_ref(), n.h.as_ref()),
+            visible: n.visible,
+            locked: n.locked,
+            children: vec![],
+        },
         Node::Unknown(n) => NodeEntry {
             id: n.id.clone().unwrap_or_default(),
             kind: n.kind.clone(),
@@ -440,6 +448,7 @@ fn node_id_str(node: &Node) -> &str {
         Node::Table(n) => &n.id,
         Node::Shape(n) => &n.id,
         Node::Connector(n) => &n.id,
+        Node::Pattern(n) => &n.id,
         Node::Unknown(n) => n.id.as_deref().unwrap_or(""),
     }
 }
@@ -466,7 +475,8 @@ fn node_children(node: &Node) -> Option<&[Node]> {
         | Node::Toc(_)
         | Node::Table(_)
         | Node::Shape(_)
-        | Node::Connector(_) => None,
+        | Node::Connector(_)
+        | Node::Pattern(_) => None,
     }
 }
 

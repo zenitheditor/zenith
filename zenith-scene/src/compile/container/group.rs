@@ -363,6 +363,7 @@ fn group_children_center(children: &[Node], base_dx: f64, base_dy: f64) -> Optio
             | Node::Toc(_)
             | Node::Footnote(_)
             | Node::Connector(_)
+            | Node::Pattern(_)
             | Node::Unknown(_) => {}
         }
     }

@@ -96,6 +96,7 @@ pub(super) fn child_declared_box(node: &zenith_core::Node) -> (Option<f64>, Opti
         | Node::Instance(_)
         | Node::Footnote(_)
         | Node::Connector(_)
+        | Node::Pattern(_)
         | Node::Unknown(_) => (None, None),
     }
 }

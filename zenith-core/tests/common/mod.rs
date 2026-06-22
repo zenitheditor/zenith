@@ -459,6 +459,12 @@ pub fn strip_node_span(node: &mut Node) {
         }
         Node::Shape(s) => s.source_span = None,
         Node::Connector(c) => c.source_span = None,
+        Node::Pattern(p) => {
+            p.source_span = None;
+            // The motif is part of the AST (PartialEq compares it), so its span
+            // must be stripped too for span-agnostic round-trip equality.
+            strip_node_span(&mut p.motif);
+        }
         Node::Unknown(u) => {
             u.source_span = None;
             for child in &mut u.children {

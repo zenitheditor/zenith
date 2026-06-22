@@ -24,12 +24,12 @@ pub use ast::{
     Dimension, Document, DocumentBody, EllipseNode, FieldNode, FilterKind, FilterLiteral, FilterOp,
     FootnoteNode, FrameNode, GradientKind, GradientLiteral, GradientStopRef, GroupNode, ImageNode,
     InstanceNode, LibraryDef, LineNode, MaskLiteral, MaskShape, MasterDef, Node, ObjectPosition,
-    Override, Page, Point, PolygonNode, PolylineNode, Project, PropertyValue, ProvenanceDef,
-    RecipeDef, RecipeParam, RectNode, STYLE_RECOGNIZED_KEYS, SafeZone, SafeZoneType, SectionDef,
-    ShadowLayerRef, ShadowLiteral, ShapeNode, Span, Style, StyleBlock, TableCell, TableColumn,
-    TableNode, TableRow, TextNode, TextSpan, TocNode, Token, TokenBlock, TokenLiteral, TokenType,
-    TokenValue, Unit, UnknownNode, UnknownProperty, UnknownStyleProp, UnknownValue, VariantDef,
-    VariantOverride, anchor_xy, canonicalize_style_key, dim_to_px, parse_anchor,
+    Override, Page, PatternNode, Point, PolygonNode, PolylineNode, Project, PropertyValue,
+    ProvenanceDef, RecipeDef, RecipeParam, RectNode, STYLE_RECOGNIZED_KEYS, SafeZone, SafeZoneType,
+    SectionDef, ShadowLayerRef, ShadowLiteral, ShapeNode, Span, Style, StyleBlock, TableCell,
+    TableColumn, TableNode, TableRow, TextNode, TextSpan, TocNode, Token, TokenBlock, TokenLiteral,
+    TokenType, TokenValue, Unit, UnknownNode, UnknownProperty, UnknownStyleProp, UnknownValue,
+    VariantDef, VariantOverride, anchor_xy, canonicalize_style_key, dim_to_px, parse_anchor,
 };
 pub use color::{
     Cmyk, cmyk_to_hex, cmyk_to_srgb, contrast_ratio, parse_cmyk, parse_rgb, relative_luminance,

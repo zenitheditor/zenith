@@ -236,6 +236,19 @@ pub(super) fn walk_node(
                 diagnostics,
             );
         }
+        Node::Pattern(p) => {
+            // The pattern is validated as a leaf; its motif is a template and
+            // is not walked (no id-collection / token-ref checks on the motif).
+            node::check_pattern(
+                p,
+                ctx,
+                seen_ids,
+                referenced_token_ids,
+                geom_required,
+                parent_ctx,
+                diagnostics,
+            );
+        }
         Node::Polygon(poly) => {
             node::check_polygon(poly, ctx, seen_ids, referenced_token_ids, diagnostics);
         }

@@ -189,6 +189,18 @@ pub(super) fn optional_bool_prop(node: &KdlNode, key: &str) -> Option<bool> {
     })
 }
 
+/// Extract an optional integer property as `i64` (negative values are valid,
+/// e.g. a `seed`). Non-integer or absent values yield `None`.
+pub(super) fn optional_i64_prop(node: &KdlNode, key: &str) -> Option<i64> {
+    node.get(key).and_then(|v| {
+        if let KdlValue::Integer(n) = v {
+            i64::try_from(*n).ok()
+        } else {
+            None
+        }
+    })
+}
+
 /// Extract an optional f64 property.
 pub(super) fn optional_f64_prop(node: &KdlNode, key: &str) -> Option<f64> {
     node.get(key).and_then(|v| match v {

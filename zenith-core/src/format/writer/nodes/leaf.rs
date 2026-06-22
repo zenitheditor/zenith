@@ -4,7 +4,8 @@
 use std::fmt::Write as _;
 
 use crate::ast::{
-    CodeNode, EllipseNode, ImageNode, LineNode, PolygonNode, PolylineNode, RectNode, TextNode,
+    CodeNode, EllipseNode, ImageNode, LineNode, PatternNode, PolygonNode, PolylineNode, RectNode,
+    TextNode,
 };
 
 use crate::format::writer::{
@@ -13,6 +14,7 @@ use crate::format::writer::{
 };
 
 use super::helpers::{write_points, write_span};
+use super::write_node;
 
 pub(super) fn write_rect(r: &RectNode, out: &mut String, depth: usize) {
     indent(out, depth);
@@ -422,6 +424,82 @@ pub(super) fn write_polyline(p: &PolylineNode, out: &mut String, depth: usize) {
     // Points block.
     out.push_str(" {\n");
     write_points(&p.points, out, depth + 1);
+    indent(out, depth);
+    out.push_str("}\n");
+}
+
+pub(super) fn write_pattern(p: &PatternNode, out: &mut String, depth: usize) {
+    indent(out, depth);
+    out.push_str("pattern");
+
+    // Canonical property order mirrors `rect`, with the pattern-specific props
+    // (kind, seed, count, spacing, jitter) emitted right after the common
+    // geometry/visual spread, then unknown props, then the single motif block.
+    out.push_str(" id=\"");
+    out.push_str(&p.id);
+    out.push('"');
+    out.push_str(" kind=\"");
+    out.push_str(&escape_kdl_string(&p.kind));
+    out.push('"');
+    write_opt_str(out, "name", &p.name);
+    write_opt_str(out, "role", &p.role);
+    write_opt_str(out, "anchor", &p.anchor);
+    write_opt_str(out, "anchor-zone", &p.anchor_zone);
+    write_opt_str(out, "anchor-sibling", &p.anchor_sibling);
+    write_opt_bool(out, "anchor-parent", &p.anchor_parent);
+    write_opt_dimension(out, "x", &p.x);
+    write_opt_dimension(out, "y", &p.y);
+    write_opt_dimension(out, "w", &p.w);
+    write_opt_dimension(out, "h", &p.h);
+    if let Some(n) = p.seed {
+        let _ = write!(out, " seed={n}");
+    }
+    if let Some(n) = p.count {
+        let _ = write!(out, " count={n}");
+    }
+    write_opt_dimension(out, "spacing", &p.spacing);
+    write_opt_f64(out, "jitter", &p.jitter);
+    write_opt_property_value(out, "radius", &p.radius);
+    write_opt_property_value(out, "radius-tl", &p.radius_tl);
+    write_opt_property_value(out, "radius-tr", &p.radius_tr);
+    write_opt_property_value(out, "radius-br", &p.radius_br);
+    write_opt_property_value(out, "radius-bl", &p.radius_bl);
+    write_opt_property_value(out, "fill", &p.fill);
+    write_opt_property_value(out, "stroke", &p.stroke);
+    write_opt_property_value(out, "stroke-width", &p.stroke_width);
+    write_opt_str(out, "stroke-alignment", &p.stroke_alignment);
+    write_opt_property_value(out, "stroke-dash", &p.stroke_dash);
+    write_opt_property_value(out, "stroke-gap", &p.stroke_gap);
+    write_opt_str(out, "stroke-linecap", &p.stroke_linecap);
+    write_opt_property_value(out, "border-top", &p.border_top);
+    write_opt_property_value(out, "border-bottom", &p.border_bottom);
+    write_opt_property_value(out, "border-left", &p.border_left);
+    write_opt_property_value(out, "border-right", &p.border_right);
+    write_opt_property_value(out, "border-width", &p.border_width);
+    write_opt_property_value(out, "stroke-outer", &p.stroke_outer);
+    write_opt_property_value(out, "stroke-outer-width", &p.stroke_outer_width);
+    write_opt_property_value(out, "shadow", &p.shadow);
+    write_opt_property_value(out, "filter", &p.filter);
+    write_opt_property_value(out, "mask", &p.mask);
+    write_opt_str(out, "blend-mode", &p.blend_mode);
+    write_opt_dimension(out, "blur", &p.blur);
+    write_opt_f64(out, "opacity", &p.opacity);
+    write_opt_bool(out, "visible", &p.visible);
+    write_opt_bool(out, "locked", &p.locked);
+    write_opt_dimension(out, "rotate", &p.rotate);
+    write_opt_str(out, "style", &p.style);
+
+    // Unknown properties in sorted key order (BTreeMap iteration is sorted).
+    for (key, prop) in &p.unknown_props {
+        out.push(' ');
+        out.push_str(key);
+        out.push('=');
+        out.push_str(&fmt_unknown_property(prop));
+    }
+
+    // The single motif template, emitted as the sole child of the block.
+    out.push_str(" {\n");
+    write_node(&p.motif, out, depth + 1);
     indent(out, depth);
     out.push_str("}\n");
 }

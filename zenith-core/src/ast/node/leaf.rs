@@ -1,6 +1,6 @@
 //! Leaf node structs: shapes and text-bearing primitives that have no child
 //! `Node`s of their own (rect, line, ellipse, image, text, code, polygon,
-//! polyline).
+//! polyline, pattern).
 
 use std::collections::BTreeMap;
 
@@ -8,7 +8,7 @@ use crate::ast::Span;
 use crate::ast::value::{Dimension, PropertyValue};
 use crate::tokens::SyntaxTheme;
 
-use super::common::{ObjectPosition, Point, TextSpan, UnknownProperty};
+use super::common::{Node, ObjectPosition, Point, TextSpan, UnknownProperty};
 
 /// An `image` node — a LEAF that draws a raster (PNG) asset into a declared
 /// `[x, y, w, h]` box with a `fit` mode, ALWAYS clipped to that box
@@ -541,6 +541,99 @@ pub struct PolygonNode {
     pub style: Option<String>,
     /// Ordered vertex list parsed from `point` child nodes.
     pub points: Vec<Point>,
+    /// Source declaration span, when available.
+    pub source_span: Option<Span>,
+    /// Unknown properties preserved for forward-compat.
+    pub unknown_props: BTreeMap<String, UnknownProperty>,
+}
+
+/// A `pattern` node — a compact procedural primitive.
+///
+/// A `pattern` carries one TEMPLATE child — the [`motif`](PatternNode::motif) —
+/// a single [`Node`] that will be expanded deterministically into many native
+/// shapes (a grid or scatter of the motif). The node currently renders nothing;
+/// expansion is not yet implemented. The motif is NOT an addressable/rendered
+/// node — id-collection, validation, anchor, and tx passes treat the pattern as
+/// a LEAF and never descend into the motif.
+///
+/// The common visual/geometry fields mirror [`RectNode`]; the pattern-specific
+/// fields (`kind`, `seed`, `count`, `spacing`, `jitter`) describe the expansion.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PatternNode {
+    pub id: String,
+    pub name: Option<String>,
+    pub role: Option<String>,
+    pub x: Option<Dimension>,
+    pub y: Option<Dimension>,
+    pub w: Option<Dimension>,
+    pub h: Option<Dimension>,
+    pub radius: Option<PropertyValue>,
+    /// Per-corner radius overrides (top-left, top-right, bottom-right, bottom-left).
+    pub radius_tl: Option<PropertyValue>,
+    pub radius_tr: Option<PropertyValue>,
+    pub radius_br: Option<PropertyValue>,
+    pub radius_bl: Option<PropertyValue>,
+    pub style: Option<String>,
+    pub fill: Option<PropertyValue>,
+    pub stroke: Option<PropertyValue>,
+    pub stroke_width: Option<PropertyValue>,
+    pub stroke_alignment: Option<String>,
+    /// Dash segment length in pixels; `None` = solid stroke.
+    pub stroke_dash: Option<PropertyValue>,
+    /// Gap length in pixels between dashes; defaults to `stroke_dash` when absent.
+    pub stroke_gap: Option<PropertyValue>,
+    /// Dash end-cap style: `"butt"` (default), `"round"`, or `"square"`.
+    pub stroke_linecap: Option<String>,
+    /// Per-side border color for the top edge. Token-required (color token).
+    pub border_top: Option<PropertyValue>,
+    /// Per-side border color for the bottom edge. Token-required (color token).
+    pub border_bottom: Option<PropertyValue>,
+    /// Per-side border color for the left edge. Token-required (color token).
+    pub border_left: Option<PropertyValue>,
+    /// Per-side border color for the right edge. Token-required (color token).
+    pub border_right: Option<PropertyValue>,
+    /// Shared border width for per-side borders. Token-required (dimension).
+    pub border_width: Option<PropertyValue>,
+    /// Outer stroke color: a SECOND stroke painted OUTSIDE the geometry.
+    pub stroke_outer: Option<PropertyValue>,
+    /// Outer stroke width for `stroke_outer`. Token-required (dimension).
+    pub stroke_outer_width: Option<PropertyValue>,
+    /// Drop shadow / outer glow, as a `(token)` ref to a `shadow` token.
+    pub shadow: Option<PropertyValue>,
+    /// Color/image filter ops, as a `(token)` ref to a `filter` token.
+    pub filter: Option<PropertyValue>,
+    /// Spatial coverage mask, as a `(token)` ref to a `mask` token.
+    pub mask: Option<PropertyValue>,
+    /// Compositing blend mode: `"normal"` (default) or one of the separable blends.
+    pub blend_mode: Option<String>,
+    /// Gaussian blur radius applied to the node's own rendered ink.
+    pub blur: Option<Dimension>,
+    pub opacity: Option<f64>,
+    pub visible: Option<bool>,
+    pub locked: Option<bool>,
+    pub rotate: Option<Dimension>,
+    /// Page-relative placement anchor. See [`RectNode::anchor`].
+    pub anchor: Option<String>,
+    /// Optional safe-zone reference for the anchor. See [`RectNode::anchor_zone`].
+    pub anchor_zone: Option<String>,
+    /// Optional sibling node id for sibling-relative anchor positioning.
+    pub anchor_sibling: Option<String>,
+    /// Parent-relative anchor toggle. See [`RectNode::anchor_parent`].
+    pub anchor_parent: Option<bool>,
+    /// Required: the pattern kind (`"grid"` | `"scatter"`; freeform, validated later).
+    pub kind: String,
+    /// Deterministic jitter seed.
+    pub seed: Option<i64>,
+    /// Scatter: number of instances.
+    pub count: Option<i64>,
+    /// Grid: cell spacing.
+    pub spacing: Option<Dimension>,
+    /// Positional jitter amount in `0..1`.
+    pub jitter: Option<f64>,
+    /// The single template child shape expanded by the pattern (mandatory).
+    /// This is a TEMPLATE, NOT an addressable/rendered node: id-collection,
+    /// validation, anchor, and tx passes never descend into it.
+    pub motif: Box<Node>,
     /// Source declaration span, when available.
     pub source_span: Option<Span>,
     /// Unknown properties preserved for forward-compat.

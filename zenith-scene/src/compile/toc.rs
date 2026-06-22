@@ -223,6 +223,7 @@ fn collect_entries(
             | Node::Footnote(_)
             | Node::Shape(_)
             | Node::Connector(_)
+            | Node::Pattern(_)
             | Node::Unknown(_) => {}
         }
     }

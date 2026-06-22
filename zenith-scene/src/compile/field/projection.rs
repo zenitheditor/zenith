@@ -54,6 +54,7 @@ fn index_nodes(children: &[Node], page_index_1based: usize, map: &mut BTreeMap<S
             | Node::Footnote(_)
             | Node::Shape(_)
             | Node::Connector(_)
+            | Node::Pattern(_)
             | Node::Unknown(_) => {}
         }
     }
@@ -129,6 +130,7 @@ fn collect_node_boxes(
             // A connector has no authored box (its endpoints are derived from
             // its targets' boxes), so it contributes nothing to the box map.
             | Node::Connector(_)
+            | Node::Pattern(_)
             | Node::Unknown(_) => {}
         }
     }
@@ -172,6 +174,7 @@ fn node_rect(node: &Node) -> Option<(f64, f64, f64, f64)> {
         | Node::Polyline(_)
         | Node::Footnote(_)
         | Node::Connector(_)
+        | Node::Pattern(_)
         | Node::Unknown(_) => None,
     }
 }
@@ -196,6 +199,7 @@ fn node_id(node: &Node) -> Option<&str> {
         Node::Table(n) => Some(&n.id),
         Node::Shape(n) => Some(&n.id),
         Node::Connector(n) => Some(&n.id),
+        Node::Pattern(n) => Some(&n.id),
         Node::Unknown(_) => None,
     }
 }
