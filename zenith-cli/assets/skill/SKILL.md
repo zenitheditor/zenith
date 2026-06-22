@@ -28,13 +28,18 @@ user wants the result as source they can review, version, and re-render.
 for that, then compose the resulting asset into a `.zen` document — see
 `references/images.md`); pure backend/code tasks; or editing existing raster files.
 
-## First: confirm the tool is available
+## First: confirm the tool, and let the CLI document itself
 
 ```bash
 zenith --version        # if missing, see https://github.com/farhan-syah/zenith#install
-zenith --help           # top-level command list
-zenith <command> --help # exact flags for any command
+zenith --help           # the command list + the loop, in the tool itself
+zenith <command> --help # exact flags, plus an EXAMPLE, for any command
 ```
+
+The CLI is the source of truth for *what commands exist and what flags they take* — it is
+self-documenting, so **read `zenith --help` and `zenith <command> --help` instead of guessing
+flags or relying on this file for syntax.** This skill covers what help can't: the workflow
+loop, design recipes, and the token/brand discipline below.
 
 If `zenith` is not installed, tell the user the one-line installer
 (`curl -fsSL https://raw.githubusercontent.com/farhan-syah/zenith/main/scripts/install.sh | sh`)
@@ -81,17 +86,12 @@ These make designs editable, on-brand, and reproducible — and keep the agentic
 
 ## Command surface
 
-Every command supports `--json` for machine-readable output. Run `zenith <cmd> --help` for flags.
-
-| Group        | Commands                                                                         |
-| ------------ | -------------------------------------------------------------------------------- |
-| **Author**   | `validate` · `fmt` · `tokens` · `inspect`                                        |
-| **Render**   | `render` (`--png` · `--pdf` · `--scene` · `--all-pages` · `--spread` · `--page`) |
-| **Edit**     | `tx` (typed transactions, dry-run by default; add `--apply` to write)            |
-| **Variants** | `merge` (CSV mail-merge → one render per row)                                    |
-| **Library**  | `library list` · `library add` (materialize reusable component/token packs)      |
-| **Theme**    | `theme new` (synthesize a theme pack from brand colours; APCA-safe `.content`)   |
-| **History**  | `history` · `undo` · `redo` · `version` · `restore` · `sync`                     |
+Discover commands with `zenith --help` and flags with `zenith <cmd> --help` (each includes an
+example). Every command supports `--json`. The groups, in brief: **author** (`validate`, `fmt`,
+`tokens`, `inspect`), **render** (`render`), **edit** (`tx` — typed, dry-run by default),
+**variants** (`merge` — CSV mail-merge), **library** (`library list`/`add`), **theme**
+(`theme new`), and **history** (`history`, `undo`, `redo`, `version`, `restore`, `sync`). Do not
+memorize flags from this file — ask the CLI.
 
 ## Routing — load a reference pack on demand
 
