@@ -24,9 +24,6 @@ mod pixels;
 mod raster;
 mod shadow;
 
-#[cfg(test)]
-mod tests;
-
 pub(crate) use raster::decode_raster_image as decode_raster_to_pixmap;
 
 pub use backend::TinySkiaBackend;
