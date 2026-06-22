@@ -198,7 +198,7 @@ pub(in crate::compile) fn compile_connector(
         .stroke_width
         .clone()
         .or_else(|| style_prop(&connector.style, style_map, "stroke-width").cloned());
-    let stroke_width = resolve_property_dimension_px(&sw, resolved, 1.0);
+    let stroke_width = resolve_property_dimension_px(sw.as_ref(), resolved, 1.0);
 
     // Rotation bracket: rotate about the line's bbox center, matching polyline.
     let rot = rotation_degrees(connector.rotate.as_ref());

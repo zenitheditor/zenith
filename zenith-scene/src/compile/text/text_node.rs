@@ -104,8 +104,11 @@ fn compile_text_autofit(
     // Resolve the declared node font size (px) — the search ceiling — and the
     // floor from `font-size-min`, defaulting to `(declared * 0.5).max(8.0)`.
     let declared = f64::from(font_size_px(text, env.resolved, env.style_map));
-    let floor =
-        resolve_property_dimension_px(&text.font_size_min, env.resolved, (declared * 0.5).max(8.0));
+    let floor = resolve_property_dimension_px(
+        text.font_size_min.as_ref(),
+        env.resolved,
+        (declared * 0.5).max(8.0),
+    );
     // Integer-px search bounds. Clamp the floor at/below the ceiling.
     let ceil_px = declared.floor().max(1.0) as i64;
     let floor_px = floor.floor().max(1.0).min(declared.floor().max(1.0)) as i64;
@@ -261,7 +264,7 @@ pub(in crate::compile) fn compile_text_sized(
         .as_ref()
         .and_then(|p| resolve_property_color(p, resolved, diagnostics, &text.id));
     let early_stroke_width: Option<f64> = {
-        let w = resolve_property_dimension_px(&text.stroke_width, resolved, -1.0);
+        let w = resolve_property_dimension_px(text.stroke_width.as_ref(), resolved, -1.0);
         if w > 0.0 { Some(w) } else { None }
     };
     let early_glyph_stroke: (Option<Color>, Option<f64>) = (early_stroke_color, early_stroke_width);

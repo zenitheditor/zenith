@@ -110,9 +110,9 @@ fn collect_flows<'a>(
                 if let Some(flow_id) = &t.flows
                     && let Some((w, h)) = member_box(t)
                 {
-                    let gap = resolve_property_dimension_px(&t.gap, resolved, 0.0).max(0.0);
-                    let pad =
-                        resolve_property_dimension_px(&t.cell_padding, resolved, 0.0).max(0.0);
+                    let gap = resolve_property_dimension_px(t.gap.as_ref(), resolved, 0.0).max(0.0);
+                    let pad = resolve_property_dimension_px(t.cell_padding.as_ref(), resolved, 0.0)
+                        .max(0.0);
                     members.entry(flow_id.clone()).or_default().push(Member {
                         table: t,
                         w,

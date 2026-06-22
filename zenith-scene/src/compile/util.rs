@@ -134,7 +134,7 @@ pub(super) fn px(v: f64) -> Dimension {
 /// idiomatic path is a token ref resolving to a `Dimension`. Shared by
 /// font-size and stroke-width resolution.
 pub(super) fn resolve_property_dimension_px(
-    prop: &Option<PropertyValue>,
+    prop: Option<&PropertyValue>,
     resolved: &BTreeMap<String, ResolvedToken>,
     default: f64,
 ) -> f64 {

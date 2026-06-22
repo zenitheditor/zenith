@@ -371,7 +371,11 @@ fn footnote_font_size(
         .font_size
         .clone()
         .or_else(|| style_prop(&fnote.style, style_map, "font-size").cloned());
-    resolve_property_dimension_px(&font_size_prop, resolved, DEFAULT_FOOTNOTE_FONT_SIZE)
+    resolve_property_dimension_px(
+        font_size_prop.as_ref(),
+        resolved,
+        DEFAULT_FOOTNOTE_FONT_SIZE,
+    )
 }
 
 /// The authored `(x, y, w, h, id)` of a body node with a resolvable rectangular

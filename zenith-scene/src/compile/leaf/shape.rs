@@ -180,7 +180,7 @@ pub(in crate::compile) fn compile_shape(
             .stroke_width
             .clone()
             .or_else(|| style_prop(&shape.style, style_map, "stroke-width").cloned());
-        resolve_property_dimension_px(&sw, resolved, 1.0)
+        resolve_property_dimension_px(sw.as_ref(), resolved, 1.0)
     };
 
     let bg = ShapeBg {
@@ -225,7 +225,7 @@ pub(in crate::compile) fn compile_shape(
                 .radius
                 .clone()
                 .or_else(|| style_prop(&shape.style, style_map, "radius").cloned());
-            let radius = resolve_property_dimension_px(&radius_prop, resolved, 0.0);
+            let radius = resolve_property_dimension_px(radius_prop.as_ref(), resolved, 0.0);
             emit_shape_rounded_rect(shape, resolved, diagnostics, commands, radius, bg);
         }
     }
@@ -278,7 +278,7 @@ fn emit_shape_label(
     }
 
     // Padded content box: bbox inset by `padding` (token → px; 0 when absent).
-    let pad = resolve_property_dimension_px(&shape.padding, resolved, 0.0);
+    let pad = resolve_property_dimension_px(shape.padding.as_ref(), resolved, 0.0);
     let content_x = x + pad;
     let content_y = y + pad;
     let content_w = (w - 2.0 * pad).max(0.0);

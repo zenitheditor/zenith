@@ -168,7 +168,7 @@ pub(super) fn compile_image(
     let clip_shape = match image.clip.as_deref() {
         Some("ellipse") | Some("circle") => Some(ImageClip::Ellipse),
         Some("rounded") => {
-            let radius = resolve_property_dimension_px(&image.clip_radius, resolved, 0.0);
+            let radius = resolve_property_dimension_px(image.clip_radius.as_ref(), resolved, 0.0);
             Some(ImageClip::RoundedRect { radius })
         }
         _ => None,

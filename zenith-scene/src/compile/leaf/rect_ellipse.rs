@@ -111,7 +111,7 @@ pub(in crate::compile) fn compile_rect(
         .radius
         .clone()
         .or_else(|| style_prop(&rect.style, style_map, "radius").cloned());
-    let radius = resolve_property_dimension_px(&radius_prop, resolved, 0.0);
+    let radius = resolve_property_dimension_px(radius_prop.as_ref(), resolved, 0.0);
 
     // Per-corner radius overrides. When any corner prop is present, build the
     // `radii` array (each corner falls back to uniform `radius`). When NO
@@ -122,16 +122,16 @@ pub(in crate::compile) fn compile_rect(
         || rect.radius_bl.is_some();
     let radii: Option<[f64; 4]> = if has_corner_props {
         let tl = rect.radius_tl.as_ref().map_or(radius, |p| {
-            resolve_property_dimension_px(&Some(p.clone()), resolved, radius)
+            resolve_property_dimension_px(Some(p), resolved, radius)
         });
         let tr = rect.radius_tr.as_ref().map_or(radius, |p| {
-            resolve_property_dimension_px(&Some(p.clone()), resolved, radius)
+            resolve_property_dimension_px(Some(p), resolved, radius)
         });
         let br = rect.radius_br.as_ref().map_or(radius, |p| {
-            resolve_property_dimension_px(&Some(p.clone()), resolved, radius)
+            resolve_property_dimension_px(Some(p), resolved, radius)
         });
         let bl = rect.radius_bl.as_ref().map_or(radius, |p| {
-            resolve_property_dimension_px(&Some(p.clone()), resolved, radius)
+            resolve_property_dimension_px(Some(p), resolved, radius)
         });
         Some([tl, tr, br, bl])
     } else {
@@ -263,12 +263,12 @@ pub(in crate::compile) fn compile_rect(
             .stroke_width
             .clone()
             .or_else(|| style_prop(&rect.style, style_map, "stroke-width").cloned());
-        let stroke_width = resolve_property_dimension_px(&sw, resolved, 1.0);
+        let stroke_width = resolve_property_dimension_px(sw.as_ref(), resolved, 1.0);
 
         // Resolve dashed stroke parameters.
         let (stroke_dash, stroke_gap, stroke_linecap) = resolve_dash_params(
-            &rect.stroke_dash,
-            &rect.stroke_gap,
+            rect.stroke_dash.as_ref(),
+            rect.stroke_gap.as_ref(),
             rect.stroke_linecap.as_deref(),
             resolved,
         );
@@ -369,7 +369,7 @@ pub(in crate::compile) fn compile_rect(
         && let Some(mut oc) = resolve_property_color(op, resolved, diagnostics, &rect.id)
     {
         oc.a = (oc.a as f64 * color_op).round() as u8;
-        let ow = resolve_property_dimension_px(&rect.stroke_outer_width, resolved, 1.0);
+        let ow = resolve_property_dimension_px(rect.stroke_outer_width.as_ref(), resolved, 1.0);
         let half = ow / 2.0;
         let ox = x - half;
         let oy = y - half;
@@ -431,7 +431,7 @@ pub(in crate::compile) fn compile_rect(
             .border_width
             .clone()
             .or_else(|| rect.stroke_width.clone());
-        let bw = resolve_property_dimension_px(&bw_prop, resolved, 1.0);
+        let bw = resolve_property_dimension_px(bw_prop.as_ref(), resolved, 1.0);
         for (prop, x1, y1, x2, y2) in [
             (rect.border_top.as_ref(), x, y, x + w, y),
             (rect.border_bottom.as_ref(), x, y + h, x + w, y + h),
@@ -554,11 +554,11 @@ pub(in crate::compile) fn compile_ellipse(
     // Resolve independent semi-axis overrides. When absent → `None` → byte-identical
     // to inscribed-ellipse behavior (renderer uses w/h directly).
     let rx: Option<f64> = ellipse.rx.as_ref().and_then(|p| {
-        let v = resolve_property_dimension_px(&Some(p.clone()), resolved, 0.0);
+        let v = resolve_property_dimension_px(Some(p), resolved, 0.0);
         if v > 0.0 { Some(v) } else { None }
     });
     let ry: Option<f64> = ellipse.ry.as_ref().and_then(|p| {
-        let v = resolve_property_dimension_px(&Some(p.clone()), resolved, 0.0);
+        let v = resolve_property_dimension_px(Some(p), resolved, 0.0);
         if v > 0.0 { Some(v) } else { None }
     });
 
@@ -664,12 +664,12 @@ pub(in crate::compile) fn compile_ellipse(
             .stroke_width
             .clone()
             .or_else(|| style_prop(&ellipse.style, style_map, "stroke-width").cloned());
-        let stroke_width = resolve_property_dimension_px(&sw, resolved, 1.0);
+        let stroke_width = resolve_property_dimension_px(sw.as_ref(), resolved, 1.0);
 
         // Resolve dashed stroke parameters.
         let (stroke_dash, stroke_gap, stroke_linecap) = resolve_dash_params(
-            &ellipse.stroke_dash,
-            &ellipse.stroke_gap,
+            ellipse.stroke_dash.as_ref(),
+            ellipse.stroke_gap.as_ref(),
             ellipse.stroke_linecap.as_deref(),
             resolved,
         );

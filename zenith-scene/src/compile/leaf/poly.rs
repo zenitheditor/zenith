@@ -111,12 +111,12 @@ pub(in crate::compile) fn compile_line(
         .stroke_width
         .clone()
         .or_else(|| style_prop(&line.style, style_map, "stroke-width").cloned());
-    let stroke_width: f64 = resolve_property_dimension_px(&sw, resolved, 1.0);
+    let stroke_width: f64 = resolve_property_dimension_px(sw.as_ref(), resolved, 1.0);
 
     // Resolve dashed stroke parameters.
     let (stroke_dash, stroke_gap, stroke_linecap) = resolve_dash_params(
-        &line.stroke_dash,
-        &line.stroke_gap,
+        line.stroke_dash.as_ref(),
+        line.stroke_gap.as_ref(),
         line.stroke_linecap.as_deref(),
         resolved,
     );
@@ -267,7 +267,7 @@ pub(in crate::compile) fn compile_polygon(
             .stroke_width
             .clone()
             .or_else(|| style_prop(&poly.style, style_map, "stroke-width").cloned());
-        let stroke_width = resolve_property_dimension_px(&sw, resolved, 1.0);
+        let stroke_width = resolve_property_dimension_px(sw.as_ref(), resolved, 1.0);
         // stroke-alignment: "inside"/"outside" shift the stroke off the path
         // boundary; anything else (incl. "center", None, or an invalid value)
         // falls back to Center. Validation emits the warning for bad values.
@@ -372,7 +372,7 @@ pub(in crate::compile) fn compile_polyline(
             .stroke_width
             .clone()
             .or_else(|| style_prop(&poly.style, style_map, "stroke-width").cloned());
-        let stroke_width = resolve_property_dimension_px(&sw, resolved, 1.0);
+        let stroke_width = resolve_property_dimension_px(sw.as_ref(), resolved, 1.0);
         commands.push(SceneCommand::StrokePolyline {
             points: flat_points,
             color,

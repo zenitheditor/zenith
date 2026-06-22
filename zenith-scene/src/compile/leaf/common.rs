@@ -15,8 +15,8 @@ use super::super::util::resolve_property_dimension_px;
 ///   (solid stroke, byte-identical to prior behavior).
 /// - `stroke_linecap` is `None` (Butt default) when dash is absent.
 pub(super) fn resolve_dash_params(
-    dash_prop: &Option<PropertyValue>,
-    gap_prop: &Option<PropertyValue>,
+    dash_prop: Option<&PropertyValue>,
+    gap_prop: Option<&PropertyValue>,
     linecap_str: Option<&str>,
     resolved: &BTreeMap<String, ResolvedToken>,
 ) -> (Option<f64>, Option<f64>, Option<LineCap>) {

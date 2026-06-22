@@ -33,7 +33,7 @@ pub(in crate::compile) fn font_size_px(
         .font_size
         .clone()
         .or_else(|| style_prop(&text.style, style_map, "font-size").cloned());
-    resolve_property_dimension_px(&font_size_prop, resolved, 16.0) as f32
+    resolve_property_dimension_px(font_size_prop.as_ref(), resolved, 16.0) as f32
 }
 
 /// Resolve a text node's font family list with style cascade, probing the

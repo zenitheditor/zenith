@@ -179,7 +179,8 @@ pub(in crate::compile) fn compile_code(
         .clone()
         .or_else(|| style_prop(&code.style, style_map, "font-size").cloned());
     let font_size: f32 =
-        super::super::util::resolve_property_dimension_px(&font_size_prop, resolved, 14.0) as f32;
+        super::super::util::resolve_property_dimension_px(font_size_prop.as_ref(), resolved, 14.0)
+            as f32;
 
     // Resolve font weight with style cascade; default to 400.
     // A weight of 700 causes the provider to select Noto Sans Mono Bold

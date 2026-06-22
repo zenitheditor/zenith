@@ -193,7 +193,8 @@ fn resolve_chain_style(
         .font_size
         .clone()
         .or_else(|| style_prop(&source.style, style_map, "font-size").cloned());
-    let font_size: f32 = resolve_property_dimension_px(&font_size_prop, resolved, 16.0) as f32;
+    let font_size: f32 =
+        resolve_property_dimension_px(font_size_prop.as_ref(), resolved, 16.0) as f32;
 
     // Node-level fill/weight fallbacks (span override → node → style → default).
     let node_fill_prop: Option<&PropertyValue> = source

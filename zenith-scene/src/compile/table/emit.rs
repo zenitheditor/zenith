@@ -151,8 +151,8 @@ pub(in crate::compile) fn compile_table(
     let origin_y = ctx.dy + table_y;
 
     // ── Resolve gap + cell padding (token or literal), default 0 ─────────
-    let gap = resolve_property_dimension_px(&table.gap, cx.resolved, 0.0).max(0.0);
-    let pad = resolve_property_dimension_px(&table.cell_padding, cx.resolved, 0.0).max(0.0);
+    let gap = resolve_property_dimension_px(table.gap.as_ref(), cx.resolved, 0.0).max(0.0);
+    let pad = resolve_property_dimension_px(table.cell_padding.as_ref(), cx.resolved, 0.0).max(0.0);
 
     // Opacity cascade.
     let opacity = (table.opacity.unwrap_or(1.0).clamp(0.0, 1.0)) * ctx.opacity;

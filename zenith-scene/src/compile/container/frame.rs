@@ -211,12 +211,12 @@ pub(in crate::compile) fn compile_frame(
 /// Resolve `padding` and `gap` from a frame's style; both default to `0.0`.
 fn frame_pad_gap(frame: &FrameNode, cx: NodeCtx) -> (f64, f64) {
     let pad = resolve_property_dimension_px(
-        &style_prop(&frame.style, cx.style_map, "padding").cloned(),
+        style_prop(&frame.style, cx.style_map, "padding"),
         cx.resolved,
         0.0,
     );
     let gap = resolve_property_dimension_px(
-        &style_prop(&frame.style, cx.style_map, "gap").cloned(),
+        style_prop(&frame.style, cx.style_map, "gap"),
         cx.resolved,
         0.0,
     );
