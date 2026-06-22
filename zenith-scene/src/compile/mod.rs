@@ -42,7 +42,7 @@ use crate::ir::{Rect, Scene, SceneCommand};
 
 use anchor::{AnchorMap, build_anchor_map};
 use chain::{ChainAssignments, resolve_chains_document};
-use container::{compile_frame, compile_group, compile_instance};
+use container::{ContainerCtx, compile_frame, compile_group, compile_instance};
 use field::{
     FieldCtx, build_node_boxes, build_page_index_map, build_section_assignments, compute_live_area,
     resolve_field_to_text,
@@ -620,6 +620,20 @@ pub(super) fn compile_node(
         return 0.0;
     }
 
+    // Bundle the shared immutable borrows for the container compilers; the
+    // mutable sinks (`commands`/`diagnostics`) and `ctx` cascade stay explicit.
+    let container_cx = ContainerCtx {
+        resolved,
+        style_map,
+        components,
+        fonts,
+        engine,
+        chains,
+        flows,
+        anchors,
+        field_ctx,
+    };
+
     match node {
         Node::Rect(rect) => {
             compile_rect(
@@ -666,57 +680,15 @@ pub(super) fn compile_node(
             0.0
         }
         Node::Frame(frame) => {
-            compile_frame(
-                frame,
-                resolved,
-                style_map,
-                components,
-                fonts,
-                engine,
-                commands,
-                diagnostics,
-                chains,
-                flows,
-                anchors,
-                field_ctx,
-                ctx,
-            );
+            compile_frame(frame, container_cx, commands, diagnostics, ctx);
             0.0
         }
         Node::Group(group) => {
-            compile_group(
-                group,
-                resolved,
-                style_map,
-                components,
-                fonts,
-                engine,
-                commands,
-                diagnostics,
-                chains,
-                flows,
-                anchors,
-                field_ctx,
-                ctx,
-            );
+            compile_group(group, container_cx, commands, diagnostics, ctx);
             0.0
         }
         Node::Instance(instance) => {
-            compile_instance(
-                instance,
-                resolved,
-                style_map,
-                components,
-                fonts,
-                engine,
-                commands,
-                diagnostics,
-                chains,
-                flows,
-                anchors,
-                field_ctx,
-                ctx,
-            );
+            compile_instance(instance, container_cx, commands, diagnostics, ctx);
             0.0
         }
         Node::Field(field) => {
