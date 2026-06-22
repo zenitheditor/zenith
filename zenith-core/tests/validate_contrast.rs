@@ -11,7 +11,7 @@ mod common;
 use common::*;
 
 // ══════════════════════════════════════════════════════════════════════
-// WCAG 2.2 contrast advisory tests
+// WCAG 3 (APCA) contrast advisory tests
 // ══════════════════════════════════════════════════════════════════════
 
 /// Build a dimension token in pt.
@@ -116,7 +116,7 @@ fn text_with_fill_and_size(
     }))
 }
 
-/// Light gray (#aaaaaa) text on white page at 16 px → contrast ~2.32:1 < 4.5
+/// Light gray (#aaaaaa) text on white page at 16 px → APCA Lc ~46 < 60
 /// → `contrast.low` warning.
 #[test]
 fn low_contrast_normal_text_warns() {
@@ -151,7 +151,7 @@ fn low_contrast_normal_text_warns() {
     assert!(!report.has_errors(), "contrast.low must not be an error");
 }
 
-/// Black (#000000) text on white page → contrast 21:1 → NO warning.
+/// Black (#000000) text on white page → APCA Lc ~106 → NO warning.
 #[test]
 fn high_contrast_text_no_warning() {
     let doc = doc_with(
@@ -179,8 +179,8 @@ fn high_contrast_text_no_warning() {
 }
 
 /// Large text (20 pt ≈ 26.67 px, which is >= 24 px) with a mid-contrast
-/// color (#777777 ≈ 4.48:1) passes the large-text threshold (3.0) but would
-/// fail the normal threshold (4.5) → NO warning.
+/// color (#777777, APCA Lc ~71 on white) clears the large-text minimum
+/// (Lc 45) → NO warning.
 ///
 /// Note: 20 pt × (4/3) = 26.67 px, which exceeds the 24 px large-text cut-off.
 #[test]
@@ -188,7 +188,7 @@ fn large_text_passes_lower_threshold_no_warning() {
     let doc = doc_with(
         vec![
             color_token_hex("color.bg", "#ffffff"),
-            color_token_hex("color.text", "#777777"), // ~4.48:1 — passes 3.0, fails 4.5
+            color_token_hex("color.text", "#777777"), // APCA Lc ~71 on white — clears large min (45)
             dim_token_pt("size.large", 20.0),         // 20pt ≈ 26.67px >= 24px → large
         ],
         vec![page_with_bg(
@@ -205,13 +205,13 @@ fn large_text_passes_lower_threshold_no_warning() {
     let report = validate(&doc);
     assert!(
         !has_code(&report, "contrast.low"),
-        "large text at ~4.48:1 should pass the 3.0 threshold; codes: {:?}",
+        "large text (#777 on white, Lc ~71) should pass the 45 large-text threshold; codes: {:?}",
         codes(&report)
     );
 }
 
 /// Small bold text (18 pt ≈ 24 px, which is exactly 24 px → large) with
-/// mid-contrast (#777777 ≈ 4.48:1) → passes 3.0 → NO warning.
+/// mid-contrast (#777777, APCA Lc ~71 on white) → clears large min (45) → NO warning.
 #[test]
 fn bold_large_text_passes_lower_threshold() {
     let doc = doc_with(
@@ -235,7 +235,7 @@ fn bold_large_text_passes_lower_threshold() {
     let report = validate(&doc);
     assert!(
         !has_code(&report, "contrast.low"),
-        "18pt bold (large text) at ~4.48:1 should pass 3.0; codes: {:?}",
+        "18pt bold (large text, Lc ~71) should clear the 45 large-text threshold; codes: {:?}",
         codes(&report)
     );
 }

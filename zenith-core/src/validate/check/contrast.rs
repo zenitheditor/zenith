@@ -1,17 +1,17 @@
-//! WCAG 2.2 contrast advisory check.
+//! WCAG 3 (APCA) contrast advisory check.
 //!
 //! Compares text-node fills against the colour they visually sit ON — the
 //! topmost preceding sibling shape (rect / ellipse / frame) that fully
 //! contains the text and has an opaque fill, falling back to the page
-//! background colour — and emits a `contrast.low` warning when the ratio is
-//! below the WCAG AA threshold.
+//! background colour — and emits a `contrast.low` warning when the APCA
+//! lightness contrast (`Lc`) is below the WCAG 3 minimum.
 
 use std::collections::BTreeMap;
 
 use crate::ast::node::Node;
 use crate::ast::style::Style;
 use crate::ast::value::{PropertyValue, dim_to_px};
-use crate::color::{contrast_ratio, parse_rgb};
+use crate::color::{apca_lc, parse_rgb};
 use crate::diagnostics::Diagnostic;
 use crate::tokens::{ResolvedToken, ResolvedValue};
 
@@ -269,19 +269,21 @@ pub(super) fn check_text_contrast(
                 })
                 .unwrap_or(400);
 
-            // WCAG AA large text: >= 24 px OR >= 18.66 px bold (>= 700).
+            // Large text needs less contrast: >= 24 px OR >= 18.66 px bold.
+            // APCA Lc minimums: 60 for body/normal text, 45 for large/bold.
             let is_large = size_px >= 24.0 || (size_px >= 18.66 && weight >= 700);
-            let threshold = if is_large { 3.0_f64 } else { 4.5_f64 };
+            let threshold = if is_large { 45.0_f64 } else { 60.0_f64 };
 
-            let ratio = contrast_ratio(fg_rgb, bg_rgb);
+            // APCA is polarity-aware; the readability bar is on the magnitude.
+            let lc = apca_lc(fg_rgb, bg_rgb).abs();
 
-            if ratio < threshold {
+            if lc < threshold {
                 diagnostics.push(Diagnostic::warning(
                     "contrast.low",
                     format!(
-                        "text '{}': contrast ratio {:.2}:1 of fill on {} \
-                         is below WCAG AA ({:.1}:1)",
-                        t.id, ratio, bg_source, threshold
+                        "text '{}': APCA contrast Lc {:.1} of fill on {} \
+                         is below the WCAG 3 minimum (Lc {:.0})",
+                        t.id, lc, bg_source, threshold
                     ),
                     t.source_span,
                     Some(t.id.clone()),
