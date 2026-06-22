@@ -13,6 +13,7 @@ pub mod render;
 pub mod tokens;
 pub mod tx;
 pub mod validate;
+pub mod variant;
 
 // ── Shared helpers ────────────────────────────────────────────────────────────
 
