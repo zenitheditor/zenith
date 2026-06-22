@@ -6,7 +6,7 @@
 //! ([`collect_all_ids`], [`unique_id`]), and the dedup-with-conflict-warning
 //! copiers for tokens / styles / assets.
 
-use std::collections::HashSet;
+use std::collections::BTreeSet;
 
 use zenith_core::{
     AssetDecl, Dimension, Document, KdlAdapter, KdlSource, Node, Style, Token, Unit,
@@ -166,7 +166,7 @@ pub(crate) fn target_component_id(pkg_id: &str, item: &str) -> String {
 /// cells do). Mirrors the validator's `collect_local_ids` but ALSO captures the
 /// `Unknown` node id when present (forward-compat: an unknown node may still be
 /// addressable), so dedup never accidentally reuses a taken id.
-fn collect_node_ids(children: &[Node], out: &mut HashSet<String>) {
+fn collect_node_ids(children: &[Node], out: &mut BTreeSet<String>) {
     for child in children {
         match child {
             Node::Rect(n) => {
@@ -244,8 +244,8 @@ fn collect_node_ids(children: &[Node], out: &mut HashSet<String>) {
 /// masters, sections, provenance, pages, the document id, and the project id).
 ///
 /// Deterministic and side-effect-free.
-pub fn collect_all_ids(doc: &Document) -> HashSet<String> {
-    let mut ids = HashSet::new();
+pub fn collect_all_ids(doc: &Document) -> BTreeSet<String> {
+    let mut ids = BTreeSet::new();
 
     if let Some(project) = &doc.project {
         ids.insert(project.id.clone());
@@ -289,7 +289,7 @@ pub fn collect_all_ids(doc: &Document) -> HashSet<String> {
 
 /// Deterministically pick `base`, or `base.1`, `base.2`, … — the first variant
 /// not present in `taken`.
-pub(super) fn unique_id(base: &str, taken: &HashSet<String>) -> String {
+pub(super) fn unique_id(base: &str, taken: &BTreeSet<String>) -> String {
     if !taken.contains(base) {
         return base.to_owned();
     }

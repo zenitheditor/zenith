@@ -7,7 +7,7 @@
 //! the container (frame/group/table/unknown) recursion. All per-kind
 //! validation logic lives in the [`node`] submodules.
 
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::ast::node::Node;
 use crate::diagnostics::Diagnostic;
@@ -23,11 +23,11 @@ pub(super) use node::shared::{node_bbox, node_id_and_span, node_role};
 #[derive(Clone, Copy)]
 pub(super) struct WalkCtx<'a> {
     pub(super) resolved_tokens: &'a BTreeMap<String, ResolvedToken>,
-    pub(super) declared_asset_ids: &'a HashSet<String>,
-    pub(super) declared_style_ids: &'a HashSet<String>,
-    pub(super) declared_component_ids: &'a HashSet<String>,
-    pub(super) component_local_ids: &'a BTreeMap<String, HashSet<String>>,
-    pub(super) all_node_ids: &'a HashSet<String>,
+    pub(super) declared_asset_ids: &'a BTreeSet<String>,
+    pub(super) declared_style_ids: &'a BTreeSet<String>,
+    pub(super) declared_component_ids: &'a BTreeSet<String>,
+    pub(super) component_local_ids: &'a BTreeMap<String, BTreeSet<String>>,
+    pub(super) all_node_ids: &'a BTreeSet<String>,
     pub(super) zone_ids: &'a BTreeSet<&'a str>,
 }
 
@@ -55,8 +55,8 @@ pub(super) struct WalkPos {
 pub(super) fn walk_node(
     node: &Node,
     ctx: WalkCtx,
-    seen_ids: &mut HashSet<String>,
-    referenced_token_ids: &mut HashSet<String>,
+    seen_ids: &mut BTreeSet<String>,
+    referenced_token_ids: &mut BTreeSet<String>,
     pos: WalkPos,
     diagnostics: &mut Vec<Diagnostic>,
 ) {

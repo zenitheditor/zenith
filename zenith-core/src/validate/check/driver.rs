@@ -7,7 +7,7 @@
 //! block). The check module root re-exports [`validate`] (and `register_id`,
 //! which the node submodules call) as part of the public surface.
 
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::ast::document::Document;
 use crate::ast::style::Style;
@@ -132,54 +132,54 @@ pub fn validate(doc: &Document) -> ValidationReport {
     // ── Step 2: collect all IDs and gather referenced token ids ──────────
     // `seen_ids` accumulates every id encountered across the whole document.
     // When we encounter a duplicate we push `id.duplicate`.
-    let mut seen_ids: HashSet<String> = HashSet::new();
-    let mut referenced_token_ids: HashSet<String> = HashSet::new();
+    let mut seen_ids: BTreeSet<String> = BTreeSet::new();
+    let mut referenced_token_ids: BTreeSet<String> = BTreeSet::new();
 
     // Declared asset ids, collected once so the node walk can validate that
     // every `image.asset` reference points at a declared `AssetDecl.id`.
-    let declared_asset_ids: HashSet<String> =
+    let declared_asset_ids: BTreeSet<String> =
         doc.assets.assets.iter().map(|d| d.id.clone()).collect();
 
     // Declared style ids, collected once so the node walk can validate that
     // every `style="..."` node attribute references a declared style.
-    let declared_style_ids: HashSet<String> =
+    let declared_style_ids: BTreeSet<String> =
         doc.styles.styles.iter().map(|s| s.id.clone()).collect();
 
     // Declared component ids, collected once so the node walk can validate that
     // every `instance component="..."` references a declared component.
-    let declared_component_ids: HashSet<String> =
+    let declared_component_ids: BTreeSet<String> =
         doc.components.iter().map(|c| c.id.clone()).collect();
 
     // Per-component LOCAL descendant id sets, used to validate that an override
     // `ref` targets a real descendant. Built once before the page walk. Ordered
     // for determinism. A component appears once; a duplicate component id is
     // diagnosed separately (id.duplicate) and the first wins in this map.
-    let mut component_local_ids: BTreeMap<String, HashSet<String>> = BTreeMap::new();
+    let mut component_local_ids: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
     for comp in &doc.components {
-        let mut local: HashSet<String> = HashSet::new();
+        let mut local: BTreeSet<String> = BTreeSet::new();
         collect_local_ids(&comp.children, &mut local);
         component_local_ids.entry(comp.id.clone()).or_insert(local);
     }
 
     // Declared master ids, collected once so the page walk can validate that
     // every `page master="..."` references a declared master.
-    let declared_master_ids: HashSet<String> = doc.masters.iter().map(|m| m.id.clone()).collect();
+    let declared_master_ids: BTreeSet<String> = doc.masters.iter().map(|m| m.id.clone()).collect();
 
     // Declared library ids, collected once so each provenance `origin` record can
     // validate that its `library="..."` references a library declared in the
     // `libraries` block.
-    let declared_library_ids: HashSet<String> =
+    let declared_library_ids: BTreeSet<String> =
         doc.libraries.iter().map(|l| l.id.clone()).collect();
 
     // Declared token ids, collected once so a provenance `node` target may also
     // reference a local TOKEN (a token imported from a library), not just a node.
-    let declared_token_ids: HashSet<String> =
+    let declared_token_ids: BTreeSet<String> =
         doc.tokens.tokens.iter().map(|t| t.id.clone()).collect();
 
     // Document-wide set of every node id (across pages, masters, and components),
     // used to resolve a `page-ref` field's `target`. Ordered iteration is not
     // required (membership only); collected once before the walk.
-    let mut all_node_ids: HashSet<String> = HashSet::new();
+    let mut all_node_ids: BTreeSet<String> = BTreeSet::new();
     for page in &doc.body.pages {
         collect_local_ids(&page.children, &mut all_node_ids);
     }
@@ -242,7 +242,7 @@ pub fn validate(doc: &Document) -> ValidationReport {
     for comp in &doc.components {
         register_id(&comp.id, &mut seen_ids, &mut diagnostics);
 
-        let mut local_seen: HashSet<String> = HashSet::new();
+        let mut local_seen: BTreeSet<String> = BTreeSet::new();
         // Components are not page-children: no safe-zones apply.
         let no_zones: BTreeSet<&str> = BTreeSet::new();
         let ctx = WalkCtx {
@@ -280,7 +280,7 @@ pub fn validate(doc: &Document) -> ValidationReport {
     for master in &doc.masters {
         register_id(&master.id, &mut seen_ids, &mut diagnostics);
 
-        let mut local_seen: HashSet<String> = HashSet::new();
+        let mut local_seen: BTreeSet<String> = BTreeSet::new();
         // Masters are not page-children: no safe-zones apply.
         let no_zones: BTreeSet<&str> = BTreeSet::new();
         let ctx = WalkCtx {
@@ -376,7 +376,7 @@ pub fn validate(doc: &Document) -> ValidationReport {
     // (`all_node_ids` is fully built above, before the page walk;
     // `declared_token_ids`/`declared_library_ids`/`declared_action_ids` are
     // collected alongside it).
-    let declared_action_ids: HashSet<String> = doc.actions.iter().map(|a| a.id.clone()).collect();
+    let declared_action_ids: BTreeSet<String> = doc.actions.iter().map(|a| a.id.clone()).collect();
     for prov in &doc.provenance {
         register_id(&prov.id, &mut seen_ids, &mut diagnostics);
         validate_provenance_def(

@@ -5,7 +5,7 @@
 //! the dispatcher [`super::super::nodes::walk_node`] so traversal/emit order is
 //! unchanged.
 
-use std::collections::{BTreeSet, HashSet};
+use std::collections::BTreeSet;
 
 use crate::ast::node::{FrameNode, GroupNode, TableNode};
 use crate::diagnostics::Diagnostic;
@@ -18,7 +18,7 @@ use crate::validate::check::visual::{VisualExpect, check_visual_prop};
 pub(in crate::validate::check) fn check_frame(
     f: &FrameNode,
     ctx: WalkCtx,
-    seen_ids: &mut HashSet<String>,
+    seen_ids: &mut BTreeSet<String>,
     geom_required: bool,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
@@ -138,7 +138,7 @@ pub(in crate::validate::check) fn check_frame(
 pub(in crate::validate::check) fn check_group(
     g: &GroupNode,
     ctx: WalkCtx,
-    seen_ids: &mut HashSet<String>,
+    seen_ids: &mut BTreeSet<String>,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
     let WalkCtx {
@@ -208,8 +208,8 @@ pub(in crate::validate::check) fn check_group(
 pub(in crate::validate::check) fn check_table(
     t: &TableNode,
     ctx: WalkCtx,
-    seen_ids: &mut HashSet<String>,
-    referenced_token_ids: &mut HashSet<String>,
+    seen_ids: &mut BTreeSet<String>,
+    referenced_token_ids: &mut BTreeSet<String>,
     geom_required: bool,
     diagnostics: &mut Vec<Diagnostic>,
 ) {

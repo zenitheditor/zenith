@@ -2,7 +2,7 @@
 //! and AABB computation, role/id extraction, and the anchor/dimension/style-ref
 //! validators reused by every per-kind `check_*` function.
 
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::ast::node::{Node, TextSpan, parse_anchor};
 use crate::ast::value::{Dimension, Unit, dim_to_px};
@@ -406,7 +406,7 @@ pub(super) fn check_optional_dim(
 pub(super) fn check_spans(
     node_id: &str,
     spans: &[TextSpan],
-    referenced_token_ids: &mut HashSet<String>,
+    referenced_token_ids: &mut BTreeSet<String>,
     resolved_tokens: &BTreeMap<String, ResolvedToken>,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
@@ -438,7 +438,7 @@ pub(super) fn check_spans(
 pub(super) fn check_style_ref(
     node_id: &str,
     style_opt: Option<&str>,
-    declared_style_ids: &HashSet<String>,
+    declared_style_ids: &BTreeSet<String>,
     span: Option<crate::ast::Span>,
     diagnostics: &mut Vec<Diagnostic>,
 ) {

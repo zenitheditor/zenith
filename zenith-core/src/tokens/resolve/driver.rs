@@ -15,7 +15,7 @@
 //!    `token.cyclic_reference`, and `token.type_mismatch` as appropriate.
 //! 4. Populate `resolved` only for tokens that passed all checks.
 
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::ast::token::{Token, TokenBlock, TokenLiteral, TokenType, TokenValue};
 use crate::diagnostics::Diagnostic;
@@ -33,9 +33,9 @@ pub fn resolve_tokens(block: &TokenBlock) -> TokenResolution {
 
     // ── Step 1: build index, detecting duplicate IDs ─────────────────────
     // `index` maps id → token reference (first definition wins).
-    let mut index: HashMap<&str, &Token> = HashMap::new();
+    let mut index: BTreeMap<&str, &Token> = BTreeMap::new();
     // Track which IDs have been seen for deterministic duplicate detection.
-    let mut seen_ids: HashSet<&str> = HashSet::new();
+    let mut seen_ids: BTreeSet<&str> = BTreeSet::new();
 
     for token in &block.tokens {
         if seen_ids.contains(token.id.as_str()) {
@@ -269,11 +269,11 @@ pub fn resolve_tokens(block: &TokenBlock) -> TokenResolution {
 /// so it is safe against arbitrarily long or cyclic chains.
 fn resolve_token_to_literal<'a>(
     start: &'a Token,
-    index: &HashMap<&str, &'a Token>,
+    index: &BTreeMap<&str, &'a Token>,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<(TokenLiteral, TokenType)> {
     // visited tracks IDs we've stepped through, used for cycle detection.
-    let mut visited: HashSet<&str> = HashSet::new();
+    let mut visited: BTreeSet<&str> = BTreeSet::new();
     let mut current: &Token = start;
 
     loop {

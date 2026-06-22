@@ -4,7 +4,7 @@
 //! id; the dispatcher in [`super::super::nodes::walk_node`] performs the child
 //! recursion so traversal order is unchanged.
 
-use std::collections::HashSet;
+use std::collections::BTreeSet;
 
 use crate::ast::node::{ConnectorNode, ShapeNode, UnknownNode};
 use crate::diagnostics::Diagnostic;
@@ -17,8 +17,8 @@ use crate::validate::check::visual::{VisualExpect, check_visual_prop};
 pub(in crate::validate::check) fn check_shape(
     s: &ShapeNode,
     ctx: WalkCtx,
-    seen_ids: &mut HashSet<String>,
-    referenced_token_ids: &mut HashSet<String>,
+    seen_ids: &mut BTreeSet<String>,
+    referenced_token_ids: &mut BTreeSet<String>,
     geom_required: bool,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
@@ -221,8 +221,8 @@ pub(in crate::validate::check) fn check_shape(
 pub(in crate::validate::check) fn check_connector(
     c: &ConnectorNode,
     ctx: WalkCtx,
-    seen_ids: &mut HashSet<String>,
-    referenced_token_ids: &mut HashSet<String>,
+    seen_ids: &mut BTreeSet<String>,
+    referenced_token_ids: &mut BTreeSet<String>,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
     let WalkCtx {
@@ -376,7 +376,7 @@ pub(in crate::validate::check) fn check_connector(
 /// node's children are walked in the same position as before.
 pub(in crate::validate::check) fn check_unknown(
     u: &UnknownNode,
-    seen_ids: &mut HashSet<String>,
+    seen_ids: &mut BTreeSet<String>,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
     diagnostics.push(Diagnostic::warning(

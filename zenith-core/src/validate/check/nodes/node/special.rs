@@ -2,7 +2,7 @@
 //! helpers: `polygon`, `polyline`, `instance`, `field`, `toc`, and `footnote`.
 //! None of these recurse into laid-out children at this site.
 
-use std::collections::HashSet;
+use std::collections::BTreeSet;
 
 use crate::ast::node::{FieldNode, FootnoteNode, InstanceNode, PolygonNode, PolylineNode, TocNode};
 use crate::diagnostics::Diagnostic;
@@ -17,8 +17,8 @@ use crate::validate::check::visual::{VisualExpect, check_visual_prop};
 pub(in crate::validate::check) fn check_polygon(
     poly: &PolygonNode,
     ctx: WalkCtx,
-    seen_ids: &mut HashSet<String>,
-    referenced_token_ids: &mut HashSet<String>,
+    seen_ids: &mut BTreeSet<String>,
+    referenced_token_ids: &mut BTreeSet<String>,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
     let WalkCtx {
@@ -151,8 +151,8 @@ pub(in crate::validate::check) fn check_polygon(
 pub(in crate::validate::check) fn check_polyline(
     poly: &PolylineNode,
     ctx: WalkCtx,
-    seen_ids: &mut HashSet<String>,
-    referenced_token_ids: &mut HashSet<String>,
+    seen_ids: &mut BTreeSet<String>,
+    referenced_token_ids: &mut BTreeSet<String>,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
     let WalkCtx {
@@ -282,8 +282,8 @@ pub(in crate::validate::check) fn check_polyline(
 pub(in crate::validate::check) fn check_instance(
     inst: &InstanceNode,
     ctx: WalkCtx,
-    seen_ids: &mut HashSet<String>,
-    referenced_token_ids: &mut HashSet<String>,
+    seen_ids: &mut BTreeSet<String>,
+    referenced_token_ids: &mut BTreeSet<String>,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
     let WalkCtx {
@@ -398,8 +398,8 @@ const KNOWN_FIELD_TYPES: &[&str] = &[
 pub(in crate::validate::check) fn check_field(
     field: &FieldNode,
     ctx: WalkCtx,
-    seen_ids: &mut HashSet<String>,
-    referenced_token_ids: &mut HashSet<String>,
+    seen_ids: &mut BTreeSet<String>,
+    referenced_token_ids: &mut BTreeSet<String>,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
     let WalkCtx {
@@ -520,8 +520,8 @@ pub(in crate::validate::check) fn check_field(
 pub(in crate::validate::check) fn check_toc(
     toc: &TocNode,
     ctx: WalkCtx,
-    seen_ids: &mut HashSet<String>,
-    referenced_token_ids: &mut HashSet<String>,
+    seen_ids: &mut BTreeSet<String>,
+    referenced_token_ids: &mut BTreeSet<String>,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
     let WalkCtx {
@@ -617,8 +617,8 @@ pub(in crate::validate::check) fn check_toc(
 pub(in crate::validate::check) fn check_footnote(
     footnote: &FootnoteNode,
     ctx: WalkCtx,
-    seen_ids: &mut HashSet<String>,
-    referenced_token_ids: &mut HashSet<String>,
+    seen_ids: &mut BTreeSet<String>,
+    referenced_token_ids: &mut BTreeSet<String>,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
     let WalkCtx {

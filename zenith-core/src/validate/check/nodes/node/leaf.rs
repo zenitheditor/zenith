@@ -2,7 +2,7 @@
 //! `code`. Each mirrors the shape of the other `check_*` helpers and pushes
 //! diagnostics in the same order the original inline match arms did.
 
-use std::collections::HashSet;
+use std::collections::BTreeSet;
 
 use crate::ast::node::{CodeNode, EllipseNode, LineNode, RectNode};
 use crate::ast::value::PropertyValue;
@@ -16,8 +16,8 @@ use crate::validate::check::visual::{VisualExpect, check_visual_prop};
 pub(in crate::validate::check) fn check_rect(
     r: &RectNode,
     ctx: WalkCtx,
-    seen_ids: &mut HashSet<String>,
-    referenced_token_ids: &mut HashSet<String>,
+    seen_ids: &mut BTreeSet<String>,
+    referenced_token_ids: &mut BTreeSet<String>,
     geom_required: bool,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
@@ -299,8 +299,8 @@ pub(in crate::validate::check) fn check_rect(
 pub(in crate::validate::check) fn check_ellipse(
     e: &EllipseNode,
     ctx: WalkCtx,
-    seen_ids: &mut HashSet<String>,
-    referenced_token_ids: &mut HashSet<String>,
+    seen_ids: &mut BTreeSet<String>,
+    referenced_token_ids: &mut BTreeSet<String>,
     geom_required: bool,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
@@ -534,8 +534,8 @@ pub(in crate::validate::check) fn check_ellipse(
 pub(in crate::validate::check) fn check_line(
     l: &LineNode,
     ctx: WalkCtx,
-    seen_ids: &mut HashSet<String>,
-    referenced_token_ids: &mut HashSet<String>,
+    seen_ids: &mut BTreeSet<String>,
+    referenced_token_ids: &mut BTreeSet<String>,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
     let WalkCtx {
@@ -649,8 +649,8 @@ pub(in crate::validate::check) fn check_line(
 pub(in crate::validate::check) fn check_code(
     c: &CodeNode,
     ctx: WalkCtx,
-    seen_ids: &mut HashSet<String>,
-    referenced_token_ids: &mut HashSet<String>,
+    seen_ids: &mut BTreeSet<String>,
+    referenced_token_ids: &mut BTreeSet<String>,
     geom_required: bool,
     diagnostics: &mut Vec<Diagnostic>,
 ) {

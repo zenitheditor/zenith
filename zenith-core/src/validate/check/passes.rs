@@ -6,7 +6,7 @@
 //! block. `register_id` is re-exported from the check module root because the
 //! node submodules call it via `crate::validate::check::register_id`.
 
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::ast::asset::{AssetDecl, AssetKind};
 use crate::ast::library::LibraryDef;
@@ -26,7 +26,7 @@ use super::visual::{VisualExpect, check_visual_prop};
 /// the node walk; `Instance` and `Unknown` ids are included where present.
 pub(in crate::validate::check) fn collect_local_ids(
     children: &[crate::ast::node::Node],
-    out: &mut HashSet<String>,
+    out: &mut BTreeSet<String>,
 ) {
     use crate::ast::node::Node;
     for child in children {
@@ -108,7 +108,7 @@ pub(in crate::validate::check) fn check_footnote_refs(
     use crate::ast::node::Node;
 
     // Page-local footnote ids (direct children only).
-    let mut footnote_ids: HashSet<&str> = HashSet::new();
+    let mut footnote_ids: BTreeSet<&str> = BTreeSet::new();
     for child in &page.children {
         if let Node::Footnote(fnote) = child {
             footnote_ids.insert(fnote.id.as_str());
@@ -117,7 +117,7 @@ pub(in crate::validate::check) fn check_footnote_refs(
 
     fn walk(
         children: &[crate::ast::node::Node],
-        footnote_ids: &HashSet<&str>,
+        footnote_ids: &BTreeSet<&str>,
         diagnostics: &mut Vec<Diagnostic>,
     ) {
         use crate::ast::node::Node;
@@ -177,7 +177,7 @@ pub(in crate::validate::check) fn check_footnote_refs(
 /// element in the document participates in the same global uniqueness check.
 pub(in crate::validate::check) fn register_id(
     id: &str,
-    seen: &mut HashSet<String>,
+    seen: &mut BTreeSet<String>,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
     if !seen.insert(id.to_owned()) {
@@ -300,10 +300,10 @@ pub(in crate::validate::check) fn validate_library_decl(
 /// - unknown properties → `provenance.unknown_property` (Warning).
 pub(in crate::validate::check) fn validate_provenance_def(
     prov: &ProvenanceDef,
-    all_node_ids: &HashSet<String>,
-    declared_token_ids: &HashSet<String>,
-    declared_action_ids: &HashSet<String>,
-    declared_library_ids: &HashSet<String>,
+    all_node_ids: &BTreeSet<String>,
+    declared_token_ids: &BTreeSet<String>,
+    declared_action_ids: &BTreeSet<String>,
+    declared_library_ids: &BTreeSet<String>,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
     if !all_node_ids.contains(&prov.node)
@@ -356,7 +356,7 @@ pub(in crate::validate::check) fn validate_provenance_def(
 pub(in crate::validate::check) fn validate_style_block(
     block: &StyleBlock,
     resolved_tokens: &BTreeMap<String, ResolvedToken>,
-    referenced_token_ids: &mut HashSet<String>,
+    referenced_token_ids: &mut BTreeSet<String>,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
     for style in &block.styles {

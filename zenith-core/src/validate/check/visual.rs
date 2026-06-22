@@ -6,7 +6,7 @@
 //! referenced token id (transitively for gradient/shadow tokens) so the
 //! unused-token pass can diff against the defined token ids.
 
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::ast::token::TokenType;
 use crate::ast::value::PropertyValue;
@@ -44,7 +44,7 @@ pub(super) fn check_visual_prop(
     prop_name: &str,
     value: Option<&PropertyValue>,
     expect: VisualExpect,
-    referenced_token_ids: &mut HashSet<String>,
+    referenced_token_ids: &mut BTreeSet<String>,
     resolved_tokens: &BTreeMap<String, ResolvedToken>,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
