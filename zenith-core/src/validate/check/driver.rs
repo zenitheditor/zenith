@@ -22,6 +22,7 @@ use super::passes::{
     check_footnote_refs, collect_local_ids, register_id, validate_asset_decl,
     validate_library_decl, validate_provenance_def, validate_style_block,
 };
+use super::recipes::check_recipes;
 use super::report::ValidationReport;
 use super::variants::check_variants;
 use super::visual::{VisualExpect, check_visual_prop};
@@ -176,6 +177,16 @@ pub fn validate(doc: &Document) -> ValidationReport {
     // reference a local TOKEN (a token imported from a library), not just a node.
     let declared_token_ids: BTreeSet<String> =
         doc.tokens.tokens.iter().map(|t| t.id.clone()).collect();
+
+    // Token id → TokenType map, used by check_recipes to distinguish undeclared
+    // tokens from declared-but-non-color tokens in the palette check.
+    // BTreeMap for determinism; built once, shared with check_recipes.
+    let token_type_map: BTreeMap<&str, &crate::ast::TokenType> = doc
+        .tokens
+        .tokens
+        .iter()
+        .map(|t| (t.id.as_str(), &t.token_type))
+        .collect();
 
     // Document-wide set of every node id (across pages, masters, and components),
     // used to resolve a `page-ref` field's `target`. Ordered iteration is not
@@ -393,6 +404,17 @@ pub fn validate(doc: &Document) -> ValidationReport {
     // Validate the top-level `variants` block: duplicate ids, unknown source
     // pages, invalid dimensions, and override-node resolution.
     check_variants(doc, &page_ids, &page_node_ids, &mut diagnostics);
+
+    // ── Recipes ───────────────────────────────────────────────────────────
+    // Validate the top-level `recipes` block: duplicate ids, unknown/non-color
+    // palette tokens, unknown expanded node ids, and unknown bounds ids.
+    check_recipes(
+        doc,
+        &page_ids,
+        &all_node_ids,
+        &token_type_map,
+        &mut diagnostics,
+    );
 
     // ── Provenance records ────────────────────────────────────────────────
     // Each `origin` id participates in the GLOBAL id-uniqueness set. The record

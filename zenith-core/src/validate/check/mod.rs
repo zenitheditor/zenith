@@ -40,6 +40,7 @@ mod fold;
 mod margin;
 mod nodes;
 mod passes;
+mod recipes;
 mod report;
 mod safezone;
 mod variants;
