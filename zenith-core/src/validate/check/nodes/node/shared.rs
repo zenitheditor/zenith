@@ -307,6 +307,8 @@ pub(in crate::validate::check) struct AnchorProps<'a> {
 /// - `anchor.zone_without_anchor` (Warning) — `anchor_zone` set but `anchor` absent.
 /// - `anchor.unresolved_zone` (Error) — `anchor_zone` names a zone not on this page.
 /// - `anchor.sibling_without_anchor` (Warning) — `anchor_sibling` set but `anchor` absent.
+///   (The sibling-reference graph — `anchor.unresolved_sibling` / `anchor.cycle` —
+///   is validated per-scope by [`check_sibling_anchors`], not here.)
 /// - `anchor.parent_without_anchor` (Warning) — `anchor_parent` set but `anchor` absent.
 /// - `anchor.unresolvable_parent` (Error) — `anchor_parent` set but the node is
 ///   not inside a frame/group container, or the parent container's box is unknown
@@ -429,6 +431,126 @@ pub(super) fn check_anchor(
     }
 
     anchor_active
+}
+
+/// Per-node sibling-anchor read: the node's id, its `anchor_sibling` target (if
+/// any), and its span — for anchor-bearing node kinds only. Kinds that never
+/// carry an `anchor` return `None` (they are not valid sibling targets and
+/// cannot themselves reference a sibling). The match is EXHAUSTIVE over `Node`
+/// so a new kind forces a decision here.
+fn node_sibling_fields(node: &Node) -> Option<(&str, Option<&str>, Option<crate::ast::Span>)> {
+    let f = match node {
+        Node::Rect(n) => (n.id.as_str(), n.anchor_sibling.as_deref(), n.source_span),
+        Node::Ellipse(n) => (n.id.as_str(), n.anchor_sibling.as_deref(), n.source_span),
+        Node::Text(n) => (n.id.as_str(), n.anchor_sibling.as_deref(), n.source_span),
+        Node::Code(n) => (n.id.as_str(), n.anchor_sibling.as_deref(), n.source_span),
+        Node::Image(n) => (n.id.as_str(), n.anchor_sibling.as_deref(), n.source_span),
+        Node::Frame(n) => (n.id.as_str(), n.anchor_sibling.as_deref(), n.source_span),
+        Node::Group(n) => (n.id.as_str(), n.anchor_sibling.as_deref(), n.source_span),
+        Node::Shape(n) => (n.id.as_str(), n.anchor_sibling.as_deref(), n.source_span),
+        Node::Table(n) => (n.id.as_str(), n.anchor_sibling.as_deref(), n.source_span),
+        Node::Field(n) => (n.id.as_str(), n.anchor_sibling.as_deref(), n.source_span),
+        Node::Toc(n) => (n.id.as_str(), n.anchor_sibling.as_deref(), n.source_span),
+        // Kinds that never carry an `anchor` are not sibling-bearing.
+        Node::Line(_)
+        | Node::Connector(_)
+        | Node::Polygon(_)
+        | Node::Polyline(_)
+        | Node::Footnote(_)
+        | Node::Instance(_)
+        | Node::Unknown(_) => return None,
+    };
+    Some(f)
+}
+
+/// Validate the sibling-anchor (`anchor-sibling`) graph of one container scope
+/// (`children` = the direct children of a page / frame / group).
+///
+/// Diagnostics pushed:
+/// - `anchor.unresolved_sibling` (Error) — a node names an `anchor-sibling`
+///   target that is not an in-scope anchor-bearing node id.
+/// - `anchor.cycle` (Error) — a node participates in a sibling-anchor reference
+///   cycle within this scope. Each cyclic node is reported at most once.
+///
+/// The cycle detection mirrors the iterative visited-set chain-follow used by
+/// the `token.cyclic_reference` detector in `tokens::resolve::driver`: each walk
+/// follows the in-scope `id → target` map with a per-walk `BTreeSet` visited;
+/// revisiting an id signals a cycle. A scope-wide `BTreeSet` of already-reported
+/// ids dedupes across walks. Bounded by scope size; no recursion, no panic.
+pub(in crate::validate::check) fn check_sibling_anchors(
+    children: &[Node],
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    // In-scope anchor-bearing node ids (valid sibling targets).
+    let mut in_scope: BTreeSet<&str> = BTreeSet::new();
+    for child in children {
+        if let Some((id, _, _)) = node_sibling_fields(child) {
+            in_scope.insert(id);
+        }
+    }
+
+    // Unresolved-reference pass, plus build the in-scope id → target edge map for
+    // cycle detection (only edges whose target is itself in-scope and anchor-
+    // bearing form the graph; an out-of-scope target is reported as unresolved
+    // and never enters the graph).
+    let mut edges: BTreeMap<&str, &str> = BTreeMap::new();
+    for child in children {
+        let Some((id, anchor_sibling, span)) = node_sibling_fields(child) else {
+            continue;
+        };
+        if let Some(target) = anchor_sibling {
+            if in_scope.contains(target) {
+                edges.insert(id, target);
+            } else {
+                diagnostics.push(Diagnostic::error(
+                    "anchor.unresolved_sibling",
+                    format!(
+                        "node '{}': anchor-sibling '{}' does not name a sibling \
+                         node in the same container",
+                        id, target
+                    ),
+                    span,
+                    Some(id.to_owned()),
+                ));
+            }
+        }
+    }
+
+    // Cycle detection: follow each id's chain through `edges` with a per-walk
+    // visited set. A revisit means a cycle; report it once per node.
+    let mut reported: BTreeSet<&str> = BTreeSet::new();
+    let span_of: BTreeMap<&str, Option<crate::ast::Span>> = children
+        .iter()
+        .filter_map(|c| node_sibling_fields(c).map(|(id, _, span)| (id, span)))
+        .collect();
+    for &start in edges.keys() {
+        if reported.contains(start) {
+            continue;
+        }
+        let mut visited: BTreeSet<&str> = BTreeSet::new();
+        let mut current = start;
+        visited.insert(current);
+        while let Some(&next) = edges.get(current) {
+            if visited.contains(next) {
+                // `next` closes a cycle. Report `start` (the walk origin) once.
+                if reported.insert(start) {
+                    diagnostics.push(Diagnostic::error(
+                        "anchor.cycle",
+                        format!(
+                            "node '{}': anchor-sibling chain reaches a cycle \
+                             (at '{}'); its position cannot be resolved",
+                            start, next
+                        ),
+                        span_of.get(start).copied().flatten(),
+                        Some(start.to_owned()),
+                    ));
+                }
+                break;
+            }
+            visited.insert(next);
+            current = next;
+        }
+    }
 }
 
 /// - absent AND `required` (e.g. a non-flow-positioned leaf) → `node.missing_geometry` (Error).

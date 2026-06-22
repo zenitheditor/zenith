@@ -767,6 +767,177 @@ fn anchor_parent_group_without_box_unresolvable() {
     );
 }
 
+// ── A-4b sibling-relative anchoring ───────────────────────────────────────────
+
+/// Wrap a raw block of page children (multiple KDL lines) in a 400×300 page.
+fn doc_with_children(children_kdl: &str) -> String {
+    format!(
+        r#"zenith version=1 {{
+  project id="proj.sib" name="AnchorSibling"
+  tokens format="zenith-token-v1" {{}}
+  styles {{}}
+  document id="doc.sib" title="AnchorSibling" {{
+page id="page.sib" w=(px)400 h=(px)300 {{
+  {children_kdl}
+}}
+  }}
+}}"#
+    )
+}
+
+// ── A-4b Test 1: top-left / center / bottom-right against a sibling box ────────
+
+#[test]
+fn anchor_sibling_three_points() {
+    // Sibling `s` at x=100 y=80 w=120 h=60. Three nodes anchor to it:
+    //   tl (20×10), anchor=top-left:      ox=0,            oy=0
+    //       → (100+0, 80+0)          = (100, 80)
+    //   ct (40×20), anchor=center:        ox=(120-40)/2=40, oy=(60-20)/2=20
+    //       → (100+40, 80+20)        = (140, 100)
+    //   br (30×15), anchor=bottom-right:  ox=120-30=90,     oy=60-15=45
+    //       → (100+90, 80+45)        = (190, 125)
+    let src = doc_with_children(
+        r##"rect id="s" x=(px)100 y=(px)80 w=(px)120 h=(px)60 fill="#888888"
+  rect id="tl" anchor="top-left" anchor-sibling="s" w=(px)20 h=(px)10 fill="#ff0000"
+  rect id="ct" anchor="center" anchor-sibling="s" w=(px)40 h=(px)20 fill="#00ff00"
+  rect id="br" anchor="bottom-right" anchor-sibling="s" w=(px)30 h=(px)15 fill="#0000ff""##,
+    );
+    let doc = parse(&src);
+    let result = compile(&doc, &default_provider());
+    assert!(
+        result.diagnostics.is_empty(),
+        "expected no diagnostics, got: {:?}",
+        result.diagnostics
+    );
+
+    let rects = fill_rects(&result);
+    let has = |x: f64, y: f64, w: f64, h: f64| {
+        rects.iter().any(|&(rx, ry, rw, rh)| {
+            (rx - x).abs() < 0.001
+                && (ry - y).abs() < 0.001
+                && (rw - w).abs() < 0.001
+                && (rh - h).abs() < 0.001
+        })
+    };
+    assert!(has(100.0, 80.0, 20.0, 10.0), "top-left; got: {rects:?}");
+    assert!(has(140.0, 100.0, 40.0, 20.0), "center; got: {rects:?}");
+    assert!(
+        has(190.0, 125.0, 30.0, 15.0),
+        "bottom-right; got: {rects:?}"
+    );
+}
+
+// ── A-4b Test 2: chain A→B→C resolves transitively, source order independent ──
+
+#[test]
+fn anchor_sibling_chain_topo_order() {
+    // C is authored BEFORE A in source to prove the toposort orders by
+    // dependency, not source order.
+    //   a: x=10 y=10 w=100 h=100 (explicit origin).
+    //   b anchors center to a:  ox=(100-20)/2=40, oy=(100-20)/2=40
+    //       → (10+40, 10+40) = (50, 50); b is 20×20.
+    //   c anchors top-left to b: ox=0, oy=0
+    //       → (50, 50); c is 8×8.
+    let src = doc_with_children(
+        r##"rect id="c" anchor="top-left" anchor-sibling="b" w=(px)8 h=(px)8 fill="#0000ff"
+  rect id="a" x=(px)10 y=(px)10 w=(px)100 h=(px)100 fill="#888888"
+  rect id="b" anchor="center" anchor-sibling="a" w=(px)20 h=(px)20 fill="#00ff00""##,
+    );
+    let doc = parse(&src);
+    let result = compile(&doc, &default_provider());
+    assert!(
+        result.diagnostics.is_empty(),
+        "expected no diagnostics, got: {:?}",
+        result.diagnostics
+    );
+
+    let rects = fill_rects(&result);
+    let has = |x: f64, y: f64, w: f64, h: f64| {
+        rects.iter().any(|&(rx, ry, rw, rh)| {
+            (rx - x).abs() < 0.001
+                && (ry - y).abs() < 0.001
+                && (rw - w).abs() < 0.001
+                && (rh - h).abs() < 0.001
+        })
+    };
+    assert!(has(50.0, 50.0, 20.0, 20.0), "b@center(a); got: {rects:?}");
+    assert!(has(50.0, 50.0, 8.0, 8.0), "c@top-left(b); got: {rects:?}");
+}
+
+// ── A-4b Test 3: anchor-zone takes precedence over anchor-sibling ─────────────
+
+#[test]
+fn anchor_zone_beats_sibling() {
+    // Node sets BOTH anchor-zone and anchor-sibling. Zone must win.
+    //   zone z: x=200 y=0 w=200 h=300. Node 50×50 anchor=top-left in zone
+    //       → (200, 0). Sibling s is at (0,0) 100×100; if sibling had won the
+    //       node would land at (0,0) — proving precedence.
+    let src = r##"zenith version=1 {
+  project id="proj.zs" name="ZoneSibling"
+  tokens format="zenith-token-v1" {}
+  styles {}
+  document id="doc.zs" title="ZoneSibling" {
+page id="page.zs" w=(px)400 h=(px)300 {
+  safe-zone id="z" type="required" x=(px)200 y=(px)0 w=(px)200 h=(px)300
+  rect id="s" x=(px)0 y=(px)0 w=(px)100 h=(px)100 fill="#888888"
+  rect id="n" anchor="top-left" anchor-zone="z" anchor-sibling="s" w=(px)50 h=(px)50 fill="#ff0000"
+}
+  }
+}"##
+    .to_string();
+    let doc = parse(&src);
+    let result = compile(&doc, &default_provider());
+    assert!(
+        result.diagnostics.is_empty(),
+        "expected no diagnostics, got: {:?}",
+        result.diagnostics
+    );
+
+    let rects = fill_rects(&result);
+    assert!(
+        rects.iter().any(|&(x, y, w, h)| {
+            (x - 200.0).abs() < 0.001
+                && (y - 0.0).abs() < 0.001
+                && (w - 50.0).abs() < 0.001
+                && (h - 50.0).abs() < 0.001
+        }),
+        "expected zone-derived (200, 0, 50, 50); got: {rects:?}"
+    );
+}
+
+// ── A-4b Test 4: sibling inside a group resolves in the group's local space ───
+
+#[test]
+fn anchor_sibling_inside_group() {
+    // Group translates children by (50, 40). Both siblings live in the group.
+    //   s: x=10 y=10 w=80 h=40 (local). n anchors bottom-right to s:
+    //       ox=80-20=60, oy=40-10=30 → local (10+60, 10+30) = (70, 40); n 20×10.
+    //   device = group(50,40) + local(70,40) = (120, 80).
+    let src = doc_with_group_child(
+        "x=(px)50 y=(px)40 w=(px)200 h=(px)200",
+        r##"rect id="s" x=(px)10 y=(px)10 w=(px)80 h=(px)40 fill="#888888"
+    rect id="n" anchor="bottom-right" anchor-sibling="s" w=(px)20 h=(px)10 fill="#ff0000""##,
+    );
+    let doc = parse(&src);
+    let result = compile(&doc, &default_provider());
+    assert!(
+        result.diagnostics.is_empty(),
+        "expected no diagnostics, got: {:?}",
+        result.diagnostics
+    );
+
+    let rects = fill_rects(&result);
+    assert!(
+        rects.iter().any(|&(x, y, w, h)| {
+            (x - 120.0).abs() < 0.001
+                && (y - 80.0).abs() < 0.001
+                && (w - 20.0).abs() < 0.001
+                && (h - 10.0).abs() < 0.001
+        }),
+        "expected group-local device (120, 80, 20, 10); got: {rects:?}"
+    );
+}
+
 // ── A-3 Test 10: anchor-parent without anchor → parent_without_anchor warning ─
 
 #[test]

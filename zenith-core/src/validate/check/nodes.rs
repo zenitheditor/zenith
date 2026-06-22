@@ -17,7 +17,9 @@ use node::shared::{node_rotate_deg, resolve_axis};
 
 mod node;
 
-pub(super) use node::shared::{AnchorParentCtx, node_bbox, node_id_and_span, node_role};
+pub(super) use node::shared::{
+    AnchorParentCtx, check_sibling_anchors, node_bbox, node_id_and_span, node_role,
+};
 
 /// Walk-wide immutable validation context (never changes during a page walk).
 #[derive(Clone, Copy)]
@@ -294,6 +296,10 @@ pub(super) fn walk_node(
                 None => None,
             };
 
+            // Validate this frame's sibling-anchor graph (one scope = its
+            // direct children) once, before descending.
+            check_sibling_anchors(&f.children, diagnostics);
+
             for child in &f.children {
                 walk_node(
                     child,
@@ -320,6 +326,10 @@ pub(super) fn walk_node(
             // A group is an A-3 anchor-parent container; its reference box is
             // usable only when it declares both `w` and `h`.
             let group_box_known = g.w.is_some() && g.h.is_some();
+
+            // Validate this group's sibling-anchor graph (one scope = its
+            // direct children) once, before descending.
+            check_sibling_anchors(&g.children, diagnostics);
 
             // Recurse into children, passing the SAME seen_ids so that
             // nested ids participate in the global uniqueness check. Groups do

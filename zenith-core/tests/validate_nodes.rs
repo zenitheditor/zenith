@@ -578,50 +578,55 @@ fn anchor_sibling_without_anchor_produces_sibling_without_anchor() {
         vec![],
         vec![minimal_page(
             "page.one",
-            vec![Node::Rect(Box::new(RectNode {
-                shadow: None,
-                filter: None,
-                mask: None,
-                id: "rect.sib".to_owned(),
-                name: None,
-                role: None,
-                x: Some(px(0.0)),
-                y: Some(px(0.0)),
-                w: Some(px(50.0)),
-                h: Some(px(50.0)),
-                radius: None,
-                radius_tl: None,
-                radius_tr: None,
-                radius_br: None,
-                radius_bl: None,
-                style: None,
-                fill: None,
-                stroke: None,
-                stroke_width: None,
-                stroke_alignment: None,
-                stroke_dash: None,
-                stroke_gap: None,
-                stroke_linecap: None,
-                border_top: None,
-                border_bottom: None,
-                border_left: None,
-                border_right: None,
-                border_width: None,
-                stroke_outer: None,
-                stroke_outer_width: None,
-                opacity: None,
-                visible: None,
-                locked: None,
-                rotate: None,
-                blend_mode: None,
-                blur: None,
-                anchor: None, // absent — triggers the warning
-                anchor_zone: None,
-                anchor_sibling: Some("x".to_owned()),
-                anchor_parent: None,
-                source_span: None,
-                unknown_props: BTreeMap::new(),
-            }))],
+            vec![
+                // A real sibling so anchor-sibling resolves; isolates the
+                // without-anchor warning from anchor.unresolved_sibling.
+                minimal_rect("sib.target", None),
+                Node::Rect(Box::new(RectNode {
+                    shadow: None,
+                    filter: None,
+                    mask: None,
+                    id: "rect.sib".to_owned(),
+                    name: None,
+                    role: None,
+                    x: Some(px(0.0)),
+                    y: Some(px(0.0)),
+                    w: Some(px(50.0)),
+                    h: Some(px(50.0)),
+                    radius: None,
+                    radius_tl: None,
+                    radius_tr: None,
+                    radius_br: None,
+                    radius_bl: None,
+                    style: None,
+                    fill: None,
+                    stroke: None,
+                    stroke_width: None,
+                    stroke_alignment: None,
+                    stroke_dash: None,
+                    stroke_gap: None,
+                    stroke_linecap: None,
+                    border_top: None,
+                    border_bottom: None,
+                    border_left: None,
+                    border_right: None,
+                    border_width: None,
+                    stroke_outer: None,
+                    stroke_outer_width: None,
+                    opacity: None,
+                    visible: None,
+                    locked: None,
+                    rotate: None,
+                    blend_mode: None,
+                    blur: None,
+                    anchor: None, // absent — triggers the warning
+                    anchor_zone: None,
+                    anchor_sibling: Some("sib.target".to_owned()),
+                    anchor_parent: None,
+                    source_span: None,
+                    unknown_props: BTreeMap::new(),
+                })),
+            ],
         )],
     );
     let report = validate(&doc);
@@ -637,4 +642,78 @@ fn anchor_sibling_without_anchor_produces_sibling_without_anchor() {
         .expect("diagnostic must exist");
     assert_eq!(diag.severity, Severity::Warning);
     assert!(!report.has_errors());
+}
+
+// ── A-4b sibling-anchor graph validation ──────────────────────────────
+
+/// Build a `minimal_rect` carrying a recognized `anchor` and an
+/// `anchor_sibling` target, for the sibling-graph validator tests.
+fn anchored_sibling_rect(id: &str, target: &str) -> Node {
+    let mut node = minimal_rect(id, None);
+    if let Node::Rect(ref mut r) = node {
+        r.anchor = Some("top-left".to_owned());
+        r.anchor_sibling = Some(target.to_owned());
+    }
+    node
+}
+
+// ── anchor-sibling naming a non-existent id → anchor.unresolved_sibling ─
+
+#[test]
+fn anchor_sibling_unresolved_target_errors() {
+    // The rect references sibling "ghost" which is not present in the scope.
+    let doc = doc_with(
+        vec![],
+        vec![minimal_page(
+            "page.one",
+            vec![anchored_sibling_rect("rect.ref", "ghost")],
+        )],
+    );
+    let report = validate(&doc);
+    assert!(
+        has_code(&report, "anchor.unresolved_sibling"),
+        "expected anchor.unresolved_sibling diagnostic; codes: {:?}",
+        codes(&report)
+    );
+    let diag = report
+        .diagnostics
+        .iter()
+        .find(|d| d.code == "anchor.unresolved_sibling")
+        .expect("diagnostic must exist");
+    assert_eq!(diag.severity, Severity::Error);
+    assert!(report.has_errors());
+}
+
+// ── two-node cycle A↔B → anchor.cycle ─────────────────────────────────
+
+#[test]
+fn anchor_sibling_two_node_cycle_errors() {
+    // a anchors to b, b anchors to a: a mutual cycle.
+    let doc = doc_with(
+        vec![],
+        vec![minimal_page(
+            "page.one",
+            vec![
+                anchored_sibling_rect("a", "b"),
+                anchored_sibling_rect("b", "a"),
+            ],
+        )],
+    );
+    let report = validate(&doc);
+    assert!(
+        has_code(&report, "anchor.cycle"),
+        "expected anchor.cycle diagnostic; codes: {:?}",
+        codes(&report)
+    );
+    // Both cyclic nodes are reported exactly once each.
+    let cycle_count = report
+        .diagnostics
+        .iter()
+        .filter(|d| d.code == "anchor.cycle")
+        .count();
+    assert_eq!(
+        cycle_count, 2,
+        "expected exactly two anchor.cycle diagnostics"
+    );
+    assert!(report.has_errors());
 }

@@ -17,7 +17,7 @@ use crate::diagnostics::Diagnostic;
 use crate::tokens::{ResolvedToken, ResolvedValue};
 
 use super::contrast::check_text_contrast;
-use super::nodes::{WalkCtx, WalkPos, walk_node};
+use super::nodes::{WalkCtx, WalkPos, check_sibling_anchors, walk_node};
 use super::passes::{
     check_footnote_refs, collect_local_ids, register_id, validate_asset_decl,
     validate_library_decl, validate_provenance_def, validate_style_block,
@@ -604,6 +604,10 @@ pub fn validate(doc: &Document) -> ValidationReport {
             all_node_ids: &all_node_ids,
             zone_ids: &zone_ids,
         };
+
+        // Validate the page-children sibling-anchor graph (the top-level scope)
+        // once, before the per-node walk.
+        check_sibling_anchors(&page.children, &mut diagnostics);
 
         for (i, node) in page.children.iter().enumerate() {
             walk_node(
