@@ -287,7 +287,7 @@ fn suffix_ids_in_children(children: &mut [Node], id_suffix: &str) {
 /// can read an id from. `Unknown` nodes that carry an `id` attribute are re-id'd
 /// here; those without one are a no-op (the caller skips them: `node_id_of`
 /// returns `None`, so no suffix is computed and this function is not called).
-fn node_set_id_any(node: &mut Node, new_id: String) {
+pub(in crate::engine) fn node_set_id_any(node: &mut Node, new_id: String) {
     match node {
         Node::Frame(f) => f.id = new_id,
         Node::Group(g) => g.id = new_id,

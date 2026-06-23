@@ -13,7 +13,9 @@ mod page;
 mod reorder;
 
 pub(in crate::engine) use add_remove::{apply_add_node, apply_remove_node};
-pub(in crate::engine) use duplicate::{apply_duplicate_node, apply_duplicate_page};
+pub(in crate::engine) use duplicate::{
+    apply_duplicate_node, apply_duplicate_page, node_set_id_any,
+};
 pub(in crate::engine) use group::{apply_group, apply_reparent, apply_ungroup};
 pub(in crate::engine) use page::{
     AddPageSpec, apply_add_page, apply_delete_page, apply_reorder_pages, apply_set_page_size,

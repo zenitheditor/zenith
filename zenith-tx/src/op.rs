@@ -872,6 +872,33 @@ pub enum Op {
         /// The id of the recipe to remove.
         id: String,
     },
+    /// Materialize a `pattern` node into an editable `group` of native shapes —
+    /// the "detach to native" path.
+    ///
+    /// The pattern is replaced in place by a group with the same id and the
+    /// pattern's `x`/`y`/`w`/`h` bounds. The group's children are clones of the
+    /// pattern's `motif`, one per instance position computed by
+    /// `pattern_positions`, each placed at its instance offset within the group.
+    /// Because the group translates its children by `x`/`y` exactly as the scene
+    /// places live pattern instances, the detached group renders identically to
+    /// the live pattern (same instance positions). Child ids are
+    /// `<pattern-id>.0`, `<pattern-id>.1`, … in render order.
+    ///
+    /// Rejected with `tx.unknown_node` if no node with `node` exists.
+    /// Rejected with `tx.not_a_pattern` if `node` is not a pattern.
+    /// Rejected with `tx.pattern_unresolved_bounds` if the pattern's `w`/`h`
+    /// cannot be resolved to a positive pixel size.
+    /// Rejected with `tx.pattern_not_expandable` if the layout yields no
+    /// instances (unknown kind or a missing required parameter).
+    ///
+    /// JSON example:
+    /// ```json
+    /// {"op":"detach_pattern","node":"dots"}
+    /// ```
+    DetachPattern {
+        /// The stable id of the pattern node to detach into a native group.
+        node: String,
+    },
 }
 
 fn default_anchor() -> String {

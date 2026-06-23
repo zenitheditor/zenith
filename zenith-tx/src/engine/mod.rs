@@ -13,6 +13,7 @@ use crate::result::{TxError, TxResult, TxStatus};
 mod asset;
 mod flags;
 mod geometry;
+mod pattern;
 mod recipe;
 mod structure;
 mod style;
@@ -24,6 +25,7 @@ use geometry::{
     GeometryDelta, apply_align_nodes, apply_align_to_edge, apply_distribute_nodes,
     apply_set_geometry,
 };
+use pattern::apply_detach_pattern;
 use recipe::{RecipeScalars, apply_create_recipe, apply_delete_recipe, apply_update_recipe};
 use structure::{
     ReorderKind, apply_add_node, apply_add_page, apply_delete_page, apply_duplicate_node,
@@ -389,6 +391,9 @@ fn apply_op(
         Op::DeleteRecipe { id } => {
             apply_delete_recipe(id, doc, diagnostics, affected);
         }
+        Op::DetachPattern { node: node_id } => {
+            apply_detach_pattern(node_id, doc, diagnostics, affected);
+        }
     }
 }
 
@@ -422,7 +427,8 @@ fn op_lock_targets(op: &Op) -> Vec<&str> {
         | Op::Reparent { node, .. }
         | Op::SetTextOverflow { node_id: node, .. }
         | Op::SetTextDirection { node, .. }
-        | Op::AlignToEdge { node, .. } => vec![node.as_str()],
+        | Op::AlignToEdge { node, .. }
+        | Op::DetachPattern { node } => vec![node.as_str()],
         // Doc-wide mode returns empty (lock handling is inside apply_find_replace_text).
         // Scoped mode: guard the named node.
         Op::FindReplaceText { node, .. } => {

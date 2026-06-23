@@ -43,7 +43,7 @@ type GeometryMut<'a> = (
 /// `Line` is excluded because it has no bbox — it uses `x1/y1/x2/y2` endpoints.
 /// `Polygon` and `Polyline` are excluded because they have no bbox either — their
 /// geometry is the `points` list. `Unknown` is excluded because its schema is opaque.
-fn node_geometry_mut(node: &mut Node) -> Option<GeometryMut<'_>> {
+pub(in crate::engine) fn node_geometry_mut(node: &mut Node) -> Option<GeometryMut<'_>> {
     match node {
         Node::Rect(r) => Some((&mut r.x, &mut r.y, &mut r.w, &mut r.h)),
         Node::Ellipse(e) => Some((&mut e.x, &mut e.y, &mut e.w, &mut e.h)),
