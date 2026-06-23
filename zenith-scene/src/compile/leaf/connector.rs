@@ -39,17 +39,22 @@ enum AnchorSide {
     Vertical,
 }
 
-/// Compute the page-absolute anchor point on the edge of a `(x, y, w, h)` box,
-/// AND the orientation of that edge ([`AnchorSide`]).
+/// Compute the page-absolute anchor point on a `(x, y, w, h)` box, AND the
+/// orientation used to leave/enter it ([`AnchorSide`]).
 ///
-/// Named anchors map to the edge centers; `"center"` is the box center (treated
-/// as `Horizontal`, a rare degenerate case). `"auto"` (the default for an absent
-/// / unrecognized anchor) chooses the edge by the dominant axis toward `toward`
-/// (the OTHER box's center): a larger horizontal delta picks left/right
-/// (`Horizontal`), otherwise top/bottom (`Vertical`).
+/// Anchors are a **nine-point grid**: a horizontal band (`left` / `center` /
+/// `right`) optionally combined with a vertical band (`top` / `center` /
+/// `bottom`) via a hyphen — e.g. `top-left`, `bottom-center`, `center-right`.
+/// A bare single token names the corresponding edge mid-point (`top` =
+/// `top-center`, `left` = `center-left`); `center` is the box center. `mid` and
+/// `middle` are accepted synonyms for `center`. The five pre-grid names
+/// (`top`/`bottom`/`left`/`right`/`center`) resolve identically, so existing
+/// output is unchanged.
 ///
-/// The point math is identical to the pre-Unit-3 anchor resolution, so
-/// straight-route output is unchanged.
+/// `"auto"` (the default for an absent / unrecognized anchor) chooses the edge
+/// by the dominant axis toward `toward` (the OTHER box's center): a larger
+/// horizontal delta picks left/right (`Horizontal`), otherwise top/bottom
+/// (`Vertical`).
 fn resolve_anchor(
     boxr: (f64, f64, f64, f64),
     anchor: &str,
@@ -58,26 +63,71 @@ fn resolve_anchor(
     let (x, y, w, h) = boxr;
     let cx = x + w / 2.0;
     let cy = y + h / 2.0;
-    match anchor {
-        "top" => ((cx, y), AnchorSide::Vertical),
-        "bottom" => ((cx, y + h), AnchorSide::Vertical),
-        "left" => ((x, cy), AnchorSide::Horizontal),
-        "right" => ((x + w, cy), AnchorSide::Horizontal),
-        "center" => ((cx, cy), AnchorSide::Horizontal),
-        // "auto" and any unrecognized value: dominant-axis edge toward `toward`.
-        _ => {
-            let dx = toward.0 - cx;
-            let dy = toward.1 - cy;
-            if dx.abs() >= dy.abs() {
-                let pt = if dx >= 0.0 { (x + w, cy) } else { (x, cy) };
-                (pt, AnchorSide::Horizontal)
-            } else if dy >= 0.0 {
-                ((cx, y + h), AnchorSide::Vertical)
-            } else {
-                ((cx, y), AnchorSide::Vertical)
-            }
-        }
+
+    if let Some(resolved) = grid_anchor(anchor, boxr) {
+        return resolved;
     }
+
+    // "auto" and any unrecognized value: dominant-axis edge toward `toward`.
+    let dx = toward.0 - cx;
+    let dy = toward.1 - cy;
+    if dx.abs() >= dy.abs() {
+        let pt = if dx >= 0.0 { (x + w, cy) } else { (x, cy) };
+        (pt, AnchorSide::Horizontal)
+    } else if dy >= 0.0 {
+        ((cx, y + h), AnchorSide::Vertical)
+    } else {
+        ((cx, y), AnchorSide::Vertical)
+    }
+}
+
+/// Resolve a nine-point grid anchor string (e.g. `top-left`, `bottom-center`,
+/// `center`) to its point and leave/enter orientation. Returns `None` when the
+/// string names no grid position (e.g. `auto`), so the caller falls back to
+/// dominant-axis resolution. `mid`/`middle` are synonyms for `center`.
+fn grid_anchor(anchor: &str, boxr: (f64, f64, f64, f64)) -> Option<((f64, f64), AnchorSide)> {
+    let (x, y, w, h) = boxr;
+    let (mut top, mut bottom, mut left, mut right, mut center, mut recognized) =
+        (false, false, false, false, false, false);
+    for part in anchor.split('-') {
+        match part {
+            "top" => top = true,
+            "bottom" => bottom = true,
+            "left" => left = true,
+            "right" => right = true,
+            "center" | "centre" | "mid" | "middle" => center = true,
+            _ => continue,
+        }
+        recognized = true;
+    }
+    if !recognized {
+        return None;
+    }
+    let px = if left {
+        x
+    } else if right {
+        x + w
+    } else {
+        x + w / 2.0
+    };
+    let py = if top {
+        y
+    } else if bottom {
+        y + h
+    } else {
+        y + h / 2.0
+    };
+    // Orientation: a pure top/bottom anchor leaves vertically; a pure left/right
+    // anchor leaves horizontally; the center and the four corners default to
+    // horizontal (matching the pre-grid `center` behavior).
+    let vertical_only = (top || bottom) && !(left || right);
+    let side = if vertical_only {
+        AnchorSide::Vertical
+    } else {
+        AnchorSide::Horizontal
+    };
+    let _ = center; // `center` only affects which band is unspecified.
+    Some(((px, py), side))
 }
 
 /// Build a flat right-angle (elbow) point list between two anchors, with the
