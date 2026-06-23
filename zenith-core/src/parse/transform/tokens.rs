@@ -17,8 +17,8 @@ use crate::error::{ParseError, ParseErrorCode};
 
 use super::helpers::{
     entry_annotation, entry_to_property_value, kdl_value_to_literal_string, node_span,
-    optional_bool_prop, optional_dimension_prop, optional_f64_prop, optional_token_ref_prop,
-    required_string_prop,
+    optional_bool_prop, optional_dimension_prop, optional_f64_prop, optional_i64_prop,
+    optional_token_ref_prop, required_string_prop,
 };
 
 pub(super) fn transform_tokens(node: &KdlNode) -> Result<TokenBlock, ParseError> {
@@ -274,11 +274,17 @@ fn transform_filter(node: &KdlNode) -> TokenValue {
             // `duotone` op. Non-duotone ops simply won't carry them → `None`.
             let shadow = optional_token_ref_prop(child, "shadow");
             let highlight = optional_token_ref_prop(child, "highlight");
+            // `seed`/`scale` are only meaningful for a `noise` op; other ops
+            // simply won't carry them → `None`.
+            let seed = optional_i64_prop(child, "seed");
+            let scale = optional_f64_prop(child, "scale");
             ops.push(FilterOp {
                 kind,
                 amount,
                 shadow,
                 highlight,
+                seed,
+                scale,
             });
         }
     }

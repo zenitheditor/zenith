@@ -298,6 +298,47 @@ fn filter_emits_begin_end_bracket() {
     );
 }
 
+/// A bare `noise` op (no props) compiles to `FilterSpec::Noise` with the
+/// per-kind defaults substituted: amount 1.0, seed 0, scale 1.0.
+#[test]
+fn noise_filter_uses_default_params() {
+    let src = r##"zenith version=1 {
+  project id="proj.nz" name="Nz"
+  tokens format="zenith-token-v1" {
+    token id="color.fill" type="color" value="#445566"
+    token id="filter.f" type="filter" {
+      noise
+    }
+  }
+  styles {}
+  document id="doc.nz" title="Nz" {
+    page id="page.nz" w=(px)200 h=(px)200 {
+      rect id="rect.nz" x=(px)10 y=(px)10 w=(px)80 h=(px)40 fill=(token)"color.fill" filter=(token)"filter.f"
+    }
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+    let cmds = &result.scene.commands;
+
+    let begin = cmds.iter().find_map(|c| match c {
+        SceneCommand::BeginFilter { filters } => Some(filters),
+        _ => None,
+    });
+    let filters = begin.expect("a BeginFilter must be emitted");
+    assert_eq!(filters.len(), 1, "one filter op: {filters:?}");
+    assert_eq!(
+        filters[0],
+        zenith_scene::FilterSpec::Noise {
+            amount: 1.0,
+            seed: 0,
+            scale: 1.0,
+        },
+        "bare noise uses default params"
+    );
+}
+
 /// When a rect sets BOTH `blur` and `filter`, blur wins: only a
 /// `BeginBlur`/`EndBlur` bracket is emitted and NO `BeginFilter`/`EndFilter`
 /// appears in the stream (precedence: blur > shadow > filter).

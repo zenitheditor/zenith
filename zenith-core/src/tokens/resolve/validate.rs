@@ -507,6 +507,22 @@ fn validate_filter(
             ));
             return None;
         }
+        // A noise op's grain cell size must be a positive, finite pixel count.
+        if let Some(s) = op.scale
+            && (!s.is_finite() || s <= 0.0)
+        {
+            diagnostics.push(Diagnostic::error(
+                "filter.invalid_scale",
+                format!(
+                    "filter token '{}' has a non-positive or non-finite noise scale; \
+                     scale must be > 0",
+                    token_id
+                ),
+                span,
+                Some(token_id.to_owned()),
+            ));
+            return None;
+        }
         // A duotone op blends between two color tokens; both are required.
         // Non-duotone ops ignore any stray shadow/highlight props.
         if op.kind == FilterKind::Duotone {
@@ -535,6 +551,8 @@ fn validate_filter(
             amount: op.amount,
             shadow: op.shadow.clone(),
             highlight: op.highlight.clone(),
+            seed: op.seed,
+            scale: op.scale,
         });
     }
 

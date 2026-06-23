@@ -630,6 +630,56 @@ fn test_duotone_filter_token_round_trip() {
     );
 }
 
+/// **Noise filter round-trip**: a noise op carrying `seed`, `scale`, and
+/// `amount` must parse→format→parse byte-stably and emit those props by name in
+/// the canonical `seed`/`scale`/`amount` order.
+#[test]
+fn test_noise_filter_token_round_trip() {
+    let src = r##"zenith version=1 {
+  project id="proj.noise" name="Noise"
+  tokens format="zenith-token-v1" {
+    token id="filter.grain" type="filter" {
+      noise seed=7 scale=2 amount=0.3
+    }
+  }
+  styles {
+  }
+  document id="doc.noise" title="Noise" {
+    page id="p" w=(px)100 h=(px)100 {
+      text id="headline" x=(px)0 y=(px)0 w=(px)100 h=(px)40 filter=(token)"filter.grain" {
+        span "Hi"
+      }
+    }
+  }
+}
+"##;
+    let adapter = KdlAdapter;
+    let doc1 = adapter.parse(src.as_bytes()).expect("parse 1");
+    let s1 = format_document(&doc1).expect("format 1");
+    let formatted = String::from_utf8(s1.clone()).expect("utf8");
+
+    assert!(
+        formatted.contains("noise seed=7 scale=2 amount=0.3"),
+        "expected noise op with seed/scale/amount; got:\n{formatted}"
+    );
+
+    // Idempotency.
+    let doc2 = adapter.parse(&s1).expect("parse 2");
+    let s2 = format_document(&doc2).expect("format 2");
+    assert_eq!(
+        formatted,
+        String::from_utf8(s2).expect("utf8"),
+        "noise formatting must be idempotent"
+    );
+
+    // AST round-trip (spans stripped).
+    assert_eq!(
+        strip_spans(doc1),
+        strip_spans(doc2),
+        "noise AST must survive format round-trip"
+    );
+}
+
 /// **Duotone color refs are used transitively**: a node referencing a duotone
 /// filter token records the duotone's shadow/highlight color tokens as used, so
 /// neither is falsely flagged `token.unused`.

@@ -1,6 +1,8 @@
 //! Token-block writing: the `tokens { … }` block plus per-token emission,
 //! including the gradient/shadow brace-block forms and token-literal values.
 
+use std::fmt::Write as _;
+
 use crate::ast::{GradientKind, Token, TokenBlock, TokenLiteral, TokenType, TokenValue};
 
 use super::{fmt_dimension, fmt_f64, indent};
@@ -111,9 +113,10 @@ fn write_token(token: &Token, out: &mut String, depth: usize) {
         for op in &f.ops {
             indent(out, depth + 1);
             out.push_str(op.kind.as_op_name());
-            // Order: name, shadow, highlight, amount. `shadow`/`highlight` are
-            // emitted only for duotone ops (mirrors the shadow-layer color
-            // emission); the round-trip parser reads them back by name.
+            // Order: name, shadow, highlight, seed, scale, amount.
+            // `shadow`/`highlight` are emitted only for duotone ops, `seed`/`scale`
+            // only for noise ops (mirrors the shadow-layer color emission); the
+            // round-trip parser reads them back by name.
             if let Some(shadow) = &op.shadow {
                 out.push_str(" shadow=(token)\"");
                 out.push_str(shadow);
@@ -123,6 +126,13 @@ fn write_token(token: &Token, out: &mut String, depth: usize) {
                 out.push_str(" highlight=(token)\"");
                 out.push_str(highlight);
                 out.push('"');
+            }
+            if let Some(seed) = op.seed {
+                let _ = write!(out, " seed={seed}");
+            }
+            if let Some(scale) = op.scale {
+                out.push_str(" scale=");
+                out.push_str(&fmt_f64(scale));
             }
             if let Some(amount) = op.amount {
                 out.push_str(" amount=");

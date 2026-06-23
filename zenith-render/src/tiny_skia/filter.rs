@@ -5,14 +5,17 @@
 //! straight-alpha (un-pre-multiplied) RGB of every pixel, then the result is
 //! re-premultiplied and composited onto the target.
 //!
-//! All arithmetic is pure `f64` with deterministic rounding (no time, no
-//! randomness, no hashing), so output is byte-identical across runs on the same
-//! machine — matching the shadow/blur anti-aliasing policy.
+//! Color-filter arithmetic is pure `f64` color math with deterministic rounding,
+//! and the noise filter adds a deterministic seeded grain via integer hashing of
+//! the page-absolute pixel cell. There is no time and no true randomness, so
+//! output is byte-identical across runs on the same machine — matching the
+//! shadow/blur anti-aliasing policy.
 //!
 //! Color-filter semantics follow the standard CSS/SVG `filter` functions. Alpha
-//! is never modified by a color filter; fully-transparent pixels are skipped.
+//! is never modified by a filter; fully-transparent pixels are skipped.
 
 use tiny_skia::Pixmap;
+use zenith_core::hash_unit;
 use zenith_scene::FilterSpec;
 
 use super::pixels::premultiplied_to_straight;
@@ -22,12 +25,15 @@ use super::pixels::premultiplied_to_straight;
 /// Each pixel is un-pre-multiplied to straight `[0,1]` RGB, transformed by each
 /// filter in turn (clamped after every op), then re-premultiplied. Iteration is
 /// over `chunks_exact_mut(4)`, which guarantees exactly 4 bytes per chunk; no
-/// manual indexing, no panics.
+/// manual indexing, no panics. The enumeration index yields the page-absolute
+/// pixel `(x, y)` (the capture pixmap is page-sized), which the noise filter
+/// uses for its deterministic per-cell grain.
 pub(super) fn apply_filters(pm: &mut Pixmap, filters: &[FilterSpec]) {
     if filters.is_empty() {
         return;
     }
-    for px in pm.data_mut().chunks_exact_mut(4) {
+    let w = pm.width() as usize;
+    for (i, px) in pm.data_mut().chunks_exact_mut(4).enumerate() {
         // tiny-skia premultiplied RGBA byte order: [r, g, b, a].
         let a = px[3];
         if a == 0 {
@@ -39,8 +45,11 @@ pub(super) fn apply_filters(pm: &mut Pixmap, filters: &[FilterSpec]) {
         let mut g = f64::from(sg) / 255.0;
         let mut b = f64::from(sb) / 255.0;
 
+        let x = (i % w) as i64;
+        let y = (i / w) as i64;
+
         for spec in filters {
-            let (nr, ng, nb) = apply_one(spec, r, g, b);
+            let (nr, ng, nb) = apply_one(spec, r, g, b, x, y);
             r = nr.clamp(0.0, 1.0);
             g = ng.clamp(0.0, 1.0);
             b = nb.clamp(0.0, 1.0);
@@ -63,8 +72,9 @@ pub(super) fn apply_filters(pm: &mut Pixmap, filters: &[FilterSpec]) {
 }
 
 /// Apply a single filter op to straight-alpha RGB in `[0,1]` (unclamped output;
-/// the caller clamps each channel after every op).
-fn apply_one(spec: &FilterSpec, r: f64, g: f64, b: f64) -> (f64, f64, f64) {
+/// the caller clamps each channel after every op). `(x, y)` is the page-absolute
+/// pixel position, used by the noise filter to seed its per-cell grain.
+fn apply_one(spec: &FilterSpec, r: f64, g: f64, b: f64, x: i64, y: i64) -> (f64, f64, f64) {
     // Luma weights (Rec. 709), shared by grayscale, saturate, and duotone.
     const RW: f64 = 0.2126;
     const GW: f64 = 0.7152;
@@ -154,6 +164,22 @@ fn apply_one(spec: &FilterSpec, r: f64, g: f64, b: f64) -> (f64, f64, f64) {
                 m10 * r + m11 * g + m12 * b,
                 m20 * r + m21 * g + m22 * b,
             )
+        }
+        FilterSpec::Noise {
+            amount,
+            seed,
+            scale,
+        } => {
+            // Monochrome additive grain: one hashed delta in [-amount, amount]
+            // applied to all three channels. `scale` blocks the grain into cells
+            // of `scale` pixels (the validator guarantees scale > 0; the guard
+            // here is defensive).
+            let s = if scale > 0.0 { scale } else { 1.0 };
+            let xs = (x as f64 / s).floor() as i64;
+            let ys = (y as f64 / s).floor() as i64;
+            let n = hash_unit(xs, ys, seed);
+            let d = (n - 0.5) * 2.0 * amount;
+            (r + d, g + d, b + d)
         }
     }
 }
@@ -302,5 +328,64 @@ mod tests {
         apply_filters(&mut c1, &[duo]);
         apply_filters(&mut c2, &[duo]);
         assert_eq!(c1.data(), c2.data(), "duotone is deterministic");
+    }
+
+    /// Build an opaque `w`×`h` Pixmap filled with a single straight-alpha color.
+    fn opaque_fill(w: u32, h: u32, r: u8, g: u8, b: u8) -> Pixmap {
+        let mut pm = Pixmap::new(w, h).expect("pixmap");
+        for px in pm.pixels_mut() {
+            *px = PremultipliedColorU8::from_rgba(r, g, b, 255).expect("opaque pixel");
+        }
+        pm
+    }
+
+    /// Determinism: applying the same noise filter to two identical pixmaps
+    /// yields byte-identical results.
+    #[test]
+    fn apply_filters_noise_is_deterministic() {
+        let noise = FilterSpec::Noise {
+            amount: 0.4,
+            seed: 7,
+            scale: 2.0,
+        };
+        let mut a = opaque_fill(8, 8, 128, 128, 128);
+        let mut b = opaque_fill(8, 8, 128, 128, 128);
+        apply_filters(&mut a, &[noise]);
+        apply_filters(&mut b, &[noise]);
+        assert_eq!(a.data(), b.data(), "noise is deterministic");
+    }
+
+    /// `amount = 0.0` makes the grain delta zero, so noise is a no-op (output
+    /// identical to input, alpha unchanged).
+    #[test]
+    fn apply_filters_noise_zero_amount_is_noop() {
+        let noise = FilterSpec::Noise {
+            amount: 0.0,
+            seed: 3,
+            scale: 1.0,
+        };
+        let before = opaque_fill(4, 4, 90, 160, 220);
+        let mut after = opaque_fill(4, 4, 90, 160, 220);
+        apply_filters(&mut after, &[noise]);
+        assert_eq!(before.data(), after.data(), "zero-amount noise is a no-op");
+    }
+
+    /// A positive-amount noise actually perturbs at least some pixels (output is
+    /// not identical to the input).
+    #[test]
+    fn apply_filters_noise_changes_pixels() {
+        let noise = FilterSpec::Noise {
+            amount: 0.5,
+            seed: 11,
+            scale: 1.0,
+        };
+        let before = opaque_fill(8, 8, 128, 128, 128);
+        let mut after = opaque_fill(8, 8, 128, 128, 128);
+        apply_filters(&mut after, &[noise]);
+        assert_ne!(
+            before.data(),
+            after.data(),
+            "positive-amount noise changes some pixels"
+        );
     }
 }

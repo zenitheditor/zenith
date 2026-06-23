@@ -118,6 +118,8 @@ fn filter_token(id: &str, ops: Vec<(FilterKind, Option<f64>)>) -> Token {
                     amount,
                     shadow: None,
                     highlight: None,
+                    seed: None,
+                    scale: None,
                 })
                 .collect(),
         })),
@@ -143,6 +145,33 @@ fn duotone_filter_token(
                 amount,
                 shadow: shadow.map(str::to_owned),
                 highlight: highlight.map(str::to_owned),
+                seed: None,
+                scale: None,
+            }],
+        })),
+        source_span: None,
+    }
+}
+
+/// Build a filter token with a single `noise` op carrying the given seed/scale/
+/// amount (any may be `None` to exercise defaults or invalid-scale diagnostics).
+fn noise_filter_token(
+    id: &str,
+    seed: Option<i64>,
+    scale: Option<f64>,
+    amount: Option<f64>,
+) -> Token {
+    Token {
+        id: id.to_owned(),
+        token_type: TokenType::Filter,
+        value: TokenValue::Literal(TokenLiteral::Filter(FilterLiteral {
+            ops: vec![FilterOp {
+                kind: FilterKind::Noise,
+                amount,
+                shadow: None,
+                highlight: None,
+                seed,
+                scale,
             }],
         })),
         source_span: None,
@@ -562,6 +591,66 @@ fn duotone_missing_highlight_produces_missing_color() {
         codes(&r.diagnostics)
     );
     assert!(!r.resolved.contains_key("filter.duo"));
+}
+
+#[test]
+fn resolves_noise_with_seed_and_scale() {
+    let b = block(vec![noise_filter_token(
+        "filter.grain",
+        Some(7),
+        Some(2.0),
+        Some(0.3),
+    )]);
+    let r = resolve_tokens(&b);
+    assert!(
+        r.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        r.diagnostics
+    );
+    match &r.resolved["filter.grain"].value {
+        ResolvedValue::Filter(f) => {
+            assert_eq!(f.ops.len(), 1);
+            assert_eq!(f.ops[0].kind, FilterKind::Noise);
+            assert_eq!(f.ops[0].amount, Some(0.3));
+            assert_eq!(f.ops[0].seed, Some(7));
+            assert_eq!(f.ops[0].scale, Some(2.0));
+        }
+        other => panic!("expected filter, got {other:?}"),
+    }
+}
+
+#[test]
+fn noise_zero_scale_produces_invalid_scale() {
+    let b = block(vec![noise_filter_token(
+        "filter.grain",
+        Some(0),
+        Some(0.0),
+        None,
+    )]);
+    let r = resolve_tokens(&b);
+    assert!(
+        has_code(&r.diagnostics, "filter.invalid_scale"),
+        "codes: {:?}",
+        codes(&r.diagnostics)
+    );
+    assert!(!r.resolved.contains_key("filter.grain"));
+}
+
+#[test]
+fn noise_negative_scale_produces_invalid_scale() {
+    let b = block(vec![noise_filter_token(
+        "filter.grain",
+        Some(0),
+        Some(-1.0),
+        None,
+    )]);
+    let r = resolve_tokens(&b);
+    assert!(
+        has_code(&r.diagnostics, "filter.invalid_scale"),
+        "codes: {:?}",
+        codes(&r.diagnostics)
+    );
+    assert!(!r.resolved.contains_key("filter.grain"));
 }
 
 // ── Mask resolution ───────────────────────────────────────────────────

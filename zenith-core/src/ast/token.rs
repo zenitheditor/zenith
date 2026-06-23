@@ -122,6 +122,11 @@ pub enum FilterKind {
     /// factor against the original. This is the only kind that references color
     /// tokens (carried on [`FilterOp::shadow`] / [`FilterOp::highlight`]).
     Duotone,
+    /// Noise: deterministic seeded film grain. Adds the same per-pixel delta to
+    /// R, G, and B, derived from an integer hash of the page-absolute pixel cell
+    /// and a `seed`. `amount` scales the grain magnitude; `scale` sets the grain
+    /// cell size in pixels. Same inputs → same grain on any machine.
+    Noise,
 }
 
 impl FilterKind {
@@ -136,6 +141,7 @@ impl FilterKind {
             "contrast" => Some(Self::Contrast),
             "hue-rotate" => Some(Self::HueRotate),
             "duotone" => Some(Self::Duotone),
+            "noise" => Some(Self::Noise),
             _ => None,
         }
     }
@@ -152,6 +158,7 @@ impl FilterKind {
             Self::Contrast => "contrast",
             Self::HueRotate => "hue-rotate",
             Self::Duotone => "duotone",
+            Self::Noise => "noise",
         }
     }
 }
@@ -180,6 +187,10 @@ pub struct FilterOp {
     /// Highlight color token id (light-area color) — `Some` only for `Duotone`
     /// ops.
     pub highlight: Option<String>,
+    /// Grain pattern seed — used only by `noise`; `None` defaults to 0.
+    pub seed: Option<i64>,
+    /// Grain cell size in pixels — used only by `noise`; `None` defaults to 1.0.
+    pub scale: Option<f64>,
 }
 
 /// Whether a gradient token is linear or radial.

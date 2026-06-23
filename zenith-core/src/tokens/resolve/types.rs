@@ -133,6 +133,11 @@ pub struct ResolvedFilterOp {
     pub amount: Option<f64>,
     pub shadow: Option<String>,
     pub highlight: Option<String>,
+    /// Grain pattern seed — `Some` only for `Noise` ops; `None` defaults to 0.
+    pub seed: Option<i64>,
+    /// Grain cell size in pixels — `Some` only for `Noise` ops; `None` defaults
+    /// to 1.0. Validated to be finite and `> 0` when present.
+    pub scale: Option<f64>,
 }
 
 /// A resolved mask: a spatial coverage shape plus a feather and invert flag.

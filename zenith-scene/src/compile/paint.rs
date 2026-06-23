@@ -267,6 +267,11 @@ pub(super) fn resolve_property_filter(
                     highlight,
                 }
             }
+            zenith_core::FilterKind::Noise => FilterSpec::Noise {
+                amount: op.amount.unwrap_or(1.0),
+                seed: op.seed.unwrap_or(0),
+                scale: op.scale.unwrap_or(1.0),
+            },
         };
         ops.push(spec);
     }

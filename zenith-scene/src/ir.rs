@@ -245,6 +245,15 @@ pub enum FilterSpec {
         shadow: Color,
         highlight: Color,
     },
+    /// Deterministic monochrome additive film grain: adds the same per-pixel
+    /// delta to R, G, and B, derived from an integer hash of the page-absolute
+    /// pixel cell and `seed`. `amount` scales the grain magnitude; `scale` is the
+    /// grain cell size in pixels. Same inputs → same grain on any machine.
+    Noise {
+        amount: f64,
+        seed: i64,
+        scale: f64,
+    },
 }
 
 // ── Mask ──────────────────────────────────────────────────────────────────────
