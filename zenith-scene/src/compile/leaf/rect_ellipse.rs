@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 
 use zenith_core::{Diagnostic, EllipseNode, RectNode, ResolvedToken, Style, dim_to_px};
 
-use crate::ir::SceneCommand;
+use crate::ir::{Paint, SceneCommand};
 
 use super::super::RenderCtx;
 use super::super::anchor::AnchorMap;
@@ -209,29 +209,7 @@ pub(in crate::compile) fn compile_rect(
     if let Some(fill_prop) = fill_prop {
         if let Some(mut gradient) = resolve_property_gradient(fill_prop, resolved, &rect.id) {
             apply_gradient_opacity(&mut gradient, color_op, 1.0);
-            if is_rounded {
-                draws.push(SceneCommand::FillRoundedRectGradient {
-                    x,
-                    y,
-                    w,
-                    h,
-                    radius,
-                    radii,
-                    gradient,
-                });
-            } else {
-                draws.push(SceneCommand::FillRectGradient {
-                    x,
-                    y,
-                    w,
-                    h,
-                    gradient,
-                });
-            }
-        } else if let Some(mut color) =
-            resolve_property_color(fill_prop, resolved, diagnostics, &rect.id)
-        {
-            color.a = (color.a as f64 * color_op).round() as u8;
+            let paint = Paint::Gradient(gradient);
             if is_rounded {
                 draws.push(SceneCommand::FillRoundedRect {
                     x,
@@ -240,10 +218,28 @@ pub(in crate::compile) fn compile_rect(
                     h,
                     radius,
                     radii,
-                    color,
+                    paint,
                 });
             } else {
-                draws.push(SceneCommand::FillRect { x, y, w, h, color });
+                draws.push(SceneCommand::FillRect { x, y, w, h, paint });
+            }
+        } else if let Some(mut color) =
+            resolve_property_color(fill_prop, resolved, diagnostics, &rect.id)
+        {
+            color.a = (color.a as f64 * color_op).round() as u8;
+            let paint = Paint::solid(color);
+            if is_rounded {
+                draws.push(SceneCommand::FillRoundedRect {
+                    x,
+                    y,
+                    w,
+                    h,
+                    radius,
+                    radii,
+                    paint,
+                });
+            } else {
+                draws.push(SceneCommand::FillRect { x, y, w, h, paint });
             }
         }
     }
@@ -624,14 +620,14 @@ pub(in crate::compile) fn compile_ellipse(
     if let Some(fill_prop) = fill_prop {
         if let Some(mut gradient) = resolve_property_gradient(fill_prop, resolved, &ellipse.id) {
             apply_gradient_opacity(&mut gradient, color_op, 1.0);
-            draws.push(SceneCommand::FillEllipseGradient {
+            draws.push(SceneCommand::FillEllipse {
                 x,
                 y,
                 w,
                 h,
                 rx,
                 ry,
-                gradient,
+                paint: Paint::Gradient(gradient),
             });
         } else if let Some(mut color) =
             resolve_property_color(fill_prop, resolved, diagnostics, &ellipse.id)
@@ -644,7 +640,7 @@ pub(in crate::compile) fn compile_ellipse(
                 h,
                 rx,
                 ry,
-                color,
+                paint: Paint::solid(color),
             });
         }
     }

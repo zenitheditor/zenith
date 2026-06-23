@@ -20,7 +20,7 @@ pub use zenith_core::{
 pub use zenith_layout::{RustybuzzEngine, ShapeRequest, TextDirection, TextLayoutEngine};
 pub use zenith_render::{RasterBackend, RasterImage, TinySkiaBackend, render_image, render_png};
 pub use zenith_scene::{
-    BlendMode, Color, FitMode, GradientPaint, GradientStop, ImageClip, Scene, SceneCommand,
+    BlendMode, Color, FitMode, GradientPaint, GradientStop, ImageClip, Paint, Scene, SceneCommand,
     SceneGlyph, ShadowSpec, SrcRect, StrokeAlign,
 };
 
@@ -46,7 +46,7 @@ pub fn make_solid_red_scene(page: f64) -> Scene {
         y: 0.0,
         w: page,
         h: page,
-        color: red(),
+        paint: Paint::solid(red()),
     });
     s.commands.push(SceneCommand::PopClip);
     s

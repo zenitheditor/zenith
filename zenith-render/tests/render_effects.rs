@@ -29,7 +29,7 @@ fn shadow_blurs_and_bleeds_outward_deterministically() {
             y: 15.0,
             w: 10.0,
             h: 10.0,
-            color: Color::srgb(255, 0, 0, 255),
+            paint: Paint::solid(Color::srgb(255, 0, 0, 255)),
         });
         scene.commands.push(SceneCommand::EndShadow);
         scene
@@ -93,7 +93,7 @@ fn blend_multiply_layer_darkens_overlap() {
         y: 0.0,
         w: page,
         h: page,
-        color: Color::srgb(255, 0, 0, 255),
+        paint: Paint::solid(Color::srgb(255, 0, 0, 255)),
     });
     // Blue rect over the red, composited with multiply via a layer.
     scene.commands.push(SceneCommand::PushLayer {
@@ -105,7 +105,7 @@ fn blend_multiply_layer_darkens_overlap() {
         y: 0.0,
         w: page,
         h: page,
-        color: Color::srgb(0, 0, 255, 255),
+        paint: Paint::solid(Color::srgb(0, 0, 255, 255)),
     });
     scene.commands.push(SceneCommand::PopLayer);
     scene.commands.push(SceneCommand::PopClip);
@@ -157,7 +157,7 @@ fn begin_end_blur_renders_deterministically_and_softens_ink() {
             y: 20.0,
             w: 20.0,
             h: 20.0,
-            color: Color::srgb(255, 0, 0, 255),
+            paint: Paint::solid(Color::srgb(255, 0, 0, 255)),
         });
         scene.commands.push(SceneCommand::EndBlur);
         scene
@@ -171,7 +171,7 @@ fn begin_end_blur_renders_deterministically_and_softens_ink() {
             y: 20.0,
             w: 20.0,
             h: 20.0,
-            color: Color::srgb(255, 0, 0, 255),
+            paint: Paint::solid(Color::srgb(255, 0, 0, 255)),
         });
         scene
     };
@@ -226,7 +226,7 @@ fn no_blur_command_scene_is_byte_identical() {
             y: 5.0,
             w: 10.0,
             h: 10.0,
-            color: Color::srgb(0, 128, 255, 200),
+            paint: Paint::solid(Color::srgb(0, 128, 255, 200)),
         });
         scene
     };

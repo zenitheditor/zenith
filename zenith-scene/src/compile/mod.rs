@@ -40,7 +40,7 @@ use zenith_core::{
 };
 use zenith_layout::RustybuzzEngine;
 
-use crate::ir::{Rect, Scene, SceneCommand};
+use crate::ir::{Paint, Rect, Scene, SceneCommand};
 
 use anchor::build_anchor_map;
 use chain::resolve_chains_document;
@@ -330,12 +330,12 @@ pub fn compile_page(doc: &Document, fonts: &dyn FontProvider, page_index: usize)
     if let Some(bg_prop) = &page.background {
         if let Some(gradient) = resolve_property_gradient(bg_prop, resolved, &page.id) {
             // Page background applies no opacity cascade (mirrors the solid path).
-            scene.commands.push(SceneCommand::FillRectGradient {
+            scene.commands.push(SceneCommand::FillRect {
                 x: 0.0,
                 y: 0.0,
                 w: media_w,
                 h: media_h,
-                gradient,
+                paint: Paint::Gradient(gradient),
             });
         } else if let Some(color) =
             resolve_property_color(bg_prop, resolved, &mut diagnostics, &page.id)
@@ -345,7 +345,7 @@ pub fn compile_page(doc: &Document, fonts: &dyn FontProvider, page_index: usize)
                 y: 0.0,
                 w: media_w,
                 h: media_h,
-                color,
+                paint: Paint::solid(color),
             });
         }
     }

@@ -2,7 +2,7 @@
 
 use zenith_core::{AssetProvider, BytesAssetProvider, FontProvider, default_provider};
 use zenith_scene::{
-    Color, FilterSpec, GradientPaint, GradientStop, Rect, Scene, SceneCommand, SceneGlyph,
+    Color, FilterSpec, GradientPaint, GradientStop, Paint, Rect, Scene, SceneCommand, SceneGlyph,
 };
 
 use super::render_pdf;
@@ -35,7 +35,7 @@ fn pdf_starts_and_ends_with_markers() {
         y: 0.0,
         w: 100.0,
         h: 80.0,
-        color: Color::srgb(10, 20, 30, 255),
+        paint: Paint::solid(Color::srgb(10, 20, 30, 255)),
     });
     let bytes = render(&scene);
     assert!(!bytes.is_empty(), "PDF must be non-empty");
@@ -62,7 +62,7 @@ fn render_is_byte_identical_across_runs() {
         y: 0.0,
         w: 120.0,
         h: 60.0,
-        color: Color::srgb(240, 240, 240, 255),
+        paint: Paint::solid(Color::srgb(240, 240, 240, 255)),
     });
     scene.commands.push(SceneCommand::DrawGlyphRun {
         x: 10.0,
@@ -98,7 +98,7 @@ fn cmyk_color_emits_device_cmyk_operator() {
         y: 0.0,
         w: 50.0,
         h: 50.0,
-        color: Color::cmyk(59.0, 85.0, 0.0, 7.0, 97, 36, 237),
+        paint: Paint::solid(Color::cmyk(59.0, 85.0, 0.0, 7.0, 97, 36, 237)),
     });
     let bytes = render(&scene);
     let text = String::from_utf8_lossy(&bytes);
@@ -116,7 +116,7 @@ fn srgb_color_emits_device_rgb_operator() {
         y: 0.0,
         w: 50.0,
         h: 50.0,
-        color: Color::srgb(200, 100, 50, 255),
+        paint: Paint::solid(Color::srgb(200, 100, 50, 255)),
     });
     let bytes = render(&scene);
     let text = String::from_utf8_lossy(&bytes);
@@ -145,7 +145,7 @@ fn bleed_scene_has_distinct_trim_box() {
         y: 0.0,
         w: 110.0,
         h: 90.0,
-        color: Color::srgb(0, 0, 0, 255),
+        paint: Paint::solid(Color::srgb(0, 0, 0, 255)),
     });
     let bytes = render(&scene);
     let text = String::from_utf8_lossy(&bytes);
@@ -169,7 +169,7 @@ fn non_bleed_scene_has_equal_boxes() {
         y: 0.0,
         w: 64.0,
         h: 48.0,
-        color: Color::srgb(1, 2, 3, 255),
+        paint: Paint::solid(Color::srgb(1, 2, 3, 255)),
     });
     let bytes = render(&scene);
     let text = String::from_utf8_lossy(&bytes);
@@ -215,12 +215,12 @@ fn glyph_run_emits_path_fill_ops() {
 #[test]
 fn gradient_scene_renders_shading() {
     let mut scene = Scene::new(100.0, 100.0);
-    scene.commands.push(SceneCommand::FillRectGradient {
+    scene.commands.push(SceneCommand::FillRect {
         x: 0.0,
         y: 0.0,
         w: 100.0,
         h: 100.0,
-        gradient: GradientPaint {
+        paint: Paint::Gradient(GradientPaint {
             angle_deg: 90.0,
             stops: vec![
                 GradientStop {
@@ -240,7 +240,7 @@ fn gradient_scene_renders_shading() {
             center_x: None,
             center_y: None,
             radius_frac: None,
-        },
+        }),
     });
     let bytes = render(&scene);
     let text = String::from_utf8_lossy(&bytes);
@@ -265,7 +265,7 @@ fn unfiltered_fill_rect_embeds_no_image() {
         y: 10.0,
         w: 30.0,
         h: 20.0,
-        color: Color::srgb(200, 60, 40, 255),
+        paint: Paint::solid(Color::srgb(200, 60, 40, 255)),
     });
     let bytes = render(&scene);
     let text = String::from_utf8_lossy(&bytes);
@@ -289,7 +289,7 @@ fn filtered_fill_rect_embeds_image_xobject() {
         y: 10.0,
         w: 30.0,
         h: 20.0,
-        color: Color::srgb(200, 60, 40, 255),
+        paint: Paint::solid(Color::srgb(200, 60, 40, 255)),
     });
     scene.commands.push(SceneCommand::EndFilter);
 
@@ -319,7 +319,7 @@ fn filtered_region_render_is_byte_identical() {
         y: 5.0,
         w: 40.0,
         h: 30.0,
-        color: Color::srgb(20, 140, 200, 255),
+        paint: Paint::solid(Color::srgb(20, 140, 200, 255)),
     });
     scene.commands.push(SceneCommand::EndFilter);
 

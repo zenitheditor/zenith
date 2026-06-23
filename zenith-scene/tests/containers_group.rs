@@ -133,7 +133,10 @@ page id="page.go" w=(px)100 h=(px)100 {
     assert_eq!(cmds.len(), 3, "expected 3 commands; got: {:?}", cmds);
 
     match &cmds[1] {
-        SceneCommand::FillRect { color, .. } => {
+        SceneCommand::FillRect {
+            paint: Paint::Solid { color },
+            ..
+        } => {
             // 255 * 1.0 (node opacity) * 0.5 (group opacity) = 127.5 → 128.
             assert_eq!(
                 color.a, 128,

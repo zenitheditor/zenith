@@ -2,7 +2,7 @@ mod common;
 use common::*;
 use zenith_core::default_provider;
 use zenith_scene::compile;
-use zenith_scene::ir::{SceneCommand, StrokeAlign};
+use zenith_scene::ir::{Paint, SceneCommand, StrokeAlign};
 
 // ── polygon: fill + stroke emits FillPolygon then StrokePolyline(closed) ─
 
@@ -43,7 +43,7 @@ page id="page.p1" w=(px)320 h=(px)200 {
     match &cmds[1] {
         SceneCommand::FillPolygon {
             points,
-            color,
+            paint: Paint::Solid { color },
             even_odd,
         } => {
             // 3 points × 2 = 6 coordinates
@@ -322,7 +322,10 @@ page id="page.p4" w=(px)200 h=(px)200 {
     let result = compile(&doc, &default_provider());
 
     let fill_a = result.scene.commands.iter().find_map(|c| match c {
-        SceneCommand::FillPolygon { color, .. } => Some(color.a),
+        SceneCommand::FillPolygon {
+            paint: Paint::Solid { color },
+            ..
+        } => Some(color.a),
         _ => None,
     });
     // #ffffff α=255, node opacity=1.0, ctx opacity=0.5 → 255*0.5 ≈ 128
@@ -368,7 +371,10 @@ page id="page.sc1" w=(px)320 h=(px)200 {
     assert_eq!(cmds.len(), 3, "expected 3 commands; got: {:?}", cmds);
 
     match &cmds[1] {
-        SceneCommand::FillRect { color, .. } => {
+        SceneCommand::FillRect {
+            paint: Paint::Solid { color },
+            ..
+        } => {
             // #3b82f6 → r=0x3b=59, g=0x82=130, b=0xf6=246
             assert_eq!(color.r, 0x3b, "r must be 0x3b from style fill");
             assert_eq!(color.g, 0x82, "g must be 0x82 from style fill");
@@ -412,7 +418,10 @@ page id="page.sc2" w=(px)320 h=(px)200 {
     assert_eq!(cmds.len(), 3, "expected 3 commands; got: {:?}", cmds);
 
     match &cmds[1] {
-        SceneCommand::FillRect { color, .. } => {
+        SceneCommand::FillRect {
+            paint: Paint::Solid { color },
+            ..
+        } => {
             // Must be local (green #00ff00), NOT the style (red #ff0000).
             assert_eq!(color.r, 0x00, "local fill r=0 must override style r=255");
             assert_eq!(color.g, 0xff, "local fill g=255 must override style g=0");

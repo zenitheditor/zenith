@@ -79,7 +79,7 @@ fn clip_clamps_fill_to_page() {
         y: 2.0,
         w: 10.0,
         h: 10.0,
-        color: red(),
+        paint: Paint::solid(red()),
     });
     scene.commands.push(SceneCommand::PopClip);
 
@@ -154,7 +154,7 @@ fn fill_polygon_renders() {
     scene.commands.push(SceneCommand::FillPolygon {
         // Triangle: top-center, bottom-right, bottom-left
         points: vec![50.0, 10.0, 90.0, 90.0, 10.0, 90.0],
-        color,
+        paint: Paint::solid(color),
         even_odd: false,
     });
     scene.commands.push(SceneCommand::PopClip);
@@ -331,7 +331,7 @@ fn ellipse_partial_clip_truncates_not_reshapes() {
         h: 20.0,
         rx: None,
         ry: None,
-        color: Color::srgb(255, 255, 255, 255),
+        paint: Paint::solid(Color::srgb(255, 255, 255, 255)),
     });
     scene.commands.push(SceneCommand::PopClip);
     scene.commands.push(SceneCommand::PopClip);
@@ -478,7 +478,7 @@ fn fill_rounded_rect_cuts_corner_fills_center() {
         h: 40.0,
         radius: 20.0,
         radii: None,
-        color: Color::srgb(255, 255, 255, 255),
+        paint: Paint::solid(Color::srgb(255, 255, 255, 255)),
     });
     scene.commands.push(SceneCommand::PopClip);
 
@@ -529,7 +529,7 @@ fn rounded_and_stroke_rects_deterministic_png() {
         h: 30.0,
         radius: 10.0,
         radii: None,
-        color: Color::srgb(0, 200, 0, 255),
+        paint: Paint::solid(Color::srgb(0, 200, 0, 255)),
     });
     scene.commands.push(SceneCommand::StrokeRoundedRect {
         x: 20.0,

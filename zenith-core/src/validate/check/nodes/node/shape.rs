@@ -344,18 +344,36 @@ pub(in crate::validate::check) fn check_connector(
             ));
         }
     }
+    // A connector anchor is `auto` or a nine-point grid position: one or more
+    // hyphen-separated bands from top/bottom/left/right/center (mid/middle accepted
+    // as center), e.g. `top`, `center`, `bottom-right`. Mirrors the scene resolver.
+    fn is_valid_anchor(a: &str) -> bool {
+        if a == "auto" {
+            return true;
+        }
+        let mut recognized = false;
+        for part in a.split('-') {
+            match part {
+                "top" | "bottom" | "left" | "right" | "center" | "centre" | "mid" | "middle" => {
+                    recognized = true;
+                }
+                _ => return false,
+            }
+        }
+        recognized
+    }
     for (label, anchor) in [
         ("from-anchor", c.from_anchor.as_deref()),
         ("to-anchor", c.to_anchor.as_deref()),
     ] {
         if let Some(a) = anchor
-            && !matches!(a, "top" | "bottom" | "left" | "right" | "center" | "auto")
+            && !is_valid_anchor(a)
         {
             diagnostics.push(Diagnostic::warning(
                 "connector.invalid_anchor",
                 format!(
-                    "connector '{}': {label} '{a}' is not one of \
-                     top/bottom/left/right/center/auto",
+                    "connector '{}': {label} '{a}' is not 'auto' or a nine-point anchor \
+                     (top/center/bottom × left/center/right, e.g. bottom-right)",
                     c.id
                 ),
                 c.source_span,

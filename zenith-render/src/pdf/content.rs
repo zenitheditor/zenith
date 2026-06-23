@@ -19,7 +19,9 @@
 
 use pdf_writer::Content;
 use zenith_core::{AssetProvider, FontProvider};
-use zenith_scene::{Color, FitMode, ImageClip, Scene, SceneCommand, StrokeAlign};
+use zenith_scene::{
+    Color, FitMode, ImageClip, Paint as ScenePaint, Scene, SceneCommand, StrokeAlign,
+};
 
 use super::color;
 use super::geometry::{GlyphPen, ellipse_path, poly_path, rounded_rect_path};
@@ -174,6 +176,95 @@ fn apply_alpha(content: &mut Content, res: &mut PageResources, color: &Color) {
     content.set_parameters(name(ALPHA_PREFIX, idx).as_name());
 }
 
+/// Fill a region with a scene [`ScenePaint`] (solid or gradient), where
+/// `build_path` emits the path operators for the geometry and returns whether a
+/// path was produced. `bbox` is the geometry's bounding box, used to resolve a
+/// gradient's axial line. `even_odd` selects the fill / clip rule.
+///
+/// - **Solid** → set the fill color and fill the path.
+/// - **Linear gradient** → clip to the path and paint an axial shading.
+/// - **Radial gradient** → PDF v0 has no axial-shading equivalent, so it degrades
+///   to a solid fill of the first stop color (consistent with the other v0 PDF
+///   degradations: blur, drop-shadow, SVG assets).
+fn fill_region<F: Fn(&mut Content) -> bool>(
+    content: &mut Content,
+    res: &mut PageResources,
+    paint: &ScenePaint,
+    bbox: (f64, f64, f64, f64),
+    even_odd: bool,
+    build_path: F,
+) {
+    let fill = |content: &mut Content, produced: bool| {
+        if produced {
+            if even_odd {
+                content.fill_even_odd();
+            } else {
+                content.fill_nonzero();
+            }
+        } else {
+            content.end_path();
+        }
+    };
+
+    match paint {
+        ScenePaint::Solid { color } => {
+            content.save_state();
+            apply_alpha(content, res, color);
+            color::set_fill(content, color);
+            let produced = build_path(content);
+            fill(content, produced);
+            content.restore_state();
+        }
+        ScenePaint::Gradient(gradient) if gradient.radial => {
+            // Radial PDF degrade: solid fill with the first stop color.
+            if let Some(first) = gradient.stops.first() {
+                content.save_state();
+                apply_alpha(content, res, &first.color);
+                color::set_fill(content, &first.color);
+                let produced = build_path(content);
+                fill(content, produced);
+                content.restore_state();
+            }
+        }
+        ScenePaint::Gradient(gradient) => {
+            let (x, y, w, h) = bbox;
+            if let Some(g) = resolve_gradient(x, y, w, h, gradient) {
+                let id = push_gradient(res, g);
+                content.save_state();
+                if build_path(content) {
+                    if even_odd {
+                        content.clip_even_odd();
+                    } else {
+                        content.clip_nonzero();
+                    }
+                    content.end_path();
+                    content.shading(name(SHADING_PREFIX, id).as_name());
+                } else {
+                    content.end_path();
+                }
+                content.restore_state();
+            }
+        }
+    }
+}
+
+/// Axis-aligned bounding box `(x, y, w, h)` of a flat `[x0,y0,x1,y1,…]` point
+/// list, used to resolve a gradient line for polygon fills. The caller has
+/// already verified at least three finite points.
+fn poly_bbox(points: &[f64]) -> (f64, f64, f64, f64) {
+    let mut min_x = f64::INFINITY;
+    let mut min_y = f64::INFINITY;
+    let mut max_x = f64::NEG_INFINITY;
+    let mut max_y = f64::NEG_INFINITY;
+    for pair in points.chunks_exact(2) {
+        min_x = min_x.min(pair[0]);
+        max_x = max_x.max(pair[0]);
+        min_y = min_y.min(pair[1]);
+        max_y = max_y.max(pair[1]);
+    }
+    (min_x, min_y, max_x - min_x, max_y - min_y)
+}
+
 pub(super) fn emit_command(
     content: &mut Content,
     res: &mut PageResources,
@@ -184,16 +275,14 @@ pub(super) fn emit_command(
 ) {
     match cmd {
         // ── Filled shapes ─────────────────────────────────────────────────
-        SceneCommand::FillRect { x, y, w, h, color } => {
+        SceneCommand::FillRect { x, y, w, h, paint } => {
             if !rect_ok(*x, *y, *w, *h) {
                 return;
             }
-            content.save_state();
-            apply_alpha(content, res, color);
-            color::set_fill(content, color);
-            content.rect(*x as f32, *y as f32, *w as f32, *h as f32);
-            content.fill_nonzero();
-            content.restore_state();
+            fill_region(content, res, paint, (*x, *y, *w, *h), false, |c| {
+                c.rect(*x as f32, *y as f32, *w as f32, *h as f32);
+                true
+            });
         }
 
         SceneCommand::StrokeRect {
@@ -225,18 +314,16 @@ pub(super) fn emit_command(
             h,
             radius,
             radii,
-            color,
+            paint,
         } => {
             if !rect_ok(*x, *y, *w, *h) || !finite(*radius) {
                 return;
             }
             let corner_radii = radii.unwrap_or([*radius; 4]);
-            content.save_state();
-            apply_alpha(content, res, color);
-            color::set_fill(content, color);
-            rounded_rect_path(content, *x, *y, *w, *h, corner_radii);
-            content.fill_nonzero();
-            content.restore_state();
+            fill_region(content, res, paint, (*x, *y, *w, *h), false, |c| {
+                rounded_rect_path(c, *x, *y, *w, *h, corner_radii);
+                true
+            });
         }
 
         SceneCommand::StrokeRoundedRect {
@@ -271,17 +358,15 @@ pub(super) fn emit_command(
             h,
             rx,
             ry,
-            color,
+            paint,
         } => {
             if !rect_ok(*x, *y, *w, *h) {
                 return;
             }
-            content.save_state();
-            apply_alpha(content, res, color);
-            color::set_fill(content, color);
-            ellipse_path(content, *x, *y, *w, *h, *rx, *ry);
-            content.fill_nonzero();
-            content.restore_state();
+            fill_region(content, res, paint, (*x, *y, *w, *h), false, |c| {
+                ellipse_path(c, *x, *y, *w, *h, *rx, *ry);
+                true
+            });
         }
 
         SceneCommand::StrokeEllipse {
@@ -338,25 +423,16 @@ pub(super) fn emit_command(
 
         SceneCommand::FillPolygon {
             points,
-            color,
+            paint,
             even_odd,
         } => {
             if points.len() < 6 || points.iter().any(|v| !v.is_finite()) {
                 return;
             }
-            content.save_state();
-            apply_alpha(content, res, color);
-            color::set_fill(content, color);
-            if poly_path(content, points, true) {
-                if *even_odd {
-                    content.fill_even_odd();
-                } else {
-                    content.fill_nonzero();
-                }
-            } else {
-                content.end_path();
-            }
-            content.restore_state();
+            let bbox = poly_bbox(points);
+            fill_region(content, res, paint, bbox, *even_odd, |c| {
+                poly_path(c, points, true)
+            });
         }
 
         SceneCommand::StrokePolyline {
@@ -437,109 +513,6 @@ pub(super) fn emit_command(
                 }
             }
             content.restore_state();
-        }
-
-        // ── Gradient fills ────────────────────────────────────────────────
-        //
-        // PDF v0 limitation: radial gradients have no axial-shading equivalent
-        // and are degraded to a solid fill using the gradient's first stop color,
-        // consistent with the v0 shadow-blur and SVG-asset omissions above.
-        SceneCommand::FillRectGradient {
-            x,
-            y,
-            w,
-            h,
-            gradient,
-        } => {
-            if !rect_ok(*x, *y, *w, *h) {
-                return;
-            }
-            if gradient.radial {
-                // Radial PDF degrade: solid fill with first stop color.
-                if let Some(first) = gradient.stops.first() {
-                    content.save_state();
-                    apply_alpha(content, res, &first.color);
-                    color::set_fill(content, &first.color);
-                    content.rect(*x as f32, *y as f32, *w as f32, *h as f32);
-                    content.fill_nonzero();
-                    content.restore_state();
-                }
-            } else if let Some(g) = resolve_gradient(*x, *y, *w, *h, gradient) {
-                let id = push_gradient(res, g);
-                content.save_state();
-                content.rect(*x as f32, *y as f32, *w as f32, *h as f32);
-                content.clip_nonzero();
-                content.end_path();
-                content.shading(name(SHADING_PREFIX, id).as_name());
-                content.restore_state();
-            }
-        }
-
-        SceneCommand::FillRoundedRectGradient {
-            x,
-            y,
-            w,
-            h,
-            radius,
-            radii,
-            gradient,
-        } => {
-            if !rect_ok(*x, *y, *w, *h) || !finite(*radius) {
-                return;
-            }
-            let corner_radii = radii.unwrap_or([*radius; 4]);
-            if gradient.radial {
-                // Radial PDF degrade: solid fill with first stop color.
-                if let Some(first) = gradient.stops.first() {
-                    content.save_state();
-                    apply_alpha(content, res, &first.color);
-                    color::set_fill(content, &first.color);
-                    rounded_rect_path(content, *x, *y, *w, *h, corner_radii);
-                    content.fill_nonzero();
-                    content.restore_state();
-                }
-            } else if let Some(g) = resolve_gradient(*x, *y, *w, *h, gradient) {
-                let id = push_gradient(res, g);
-                content.save_state();
-                rounded_rect_path(content, *x, *y, *w, *h, corner_radii);
-                content.clip_nonzero();
-                content.end_path();
-                content.shading(name(SHADING_PREFIX, id).as_name());
-                content.restore_state();
-            }
-        }
-
-        SceneCommand::FillEllipseGradient {
-            x,
-            y,
-            w,
-            h,
-            rx,
-            ry,
-            gradient,
-        } => {
-            if !rect_ok(*x, *y, *w, *h) {
-                return;
-            }
-            if gradient.radial {
-                // Radial PDF degrade: solid fill with first stop color.
-                if let Some(first) = gradient.stops.first() {
-                    content.save_state();
-                    apply_alpha(content, res, &first.color);
-                    color::set_fill(content, &first.color);
-                    ellipse_path(content, *x, *y, *w, *h, *rx, *ry);
-                    content.fill_nonzero();
-                    content.restore_state();
-                }
-            } else if let Some(g) = resolve_gradient(*x, *y, *w, *h, gradient) {
-                let id = push_gradient(res, g);
-                content.save_state();
-                ellipse_path(content, *x, *y, *w, *h, *rx, *ry);
-                content.clip_nonzero();
-                content.end_path();
-                content.shading(name(SHADING_PREFIX, id).as_name());
-                content.restore_state();
-            }
         }
 
         // ── Text ──────────────────────────────────────────────────────────

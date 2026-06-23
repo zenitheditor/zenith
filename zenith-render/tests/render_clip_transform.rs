@@ -34,7 +34,7 @@ fn push_transform_rotates_fill_rect() {
         y: 25.0,
         w: 50.0,
         h: 50.0,
-        color: red_color,
+        paint: Paint::solid(red_color),
     });
     rotated.commands.push(SceneCommand::PopTransform);
     rotated.commands.push(SceneCommand::PopClip);
@@ -52,7 +52,7 @@ fn push_transform_rotates_fill_rect() {
         y: 25.0,
         w: 50.0,
         h: 50.0,
-        color: red_color,
+        paint: Paint::solid(red_color),
     });
     plain.commands.push(SceneCommand::PopClip);
 

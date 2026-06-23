@@ -2,7 +2,7 @@ mod common;
 use common::*;
 use zenith_core::default_provider;
 use zenith_scene::compile;
-use zenith_scene::ir::SceneCommand;
+use zenith_scene::ir::{Paint, SceneCommand};
 
 // ── rect: fill only → FillRect (regression) ──────────────────────────
 
@@ -68,7 +68,10 @@ page id="page.rfs" w=(px)100 h=(px)100 {
     // PushClip, FillRect, StrokeRect, PopClip
     assert_eq!(cmds.len(), 4, "expected 4 commands; got: {:?}", cmds);
     match &cmds[1] {
-        SceneCommand::FillRect { color, .. } => assert_eq!(color.r, 0x11),
+        SceneCommand::FillRect {
+            paint: Paint::Solid { color },
+            ..
+        } => assert_eq!(color.r, 0x11),
         other => panic!("expected FillRect first, got {other:?}"),
     }
     match &cmds[2] {
@@ -116,7 +119,11 @@ page id="page.rfr" w=(px)100 h=(px)100 {
     // PushClip, FillRoundedRect, PopClip
     assert_eq!(cmds.len(), 3, "expected 3 commands; got: {:?}", cmds);
     match &cmds[1] {
-        SceneCommand::FillRoundedRect { radius, color, .. } => {
+        SceneCommand::FillRoundedRect {
+            radius,
+            paint: Paint::Solid { color },
+            ..
+        } => {
             assert_eq!(color.r, 0x11);
             assert!((*radius - 8.0).abs() < 0.01, "radius must be 8px");
         }
@@ -377,12 +384,12 @@ page id="page.g" w=(px)640 h=(px)360 background=(token)"grad.bg" {
 
     // Page background gradient (full page, no opacity cascade).
     match &cmds[1] {
-        SceneCommand::FillRectGradient {
+        SceneCommand::FillRect {
             x,
             y,
             w,
             h,
-            gradient,
+            paint: Paint::Gradient(gradient),
         } => {
             assert_eq!((*x, *y, *w, *h), (0.0, 0.0, 640.0, 360.0));
             assert_eq!(gradient.angle_deg, 90.0);
@@ -392,23 +399,29 @@ page id="page.g" w=(px)640 h=(px)360 background=(token)"grad.bg" {
             assert_eq!(gradient.stops[0].color.a, 255);
             assert_eq!(gradient.stops[1].color.r, 0x44);
         }
-        other => panic!("expected FillRectGradient bg, got {other:?}"),
+        other => panic!("expected FillRect gradient bg, got {other:?}"),
     }
 
     // Rect fill gradient.
     let has_rect_grad = cmds.iter().any(|c| {
         matches!(
             c,
-            SceneCommand::FillRectGradient { x, w, .. } if *x == 10.0 && *w == 100.0
+            SceneCommand::FillRect { x, w, paint: Paint::Gradient(_), .. } if *x == 10.0 && *w == 100.0
         )
     });
-    assert!(has_rect_grad, "expected rect FillRectGradient: {cmds:?}");
+    assert!(has_rect_grad, "expected rect gradient FillRect: {cmds:?}");
 
     // Ellipse fill gradient.
-    let has_ell_grad = cmds
-        .iter()
-        .any(|c| matches!(c, SceneCommand::FillEllipseGradient { .. }));
-    assert!(has_ell_grad, "expected FillEllipseGradient: {cmds:?}");
+    let has_ell_grad = cmds.iter().any(|c| {
+        matches!(
+            c,
+            SceneCommand::FillEllipse {
+                paint: Paint::Gradient(_),
+                ..
+            }
+        )
+    });
+    assert!(has_ell_grad, "expected FillEllipse gradient: {cmds:?}");
 }
 
 /// A radial gradient token (`radial=#true`) referenced via `fill=(token)` on
@@ -444,13 +457,17 @@ page id="page.rg" w=(px)100 h=(px)100 {
 
     let cmds = &result.scene.commands;
     let found = cmds.iter().find_map(|c| {
-        if let SceneCommand::FillRectGradient { gradient, .. } = c {
+        if let SceneCommand::FillRect {
+            paint: Paint::Gradient(gradient),
+            ..
+        } = c
+        {
             Some(gradient)
         } else {
             None
         }
     });
-    let grad: &GradientPaint = found.expect("expected FillRectGradient");
+    let grad: &GradientPaint = found.expect("expected FillRect gradient");
     assert!(grad.radial, "GradientPaint must have radial=true");
     assert_eq!(grad.center_x, Some(0.5));
     assert_eq!(grad.center_y, Some(0.5));
@@ -482,19 +499,35 @@ page id="page.s" w=(px)640 h=(px)360 {
     let result = compile(&doc, &default_provider());
     let cmds = &result.scene.commands;
     assert!(
-        cmds.iter()
-            .any(|c| matches!(c, SceneCommand::FillRect { .. })),
+        cmds.iter().any(|c| matches!(
+            c,
+            SceneCommand::FillRect {
+                paint: Paint::Solid { .. },
+                ..
+            }
+        )),
         "solid rect must emit FillRect: {cmds:?}"
     );
     assert!(
-        cmds.iter()
-            .any(|c| matches!(c, SceneCommand::FillEllipse { .. })),
+        cmds.iter().any(|c| matches!(
+            c,
+            SceneCommand::FillEllipse {
+                paint: Paint::Solid { .. },
+                ..
+            }
+        )),
         "solid ellipse must emit FillEllipse: {cmds:?}"
     );
     assert!(
         !cmds.iter().any(|c| matches!(
             c,
-            SceneCommand::FillRectGradient { .. } | SceneCommand::FillEllipseGradient { .. }
+            SceneCommand::FillRect {
+                paint: Paint::Gradient(_),
+                ..
+            } | SceneCommand::FillEllipse {
+                paint: Paint::Gradient(_),
+                ..
+            }
         )),
         "solid fills must not emit gradient commands: {cmds:?}"
     );

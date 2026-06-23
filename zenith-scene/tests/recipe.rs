@@ -74,7 +74,7 @@ fn procedural_background_emits_expected_scene_commands() {
     let bg_grad = cmds.iter().find(|c| {
         matches!(
             c,
-            SceneCommand::FillRectGradient { x, y, w, h, .. }
+            SceneCommand::FillRect { x, y, w, h, paint: Paint::Gradient(_) }
                 if *x == 0.0 && *y == 0.0 && *w == 1080.0 && *h == 1080.0
         )
     });
@@ -84,7 +84,11 @@ fn procedural_background_emits_expected_scene_commands() {
     );
 
     // Verify angle from gradient.bg token (135°).
-    if let Some(SceneCommand::FillRectGradient { gradient, .. }) = bg_grad {
+    if let Some(SceneCommand::FillRect {
+        paint: Paint::Gradient(gradient),
+        ..
+    }) = bg_grad
+    {
         assert_eq!(
             gradient.angle_deg, 135.0,
             "background gradient angle must be 135°: {gradient:?}"
@@ -99,7 +103,15 @@ fn procedural_background_emits_expected_scene_commands() {
     // ── S-recipe-01: translucent ellipses must emit FillEllipseGradient ────
     let ellipse_grads = cmds
         .iter()
-        .filter(|c| matches!(c, SceneCommand::FillEllipseGradient { .. }))
+        .filter(|c| {
+            matches!(
+                c,
+                SceneCommand::FillEllipse {
+                    paint: Paint::Gradient(_),
+                    ..
+                }
+            )
+        })
         .count();
     assert!(
         ellipse_grads >= 1,
@@ -246,7 +258,10 @@ fn translucent_ellipse_opacity_bakes_into_fill() {
             return None;
         }
         match c {
-            SceneCommand::FillEllipseGradient { gradient, .. } => Some(gradient),
+            SceneCommand::FillEllipse {
+                paint: Paint::Gradient(gradient),
+                ..
+            } => Some(gradient),
             _ => None,
         }
     });

@@ -73,12 +73,13 @@ pub(in crate::validate::check) fn check_polygon(
         ));
     }
 
-    // Visual properties.
+    // Visual properties. Fill accepts a color OR a gradient token (the scene
+    // paints any geometry uniformly); stroke is color-only.
     check_visual_prop(
         &poly.id,
         "fill",
         poly.fill.as_ref(),
-        VisualExpect::Color,
+        VisualExpect::ColorOrGradient,
         referenced_token_ids,
         resolved_tokens,
         diagnostics,
@@ -207,12 +208,13 @@ pub(in crate::validate::check) fn check_polyline(
         ));
     }
 
-    // Visual properties.
+    // Visual properties. Fill accepts a color OR a gradient token (the scene
+    // paints any geometry uniformly); stroke is color-only.
     check_visual_prop(
         &poly.id,
         "fill",
         poly.fill.as_ref(),
-        VisualExpect::Color,
+        VisualExpect::ColorOrGradient,
         referenced_token_ids,
         resolved_tokens,
         diagnostics,

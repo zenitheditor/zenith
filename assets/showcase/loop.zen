@@ -1,0 +1,49 @@
+zenith version=1 {
+  project id="proj.loop" name="Zenith Agentic Loop"
+  tokens format="zenith-token-v1" {
+    token id="color.ink" type="color" value="#10121d"
+    token id="color.surface" type="color" value="#1a1c28"
+    token id="color.border" type="color" value="#33384a"
+    token id="color.text" type="color" value="#f7f8fa"
+    token id="color.muted" type="color" value="#aab4c6"
+    token id="color.primary" type="color" value="#6366f1"
+    token id="color.accent" type="color" value="#22d3ee"
+    token id="font.body" type="fontFamily" value="Noto Sans"
+    token id="weight.bold" type="fontWeight" value=700
+    token id="weight.semi" type="fontWeight" value=600
+    token id="size.bw" type="dimension" value=(px)1.5
+    token id="size.r" type="dimension" value=(px)28
+    token id="size.pad" type="dimension" value=(px)8
+    token id="size.label" type="dimension" value=(px)21
+    token id="size.mid" type="dimension" value=(px)18
+    token id="size.midsub" type="dimension" value=(px)15
+  }
+  styles {
+    style id="style.node" {
+      font-family (token)"font.body"
+      font-size (token)"size.label"
+      font-weight (token)"weight.semi"
+      fill (token)"color.text"
+    }
+  }
+  document id="doc.loop" title="Zenith Agentic Loop" {
+    page id="page.loop" w=(px)1090 h=(px)500 background=(token)"color.ink" {
+      // ── Regular pentagon, apex up: centre (545,270), circumradius 215.
+      //    Node centres sit on the vertices; the label sits at the centroid. ──
+      shape id="n.author" kind="process" x=(px)470 y=(px)26 w=(px)150 h=(px)58 fill=(token)"color.surface" stroke=(token)"color.accent" stroke-width=(token)"size.bw" radius=(token)"size.r" padding=(token)"size.pad" text-style="style.node" { span "author" }
+      shape id="n.validate" kind="process" x=(px)675 y=(px)175 w=(px)150 h=(px)58 fill=(token)"color.surface" stroke=(token)"color.border" stroke-width=(token)"size.bw" radius=(token)"size.r" padding=(token)"size.pad" text-style="style.node" { span "validate" }
+      shape id="n.render" kind="process" x=(px)596 y=(px)415 w=(px)150 h=(px)58 fill=(token)"color.surface" stroke=(token)"color.border" stroke-width=(token)"size.bw" radius=(token)"size.r" padding=(token)"size.pad" text-style="style.node" { span "render" }
+      shape id="n.inspect" kind="process" x=(px)344 y=(px)415 w=(px)150 h=(px)58 fill=(token)"color.surface" stroke=(token)"color.border" stroke-width=(token)"size.bw" radius=(token)"size.r" padding=(token)"size.pad" text-style="style.node" { span "inspect" }
+      shape id="n.edit" kind="process" x=(px)265 y=(px)175 w=(px)150 h=(px)58 fill=(token)"color.surface" stroke=(token)"color.border" stroke-width=(token)"size.bw" radius=(token)"size.r" padding=(token)"size.pad" text-style="style.node" { span "edit" }
+      // ── Ring connectors (clockwise, looping back), 9-point anchors ──
+      connector id="c.1" from="n.author" to="n.validate" from-anchor="bottom-right" to-anchor="top" stroke=(token)"color.primary" stroke-width=(token)"size.bw" route="straight" marker-end="arrow"
+      connector id="c.2" from="n.validate" to="n.render" from-anchor="bottom" to-anchor="top" stroke=(token)"color.primary" stroke-width=(token)"size.bw" route="straight" marker-end="arrow"
+      connector id="c.3" from="n.render" to="n.inspect" from-anchor="left" to-anchor="right" stroke=(token)"color.primary" stroke-width=(token)"size.bw" route="straight" marker-end="arrow"
+      connector id="c.4" from="n.inspect" to="n.edit" from-anchor="top" to-anchor="bottom" stroke=(token)"color.primary" stroke-width=(token)"size.bw" route="straight" marker-end="arrow"
+      connector id="c.5" from="n.edit" to="n.author" from-anchor="top" to-anchor="bottom-left" stroke=(token)"color.primary" stroke-width=(token)"size.bw" route="straight" marker-end="arrow"
+      // ── Centre label at the pentagon centroid (545,270) ──
+      text id="mid" x=(px)415 y=(px)245 w=(px)260 h=(px)30 align="center" fill=(token)"color.text" font-family=(token)"font.body" font-size=(token)"size.mid" font-weight=(token)"weight.bold" { span "the agentic loop" }
+      text id="midsub" x=(px)415 y=(px)276 w=(px)260 h=(px)26 align="center" fill=(token)"color.muted" font-family=(token)"font.body" font-size=(token)"size.midsub" font-weight=(token)"weight.semi" { span "typed, validated, reproducible" }
+    }
+  }
+}

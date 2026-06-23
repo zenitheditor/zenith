@@ -9,7 +9,7 @@ use zenith_core::{
 };
 use zenith_layout::RustybuzzEngine;
 
-use crate::ir::SceneCommand;
+use crate::ir::{Paint, SceneCommand};
 
 use super::super::anchor::AnchorMap;
 use super::super::chain::ChainAssignments;
@@ -397,7 +397,7 @@ fn emit_cell_fill(
             y: rect.y,
             w: rect.w,
             h: rect.h,
-            color,
+            paint: Paint::solid(color),
         });
     }
 }

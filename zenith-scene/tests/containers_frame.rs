@@ -243,7 +243,10 @@ page id="page.f5" w=(px)100 h=(px)100 {
         .iter()
         .find(|c| matches!(c, SceneCommand::FillRect { .. }));
     match fill_rect {
-        Some(SceneCommand::FillRect { color, .. }) => {
+        Some(SceneCommand::FillRect {
+            paint: Paint::Solid { color },
+            ..
+        }) => {
             // 255 * 1.0 (node opacity) * 0.5 (frame opacity) = 127.5 → 128.
             assert_eq!(
                 color.a, 128,

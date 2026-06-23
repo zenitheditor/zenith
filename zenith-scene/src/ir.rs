@@ -168,6 +168,38 @@ pub struct GradientPaint {
     pub radius_frac: Option<f64>,
 }
 
+// ── Paint ───────────────────────────────────────────────────────────────────
+
+/// How a filled region is painted.
+///
+/// Every fill command carries a `Paint`, so any geometry (rectangle, rounded
+/// rectangle, ellipse, polygon, …) can be filled with a flat color or a
+/// gradient through one uniform model — there is no per-geometry gradient
+/// command. New fill kinds (e.g. patterns) are added here as one more variant,
+/// and the exhaustive matches over `Paint` force every backend to handle them.
+///
+/// Serialized internally-tagged on `kind` so the JSON is self-describing:
+/// `{ "kind": "solid", "color": {…} }` or
+/// `{ "kind": "gradient", "angle_deg": …, "stops": [...] }`.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(tag = "kind", rename_all = "lowercase")]
+pub enum Paint {
+    /// A flat fill color.
+    Solid {
+        /// The fill color (straight / un-pre-multiplied alpha).
+        color: Color,
+    },
+    /// A linear or radial gradient.
+    Gradient(GradientPaint),
+}
+
+impl Paint {
+    /// Construct a solid paint from a color.
+    pub fn solid(color: Color) -> Self {
+        Paint::Solid { color }
+    }
+}
+
 // ── Shadow ────────────────────────────────────────────────────────────────────
 
 /// A single drop-shadow / outer-glow layer.
@@ -337,7 +369,7 @@ pub enum SceneCommand {
         y: f64,
         w: f64,
         h: f64,
-        color: Color,
+        paint: Paint,
     },
     /// Stroke an axis-aligned rectangle (inside the declared edge by default).
     StrokeRect {
@@ -364,7 +396,7 @@ pub enum SceneCommand {
         w: f64,
         h: f64,
         radius: f64,
-        color: Color,
+        paint: Paint,
         /// Per-corner radii `[tl, tr, br, bl]`. `None` = use uniform `radius` for all
         /// corners (byte-identical to prior IR when absent).
         #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -399,42 +431,7 @@ pub enum SceneCommand {
         y: f64,
         w: f64,
         h: f64,
-        color: Color,
-        /// Explicit x-radius (overrides w/2). `None` = inscribed ellipse (byte-identical).
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        rx: Option<f64>,
-        /// Explicit y-radius (overrides h/2). `None` = inscribed ellipse (byte-identical).
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        ry: Option<f64>,
-    },
-    /// Fill an axis-aligned rectangle with a linear gradient.
-    FillRectGradient {
-        x: f64,
-        y: f64,
-        w: f64,
-        h: f64,
-        gradient: GradientPaint,
-    },
-    /// Fill a rectangle with uniform corner radius, painted with a linear gradient.
-    FillRoundedRectGradient {
-        x: f64,
-        y: f64,
-        w: f64,
-        h: f64,
-        radius: f64,
-        gradient: GradientPaint,
-        /// Per-corner radii `[tl, tr, br, bl]`. `None` = use uniform `radius` for all
-        /// corners (byte-identical to prior IR when absent).
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        radii: Option<[f64; 4]>,
-    },
-    /// Fill an axis-aligned ellipse with a linear gradient.
-    FillEllipseGradient {
-        x: f64,
-        y: f64,
-        w: f64,
-        h: f64,
-        gradient: GradientPaint,
+        paint: Paint,
         /// Explicit x-radius (overrides w/2). `None` = inscribed ellipse (byte-identical).
         #[serde(default, skip_serializing_if = "Option::is_none")]
         rx: Option<f64>,
@@ -489,7 +486,7 @@ pub enum SceneCommand {
     FillPolygon {
         /// Flat list of `[x0, y0, x1, y1, …]` vertex coordinates.
         points: Vec<f64>,
-        color: Color,
+        paint: Paint,
         /// When `true`, use the even-odd fill rule; otherwise nonzero (winding).
         #[serde(default)]
         even_odd: bool,
@@ -773,7 +770,7 @@ mod tests {
             y: 0.0,
             w: 640.0,
             h: 360.0,
-            color: Color::srgb(10, 20, 30, 255),
+            paint: Paint::solid(Color::srgb(10, 20, 30, 255)),
         });
         let a = s.to_json().expect("first serialize");
         let b = s.to_json().expect("second serialize");
@@ -787,7 +784,7 @@ mod tests {
             y: 2.0,
             w: 3.0,
             h: 4.0,
-            color: Color::srgb(255, 0, 0, 255),
+            paint: Paint::solid(Color::srgb(255, 0, 0, 255)),
         };
         let json = serde_json::to_string(&cmd).expect("serialize");
         assert!(
@@ -803,7 +800,7 @@ mod tests {
             y: 0.0,
             w: 1.0,
             h: 1.0,
-            color: Color::srgb(1, 2, 3, 255),
+            paint: Paint::solid(Color::srgb(1, 2, 3, 255)),
         };
         let json = serde_json::to_string(&cmd).expect("serialize");
         assert!(

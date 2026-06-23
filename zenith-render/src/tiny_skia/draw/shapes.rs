@@ -4,75 +4,163 @@
 //! [`DrawCtx`]; behavior is byte-identical to the prior inline match arms.
 
 use tiny_skia::{FillRule, Mask, Paint, PathBuilder, Pixmap, Rect, Stroke, Transform};
-use zenith_scene::{SceneCommand, StrokeAlign};
+use zenith_scene::{Paint as ScenePaint, SceneCommand, StrokeAlign};
 
 use super::super::commands::{DrawCtx, build_stroke_dash, map_line_cap};
+use super::super::gradient::gradient_shader;
 use super::super::paths::{
     build_align_mask, build_poly_path, build_rounded_rect_path, clip_mask, intersect_rects,
 };
 
+/// Build a tiny-skia fill paint from a scene [`ScenePaint`] over the bounding
+/// box `(x, y, w, h)` (used to resolve the gradient line). Anti-aliased — the
+/// caller uses this for path fills (rounded-rect, ellipse, polygon, and the
+/// rotated/gradient rect branch). Returns `None` when a gradient shader cannot
+/// be built (e.g. fewer than two stops), so the caller skips the draw.
+fn ts_fill_paint(paint: &ScenePaint, x: f64, y: f64, w: f64, h: f64) -> Option<Paint<'static>> {
+    match paint {
+        ScenePaint::Solid { color } => {
+            let mut p = Paint::default();
+            p.set_color_rgba8(color.r, color.g, color.b, color.a);
+            p.anti_alias = true;
+            Some(p)
+        }
+        ScenePaint::Gradient(gradient) => {
+            let shader = gradient_shader(x, y, w, h, gradient)?;
+            Some(Paint {
+                shader,
+                anti_alias: true,
+                ..Default::default()
+            })
+        }
+    }
+}
+
+/// The axis-aligned bounding box `(x, y, w, h)` of a flat `[x0,y0,x1,y1,…]`
+/// point list, used to resolve a gradient line for polygon fills.
+fn flat_points_bbox(points: &[f64]) -> Option<(f64, f64, f64, f64)> {
+    let mut xs = points.iter().step_by(2).copied();
+    let mut ys = points.iter().skip(1).step_by(2).copied();
+    let (mut min_x, mut max_x) = {
+        let first = xs.next()?;
+        (first, first)
+    };
+    let (mut min_y, mut max_y) = {
+        let first = ys.next()?;
+        (first, first)
+    };
+    for x in xs {
+        min_x = min_x.min(x);
+        max_x = max_x.max(x);
+    }
+    for y in ys {
+        min_y = min_y.min(y);
+        max_y = max_y.max(y);
+    }
+    Some((min_x, min_y, max_x - min_x, max_y - min_y))
+}
+
 pub(in crate::tiny_skia) fn fill_rect(target: &mut Pixmap, ctx: DrawCtx, cmd: &SceneCommand) {
-    let SceneCommand::FillRect { x, y, w, h, color } = cmd else {
+    let SceneCommand::FillRect { x, y, w, h, paint } = cmd else {
         return;
     };
-    if ctx.current_ts.is_identity() {
-        // ── Unrotated (identity) path — byte-identical to before ──
-        let fill_rect = (*x, *y, x + w, y + h);
-        let effective_clip = ctx.effective_clip;
+    match paint {
+        // ── Solid fill — byte-identical to the pre-Paint behavior ──
+        ScenePaint::Solid { color } => {
+            if ctx.current_ts.is_identity() {
+                // ── Unrotated (identity) path — AA-off axis-aligned fill ──
+                let fill_rect = (*x, *y, x + w, y + h);
+                let effective_clip = ctx.effective_clip;
 
-        // Intersect the fill rect with the current effective clip.
-        let (ix, iy, ix2, iy2) = match intersect_rects(fill_rect, effective_clip) {
-            Some(r) => r,
-            None => return, // nothing to draw
-        };
+                // Intersect the fill rect with the current effective clip.
+                let (ix, iy, ix2, iy2) = match intersect_rects(fill_rect, effective_clip) {
+                    Some(r) => r,
+                    None => return, // nothing to draw
+                };
 
-        let iw = ix2 - ix;
-        let ih = iy2 - iy;
+                let iw = ix2 - ix;
+                let ih = iy2 - iy;
 
-        // tiny-skia requires positive, finite values for Rect::from_xywh.
-        if iw <= 0.0
-            || ih <= 0.0
-            || !ix.is_finite()
-            || !iy.is_finite()
-            || !iw.is_finite()
-            || !ih.is_finite()
-        {
-            return;
+                // tiny-skia requires positive, finite values for Rect::from_xywh.
+                if iw <= 0.0
+                    || ih <= 0.0
+                    || !ix.is_finite()
+                    || !iy.is_finite()
+                    || !iw.is_finite()
+                    || !ih.is_finite()
+                {
+                    return;
+                }
+
+                let rect = match Rect::from_xywh(ix as f32, iy as f32, iw as f32, ih as f32) {
+                    Some(r) => r,
+                    None => return,
+                };
+
+                let mut paint = Paint::default();
+                paint.set_color_rgba8(color.r, color.g, color.b, color.a);
+                paint.anti_alias = false; // deterministic: no edge AA variance
+
+                // Drawing outside the pixmap simply touches no pixels; not an error.
+                target.fill_rect(rect, &paint, Transform::identity(), None);
+            } else {
+                // ── Rotated path: fill the rect as a path under the current
+                // transform, AA-on, masked by the (axis-aligned) clip. ──
+                let effective_clip = ctx.effective_clip;
+                let mask = match clip_mask(effective_clip, ctx.width, ctx.height) {
+                    None => return,
+                    Some(m) => m,
+                };
+                let Some(rect) = Rect::from_xywh(*x as f32, *y as f32, *w as f32, *h as f32) else {
+                    return;
+                };
+                let path = PathBuilder::from_rect(rect);
+                let mut paint = Paint::default();
+                paint.set_color_rgba8(color.r, color.g, color.b, color.a);
+                paint.anti_alias = true;
+                target.fill_path(
+                    &path,
+                    &paint,
+                    FillRule::Winding,
+                    ctx.current_ts,
+                    mask.as_ref(),
+                );
+            }
         }
-
-        let rect = match Rect::from_xywh(ix as f32, iy as f32, iw as f32, ih as f32) {
-            Some(r) => r,
-            None => return,
-        };
-
-        let mut paint = Paint::default();
-        paint.set_color_rgba8(color.r, color.g, color.b, color.a);
-        paint.anti_alias = false; // deterministic: no edge AA variance
-
-        // Drawing outside the pixmap simply touches no pixels; not an error.
-        target.fill_rect(rect, &paint, Transform::identity(), None);
-    } else {
-        // ── Rotated path: fill the rect as a path under the current
-        // transform, AA-on, masked by the (axis-aligned) clip. ──
-        let effective_clip = ctx.effective_clip;
-        let mask = match clip_mask(effective_clip, ctx.width, ctx.height) {
-            None => return,
-            Some(m) => m,
-        };
-        let Some(rect) = Rect::from_xywh(*x as f32, *y as f32, *w as f32, *h as f32) else {
-            return;
-        };
-        let path = PathBuilder::from_rect(rect);
-        let mut paint = Paint::default();
-        paint.set_color_rgba8(color.r, color.g, color.b, color.a);
-        paint.anti_alias = true;
-        target.fill_path(
-            &path,
-            &paint,
-            FillRule::Winding,
-            ctx.current_ts,
-            mask.as_ref(),
-        );
+        // ── Gradient fill — path-fill with a shader (AA on) ──
+        ScenePaint::Gradient(_) => {
+            if !x.is_finite()
+                || !y.is_finite()
+                || !w.is_finite()
+                || !h.is_finite()
+                || *w <= 0.0
+                || *h <= 0.0
+            {
+                return;
+            }
+            let effective_clip = ctx.effective_clip;
+            if intersect_rects((*x, *y, x + w, y + h), effective_clip).is_none() {
+                return;
+            }
+            let Some(rect) = Rect::from_xywh(*x as f32, *y as f32, *w as f32, *h as f32) else {
+                return;
+            };
+            let path = PathBuilder::from_rect(rect);
+            let mask = match clip_mask(effective_clip, ctx.width, ctx.height) {
+                None => return,
+                Some(m) => m,
+            };
+            let Some(paint_ts) = ts_fill_paint(paint, *x, *y, *w, *h) else {
+                return;
+            };
+            target.fill_path(
+                &path,
+                &paint_ts,
+                FillRule::Winding,
+                ctx.current_ts,
+                mask.as_ref(),
+            );
+        }
     }
 }
 
@@ -84,7 +172,7 @@ pub(in crate::tiny_skia) fn fill_ellipse(target: &mut Pixmap, ctx: DrawCtx, cmd:
         h,
         rx,
         ry,
-        color,
+        paint,
     } = cmd
     else {
         return;
@@ -132,13 +220,15 @@ pub(in crate::tiny_skia) fn fill_ellipse(target: &mut Pixmap, ctx: DrawCtx, cmd:
         Some(m) => m,
     };
 
-    let mut paint = Paint::default();
-    paint.set_color_rgba8(color.r, color.g, color.b, color.a);
-    paint.anti_alias = true;
+    // The gradient line resolves over the node bbox (x, y, w, h), matching the
+    // rect/rounded-rect convention; the path itself is the oval bbox.
+    let Some(paint_ts) = ts_fill_paint(paint, *x, *y, *w, *h) else {
+        return;
+    };
 
     target.fill_path(
         &path,
-        &paint,
+        &paint_ts,
         FillRule::Winding,
         ctx.current_ts,
         mask.as_ref(),
@@ -309,7 +399,7 @@ pub(in crate::tiny_skia) fn stroke_line(target: &mut Pixmap, ctx: DrawCtx, cmd: 
 pub(in crate::tiny_skia) fn fill_polygon(target: &mut Pixmap, ctx: DrawCtx, cmd: &SceneCommand) {
     let SceneCommand::FillPolygon {
         points,
-        color,
+        paint,
         even_odd,
     } = cmd
     else {
@@ -341,11 +431,15 @@ pub(in crate::tiny_skia) fn fill_polygon(target: &mut Pixmap, ctx: DrawCtx, cmd:
         FillRule::Winding
     };
 
-    let mut paint = Paint::default();
-    paint.set_color_rgba8(color.r, color.g, color.b, color.a);
-    paint.anti_alias = true;
+    // A gradient fill resolves its line over the polygon's bounding box.
+    let Some((bx, by, bw, bh)) = flat_points_bbox(points) else {
+        return;
+    };
+    let Some(paint_ts) = ts_fill_paint(paint, bx, by, bw, bh) else {
+        return;
+    };
 
-    target.fill_path(&path, &paint, fill_rule, ctx.current_ts, mask.as_ref());
+    target.fill_path(&path, &paint_ts, fill_rule, ctx.current_ts, mask.as_ref());
 }
 
 pub(in crate::tiny_skia) fn stroke_polyline(target: &mut Pixmap, ctx: DrawCtx, cmd: &SceneCommand) {
@@ -505,7 +599,7 @@ pub(in crate::tiny_skia) fn fill_rounded_rect(
         h,
         radius,
         radii,
-        color,
+        paint,
     } = cmd
     else {
         return;
@@ -539,13 +633,13 @@ pub(in crate::tiny_skia) fn fill_rounded_rect(
         Some(m) => m,
     };
 
-    let mut paint = Paint::default();
-    paint.set_color_rgba8(color.r, color.g, color.b, color.a);
-    paint.anti_alias = true;
+    let Some(paint_ts) = ts_fill_paint(paint, *x, *y, *w, *h) else {
+        return;
+    };
 
     target.fill_path(
         &path,
-        &paint,
+        &paint_ts,
         FillRule::Winding,
         ctx.current_ts,
         mask.as_ref(),

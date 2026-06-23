@@ -11,7 +11,7 @@ use zenith_core::{
 };
 use zenith_layout::{ShapeRequest, TextDirection, TextLayoutEngine, ZenithGlyphRun};
 
-use crate::ir::{Color, SceneCommand};
+use crate::ir::{Color, Paint, SceneCommand};
 
 use super::super::RenderCtx;
 use super::super::paint::{
@@ -766,7 +766,7 @@ pub(in crate::compile) fn compile_text_sized(
                     y: baseline_y + shaped.font_size as f64 * 0.12,
                     w: run_advance,
                     h: deco_thickness,
-                    color: shaped.color,
+                    paint: Paint::solid(shaped.color),
                 });
             }
             if shaped.strikethrough {
@@ -775,7 +775,7 @@ pub(in crate::compile) fn compile_text_sized(
                     y: baseline_y - shaped.font_size as f64 * 0.30,
                     w: run_advance,
                     h: deco_thickness,
-                    color: shaped.color,
+                    paint: Paint::solid(shaped.color),
                 });
             }
 

@@ -6,7 +6,7 @@
 
 use zenith_layout::TextDirection;
 
-use crate::ir::{Color, SceneCommand};
+use crate::ir::{Color, Paint, SceneCommand};
 
 use super::ctx::{EmitStyle, UniformGeom};
 use super::pack::Line;
@@ -170,7 +170,7 @@ pub(in crate::compile) fn emit_lines_profiled<F>(
                         y: deco_y,
                         w: run_right - sx,
                         h: deco_thickness,
-                        color,
+                        paint: Paint::solid(color),
                     });
                 }
             }
@@ -180,7 +180,7 @@ pub(in crate::compile) fn emit_lines_profiled<F>(
                     y: deco_y,
                     w: run_right - sx,
                     h: deco_thickness,
-                    color,
+                    paint: Paint::solid(color),
                 });
             }
         }

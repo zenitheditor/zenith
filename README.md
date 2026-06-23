@@ -2,6 +2,8 @@
 
 # Zenith
 
+<img src="assets/showcase/hero.png" alt="Zenith — give your AI agent the power to create and edit real designs" width="900">
+
 <h3>A design-document format and engine built for the age of AI agents.</h3>
 
 <p>
@@ -24,6 +26,8 @@ Plain-text <strong>.zen</strong> design files that you can read, diff, review, v
   <img src="https://img.shields.io/badge/deps-C--free-green" alt="C-free dependencies">
   <a href="#status"><img src="https://img.shields.io/badge/status-pre--0.1-yellow" alt="Status: pre-0.1"></a>
 </p>
+
+<sub><i>Every banner and diagram in this README is itself created using Zenith — source in <a href="assets/showcase">assets/showcase/</a>.</i></sub>
 
 </div>
 
@@ -190,6 +194,10 @@ People are still first-class users. "Agent-first" means the safe, scriptable cor
 
 A `.zen` document flows through a single deterministic pipeline. Each stage is a separate crate with a clean contract boundary, so a future GPU backend, SVG export, or visual editor consumes the same scene IR:
 
+<p align="center"><img src="assets/showcase/pipeline.png" alt="Pipeline: .zen source → validate → compile → scene IR → render → PNG/PDF" width="900"></p>
+
+<sub><i>Rendered by Zenith — source: <a href="assets/showcase/pipeline.zen"><code>assets/showcase/pipeline.zen</code></a>.</i></sub>
+
 ```text
   design.zen  (KDL plain text)
        │  parse + validate           zenith-core   →  diagnostics (Error/Warning/Advisory)
@@ -255,7 +263,11 @@ What it actually checks, in plain terms:
 Why it matters:
 
 - **For people** — you catch "the headline ran off the page", "this grey-on-grey is unreadable", "that color isn't a brand token", or "the print file has the wrong colorspace" _before_ exporting, not after.
-- **For agents** — `zenith validate --json` is a precise, machine-readable contract. An agent edits the source, validates, and _knows_ whether the change is sound — the safety net that makes hands-off editing trustworthy. The agent loop is always **author/edit → `validate` → fix Errors → `render`** (see [Quick start](#quick-start)).
+- **For agents** — `zenith validate --json` is a precise, machine-readable contract. An agent edits the source, validates, and _knows_ whether the change is sound — the safety net that makes hands-off editing trustworthy.
+
+<p align="center"><img src="assets/showcase/loop.png" alt="The agentic loop: author → validate → render → inspect → edit" width="620"></p>
+
+<sub><i>Rendered by Zenith — source: <a href="assets/showcase/loop.zen"><code>assets/showcase/loop.zen</code></a>.</i></sub>
 
 </details>
 
@@ -264,6 +276,10 @@ Why it matters:
 <details><summary>Two ways to generate many outputs from one design: <code>zenith variant</code> (sizes) and <code>zenith merge</code> (data).</summary>
 
 Two complementary ways to generate many outputs from one design — one varies **size**, the other varies **content**.
+
+<p align="center"><img src="assets/showcase/variants.png" alt="One canonical design rendered at square, story, and banner sizes" width="900"></p>
+
+<sub><i>Rendered by Zenith — source: <a href="assets/showcase/variants.zen"><code>assets/showcase/variants.zen</code></a>.</i></sub>
 
 ### Size / format variants (`zenith variant`)
 

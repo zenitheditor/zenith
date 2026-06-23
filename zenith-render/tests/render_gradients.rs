@@ -18,12 +18,12 @@ fn fill_rect_gradient_renders_non_uniform_and_deterministic() {
         w: 40.0,
         h: 40.0,
     });
-    scene.commands.push(SceneCommand::FillRectGradient {
+    scene.commands.push(SceneCommand::FillRect {
         x: 0.0,
         y: 0.0,
         w: 40.0,
         h: 40.0,
-        gradient: GradientPaint {
+        paint: Paint::Gradient(GradientPaint {
             angle_deg: 90.0, // top-to-bottom
             stops: vec![
                 GradientStop {
@@ -39,7 +39,7 @@ fn fill_rect_gradient_renders_non_uniform_and_deterministic() {
             center_x: None,
             center_y: None,
             radius_frac: None,
-        },
+        }),
     });
     scene.commands.push(SceneCommand::PopClip);
 
@@ -82,12 +82,12 @@ fn radial_gradient_renders_symmetric_and_varies() {
         h: size,
     });
     // White center → black edge, centered radial gradient.
-    scene.commands.push(SceneCommand::FillRectGradient {
+    scene.commands.push(SceneCommand::FillRect {
         x: 0.0,
         y: 0.0,
         w: size,
         h: size,
-        gradient: GradientPaint {
+        paint: Paint::Gradient(GradientPaint {
             angle_deg: 0.0,
             stops: vec![
                 GradientStop {
@@ -103,7 +103,7 @@ fn radial_gradient_renders_symmetric_and_varies() {
             center_x: Some(0.5),
             center_y: Some(0.5),
             radius_frac: None,
-        },
+        }),
     });
     scene.commands.push(SceneCommand::PopClip);
 

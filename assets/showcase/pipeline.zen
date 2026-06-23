@@ -1,0 +1,56 @@
+zenith version=1 {
+  project id="proj.pipeline" name="Zenith Pipeline"
+  tokens format="zenith-token-v1" {
+    token id="color.ink" type="color" value="#10121d"
+    token id="color.surface" type="color" value="#1a1c28"
+    token id="color.border" type="color" value="#33384a"
+    token id="color.text" type="color" value="#f7f8fa"
+    token id="color.muted" type="color" value="#aab4c6"
+    token id="color.primary" type="color" value="#6366f1"
+    token id="color.accent" type="color" value="#22d3ee"
+    token id="font.body" type="fontFamily" value="Noto Sans"
+    token id="weight.semi" type="fontWeight" value=600
+    token id="size.bw" type="dimension" value=(px)1.5
+    token id="size.r" type="dimension" value=(px)10
+    token id="size.pad" type="dimension" value=(px)10
+    token id="size.label" type="dimension" value=(px)21
+    token id="size.out" type="dimension" value=(px)20
+    token id="size.cap" type="dimension" value=(px)18
+  }
+  styles {
+    style id="style.label" {
+      font-family (token)"font.body"
+      font-size (token)"size.label"
+      font-weight (token)"weight.semi"
+      fill (token)"color.text"
+    }
+    style id="style.out" {
+      font-family (token)"font.body"
+      font-size (token)"size.out"
+      font-weight (token)"weight.semi"
+      fill (token)"color.text"
+    }
+  }
+  document id="doc.pipeline" title="Zenith Pipeline" {
+    page id="page.pipeline" w=(px)1280 h=(px)300 background=(token)"color.ink" {
+      // ── Pipeline stages: .zen → validate → compile → scene IR → render ──
+      shape id="s.src" kind="process" x=(px)32 y=(px)120 w=(px)176 h=(px)72 fill=(token)"color.surface" stroke=(token)"color.accent" stroke-width=(token)"size.bw" radius=(token)"size.r" padding=(token)"size.pad" text-style="style.label" { span ".zen source" }
+      shape id="s.val" kind="process" x=(px)262 y=(px)120 w=(px)176 h=(px)72 fill=(token)"color.surface" stroke=(token)"color.border" stroke-width=(token)"size.bw" radius=(token)"size.r" padding=(token)"size.pad" text-style="style.label" { span "validate" }
+      shape id="s.cmp" kind="process" x=(px)492 y=(px)120 w=(px)176 h=(px)72 fill=(token)"color.surface" stroke=(token)"color.border" stroke-width=(token)"size.bw" radius=(token)"size.r" padding=(token)"size.pad" text-style="style.label" { span "compile" }
+      shape id="s.scene" kind="process" x=(px)722 y=(px)120 w=(px)176 h=(px)72 fill=(token)"color.surface" stroke=(token)"color.border" stroke-width=(token)"size.bw" radius=(token)"size.r" padding=(token)"size.pad" text-style="style.label" { span "scene IR" }
+      shape id="s.render" kind="process" x=(px)952 y=(px)120 w=(px)176 h=(px)72 fill=(token)"color.surface" stroke=(token)"color.primary" stroke-width=(token)"size.bw" radius=(token)"size.r" padding=(token)"size.pad" text-style="style.label" { span "render" }
+      // ── Outputs: PNG + PDF ──
+      shape id="s.png" kind="terminator" x=(px)1150 y=(px)56 w=(px)98 h=(px)60 fill=(token)"color.primary" stroke=(token)"color.accent" stroke-width=(token)"size.bw" padding=(token)"size.pad" text-style="style.out" { span "PNG" }
+      shape id="s.pdf" kind="terminator" x=(px)1150 y=(px)196 w=(px)98 h=(px)60 fill=(token)"color.primary" stroke=(token)"color.accent" stroke-width=(token)"size.bw" padding=(token)"size.pad" text-style="style.out" { span "PDF" }
+      // ── Connectors ──
+      connector id="c.1" from="s.src" to="s.val" stroke=(token)"color.muted" stroke-width=(token)"size.bw" route="orthogonal" marker-end="arrow"
+      connector id="c.2" from="s.val" to="s.cmp" stroke=(token)"color.muted" stroke-width=(token)"size.bw" route="orthogonal" marker-end="arrow"
+      connector id="c.3" from="s.cmp" to="s.scene" stroke=(token)"color.muted" stroke-width=(token)"size.bw" route="orthogonal" marker-end="arrow"
+      connector id="c.4" from="s.scene" to="s.render" stroke=(token)"color.muted" stroke-width=(token)"size.bw" route="orthogonal" marker-end="arrow"
+      connector id="c.png" from="s.render" to="s.png" stroke=(token)"color.accent" stroke-width=(token)"size.bw" route="orthogonal" marker-end="arrow"
+      connector id="c.pdf" from="s.render" to="s.pdf" stroke=(token)"color.accent" stroke-width=(token)"size.bw" route="orthogonal" marker-end="arrow"
+      // ── Caption ──
+      text id="cap" x=(px)32 y=(px)244 w=(px)900 h=(px)40 fill=(token)"color.muted" font-family=(token)"font.body" font-size=(token)"size.cap" font-weight=(token)"weight.semi" { span "One deterministic pipeline — same source in, same pixels out." }
+    }
+  }
+}

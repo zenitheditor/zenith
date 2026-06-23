@@ -1,0 +1,68 @@
+zenith version=1 {
+  project id="proj.hero" name="Zenith Hero"
+  tokens format="zenith-token-v1" {
+    token id="color.ink" type="color" value="#10121d"
+    token id="color.text" type="color" value="#f7f8fa"
+    token id="color.muted" type="color" value="#aab4c6"
+    token id="color.primary" type="color" value="#6366f1"
+    token id="color.accent" type="color" value="#22d3ee"
+    token id="grad.brand" type="gradient" angle=(deg)110 {
+      stop offset=0.0 color=(token)"color.primary"
+      stop offset=1.0 color=(token)"color.accent"
+    }
+    token id="grad.glow" type="gradient" radial=#true center-x=0.8 center-y=0.25 radius=0.75 {
+      stop offset=0.0 color=(token)"color.primary"
+      stop offset=1.0 color=(token)"color.ink"
+    }
+    token id="font.body" type="fontFamily" value="Noto Sans"
+    token id="weight.bold" type="fontWeight" value=700
+    token id="weight.semi" type="fontWeight" value=600
+    token id="radius.sm" type="dimension" value=(px)4
+    token id="size.line" type="dimension" value=(px)1.5
+    token id="size.word" type="dimension" value=(px)120
+    token id="size.tag" type="dimension" value=(px)30
+    token id="size.kicker" type="dimension" value=(px)18
+  }
+  styles {}
+  document id="doc.hero" title="Zenith Hero" {
+    page id="page.hero" w=(px)1280 h=(px)440 background=(token)"color.ink" {
+      rect id="bg.glow" x=(px)0 y=(px)0 w=(px)1280 h=(px)440 fill=(token)"grad.glow" opacity=0.6
+      // Faint diagonal hatch on the left, each line fading by its x-position —
+      // just visible at the far-left edge, gone by the centre, so the
+      // background glow shows through cleanly.
+      line id="ln.1" x1=(px)20 y1=(px)440 x2=(px)190 y2=(px)0 stroke=(token)"color.primary" stroke-width=(token)"size.line" opacity=0.3
+      line id="ln.2" x1=(px)110 y1=(px)440 x2=(px)280 y2=(px)0 stroke=(token)"color.primary" stroke-width=(token)"size.line" opacity=0.22
+      line id="ln.3" x1=(px)200 y1=(px)440 x2=(px)370 y2=(px)0 stroke=(token)"color.accent" stroke-width=(token)"size.line" opacity=0.16
+      line id="ln.4" x1=(px)290 y1=(px)440 x2=(px)460 y2=(px)0 stroke=(token)"color.primary" stroke-width=(token)"size.line" opacity=0.1
+      line id="ln.5" x1=(px)380 y1=(px)440 x2=(px)550 y2=(px)0 stroke=(token)"color.primary" stroke-width=(token)"size.line" opacity=0.05
+      line id="ln.6" x1=(px)470 y1=(px)440 x2=(px)640 y2=(px)0 stroke=(token)"color.primary" stroke-width=(token)"size.line" opacity=0.03
+      // Layered, tilted, fading gradient peaks — receding behind the front
+      // one (painted back-to-front; each less opaque). Shows layers + rotation
+      // + per-shape opacity + gradient fill on rotated polygons.
+      polygon id="peak.b3" fill=(token)"grad.brand" opacity=0.1 rotate=(deg)-24 {
+        point x=(px)1070 y=(px)110
+        point x=(px)1190 y=(px)312
+        point x=(px)950 y=(px)312
+      }
+      polygon id="peak.b2" fill=(token)"grad.brand" opacity=0.18 rotate=(deg)-16 {
+        point x=(px)1070 y=(px)110
+        point x=(px)1190 y=(px)312
+        point x=(px)950 y=(px)312
+      }
+      polygon id="peak.b1" fill=(token)"grad.brand" opacity=0.32 rotate=(deg)-8 {
+        point x=(px)1070 y=(px)110
+        point x=(px)1190 y=(px)312
+        point x=(px)950 y=(px)312
+      }
+      polygon id="peak.main" fill=(token)"grad.brand" opacity=0.95 {
+        point x=(px)1070 y=(px)110
+        point x=(px)1190 y=(px)312
+        point x=(px)950 y=(px)312
+      }
+      text id="kicker" x=(px)84 y=(px)92 w=(px)700 h=(px)28 fill=(token)"color.accent" font-family=(token)"font.body" font-size=(token)"size.kicker" font-weight=(token)"weight.semi" { span "THE  DESIGN  COMPILER" }
+      text id="wordmark" x=(px)80 y=(px)120 w=(px)860 h=(px)180 fill=(token)"color.text" font-family=(token)"font.body" font-size=(token)"size.word" font-weight=(token)"weight.bold" { span "ZENITH" }
+      rect id="rule" x=(px)88 y=(px)286 w=(px)260 h=(px)8 fill=(token)"grad.brand" radius=(token)"radius.sm"
+      text id="tagline" x=(px)84 y=(px)306 w=(px)760 h=(px)96 fill=(token)"color.muted" font-family=(token)"font.body" font-size=(token)"size.tag" font-weight=(token)"weight.semi" { span "Give your AI agent the power to create and edit real designs." }
+    }
+  }
+}

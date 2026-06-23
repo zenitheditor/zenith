@@ -55,15 +55,6 @@ pub(in crate::tiny_skia) fn draw_command(
         SceneCommand::StrokeRoundedRect { .. } => {
             draw::shapes::stroke_rounded_rect(target, ctx, cmd)
         }
-        SceneCommand::FillRectGradient { .. } => {
-            draw::gradient_fills::fill_rect_gradient(target, ctx, cmd)
-        }
-        SceneCommand::FillRoundedRectGradient { .. } => {
-            draw::gradient_fills::fill_rounded_rect_gradient(target, ctx, cmd)
-        }
-        SceneCommand::FillEllipseGradient { .. } => {
-            draw::gradient_fills::fill_ellipse_gradient(target, ctx, cmd)
-        }
         SceneCommand::DrawGlyphRun { .. } => draw::text::draw_glyph_run(target, ctx, cmd, fonts),
         SceneCommand::DrawImage { .. } => {
             draw::image::draw_image(target, ctx, cmd, assets, fonts, svg_fontdb)

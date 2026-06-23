@@ -7,10 +7,12 @@ use zenith_core::{
     Diagnostic, LineNode, Point, PolygonNode, PolylineNode, ResolvedToken, Span, Style, dim_to_px,
 };
 
-use crate::ir::{SceneCommand, StrokeAlign};
+use crate::ir::{Paint, SceneCommand, StrokeAlign};
 
 use super::super::RenderCtx;
-use super::super::paint::resolve_property_color;
+use super::super::paint::{
+    apply_gradient_opacity, resolve_property_color, resolve_property_gradient,
+};
 use super::super::style_prop;
 use super::super::util::{resolve_property_dimension_px, rotation_degrees, unsupported_unit_diag};
 use super::common::resolve_dash_params;
@@ -238,19 +240,31 @@ pub(in crate::compile) fn compile_polygon(
     }
 
     // FILL (drawn first, stroke on top) — node-local overrides style cascade.
+    // A gradient fill resolves over the polygon's bounding box at raster time;
+    // a color fill bakes in the node + ancestor opacity.
     let fill_prop = poly
         .fill
         .as_ref()
         .or_else(|| style_prop(&poly.style, style_map, "fill"));
-    if let Some(fill_prop) = fill_prop
-        && let Some(mut color) = resolve_property_color(fill_prop, resolved, diagnostics, &poly.id)
-    {
-        color.a = (color.a as f64 * node_opacity * ctx.opacity).round() as u8;
-        commands.push(SceneCommand::FillPolygon {
-            points: flat_points.clone(),
-            color,
-            even_odd,
-        });
+    if let Some(fill_prop) = fill_prop {
+        let fill_op = node_opacity * ctx.opacity;
+        if let Some(mut gradient) = resolve_property_gradient(fill_prop, resolved, &poly.id) {
+            apply_gradient_opacity(&mut gradient, fill_op, 1.0);
+            commands.push(SceneCommand::FillPolygon {
+                points: flat_points.clone(),
+                paint: Paint::Gradient(gradient),
+                even_odd,
+            });
+        } else if let Some(mut color) =
+            resolve_property_color(fill_prop, resolved, diagnostics, &poly.id)
+        {
+            color.a = (color.a as f64 * fill_op).round() as u8;
+            commands.push(SceneCommand::FillPolygon {
+                points: flat_points.clone(),
+                paint: Paint::solid(color),
+                even_odd,
+            });
+        }
     }
 
     // STROKE (drawn on top of fill) — node-local overrides style cascade.
@@ -347,15 +361,25 @@ pub(in crate::compile) fn compile_polyline(
         .fill
         .as_ref()
         .or_else(|| style_prop(&poly.style, style_map, "fill"));
-    if let Some(fill_prop) = fill_prop
-        && let Some(mut color) = resolve_property_color(fill_prop, resolved, diagnostics, &poly.id)
-    {
-        color.a = (color.a as f64 * node_opacity * ctx.opacity).round() as u8;
-        commands.push(SceneCommand::FillPolygon {
-            points: flat_points.clone(),
-            color,
-            even_odd,
-        });
+    if let Some(fill_prop) = fill_prop {
+        let fill_op = node_opacity * ctx.opacity;
+        if let Some(mut gradient) = resolve_property_gradient(fill_prop, resolved, &poly.id) {
+            apply_gradient_opacity(&mut gradient, fill_op, 1.0);
+            commands.push(SceneCommand::FillPolygon {
+                points: flat_points.clone(),
+                paint: Paint::Gradient(gradient),
+                even_odd,
+            });
+        } else if let Some(mut color) =
+            resolve_property_color(fill_prop, resolved, diagnostics, &poly.id)
+        {
+            color.a = (color.a as f64 * fill_op).round() as u8;
+            commands.push(SceneCommand::FillPolygon {
+                points: flat_points.clone(),
+                paint: Paint::solid(color),
+                even_odd,
+            });
+        }
     }
 
     // STROKE — open path (closed: false) — style cascade.

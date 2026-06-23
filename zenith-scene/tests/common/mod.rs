@@ -11,7 +11,7 @@
 #![allow(dead_code, unused_imports)]
 
 pub use zenith_core::{Document, KdlAdapter, KdlSource, default_provider};
-pub use zenith_scene::ir::{Color, FitMode, ImageClip, SceneCommand};
+pub use zenith_scene::ir::{Color, FitMode, ImageClip, Paint, SceneCommand};
 pub use zenith_scene::{CompileResult, compile, compile_page};
 
 // ── Helper to parse a .zen source string ──────────────────────────────
@@ -36,14 +36,17 @@ pub fn fill_rects(result: &CompileResult) -> Vec<(f64, f64, f64, f64)> {
         .collect()
 }
 
-/// The `FillRect` color red-channel values present in a scene.
+/// The solid-`FillRect` color red-channel values present in a scene.
 pub fn fill_reds(result: &CompileResult) -> Vec<u8> {
     result
         .scene
         .commands
         .iter()
         .filter_map(|c| match c {
-            SceneCommand::FillRect { color, .. } => Some(color.r),
+            SceneCommand::FillRect {
+                paint: Paint::Solid { color },
+                ..
+            } => Some(color.r),
             _ => None,
         })
         .collect()

@@ -16,12 +16,12 @@
 //! # Quick start
 //!
 //! ```rust
-//! use zenith_scene::{Scene, SceneCommand, Color};
+//! use zenith_scene::{Scene, SceneCommand, Color, Paint};
 //!
 //! let mut scene = Scene::new(640.0, 360.0);
 //! scene.commands.push(SceneCommand::FillRect {
 //!     x: 0.0, y: 0.0, w: 640.0, h: 360.0,
-//!     color: Color::srgb(248, 250, 252, 255),
+//!     paint: Paint::solid(Color::srgb(248, 250, 252, 255)),
 //! });
 //! let json = scene.to_json().expect("serializes");
 //! assert!(json.contains("zenith-scene-v1"));
@@ -38,5 +38,6 @@ pub mod ir;
 pub use compile::{CompileResult, compile, compile_page};
 pub use ir::{
     BlendMode, Color, FilterSpec, FitMode, GradientPaint, GradientStop, ImageClip, LineCap,
-    MaskShape, MaskSpec, Rect, Scene, SceneCommand, SceneGlyph, ShadowSpec, SrcRect, StrokeAlign,
+    MaskShape, MaskSpec, Paint, Rect, Scene, SceneCommand, SceneGlyph, ShadowSpec, SrcRect,
+    StrokeAlign,
 };

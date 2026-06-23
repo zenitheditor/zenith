@@ -2,7 +2,7 @@ mod common;
 use common::*;
 use zenith_core::default_provider;
 use zenith_scene::compile;
-use zenith_scene::ir::SceneCommand;
+use zenith_scene::ir::{Paint, SceneCommand};
 
 // ── Minimal single-rect document ──────────────────────────────────────
 
@@ -43,7 +43,13 @@ page id="page.t1" w=(px)640 h=(px)360 {
     );
 
     match &cmds[1] {
-        SceneCommand::FillRect { x, y, w, h, color } => {
+        SceneCommand::FillRect {
+            x,
+            y,
+            w,
+            h,
+            paint: Paint::Solid { color },
+        } => {
             assert_eq!(*x, 0.0);
             assert_eq!(*y, 0.0);
             assert_eq!(*w, 640.0);
@@ -96,11 +102,17 @@ page id="page.t2" w=(px)100 h=(px)100 {
     assert_eq!(cmds.len(), 4, "expected 4 commands, got: {:?}", cmds);
 
     match &cmds[1] {
-        SceneCommand::FillRect { color, .. } => assert_eq!(color.r, 0x11),
+        SceneCommand::FillRect {
+            paint: Paint::Solid { color },
+            ..
+        } => assert_eq!(color.r, 0x11),
         other => panic!("expected FillRect for rect.a, got {other:?}"),
     }
     match &cmds[2] {
-        SceneCommand::FillRect { color, .. } => assert_eq!(color.r, 0x22),
+        SceneCommand::FillRect {
+            paint: Paint::Solid { color },
+            ..
+        } => assert_eq!(color.r, 0x22),
         other => panic!("expected FillRect for rect.b, got {other:?}"),
     }
 }
@@ -177,7 +189,10 @@ page id="page.t7" w=(px)100 h=(px)100 background=(token)"color.bg" {
 
     // Background fill must be white.
     match &cmds[1] {
-        SceneCommand::FillRect { color, .. } => {
+        SceneCommand::FillRect {
+            paint: Paint::Solid { color },
+            ..
+        } => {
             assert_eq!(color.r, 255, "bg must be white");
             assert_eq!(color.g, 255);
             assert_eq!(color.b, 255);
@@ -187,7 +202,10 @@ page id="page.t7" w=(px)100 h=(px)100 background=(token)"color.bg" {
 
     // Child rect must be black.
     match &cmds[2] {
-        SceneCommand::FillRect { color, .. } => {
+        SceneCommand::FillRect {
+            paint: Paint::Solid { color },
+            ..
+        } => {
             assert_eq!(color.r, 0, "child rect must be black");
             assert_eq!(color.g, 0);
             assert_eq!(color.b, 0);
@@ -223,7 +241,10 @@ page id="page.t8" w=(px)100 h=(px)100 {
     );
 
     match &result.scene.commands[1] {
-        SceneCommand::FillRect { color, .. } => {
+        SceneCommand::FillRect {
+            paint: Paint::Solid { color },
+            ..
+        } => {
             // 255 * 0.5 = 127.5 → rounds to 128.
             assert_eq!(color.a, 128, "opacity 0.5 must give a=128; got {}", color.a);
         }
@@ -349,7 +370,7 @@ page id="page.e1" w=(px)640 h=(px)360 {
             h,
             rx,
             ry,
-            color,
+            paint: Paint::Solid { color },
         } => {
             assert_eq!(*x, 0.0);
             assert_eq!(*y, 0.0);
@@ -455,7 +476,7 @@ page id="page.e3" w=(px)200 h=(px)200 {
             h,
             rx,
             ry,
-            color,
+            paint: Paint::Solid { color },
         } => {
             assert_eq!(*x, 10.0);
             assert_eq!(*y, 10.0);

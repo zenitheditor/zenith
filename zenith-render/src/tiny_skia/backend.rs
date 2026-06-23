@@ -381,9 +381,6 @@ impl RasterBackend for TinySkiaBackend {
                 | SceneCommand::FillRoundedRect { .. }
                 | SceneCommand::StrokeRoundedRect { .. }
                 | SceneCommand::FillEllipse { .. }
-                | SceneCommand::FillRectGradient { .. }
-                | SceneCommand::FillRoundedRectGradient { .. }
-                | SceneCommand::FillEllipseGradient { .. }
                 | SceneCommand::StrokeEllipse { .. }
                 | SceneCommand::StrokeLine { .. }
                 | SceneCommand::FillPolygon { .. }

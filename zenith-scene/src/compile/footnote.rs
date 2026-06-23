@@ -32,7 +32,7 @@ use zenith_core::{
 };
 use zenith_layout::RustybuzzEngine;
 
-use crate::ir::{Color, SceneCommand};
+use crate::ir::{Color, Paint, SceneCommand};
 
 use super::RenderCtx;
 use super::anchor::AnchorMap;
@@ -346,7 +346,7 @@ pub(in crate::compile) fn compile_footnote_zone(
         y: separator_y + ctx.dy,
         w: rule_w,
         h: SEPARATOR_THICKNESS,
-        color: rule_color,
+        paint: Paint::solid(rule_color),
     });
 
     // ── Emit pass: stack footnotes top-down from the block top ────────────

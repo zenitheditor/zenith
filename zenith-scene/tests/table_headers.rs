@@ -7,7 +7,7 @@
 
 mod common;
 
-use common::{SceneCommand, compile, default_provider, parse};
+use common::{Paint, SceneCommand, compile, default_provider, parse};
 
 // ── Header-row styling tests ──────────────────────────────────────────────────
 
@@ -49,7 +49,10 @@ fn header_fill_applied_to_first_row_cells() {
         .commands
         .iter()
         .filter_map(|c| match c {
-            SceneCommand::FillRect { color, .. } => Some((color.r, color.g, color.b)),
+            SceneCommand::FillRect {
+                paint: Paint::Solid { color },
+                ..
+            } => Some((color.r, color.g, color.b)),
             _ => None,
         })
         .collect();
@@ -117,7 +120,10 @@ fn header_cell_own_fill_overrides_header_fill() {
         .commands
         .iter()
         .filter_map(|c| match c {
-            SceneCommand::FillRect { color, .. } => Some((color.r, color.g, color.b)),
+            SceneCommand::FillRect {
+                paint: Paint::Solid { color },
+                ..
+            } => Some((color.r, color.g, color.b)),
             _ => None,
         })
         .collect();
@@ -254,7 +260,10 @@ fn no_header_rows_emits_table_fill_for_all_cells() {
         .commands
         .iter()
         .filter_map(|c| match c {
-            SceneCommand::FillRect { color, .. } => Some((color.r, color.g, color.b)),
+            SceneCommand::FillRect {
+                paint: Paint::Solid { color },
+                ..
+            } => Some((color.r, color.g, color.b)),
             _ => None,
         })
         .collect();
@@ -263,7 +272,10 @@ fn no_header_rows_emits_table_fill_for_all_cells() {
         .commands
         .iter()
         .filter_map(|c| match c {
-            SceneCommand::FillRect { color, .. } => Some((color.r, color.g, color.b)),
+            SceneCommand::FillRect {
+                paint: Paint::Solid { color },
+                ..
+            } => Some((color.r, color.g, color.b)),
             _ => None,
         })
         .collect();

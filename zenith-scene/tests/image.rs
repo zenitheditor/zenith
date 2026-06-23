@@ -294,7 +294,7 @@ fn bleed_expands_canvas_and_shifts_content() {
     // Background fills the ENTIRE media box (bleeds off the trim edge).
     match cmds
         .iter()
-        .find(|c| matches!(c, SceneCommand::FillRect { color, .. } if color.r == 0x10))
+        .find(|c| matches!(c, SceneCommand::FillRect { paint: Paint::Solid { color }, .. } if color.r == 0x10))
     {
         Some(SceneCommand::FillRect { x, y, w, h, .. }) => {
             assert_eq!((*x, *y, *w, *h), (0.0, 0.0, 470.0, 670.0));
@@ -305,7 +305,7 @@ fn bleed_expands_canvas_and_shifts_content() {
     // Hero rect shifted by (b, b) = (35, 35).
     match cmds
         .iter()
-        .find(|c| matches!(c, SceneCommand::FillRect { color, .. } if color.r == 0xff))
+        .find(|c| matches!(c, SceneCommand::FillRect { paint: Paint::Solid { color }, .. } if color.r == 0xff))
     {
         Some(SceneCommand::FillRect { x, y, w, h, .. }) => {
             assert_eq!((*x, *y, *w, *h), (35.0, 35.0, 100.0, 100.0));
@@ -377,7 +377,7 @@ fn bleed_absent_is_byte_identical_to_no_bleed() {
         .scene
         .commands
         .iter()
-        .find(|c| matches!(c, SceneCommand::FillRect { color, .. } if color.r == 0xff))
+        .find(|c| matches!(c, SceneCommand::FillRect { paint: Paint::Solid { color }, .. } if color.r == 0xff))
     {
         Some(SceneCommand::FillRect { x, y, .. }) => assert_eq!((*x, *y), (0.0, 0.0)),
         other => panic!("expected unshifted hero FillRect, got {other:?}"),

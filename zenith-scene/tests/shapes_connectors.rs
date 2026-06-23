@@ -94,6 +94,61 @@ page id="page.cn" w=(px)640 h=(px)360 {
     assert_eq!(pts, vec![140.0, 80.0, 300.0, 100.0]);
 }
 
+/// Nine-point grid anchors resolve to box corners: `from-anchor="bottom-right"`
+/// / `to-anchor="top-left"` attach at those exact corners.
+#[test]
+fn connector_nine_point_corner_anchors() {
+    let src = r##"zenith version=1 {
+  project id="proj.cn" name="CN"
+  tokens format="zenith-token-v1" {
+token id="color.line" type="color" value="#1e3a8a"
+  }
+  styles {}
+  document id="doc.cn" title="CN" {
+page id="page.cn" w=(px)640 h=(px)360 {
+  rect id="a" x=(px)40 y=(px)40 w=(px)100 h=(px)80 stroke=(token)"color.line"
+  rect id="b" x=(px)300 y=(px)60 w=(px)100 h=(px)80 stroke=(token)"color.line"
+  connector id="c1" from="a" to="b" from-anchor="bottom-right" to-anchor="top-left" stroke=(token)"color.line"
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+    let cmds = &result.scene.commands;
+    // a bottom-right = (140, 120); b top-left = (300, 60).
+    let pts = first_stroke_polyline_points(cmds);
+    assert_eq!(pts, vec![140.0, 120.0, 300.0, 60.0]);
+}
+
+/// `mid` is a synonym for `center`, and a bare edge name is that edge's
+/// mid-point: `from-anchor="mid-right"` = right-mid, `to-anchor="top"` =
+/// top-center.
+#[test]
+fn connector_anchor_synonyms_and_edge_midpoints() {
+    let src = r##"zenith version=1 {
+  project id="proj.cn" name="CN"
+  tokens format="zenith-token-v1" {
+token id="color.line" type="color" value="#1e3a8a"
+  }
+  styles {}
+  document id="doc.cn" title="CN" {
+page id="page.cn" w=(px)640 h=(px)360 {
+  rect id="a" x=(px)40 y=(px)40 w=(px)100 h=(px)80 stroke=(token)"color.line"
+  rect id="b" x=(px)300 y=(px)60 w=(px)100 h=(px)80 stroke=(token)"color.line"
+  connector id="c1" from="a" to="b" from-anchor="mid-right" to-anchor="top" stroke=(token)"color.line"
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+    let cmds = &result.scene.commands;
+    // a mid-right = (140, 80); b top-center = (350, 60).
+    let pts = first_stroke_polyline_points(cmds);
+    assert_eq!(pts, vec![140.0, 80.0, 350.0, 60.0]);
+}
+
 /// A connector to a MISSING target emits no StrokePolyline (graceful skip).
 #[test]
 fn connector_missing_target_emits_nothing() {

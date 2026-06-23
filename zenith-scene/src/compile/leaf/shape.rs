@@ -8,7 +8,7 @@ use zenith_core::{
 };
 use zenith_layout::RustybuzzEngine;
 
-use crate::ir::{SceneCommand, StrokeAlign};
+use crate::ir::{Paint, SceneCommand, StrokeAlign};
 
 use super::super::RenderCtx;
 use super::super::anchor::AnchorMap;
@@ -440,10 +440,16 @@ fn emit_shape_rounded_rect(
                 h,
                 radius,
                 radii: None,
-                color,
+                paint: Paint::solid(color),
             });
         } else {
-            commands.push(SceneCommand::FillRect { x, y, w, h, color });
+            commands.push(SceneCommand::FillRect {
+                x,
+                y,
+                w,
+                h,
+                paint: Paint::solid(color),
+            });
         }
     }
 
@@ -538,7 +544,7 @@ fn emit_shape_ellipse(
             h,
             rx: None,
             ry: None,
-            color,
+            paint: Paint::solid(color),
         });
     }
 
@@ -601,7 +607,7 @@ fn emit_shape_decision(
         color.a = (color.a as f64 * color_op).round() as u8;
         commands.push(SceneCommand::FillPolygon {
             points: flat_points.clone(),
-            color,
+            paint: Paint::solid(color),
             even_odd: false,
         });
     }

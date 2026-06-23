@@ -52,7 +52,10 @@ fn rect_blend_mode_wraps_fill_in_layer() {
         other => panic!("expected PushLayer, got {other:?}"),
     }
     match &cmds[2] {
-        SceneCommand::FillRect { color, .. } => {
+        SceneCommand::FillRect {
+            paint: Paint::Solid { color },
+            ..
+        } => {
             // Colors emit at full alpha when a blend layer is active.
             assert_eq!(color.a, 255, "blend-layer fill must use full alpha");
         }
