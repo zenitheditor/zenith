@@ -166,6 +166,15 @@ pub enum Command {
     /// (non-node surface attributes).
     /// Bare `zenith schema` prints a short overview with counts and drill-in hints.
     Schema(SchemaArgs),
+
+    /// Manage workspace-level process state: scratch candidates and their lifecycle.
+    ///
+    /// The workspace subsystem persists design scratch candidates — point-in-time
+    /// `.zen` snapshots that are evaluated and promoted or rejected — alongside
+    /// the durable version history. Use `zenith workspace scratch` to record and
+    /// inspect candidates; use `zenith workspace candidate` to transition their
+    /// lifecycle status (draft → selected | rejected).
+    Workspace(WorkspaceArgs),
 }
 
 /// Arguments for `zenith mcp`.
@@ -835,4 +844,118 @@ pub enum SchemaSub {
     /// node and the `document { … }` child block: version, colorspace, doc-id,
     /// mirror-margins, page-progression, spread-gutter, margin-*, and more.
     Document,
+}
+
+// ── Workspace command group ───────────────────────────────────────────────────
+
+/// Arguments for `zenith workspace`.
+#[derive(Debug, Args)]
+pub struct WorkspaceArgs {
+    #[command(subcommand)]
+    pub command: WorkspaceSub,
+}
+
+/// Subcommands of `zenith workspace`.
+#[derive(Debug, Subcommand)]
+pub enum WorkspaceSub {
+    /// Record, list, and inspect scratch design candidates for a document.
+    ///
+    /// Scratch candidates are content-addressed `.zen` snapshots stored in the
+    /// session data directory alongside the durable version history. Use `new`
+    /// to record a candidate, `list` to enumerate them, and `show` to inspect
+    /// a specific one.
+    Scratch(ScratchArgs),
+
+    /// Transition a scratch candidate's lifecycle status (draft → selected | rejected).
+    Candidate(CandidateArgs),
+}
+
+/// Arguments for `zenith workspace scratch`.
+#[derive(Debug, Args)]
+pub struct ScratchArgs {
+    #[command(subcommand)]
+    pub command: ScratchSub,
+}
+
+/// Subcommands of `zenith workspace scratch`.
+#[derive(Debug, Subcommand)]
+pub enum ScratchSub {
+    /// Record the current `.zen` file as a scratch candidate.
+    New(ScratchNewArgs),
+    /// List all scratch candidates for a document.
+    List(ScratchListArgs),
+    /// Show detail for one scratch candidate.
+    Show(ScratchShowArgs),
+}
+
+/// Arguments for `zenith workspace scratch new`.
+#[derive(Debug, Args)]
+#[command(after_help = "EXAMPLE:\n  \
+zenith workspace scratch new poster.zen --page main --status draft --notes \"first pass\"")]
+pub struct ScratchNewArgs {
+    /// Path to the `.zen` document to snapshot.
+    pub doc: PathBuf,
+
+    /// Page id this candidate captures (default: `*` for the whole document).
+    #[arg(long, value_name = "ID")]
+    pub page: Option<String>,
+
+    /// Initial lifecycle status: `draft`, `selected`, or `rejected` (default: `draft`).
+    #[arg(long, default_value = "draft", value_name = "STATUS")]
+    pub status: String,
+
+    /// Free-text notes about this candidate.
+    #[arg(long, value_name = "TEXT")]
+    pub notes: Option<String>,
+
+    /// Target slot or branch to promote this candidate into.
+    #[arg(long, value_name = "TARGET")]
+    pub promotion_target: Option<String>,
+
+    /// Policy tag controlling when this candidate may be cleaned up.
+    #[arg(long, value_name = "POLICY")]
+    pub cleanup_policy: Option<String>,
+
+    /// Workflow role label for this candidate (e.g. `hero`, `fallback`).
+    #[arg(long, value_name = "ROLE")]
+    pub workspace_role: Option<String>,
+}
+
+/// Arguments for `zenith workspace scratch list`.
+#[derive(Debug, Args)]
+pub struct ScratchListArgs {
+    /// Path to the `.zen` document.
+    pub doc: PathBuf,
+
+    /// Emit machine-readable JSON instead of a human-readable listing.
+    #[arg(long)]
+    pub json: bool,
+}
+
+/// Arguments for `zenith workspace scratch show`.
+#[derive(Debug, Args)]
+pub struct ScratchShowArgs {
+    /// Path to the `.zen` document.
+    pub doc: PathBuf,
+
+    /// The candidate id to show (e.g. `cand0`).
+    pub candidate: String,
+
+    /// Emit machine-readable JSON instead of a human-readable summary.
+    #[arg(long)]
+    pub json: bool,
+}
+
+/// Arguments for `zenith workspace candidate`.
+#[derive(Debug, Args)]
+#[command(after_help = "EXAMPLE:\n  zenith workspace candidate poster.zen cand0 selected")]
+pub struct CandidateArgs {
+    /// Path to the `.zen` document.
+    pub doc: PathBuf,
+
+    /// The candidate id to transition (e.g. `cand0`).
+    pub candidate: String,
+
+    /// New lifecycle status: `draft`, `selected`, or `rejected`.
+    pub status: String,
 }
