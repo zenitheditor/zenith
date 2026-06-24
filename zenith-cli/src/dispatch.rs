@@ -856,5 +856,18 @@ pub fn run() -> ExitCode {
         }
 
         Command::Mcp(_) => ExitCode::from(mcp::run()),
+
+        Command::Schema(args) => {
+            let json = args.json;
+            let (output, code) = match args.command {
+                None => commands::schema::overview(json),
+                Some(cli::SchemaSub::Nodes) => commands::schema::nodes(json),
+                Some(cli::SchemaSub::Node { kind }) => commands::schema::node_detail(&kind, json),
+                Some(cli::SchemaSub::Ops) => commands::schema::ops(json),
+                Some(cli::SchemaSub::Op { name }) => commands::schema::op_detail(&name, json),
+            };
+            println!("{}", output);
+            ExitCode::from(code)
+        }
     }
 }

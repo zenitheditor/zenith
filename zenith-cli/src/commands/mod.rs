@@ -11,6 +11,7 @@ pub mod library;
 pub mod merge;
 pub mod plugin;
 pub mod render;
+pub mod schema;
 pub mod theme;
 pub mod tokens;
 pub mod tx;

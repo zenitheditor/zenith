@@ -173,6 +173,66 @@ pub struct VariantManifest {
     pub targets: Vec<VariantManifestTarget>,
 }
 
+// ── Schema JSON types ─────────────────────────────────────────────────────────
+
+/// A single node-kind entry in the `schema nodes` JSON output.
+#[derive(Debug, Serialize)]
+pub struct SchemaNodeEntry {
+    pub kind: String,
+    pub summary: String,
+}
+
+/// A single node-kind detail entry in the `schema node <kind>` JSON output.
+#[derive(Debug, Serialize)]
+pub struct SchemaNodeDetail {
+    pub kind: String,
+    pub summary: String,
+    pub attributes: Vec<String>,
+}
+
+/// A single op entry in the `schema ops` JSON output.
+#[derive(Debug, Serialize)]
+pub struct SchemaOpEntry {
+    pub op: String,
+    pub summary: String,
+}
+
+/// Top-level JSON envelope for `schema nodes`.
+#[derive(Debug, Serialize)]
+pub struct SchemaNodesOutput {
+    pub schema: &'static str,
+    pub nodes: Vec<SchemaNodeEntry>,
+}
+
+/// Top-level JSON envelope for `schema node <kind>`.
+#[derive(Debug, Serialize)]
+pub struct SchemaNodeOutput {
+    pub schema: &'static str,
+    pub node: SchemaNodeDetail,
+}
+
+/// Top-level JSON envelope for `schema ops`.
+#[derive(Debug, Serialize)]
+pub struct SchemaOpsOutput {
+    pub schema: &'static str,
+    pub ops: Vec<SchemaOpEntry>,
+}
+
+/// Top-level JSON envelope for `schema op <name>`.
+#[derive(Debug, Serialize)]
+pub struct SchemaOpOutput {
+    pub schema: &'static str,
+    pub op: SchemaOpEntry,
+}
+
+/// Top-level JSON envelope for bare `zenith schema` (overview).
+#[derive(Debug, Serialize)]
+pub struct SchemaOverviewOutput {
+    pub schema: &'static str,
+    pub node_kinds: usize,
+    pub tx_ops: usize,
+}
+
 // ── Recipe inspect JSON types ─────────────────────────────────────────────────
 
 /// A single `param` entry within a [`RecipeInspectJson`].

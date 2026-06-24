@@ -9,6 +9,7 @@
 pub mod engine;
 pub mod op;
 pub mod result;
+pub mod schema;
 
 // Curated flat re-exports.
 pub use engine::run_transaction;

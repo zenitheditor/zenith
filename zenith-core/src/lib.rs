@@ -13,6 +13,7 @@ pub mod error;
 pub mod font;
 pub mod format;
 pub mod parse;
+pub mod schema;
 pub mod theme;
 pub mod tokens;
 pub mod util;

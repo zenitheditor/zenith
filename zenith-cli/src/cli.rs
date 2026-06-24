@@ -130,6 +130,19 @@ pub enum Command {
     /// installing the CLI and the skill (`zenith plugin install`) and running commands directly — it is
     /// faster and cheaper on tokens than going through MCP.
     Mcp(McpArgs),
+
+    /// Describe the Zenith document schema (node kinds, attributes, tx ops).
+    ///
+    /// Self-describing source of truth for agents and tooling. Reports every
+    /// authorable node kind with its one-line summary and recognized attribute
+    /// names, and every transaction op with its summary. Attribute types,
+    /// required-ness, and valid values are enforced at document-level by
+    /// `zenith validate` — run that command for the full diagnostic loop.
+    ///
+    /// Subcommands: `nodes` (all kinds), `node <kind>` (one kind + its
+    /// attributes), `ops` (all tx ops), `op <name>` (one op summary).
+    /// Bare `zenith schema` prints a short overview with counts and drill-in hints.
+    Schema(SchemaArgs),
 }
 
 /// Arguments for `zenith mcp`.
@@ -651,4 +664,44 @@ pub struct RestoreArgs {
 pub struct SyncArgs {
     /// Path to the `.zen` document.
     pub path: PathBuf,
+}
+
+/// Arguments for `zenith schema`.
+#[derive(Debug, Args)]
+#[command(after_help = "EXAMPLES:\n  \
+zenith schema                       # overview: counts + drill-in hints\n  \
+zenith schema nodes                 # list all node kinds with summaries\n  \
+zenith schema node pattern          # attributes for one node kind\n  \
+zenith schema ops                   # list all transaction ops\n  \
+zenith schema op set_fill           # summary for one op\n  \
+zenith schema nodes --json          # machine-readable JSON")]
+pub struct SchemaArgs {
+    #[command(subcommand)]
+    pub command: Option<SchemaSub>,
+
+    /// Emit machine-readable JSON instead of human-readable text.
+    #[arg(long, global = true)]
+    pub json: bool,
+}
+
+/// Subcommands of `zenith schema`.
+#[derive(Debug, Subcommand)]
+pub enum SchemaSub {
+    /// List all authorable node kinds with their one-line summaries.
+    Nodes,
+
+    /// Show the summary and recognized attributes for one node kind.
+    Node {
+        /// The node kind to look up (e.g. `rect`, `text`, `pattern`).
+        kind: String,
+    },
+
+    /// List all transaction ops with their one-line summaries.
+    Ops,
+
+    /// Show the summary for one transaction op.
+    Op {
+        /// The op name to look up (e.g. `set_fill`, `add_node`).
+        name: String,
+    },
 }
