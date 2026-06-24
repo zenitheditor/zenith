@@ -147,7 +147,15 @@ pub fn document_attributes() -> Vec<&'static str> {
 
 // ── Attribute type hints ──────────────────────────────────────────────────────
 
-/// Return a concise, agent-readable type hint for the named attribute.
+/// Return a concise, agent-readable type hint for the named attribute on the
+/// given node kind.
+///
+/// This is the accurate, kind-aware entry point.  For attributes whose type
+/// depends on the node kind (primarily the paint/visual attributes) the hint
+/// reflects what the validator actually enforces for that specific kind.
+///
+/// Use `attribute_type` for non-node surfaces (page, asset, document) where
+/// the attribute name alone is sufficient.
 ///
 /// The hint describes *what value to write*, not the Rust representation.
 /// Categories used:
@@ -164,19 +172,83 @@ pub fn document_attributes() -> Vec<&'static str> {
 /// - `"enum: a|b|…"` — one of the explicitly-listed values.
 ///
 /// Returns `"string"` as a safe fallback for anything not in the dictionary.
-/// The completeness drift test (`attribute_type_covers_all_known_attrs`) asserts
-/// that every attribute returned by the `node_*` / `page_*` / `asset_*` /
-/// `document_*` functions has an explicit entry here (the fallback sentinel
-/// `"<unmapped>"` is used in the test; the public API returns `"string"`).
-pub fn attribute_type(name: &str) -> &'static str {
-    attribute_type_inner(name, "string")
+pub fn attribute_type_for_kind(kind: &str, name: &str) -> &'static str {
+    attribute_type_for_kind_inner(kind, name, "string")
 }
 
-/// Internal helper shared by `attribute_type` and the completeness test.
+/// Return a concise, agent-readable type hint for the named attribute.
 ///
-/// `fallback` is `"string"` for the public API and `"<unmapped>"` in the test
-/// so the drift guard can detect newly added attributes that lack an entry.
-fn attribute_type_inner(name: &str, fallback: &'static str) -> &'static str {
+/// This is the kind-agnostic entry point intended for non-node surfaces (page,
+/// asset, document) where the attribute name alone determines the type.  For
+/// node attributes, prefer [`attribute_type_for_kind`] to get accurate
+/// per-kind paint/visual hints.
+///
+/// The completeness drift test (`attribute_type_covers_all_known_attrs`) uses
+/// the kind-agnostic path with the sentinel `"<unmapped>"` fallback.
+pub fn attribute_type(name: &str) -> &'static str {
+    // Non-node surfaces carry no fill/stroke, so the kind-agnostic path is
+    // accurate for them.  We route through the kind-aware inner function with
+    // an empty kind string; the paint-specific branch will fall through to the
+    // generic arms.
+    attribute_type_for_kind_inner("", name, "string")
+}
+
+/// Internal helper — kind-aware attribute type resolution.
+///
+/// `kind` is the canonical node-kind string (e.g. `"rect"`, `"text"`) or `""`
+/// for non-node surfaces.  `fallback` is `"string"` for the public APIs and
+/// `"<unmapped>"` in the completeness drift test.
+fn attribute_type_for_kind_inner(kind: &str, name: &str, fallback: &'static str) -> &'static str {
+    // ── Kind-specific overrides for paint/visual attributes ───────────────
+    //
+    // These must be checked first, before the generic arm, because the correct
+    // token type varies by node kind.  Each entry is verified against the
+    // validator's `VisualExpect` at the cited source location.
+    match (kind, name) {
+        // fill: ColorOrGradient — rect (leaf.rs check_visual_props→shared.rs:804),
+        //   ellipse (leaf.rs:218), polygon (special.rs:83), polyline (special.rs:213),
+        //   pattern (pattern.rs:101→shared.rs:804).
+        ("rect" | "ellipse" | "polygon" | "polyline" | "pattern", "fill") => {
+            "token ref: color/gradient"
+        }
+        // fill: Color — text (text.rs:113), shape (shape.rs:108), code (leaf.rs:561).
+        // table fill is also Color (container.rs:304→312).
+        ("text" | "shape" | "code" | "table", "fill") => "token ref: color",
+        // stroke: Color on every node kind that has it — verified at:
+        //   shared.rs:813 (rect/pattern), leaf.rs:227 (ellipse), leaf.rs:409 (line),
+        //   special.rs:92 (polygon), special.rs:222 (polyline),
+        //   text.rs:122, shape.rs:117, shape.rs:248 (connector).
+        // There is no node kind where stroke accepts a gradient.
+        (_, "stroke") => "token ref: color",
+        // shadow / filter / mask: dedicated token types; NOT color/gradient.
+        // Verified at shared.rs:960 (Shadow), 969 (Filter), 978 (Mask).
+        // These are only present on kinds that go through check_visual_props
+        // (rect, pattern) or equivalent, but the type is uniform across all kinds.
+        (_, "shadow") => "token ref: shadow",
+        (_, "filter") => "token ref: filter",
+        (_, "mask") => "token ref: mask",
+        // background: page surface only; accepts Color or Gradient (driver.rs:639).
+        // The empty-kind non-node path also falls here for correctness.
+        (_, "background") => "token ref: color/gradient",
+        // Per-side border colors and stroke-outer: Color (shared.rs:887).
+        (_, "border-top" | "border-bottom" | "border-left" | "border-right" | "stroke-outer") => {
+            "token ref: color"
+        }
+        // border (table): Color (container.rs:305→312).
+        (_, "border") => "token ref: color",
+        // contrast-bg (text): Color (text.rs:139).
+        // header-fill (table): Color (container.rs:306→312).
+        (_, "contrast-bg" | "header-fill") => "token ref: color",
+        // All other attributes fall through to the generic arm below.
+        _ => attribute_type_generic(name, fallback),
+    }
+}
+
+/// Generic attribute type resolution — kind-independent properties.
+///
+/// Called by `attribute_type_for_kind_inner` for every attribute that is not
+/// a paint/visual property requiring per-kind disambiguation.
+fn attribute_type_generic(name: &str, fallback: &'static str) -> &'static str {
     match name {
         // ── Identity / labelling ──────────────────────────────────────────
         "id" => "string",
@@ -197,16 +269,6 @@ fn attribute_type_inner(name: &str, fallback: &'static str) -> &'static str {
         "bleed" => "px literal",
         "spread-gutter" => "px literal",
         "margin-inner" | "margin-outer" | "margin-top" | "margin-bottom" => "px literal",
-
-        // ── Visual — token refs: color/gradient ───────────────────────────
-        "fill" | "stroke" | "background" | "shadow" | "filter" | "mask" => {
-            "token ref: color/gradient"
-        }
-        "border-top" | "border-bottom" | "border-left" | "border-right" | "border" => {
-            "token ref: color/gradient"
-        }
-        "stroke-outer" => "token ref: color/gradient",
-        "contrast-bg" | "header-fill" => "token ref: color/gradient",
 
         // ── Visual — token refs: dimension ────────────────────────────────
         "radius" | "radius-tl" | "radius-tr" | "radius-br" | "radius-bl" => "token ref: dimension",
@@ -729,51 +791,180 @@ mod tests {
     // ── Attribute type completeness drift guard ───────────────────────────
 
     /// Every attribute returned by any of the four public attribute-list
-    /// functions must have an explicit entry in `attribute_type_inner` — not
-    /// just the silent `"string"` fallback.
+    /// functions must have an explicit entry in `attribute_type_for_kind_inner`
+    /// or `attribute_type_generic` — not just the silent `"string"` fallback.
     ///
     /// When a new attribute is added to a KNOWN_PROPS constant, this test
     /// fails with a list of unmapped names, forcing the developer to add a
-    /// corresponding arm to `attribute_type_inner`.
+    /// corresponding arm to the appropriate function.
     ///
     /// The sentinel `"<unmapped>"` is used here instead of `"string"` so the
     /// test can distinguish "no entry at all" from a deliberate `"string"`
     /// annotation on reference/metadata fields.
+    ///
+    /// For node attributes the test probes with the first kind that lists the
+    /// attribute; the completeness check just needs at least one mapped path.
+    /// The per-kind accuracy tests below verify the per-kind correctness.
     #[test]
     fn attribute_type_covers_all_known_attrs() {
+        use std::collections::BTreeMap;
         use std::collections::BTreeSet;
 
-        // Build the union of every canonical attribute across all surfaces.
-        let mut all_attrs: BTreeSet<&'static str> = BTreeSet::new();
-
-        for kind in node_kinds() {
+        // Build a map from each attribute name to the first kind that lists it
+        // (so we can probe with a real kind).
+        let mut attr_to_kind: BTreeMap<&'static str, &'static str> = BTreeMap::new();
+        for &kind in node_kinds() {
             for attr in node_attributes(kind) {
-                all_attrs.insert(attr);
+                attr_to_kind.entry(attr).or_insert(kind);
             }
         }
+
+        // Non-node surface attributes: probe with empty kind (kind-agnostic path).
+        let mut surface_attrs: BTreeSet<&'static str> = BTreeSet::new();
         for attr in page_attributes() {
-            all_attrs.insert(attr);
+            surface_attrs.insert(attr);
         }
         for attr in asset_attributes() {
-            all_attrs.insert(attr);
+            surface_attrs.insert(attr);
         }
         for attr in document_attributes() {
-            all_attrs.insert(attr);
+            surface_attrs.insert(attr);
         }
 
         // Collect any attribute whose type resolves to the unmapped sentinel.
-        let unmapped: Vec<&'static str> = all_attrs
-            .into_iter()
-            .filter(|name| attribute_type_inner(name, "<unmapped>") == "<unmapped>")
-            .collect();
+        let mut unmapped: Vec<String> = Vec::new();
+
+        for (attr, kind) in &attr_to_kind {
+            if attribute_type_for_kind_inner(kind, attr, "<unmapped>") == "<unmapped>" {
+                unmapped.push(format!("{attr} (on {kind})"));
+            }
+        }
+        for attr in &surface_attrs {
+            // Only probe surface-only attrs (those not already covered via a node kind).
+            if !attr_to_kind.contains_key(attr)
+                && attribute_type_for_kind_inner("", attr, "<unmapped>") == "<unmapped>"
+            {
+                unmapped.push(format!("{attr} (surface)"));
+            }
+        }
 
         assert!(
             unmapped.is_empty(),
-            "attribute_type_inner() has no entry for {} attribute(s): {:?}\n\
-             Add an arm to `attribute_type_inner` in zenith-core/src/schema.rs.",
+            "attribute_type_for_kind_inner() has no entry for {} attribute(s): {:?}\n\
+             Add an arm to `attribute_type_for_kind_inner` or `attribute_type_generic` \
+             in zenith-core/src/schema.rs.",
             unmapped.len(),
             unmapped,
         );
+    }
+
+    // ── Paint-attribute accuracy tests ────────────────────────────────────────
+
+    /// `fill` must report color/gradient for geometry kinds and color-only for
+    /// text, shape, and code — matching what the validator enforces via
+    /// `VisualExpect`.
+    #[test]
+    fn fill_type_hint_is_kind_accurate() {
+        // ColorOrGradient kinds: rect (shared.rs:804), ellipse (leaf.rs:218),
+        // polygon (special.rs:83), polyline (special.rs:213), pattern (pattern.rs:101).
+        for kind in &["rect", "ellipse", "polygon", "polyline", "pattern"] {
+            assert_eq!(
+                attribute_type_for_kind(kind, "fill"),
+                "token ref: color/gradient",
+                "fill on {kind} should accept color/gradient (validator uses ColorOrGradient)",
+            );
+        }
+        // Color-only kinds: text (text.rs:113), shape (shape.rs:108), code (leaf.rs:561),
+        // table (container.rs:304).
+        for kind in &["text", "shape", "code", "table"] {
+            assert_eq!(
+                attribute_type_for_kind(kind, "fill"),
+                "token ref: color",
+                "fill on {kind} should be color-only (validator uses VisualExpect::Color)",
+            );
+        }
+    }
+
+    /// `stroke` is Color on every kind that has it — never color/gradient.
+    /// Verified at shared.rs:813, leaf.rs:227/409, special.rs:92/222,
+    /// text.rs:122, shape.rs:117/248.
+    #[test]
+    fn stroke_type_hint_is_color_only() {
+        for kind in &[
+            "rect",
+            "ellipse",
+            "line",
+            "polygon",
+            "polyline",
+            "pattern",
+            "text",
+            "shape",
+            "connector",
+        ] {
+            assert_eq!(
+                attribute_type_for_kind(kind, "stroke"),
+                "token ref: color",
+                "stroke on {kind} must be color-only (validator uses VisualExpect::Color)",
+            );
+        }
+    }
+
+    /// `shadow`, `filter`, and `mask` must each report their own dedicated token
+    /// type — NOT color or color/gradient.
+    /// Verified at shared.rs:960 (Shadow), 969 (Filter), 978 (Mask).
+    #[test]
+    fn shadow_filter_mask_report_own_token_types() {
+        for kind in &["rect", "pattern"] {
+            assert_eq!(
+                attribute_type_for_kind(kind, "shadow"),
+                "token ref: shadow",
+                "shadow on {kind} must reference a shadow token",
+            );
+            assert_eq!(
+                attribute_type_for_kind(kind, "filter"),
+                "token ref: filter",
+                "filter on {kind} must reference a filter token",
+            );
+            assert_eq!(
+                attribute_type_for_kind(kind, "mask"),
+                "token ref: mask",
+                "mask on {kind} must reference a mask token",
+            );
+        }
+        // Verify the kind-agnostic public API also gives the right answer.
+        assert_eq!(attribute_type("shadow"), "token ref: shadow");
+        assert_eq!(attribute_type("filter"), "token ref: filter");
+        assert_eq!(attribute_type("mask"), "token ref: mask");
+    }
+
+    /// `background` (page surface) reports color/gradient — driver.rs:639 uses
+    /// VisualExpect::ColorOrGradient.
+    #[test]
+    fn background_type_hint_is_color_or_gradient() {
+        assert_eq!(attribute_type("background"), "token ref: color/gradient");
+        assert_eq!(
+            attribute_type_for_kind("", "background"),
+            "token ref: color/gradient"
+        );
+    }
+
+    /// Border/stroke-outer type hints are color-only — shared.rs:887 uses
+    /// VisualExpect::Color for all per-side border props.
+    #[test]
+    fn border_and_stroke_outer_are_color_only() {
+        for attr in &[
+            "border-top",
+            "border-bottom",
+            "border-left",
+            "border-right",
+            "stroke-outer",
+        ] {
+            assert_eq!(
+                attribute_type_for_kind("rect", attr),
+                "token ref: color",
+                "{attr} on rect must be color-only (validator uses VisualExpect::Color)",
+            );
+        }
     }
 
     // ── Token type drift guards ───────────────────────────────────────────────

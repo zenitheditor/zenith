@@ -110,7 +110,7 @@ pub fn node_detail(kind: &str, json: bool) -> (String, u8) {
         .iter()
         .map(|&a| SchemaAttr {
             name: a.to_owned(),
-            ty: core_schema::attribute_type(a).to_owned(),
+            ty: core_schema::attribute_type_for_kind(kind, a).to_owned(),
         })
         .collect();
 
