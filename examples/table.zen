@@ -7,6 +7,9 @@ zenith version=1 {
     token id="color.head" type="color" value="#e2e8f0"
     token id="font.body" type="fontFamily" value="Noto Sans"
     token id="size.fs" type="dimension" value=(px)18
+    token id="size.bw" type="dimension" value=(px)1
+    token id="size.pad" type="dimension" value=(px)10
+    token id="size.gap" type="dimension" value=(px)0
   }
   styles {
     style id="style.cell" {
@@ -17,7 +20,7 @@ zenith version=1 {
   }
   document id="doc.table" title="Table Example" {
     page id="page.table" w=(px)520 h=(px)220 background=(token)"color.bg" {
-      table id="tbl.people" x=(px)40 y=(px)40 w=(px)440 h=(px)140 border=(token)"color.line" border-width=(px)1 header-rows=1 header-fill=(token)"color.head" cell-padding=(px)10 gap=(px)0 {
+      table id="tbl.people" x=(px)40 y=(px)40 w=(px)440 h=(px)140 border=(token)"color.line" border-width=(token)"size.bw" header-rows=1 header-fill=(token)"color.head" cell-padding=(token)"size.pad" gap=(token)"size.gap" {
         column width=(px)200
         column width=(px)140
         column width=(px)100

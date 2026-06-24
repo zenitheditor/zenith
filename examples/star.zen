@@ -13,15 +13,15 @@ zenith version=1 {
       rect id="rect.bg" x=(px)0 y=(px)0 w=(px)320 h=(px)200 fill=(token)"color.bg"
       polygon id="poly.star" fill=(token)"color.fill" stroke=(token)"color.stroke" stroke-width=(token)"size.stroke" fill-rule="evenodd" {
         point x=(px)160 y=(px)30
-        point x=(px)185 y=(px)105
-        point x=(px)265 y=(px)105
-        point x=(px)200 y=(px)150
-        point x=(px)225 y=(px)170
-        point x=(px)160 y=(px)125
-        point x=(px)95 y=(px)170
-        point x=(px)120 y=(px)150
-        point x=(px)55 y=(px)105
-        point x=(px)135 y=(px)105
+        point x=(px)178 y=(px)85
+        point x=(px)236 y=(px)85
+        point x=(px)189 y=(px)119
+        point x=(px)207 y=(px)175
+        point x=(px)160 y=(px)141
+        point x=(px)113 y=(px)175
+        point x=(px)131 y=(px)119
+        point x=(px)84 y=(px)85
+        point x=(px)142 y=(px)85
       }
     }
   }
