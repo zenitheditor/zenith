@@ -20,5 +20,6 @@ pub use candidate::{candidate_set_status, candidate_set_status_in};
 pub use finalize::{finalize, finalize_in};
 pub use promote::{promote, promote_in};
 pub use scratch::{
-    scratch_list, scratch_list_in, scratch_new, scratch_new_in, scratch_show, scratch_show_in,
+    ScratchNewOutcome, scratch_list, scratch_list_in, scratch_new, scratch_new_in, scratch_show,
+    scratch_show_in,
 };

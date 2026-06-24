@@ -76,7 +76,8 @@ fn scratch_new_returns_candidate_id() {
         &doc_path,
         &new_args(&doc_path, None, "draft", None, None, None, None),
     )
-    .unwrap();
+    .unwrap()
+    .id;
 
     assert_eq!(id, "cand0", "first candidate must be cand0");
 }
@@ -331,7 +332,8 @@ fn record_selected_candidate(
         doc_path,
         &new_args(doc_path, Some(page_id), "draft", None, None, None, None),
     )
-    .unwrap();
+    .unwrap()
+    .id;
     candidate_set_status_in(paths, doc_path, &cand_id, "selected").unwrap();
     cand_id
 }
@@ -387,7 +389,8 @@ fn promote_draft_candidate_errors() {
             None,
         ),
     )
-    .unwrap();
+    .unwrap()
+    .id;
 
     let result = promote_in(&paths, &doc_path, &cand_id, "page.export", ".promoted");
     assert!(result.is_err(), "promoting a draft candidate must error");
@@ -628,5 +631,121 @@ fn unbundle_bad_file_errors() {
     assert!(
         msg.contains("magic"),
         "error must mention 'magic'; got: {msg}"
+    );
+}
+
+// ── auto-attach on `scratch new` ────────────────────────────────────────────────
+
+/// A minimal valid `.zen` document WITHOUT a `doc-id` attribute. `scratch new`
+/// must transparently mint + stamp one rather than erroring.
+const FIXTURE_NO_ID: &str = r##"zenith version=1 {
+  project id="proj.ws" name="Workspace Test"
+  tokens format="zenith-token-v1" {
+    token id="color.bg" type="color" value="#ffffff"
+  }
+  styles {
+  }
+  document id="doc.ws" title="Workspace Test" {
+    page id="page.main" w=(px)400 h=(px)300 {
+      rect id="rect.bg" x=(px)0 y=(px)0 w=(px)400 h=(px)300 fill=(token)"color.bg"
+    }
+  }
+}
+"##;
+
+fn setup_no_id() -> (TempDir, StorePaths, std::path::PathBuf) {
+    let tmp = TempDir::new().unwrap();
+    let paths = StorePaths::new(tmp.path());
+    let doc_path = tmp.path().join("doc.zen");
+    std::fs::write(&doc_path, FIXTURE_NO_ID).unwrap();
+    (tmp, paths, doc_path)
+}
+
+/// `scratch new` on a doc with NO doc-id must succeed, stamp a doc-id into the
+/// on-disk file, record an initial Tier-2 version (whose content is the stamped
+/// bytes), and create exactly one candidate.
+#[test]
+fn scratch_new_auto_attaches_doc_id_when_absent() {
+    use zenith_core::{KdlAdapter, KdlSource as _};
+    use zenith_session::adapter::OsFs;
+    use zenith_session::{list_scratch, list_versions, version_content};
+
+    let (_tmp, paths, doc_path) = setup_no_id();
+
+    let id = scratch_new_in(
+        &paths,
+        FIXTURE_NO_ID.as_bytes(),
+        &doc_path,
+        &new_args(&doc_path, None, "draft", None, None, None, None),
+    )
+    .expect("scratch new on a doc with no doc-id must succeed")
+    .id;
+    assert_eq!(id, "cand0", "first candidate must be cand0");
+
+    // The on-disk file must now carry a stamped doc-id.
+    let on_disk = std::fs::read(&doc_path).unwrap();
+    let stamped_id = KdlAdapter
+        .parse(&on_disk)
+        .unwrap()
+        .doc_id
+        .expect("file must carry a doc-id after auto-attach");
+    assert_eq!(
+        stamped_id.len(),
+        26,
+        "stamped doc-id must be a 26-char ULID"
+    );
+
+    let fs = OsFs;
+
+    // An initial Tier-2 version must have been recorded by the attach.
+    let versions = list_versions(&fs, &paths, &stamped_id).unwrap();
+    assert!(
+        !versions.is_empty(),
+        "auto-attach must record an initial version"
+    );
+
+    // The candidate snapshot must equal the post-stamp on-disk bytes.
+    let entries = list_scratch(&fs, &paths, &stamped_id).unwrap();
+    assert_eq!(entries.len(), 1, "exactly one candidate must exist");
+    let stored_version = version_content(&fs, &paths, &stamped_id, &versions[0].id).unwrap();
+    assert_eq!(
+        stored_version, on_disk,
+        "recorded version content must equal the stamped on-disk bytes"
+    );
+}
+
+/// `scratch new` on a doc that ALREADY has a doc-id must NOT add a spurious
+/// history version (behavior unchanged from before auto-attach existed).
+#[test]
+fn scratch_new_does_not_record_history_when_doc_id_present() {
+    use zenith_session::adapter::OsFs;
+    use zenith_session::list_versions;
+
+    let (_tmp, paths, doc_path) = setup();
+
+    let fs = OsFs;
+    let before = list_versions(&fs, &paths, DOC_ID).unwrap();
+
+    scratch_new_in(
+        &paths,
+        FIXTURE.as_bytes(),
+        &doc_path,
+        &new_args(&doc_path, None, "draft", None, None, None, None),
+    )
+    .unwrap();
+
+    let after = list_versions(&fs, &paths, DOC_ID).unwrap();
+    assert_eq!(
+        before.len(),
+        after.len(),
+        "scratch new on a doc with an existing doc-id must not record a version"
+    );
+
+    // The on-disk file must be byte-identical (no re-stamp / re-format).
+    let on_disk = std::fs::read(&doc_path).unwrap();
+    assert_eq!(
+        on_disk,
+        FIXTURE.as_bytes(),
+        "file with an existing doc-id must be left untouched"
     );
 }

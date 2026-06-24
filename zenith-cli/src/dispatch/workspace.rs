@@ -17,8 +17,11 @@ pub(super) fn dispatch_workspace(args: WorkspaceArgs) -> ExitCode {
                     }
                 };
                 match commands::workspace::scratch_new(&doc_bytes, &a.doc, &a) {
-                    Ok(id) => {
-                        println!("{}", id);
+                    Ok(outcome) => {
+                        if let Some(w) = &outcome.warning {
+                            eprintln!("warning: {w}");
+                        }
+                        println!("{}", outcome.id);
                         ExitCode::SUCCESS
                     }
                     Err(e) => {

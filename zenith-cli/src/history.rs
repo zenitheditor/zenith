@@ -235,6 +235,64 @@ pub fn read_doc_id(doc_path: &Path) -> Result<String, String> {
     doc_id_at(doc_path)
 }
 
+// ── ensure_doc_id_in ─────────────────────────────────────────────────────────
+
+/// The result of an [`ensure_doc_id_in`] call.
+pub struct EnsuredDocId {
+    /// The document's stable `doc-id` (existing or freshly minted).
+    pub doc_id: String,
+    /// Non-fatal warning from the recording pipeline when a new id was attached.
+    /// `None` when the doc already had an id (no recording is performed in that case).
+    pub warning: Option<String>,
+}
+
+/// Ensure the document at `doc_path` carries a `doc-id`, attaching one if absent.
+///
+/// If the document already has a `doc-id`, returns it immediately without
+/// recording any history. If it has none, mints + stamps an id through the
+/// same pipeline `tx --apply` uses ([`record_edit_in`]), writes the stamped
+/// bytes back to `doc_path`, and returns the new id.
+///
+/// Use this variant in tests where you want a tempdir-rooted store. The
+/// production call site (`scratch_new`) resolves its own [`StorePaths`] via
+/// [`open_store`][crate::commands::workspace::open_store].
+pub fn ensure_doc_id_in(paths: &StorePaths, doc_path: &Path) -> Result<EnsuredDocId, String> {
+    let bytes = std::fs::read(doc_path)
+        .map_err(|e| format!("cannot read '{}': {e}", doc_path.display()))?;
+
+    // Parse once to check for an existing id.
+    let parsed = KdlAdapter
+        .parse(&bytes)
+        .map_err(|e| format!("cannot parse '{}': {}", doc_path.display(), e.message))?;
+
+    // Already has an id: return immediately, record nothing.
+    if let Some(doc_id) = parsed.doc_id {
+        return Ok(EnsuredDocId {
+            doc_id,
+            warning: None,
+        });
+    }
+
+    // No id yet: mint + stamp + record via the shared edit pipeline, write the
+    // stamped bytes back, then read the now-attached id from those bytes.
+    let recorded = record_edit_in(paths, &bytes, doc_path, "document.attach");
+    std::fs::write(doc_path, &recorded.bytes)
+        .map_err(|e| format!("cannot write '{}': {e}", doc_path.display()))?;
+    let doc = KdlAdapter
+        .parse(&recorded.bytes)
+        .map_err(|e| format!("cannot parse '{}': {}", doc_path.display(), e.message))?;
+    let doc_id = doc.doc_id.ok_or_else(|| {
+        format!(
+            "failed to attach a doc-id to '{}' (no id present after recording)",
+            doc_path.display()
+        )
+    })?;
+    Ok(EnsuredDocId {
+        doc_id,
+        warning: recorded.warning,
+    })
+}
+
 // ── history_view ──────────────────────────────────────────────────────────────
 
 /// Build the history view for the document at `doc_path`.

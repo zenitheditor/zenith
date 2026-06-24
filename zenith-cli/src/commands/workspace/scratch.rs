@@ -10,7 +10,7 @@ use zenith_session::{
 
 use crate::cli::ScratchNewArgs;
 use crate::commands::serialize_pretty;
-use crate::history::read_doc_id;
+use crate::history::{ensure_doc_id_in, read_doc_id};
 
 // ── status parsing ────────────────────────────────────────────────────────────
 
@@ -38,12 +38,27 @@ pub(crate) fn open_store() -> Result<StorePaths, String> {
 
 // ── scratch new ───────────────────────────────────────────────────────────────
 
-/// Record the document bytes as a new scratch candidate and return the created id.
+/// Outcome of `scratch new`: the created candidate id plus any non-fatal
+/// `warning` surfaced while transparently attaching a `doc-id` (e.g. the file
+/// was stamped but the initial history version could not be recorded).
+#[derive(Debug)]
+pub struct ScratchNewOutcome {
+    pub id: String,
+    pub warning: Option<String>,
+}
+
+/// Record the document bytes as a new scratch candidate.
+///
+/// If the document has no `doc-id` yet, one is transparently minted, stamped
+/// into the file, and recorded as the initial history version before the
+/// candidate is created (see [`ensure_doc_id_in`]). The candidate snapshot is
+/// always the caller-supplied `doc_bytes`; identity comes from the file at
+/// `doc_path` (in production these are the same content).
 pub fn scratch_new(
     doc_bytes: &[u8],
     doc_path: &Path,
     args: &ScratchNewArgs,
-) -> Result<String, String> {
+) -> Result<ScratchNewOutcome, String> {
     let paths = open_store()?;
     scratch_new_in(&paths, doc_bytes, doc_path, args)
 }
@@ -54,8 +69,11 @@ pub fn scratch_new_in(
     doc_bytes: &[u8],
     doc_path: &Path,
     args: &ScratchNewArgs,
-) -> Result<String, String> {
-    let doc_id = read_doc_id(doc_path)?;
+) -> Result<ScratchNewOutcome, String> {
+    // Attach a doc-id on first use (no-op + no history when one already exists).
+    // Identity comes from the file at `doc_path`; the snapshot is always the
+    // caller-supplied `doc_bytes` (in production these are the same content).
+    let ensured = ensure_doc_id_in(paths, doc_path)?;
     let fs = OsFs;
     let clock = OsClock;
     let status = parse_status(&args.status)?;
@@ -69,7 +87,7 @@ pub fn scratch_new_in(
         &fs,
         paths,
         &clock,
-        &doc_id,
+        &ensured.doc_id,
         NewCandidate {
             page_id: args.page.as_deref().unwrap_or("*"),
             snapshot: doc_bytes,
@@ -78,7 +96,10 @@ pub fn scratch_new_in(
         },
     )
     .map_err(|e| e.message)?;
-    Ok(entry.id)
+    Ok(ScratchNewOutcome {
+        id: entry.id,
+        warning: ensured.warning,
+    })
 }
 
 // ── scratch list ──────────────────────────────────────────────────────────────
