@@ -1,11 +1,10 @@
-//! "Did you mean?" suggestion helpers for `node.unknown_property` warnings.
+//! "Did you mean?" suggestion helper for unknown-property diagnostics.
 //!
-//! Exposes [`check_unknown_props`] — a single shared helper that replaces the
-//! duplicated `for prop_name in …unknown_props.keys()` loops across all
-//! per-kind check files. When a typo is close (Levenshtein distance ≤ 2) to a
-//! known property name the diagnostic message includes a "did you mean?" hint;
-//! otherwise the original version-relative wording is emitted verbatim so
-//! forward-compat documents are not affected.
+//! [`check_unknown_props`] is the single shared helper that replaces the ~15
+//! duplicated `unknown_props.keys()` loops scattered across the per-kind
+//! `check_*` files. It computes an edit-distance suggestion from the node
+//! kind's known-props list and emits one `node.unknown_property` Warning per
+//! unknown entry with the appropriate message.
 
 use std::collections::BTreeMap;
 
@@ -15,91 +14,72 @@ use crate::diagnostics::Diagnostic;
 use crate::parse::transform::known_props_for_kind;
 
 // ---------------------------------------------------------------------------
-// Levenshtein distance (bounded)
+// Edit-distance helper
 // ---------------------------------------------------------------------------
 
-/// Compute the Levenshtein edit distance between `a` and `b`.
+/// Compute the Levenshtein distance between `a` and `b`, returning `Some(dist)`
+/// if the distance is ≤ `max`, or `None` if it exceeds `max`.
 ///
-/// Returns `Some(distance)` if the distance is ≤ `max`, otherwise `None`.
-/// Uses a single-row DP approach; iterates over `chars()` so multi-byte
-/// codepoints are counted as one edit unit. No unchecked indexing.
-fn edit_distance_within(a: &str, b: &str, max: usize) -> Option<usize> {
+/// Works on Unicode scalar values (via `chars()`). Uses a single-row DP with
+/// no unchecked indexing and allocates at most `b.chars().count() + 1` values.
+pub(super) fn edit_distance_within(a: &str, b: &str, max: usize) -> Option<usize> {
     let a_chars: Vec<char> = a.chars().collect();
     let b_chars: Vec<char> = b.chars().collect();
-    let a_len = a_chars.len();
-    let b_len = b_chars.len();
+    let la = a_chars.len();
+    let lb = b_chars.len();
 
-    // Fast path: if length difference alone exceeds max, skip the DP.
-    if a_len.abs_diff(b_len) > max {
+    // Fast path: length difference alone exceeds the budget.
+    if la.abs_diff(lb) > max {
         return None;
     }
 
-    // Single-row DP. `row[j]` = edit distance between a[0..i] and b[0..j].
-    let mut row: Vec<usize> = (0..=b_len).collect();
+    // `row[j]` = edit distance between a[0..i] and b[0..j] at the start of
+    // each outer iteration (i.e., after processing i characters of `a`).
+    let mut row: Vec<usize> = (0..=lb).collect();
 
-    for i in 1..=a_len {
-        let mut prev = i - 1; // row[j-1] from the previous outer iteration
+    for i in 1..=la {
+        let mut prev = row[0]; // = dist(a[0..i-1], b[0..0])
         row[0] = i;
-        for j in 1..=b_len {
+        let mut row_min = row[0];
+        for j in 1..=lb {
             let old = row[j];
-            let cost = if a_chars[i - 1] == b_chars[j - 1] {
-                0
-            } else {
-                1
-            };
-            row[j] = (prev + cost).min(row[j] + 1).min(row[j - 1] + 1);
+            let cost = usize::from(a_chars[i - 1] != b_chars[j - 1]);
+            row[j] = (prev + cost)
+                .min(old + 1) // deletion from a
+                .min(row[j - 1] + 1); // insertion into a
             prev = old;
+            if row[j] < row_min {
+                row_min = row[j];
+            }
+        }
+        // Early exit: if the minimum in this row already exceeds `max`, no
+        // column in any subsequent row can be ≤ max.
+        if row_min > max {
+            return None;
         }
     }
 
-    let dist = row[b_len];
+    let dist = row[lb];
     if dist <= max { Some(dist) } else { None }
 }
 
 // ---------------------------------------------------------------------------
-// Suggestion finder
+// Shared unknown-property check
 // ---------------------------------------------------------------------------
 
-/// Find the lexicographically-smallest known property within edit distance ≤ 2
-/// of `prop_name`. Returns `None` when no near-miss exists or when the only
-/// candidate is an exact match (which would not be in `unknown_props` anyway).
-fn find_suggestion<'a>(prop_name: &str, known: &[&'a str]) -> Option<&'a str> {
-    let mut best: Option<(usize, &str)> = None; // (distance, name) — lex-sorted within distance
-
-    for &candidate in known {
-        // Skip exact matches (should never appear in unknown_props, but be safe).
-        if candidate == prop_name {
-            continue;
-        }
-        if let Some(dist) = edit_distance_within(prop_name, candidate, 2) {
-            let is_better = match best {
-                None => true,
-                Some((best_dist, best_name)) => {
-                    dist < best_dist || (dist == best_dist && candidate < best_name)
-                }
-            };
-            if is_better {
-                best = Some((dist, candidate));
-            }
-        }
-    }
-
-    best.map(|(_, name)| name)
-}
-
-// ---------------------------------------------------------------------------
-// Public shared helper
-// ---------------------------------------------------------------------------
-
-/// Emit a `node.unknown_property` warning for every entry in `unknown`.
+/// Emit one `node.unknown_property` Warning for every entry in `unknown`.
 ///
-/// When a near-miss (edit distance ≤ 2) to a known property for `kind` exists,
-/// the warning message includes a "did you mean?" hint. Otherwise the original
-/// version-relative wording is emitted unchanged, so forward-compat documents
-/// (using properties from a later schema version) are not misled.
+/// For each unknown property name, the known-props list for `kind` is queried
+/// via [`known_props_for_kind`] and the closest match within edit distance ≤ 2
+/// is found. Ties are broken by lexicographic order (BTreeMap iteration gives
+/// a deterministic candidate order because the known-props slice is sorted by
+/// insertion in the transform consts — we additionally pick the lex-smallest
+/// among equal-distance candidates).
 ///
-/// The diagnostic code is always `"node.unknown_property"` and the severity is
-/// always Warning — no new code or severity level is introduced.
+/// - Near-miss (distance ≤ 2): message contains `— did you mean '<suggestion>'?`
+/// - No near-miss: the existing version-relative message is used verbatim.
+///
+/// Code is always `"node.unknown_property"`, severity always Warning.
 pub(super) fn check_unknown_props(
     kind: &str,
     id: &str,
@@ -108,24 +88,61 @@ pub(super) fn check_unknown_props(
     diagnostics: &mut Vec<Diagnostic>,
 ) {
     let known = known_props_for_kind(kind);
+
     for prop_name in unknown.keys() {
-        let msg = match find_suggestion(prop_name, known) {
-            Some(suggestion) => format!(
+        // Find the closest known prop within edit distance ≤ 2.
+        // Deterministic tie-break: lexicographically smallest candidate wins
+        // because we iterate `known` in slice order and only replace when
+        // strictly less distance OR (same distance AND lex-smaller name).
+        let suggestion = find_suggestion(prop_name, known);
+
+        let message = match suggestion {
+            Some(s) => format!(
                 "{kind} '{id}': unknown property '{prop_name}' \
-                 — did you mean '{suggestion}'? (or a newer-schema property)"
+                 — did you mean '{s}'? \
+                 (or a newer-schema property)"
             ),
             None => format!(
-                "{kind} '{id}': unknown property '{prop_name}' \
-                 (version-relative; may be valid in a later schema version)"
+                "{kind} '{id}': unknown property '{prop_name}' (version-relative; \
+                 may be valid in a later schema version)"
             ),
         };
+
         diagnostics.push(Diagnostic::warning(
             "node.unknown_property",
-            msg,
+            message,
             span,
             Some(id.to_owned()),
         ));
     }
+}
+
+/// Find the lexicographically-smallest known prop within edit distance ≤ 2 of
+/// `prop_name`, skipping any candidate that is identical to `prop_name` (exact
+/// matches would have been collected as known props at parse time).
+///
+/// Returns `None` when no candidate is within the budget.
+fn find_suggestion<'a>(prop_name: &str, known: &[&'a str]) -> Option<&'a str> {
+    let mut best: Option<(&str, usize)> = None; // (candidate, distance)
+
+    for &candidate in known {
+        if candidate == prop_name {
+            continue;
+        }
+        if let Some(dist) = edit_distance_within(prop_name, candidate, 2) {
+            let replace = match best {
+                None => true,
+                Some((prev, prev_dist)) => {
+                    dist < prev_dist || (dist == prev_dist && candidate < prev)
+                }
+            };
+            if replace {
+                best = Some((candidate, dist));
+            }
+        }
+    }
+
+    best.map(|(c, _)| c)
 }
 
 // ---------------------------------------------------------------------------
@@ -136,63 +153,69 @@ pub(super) fn check_unknown_props(
 mod tests {
     use super::*;
 
-    // edit_distance_within
-
     #[test]
-    fn distance_identical_strings_is_zero() {
+    fn edit_distance_identical_strings() {
         assert_eq!(edit_distance_within("fill", "fill", 2), Some(0));
     }
 
     #[test]
-    fn distance_one_deletion() {
-        // "fil" → "fill": insert one 'l' = distance 1
+    fn edit_distance_one_substitution() {
+        // "fil" → "fill" is 1 insertion
         assert_eq!(edit_distance_within("fil", "fill", 2), Some(1));
     }
 
     #[test]
-    fn distance_two_substitutions() {
-        // "widht" → "width": the transposed 'h'/'t' cost two substitutions
-        // under plain Levenshtein.
-        assert_eq!(edit_distance_within("widht", "width", 2), Some(2));
+    fn edit_distance_two_substitutions() {
+        // "gall" → "fill" substitutes g→f and a→i (the two trailing l's match)
+        // for an edit distance of 2.
+        assert_eq!(edit_distance_within("gall", "fill", 2), Some(2));
     }
 
     #[test]
-    fn distance_exceeds_max_returns_none() {
-        // "quantum_flux" vs "fill": distance >> 2
+    fn edit_distance_exceeds_max_returns_none() {
         assert_eq!(edit_distance_within("quantum_flux", "fill", 2), None);
     }
 
     #[test]
-    fn distance_length_diff_fast_path() {
-        // Length diff > 2 → None without running DP
-        assert_eq!(edit_distance_within("x", "opacity", 2), None);
+    fn edit_distance_empty_a() {
+        // empty → "fill" = 4 insertions, exceeds 2
+        assert_eq!(edit_distance_within("", "fill", 2), None);
     }
 
-    // find_suggestion
+    #[test]
+    fn edit_distance_empty_b() {
+        // "fill" → empty = 4 deletions, exceeds 2
+        assert_eq!(edit_distance_within("fill", "", 2), None);
+    }
 
     #[test]
-    fn suggestion_typo_fil_finds_fill() {
-        let known = &["fill", "stroke", "opacity", "visible"];
+    fn find_suggestion_near_miss_fill() {
+        let known: &[&str] = &["fill", "stroke", "x", "y", "w", "h"];
+        // "fil" is 1 edit from "fill"
         assert_eq!(find_suggestion("fil", known), Some("fill"));
     }
 
     #[test]
-    fn suggestion_far_miss_returns_none() {
-        let known = &["fill", "stroke", "opacity", "visible"];
+    fn find_suggestion_far_miss_returns_none() {
+        let known: &[&str] = &["fill", "stroke", "x", "y", "w", "h"];
         assert_eq!(find_suggestion("quantum_flux", known), None);
     }
 
     #[test]
-    fn suggestion_exact_match_skipped() {
-        // If someone somehow has an exact name in known, it should NOT be suggested.
-        let known = &["fill", "stroke"];
+    fn find_suggestion_skips_exact_match() {
+        // If "fill" is in unknown props but also in known (shouldn't normally
+        // happen, but the guard must not suggest the exact same name).
+        let known: &[&str] = &["fill"];
         assert_eq!(find_suggestion("fill", known), None);
     }
 
     #[test]
-    fn suggestion_tie_breaks_lexicographically() {
-        // "ab" is distance 1 from both "abc" and "abd"; "abc" < "abd" lexicographically.
-        let known = &["abd", "abc"];
-        assert_eq!(find_suggestion("ab", known), Some("abc"));
+    fn find_suggestion_tie_break_lexicographic() {
+        // "ab" has distance 1 from "a" (insert b) and "ac" (substitute c→b).
+        // Among equal-distance candidates, the lex-smallest wins: "a" < "ac".
+        let known: &[&str] = &["ac", "a"];
+        let result = find_suggestion("ab", known);
+        // Both "a" and "ac" are at distance 1. "a" < "ac" lexicographically.
+        assert_eq!(result, Some("a"));
     }
 }

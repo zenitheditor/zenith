@@ -7,7 +7,7 @@
 //! reused by every per-kind check.
 
 pub(super) mod shared;
-mod suggest;
+pub(super) mod suggest;
 
 mod container;
 mod leaf;
