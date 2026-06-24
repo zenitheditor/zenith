@@ -12,7 +12,10 @@ The `.zen` holds ONLY final content. Process state — scratch candidates, their
 
 ## 1. Plan for addressability
 
-There is no in-file brief block; keep the plan in the work itself.
+Start a fresh document with `zenith new doc.zen --name "…"` (a minimal valid scaffold with a
+`doc-id`), or open any existing `.zen` — identity and the workspace store attach transparently on
+the first edit, so `zenith workspace scratch new` works immediately with no prior `tx`. There is no
+in-file brief block; keep the plan in the work itself.
 
 - Give every node a stable `id` so each edit is a precise transaction.
 - Give each layer group a `semantic-role` (+ optional `layer-priority`/`intensity`) so layers stay

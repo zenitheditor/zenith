@@ -223,6 +223,7 @@ Everything that touches the render path is **deterministic and C-free**: no time
 
 <details><summary>Tokens, a full node set, real typography, visual effects, anchors, recipes, a transaction engine, deterministic PNG/PDF, history, libraries, and data-merge.</summary>
 
+- **Scaffold & identity** — `zenith new` creates a ready-to-edit document (minimal valid template, default `.zen` extension, parent dirs created) with a stable `doc-id` minted on first write; any `.zen` gains its identity and workspace store transparently on the first edit — no manual setup step.
 - **Plain-text `.zen` format** — KDL v2 source with `project` / `tokens` / `styles` / `document` / `page` structure; every node carries a stable id.
 - **Design tokens** — `color` (sRGB **and** native CMYK), `dimension`, `number`, `fontFamily`, `fontWeight`, `gradient` (linear/radial), `shadow`, `filter`, and `mask`, with alias chains and cycle detection.
 - **A full node set** — `rect`, `ellipse`, `line`, `polygon`, `polyline`, `text`, `code`, `image`, `frame`, `group`, `pattern`, `shape`, `connector`, `instance`, `field`, `footnote`, `toc`, and `table`, plus lossless pass-through of unknown nodes for forward compatibility.
@@ -358,7 +359,7 @@ Run `zenith <command> --help` for flags (each prints a description and an exampl
 
 | Group         | Commands                                                                                                  |
 | ------------- | --------------------------------------------------------------------------------------------------------- |
-| **Author**    | `validate` · `fmt` · `tokens` · `inspect`                                                                 |
+| **Author**    | `new` · `validate` · `fmt` · `tokens` · `inspect`                                                         |
 | **Render**    | `render` (`--pdf` · `--scene` · `--all-pages` · `--spread` · `--page`)                                    |
 | **Edit**      | `tx` (typed transactions, dry-run by default)                                                             |
 | **Variants**  | `variant` (one design → many sizes/formats) · `merge` (CSV data mail-merge)                               |
