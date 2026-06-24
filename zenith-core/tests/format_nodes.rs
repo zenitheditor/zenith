@@ -411,6 +411,40 @@ fn test_safe_zone_format_round_trip() {
     );
 }
 
+/// A safe-zone `label` containing a double-quote and a newline must be escaped on
+/// emit so the formatted document re-parses to the identical label.
+#[test]
+fn test_safe_zone_label_escaping_round_trip() {
+    let src = "zenith version=1 {\n  \
+         project id=\"proj.szesc\" name=\"SZEsc\"\n  \
+         tokens format=\"zenith-token-v1\" {\n  }\n  \
+         styles {\n  }\n  \
+         document id=\"doc.szesc\" title=\"SZEsc\" {\n    \
+           page id=\"page.one\" w=(px)800 h=(px)600 {\n      \
+             safe-zone id=\"sz.q\" type=\"exclusion\" x=(px)0 y=(px)0 w=(px)10 h=(px)10 \
+                 label=\"a \\\"q\\\" b\\nc\"\n    }\n  }\n}\n";
+    let adapter = KdlAdapter;
+    let doc = adapter.parse(src.as_bytes()).expect("parse must succeed");
+    let label = doc.body.pages[0].safe_zones[0]
+        .label
+        .clone()
+        .expect("label present");
+    assert_eq!(
+        label, "a \"q\" b\nc",
+        "parsed label has the raw special chars"
+    );
+
+    let formatted = format_document(&doc).expect("format must succeed");
+    let doc2 = adapter
+        .parse(&formatted)
+        .expect("re-parse after format must succeed");
+    assert_eq!(
+        doc2.body.pages[0].safe_zones[0].label.as_deref(),
+        Some("a \"q\" b\nc"),
+        "safe-zone label with quote/newline must survive parse → format → parse"
+    );
+}
+
 /// A `.zen` document with a `fold` declared as a page child.
 const FOLD_DOC: &str = r##"zenith version=1 {
   project id="proj.fold" name="Fold Project"

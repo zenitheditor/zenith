@@ -104,7 +104,7 @@ fn write_safe_zone(zone: &SafeZone, out: &mut String, depth: usize) {
     out.push_str(&fmt_dimension(&zone.w));
     out.push_str(" h=");
     out.push_str(&fmt_dimension(&zone.h));
-    write_opt_str(out, "label", &zone.label);
+    write_opt_str_escaped(out, "label", &zone.label);
     out.push('\n');
 }
 
