@@ -60,24 +60,32 @@ zenith render doc.zen --all-pages preview/      # contact sheet: one PNG per pag
 
 ## 5. Promote the chosen candidate into the final page
 
-Promotion is not yet a single primitive; compose it from structural ops:
+Mark the winner with `candidate-status="selected"` (and `promotion-target` = the final page id),
+then use the **`promote_candidate`** tx op — it deep-copies the selected candidate page's content
+into the target export page, appending an `id_suffix` so ids stay unique:
 
-- Copy the selected groups from the scratch page into the final page (`add_node` /
-  reparent ops — see `zenith tx --help`), regenerating ids if they would collide.
-- Ensure z-order: decorative background groups sit **below** the foreground product/title
-  groups.
-- Record what came from which candidate in a `note` (source candidate id + id mapping), since
-  the engine does not track this for you.
+```bash
+# promote.json: {"ops":[{"op":"promote_candidate","source_page":"page.scratch.hero.02","target_page":"page.hero","id_suffix":".final"}]}
+zenith tx doc.zen promote.json --apply
+```
+
+- The source must have `candidate-status="selected"`; the target page's content is replaced.
+- See `zenith schema op promote_candidate` for the exact fields.
 - `validate` and `render` again after promotion.
 
 ## 6. Finalize and clean up
 
-Produce a clean deliverable:
+Use the **`finalize_run`** tx op: for each page in the run whose `candidate-status="rejected"`, it
+applies that page's `cleanup-policy` — `"delete"` removes the page; `"archive"` (or absent policy)
+sets its `workspace-role` to `"archived"`:
 
-- Delete unpromoted `scratch.*` pages and any now-unused generated assets/tokens. (Check
-  `zenith tokens <file>` and validation for unused-token advisories.)
-- If an audit trail is wanted, keep the rejected candidates in a separate archived copy rather
-  than in the deliverable.
+```bash
+# finalize.json: {"ops":[{"op":"finalize_run","run_pages":["page.scratch.hero.01","page.scratch.hero.02"]}]}
+zenith tx doc.zen finalize.json --apply
+```
+
+- See `zenith schema op finalize_run` for the fields.
+- Then check `zenith tokens <file>` / validation for now-unused-token advisories.
 - Final source must `validate` with no hard diagnostics and `render` cleanly.
 
 ## 7. Durable history and undo
@@ -107,9 +115,9 @@ which is why steps 1–3 insist on ids, tokens, and groups.
 
 ## Known gaps (do not pretend these exist)
 
-The page workflow-metadata fields above (`workspace-role`, `candidate-status`, `promotion-target`,
-`notes`, `cleanup-policy`) are recorded and validated, but the engine does **not act** on them yet:
-there is no automated `promote_candidate`/cleanup transaction op — promotion and deletion are still
-manual (step 5). Also **not** implemented; do not generate source that assumes them: brush/stamp
-definitions, a built-in critique report, and structured run-log provenance. Use the conventions
-above with today's primitives until the engine ships these.
+The candidate lifecycle is now first-class: page metadata (`workspace-role`, `candidate-status`,
+`promotion-target`, `notes`, `cleanup-policy`), the `promote_candidate` / `finalize_run` tx ops
+(steps 5–6), and a document-level `agent-runs` provenance block (a structured run log) all ship —
+prefer them over manual conventions. Still **not** implemented; do not generate source that assumes
+them: brush/stamp definitions and a built-in automated critique report. Use the conventions above
+with today's primitives until the engine ships these.
