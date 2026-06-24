@@ -399,3 +399,34 @@ fn pattern_border_token_not_flagged_unused() {
         codes(&report)
     );
 }
+
+/// A token used ONLY inside a pattern's motif must NOT be flagged
+/// `token.unused`. The motif renders (replicated per instance), so the motif
+/// subtree is walked for token references even though its ids are not collected.
+#[test]
+fn pattern_motif_token_not_flagged_unused() {
+    let src = r##"zenith version=1 {
+  project id="proj.mt" name="MotifToken"
+  tokens format="zenith-token-v1" {
+    token id="color.dot" type="color" value="#fbbf24"
+  }
+  styles {
+  }
+  document id="doc.mt" title="MotifToken" {
+    page id="page.mt" w=(px)800 h=(px)600 {
+      pattern id="p.grid" kind="grid" x=(px)0 y=(px)0 w=(px)800 h=(px)600 spacing=(px)20 {
+        ellipse id="e.m" w=(px)8 h=(px)8 fill=(token)"color.dot"
+      }
+    }
+  }
+}
+"##;
+    let adapter = KdlAdapter;
+    let doc = adapter.parse(src.as_bytes()).expect("parse must succeed");
+    let report = validate(&doc);
+    assert!(
+        !has_code(&report, "token.unused"),
+        "token used only inside a pattern motif must NOT be flagged token.unused; got: {:?}",
+        codes(&report)
+    );
+}

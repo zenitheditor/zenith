@@ -237,8 +237,10 @@ pub(super) fn walk_node(
             );
         }
         Node::Pattern(p) => {
-            // The pattern is validated as a leaf; its motif is a template and
-            // is not walked (no id-collection / token-ref checks on the motif).
+            // The pattern is validated as a leaf; its motif is a TEMPLATE, so its
+            // own ids must not enter the uniqueness set and its validity is owned
+            // by the compile-time probe — hence id-collection / motif diagnostics
+            // are not done here.
             node::check_pattern(
                 p,
                 ctx,
@@ -247,6 +249,20 @@ pub(super) fn walk_node(
                 geom_required,
                 parent_ctx,
                 diagnostics,
+            );
+            // The motif still RENDERS (replicated once per instance), so tokens
+            // referenced only inside it are genuinely used. Walk it into throwaway
+            // id/diagnostic sinks to collect those token references — without
+            // registering the template's ids or re-surfacing its diagnostics.
+            let mut motif_seen: BTreeSet<String> = BTreeSet::new();
+            let mut motif_diags: Vec<Diagnostic> = Vec::new();
+            walk_node(
+                &p.motif,
+                ctx,
+                &mut motif_seen,
+                referenced_token_ids,
+                pos,
+                &mut motif_diags,
             );
         }
         Node::Polygon(poly) => {
