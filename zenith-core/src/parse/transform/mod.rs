@@ -21,3 +21,4 @@ mod special;
 mod tokens;
 
 pub use document::transform;
+pub(crate) use helpers::known_props_for_kind;

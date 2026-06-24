@@ -318,6 +318,54 @@ pub(super) fn kdl_value_to_unknown_value(v: &KdlValue) -> UnknownValue {
     }
 }
 
+/// Return the compile-time known-props slice for a given node kind string.
+///
+/// Used by the validator's "did you mean?" suggestion helper to compute
+/// edit-distance candidates without duplicating the per-kind arrays. Returns
+/// `&[]` for kinds that either have no fixed prop list or are not recognised.
+/// The kind strings match the KDL node-name strings (lowercase, no namespace).
+pub(crate) fn known_props_for_kind(kind: &str) -> &'static [&'static str] {
+    // Import the per-submodule consts here at the point of use.
+    use super::container::{
+        CELL_KNOWN_PROPS, COLUMN_KNOWN_PROPS, FRAME_KNOWN_PROPS, GROUP_KNOWN_PROPS,
+        INSTANCE_KNOWN_PROPS, ROW_KNOWN_PROPS, TABLE_KNOWN_PROPS,
+    };
+    use super::leaf::{
+        CODE_KNOWN_PROPS, ELLIPSE_KNOWN_PROPS, IMAGE_KNOWN_PROPS, LINE_KNOWN_PROPS,
+        POLYGON_KNOWN_PROPS, POLYLINE_KNOWN_PROPS, RECT_KNOWN_PROPS, TEXT_KNOWN_PROPS,
+    };
+    use super::pattern::PATTERN_KNOWN_PROPS;
+    use super::special::{
+        CONNECTOR_KNOWN_PROPS, FIELD_KNOWN_PROPS, FOOTNOTE_KNOWN_PROPS, SHAPE_KNOWN_PROPS,
+        TOC_KNOWN_PROPS,
+    };
+
+    match kind {
+        "rect" => RECT_KNOWN_PROPS,
+        "ellipse" => ELLIPSE_KNOWN_PROPS,
+        "image" => IMAGE_KNOWN_PROPS,
+        "text" => TEXT_KNOWN_PROPS,
+        "code" => CODE_KNOWN_PROPS,
+        "line" => LINE_KNOWN_PROPS,
+        "polygon" => POLYGON_KNOWN_PROPS,
+        "polyline" => POLYLINE_KNOWN_PROPS,
+        "frame" => FRAME_KNOWN_PROPS,
+        "group" => GROUP_KNOWN_PROPS,
+        "table" => TABLE_KNOWN_PROPS,
+        "cell" => CELL_KNOWN_PROPS,
+        "row" => ROW_KNOWN_PROPS,
+        "column" => COLUMN_KNOWN_PROPS,
+        "shape" => SHAPE_KNOWN_PROPS,
+        "connector" => CONNECTOR_KNOWN_PROPS,
+        "field" => FIELD_KNOWN_PROPS,
+        "toc" => TOC_KNOWN_PROPS,
+        "footnote" => FOOTNOTE_KNOWN_PROPS,
+        "pattern" => PATTERN_KNOWN_PROPS,
+        "instance" => INSTANCE_KNOWN_PROPS,
+        _ => &[],
+    }
+}
+
 /// Collect all entries that are NOT in `known_keys` into `unknown_props`.
 pub(super) fn collect_unknown_props(
     node: &KdlNode,

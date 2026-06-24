@@ -14,6 +14,7 @@ use super::shared::{
     AnchorParentCtx, AnchorProps, check_anchor, check_optional_dim, check_style_ref,
     is_valid_blend_mode,
 };
+use super::suggest::check_unknown_props;
 use crate::validate::check::nodes::WalkCtx;
 use crate::validate::check::register_id;
 use crate::validate::check::visual::{VisualExpect, check_visual_prop};
@@ -132,18 +133,7 @@ pub(in crate::validate::check) fn check_frame(
     }
 
     // Unknown properties.
-    for prop_name in f.unknown_props.keys() {
-        diagnostics.push(Diagnostic::warning(
-            "node.unknown_property",
-            format!(
-                "frame '{}': unknown property '{}' (version-relative; \
-                 may be valid in a later schema version)",
-                f.id, prop_name
-            ),
-            f.source_span,
-            Some(f.id.clone()),
-        ));
-    }
+    check_unknown_props("frame", &f.id, &f.unknown_props, f.source_span, diagnostics);
 }
 
 pub(in crate::validate::check) fn check_group(
@@ -210,18 +200,7 @@ pub(in crate::validate::check) fn check_group(
     }
 
     // Unknown properties.
-    for prop_name in g.unknown_props.keys() {
-        diagnostics.push(Diagnostic::warning(
-            "node.unknown_property",
-            format!(
-                "group '{}': unknown property '{}' (version-relative; \
-                 may be valid in a later schema version)",
-                g.id, prop_name
-            ),
-            g.source_span,
-            Some(g.id.clone()),
-        ));
-    }
+    check_unknown_props("group", &g.id, &g.unknown_props, g.source_span, diagnostics);
 }
 
 pub(in crate::validate::check) fn check_table(
@@ -443,62 +422,36 @@ pub(in crate::validate::check) fn check_table(
     }
 
     // Unknown properties on the table node itself.
-    for prop_name in t.unknown_props.keys() {
-        diagnostics.push(Diagnostic::warning(
-            "node.unknown_property",
-            format!(
-                "table '{}': unknown property '{}' (version-relative; \
-                 may be valid in a later schema version)",
-                t.id, prop_name
-            ),
-            t.source_span,
-            Some(t.id.clone()),
-        ));
-    }
+    check_unknown_props("table", &t.id, &t.unknown_props, t.source_span, diagnostics);
 
     // Unknown properties on each column declaration.
     for col in &t.columns {
-        for prop_name in col.unknown_props.keys() {
-            diagnostics.push(Diagnostic::warning(
-                "node.unknown_property",
-                format!(
-                    "table '{}': column has unknown property '{}' (version-relative; \
-                     may be valid in a later schema version)",
-                    t.id, prop_name
-                ),
-                col.source_span,
-                Some(t.id.clone()),
-            ));
-        }
+        check_unknown_props(
+            "column",
+            &t.id,
+            &col.unknown_props,
+            col.source_span,
+            diagnostics,
+        );
     }
 
     // Unknown properties on each row and cell.
     for row in &t.rows {
-        for prop_name in row.unknown_props.keys() {
-            diagnostics.push(Diagnostic::warning(
-                "node.unknown_property",
-                format!(
-                    "table '{}': row has unknown property '{}' (version-relative; \
-                     may be valid in a later schema version)",
-                    t.id, prop_name
-                ),
-                row.source_span,
-                Some(t.id.clone()),
-            ));
-        }
+        check_unknown_props(
+            "row",
+            &t.id,
+            &row.unknown_props,
+            row.source_span,
+            diagnostics,
+        );
         for cell in &row.cells {
-            for prop_name in cell.unknown_props.keys() {
-                diagnostics.push(Diagnostic::warning(
-                    "node.unknown_property",
-                    format!(
-                        "table '{}': cell has unknown property '{}' (version-relative; \
-                         may be valid in a later schema version)",
-                        t.id, prop_name
-                    ),
-                    cell.source_span,
-                    Some(t.id.clone()),
-                ));
-            }
+            check_unknown_props(
+                "cell",
+                &t.id,
+                &cell.unknown_props,
+                cell.source_span,
+                diagnostics,
+            );
         }
     }
 

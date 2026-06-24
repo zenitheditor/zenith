@@ -15,7 +15,7 @@ use super::helpers::{
 };
 use super::node::transform_node;
 
-const PATTERN_KNOWN_PROPS: &[&str] = &[
+pub(crate) const PATTERN_KNOWN_PROPS: &[&str] = &[
     "id",
     "name",
     "role",

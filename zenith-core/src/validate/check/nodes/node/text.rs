@@ -10,6 +10,7 @@ use super::shared::{
     AnchorParentCtx, AnchorProps, check_anchor, check_optional_dim, check_spans, check_style_ref,
     is_valid_blend_mode,
 };
+use super::suggest::check_unknown_props;
 use crate::validate::check::nodes::WalkCtx;
 use crate::validate::check::register_id;
 use crate::validate::check::visual::{VisualExpect, check_visual_prop};
@@ -246,18 +247,7 @@ pub(in crate::validate::check) fn check_text(
     }
 
     // Unknown properties.
-    for prop_name in t.unknown_props.keys() {
-        diagnostics.push(Diagnostic::warning(
-            "node.unknown_property",
-            format!(
-                "text '{}': unknown property '{}' (version-relative; \
-                 may be valid in a later schema version)",
-                t.id, prop_name
-            ),
-            t.source_span,
-            Some(t.id.clone()),
-        ));
-    }
+    check_unknown_props("text", &t.id, &t.unknown_props, t.source_span, diagnostics);
 }
 
 pub(in crate::validate::check) fn check_image(
@@ -512,17 +502,12 @@ pub(in crate::validate::check) fn check_image(
     }
 
     // Unknown properties.
-    for prop_name in img.unknown_props.keys() {
-        diagnostics.push(Diagnostic::warning(
-            "node.unknown_property",
-            format!(
-                "image '{}': unknown property '{}' (version-relative; \
-                 may be valid in a later schema version)",
-                img.id, prop_name
-            ),
-            img.source_span,
-            Some(img.id.clone()),
-        ));
-    }
+    check_unknown_props(
+        "image",
+        &img.id,
+        &img.unknown_props,
+        img.source_span,
+        diagnostics,
+    );
     // Image is a leaf — no child recursion.
 }

@@ -17,7 +17,7 @@ use super::helpers::{
     optional_string_prop_aliased, optional_u32_prop, required_string_prop,
 };
 
-const RECT_KNOWN_PROPS: &[&str] = &[
+pub(crate) const RECT_KNOWN_PROPS: &[&str] = &[
     "id",
     "name",
     "role",
@@ -175,7 +175,7 @@ pub(super) fn transform_rect(node: &KdlNode) -> Result<RectNode, ParseError> {
     })
 }
 
-const IMAGE_KNOWN_PROPS: &[&str] = &[
+pub(crate) const IMAGE_KNOWN_PROPS: &[&str] = &[
     "id",
     "name",
     "role",
@@ -294,7 +294,7 @@ pub(super) fn transform_image(node: &KdlNode) -> Result<ImageNode, ParseError> {
     })
 }
 
-const ELLIPSE_KNOWN_PROPS: &[&str] = &[
+pub(crate) const ELLIPSE_KNOWN_PROPS: &[&str] = &[
     "id",
     "name",
     "role",
@@ -401,7 +401,7 @@ pub(super) fn transform_ellipse(node: &KdlNode) -> Result<EllipseNode, ParseErro
     })
 }
 
-const LINE_KNOWN_PROPS: &[&str] = &[
+pub(crate) const LINE_KNOWN_PROPS: &[&str] = &[
     "id",
     "name",
     "role",
@@ -461,7 +461,7 @@ pub(super) fn transform_line(node: &KdlNode) -> Result<LineNode, ParseError> {
     })
 }
 
-const TEXT_KNOWN_PROPS: &[&str] = &[
+pub(crate) const TEXT_KNOWN_PROPS: &[&str] = &[
     "id",
     "name",
     "role",
@@ -633,7 +633,7 @@ pub(super) fn transform_text(node: &KdlNode) -> Result<TextNode, ParseError> {
     })
 }
 
-const CODE_KNOWN_PROPS: &[&str] = &[
+pub(crate) const CODE_KNOWN_PROPS: &[&str] = &[
     "id",
     "name",
     "role",
@@ -749,7 +749,7 @@ pub(super) fn transform_code(node: &KdlNode) -> Result<CodeNode, ParseError> {
     })
 }
 
-const POLYGON_KNOWN_PROPS: &[&str] = &[
+pub(crate) const POLYGON_KNOWN_PROPS: &[&str] = &[
     "id",
     "name",
     "role",
@@ -770,7 +770,7 @@ const POLYGON_KNOWN_PROPS: &[&str] = &[
 
 // NOTE: polyline intentionally omits stroke-alignment — an author
 // writing it gets a node.unknown_property warning, which is correct.
-const POLYLINE_KNOWN_PROPS: &[&str] = &[
+pub(crate) const POLYLINE_KNOWN_PROPS: &[&str] = &[
     "id",
     "name",
     "role",

@@ -12,6 +12,7 @@ use crate::diagnostics::Diagnostic;
 use super::shared::{
     AnchorParentCtx, AnchorProps, check_anchor, check_optional_dim, check_spans, check_style_ref,
 };
+use super::suggest::check_unknown_props;
 use crate::validate::check::nodes::WalkCtx;
 use crate::validate::check::register_id;
 use crate::validate::check::visual::{VisualExpect, check_visual_prop};
@@ -214,18 +215,7 @@ pub(in crate::validate::check) fn check_shape(
     );
 
     // Unknown properties.
-    for prop_name in s.unknown_props.keys() {
-        diagnostics.push(Diagnostic::warning(
-            "node.unknown_property",
-            format!(
-                "shape '{}': unknown property '{}' (version-relative; \
-                 may be valid in a later schema version)",
-                s.id, prop_name
-            ),
-            s.source_span,
-            Some(s.id.clone()),
-        ));
-    }
+    check_unknown_props("shape", &s.id, &s.unknown_props, s.source_span, diagnostics);
 }
 
 pub(in crate::validate::check) fn check_connector(
@@ -385,18 +375,13 @@ pub(in crate::validate::check) fn check_connector(
     }
 
     // Unknown properties.
-    for prop_name in c.unknown_props.keys() {
-        diagnostics.push(Diagnostic::warning(
-            "node.unknown_property",
-            format!(
-                "connector '{}': unknown property '{}' (version-relative; \
-                 may be valid in a later schema version)",
-                c.id, prop_name
-            ),
-            c.source_span,
-            Some(c.id.clone()),
-        ));
-    }
+    check_unknown_props(
+        "connector",
+        &c.id,
+        &c.unknown_props,
+        c.source_span,
+        diagnostics,
+    );
 }
 
 /// Emit the forward-compat `node.unknown_kind` warning and register the
