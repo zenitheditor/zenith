@@ -95,11 +95,13 @@ These make designs editable, on-brand, and reproducible — and keep the agentic
 ## Command surface
 
 Discover commands with `zenith --help` and flags with `zenith <cmd> --help` (each includes an
-example). Every command supports `--json`. The groups, in brief: **author** (`validate`, `fmt`,
-`tokens`, `inspect`), **render** (`render`), **edit** (`tx` — typed, dry-run by default),
-**variants** (`variant` — size/format variants from one page; `merge` — CSV data mail-merge),
-**library** (`library list`/`add`), **theme** (`theme new`), and **history** (`history`, `undo`,
-`redo`, `version`, `restore`, `sync`). Do not memorize flags from this file — ask the CLI.
+example). Most commands support `--json` for machine-readable output. The groups, in brief:
+**author** (`new` — scaffold a fresh document; `validate`, `fmt`, `tokens`, `inspect`), **render**
+(`render`), **edit** (`tx` — typed, dry-run by default), **variants** (`variant` — size/format
+variants from one page; `merge` — CSV data mail-merge), **library** (`library list`/`add`),
+**theme** (`theme new`), **workspace** (`workspace scratch`/`candidate`/`promote`/`finalize`/`bundle`/
+`unbundle` — store-backed scratch candidates), and **history** (`history`, `undo`, `redo`, `version`,
+`restore`, `sync`). Do not memorize flags from this file — ask the CLI.
 
 > Two different "variant" tools — don't confuse them: `zenith variant` varies **size/format**
 > (one design → square/story/banner), `zenith merge` varies **content** (one template → many
