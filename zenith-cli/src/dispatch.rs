@@ -446,6 +446,24 @@ pub fn run() -> ExitCode {
                 ExitCode::SUCCESS
             }
 
+            cli::LibrarySub::Show(show_args) => {
+                let project_dir = resolve_project_dir(show_args.path.as_deref());
+                match commands::library::show(
+                    &show_args.spec,
+                    project_dir.as_deref(),
+                    show_args.json,
+                ) {
+                    Ok(out) => {
+                        println!("{}", out);
+                        ExitCode::SUCCESS
+                    }
+                    Err(e) => {
+                        eprintln!("{}", e.message);
+                        ExitCode::from(e.exit_code)
+                    }
+                }
+            }
+
             cli::LibrarySub::Add(add_args) => {
                 // Parse the optional `--at "X,Y"` origin up front.
                 let at = match parse_at_spec(add_args.at.as_deref()) {
