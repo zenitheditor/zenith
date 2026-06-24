@@ -60,6 +60,17 @@ pub struct Cli {
 /// Top-level subcommands.
 #[derive(Debug, Subcommand)]
 pub enum Command {
+    /// Scaffold a new minimal, valid `.zen` document at a fresh path.
+    ///
+    /// Writes a minimal valid document (one page on a white background) at the
+    /// given path, with a `doc-id` already minted + stamped and its first
+    /// version recorded in history — a ready-to-edit "File > New" starting point.
+    /// A `.zen` extension is appended when the path has none, and any missing
+    /// parent directories are created. Refuses to overwrite an existing file.
+    /// The id slug is derived from `--name` when given, otherwise from the
+    /// path's file stem; the default name is "Untitled".
+    New(NewArgs),
+
     /// Validate a `.zen` document and report diagnostics.
     ///
     /// Validate a .zen document and report diagnostics. Hard (Error) diagnostics
@@ -343,6 +354,20 @@ pub struct VariantArgs {
     /// reproducibility.  Independent of --json.
     #[arg(long, value_name = "PATH")]
     pub manifest: Option<PathBuf>,
+}
+
+/// Arguments for `zenith new`.
+#[derive(Debug, Args)]
+#[command(after_help = "EXAMPLE:\n  zenith new poster.zen --name \"Launch Poster\"")]
+pub struct NewArgs {
+    /// Path to create the new document at (must not already exist). A `.zen`
+    /// extension is appended if absent, and missing parent directories are created.
+    pub path: PathBuf,
+
+    /// Display name for the document (used in ids and the title). Defaults to
+    /// "Untitled"; the id slug is derived from this, else from the file stem.
+    #[arg(long, value_name = "NAME")]
+    pub name: Option<String>,
 }
 
 /// Arguments for `zenith validate`.

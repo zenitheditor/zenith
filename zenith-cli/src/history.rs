@@ -32,6 +32,8 @@ use zenith_session::{
 pub struct Recorded {
     /// Bytes to write to the `.zen` file (may have a stamped `doc-id`).
     pub bytes: Vec<u8>,
+    /// The document's stable `doc-id` (existing or freshly minted).
+    pub doc_id: String,
     /// Non-fatal warning produced during history recording, if any.
     pub warning: Option<String>,
 }
@@ -51,6 +53,7 @@ pub fn record_edit(content: &[u8], doc_path: &Path, op_kind: &str) -> Recorded {
         Err(e) => {
             return Recorded {
                 bytes: content.to_vec(),
+                doc_id: String::new(),
                 warning: Some(format!("history: resolve_data_dir failed: {}", e.message)),
             };
         }
@@ -78,6 +81,7 @@ pub fn record_edit_in(
         Err(e) => {
             return Recorded {
                 bytes: content.to_vec(),
+                doc_id: String::new(),
                 warning: Some(format!("history: parse failed: {}", e.message)),
             };
         }
@@ -88,6 +92,7 @@ pub fn record_edit_in(
         Err(e) => {
             return Recorded {
                 bytes: content.to_vec(),
+                doc_id: doc.doc_id.unwrap_or_default(),
                 warning: Some(format!("history: reconcile failed: {}", e.message)),
             };
         }
@@ -103,6 +108,7 @@ pub fn record_edit_in(
                 Err(e) => {
                     return Recorded {
                         bytes: content.to_vec(),
+                        doc_id: reconciled.doc_id,
                         warning: Some(format!("history: format failed: {}", e.message)),
                     };
                 }
@@ -124,6 +130,7 @@ pub fn record_edit_in(
     ) {
         return Recorded {
             bytes: final_bytes,
+            doc_id: reconciled.doc_id,
             warning: Some(format!(
                 "history: record_state failed: {} (file will still be written)",
                 e.message
@@ -145,6 +152,7 @@ pub fn record_edit_in(
     ) {
         return Recorded {
             bytes: final_bytes,
+            doc_id: reconciled.doc_id,
             warning: Some(format!(
                 "history: record_version failed: {} (file will still be written)",
                 e.message
@@ -154,6 +162,7 @@ pub fn record_edit_in(
 
     Recorded {
         bytes: final_bytes,
+        doc_id: reconciled.doc_id,
         warning: None,
     }
 }
@@ -274,21 +283,18 @@ pub fn ensure_doc_id_in(paths: &StorePaths, doc_path: &Path) -> Result<EnsuredDo
     }
 
     // No id yet: mint + stamp + record via the shared edit pipeline, write the
-    // stamped bytes back, then read the now-attached id from those bytes.
+    // stamped bytes back, then return the now-attached id from the recorded result.
     let recorded = record_edit_in(paths, &bytes, doc_path, "document.attach");
     std::fs::write(doc_path, &recorded.bytes)
         .map_err(|e| format!("cannot write '{}': {e}", doc_path.display()))?;
-    let doc = KdlAdapter
-        .parse(&recorded.bytes)
-        .map_err(|e| format!("cannot parse '{}': {}", doc_path.display(), e.message))?;
-    let doc_id = doc.doc_id.ok_or_else(|| {
-        format!(
+    if recorded.doc_id.is_empty() {
+        return Err(format!(
             "failed to attach a doc-id to '{}' (no id present after recording)",
             doc_path.display()
-        )
-    })?;
+        ));
+    }
     Ok(EnsuredDocId {
-        doc_id,
+        doc_id: recorded.doc_id,
         warning: recorded.warning,
     })
 }

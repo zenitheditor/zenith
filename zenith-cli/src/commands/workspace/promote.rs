@@ -140,7 +140,7 @@ pub fn promote_in(
     let formatted = KdlAdapter
         .format(&main_doc)
         .map_err(|e| format!("format failed: {}", e.message))?;
-    let Recorded { bytes, warning } =
+    let Recorded { bytes, warning, .. } =
         record_edit_in(paths, &formatted, doc_path, "workspace.promote");
     if let Some(w) = &warning {
         eprintln!("warning: {w}");
