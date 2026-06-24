@@ -1,34 +1,51 @@
 # Agentic visual workflow
 
 How an agent takes a vague brief to a finished, auditable design without polluting the final
-file. This encodes the full loop using **today's** Zenith primitives. Where a step is a
-_convention_ rather than a first-class engine feature, that is called out — follow the
-convention; don't claim the engine enforces it.
+file. Most of this loop is now **first-class** in the engine: page workflow metadata
+(`workspace-role`/`candidate-status`/…), the `promote_candidate`/`finalize_run` tx ops, and the
+`agent-runs` + `previews` provenance blocks. Prefer those over ad-hoc conventions; the few
+remaining conventions are called out as such.
 
-> Exact transaction op names and flags: `zenith tx --help` and `examples/*.tx.json`
-> (e.g. `examples/center.tx.json`). Verify before you rely on a specific op.
+> Exact transaction op names + fields: `zenith schema op <name>` and `zenith tx --help`
+> (+ `examples/*.tx.json`). Authorable attributes: `zenith schema node <kind>` / `schema page`.
+> Verify before relying on a specific op or field.
 
 ## 1. Capture the brief and plan (traceability)
 
-Before generating anything, write the brief down _in the document_ so the result can be traced
-back to intent:
+Record intent _in the document_ with the first-class `agent-runs` provenance block, so the result
+traces back to the brief and every step is auditable (`zenith inspect` surfaces it):
 
-- Put the goal, palette, mood, and layer plan in `note` / `role="guide"` content, or a sidecar
-  `*.brief.md` next to the `.zen`. These do not render.
-- Reference intended layer groups by the **stable ids** you will create (`bg.*`, `hero.*`,
-  `cta.*`), so the plan and the final source line up.
-- List measurable acceptance criteria (e.g. "title contrast ≥ Lc 60 (APCA)", "product safe area kept
-  clear"). You will check these with `zenith validate` and by inspecting the render.
+```kdl
+agent-runs {
+  run id="run.hero" brief="Launch hero: dark, energetic, product-forward" {
+    step id="s1" action="generate-bg" action-version="1" {
+      param name="palette" value="brand"
+      param name="seed" value="7"
+    }
+    // steps carry action + params; the engine also attaches affected node ids + diagnostics.
+  }
+}
+```
+
+- Name the layer groups you will create and give each a **`semantic-role`** (plus optional
+  `layer-priority` / `intensity`) so the plan and the final source line up and layers stay
+  addressable — e.g. `group id="bg.grunge" semantic-role="background" layer-priority=0`.
+  (`zenith schema node group` lists these.)
+- List measurable acceptance criteria (e.g. "title contrast ≥ Lc 60 (APCA)", "product safe area
+  kept clear"); check them with `zenith validate` and by inspecting the render.
 
 ## 2. Scratch experiments (don't pollute the final)
 
-Tag experiment pages with the page **`workspace-role`** metadata field (free-form, e.g.
-`workspace-role="scratch"`) plus a clear naming convention (`zenith schema page` lists the fields):
+`workspace-role` is the **first-class scratchpad marker** on a page — set `workspace-role="scratch"`
+on every experiment page (the engine validates + carries it; `finalize_run` later acts on it). A
+naming convention reinforces it but is no longer the mechanism:
 
 - Final pages: `page.<name>` (e.g. `page.hero`).
-- Experiments: `page.scratch.<topic>.<NN>` (e.g. `page.scratch.bg.01`), tagged `workspace-role="scratch"`.
-- Keep experiments clearly tagged, render them, and delete the losers before final export. Nothing
-  in a scratch page should reach the deliverable unless you deliberately promote it (step 5).
+- Experiments: `workspace-role="scratch"` (optionally named `page.scratch.<topic>.<NN>`).
+- Give each experiment a `candidate-status` and a `cleanup-policy` up front (step 3) so the run can
+  be finalized automatically (step 6) — don't hand-delete losers.
+- Nothing in a scratch page reaches the deliverable unless you deliberately promote it (step 5).
+  (`zenith schema page` lists `workspace-role`, `candidate-status`, `cleanup-policy`, …)
 
 ## 3. Generate multiple candidates from one plan
 
@@ -119,9 +136,10 @@ which is why steps 1–3 insist on ids, tokens, and groups.
 
 ## Known gaps (do not pretend these exist)
 
-The candidate lifecycle is now first-class: page metadata (`workspace-role`, `candidate-status`,
-`promotion-target`, `notes`, `cleanup-policy`), the `promote_candidate` / `finalize_run` tx ops
-(steps 5–6), and a document-level `agent-runs` provenance block (a structured run log) all ship —
-prefer them over manual conventions. Still **not** implemented; do not generate source that assumes
-them: brush/stamp definitions and a built-in automated critique report. Use the conventions above
-with today's primitives until the engine ships these.
+Most of the loop is first-class now — prefer these over ad-hoc conventions: page workflow metadata
+(`workspace-role`, `candidate-status`, `promotion-target`, `notes`, `cleanup-policy`); group
+`semantic-role`/`layer-priority`/`intensity` + `protected-region`/`editable-param` children; the
+`promote_candidate`/`finalize_run` tx ops (steps 5–6); and the document-level `agent-runs` and
+`previews` provenance blocks. Still **not** implemented; do not generate source that assumes them:
+brush/stamp definitions and a built-in automated critique report (you self-critique by reading the
+render — step 4). Use today's primitives until the engine ships these.
