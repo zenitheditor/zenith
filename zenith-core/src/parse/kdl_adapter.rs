@@ -94,10 +94,12 @@ impl KdlSource for KdlAdapter {
                         && m.contains("No closing")
                         && m.contains("child block")
                     {
+                        // Put the hint on its own line so it is not buried after
+                        // the raw kdl message — this is the most common real cause.
                         msg.push_str(
-                            "; hint: a node and its arguments must be on one line — if you split \
-                             attributes across lines, end each line with `\\`; otherwise a `{` is \
-                             unclosed",
+                            "\n  hint: a node and all its arguments must be on ONE line. If you \
+                             split a node's attributes across lines, end each line with `\\` to \
+                             continue it — otherwise a `{` is genuinely unclosed.",
                         );
                     }
                     let span = crate::ast::Span {
@@ -476,7 +478,7 @@ mod tests {
             .parse(src)
             .expect_err("split attributes must fail to parse");
         assert!(
-            err.message.contains("must be on one line") && err.message.contains('\\'),
+            err.message.contains("on ONE line") && err.message.contains('\\'),
             "multi-line-attribute error must include the continuation hint; got: {:?}",
             err.message
         );
