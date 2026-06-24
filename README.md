@@ -432,11 +432,19 @@ themes); other agents (Cursor, Windsurf, Aider, Zed, Gemini, Copilot, Continue, 
 Antigravity) get a single self-contained rule file that points back at the self-documenting
 CLI. Writes are idempotent — re-run any time to update, or `zenith plugin uninstall` to remove.
 
-### MCP server (remote / CI / server agents)
+### MCP server (remote / CI / hosted agents)
 
 For agents that discover capabilities through the Model Context Protocol — or for CI and
-server pipelines — Zenith runs as an MCP server over stdio, exposing `validate`, `inspect`,
-`tokens`, `fmt`, `render`, `tx`, `merge`, and `theme` as tools:
+hosted/SaaS pipelines — Zenith runs as a first-class MCP server. It is **not** a thin CLI
+wrapper: tool results are trimmed structured JSON, schema detail is fetched on demand via a
+single `zenith_schema` tool (so the model never carries every node/op schema), large or binary
+artifacts (renders, big trees, diffs) come back as **resource links** into a content-addressed
+store instead of being inlined, and documents are addressable by `doc-id` so agents stop
+juggling paths. The full author loop is exposed — `zenith_schema`, `zenith_validate`,
+`zenith_inspect`, `zenith_tokens`, `zenith_tx`, `zenith_render`, `zenith_fmt`, `zenith_merge`,
+`zenith_theme_new`, plus the scratch/candidate/promote/finalize workspace tools.
+
+Run it over stdio (the default transport):
 
 ```bash
 zenith mcp
@@ -452,10 +460,29 @@ Point any MCP-aware client at it:
 }
 ```
 
+…or, for Claude Code: `claude mcp add zenith -- zenith mcp`.
+
+**Remote / hosted serving.** Build with the optional `http` feature and serve native
+Streamable-HTTP at a single `/mcp` endpoint (kept behind an opt-in feature so the default build
+stays dependency-light and C-free):
+
+```bash
+cargo install --path zenith-cli --features http --locked
+zenith mcp --http 127.0.0.1:8080
+# test it:
+curl -s -XPOST http://127.0.0.1:8080/mcp \
+  -H 'Content-Type: application/json' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+```
+
+The workspace store (scratch candidates, version history, rendered resource artifacts) lives
+under `$XDG_DATA_HOME/zenith` (`~/.local/share/zenith` by default); set `ZENITH_DATA_DIR` to
+relocate it for isolated/hosted deployments.
+
 > **Local agents should prefer the CLI + skill**, not MCP. Running `zenith` directly (taught by
-> `zenith plugin install`) is faster and cheaper on tokens than routing every call through MCP.
-> Reach for the MCP server when the agent can't run a local binary — remote hosts, CI, or
-> hosted/production services where you want the full read+write surface behind a protocol.
+> `zenith plugin install`) is the fastest path when the environment can run the binary. Reach
+> for the MCP server when it can't — remote hosts, CI, sandboxes, or hosted/production services
+> where you want the full read+write surface behind a protocol. The server is first-class there.
 
 The repo ships a [`server.json`](./server.json) (MCP registry manifest); the release workflow
 publishes it to the [MCP registry](https://registry.modelcontextprotocol.io) on each stable tag

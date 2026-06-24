@@ -103,6 +103,34 @@ Stable ids + tokens + `semantic-role` groups make edits precise transactions:
 - "Stronger glow" → update the shadow token it references.
 - "Remove honeycomb near the headline" → delete/clip nodes in `bg.honeycomb`.
 
+## Running this loop over MCP (when the CLI isn't available)
+
+Prefer the `zenith` CLI whenever your environment can run it — it is the primary, fastest surface.
+When a local binary is not suitable (remote, CI, sandboxed, hosted agents), the same loop runs over
+the **`zenith mcp`** server, which exposes the command surface as MCP tools. It is a first-class
+surface, not a thin wrapper: results are trimmed structured JSON, schema detail is fetched on demand,
+and large/binary artifacts come back as **resource links** (read them with `resources/read`).
+
+Every tool takes a `doc` argument that is either a path **or** the 26-char `doc-id` — so after the
+first call (which attaches identity) you can address the document by id and stop passing paths.
+
+| CLI step                                            | MCP tool                                                                 |
+| --------------------------------------------------- | ------------------------------------------------------------------------ |
+| `zenith schema node/op …` (learn syntax on demand)  | `zenith_schema` `{surface, name}`                                        |
+| `zenith tx` (typed edit, dry-run by default)        | `zenith_tx` `{doc, transaction, apply?, diff?}`                          |
+| `zenith validate`                                   | `zenith_validate` `{doc, severity?}` → `{valid, error_count, …}`         |
+| `zenith render`                                     | `zenith_render` `{doc, format}` → a resource link (never raw bytes)      |
+| `zenith inspect` / `tokens` / `fmt`                 | `zenith_inspect` / `zenith_tokens` / `zenith_fmt`                        |
+| `zenith workspace scratch new/list/show`            | `zenith_workspace_scratch` `{doc, op:"new"\|"list"\|"show", …}`          |
+| `zenith workspace candidate`                        | `zenith_workspace_candidate` `{doc, candidate_id, status}`               |
+| `zenith workspace promote`                          | `zenith_workspace_promote` `{doc, candidate_id, target_page}`            |
+| `zenith workspace finalize` / `bundle` / `unbundle` | `zenith_workspace_finalize` `{doc, op:"finalize"\|"bundle"\|"unbundle"}` |
+| `zenith merge` / `theme new`                        | `zenith_merge` / `zenith_theme_new`                                      |
+
+Transport: stdio by default; `zenith mcp --http <ADDR>` serves native Streamable-HTTP (binary built
+with the `http` feature). History navigation (`history`/`undo`/`redo`/`version`/`restore`/`sync`) is
+CLI-only for now — use the CLI when you need it.
+
 ## Not implemented (don't assume these)
 
 Brush/stamp definitions; an automated critique report (self-critique by reading the render, step 3);
