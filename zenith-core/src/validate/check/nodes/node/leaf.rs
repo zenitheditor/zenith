@@ -12,6 +12,7 @@ use super::shared::{
     AnchorParentCtx, AnchorProps, VisualProps, check_anchor, check_optional_dim, check_style_ref,
     check_visual_props, is_valid_blend_mode,
 };
+use super::suggest::check_unknown_props;
 use crate::validate::check::nodes::WalkCtx;
 use crate::validate::check::register_id;
 use crate::validate::check::visual::{VisualExpect, check_visual_prop};
@@ -130,18 +131,7 @@ pub(in crate::validate::check) fn check_rect(
     );
 
     // Unknown properties.
-    for prop_name in r.unknown_props.keys() {
-        diagnostics.push(Diagnostic::warning(
-            "node.unknown_property",
-            format!(
-                "rect '{}': unknown property '{}' (version-relative; \
-                 may be valid in a later schema version)",
-                r.id, prop_name
-            ),
-            r.source_span,
-            Some(r.id.clone()),
-        ));
-    }
+    check_unknown_props("rect", &r.id, &r.unknown_props, r.source_span, diagnostics);
 }
 
 pub(in crate::validate::check) fn check_ellipse(
@@ -373,18 +363,13 @@ pub(in crate::validate::check) fn check_ellipse(
     }
 
     // Unknown properties.
-    for prop_name in e.unknown_props.keys() {
-        diagnostics.push(Diagnostic::warning(
-            "node.unknown_property",
-            format!(
-                "ellipse '{}': unknown property '{}' (version-relative; \
-                 may be valid in a later schema version)",
-                e.id, prop_name
-            ),
-            e.source_span,
-            Some(e.id.clone()),
-        ));
-    }
+    check_unknown_props(
+        "ellipse",
+        &e.id,
+        &e.unknown_props,
+        e.source_span,
+        diagnostics,
+    );
 }
 
 pub(in crate::validate::check) fn check_line(
@@ -488,18 +473,7 @@ pub(in crate::validate::check) fn check_line(
     }
 
     // Unknown properties.
-    for prop_name in l.unknown_props.keys() {
-        diagnostics.push(Diagnostic::warning(
-            "node.unknown_property",
-            format!(
-                "line '{}': unknown property '{}' (version-relative; \
-                 may be valid in a later schema version)",
-                l.id, prop_name
-            ),
-            l.source_span,
-            Some(l.id.clone()),
-        ));
-    }
+    check_unknown_props("line", &l.id, &l.unknown_props, l.source_span, diagnostics);
 }
 
 pub(in crate::validate::check) fn check_code(
@@ -618,16 +592,5 @@ pub(in crate::validate::check) fn check_code(
     );
 
     // Unknown properties.
-    for prop_name in c.unknown_props.keys() {
-        diagnostics.push(Diagnostic::warning(
-            "node.unknown_property",
-            format!(
-                "code '{}': unknown property '{}' (version-relative; \
-                 may be valid in a later schema version)",
-                c.id, prop_name
-            ),
-            c.source_span,
-            Some(c.id.clone()),
-        ));
-    }
+    check_unknown_props("code", &c.id, &c.unknown_props, c.source_span, diagnostics);
 }

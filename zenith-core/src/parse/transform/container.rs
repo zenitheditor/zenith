@@ -17,7 +17,7 @@ use super::helpers::{
 };
 use super::leaf::transform_span;
 
-const FRAME_KNOWN_PROPS: &[&str] = &[
+pub(crate) const FRAME_KNOWN_PROPS: &[&str] = &[
     "id",
     "name",
     "role",
@@ -92,7 +92,7 @@ pub(super) fn transform_frame(node: &KdlNode) -> Result<FrameNode, ParseError> {
     })
 }
 
-const GROUP_KNOWN_PROPS: &[&str] = &[
+pub(crate) const GROUP_KNOWN_PROPS: &[&str] = &[
     "id",
     "name",
     "role",
@@ -162,7 +162,7 @@ pub(super) fn transform_group(node: &KdlNode) -> Result<GroupNode, ParseError> {
     })
 }
 
-const CELL_KNOWN_PROPS: &[&str] = &[
+pub(crate) const CELL_KNOWN_PROPS: &[&str] = &[
     "colspan",
     "rowspan",
     "fill",
@@ -175,11 +175,11 @@ const CELL_KNOWN_PROPS: &[&str] = &[
     "v_align",
 ];
 
-const ROW_KNOWN_PROPS: &[&str] = &[];
+pub(crate) const ROW_KNOWN_PROPS: &[&str] = &[];
 
-const COLUMN_KNOWN_PROPS: &[&str] = &["width"];
+pub(crate) const COLUMN_KNOWN_PROPS: &[&str] = &["width"];
 
-const TABLE_KNOWN_PROPS: &[&str] = &[
+pub(crate) const TABLE_KNOWN_PROPS: &[&str] = &[
     "id",
     "name",
     "role",
@@ -335,7 +335,7 @@ pub(super) fn transform_table(node: &KdlNode) -> Result<TableNode, ParseError> {
     })
 }
 
-const INSTANCE_KNOWN_PROPS: &[&str] = &[
+pub(crate) const INSTANCE_KNOWN_PROPS: &[&str] = &[
     "id",
     "name",
     "role",

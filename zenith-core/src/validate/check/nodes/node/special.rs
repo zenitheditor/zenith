@@ -10,6 +10,7 @@ use crate::diagnostics::Diagnostic;
 use super::shared::{
     AnchorParentCtx, AnchorProps, check_anchor, check_optional_dim, check_spans, check_style_ref,
 };
+use super::suggest::check_unknown_props;
 use crate::validate::check::nodes::WalkCtx;
 use crate::validate::check::register_id;
 use crate::validate::check::visual::{VisualExpect, check_visual_prop};
@@ -136,18 +137,13 @@ pub(in crate::validate::check) fn check_polygon(
     }
 
     // Unknown properties.
-    for prop_name in poly.unknown_props.keys() {
-        diagnostics.push(Diagnostic::warning(
-            "node.unknown_property",
-            format!(
-                "polygon '{}': unknown property '{}' (version-relative; \
-                 may be valid in a later schema version)",
-                poly.id, prop_name
-            ),
-            poly.source_span,
-            Some(poly.id.clone()),
-        ));
-    }
+    check_unknown_props(
+        "polygon",
+        &poly.id,
+        &poly.unknown_props,
+        poly.source_span,
+        diagnostics,
+    );
     // polygon is a LEAF: no child-node recursion (points are sub-data).
 }
 
@@ -255,18 +251,13 @@ pub(in crate::validate::check) fn check_polyline(
     }
 
     // Unknown properties.
-    for prop_name in poly.unknown_props.keys() {
-        diagnostics.push(Diagnostic::warning(
-            "node.unknown_property",
-            format!(
-                "polyline '{}': unknown property '{}' (version-relative; \
-                 may be valid in a later schema version)",
-                poly.id, prop_name
-            ),
-            poly.source_span,
-            Some(poly.id.clone()),
-        ));
-    }
+    check_unknown_props(
+        "polyline",
+        &poly.id,
+        &poly.unknown_props,
+        poly.source_span,
+        diagnostics,
+    );
     // polyline is a LEAF: no child-node recursion (points are sub-data).
 }
 
@@ -360,18 +351,13 @@ pub(in crate::validate::check) fn check_instance(
     }
 
     // Unknown properties on the instance node.
-    for prop_name in inst.unknown_props.keys() {
-        diagnostics.push(Diagnostic::warning(
-            "node.unknown_property",
-            format!(
-                "instance '{}': unknown property '{}' (version-relative; \
-                 may be valid in a later schema version)",
-                inst.id, prop_name
-            ),
-            inst.source_span,
-            Some(inst.id.clone()),
-        ));
-    }
+    check_unknown_props(
+        "instance",
+        &inst.id,
+        &inst.unknown_props,
+        inst.source_span,
+        diagnostics,
+    );
 }
 
 // ── field validation ──────────────────────────────────────────────────────────
@@ -512,18 +498,13 @@ pub(in crate::validate::check) fn check_field(
     );
 
     // Unknown properties on the field node.
-    for prop_name in field.unknown_props.keys() {
-        diagnostics.push(Diagnostic::warning(
-            "node.unknown_property",
-            format!(
-                "field '{}': unknown property '{}' (version-relative; \
-                 may be valid in a later schema version)",
-                field.id, prop_name
-            ),
-            field.source_span,
-            Some(field.id.clone()),
-        ));
-    }
+    check_unknown_props(
+        "field",
+        &field.id,
+        &field.unknown_props,
+        field.source_span,
+        diagnostics,
+    );
 }
 
 /// Validate a [`TocNode`]: id uniqueness, style ref, visual properties, and
@@ -612,18 +593,13 @@ pub(in crate::validate::check) fn check_toc(
     );
 
     // Unknown properties on the toc node.
-    for prop_name in toc.unknown_props.keys() {
-        diagnostics.push(Diagnostic::warning(
-            "node.unknown_property",
-            format!(
-                "toc '{}': unknown property '{}' (version-relative; \
-                 may be valid in a later schema version)",
-                toc.id, prop_name
-            ),
-            toc.source_span,
-            Some(toc.id.clone()),
-        ));
-    }
+    check_unknown_props(
+        "toc",
+        &toc.id,
+        &toc.unknown_props,
+        toc.source_span,
+        diagnostics,
+    );
 }
 
 /// Validate a [`FootnoteNode`]: id uniqueness, style ref, the content-span and
@@ -693,16 +669,11 @@ pub(in crate::validate::check) fn check_footnote(
         diagnostics,
     );
 
-    for prop_name in footnote.unknown_props.keys() {
-        diagnostics.push(Diagnostic::warning(
-            "node.unknown_property",
-            format!(
-                "footnote '{}': unknown property '{}' (version-relative; \
-                 may be valid in a later schema version)",
-                footnote.id, prop_name
-            ),
-            footnote.source_span,
-            Some(footnote.id.clone()),
-        ));
-    }
+    check_unknown_props(
+        "footnote",
+        &footnote.id,
+        &footnote.unknown_props,
+        footnote.source_span,
+        diagnostics,
+    );
 }

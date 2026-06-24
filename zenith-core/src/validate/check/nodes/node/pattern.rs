@@ -10,6 +10,7 @@ use super::shared::{
     AnchorParentCtx, AnchorProps, VisualProps, check_anchor, check_optional_dim, check_style_ref,
     check_visual_props,
 };
+use super::suggest::check_unknown_props;
 use crate::validate::check::nodes::WalkCtx;
 use crate::validate::check::register_id;
 
@@ -227,16 +228,11 @@ pub(in crate::validate::check) fn check_pattern(
     }
 
     // Unknown properties.
-    for prop_name in p.unknown_props.keys() {
-        diagnostics.push(Diagnostic::warning(
-            "node.unknown_property",
-            format!(
-                "pattern '{}': unknown property '{}' (version-relative; \
-                 may be valid in a later schema version)",
-                p.id, prop_name
-            ),
-            p.source_span,
-            Some(p.id.clone()),
-        ));
-    }
+    check_unknown_props(
+        "pattern",
+        &p.id,
+        &p.unknown_props,
+        p.source_span,
+        diagnostics,
+    );
 }

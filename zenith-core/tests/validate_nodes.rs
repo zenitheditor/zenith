@@ -9,6 +9,7 @@ use std::collections::BTreeMap;
 mod common;
 
 use common::*;
+use zenith_core::{UnknownProperty, UnknownValue};
 
 // ── Test 1: clean minimal doc has no errors ───────────────────────────
 
@@ -1026,4 +1027,195 @@ fn anchor_gap_non_px_unit_produces_gap_invalid_unit() {
         .find(|d| d.code == "anchor.gap_invalid_unit")
         .expect("diagnostic must exist");
     assert_eq!(diag.severity, Severity::Warning);
+}
+
+// ── "did you mean?" suggestion tests ─────────────────────────────────
+
+/// A rect with `fil` (typo of `fill`) in `unknown_props` should produce a
+/// `node.unknown_property` warning whose message contains "did you mean 'fill'?".
+#[test]
+fn rect_near_miss_unknown_prop_suggests_did_you_mean() {
+    let mut unknown_props = BTreeMap::new();
+    unknown_props.insert(
+        "fil".to_owned(),
+        UnknownProperty {
+            value: UnknownValue::String("red".to_owned()),
+            ty: Some("token".to_owned()),
+        },
+    );
+    let doc = doc_with(
+        vec![],
+        vec![minimal_page(
+            "page.one",
+            vec![Node::Rect(Box::new(RectNode {
+                shadow: None,
+                filter: None,
+                mask: None,
+                id: "rect.typo".to_owned(),
+                name: None,
+                role: None,
+                x: Some(px(0.0)),
+                y: Some(px(0.0)),
+                w: Some(px(100.0)),
+                h: Some(px(100.0)),
+                radius: None,
+                radius_tl: None,
+                radius_tr: None,
+                radius_br: None,
+                radius_bl: None,
+                style: None,
+                fill: None,
+                stroke: None,
+                stroke_width: None,
+                stroke_alignment: None,
+                stroke_dash: None,
+                stroke_gap: None,
+                stroke_linecap: None,
+                border_top: None,
+                border_bottom: None,
+                border_left: None,
+                border_right: None,
+                border_width: None,
+                stroke_outer: None,
+                stroke_outer_width: None,
+                opacity: None,
+                visible: None,
+                locked: None,
+                rotate: None,
+                blend_mode: None,
+                blur: None,
+                anchor: None,
+                anchor_zone: None,
+                anchor_sibling: None,
+                anchor_edge: None,
+                anchor_gap: None,
+                anchor_parent: None,
+                source_span: None,
+                unknown_props,
+            }))],
+        )],
+    );
+    let report = validate(&doc);
+    assert!(
+        has_code(&report, "node.unknown_property"),
+        "expected node.unknown_property; codes: {:?}",
+        codes(&report)
+    );
+    let diag = report
+        .diagnostics
+        .iter()
+        .find(|d| d.code == "node.unknown_property")
+        .expect("diagnostic must exist");
+    assert!(
+        diag.message.contains("did you mean 'fill'?"),
+        "expected 'did you mean \\'fill\\'?' in message; got: {:?}",
+        diag.message
+    );
+}
+
+/// A rect with `quantum_flux` (genuinely unrecognised, far from all known props)
+/// should produce a `node.unknown_property` warning with the original
+/// version-relative wording and NO "did you mean?" hint.
+#[test]
+fn rect_far_miss_unknown_prop_no_suggestion() {
+    let mut unknown_props = BTreeMap::new();
+    unknown_props.insert(
+        "quantum_flux".to_owned(),
+        UnknownProperty {
+            value: UnknownValue::Integer(1),
+            ty: None,
+        },
+    );
+    let doc = doc_with(
+        vec![],
+        vec![minimal_page(
+            "page.one",
+            vec![Node::Rect(Box::new(RectNode {
+                shadow: None,
+                filter: None,
+                mask: None,
+                id: "rect.future".to_owned(),
+                name: None,
+                role: None,
+                x: Some(px(0.0)),
+                y: Some(px(0.0)),
+                w: Some(px(100.0)),
+                h: Some(px(100.0)),
+                radius: None,
+                radius_tl: None,
+                radius_tr: None,
+                radius_br: None,
+                radius_bl: None,
+                style: None,
+                fill: None,
+                stroke: None,
+                stroke_width: None,
+                stroke_alignment: None,
+                stroke_dash: None,
+                stroke_gap: None,
+                stroke_linecap: None,
+                border_top: None,
+                border_bottom: None,
+                border_left: None,
+                border_right: None,
+                border_width: None,
+                stroke_outer: None,
+                stroke_outer_width: None,
+                opacity: None,
+                visible: None,
+                locked: None,
+                rotate: None,
+                blend_mode: None,
+                blur: None,
+                anchor: None,
+                anchor_zone: None,
+                anchor_sibling: None,
+                anchor_edge: None,
+                anchor_gap: None,
+                anchor_parent: None,
+                source_span: None,
+                unknown_props,
+            }))],
+        )],
+    );
+    let report = validate(&doc);
+    assert!(
+        has_code(&report, "node.unknown_property"),
+        "expected node.unknown_property; codes: {:?}",
+        codes(&report)
+    );
+    let diag = report
+        .diagnostics
+        .iter()
+        .find(|d| d.code == "node.unknown_property")
+        .expect("diagnostic must exist");
+    assert!(
+        !diag.message.contains("did you mean"),
+        "expected no 'did you mean' for far-miss prop; got: {:?}",
+        diag.message
+    );
+    assert!(
+        diag.message.contains("version-relative"),
+        "expected version-relative wording for far-miss prop; got: {:?}",
+        diag.message
+    );
+}
+
+/// A rect with only correctly-spelled known properties should produce no
+/// `node.unknown_property` diagnostic at all.
+#[test]
+fn rect_correctly_spelled_props_no_unknown_property() {
+    let doc = doc_with(
+        vec![],
+        vec![minimal_page(
+            "page.one",
+            vec![minimal_rect("rect.clean", None)],
+        )],
+    );
+    let report = validate(&doc);
+    assert!(
+        !has_code(&report, "node.unknown_property"),
+        "expected no node.unknown_property for a clean rect; codes: {:?}",
+        codes(&report)
+    );
 }

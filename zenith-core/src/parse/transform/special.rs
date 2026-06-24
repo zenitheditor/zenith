@@ -13,7 +13,7 @@ use super::helpers::{
 };
 use super::leaf::transform_span;
 
-const SHAPE_KNOWN_PROPS: &[&str] = &[
+pub(crate) const SHAPE_KNOWN_PROPS: &[&str] = &[
     "id",
     "name",
     "role",
@@ -117,7 +117,7 @@ pub(super) fn transform_shape(node: &KdlNode) -> Result<ShapeNode, ParseError> {
     })
 }
 
-const CONNECTOR_KNOWN_PROPS: &[&str] = &[
+pub(crate) const CONNECTOR_KNOWN_PROPS: &[&str] = &[
     "id",
     "name",
     "role",
@@ -173,7 +173,7 @@ pub(super) fn transform_connector(node: &KdlNode) -> Result<ConnectorNode, Parse
     })
 }
 
-const FIELD_KNOWN_PROPS: &[&str] = &[
+pub(crate) const FIELD_KNOWN_PROPS: &[&str] = &[
     "id",
     "name",
     "role",
@@ -271,7 +271,7 @@ pub(super) fn transform_field(node: &KdlNode) -> Result<FieldNode, ParseError> {
     })
 }
 
-const TOC_KNOWN_PROPS: &[&str] = &[
+pub(crate) const TOC_KNOWN_PROPS: &[&str] = &[
     "id",
     "name",
     "role",
@@ -369,7 +369,7 @@ pub(super) fn transform_toc(node: &KdlNode) -> Result<TocNode, ParseError> {
     })
 }
 
-const FOOTNOTE_KNOWN_PROPS: &[&str] = &[
+pub(crate) const FOOTNOTE_KNOWN_PROPS: &[&str] = &[
     "id",
     "name",
     "role",

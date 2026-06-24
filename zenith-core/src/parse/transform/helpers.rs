@@ -318,6 +318,40 @@ pub(super) fn kdl_value_to_unknown_value(v: &KdlValue) -> UnknownValue {
     }
 }
 
+/// Return the compile-time slice of known property names for a given node kind
+/// string. Returns `&[]` for any kind that does not have a known-props list
+/// (forward-compat: unrecognised kinds do not attempt suggestions).
+///
+/// The slices are the same `pub(crate)` constants that [`collect_unknown_props`]
+/// already uses during parsing, so the validator and the parser share a single
+/// source of truth for what is "known".
+pub(crate) fn known_props_for_kind(kind: &str) -> &'static [&'static str] {
+    match kind {
+        "rect" => super::leaf::RECT_KNOWN_PROPS,
+        "ellipse" => super::leaf::ELLIPSE_KNOWN_PROPS,
+        "image" => super::leaf::IMAGE_KNOWN_PROPS,
+        "line" => super::leaf::LINE_KNOWN_PROPS,
+        "text" => super::leaf::TEXT_KNOWN_PROPS,
+        "code" => super::leaf::CODE_KNOWN_PROPS,
+        "polygon" => super::leaf::POLYGON_KNOWN_PROPS,
+        "polyline" => super::leaf::POLYLINE_KNOWN_PROPS,
+        "frame" => super::container::FRAME_KNOWN_PROPS,
+        "group" => super::container::GROUP_KNOWN_PROPS,
+        "table" => super::container::TABLE_KNOWN_PROPS,
+        "column" => super::container::COLUMN_KNOWN_PROPS,
+        "row" => super::container::ROW_KNOWN_PROPS,
+        "cell" => super::container::CELL_KNOWN_PROPS,
+        "instance" => super::container::INSTANCE_KNOWN_PROPS,
+        "shape" => super::special::SHAPE_KNOWN_PROPS,
+        "connector" => super::special::CONNECTOR_KNOWN_PROPS,
+        "field" => super::special::FIELD_KNOWN_PROPS,
+        "toc" => super::special::TOC_KNOWN_PROPS,
+        "footnote" => super::special::FOOTNOTE_KNOWN_PROPS,
+        "pattern" => super::pattern::PATTERN_KNOWN_PROPS,
+        _ => &[],
+    }
+}
+
 /// Collect all entries that are NOT in `known_keys` into `unknown_props`.
 pub(super) fn collect_unknown_props(
     node: &KdlNode,
