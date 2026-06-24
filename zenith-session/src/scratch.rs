@@ -212,6 +212,83 @@ pub fn set_candidate_status(
     Ok(updated)
 }
 
+// ── FinalizeReport ────────────────────────────────────────────────────────────
+
+/// Report of a finalize pass.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct FinalizeReport {
+    /// Candidate ids removed from the index (had `status == Rejected` and
+    /// `cleanup_policy == Some("delete")`).
+    pub deleted: Vec<String>,
+    /// Number of distinct candidates remaining in the index after the pass.
+    pub kept: usize,
+}
+
+/// Apply each rejected candidate's cleanup-policy to the scratch store.
+///
+/// Candidates that are `Rejected` with `cleanup_policy == Some("delete")` are
+/// removed from the index entirely. Their snapshot objects are left in
+/// `objects/` for a future GC pass. All other candidates (non-rejected, or
+/// rejected with a different/absent cleanup policy) are preserved.
+///
+/// The scratch index is normally append-only; this is an explicit compaction
+/// that rewrites it to exclude deleted candidates' lines while preserving
+/// every other candidate's full append history (all raw lines for kept ids are
+/// retained in their original order).
+///
+/// Returns `Ok(FinalizeReport { deleted: [], kept: N })` without touching the
+/// file when there is nothing to delete.
+pub fn finalize_candidates(
+    fs: &impl Fs,
+    paths: &StorePaths,
+    doc_id: &str,
+) -> Result<FinalizeReport, SessionError> {
+    let resolved = list_scratch(fs, paths, doc_id)?;
+
+    let mut to_delete: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    for entry in &resolved {
+        match entry.status {
+            CandidateStatus::Rejected => {
+                if entry.cleanup_policy.as_deref() == Some("delete") {
+                    to_delete.insert(entry.id.clone());
+                }
+            }
+            CandidateStatus::Draft | CandidateStatus::Selected => {}
+        }
+    }
+
+    if to_delete.is_empty() {
+        return Ok(FinalizeReport {
+            deleted: vec![],
+            kept: resolved.len(),
+        });
+    }
+
+    let raw = read_jsonl_records::<CandidateEntry>(fs, &paths.scratch_index(doc_id))?;
+    let kept_raw: Vec<&CandidateEntry> =
+        raw.iter().filter(|r| !to_delete.contains(&r.id)).collect();
+
+    let mut bytes: Vec<u8> = Vec::new();
+    for entry in &kept_raw {
+        let mut line = serde_json::to_vec(entry)
+            .map_err(|e| SessionError::new(format!("serialize candidate: {e}")))?;
+        line.push(b'\n');
+        bytes.extend_from_slice(&line);
+    }
+
+    let index_path = paths.scratch_index(doc_id);
+    if let Some(parent) = index_path.parent() {
+        fs.create_dir_all(parent)?;
+    }
+    fs.write(&index_path, &bytes)?;
+
+    let kept = resolved.len() - to_delete.len();
+    Ok(FinalizeReport {
+        deleted: to_delete.into_iter().collect(),
+        kept,
+    })
+}
+
 /// Recover the stored `.zen` snapshot bytes for a candidate entry.
 ///
 /// Decompresses and verifies the object addressed by `entry.snapshot_hash`.
@@ -537,6 +614,219 @@ mod tests {
         assert!(
             err.message.contains("cand99"),
             "error message should include the missing id"
+        );
+    }
+
+    #[test]
+    fn finalize_deletes_rejected_delete_policy() {
+        let (fs, paths) = setup();
+        let clk = clock();
+
+        // cand0: rejected + delete  → must be removed
+        let e0 = put_scratch(
+            &fs,
+            &paths,
+            &clk,
+            "doc1",
+            NewCandidate {
+                page_id: "page-a",
+                snapshot: b"zen A",
+                status: CandidateStatus::Rejected,
+                meta: CandidateMeta {
+                    cleanup_policy: Some("delete"),
+                    ..CandidateMeta::default()
+                },
+            },
+        )
+        .unwrap();
+
+        // cand1: draft → kept
+        put_scratch(
+            &fs,
+            &paths,
+            &clk,
+            "doc1",
+            NewCandidate {
+                page_id: "page-b",
+                snapshot: b"zen B",
+                status: CandidateStatus::Draft,
+                meta: CandidateMeta::default(),
+            },
+        )
+        .unwrap();
+
+        // cand2: selected → kept
+        put_scratch(
+            &fs,
+            &paths,
+            &clk,
+            "doc1",
+            NewCandidate {
+                page_id: "page-c",
+                snapshot: b"zen C",
+                status: CandidateStatus::Selected,
+                meta: CandidateMeta::default(),
+            },
+        )
+        .unwrap();
+
+        let report = finalize_candidates(&fs, &paths, "doc1").unwrap();
+        assert_eq!(report.deleted, vec![e0.id.clone()]);
+        assert_eq!(report.kept, 2);
+
+        let remaining = list_scratch(&fs, &paths, "doc1").unwrap();
+        assert_eq!(remaining.len(), 2);
+        assert!(
+            remaining.iter().all(|e| e.id != e0.id),
+            "deleted candidate must not appear in list"
+        );
+    }
+
+    #[test]
+    fn finalize_keeps_archived_and_selected() {
+        let (fs, paths) = setup();
+        let clk = clock();
+
+        // cand0: rejected + archive → kept
+        put_scratch(
+            &fs,
+            &paths,
+            &clk,
+            "doc1",
+            NewCandidate {
+                page_id: "page-a",
+                snapshot: b"zen A",
+                status: CandidateStatus::Rejected,
+                meta: CandidateMeta {
+                    cleanup_policy: Some("archive"),
+                    ..CandidateMeta::default()
+                },
+            },
+        )
+        .unwrap();
+
+        // cand1: selected → kept
+        put_scratch(
+            &fs,
+            &paths,
+            &clk,
+            "doc1",
+            NewCandidate {
+                page_id: "page-b",
+                snapshot: b"zen B",
+                status: CandidateStatus::Selected,
+                meta: CandidateMeta::default(),
+            },
+        )
+        .unwrap();
+
+        let report = finalize_candidates(&fs, &paths, "doc1").unwrap();
+        assert!(report.deleted.is_empty(), "nothing should be deleted");
+        assert_eq!(report.kept, 2);
+
+        let remaining = list_scratch(&fs, &paths, "doc1").unwrap();
+        assert_eq!(remaining.len(), 2);
+    }
+
+    #[test]
+    fn finalize_noop_when_nothing_to_delete() {
+        let (fs, paths) = setup();
+        let clk = clock();
+
+        put_scratch(
+            &fs,
+            &paths,
+            &clk,
+            "doc1",
+            NewCandidate {
+                page_id: "page-a",
+                snapshot: b"zen A",
+                status: CandidateStatus::Draft,
+                meta: CandidateMeta::default(),
+            },
+        )
+        .unwrap();
+        put_scratch(
+            &fs,
+            &paths,
+            &clk,
+            "doc1",
+            NewCandidate {
+                page_id: "page-b",
+                snapshot: b"zen B",
+                status: CandidateStatus::Draft,
+                meta: CandidateMeta::default(),
+            },
+        )
+        .unwrap();
+
+        let bytes_before = fs.read(&paths.scratch_index("doc1")).unwrap();
+        let report = finalize_candidates(&fs, &paths, "doc1").unwrap();
+        assert!(report.deleted.is_empty());
+        assert_eq!(report.kept, 2);
+        // No-op path: file must be unchanged.
+        let bytes_after = fs.read(&paths.scratch_index("doc1")).unwrap();
+        assert_eq!(bytes_before, bytes_after, "file must be unchanged on noop");
+    }
+
+    #[test]
+    fn finalize_preserves_other_candidates_history() {
+        let (fs, paths) = setup();
+        let clk = clock();
+
+        // cand0: draft → selected (two raw lines in the index)
+        put_scratch(
+            &fs,
+            &paths,
+            &clk,
+            "doc1",
+            NewCandidate {
+                page_id: "page-a",
+                snapshot: b"zen A",
+                status: CandidateStatus::Draft,
+                meta: CandidateMeta::default(),
+            },
+        )
+        .unwrap();
+        set_candidate_status(
+            &fs,
+            &paths,
+            &clk,
+            "doc1",
+            "cand0",
+            CandidateStatus::Selected,
+        )
+        .unwrap();
+
+        // cand1: rejected + delete → removed
+        put_scratch(
+            &fs,
+            &paths,
+            &clk,
+            "doc1",
+            NewCandidate {
+                page_id: "page-b",
+                snapshot: b"zen B",
+                status: CandidateStatus::Rejected,
+                meta: CandidateMeta {
+                    cleanup_policy: Some("delete"),
+                    ..CandidateMeta::default()
+                },
+            },
+        )
+        .unwrap();
+
+        let report = finalize_candidates(&fs, &paths, "doc1").unwrap();
+        assert_eq!(report.deleted, vec!["cand1".to_owned()]);
+        assert_eq!(report.kept, 1);
+
+        let remaining = list_scratch(&fs, &paths, "doc1").unwrap();
+        assert_eq!(remaining.len(), 1);
+        assert_eq!(remaining[0].id, "cand0");
+        assert_eq!(
+            remaining[0].status,
+            CandidateStatus::Selected,
+            "cand0 history lines survived; resolved status must be Selected"
         );
     }
 

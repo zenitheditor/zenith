@@ -74,6 +74,16 @@ pub(super) fn dispatch_workspace(args: WorkspaceArgs) -> ExitCode {
                 }
             }
         }
+        cli::WorkspaceSub::Finalize(a) => match commands::workspace::finalize(&a.doc, a.json) {
+            Ok(out) => {
+                println!("{}", out);
+                ExitCode::SUCCESS
+            }
+            Err(e) => {
+                eprintln!("{}", e);
+                ExitCode::from(2)
+            }
+        },
         cli::WorkspaceSub::Bundle(a) => match commands::workspace::bundle_doc(&a.doc, &a.out) {
             Ok(out) => {
                 println!("{}", out);

@@ -33,6 +33,13 @@ pub enum WorkspaceSub {
     /// `zenith workspace candidate` to transition it first.
     Promote(PromoteArgs),
 
+    /// Clean up rejected scratch candidates according to their cleanup policy.
+    ///
+    /// Candidates with `status = rejected` and `cleanup_policy = delete` are
+    /// removed from the scratch index. Their snapshot objects are left in the
+    /// object store for a future GC pass. All other candidates are preserved.
+    Finalize(FinalizeArgs),
+
     /// Pack a document's entire session store into a portable `.zenithbundle` file.
     ///
     /// The bundle is a deterministic, C-free DEFLATE archive containing every
@@ -162,6 +169,20 @@ pub struct PromoteArgs {
     /// Suffix appended to every cloned node id to keep them unique (default: `.promoted`).
     #[arg(long, default_value = ".promoted", value_name = "SUFFIX")]
     pub id_suffix: String,
+}
+
+/// Arguments for `zenith workspace finalize`.
+#[derive(Debug, Args)]
+#[command(
+    after_help = "EXAMPLE:\n  zenith workspace finalize poster.zen\n  zenith workspace finalize poster.zen --json"
+)]
+pub struct FinalizeArgs {
+    /// Path to the `.zen` document whose scratch store to finalize.
+    pub doc: PathBuf,
+
+    /// Emit machine-readable JSON instead of a human-readable report.
+    #[arg(long)]
+    pub json: bool,
 }
 
 /// Arguments for `zenith workspace candidate`.

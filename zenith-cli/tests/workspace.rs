@@ -10,8 +10,8 @@
 use tempfile::TempDir;
 use zenith_cli::cli::ScratchNewArgs;
 use zenith_cli::commands::workspace::{
-    bundle_doc_in, candidate_set_status_in, promote_in, scratch_list_in, scratch_new_in,
-    scratch_show_in, unbundle_doc_in,
+    bundle_doc_in, candidate_set_status_in, finalize_in, promote_in, scratch_list_in,
+    scratch_new_in, scratch_show_in, unbundle_doc_in,
 };
 use zenith_session::StorePaths;
 
@@ -502,6 +502,121 @@ fn bundle_missing_doc_errors() {
     assert!(
         msg.contains(DOC_ID),
         "error must mention the doc_id; got: {msg}"
+    );
+}
+
+// ── Finalize tests ────────────────────────────────────────────────────────────
+
+#[test]
+fn finalize_removes_rejected_delete_candidate() {
+    let (_tmp, paths, doc_path) = setup();
+
+    // cand0: rejected + delete → should be removed
+    scratch_new_in(
+        &paths,
+        FIXTURE.as_bytes(),
+        &doc_path,
+        &new_args(
+            &doc_path,
+            None,
+            "rejected",
+            None,
+            None,
+            Some("delete"),
+            None,
+        ),
+    )
+    .unwrap();
+
+    // cand1: draft → kept
+    scratch_new_in(
+        &paths,
+        FIXTURE.as_bytes(),
+        &doc_path,
+        &new_args(&doc_path, None, "draft", None, None, None, None),
+    )
+    .unwrap();
+
+    let out = finalize_in(&paths, &doc_path, false).unwrap();
+    assert!(
+        out.contains("cand0"),
+        "report must mention deleted id; got: {out}"
+    );
+    assert!(
+        out.contains("deleted"),
+        "report must say 'deleted'; got: {out}"
+    );
+
+    // cand0 must be gone from the listing
+    let list = scratch_list_in(&paths, &doc_path, false).unwrap();
+    assert!(
+        !list.contains("cand0"),
+        "cand0 must be absent after finalize; got: {list}"
+    );
+    assert!(
+        list.contains("cand1"),
+        "cand1 must still be present; got: {list}"
+    );
+}
+
+#[test]
+fn finalize_json_output_is_valid() {
+    let (_tmp, paths, doc_path) = setup();
+
+    scratch_new_in(
+        &paths,
+        FIXTURE.as_bytes(),
+        &doc_path,
+        &new_args(
+            &doc_path,
+            None,
+            "rejected",
+            None,
+            None,
+            Some("delete"),
+            None,
+        ),
+    )
+    .unwrap();
+
+    let out = finalize_in(&paths, &doc_path, true).unwrap();
+    let parsed: serde_json::Value = serde_json::from_str(&out).unwrap();
+    let deleted = parsed["deleted"].as_array().unwrap();
+    assert_eq!(deleted.len(), 1);
+    assert_eq!(deleted[0], "cand0");
+    assert_eq!(parsed["kept"], 0);
+}
+
+#[test]
+fn finalize_noop_when_no_delete_policy() {
+    let (_tmp, paths, doc_path) = setup();
+
+    scratch_new_in(
+        &paths,
+        FIXTURE.as_bytes(),
+        &doc_path,
+        &new_args(
+            &doc_path,
+            None,
+            "rejected",
+            None,
+            None,
+            Some("archive"),
+            None,
+        ),
+    )
+    .unwrap();
+
+    let out = finalize_in(&paths, &doc_path, false).unwrap();
+    assert!(
+        out.contains("nothing to delete"),
+        "report must say nothing to delete; got: {out}"
+    );
+
+    let list = scratch_list_in(&paths, &doc_path, false).unwrap();
+    assert!(
+        list.contains("cand0"),
+        "archive-policy candidate must survive; got: {list}"
     );
 }
 
