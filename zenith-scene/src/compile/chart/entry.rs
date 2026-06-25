@@ -9,7 +9,9 @@
 //! Returns `0.0`: charts are absolute-positioned and do not participate in
 //! flow layout (same contract as `compile_pattern`).
 
-use zenith_core::{ChartNode, Diagnostic, FontStyle, dim_to_px};
+use std::collections::BTreeMap;
+
+use zenith_core::{ChartNode, Diagnostic, FontStyle, ResolvedToken, dim_to_px};
 use zenith_layout::{ShapeRequest, TextDirection, TextLayoutEngine};
 
 use crate::ir::{Color, SceneCommand};
@@ -29,7 +31,7 @@ use super::legend::{
 };
 use super::line::{emit_area_fill, emit_line_series, line_points};
 use super::palette::series_color;
-use super::pie::{emit_pie, slice_color};
+use super::pie::{emit_pie, resolve_slice_color};
 use super::scale::{LinearScale, data_range, nice_ticks};
 
 // ── Default colors ─────────────────────────────────────────────────────────────
@@ -163,9 +165,14 @@ pub(in crate::compile) fn compile_chart(
             align: LegendAlign::from_opt(chart.legend_align.as_deref()),
         };
 
+        let n = chart.series.first().map(|s| s.values.len()).unwrap_or(0);
+
         let (w_res, h_res) = if legend_on {
-            let n = chart.series.first().map(|s| s.values.len()).unwrap_or(0);
-            let entries = pie_legend_entries(chart, n);
+            // Use a temporary diagnostics buffer here so that missing-token
+            // diagnostics for slice-colors are not emitted twice (once for the
+            // reserve measurement and once for the actual legend render below).
+            let mut reserve_diags: Vec<Diagnostic> = Vec::new();
+            let entries = pie_legend_entries(chart, n, cx.resolved, &mut reserve_diags);
             let (wr, hr) = legend_reserve(&entries, legend_config, w, cx);
             // Cap side strips to 40% of width; cap bands to 50% of height.
             let wr_capped = if legend_config.position.is_side() {
@@ -197,8 +204,7 @@ pub(in crate::compile) fn compile_chart(
         );
 
         if legend_on && (w_res > 0.0 || h_res > 0.0) {
-            let n = chart.series.first().map(|s| s.values.len()).unwrap_or(0);
-            let entries = pie_legend_entries(chart, n);
+            let entries = pie_legend_entries(chart, n, cx.resolved, diagnostics);
             emit_legend(
                 &entries,
                 LegendArea {
@@ -626,9 +632,15 @@ fn position_layout(
 ///
 /// One entry per category (indexed into `series[0].values`): the label comes
 /// from `chart.categories[i]` when available, falling back to the 1-based
-/// ordinal string `"1"`, `"2"`, … Slice colors follow the same deterministic
-/// palette as `emit_pie`.
-pub(super) fn pie_legend_entries(chart: &ChartNode, n: usize) -> Vec<(String, Color)> {
+/// ordinal string `"1"`, `"2"`, … Slice colors are resolved via the same
+/// `resolve_slice_color` path used by `emit_pie`, so legend swatches always
+/// agree with the slice fills.
+pub(super) fn pie_legend_entries(
+    chart: &ChartNode,
+    n: usize,
+    resolved: &BTreeMap<String, ResolvedToken>,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Vec<(String, Color)> {
     (0..n)
         .map(|i| {
             let label = chart
@@ -636,7 +648,7 @@ pub(super) fn pie_legend_entries(chart: &ChartNode, n: usize) -> Vec<(String, Co
                 .get(i)
                 .cloned()
                 .unwrap_or_else(|| (i + 1).to_string());
-            let color = slice_color(i);
+            let color = resolve_slice_color(chart, i, resolved, diagnostics);
             (label, color)
         })
         .collect()

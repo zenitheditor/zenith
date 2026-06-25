@@ -4,9 +4,10 @@
 //! no I/O) suitable for unit testing. `emit_pie` composes them with text
 //! shaping to produce `FillPolygon` and `DrawGlyphRun` commands.
 
+use std::collections::BTreeMap;
 use std::f64::consts::PI;
 
-use zenith_core::{ChartNode, Diagnostic, FontStyle};
+use zenith_core::{ChartNode, Diagnostic, FontStyle, ResolvedToken};
 use zenith_layout::{ShapeRequest, TextDirection, TextLayoutEngine};
 
 use crate::ir::{Color, Paint, SceneCommand};
@@ -125,11 +126,30 @@ pub(super) fn wedge_polygon(geom: PieGeom, a_start: f64, a_end: f64) -> Vec<f64>
 // ── Slice color ───────────────────────────────────────────────────────────────
 
 /// Return the palette color for slice `idx` (cycles through `SERIES_PALETTE`).
-pub(super) fn slice_color(idx: usize) -> Color {
+fn slice_color(idx: usize) -> Color {
     SERIES_PALETTE
         .get(idx % SERIES_PALETTE.len())
         .copied()
         .unwrap_or(Color::srgb(66, 133, 244, 255))
+}
+
+/// Resolve the fill color for slice `i` of a pie/donut chart.
+///
+/// Consults `chart.slice_colors[i]` first; if absent or unresolvable, falls
+/// back to the deterministic palette via `slice_color(i)`. This is the single
+/// authoritative resolution path shared by the slice emitter and the legend
+/// builder so both always agree.
+pub(super) fn resolve_slice_color(
+    chart: &ChartNode,
+    i: usize,
+    resolved: &BTreeMap<String, ResolvedToken>,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Color {
+    chart
+        .slice_colors
+        .get(i)
+        .and_then(|p| resolve_property_color(p, resolved, diagnostics, &chart.id))
+        .unwrap_or_else(|| slice_color(i))
 }
 
 // ── Slice-label context ───────────────────────────────────────────────────────
@@ -192,7 +212,6 @@ fn emit_slice_label(
             let ascent: f64 = result.runs.first().map(|r| r.ascent as f64).unwrap_or(7.0);
             let baseline_y = ly + ascent * 0.35;
             let mut label_x = lx - total_advance / 2.0;
-            let color = label_color;
 
             for run in result.runs {
                 let advance = run.advance_width as f64;
@@ -202,7 +221,7 @@ fn emit_slice_label(
                     y: baseline_y,
                     font_id: run.font_id.clone(),
                     font_size: run.font_size,
-                    color,
+                    color: label_color,
                     stroke_color: None,
                     stroke_width: None,
                     glyphs,
@@ -308,11 +327,7 @@ pub(super) fn emit_pie(
 
         // Per-slice fill color: resolve from slice_colors if present, else fall
         // back to the palette so a chart without slice-colors is byte-identical.
-        let fill = chart
-            .slice_colors
-            .get(i)
-            .and_then(|p| resolve_property_color(p, cx.resolved, diagnostics, &chart.id))
-            .unwrap_or_else(|| slice_color(i));
+        let fill = resolve_slice_color(chart, i, cx.resolved, diagnostics);
         let poly = wedge_polygon(geom, *a_start, *a_end);
         commands.push(SceneCommand::FillPolygon {
             points: poly,

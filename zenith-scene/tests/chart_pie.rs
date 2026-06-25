@@ -30,6 +30,23 @@ fn fill_polygon_colors(result: &zenith_scene::CompileResult) -> Vec<Color> {
         .collect()
 }
 
+/// Collect the solid-fill colors of every `FillRect` command in order.
+/// Legend swatches are emitted as `FillRect`, NOT `FillPolygon`.
+fn fill_rect_colors(result: &zenith_scene::CompileResult) -> Vec<Color> {
+    result
+        .scene
+        .commands
+        .iter()
+        .filter_map(|c| match c {
+            SceneCommand::FillRect {
+                paint: Paint::Solid { color },
+                ..
+            } => Some(*color),
+            _ => None,
+        })
+        .collect()
+}
+
 // Palette slot 0 (blue) and slot 1 (red) — match SERIES_PALETTE in palette.rs.
 const PALETTE_0: Color = Color::srgb(66, 133, 244, 255);
 const PALETTE_1: Color = Color::srgb(234, 67, 53, 255);
@@ -242,5 +259,128 @@ fn pie_partial_slice_colors_falls_back_for_undeclared_slices() {
         colors[2],
         Color::srgb(52, 168, 83, 255),
         "slice 2 must fall back to palette slot 2 (green)"
+    );
+}
+
+// ── Legend swatches match slice-colors (regression: legend used default palette) ──
+
+/// A pie with `legend=#true` and explicit `slice-colors` must emit legend swatches
+/// whose fill colors match the declared slice-colors, NOT the default palette.
+/// This is the key regression test for the legend/slice color disagreement bug.
+#[test]
+fn pie_legend_swatches_match_slice_colors() {
+    let src = r##"zenith version=1 {
+  project id="proj.ls" name="LS"
+  tokens format="zenith-token-v1" {
+    token id="color.ls0" type="color" value="#bb1122"
+    token id="color.ls1" type="color" value="#2233bb"
+  }
+  styles {}
+  document id="doc.ls" title="LS" {
+    page id="page.ls" w=(px)600 h=(px)400 {
+      chart id="c.ls" kind="pie" x=(px)0 y=(px)0 w=(px)600 h=(px)400 legend=#true {
+        slice-colors (token)"color.ls0" (token)"color.ls1"
+        series 50.0 50.0
+      }
+    }
+  }
+}"##;
+
+    let doc = parse(src);
+    let result = compile_page(&doc, &default_provider(), 0, None);
+
+    // Slices must use the declared colors.
+    let slice_colors = fill_polygon_colors(&result);
+    assert_eq!(
+        slice_colors.len(),
+        2,
+        "two slices → two FillPolygon commands"
+    );
+    assert_eq!(
+        slice_colors[0],
+        Color::srgb(0xBB, 0x11, 0x22, 0xFF),
+        "slice 0 fill must be color.ls0 (#bb1122)"
+    );
+    assert_eq!(
+        slice_colors[1],
+        Color::srgb(0x22, 0x33, 0xBB, 0xFF),
+        "slice 1 fill must be color.ls1 (#2233bb)"
+    );
+
+    // Legend swatches (FillRect) must use the SAME declared colors, not the palette.
+    let swatch_colors = fill_rect_colors(&result);
+    assert_eq!(
+        swatch_colors.len(),
+        2,
+        "two legend entries → two FillRect swatch commands"
+    );
+    assert_eq!(
+        swatch_colors[0],
+        Color::srgb(0xBB, 0x11, 0x22, 0xFF),
+        "legend swatch 0 must match slice 0 color (#bb1122), not the default palette"
+    );
+    assert_eq!(
+        swatch_colors[1],
+        Color::srgb(0x22, 0x33, 0xBB, 0xFF),
+        "legend swatch 1 must match slice 1 color (#2233bb), not the default palette"
+    );
+}
+
+/// A donut with `legend=#true` and explicit `slice-colors` must also emit legend
+/// swatches matching the declared colors (same fix applies to donut).
+#[test]
+fn donut_legend_swatches_match_slice_colors() {
+    let src = r##"zenith version=1 {
+  project id="proj.dls" name="DLS"
+  tokens format="zenith-token-v1" {
+    token id="color.dls0" type="color" value="#44aa66"
+    token id="color.dls1" type="color" value="#aa4466"
+  }
+  styles {}
+  document id="doc.dls" title="DLS" {
+    page id="page.dls" w=(px)600 h=(px)400 {
+      chart id="c.dls" kind="donut" x=(px)0 y=(px)0 w=(px)600 h=(px)400 legend=#true {
+        slice-colors (token)"color.dls0" (token)"color.dls1"
+        series 60.0 40.0
+      }
+    }
+  }
+}"##;
+
+    let doc = parse(src);
+    let result = compile_page(&doc, &default_provider(), 0, None);
+
+    let slice_colors = fill_polygon_colors(&result);
+    assert_eq!(
+        slice_colors.len(),
+        2,
+        "two slices → two FillPolygon commands"
+    );
+    assert_eq!(
+        slice_colors[0],
+        Color::srgb(0x44, 0xAA, 0x66, 0xFF),
+        "donut slice 0 color"
+    );
+    assert_eq!(
+        slice_colors[1],
+        Color::srgb(0xAA, 0x44, 0x66, 0xFF),
+        "donut slice 1 color"
+    );
+
+    let swatch_colors = fill_rect_colors(&result);
+    assert_eq!(
+        swatch_colors.len(),
+        2,
+        "two legend entries → two FillRect swatch commands"
+    );
+    assert_eq!(
+        swatch_colors[0],
+        Color::srgb(0x44, 0xAA, 0x66, 0xFF),
+        "donut legend swatch 0 must match slice 0 color (#44aa66), not the palette"
+    );
+    assert_eq!(
+        swatch_colors[1],
+        Color::srgb(0xAA, 0x44, 0x66, 0xFF),
+        "donut legend swatch 1 must match slice 1 color (#aa4466), not the palette"
     );
 }
