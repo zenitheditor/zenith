@@ -22,7 +22,10 @@ use super::super::util::{missing_geometry_diag, resolve_anchored_axis, unsupport
 use super::axis::{AxisColors, emit_axis_lines, emit_gridlines_and_labels};
 use super::bar::{BarMode, CatLabels, emit_bars, emit_category_labels, stacked_max};
 use super::frame::{PlotArea, plot_area};
-use super::legend::{LegendArea, emit_legend, measure_legend_width};
+use super::legend::{
+    LegendAlign, LegendArea, LegendConfig, LegendLayout, LegendPosition, emit_legend,
+    legend_reserve,
+};
 use super::line::{emit_area_fill, emit_line_series, line_points};
 use super::palette::series_color;
 use super::pie::{emit_pie, slice_color};
@@ -153,37 +156,57 @@ pub(in crate::compile) fn compile_chart(
         let is_donut = chart.kind.as_str() == "donut";
         let legend_on = chart.legend == Some(true);
 
-        let legend_w = if legend_on {
-            // One entry per category, colored by the slice palette.
-            let n = chart.series.first().map(|s| s.values.len()).unwrap_or(0);
-            let entries = pie_legend_entries(chart, n);
-            measure_legend_width(&entries, cx).min(w * 0.4)
-        } else {
-            0.0
+        let legend_config = LegendConfig {
+            position: LegendPosition::from_opt(chart.legend_position.as_deref()),
+            layout: LegendLayout::from_opt(chart.legend_layout.as_deref()),
+            align: LegendAlign::from_opt(chart.legend_align.as_deref()),
         };
 
-        // Render the pie into the left portion of the bbox (reduced by legend strip).
+        let (w_res, h_res) = if legend_on {
+            let n = chart.series.first().map(|s| s.values.len()).unwrap_or(0);
+            let entries = pie_legend_entries(chart, n);
+            let (wr, hr) = legend_reserve(&entries, legend_config, w, cx);
+            // Cap side strips to 40% of width; cap bands to 50% of height.
+            let wr_capped = if legend_config.position.is_side() {
+                wr.min(w * 0.4)
+            } else {
+                wr
+            };
+            let hr_capped = if !legend_config.position.is_side() {
+                hr.min(h * 0.5)
+            } else {
+                hr
+            };
+            (wr_capped, hr_capped)
+        } else {
+            (0.0, 0.0)
+        };
+
+        // Derive the pie bbox and legend area from the legend position.
+        let (bbox_x, bbox_y, bbox_w, bbox_h, la_x, la_y, la_w, la_h) =
+            position_layout(x, y, w, h, w_res, h_res, legend_config.position);
+
         emit_pie(
             chart,
-            (x, y, w - legend_w, h),
+            (bbox_x, bbox_y, bbox_w, bbox_h),
             is_donut,
             cx,
             commands,
             diagnostics,
         );
 
-        // Legend strip to the right of the pie.
-        if legend_on && legend_w > 0.0 {
+        if legend_on && (w_res > 0.0 || h_res > 0.0) {
             let n = chart.series.first().map(|s| s.values.len()).unwrap_or(0);
             let entries = pie_legend_entries(chart, n);
             emit_legend(
                 &entries,
                 LegendArea {
-                    x: x + w - legend_w,
-                    y,
-                    w: legend_w,
-                    h,
+                    x: la_x,
+                    y: la_y,
+                    w: la_w,
+                    h: la_h,
                 },
+                legend_config,
                 cx,
                 commands,
                 diagnostics,
@@ -200,12 +223,17 @@ pub(in crate::compile) fn compile_chart(
     }
 
     // ── Legend (axis-bearing kinds) ──────────────────────────────────────────
-    // Build the series entries and measure the legend strip width before
-    // computing the plot area so the plot width is already reduced by the time
-    // `plot_area` is called. When `legend_on` is false `legend_w` is exactly
-    // `0.0` and `series_entries` is empty — the existing render path is
-    // byte-identical (same commands, same diagnostics).
+    // Build the series entries and measure the legend reserve before computing
+    // the plot area so the plot bbox is already reduced when `plot_area` is
+    // called. When `legend_on` is false `(w_res, h_res)` is `(0.0, 0.0)` and
+    // `series_entries` is empty — the existing render path is byte-identical
+    // (same commands, same diagnostics).
     let legend_on = chart.legend == Some(true);
+    let legend_config = LegendConfig {
+        position: LegendPosition::from_opt(chart.legend_position.as_deref()),
+        layout: LegendLayout::from_opt(chart.legend_layout.as_deref()),
+        align: LegendAlign::from_opt(chart.legend_align.as_deref()),
+    };
     let series_entries: Vec<(String, Color)> = if legend_on {
         chart
             .series
@@ -223,16 +251,32 @@ pub(in crate::compile) fn compile_chart(
     } else {
         Vec::new()
     };
-    let legend_w = if legend_on {
-        measure_legend_width(&series_entries, cx).min(w * 0.4)
+    let (w_res, h_res) = if legend_on {
+        let (wr, hr) = legend_reserve(&series_entries, legend_config, w, cx);
+        // Cap side strips to 40% of width; cap bands to 50% of height.
+        let wr_capped = if legend_config.position.is_side() {
+            wr.min(w * 0.4)
+        } else {
+            wr
+        };
+        let hr_capped = if !legend_config.position.is_side() {
+            hr.min(h * 0.5)
+        } else {
+            hr
+        };
+        (wr_capped, hr_capped)
     } else {
-        0.0
+        (0.0, 0.0)
     };
+
+    // Derive the plot bbox and legend area from the legend position.
+    let (bbox_x, bbox_y, bbox_w, bbox_h, la_x, la_y, la_w, la_h) =
+        position_layout(x, y, w, h, w_res, h_res, legend_config.position);
 
     // ── Plot area ────────────────────────────────────────────────────────────
     let has_title = chart.title.is_some();
     let has_caption = chart.caption.is_some();
-    let plot = plot_area(x, y, w - legend_w, h, has_title, has_caption);
+    let plot = plot_area(bbox_x, bbox_y, bbox_w, bbox_h, has_title, has_caption);
 
     // ── Axis colors ──────────────────────────────────────────────────────────
     let axis_color = chart
@@ -384,18 +428,19 @@ pub(in crate::compile) fn compile_chart(
     }
 
     // ── Legend ───────────────────────────────────────────────────────────────
-    // The legend strip sits to the right of the plot area.  When `legend_on`
-    // is false `legend_w` is `0.0` and this block is skipped — no commands are
-    // emitted and the existing render path is byte-identical.
-    if legend_on && legend_w > 0.0 {
+    // The legend occupies the area derived from `legend_config.position`. When
+    // `legend_on` is false `(w_res, h_res)` is `(0.0, 0.0)` and this block is
+    // skipped — no commands are emitted and the render path is byte-identical.
+    if legend_on && (w_res > 0.0 || h_res > 0.0) {
         emit_legend(
             &series_entries,
             LegendArea {
-                x: x + w - legend_w,
-                y,
-                w: legend_w,
-                h,
+                x: la_x,
+                y: la_y,
+                w: la_w,
+                h: la_h,
             },
+            legend_config,
             cx,
             commands,
             diagnostics,
@@ -518,7 +563,7 @@ pub(super) fn emit_title(
                 commands.push(SceneCommand::DrawGlyphRun {
                     x: label_x,
                     y: baseline_y,
-                    font_id: run.font_id.clone(),
+                    font_id: run.font_id,
                     font_size: run.font_size,
                     color,
                     stroke_color: None,
@@ -528,6 +573,32 @@ pub(super) fn emit_title(
                 label_x += advance;
             }
         }
+    }
+}
+
+// ── position_layout ───────────────────────────────────────────────────────────
+
+/// Compute the plot/pie bbox and the legend area from the legend position.
+///
+/// Returns `(bbox_x, bbox_y, bbox_w, bbox_h, legend_x, legend_y, legend_w, legend_h)`.
+///
+/// When `w_res` and `h_res` are both `0.0` (legend off), the bbox equals the
+/// full `(x, y, w, h)` for every position variant — the render output is
+/// byte-identical to the no-legend path.
+fn position_layout(
+    x: f64,
+    y: f64,
+    w: f64,
+    h: f64,
+    w_res: f64,
+    h_res: f64,
+    position: LegendPosition,
+) -> (f64, f64, f64, f64, f64, f64, f64, f64) {
+    match position {
+        LegendPosition::Right => (x, y, w - w_res, h, x + w - w_res, y, w_res, h),
+        LegendPosition::Left => (x + w_res, y, w - w_res, h, x, y, w_res, h),
+        LegendPosition::Top => (x, y + h_res, w, h - h_res, x, y, w, h_res),
+        LegendPosition::Bottom => (x, y, w, h - h_res, x, y + h - h_res, w, h_res),
     }
 }
 
