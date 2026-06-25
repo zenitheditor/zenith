@@ -31,9 +31,9 @@
 use std::fmt::Write as _;
 
 use crate::ast::{
-    ActionDef, AssetBlock, AssetDecl, ComponentDef, DiagnosticPolicy, Dimension, Document,
-    LibraryDef, MasterDef, ObjectPosition, PolicyVerb, Project, PropertyValue, ProvenanceDef,
-    RecipeDef, RecipeParam, SectionDef, UnknownProperty, UnknownValue, VariantDef,
+    ActionDef, AssetBlock, AssetDecl, BrandContract, ComponentDef, DiagnosticPolicy, Dimension,
+    Document, LibraryDef, MasterDef, ObjectPosition, PolicyVerb, Project, PropertyValue,
+    ProvenanceDef, RecipeDef, RecipeParam, SectionDef, UnknownProperty, UnknownValue, VariantDef,
 };
 use crate::error::FormatError;
 
@@ -282,12 +282,16 @@ fn write_document(doc: &Document, out: &mut String) {
     write_opt_str(out, "page-parity-start", &doc.page_parity_start);
     out.push_str(" {\n");
 
-    // Child order: diagnostics, project, assets, libraries, tokens, styles, components, masters, sections, provenance, variants, recipes, actions, document.
+    // Child order: diagnostics, brand, project, assets, libraries, tokens, styles, components, masters, sections, provenance, variants, recipes, actions, document.
     // `diagnostics` is emitted first — right after the document-level attributes
     // and before `tokens` — so the lint policy reads at the top of the file. It
     // is omitted entirely when the policy is empty, so a document with no
     // `diagnostics` block round-trips byte-identically.
     write_diagnostics_block(&doc.diagnostic_policy, out, 1);
+    // `brand` is emitted right after `diagnostics` (both are structural metadata
+    // that live outside the token/style pipeline). Omitted when the contract is
+    // empty so a document with no `brand` block round-trips byte-identically.
+    write_brand_block(&doc.brand_contract, out, 1);
     if let Some(proj) = &doc.project {
         write_project(proj, out, 1);
     }
@@ -336,6 +340,64 @@ fn write_diagnostics_block(policy: &DiagnosticPolicy, out: &mut String, depth: u
         out.push_str(&escape_kdl_string(&entry.code));
         out.push_str("\"\n");
     }
+    indent(out, depth);
+    out.push_str("}\n");
+}
+
+// ---------------------------------------------------------------------------
+// Brand contract
+// ---------------------------------------------------------------------------
+
+/// Emit the `brand { … }` block.
+///
+/// Stable position: right after `diagnostics`, before `project`. Emitted ONLY
+/// when the contract has at least one constrained category (`!is_empty()`), so
+/// documents without a brand contract keep their existing canonical form and
+/// round-trip byte-identically. Canonical child order: `colors`, `fonts`,
+/// `weights` (matching the declaration order in the KDL syntax docs).
+///
+/// Each value is emitted as a positional argument on its child node:
+/// `colors "#0b1f33" "#ffffff"`, `fonts "Noto Sans"`, `weights 400 700`.
+/// Absent categories are not emitted (a `None` field → no line).
+fn write_brand_block(contract: &BrandContract, out: &mut String, depth: usize) {
+    if contract.is_empty() {
+        return;
+    }
+    indent(out, depth);
+    out.push_str("brand {\n");
+
+    if let Some(colors) = &contract.allowed_colors {
+        indent(out, depth + 1);
+        out.push_str("colors");
+        for color in colors {
+            out.push_str(" \"");
+            out.push_str(color);
+            out.push('"');
+        }
+        out.push('\n');
+    }
+
+    if let Some(fonts) = &contract.allowed_fonts {
+        indent(out, depth + 1);
+        out.push_str("fonts");
+        for font in fonts {
+            out.push_str(" \"");
+            out.push_str(&escape_kdl_string(font));
+            out.push('"');
+        }
+        out.push('\n');
+    }
+
+    if let Some(weights) = &contract.allowed_weights {
+        indent(out, depth + 1);
+        out.push_str("weights");
+        for weight in weights {
+            out.push(' ');
+            let _ = write!(out, "{weight}");
+        }
+        out.push('\n');
+    }
+
     indent(out, depth);
     out.push_str("}\n");
 }

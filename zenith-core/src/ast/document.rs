@@ -3,6 +3,7 @@
 use super::Span;
 use super::action::ActionDef;
 use super::asset::AssetBlock;
+use super::brand::BrandContract;
 use super::library::LibraryDef;
 use super::node::Node;
 use super::policy::DiagnosticPolicy;
@@ -343,6 +344,13 @@ pub struct Document {
     /// so a document with no `diagnostics` block validates and round-trips
     /// byte-identically to before this field existed.
     pub diagnostic_policy: DiagnosticPolicy,
+    /// Brand contract parsed from the root `brand { … }` block; empty (the
+    /// default) when the block is absent. Declares approved colors, font
+    /// families, and font weights. The validator emits `brand.*` Warning
+    /// diagnostics when a resolved token's value is off-contract. An empty
+    /// (default) contract is an identity pass — a document with no `brand` block
+    /// validates and round-trips byte-identically to before this field existed.
+    pub brand_contract: BrandContract,
     pub body: DocumentBody,
 }
 
@@ -474,6 +482,7 @@ mod parity_tests {
             variants: Vec::new(),
             recipes: Vec::new(),
             diagnostic_policy: DiagnosticPolicy::default(),
+            brand_contract: BrandContract::default(),
             body: DocumentBody {
                 id: "body".to_owned(),
                 title: None,

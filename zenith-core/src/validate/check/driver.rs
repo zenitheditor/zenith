@@ -17,6 +17,7 @@ use crate::color::parse_rgb;
 use crate::diagnostics::Diagnostic;
 use crate::tokens::{ResolvedToken, ResolvedValue};
 
+use super::brand::check_brand_contract;
 use super::contrast::check_text_contrast;
 use super::nodes::{WalkCtx, WalkPos, check_sibling_anchors, walk_node};
 use super::passes::{
@@ -58,6 +59,11 @@ pub fn validate_with_policy(doc: &Document, policy: &DiagnosticPolicy) -> Valida
     let resolved_tokens: &BTreeMap<String, ResolvedToken> = &token_resolution.resolved;
 
     let mut diagnostics: Vec<Diagnostic> = token_resolution.diagnostics;
+
+    // ── Brand-contract check ──────────────────────────────────────────────
+    // Runs right after token resolution so we have the resolved token map.
+    // An empty contract is an identity pass (no diagnostics, byte-identical).
+    check_brand_contract(&doc.brand_contract, resolved_tokens, &mut diagnostics);
 
     // ── Document color space ──────────────────────────────────────────────
     // `colorspace` is informational export metadata; it does not affect PNG

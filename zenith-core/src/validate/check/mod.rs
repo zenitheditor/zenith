@@ -38,6 +38,7 @@
 //!   footnote-ref resolution, per-declaration and styles-block checks).
 //! - [`report`] — the [`ValidationReport`] outcome type.
 
+mod brand;
 mod contrast;
 mod driver;
 mod fold;

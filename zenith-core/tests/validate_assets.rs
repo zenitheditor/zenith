@@ -48,6 +48,7 @@ fn doc_with_assets(assets: Vec<AssetDecl>) -> Document {
         variants: Vec::new(),
         recipes: Vec::new(),
         diagnostic_policy: zenith_core::DiagnosticPolicy::default(),
+        brand_contract: BrandContract::default(),
         body: DocumentBody {
             id: "doc.asset-test".to_owned(),
             title: None,

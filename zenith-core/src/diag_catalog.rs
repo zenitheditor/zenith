@@ -144,6 +144,21 @@ pub const DIAGNOSTIC_CODES: &[DiagnosticCodeInfo] = &[
         "A text column could not be snapped to the baseline grid.",
     ),
     info(
+        "brand.color_off_palette",
+        Severity::Warning,
+        "A color token's value is not in the document brand palette.",
+    ),
+    info(
+        "brand.font_not_allowed",
+        Severity::Warning,
+        "A font-family token's value is not in the approved brand font list.",
+    ),
+    info(
+        "brand.weight_not_allowed",
+        Severity::Warning,
+        "A font-weight token's value is not in the approved brand weight list.",
+    ),
+    info(
         "component.unknown_override_target",
         Severity::Warning,
         "Instance override targets an unknown component child.",
