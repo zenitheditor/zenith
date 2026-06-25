@@ -619,3 +619,60 @@ fn chart_label_colors_token_refs_are_collected() {
         unused_diags
     );
 }
+
+/// `orientation="vertical"` and `orientation="horizontal"` are valid — no
+/// `chart.invalid_orientation` diagnostic.
+#[test]
+fn chart_orientation_valid_values_no_diagnostic() {
+    for value in ["vertical", "horizontal"] {
+        let src = format!(
+            r#"zenith version=1 {{
+  project id="proj.ov" name="OrientationValid"
+  styles {{
+  }}
+  document id="doc.ov" title="OrientationValid" {{
+    page id="page.ov" w=(px)800 h=(px)600 {{
+      chart id="c.ov" kind="bar" x=(px)0 y=(px)0 w=(px)400 h=(px)300 orientation="{value}" {{
+        series 1.0 2.0 label="S"
+      }}
+    }}
+  }}
+}}
+"#
+        );
+        let adapter = KdlAdapter;
+        let doc = adapter.parse(src.as_bytes()).expect("parse must succeed");
+        let report = validate(&doc);
+        assert!(
+            !has_code(&report, "chart.invalid_orientation"),
+            "orientation=\"{value}\" must not fire chart.invalid_orientation; got: {:?}",
+            codes(&report)
+        );
+    }
+}
+
+/// A bogus `orientation` value fires `chart.invalid_orientation`.
+#[test]
+fn chart_invalid_orientation_fires_diagnostic() {
+    let src = r#"zenith version=1 {
+  project id="proj.io" name="InvalidOrientation"
+  styles {
+  }
+  document id="doc.io" title="InvalidOrientation" {
+    page id="page.io" w=(px)800 h=(px)600 {
+      chart id="c.bad" kind="bar" x=(px)0 y=(px)0 w=(px)400 h=(px)300 orientation="diagonal" {
+        series 1.0 2.0 label="S"
+      }
+    }
+  }
+}
+"#;
+    let adapter = KdlAdapter;
+    let doc = adapter.parse(src.as_bytes()).expect("parse must succeed");
+    let report = validate(&doc);
+    assert!(
+        has_code(&report, "chart.invalid_orientation"),
+        "bogus orientation must fire chart.invalid_orientation; got: {:?}",
+        codes(&report)
+    );
+}

@@ -464,6 +464,11 @@ pub const DIAGNOSTIC_CODES: &[DiagnosticCodeInfo] = &[
         "Chart `legend-position` is not one of `right`, `left`, `top`, or `bottom`.",
     ),
     info(
+        "chart.invalid_orientation",
+        Severity::Warning,
+        "Chart `orientation` is not `vertical` or `horizontal`.",
+    ),
+    info(
         "chart.invalid_point_placement",
         Severity::Warning,
         "Chart `point-placement` is not `edge` or `center`.",

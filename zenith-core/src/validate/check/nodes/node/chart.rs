@@ -169,6 +169,24 @@ pub(in crate::validate::check) fn check_chart(
         }
     }
 
+    // Validate orientation against the recognized set {"vertical", "horizontal"}.
+    // Unknown values are a Warning (governable) — mirrors bar_mode's validation style.
+    if let Some(orientation) = &c.orientation {
+        let orientation_known = matches!(orientation.as_str(), "vertical" | "horizontal");
+        if !orientation_known {
+            diagnostics.push(Diagnostic::warning(
+                "chart.invalid_orientation",
+                format!(
+                    "chart '{}': orientation '{}' is not recognized; \
+                     expected \"vertical\" or \"horizontal\"",
+                    c.id, orientation
+                ),
+                c.source_span,
+                Some(c.id.clone()),
+            ));
+        }
+    }
+
     // Validate point-placement against the recognized set {"edge", "center"}.
     if let Some(point_placement) = &c.point_placement {
         let point_placement_known = matches!(point_placement.as_str(), "edge" | "center");

@@ -609,3 +609,92 @@ fn chart_without_legend_props_byte_identical() {
         "chart without legend props must round-trip identically"
     );
 }
+
+/// **Chart orientation round-trip**: a bar chart with `orientation="horizontal"`
+/// formats with the prop present and re-parses byte-identically (spans stripped).
+#[test]
+fn chart_orientation_horizontal_round_trips() {
+    let src = r#"zenith version=1 {
+  project id="proj.ori" name="Orientation"
+  styles {
+  }
+  document id="doc.ori" title="Orientation" {
+    page id="page.ori" w=(px)800 h=(px)600 {
+      chart id="c.h" kind="bar" x=(px)0 y=(px)0 w=(px)400 h=(px)300 orientation="horizontal" {
+        series 10.0 20.0 label="A"
+      }
+    }
+  }
+}
+"#;
+    let adapter = KdlAdapter;
+    let doc = adapter.parse(src.as_bytes()).expect("parse must succeed");
+
+    let chart = match &doc.body.pages[0].children[0] {
+        Node::Chart(c) => c,
+        other => panic!("expected Chart node, got {other:?}"),
+    };
+    assert_eq!(
+        chart.orientation,
+        Some("horizontal".to_owned()),
+        "orientation must parse to Some(\"horizontal\")"
+    );
+
+    let formatted = format_document(&doc).expect("format must succeed");
+    let formatted_str = String::from_utf8(formatted.clone()).expect("formatted must be utf8");
+    assert!(
+        formatted_str.contains("orientation=\"horizontal\""),
+        "formatter must emit orientation=\"horizontal\"; got:\n{formatted_str}"
+    );
+
+    let reparsed = adapter.parse(&formatted).expect("re-parse after format");
+    assert_eq!(
+        strip_spans(doc),
+        strip_spans(reparsed),
+        "chart with orientation must round-trip identically"
+    );
+}
+
+/// **Chart without orientation is byte-identical**: a chart that does not set
+/// `orientation` must not emit the prop at all, keeping existing docs byte-stable.
+#[test]
+fn chart_absent_orientation_emits_nothing() {
+    let src = r#"zenith version=1 {
+  project id="proj.nori" name="NoOrientation"
+  styles {
+  }
+  document id="doc.nori" title="NoOrientation" {
+    page id="page.nori" w=(px)800 h=(px)600 {
+      chart id="c.plain" kind="bar" x=(px)0 y=(px)0 w=(px)400 h=(px)300 {
+        series 5.0 10.0 label="S"
+      }
+    }
+  }
+}
+"#;
+    let adapter = KdlAdapter;
+    let doc = adapter.parse(src.as_bytes()).expect("parse must succeed");
+
+    let chart = match &doc.body.pages[0].children[0] {
+        Node::Chart(c) => c,
+        other => panic!("expected Chart node, got {other:?}"),
+    };
+    assert_eq!(
+        chart.orientation, None,
+        "orientation must be None when absent"
+    );
+
+    let formatted = format_document(&doc).expect("format must succeed");
+    let formatted_str = String::from_utf8(formatted.clone()).expect("formatted must be utf8");
+    assert!(
+        !formatted_str.contains("orientation"),
+        "formatter must NOT emit orientation when absent; got:\n{formatted_str}"
+    );
+
+    let reparsed = adapter.parse(&formatted).expect("re-parse after format");
+    assert_eq!(
+        strip_spans(doc),
+        strip_spans(reparsed),
+        "chart without orientation must round-trip identically"
+    );
+}

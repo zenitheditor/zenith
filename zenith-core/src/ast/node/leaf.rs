@@ -718,9 +718,9 @@ pub struct ChartSeries {
 ///
 /// The common visual/geometry fields mirror [`PatternNode`]; the chart-specific
 /// fields (`kind`, `title`, `caption`, `legend`, `axis_*`, `bar_mode`,
-/// `point_placement`, `value_labels`, `value_color`, `label_colors`, `categories`,
-/// `series`, `legend_position`, `legend_layout`, `legend_align`) describe the chart
-/// content.
+/// `orientation`, `point_placement`, `value_labels`, `value_color`, `label_colors`,
+/// `categories`, `series`, `legend_position`, `legend_layout`, `legend_align`)
+/// describe the chart content.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ChartNode {
     pub id: String,
@@ -817,6 +817,10 @@ pub struct ChartNode {
     /// Bar layout mode: `"grouped"` (default) | `"stacked"`; freeform,
     /// validated later. Mirrors how `kind` is typed/documented.
     pub bar_mode: Option<String>,
+    /// Bar orientation: `"vertical"` (default; bars grow up from the X axis) |
+    /// `"horizontal"` (bars grow right from the Y axis, categories on the Y
+    /// axis). Applies to bar charts; freeform, validated later.
+    pub orientation: Option<String>,
     /// X placement for line/area points: `"edge"` (default; first point on the
     /// value axis, last at the right edge) | `"center"` (category-band centers).
     /// freeform, validated later.
