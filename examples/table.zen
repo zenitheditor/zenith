@@ -25,19 +25,19 @@ zenith version=1 {
         column width=(px)140
         column width=(px)100
         row {
-          cell { text id="h1" x=(px)0 y=(px)0 style="style.cell" { span "Name" } }
-          cell { text id="h2" x=(px)0 y=(px)0 style="style.cell" { span "Role" } }
-          cell { text id="h3" x=(px)0 y=(px)0 style="style.cell" { span "Year" } }
+          cell { text id="h1" style="style.cell" { span "Name" } }
+          cell { text id="h2" style="style.cell" { span "Role" } }
+          cell { text id="h3" style="style.cell" { span "Year" } }
         }
         row {
-          cell { text id="r1c1" x=(px)0 y=(px)0 style="style.cell" { span "Ada Lovelace" } }
-          cell { text id="r1c2" x=(px)0 y=(px)0 style="style.cell" { span "Analyst" } }
-          cell { text id="r1c3" x=(px)0 y=(px)0 style="style.cell" { span "1843" } }
+          cell { text id="r1c1" style="style.cell" { span "Ada Lovelace" } }
+          cell { text id="r1c2" style="style.cell" { span "Analyst" } }
+          cell { text id="r1c3" style="style.cell" { span "1843" } }
         }
         row {
-          cell { text id="r2c1" x=(px)0 y=(px)0 style="style.cell" { span "Alan Turing" } }
-          cell { text id="r2c2" x=(px)0 y=(px)0 style="style.cell" { span "Logician" } }
-          cell { text id="r2c3" x=(px)0 y=(px)0 style="style.cell" { span "1936" } }
+          cell { text id="r2c1" style="style.cell" { span "Alan Turing" } }
+          cell { text id="r2c2" style="style.cell" { span "Logician" } }
+          cell { text id="r2c3" style="style.cell" { span "1936" } }
         }
       }
     }

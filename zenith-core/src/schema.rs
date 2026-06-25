@@ -153,13 +153,18 @@ pub fn node_content(kind: &str) -> Option<NodeContentDescriptor> {
             description: "Optional `column` children (each with `width=(px)N`) declare column \
                 widths; then `row` children each containing `cell` children. \
                 Each cell accepts colspan, rowspan, fill, border, h-align, v-align, \
-                and arbitrary renderable child nodes for cell content.",
+                and arbitrary renderable child nodes for cell content. \
+                Cell text auto-places: the cell sizes and positions its text into the content box \
+                (padding-inset), wraps to the column width, and aligns via the cell/table \
+                `h-align` (start|center|end) and `v-align` (top|middle|bottom). \
+                Omit `x`/`y`/`w`/`h` on cell text; set them only to override the auto layout. \
+                The table itself requires its own `x`/`y`/`w`/`h`.",
             example: concat!(
                 "column width=(px)120\n",
                 "column width=(px)80\n",
                 "row {\n",
-                "    cell { text id=\"h1\" x=(px)0 y=(px)0 w=(px)120 h=(px)24 { span \"Name\" } }\n",
-                "    cell { text id=\"h2\" x=(px)0 y=(px)0 w=(px)80 h=(px)24 { span \"Score\" } }\n",
+                "    cell { text { span \"Name\" } }\n",
+                "    cell { text { span \"Score\" } }\n",
                 "}",
             ),
         }),
