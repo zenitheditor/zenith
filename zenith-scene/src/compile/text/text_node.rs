@@ -326,6 +326,8 @@ pub(in crate::compile) fn compile_text_sized(
                         strikethrough: None,
                         vertical_align: Some("super".to_owned()),
                         footnote_ref: None,
+                        data_ref: None,
+                        data_format: None,
                     }),
                     None => diagnostics.push(Diagnostic::advisory(
                         "footnote.unresolved_ref",

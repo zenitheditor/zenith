@@ -4,8 +4,8 @@
 use std::collections::BTreeMap;
 
 use zenith_core::{
-    DataContext, Diagnostic, FontProvider, Node, PropertyValue, ResolvedToken, Style, TableColumn,
-    TableNode, TableRow, dim_to_px,
+    Diagnostic, FontProvider, Node, PropertyValue, ResolvedToken, Style, TableColumn, TableNode,
+    TableRow, dim_to_px,
 };
 use zenith_layout::RustybuzzEngine;
 
@@ -51,8 +51,6 @@ pub(in crate::compile) struct TableEmitCtx<'a> {
     pub(in crate::compile) anchors: &'a AnchorMap,
     /// Per-page field context (page index, live area, footnote markers, …).
     pub(in crate::compile) field_ctx: &'a FieldCtx<'a>,
-    /// Optional runtime data context for `(data)"field.path"` resolution.
-    pub(in crate::compile) data: Option<&'a DataContext>,
 }
 
 impl<'a> TableEmitCtx<'a> {
@@ -67,8 +65,8 @@ impl<'a> TableEmitCtx<'a> {
     }
 
     /// The shared immutable node-compile context for descendant `compile_node`
-    /// calls (cell children). Carries the same nine borrows as this struct minus
-    /// the table node itself.
+    /// calls (cell children). Carries the same borrows as this struct minus the
+    /// table node itself.
     fn node_ctx(&self) -> NodeCtx<'a> {
         NodeCtx {
             resolved: self.resolved,
@@ -80,7 +78,6 @@ impl<'a> TableEmitCtx<'a> {
             flows: self.flows,
             anchors: self.anchors,
             field_ctx: self.field_ctx,
-            data: self.data,
         }
     }
 }

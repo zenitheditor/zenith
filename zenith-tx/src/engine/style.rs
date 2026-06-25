@@ -564,6 +564,8 @@ fn op_spans_to_text_spans(spans: &[OpSpan]) -> Vec<TextSpan> {
             strikethrough: s.strikethrough,
             vertical_align: s.vertical_align.clone(),
             footnote_ref: s.footnote_ref.clone(),
+            data_ref: None,
+            data_format: None,
         })
         .collect()
 }

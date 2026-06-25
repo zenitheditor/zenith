@@ -497,6 +497,12 @@ fn attribute_type_generic(name: &str, fallback: &'static str) -> &'static str {
         "language" => "string",
         "syntax-theme" => "string",
 
+        // ── Data binding (on a `span`) ────────────────────────────────────
+        "data-ref" => "string",
+        "format" => "enum: currency|percent|number",
+        "precision" => "i64",
+        "locale" => "string",
+
         // ── Field / TOC / Footnote ────────────────────────────────────────
         "type" => "string",
         "recto" | "verso" | "target" => "string",

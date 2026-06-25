@@ -48,6 +48,7 @@ use anchor::build_anchor_map;
 use chain::resolve_chains_document;
 use container::{compile_frame, compile_group, compile_instance};
 pub(in crate::compile) use ctx::NodeCtx;
+use data_resolve::{scan_for_data_refs, substitute_data_refs};
 use field::{
     FieldCtx, build_node_boxes, build_page_index_map, build_section_assignments, compute_live_area,
     resolve_field_to_text,
@@ -207,6 +208,41 @@ pub fn compile_page(
     data: Option<&DataContext>,
 ) -> CompileResult {
     let mut diagnostics: Vec<Diagnostic> = Vec::new();
+
+    // ── Step 0: data-binding pre-pass ─────────────────────────────────────
+    // Resolve every `(data)"field"` property reference and every span
+    // `data-ref` BEFORE compilation so all downstream resolvers only ever see
+    // `Literal` / `TokenRef` / `Dimension` values.
+    //
+    // - `data = Some`: clone the doc once, substitute in place, then compile the
+    //   clone. The clone is unavoidable because compilation borrows `doc`
+    //   immutably elsewhere; it only happens on the data-binding path.
+    // - `data = None`: NEVER clone. A read-only scan emits a single
+    //   `data.no_context` advisory iff any ref exists, then the original `doc`
+    //   compiles by reference — byte-identical to the no-data-binding path.
+    let owned_doc: Option<Document> = match data {
+        Some(ctx) => {
+            let mut cloned = doc.clone();
+            substitute_data_refs(&mut cloned, ctx, &mut diagnostics);
+            Some(cloned)
+        }
+        None => {
+            // Read-only scan: emit ONE `data.no_context` advisory iff a ref
+            // exists. No clone, no mutation — byte-identical when refs are absent.
+            if scan_for_data_refs(doc) {
+                diagnostics.push(Diagnostic::advisory(
+                    "data.no_context",
+                    "document contains `(data)` references but no data context was \
+                     provided at compile time; the references are left unresolved",
+                    None,
+                    None,
+                ));
+            }
+            None
+        }
+    };
+    // From here on, compile against the (possibly substituted) document.
+    let doc: &Document = owned_doc.as_ref().unwrap_or(doc);
 
     // ── Step 1: resolve tokens ────────────────────────────────────────────
     let token_resolution = resolve_tokens(&doc.tokens);
@@ -465,7 +501,6 @@ pub fn compile_page(
         flows: &flows,
         anchors: &anchors,
         field_ctx: &field_ctx,
-        data,
     };
 
     // ── Resolve the page baseline grid ───────────────────────────────────
@@ -657,7 +692,6 @@ pub(in crate::compile) fn compile_node(
         flows,
         anchors,
         field_ctx,
-        data,
     } = cx;
 
     match node {
@@ -668,7 +702,6 @@ pub(in crate::compile) fn compile_node(
                     resolved,
                     style_map,
                     anchors,
-                    data,
                 },
                 commands,
                 diagnostics,
@@ -683,7 +716,6 @@ pub(in crate::compile) fn compile_node(
                     resolved,
                     style_map,
                     anchors,
-                    data,
                 },
                 commands,
                 diagnostics,
@@ -816,7 +848,6 @@ pub(in crate::compile) fn compile_node(
                     flows,
                     anchors,
                     field_ctx,
-                    data,
                 },
                 commands,
                 diagnostics,
@@ -839,7 +870,6 @@ pub(in crate::compile) fn compile_node(
                     node_boxes: field_ctx.node_boxes,
                     anchors,
                     ctx,
-                    data,
                 },
             );
             0.0

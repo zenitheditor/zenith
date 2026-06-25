@@ -3,6 +3,7 @@
 //! (polygon/polyline vertices).
 
 use crate::ast::{Point, TextSpan};
+use crate::data::DataFormat;
 
 use crate::format::writer::{
     escape_kdl_string, indent, write_opt_bool, write_opt_dimension, write_opt_property_value,
@@ -25,7 +26,34 @@ pub(super) fn write_span(span: &TextSpan, out: &mut String, depth: usize) {
     write_opt_str(out, "vertical-align", &span.vertical_align);
     write_opt_str(out, "footnote-ref", &span.footnote_ref);
 
+    // Data-binding: emit `data-ref` and the resolved format attrs only when set,
+    // so a span without data binding is byte-identical to before.
+    write_opt_str(out, "data-ref", &span.data_ref);
+    write_span_data_format(out, &span.data_format);
+
     out.push('\n');
+}
+
+/// Emit the `format` / `precision` / `locale` attributes for a span's optional
+/// [`DataFormat`]. Emits nothing when `fmt` is `None`. Attribute order is
+/// canonical (`format` then `precision` then `locale`) so round-trips are stable.
+fn write_span_data_format(out: &mut String, fmt: &Option<DataFormat>) {
+    let Some(fmt) = fmt else {
+        return;
+    };
+    let (name, precision, locale): (&str, &Option<u8>, &Option<String>) = match fmt {
+        DataFormat::Currency { locale, precision } => ("currency", precision, locale),
+        DataFormat::Percent { precision } => ("percent", precision, &None),
+        DataFormat::Number { precision } => ("number", precision, &None),
+    };
+    out.push_str(" format=\"");
+    out.push_str(name);
+    out.push('"');
+    if let Some(p) = precision {
+        out.push_str(" precision=");
+        out.push_str(&p.to_string());
+    }
+    write_opt_str(out, "locale", locale);
 }
 
 /// Emit a `point x=(unit)N y=(unit)N` line for each vertex in the list.

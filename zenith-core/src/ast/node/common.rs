@@ -2,6 +2,7 @@
 //! geometry primitives, and the top-level [`Node`] enum.
 
 use crate::ast::value::PropertyValue;
+use crate::data::DataFormat;
 
 use super::container::{FrameNode, GroupNode, TableNode};
 use super::leaf::{
@@ -72,6 +73,19 @@ pub struct TextSpan {
     /// baseline). An id that names no footnote on the same page yields an
     /// advisory `footnote.unresolved_ref` and no marker. KDL: `footnote-ref="fn.1"`.
     pub footnote_ref: Option<String>,
+    /// Runtime data-field reference for the span's TEXT CONTENT. When `Some(path)`,
+    /// the scene compiler's data pre-pass looks `path` up in the active
+    /// [`DataContext`](crate::data::DataContext) and REPLACES [`TextSpan::text`]
+    /// with the resolved value (styled by [`TextSpan::data_format`] when set). A
+    /// missing field emits `data.missing_field` and leaves the authored `text`
+    /// (the fallback). `None` keeps the literal `text` unchanged (byte-identical
+    /// to a span without the attribute). KDL: `data-ref="revenue.total"`.
+    pub data_ref: Option<String>,
+    /// Optional display format applied to the resolved [`TextSpan::data_ref`]
+    /// value (currency / percent / number, with optional precision + locale). Only
+    /// meaningful when `data_ref` is `Some`. `None` substitutes the raw field
+    /// value verbatim. KDL: `format="currency" precision=2`.
+    pub data_format: Option<DataFormat>,
 }
 
 /// How an `image` node aligns its content within the declared box when the

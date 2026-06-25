@@ -515,6 +515,85 @@ fn test_span_vertical_align_round_trip() {
     );
 }
 
+/// **Span data-ref + format round-trip**: a `span "" data-ref="rev"
+/// format="currency" precision=2` parses to the data fields and formats back
+/// identically; a plain span (no data-ref) stays byte-identical.
+#[test]
+fn test_span_data_ref_round_trip() {
+    let src = r##"zenith version=1 {
+  project id="proj.db" name="DB"
+  tokens format="zenith-token-v1" {
+  }
+  styles {
+  }
+  document id="doc.db" title="DB" {
+    page id="page.one" w=(px)400 h=(px)200 {
+      text id="body" x=(px)10 y=(px)10 w=(px)300 h=(px)100 {
+        span "$0.00" data-ref="rev" format="currency" precision=2
+        span " plain"
+      }
+    }
+  }
+}
+"##;
+    let adapter = KdlAdapter;
+    let doc = adapter.parse(src.as_bytes()).expect("parse");
+
+    let page = &doc.body.pages[0];
+    let zenith_core::Node::Text(text_node) = &page.children[0] else {
+        panic!("expected a text node");
+    };
+    let span0 = &text_node.spans[0];
+    assert_eq!(
+        span0.data_ref.as_deref(),
+        Some("rev"),
+        "data-ref must parse"
+    );
+    assert_eq!(
+        span0.data_format,
+        Some(zenith_core::DataFormat::Currency {
+            locale: None,
+            precision: Some(2)
+        }),
+        "format=currency precision=2 must parse into a DataFormat"
+    );
+    // A span with no data-ref must carry neither data field.
+    assert_eq!(text_node.spans[1].data_ref, None);
+    assert_eq!(text_node.spans[1].data_format, None);
+
+    // Canonical form carries the data-ref + format attrs verbatim.
+    let formatted = format_document(&doc).expect("format");
+    let text = String::from_utf8(formatted).expect("utf8");
+    assert!(
+        text.contains("data-ref=\"rev\""),
+        "formatted output must carry data-ref; got:\n{text}"
+    );
+    assert!(
+        text.contains("format=\"currency\""),
+        "formatted output must carry the currency format; got:\n{text}"
+    );
+    assert!(
+        text.contains("precision=2"),
+        "formatted output must carry the precision; got:\n{text}"
+    );
+    // The plain span must NOT gain any data attrs (byte-identical when absent).
+    assert!(
+        text.contains("span \" plain\"\n"),
+        "plain span must be emitted with no data attrs; got:\n{text}"
+    );
+
+    // Round-trip AST equality (strip_spans only zeroes node SOURCE spans, leaving
+    // data_ref/data_format on TextSpan untouched).
+    let reparsed = adapter
+        .parse(text.as_bytes())
+        .expect("re-parse after format");
+    assert_eq!(
+        strip_spans(doc),
+        strip_spans(reparsed),
+        "span data-ref + format must survive parse → format → parse"
+    );
+}
+
 /// **Footnote + span footnote-ref round-trip**: a page-level `footnote` node and
 /// a `span ... footnote-ref="fn.1"` both parse, format into the canonical text,
 /// and survive parse → format → parse.

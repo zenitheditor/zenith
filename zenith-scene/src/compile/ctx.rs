@@ -1,7 +1,7 @@
 //! Shared immutable compile context threaded into [`compile_node`] and the
 //! container / table / text / field compilers.
 //!
-//! [`NodeCtx`] bundles the nine read-only lookups every `compile_*` function
+//! [`NodeCtx`] bundles the read-only lookups every `compile_*` function
 //! forwards down the node recursion. Bundling them into one `Copy` struct keeps
 //! each signature short — the mutable `commands` / `diagnostics` sinks and the
 //! per-subtree [`RenderCtx`](super::RenderCtx) cascade stay as explicit
@@ -14,7 +14,7 @@
 
 use std::collections::BTreeMap;
 
-use zenith_core::{DataContext, FontProvider, ResolvedToken, Style};
+use zenith_core::{FontProvider, ResolvedToken, Style};
 use zenith_layout::RustybuzzEngine;
 
 use super::ComponentMap;
@@ -27,7 +27,7 @@ use super::table_flow::TableFlowAssignments;
 ///
 /// The container compilers (`compile_frame`, `compile_group`,
 /// `compile_instance` and their flow/grid helpers), table emission, and the
-/// node dispatcher all forward the same nine read-only lookups down the
+/// node dispatcher all forward the same read-only lookups down the
 /// recursion.
 #[derive(Clone, Copy)]
 pub(in crate::compile) struct NodeCtx<'a> {
@@ -49,7 +49,4 @@ pub(in crate::compile) struct NodeCtx<'a> {
     pub(in crate::compile) anchors: &'a AnchorMap,
     /// Per-page field context (page index, live area, footnote markers, …).
     pub(in crate::compile) field_ctx: &'a FieldCtx<'a>,
-    /// Optional runtime data context for `(data)"field.path"` resolution.
-    /// `None` → any `DataRef` property emits `data.no_context` and is skipped.
-    pub(in crate::compile) data: Option<&'a DataContext>,
 }

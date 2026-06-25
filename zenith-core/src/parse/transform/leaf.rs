@@ -7,6 +7,7 @@ use crate::ast::node::{
     CodeNode, EllipseNode, ImageNode, LineNode, Point, PolygonNode, PolylineNode, RectNode,
     TextNode, TextSpan,
 };
+use crate::data::DataFormat;
 use crate::error::{ParseError, ParseErrorCode};
 use crate::tokens::SyntaxTheme;
 
@@ -529,6 +530,13 @@ pub(crate) const TEXT_KNOWN_PROPS: &[&str] = &[
     "anchor_gap",
     "anchor-parent",
     "anchor_parent",
+    // span data-binding attrs (carried on `span` children, listed here so the
+    // family of recognized text/span props is documented in one place).
+    "data-ref",
+    "data_ref",
+    "format",
+    "precision",
+    "locale",
 ];
 
 pub(super) fn transform_text(node: &KdlNode) -> Result<TextNode, ParseError> {
@@ -908,6 +916,12 @@ pub(super) fn transform_span(node: &KdlNode) -> Result<TextSpan, ParseError> {
     let footnote_ref =
         optional_string_prop_aliased(node, "footnote-ref", "footnote_ref").map(str::to_owned);
 
+    // Data-binding: a `data-ref="path"` ties the span's TEXT CONTENT to a runtime
+    // field; an optional `format` (+ `precision` / `locale`) styles the resolved
+    // value. Both spellings (`data-ref`/`data_ref`) are accepted.
+    let data_ref = optional_string_prop_aliased(node, "data-ref", "data_ref").map(str::to_owned);
+    let data_format = parse_span_data_format(node);
+
     Ok(TextSpan {
         text,
         fill,
@@ -917,5 +931,25 @@ pub(super) fn transform_span(node: &KdlNode) -> Result<TextSpan, ParseError> {
         strikethrough,
         vertical_align,
         footnote_ref,
+        data_ref,
+        data_format,
     })
+}
+
+/// Build a [`DataFormat`] for a `span` from its `format` / `precision` / `locale`
+/// attributes. Returns `None` when no `format` attribute is present (the span
+/// substitutes the raw data value verbatim). `precision` is an optional integer
+/// clamped into `u8`; `locale` is an optional string (only carried by currency).
+/// An unrecognized `format` value yields `None`.
+fn parse_span_data_format(node: &KdlNode) -> Option<DataFormat> {
+    let format = optional_string_prop(node, "format")?;
+    let precision: Option<u8> =
+        optional_u32_prop(node, "precision").and_then(|n| u8::try_from(n).ok());
+    let locale = optional_string_prop(node, "locale").map(str::to_owned);
+    match format {
+        "currency" => Some(DataFormat::Currency { locale, precision }),
+        "percent" => Some(DataFormat::Percent { precision }),
+        "number" => Some(DataFormat::Number { precision }),
+        _ => None,
+    }
 }

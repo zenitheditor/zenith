@@ -3,11 +3,8 @@
 
 use std::collections::BTreeMap;
 
-use std::borrow::Cow;
-
 use zenith_core::{
-    DataContext, Diagnostic, FontProvider, PropertyValue, ResolvedToken, ShapeNode, Style,
-    TextNode, dim_to_px,
+    Diagnostic, FontProvider, PropertyValue, ResolvedToken, ShapeNode, Style, TextNode, dim_to_px,
 };
 use zenith_layout::RustybuzzEngine;
 
@@ -16,7 +13,6 @@ use crate::ir::{Paint, SceneCommand, StrokeAlign};
 use super::super::RenderCtx;
 use super::super::anchor::AnchorMap;
 use super::super::chain::ChainAssignments;
-use super::super::data_resolve::resolve_data_prop;
 use super::super::paint::resolve_property_color;
 use super::super::style_prop;
 use super::super::text::{
@@ -45,7 +41,6 @@ pub(in crate::compile) struct ShapeCompileEnv<'a> {
     pub(in crate::compile) node_boxes: &'a BTreeMap<String, (f64, f64, f64, f64)>,
     pub(in crate::compile) anchors: &'a AnchorMap,
     pub(in crate::compile) ctx: RenderCtx,
-    pub(in crate::compile) data: Option<&'a DataContext>,
 }
 
 /// Page-absolute bounding box of a resolved shape, shared by the background
@@ -105,7 +100,6 @@ pub(in crate::compile) fn compile_shape(
     let resolved = env.resolved;
     let style_map = env.style_map;
     let ctx = env.ctx;
-    let data = env.data;
 
     // Skip invisible shapes.
     if shape.visible == Some(false) {
@@ -173,15 +167,11 @@ pub(in crate::compile) fn compile_shape(
     let color_op = node_opacity * ctx.opacity;
 
     // Resolve fill / stroke once (node-local prop overrides style cascade).
-    // A `(data)` ref in fill is resolved to a Literal before paint resolution.
-    // We hold the `Cow` to keep any owned value alive for the duration of `bg`.
-    let fill_raw = shape
+    // Any `(data)` ref was already substituted to a `Literal` by the pre-pass.
+    let fill_prop: Option<&PropertyValue> = shape
         .fill
         .as_ref()
         .or_else(|| style_prop(&shape.style, style_map, "fill"));
-    let fill_cow: Option<Cow<'_, PropertyValue>> =
-        fill_raw.map(|pv| resolve_data_prop(pv, data, "fill", &shape.id, diagnostics));
-    let fill_prop: Option<&PropertyValue> = fill_cow.as_deref();
     let stroke_prop = shape
         .stroke
         .as_ref()
@@ -280,7 +270,6 @@ fn emit_shape_label(
         node_boxes,
         anchors,
         ctx,
-        data: _,
     } = env;
     let ShapeBox { x, y, w, h } = geom;
 

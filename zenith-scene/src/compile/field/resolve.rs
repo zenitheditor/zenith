@@ -216,6 +216,8 @@ pub(in crate::compile) fn resolve_field_to_text(
             strikethrough: None,
             vertical_align: None,
             footnote_ref: None,
+            data_ref: None,
+            data_format: None,
         }],
         source_span: field.source_span,
         unknown_props: BTreeMap::new(),
