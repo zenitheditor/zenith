@@ -1,9 +1,9 @@
 //! `compile_chart` entry point.
 //!
 //! Resolves geometry, computes the scale and plot area, and emits the axis
-//! frame (Y axis, X axis, gridlines, tick labels, title) for axis-bearing
-//! chart kinds (`bar`, `line`). Non-axis kinds (`sparkline`, `pie`, `donut`)
-//! emit nothing and return `0.0`.
+//! frame, series geometry, and labels for axis-bearing chart kinds (`bar`,
+//! `line`, `area`). Sparklines render directly into their bbox with a small
+//! inset and no axes. Non-renderable kinds (`pie`, `donut`) emit nothing.
 //!
 //! Returns `0.0`: charts are absolute-positioned and do not participate in
 //! flow layout (same contract as `compile_pattern`).
@@ -18,9 +18,11 @@ use super::super::RenderCtx;
 use super::super::paint::resolve_property_color;
 use super::super::text::run_to_scene_glyphs;
 use super::super::util::{missing_geometry_diag, resolve_anchored_axis, unsupported_unit_diag};
-use super::axis::{AxisColors, emit_axes_frame, emit_axis_lines, emit_gridlines_and_labels};
+use super::axis::{AxisColors, emit_axis_lines, emit_gridlines_and_labels};
 use super::bar::{BarMode, emit_bars, emit_category_labels, stacked_max};
-use super::frame::plot_area;
+use super::frame::{PlotArea, plot_area};
+use super::line::{emit_area_fill, emit_line_series, line_points};
+use super::palette::series_color;
 use super::scale::{LinearScale, data_range, nice_ticks};
 
 // ── Default colors ─────────────────────────────────────────────────────────────
@@ -38,15 +40,17 @@ const DEFAULT_TITLE_COLOR: Color = Color::srgb(40, 40, 40, 255);
 
 /// Compile a `chart` node.
 ///
-/// Axis-bearing kinds (`bar`, `line`) emit:
+/// Axis-bearing kinds (`bar`, `line`, `area`) emit:
 /// - The Y axis and X axis lines (the frame).
 /// - Horizontal gridlines at each Y tick.
 /// - Numeric Y tick labels (shaped text, right-aligned).
+/// - Series geometry (bars / line strokes / area fills).
+/// - Category labels (X axis).
 /// - The title (if present) above the plot area.
 ///
-/// Non-axis kinds (`sparkline`, `pie`, `donut`) emit nothing (their rendering
-/// is deferred). Any other kind string is treated the same as non-axis kinds —
-/// no wildcard that would silently swallow a future `Node` variant.
+/// Sparklines render directly into their bbox (no axes, no labels, no title).
+/// Non-renderable kinds (`pie`, `donut`) emit nothing. Any other kind string
+/// also emits nothing — see the gate comment for the reasoning.
 ///
 /// Returns `0.0`: charts are absolute-positioned and do not participate in
 /// flow layout.
@@ -62,14 +66,17 @@ pub(in crate::compile) fn compile_chart(
         return 0.0;
     }
 
-    // Only axis-bearing kinds draw anything in this pass.
+    // Axis-bearing kinds proceed past this gate; non-renderable kinds exit
+    // early. Sparkline is handled via its own branch below (after geometry
+    // resolution) because it needs x/y/w/h but NOT the full axis machinery.
     match chart.kind.as_str() {
-        "bar" | "line" => {}
-        "sparkline" | "pie" | "donut" => return 0.0,
-        // Forward-compat: unknown kind strings (none exist yet) emit nothing
-        // and remain visible as soon as the renderer implements them. We do
-        // NOT use `_` to avoid silently swallowing a future known kind; an
-        // explicit non-exhaustive string match is the correct pattern here.
+        "bar" | "line" | "area" | "sparkline" => {}
+        "pie" | "donut" => return 0.0,
+        // Forward-compat: unknown kind strings emit nothing. We enumerate the
+        // known non-renderable kinds explicitly rather than using a wildcard so
+        // that a newly added known kind causes a compile error at every match
+        // site. (String matches don't trigger exhaustive warnings, but keeping
+        // the set explicit makes the coverage intent clear.)
         _ => return 0.0,
     }
 
@@ -126,6 +133,14 @@ pub(in crate::compile) fn compile_chart(
 
     let x = x_raw + ctx.dx;
     let y = y_raw + ctx.dy;
+
+    // ── Sparkline early branch ───────────────────────────────────────────────
+    // Sparklines render directly into their bbox (small inset, no axes, no
+    // labels, no title). Handled here, after geometry resolution, so x/y/w/h
+    // are available. Returns immediately after emitting.
+    if chart.kind.as_str() == "sparkline" {
+        return emit_sparkline(chart, (x, y, w, h), cx, commands, diagnostics);
+    }
 
     // ── Axis style "hidden" ──────────────────────────────────────────────────
     // When axis_style="hidden" the caller explicitly opts out of axes.
@@ -185,10 +200,8 @@ pub(in crate::compile) fn compile_chart(
 
     // ── Emit chart content (kind-specific z-order) ───────────────────────────
     //
-    // Bar charts: gridlines → bars → axis lines (bars paint over gridlines,
-    // axis lines paint over bar edges that touch them).
-    // Line charts: the combined emit_axes_frame call preserves the existing
-    // order (gridlines + tick labels + axis lines together).
+    // Bar: gridlines → bars → category labels → axis lines.
+    // Line/area: gridlines → (area fills) → line strokes → axis lines → cat labels.
     match chart.kind.as_str() {
         "bar" => {
             let n_categories = chart
@@ -219,8 +232,16 @@ pub(in crate::compile) fn compile_chart(
             );
             emit_axis_lines(&plot, colors.axis, commands);
         }
-        "line" => {
-            emit_axes_frame(
+        "line" | "area" => {
+            let is_area = chart.kind.as_str() == "area";
+            let n_categories = chart
+                .series
+                .iter()
+                .map(|s| s.values.len())
+                .max()
+                .unwrap_or(0);
+
+            emit_gridlines_and_labels(
                 &plot,
                 &y_ticks,
                 colors,
@@ -229,8 +250,46 @@ pub(in crate::compile) fn compile_chart(
                 commands,
                 diagnostics,
             );
+
+            // Resolve color + points once per series (reused for fill + stroke).
+            let mut series_geom: Vec<(Vec<(f64, f64)>, Color)> =
+                Vec::with_capacity(chart.series.len());
+            for (idx, series) in chart.series.iter().enumerate() {
+                let c = series_color(series, idx, cx.resolved, diagnostics, &chart.id);
+                let pts = line_points(&series.values, &plot, &y_scale, true);
+                series_geom.push((pts, c));
+            }
+
+            // Area fills first (drawn below the line strokes).
+            if is_area {
+                for (pts, c) in &series_geom {
+                    // Area fill: series color at ~25% alpha.
+                    let area_color = Color::srgb(c.r, c.g, c.b, 64);
+                    emit_area_fill(pts, &plot, area_color, commands);
+                }
+            }
+
+            // Line strokes on top of fills.
+            for (pts, c) in &series_geom {
+                emit_line_series(pts, *c, 2.0, commands);
+            }
+
+            emit_axis_lines(&plot, colors.axis, commands);
+
+            if !chart.categories.is_empty() {
+                emit_category_labels(
+                    &chart.categories,
+                    n_categories,
+                    &plot,
+                    colors.label,
+                    cx,
+                    commands,
+                    diagnostics,
+                );
+            }
         }
-        // Non-axis kinds are filtered above; no wildcard here.
+        // sparkline is handled in its own early branch above and never reaches here.
+        // pie/donut/unknown are filtered by the gate match and never reach here.
         _ => {}
     }
 
@@ -245,6 +304,53 @@ pub(in crate::compile) fn compile_chart(
             commands,
             diagnostics,
         );
+    }
+
+    0.0
+}
+
+// ── Sparkline emitter ─────────────────────────────────────────────────────────
+
+/// Emit a sparkline into `[x, y, w, h]` with a small inset on all four sides.
+///
+/// Sparklines are compact, axis-free series previews — no gridlines, no tick
+/// labels, no title. One 1.5 px stroke per series, colored by the shared
+/// series-color resolver.
+///
+/// Returns `0.0` (charts are absolute-positioned and do not participate in
+/// flow layout).
+fn emit_sparkline(
+    chart: &ChartNode,
+    bbox: (f64, f64, f64, f64),
+    cx: NodeCtx,
+    commands: &mut Vec<SceneCommand>,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> f64 {
+    const INSET: f64 = 4.0;
+    let (x, y, w, h) = bbox;
+
+    let spark_plot = PlotArea {
+        x: x + INSET,
+        y: y + INSET,
+        w: (w - 2.0 * INSET).max(0.0),
+        h: (h - 2.0 * INSET).max(0.0),
+    };
+
+    // Auto-fit data range (no zero-fold, no stacked expansion).
+    let (data_lo, data_hi) =
+        data_range(&chart.series, chart.axis_min, chart.axis_max).unwrap_or((0.0, 1.0));
+
+    let y_scale = LinearScale {
+        data_min: data_lo,
+        data_max: data_hi,
+        pixel_min: spark_plot.y + spark_plot.h,
+        pixel_max: spark_plot.y,
+    };
+
+    for (idx, series) in chart.series.iter().enumerate() {
+        let color = series_color(series, idx, cx.resolved, diagnostics, &chart.id);
+        let pts = line_points(&series.values, &spark_plot, &y_scale, false);
+        emit_line_series(&pts, color, 1.5, commands);
     }
 
     0.0

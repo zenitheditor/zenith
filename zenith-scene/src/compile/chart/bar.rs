@@ -11,11 +11,10 @@ use zenith_layout::{ShapeRequest, TextDirection, TextLayoutEngine};
 use crate::ir::{Color, Paint, SceneCommand};
 
 use super::super::NodeCtx;
-use super::super::paint::resolve_property_color;
 use super::super::text::run_to_scene_glyphs;
 use super::axis::format_tick_label;
 use super::frame::PlotArea;
-use super::palette::SERIES_PALETTE;
+use super::palette::series_color;
 use super::scale::LinearScale;
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -239,19 +238,12 @@ pub(super) fn emit_bars(
 
     for s in 0..chart.series.len() {
         // Resolve color: explicit series color → palette fallback.
-        let color = chart
-            .series
-            .get(s)
-            .and_then(|series| series.color.as_ref())
-            .and_then(|prop| resolve_property_color(prop, cx.resolved, diagnostics, &chart.id))
-            .unwrap_or_else(|| {
-                // SERIES_PALETTE has a fixed length; modulo keeps the index in
-                // bounds. Use .get() so the access is panic-free.
-                SERIES_PALETTE
-                    .get(s % SERIES_PALETTE.len())
-                    .copied()
-                    .unwrap_or(SERIES_PALETTE[0])
-            });
+        // Shared resolver lives in palette::series_color so all chart kinds
+        // (bar, line, area, sparkline) produce identical color semantics.
+        let color = match chart.series.get(s) {
+            Some(series) => series_color(series, s, cx.resolved, diagnostics, &chart.id),
+            None => continue,
+        };
 
         let paint = Paint::solid(color);
 

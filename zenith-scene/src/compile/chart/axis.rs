@@ -1,9 +1,8 @@
 //! Axis frame emission: Y axis line, X axis line, Y gridlines, and Y tick
-//! labels for axis-bearing chart kinds (bar, line).
+//! labels for axis-bearing chart kinds (bar, line, area).
 //!
-//! `emit_axes_frame` pushes `SceneCommand`s for the axis box and tick labels.
-//! It is pure (no side effects beyond pushing commands/diagnostics) and
-//! deterministic.
+//! All emitters are pure (no side effects beyond pushing commands/diagnostics)
+//! and deterministic.
 
 use zenith_core::{Diagnostic, FontStyle};
 use zenith_layout::{ShapeRequest, TextDirection, TextLayoutEngine};
@@ -18,7 +17,7 @@ use super::scale::Tick;
 // ── Color bundle ──────────────────────────────────────────────────────────────
 
 /// Color bundle for the axis frame — avoids triggering the `too_many_arguments`
-/// lint on `emit_axes_frame` without a suppression attribute.
+/// lint on the axis emitters without a suppression attribute.
 #[derive(Clone, Copy)]
 pub(super) struct AxisColors {
     /// Color for the Y and X axis lines.
@@ -197,28 +196,6 @@ pub(super) fn emit_axis_lines(
         stroke_gap: None,
         stroke_linecap: None,
     });
-}
-
-// ── emit_axes_frame ───────────────────────────────────────────────────────────
-
-/// Emit the full axis frame (gridlines + tick labels + axis lines) for a
-/// line chart.
-///
-/// This is a thin combinator that calls `emit_gridlines_and_labels` then
-/// `emit_axis_lines`, preserving the original z-order for the line-chart path.
-/// Bar charts call those two functions individually with bars emitted between
-/// them to achieve the correct z-order.
-pub(super) fn emit_axes_frame(
-    plot: &PlotArea,
-    y_ticks: &[Tick],
-    colors: AxisColors,
-    chart_id: &str,
-    cx: NodeCtx,
-    commands: &mut Vec<SceneCommand>,
-    diagnostics: &mut Vec<Diagnostic>,
-) {
-    emit_gridlines_and_labels(plot, y_ticks, colors, chart_id, cx, commands, diagnostics);
-    emit_axis_lines(plot, colors.axis, commands);
 }
 
 #[cfg(test)]

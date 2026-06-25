@@ -79,7 +79,7 @@ pub fn node_summary(kind: &str) -> Option<&'static str> {
         "connector" => Some("Directed connector line between two anchor points on nodes."),
         "pattern" => Some("Procedural grid or scatter tiling of one motif node."),
         "chart" => Some(
-            "Data-visualization chart (bar, line, sparkline, pie, donut) with inline series data.",
+            "Data-visualization chart (bar, line, area, sparkline, pie, donut) with inline series data.",
         ),
         _ => None,
     }
@@ -407,7 +407,7 @@ fn attribute_type_for_kind_inner(kind: &str, name: &str, fallback: &'static str)
         // The attribute name alone is insufficient — each surface has a distinct enum.
         ("shape", "kind") => "enum: process|decision|terminator|ellipse",
         ("pattern", "kind") => "enum: grid|scatter",
-        ("chart", "kind") => "enum: bar|line|sparkline|pie|donut",
+        ("chart", "kind") => "enum: bar|line|area|sparkline|pie|donut",
         // chart axis/legend/caption/bar-mode: chart-only attributes (validate/check/nodes/node/chart.rs).
         ("chart", "legend") => "bool",
         ("chart", "caption") => "string",

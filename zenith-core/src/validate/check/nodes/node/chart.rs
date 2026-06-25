@@ -130,18 +130,18 @@ pub(in crate::validate::check) fn check_chart(
 
     // Chart-specific semantic checks.
     //
-    // The renderer recognizes exactly "bar", "line", "sparkline", "pie", and
+    // The renderer recognizes "bar", "line", "area", "sparkline", "pie", and
     // "donut"; any other kind string cannot render and is reported immediately.
     let kind_known = matches!(
         c.kind.as_str(),
-        "bar" | "line" | "sparkline" | "pie" | "donut"
+        "bar" | "line" | "area" | "sparkline" | "pie" | "donut"
     );
     if !kind_known {
         diagnostics.push(Diagnostic::error(
             "chart.invalid_kind",
             format!(
                 "chart '{}': kind '{}' is not recognized; \
-                 expected \"bar\", \"line\", \"sparkline\", \"pie\", or \"donut\"",
+                 expected \"bar\", \"line\", \"area\", \"sparkline\", \"pie\", or \"donut\"",
                 c.id, c.kind
             ),
             c.source_span,
