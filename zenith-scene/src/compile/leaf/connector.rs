@@ -4,14 +4,20 @@
 
 use std::collections::BTreeMap;
 
-use zenith_core::{ConnectorNode, Diagnostic, ResolvedToken, Style};
+use zenith_core::{ConnectorNode, Diagnostic, FontProvider, ResolvedToken, Style, TextNode};
+use zenith_layout::RustybuzzEngine;
 
 use crate::ir::{Paint, SceneCommand, StrokeAlign};
 
 use super::super::RenderCtx;
+use super::super::anchor::AnchorMap;
+use super::super::chain::ChainAssignments;
 use super::super::paint::resolve_property_color;
 use super::super::style_prop;
-use super::super::util::{resolve_property_dimension_px, rotation_degrees};
+use super::super::text::{
+    MeasureEnv, TextCompileEnv, compile_text, measure_text_wrapped_height, resolve_text_families,
+};
+use super::super::util::{px, resolve_property_dimension_px, rotation_degrees};
 use super::poly::flat_points_centroid_center;
 use super::routing;
 
@@ -25,11 +31,20 @@ const ROUTE_MARGIN: f64 = 8.0;
 /// Bundles the maps and the per-subtree [`RenderCtx`] so the connector compiler
 /// stays under the argument-count lint without an `#[allow]`. All fields are
 /// borrows/`Copy` scalars held for the duration of a single compile call.
+///
+/// The font/engine/chains/footnote_markers/anchors fields are needed for the
+/// optional owned label — they mirror the same fields in [`ShapeCompileEnv`]
+/// and are threaded through from the page-level compile context.
 #[derive(Clone, Copy)]
 pub(in crate::compile) struct ConnectorEnv<'a> {
     pub(in crate::compile) resolved: &'a BTreeMap<String, ResolvedToken>,
     pub(in crate::compile) style_map: &'a BTreeMap<&'a str, &'a Style>,
+    pub(in crate::compile) fonts: &'a dyn FontProvider,
+    pub(in crate::compile) engine: &'a RustybuzzEngine,
+    pub(in crate::compile) chains: &'a ChainAssignments,
+    pub(in crate::compile) footnote_markers: &'a BTreeMap<String, String>,
     pub(in crate::compile) node_boxes: &'a BTreeMap<String, (f64, f64, f64, f64)>,
+    pub(in crate::compile) anchors: &'a AnchorMap,
     pub(in crate::compile) ctx: RenderCtx,
 }
 
@@ -279,6 +294,198 @@ fn point_at(pts: &[f64], i: usize) -> Option<(f64, f64)> {
     Some((*x, *y))
 }
 
+/// Compute the geometric midpoint of a flat `[x0,y0, x1,y1, …]` polyline.
+///
+/// The midpoint is the point at half the total arc-length of the polyline.
+/// Returns `None` when the list has fewer than two points (degenerate). The
+/// computation is deterministic and allocation-free beyond the input slice.
+fn polyline_midpoint(pts: &[f64]) -> Option<(f64, f64)> {
+    let n = pts.len() / 2;
+    if n < 2 {
+        return None;
+    }
+
+    // Accumulate segment lengths.
+    let mut total = 0.0_f64;
+    for i in 0..n.saturating_sub(1) {
+        let (x0, y0) = (pts[i * 2], pts[i * 2 + 1]);
+        let (x1, y1) = (pts[i * 2 + 2], pts[i * 2 + 3]);
+        let dx = x1 - x0;
+        let dy = y1 - y0;
+        total += (dx * dx + dy * dy).sqrt();
+    }
+
+    // Walk to the half-length point.
+    let half = total / 2.0;
+    let mut walked = 0.0_f64;
+    for i in 0..n.saturating_sub(1) {
+        let (x0, y0) = (pts[i * 2], pts[i * 2 + 1]);
+        let (x1, y1) = (pts[i * 2 + 2], pts[i * 2 + 3]);
+        let dx = x1 - x0;
+        let dy = y1 - y0;
+        let seg_len = (dx * dx + dy * dy).sqrt();
+        if walked + seg_len >= half {
+            let t = if seg_len < 1e-9 {
+                0.0
+            } else {
+                (half - walked) / seg_len
+            };
+            return Some((x0 + t * dx, y0 + t * dy));
+        }
+        walked += seg_len;
+    }
+
+    // Fallback: last point (handles floating-point rounding at total == half).
+    let last = n - 1;
+    Some((pts[last * 2], pts[last * 2 + 1]))
+}
+
+/// Synthesize a [`TextNode`] for the connector's owned label and render it
+/// centered at the geometric midpoint of the routed polyline.
+///
+/// The label box is `LABEL_W × LABEL_H` px, centered on the midpoint so the
+/// text is visually at the connector's middle. The synthesis mirrors
+/// `emit_shape_label` but without padding or vertical alignment (the box is
+/// auto-sized at a fixed small height; if the text wraps the center is still
+/// approximately correct). The label inherits `ctx.opacity`.
+///
+/// When `connector.spans` is empty this function returns immediately (no-op),
+/// preserving byte-identical output for span-less connectors.
+fn emit_connector_label(
+    connector: &ConnectorNode,
+    flat_points: &[f64],
+    commands: &mut Vec<SceneCommand>,
+    diagnostics: &mut Vec<Diagnostic>,
+    env: ConnectorEnv,
+) {
+    // Early-out: no spans → no label → byte-identical to the pre-label behaviour.
+    if connector.spans.is_empty() {
+        return;
+    }
+
+    let Some((mx, my)) = polyline_midpoint(flat_points) else {
+        return;
+    };
+
+    let ConnectorEnv {
+        resolved,
+        style_map,
+        fonts,
+        engine,
+        chains,
+        footnote_markers,
+        node_boxes,
+        anchors,
+        ctx,
+    } = env;
+
+    // Fixed label box dimensions: wide enough for a short branch label, short
+    // enough to not overlap arrowheads on typical connectors. The box is
+    // centered on the midpoint.
+    const LABEL_W: f64 = 120.0;
+    const LABEL_H: f64 = 40.0;
+
+    let lx = mx - LABEL_W / 2.0;
+    let ly = my - LABEL_H / 2.0;
+
+    let mut synth = TextNode {
+        id: format!("{}/label", connector.id),
+        name: None,
+        role: None,
+        x: Some(px(lx)),
+        y: Some(px(ly)),
+        w: Some(px(LABEL_W)),
+        h: Some(px(LABEL_H)),
+        align: Some("center".to_owned()),
+        v_align: None,
+        direction: None,
+        overflow: None,
+        overflow_wrap: None,
+        style: connector.text_style.clone(),
+        fill: None,
+        stroke: None,
+        stroke_width: None,
+        contrast_bg: None,
+        font_family: None,
+        font_size: None,
+        font_size_min: None,
+        font_weight: None,
+        shadow: None,
+        filter: None,
+        mask: None,
+        blend_mode: None,
+        blur: None,
+        opacity: None,
+        visible: None,
+        locked: None,
+        rotate: None,
+        chain: None,
+        drop_cap_lines: None,
+        hyphenate: None,
+        widow_orphan: None,
+        tab_leader: None,
+        text_exclusion: None,
+        padding_left: None,
+        text_indent: None,
+        bullet: None,
+        bullet_gap: None,
+        anchor: None,
+        anchor_zone: None,
+        anchor_sibling: None,
+        anchor_edge: None,
+        anchor_gap: None,
+        anchor_parent: None,
+        spans: connector.spans.clone(),
+        source_span: connector.source_span,
+        unknown_props: BTreeMap::new(),
+    };
+
+    // VERTICAL CENTERING: pre-offset `y` by the measured wrapped height so the
+    // label text is visually centered in the box (mirrors emit_shape_label).
+    let families = resolve_text_families(&synth, resolved, style_map, fonts, diagnostics);
+    let wrapped_h = measure_text_wrapped_height(
+        &synth,
+        LABEL_W,
+        &families,
+        MeasureEnv {
+            resolved,
+            style_map,
+            fonts,
+            engine,
+        },
+        diagnostics,
+    )
+    .unwrap_or(0.0);
+    let v_offset = ((LABEL_H - wrapped_h) / 2.0).max(0.0);
+    synth.y = Some(px(ly + v_offset));
+
+    // The midpoint (mx, my) is already in page-absolute coordinates (the flat
+    // points were built from page-absolute anchor points). Zero the ctx
+    // translation so compile_text does not double-translate — same guard as
+    // emit_shape_label.
+    let label_ctx = RenderCtx {
+        dx: 0.0,
+        dy: 0.0,
+        ..ctx
+    };
+    let _ = compile_text(
+        &synth,
+        TextCompileEnv {
+            resolved,
+            style_map,
+            fonts,
+            engine,
+            chains,
+            footnote_markers,
+            node_boxes,
+            anchors,
+        },
+        commands,
+        diagnostics,
+        label_ctx,
+    );
+}
+
 /// Compile a `connector` leaf node — a semantic arrow whose endpoints are
 /// DERIVED at compile time from the resolved boxes of its `from`/`to` targets.
 ///
@@ -291,17 +498,24 @@ fn point_at(pts: &[f64], i: usize) -> Option<(f64, f64)> {
 /// so they land axis-aligned. When `from`/`to` is absent, or a target box is
 /// not in `node_boxes` (unresolved), nothing is emitted (graceful — validation
 /// warned); markers follow the same guards, so a skipped line skips its heads.
+///
+/// When the connector carries `span` children an owned label is emitted at the
+/// geometric midpoint of the routed polyline (see [`emit_connector_label`]).
+/// A connector without spans renders exactly as before — byte-identical output.
 pub(in crate::compile) fn compile_connector(
     connector: &ConnectorNode,
     commands: &mut Vec<SceneCommand>,
     diagnostics: &mut Vec<Diagnostic>,
     env: ConnectorEnv,
 ) {
+    // ConnectorEnv is Copy; bind individual fields for use in this function
+    // while keeping `env` available to pass to emit_connector_label at the end.
     let ConnectorEnv {
         resolved,
         style_map,
         node_boxes,
         ctx,
+        ..
     } = env;
 
     if connector.visible == Some(false) {
@@ -418,7 +632,7 @@ pub(in crate::compile) fn compile_connector(
     let start_from = point_at(&flat_points, 1);
 
     commands.push(SceneCommand::StrokePolyline {
-        points: flat_points,
+        points: flat_points.clone(),
         color,
         stroke_width,
         closed: false,
@@ -455,6 +669,12 @@ pub(in crate::compile) fn compile_connector(
     if rot.is_some() {
         commands.push(SceneCommand::PopTransform);
     }
+
+    // OWNED LABEL — emitted OUTSIDE the rotation bracket so the label text is
+    // not rotated with the line (branch labels like "Yes"/"No" stay readable
+    // regardless of line orientation). The midpoint is computed in page-absolute
+    // coordinates before the rotation bracket, so this is correct.
+    emit_connector_label(connector, &flat_points, commands, diagnostics, env);
 }
 
 /// Build a filled-triangle arrowhead whose tip sits at `tip`, arriving along the

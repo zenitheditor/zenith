@@ -289,6 +289,8 @@ fn make_connector(spec: ConnectorSpec) -> Node {
         locked: None,
         rotate: None,
         style: None,
+        text_style: None,
+        spans: Vec::new(),
         source_span: None,
         unknown_props: BTreeMap::new(),
     }))

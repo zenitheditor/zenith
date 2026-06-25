@@ -75,7 +75,8 @@ pub(super) fn write_connector(c: &ConnectorNode, out: &mut String, depth: usize)
 
     // Canonical property order: id, name, role, from, to, from-anchor,
     // to-anchor, route, marker-start, marker-end, stroke, stroke-width,
-    // opacity, visible, locked, rotate, style, then unknown props (sorted).
+    // opacity, visible, locked, rotate, style, text-style, then unknown props
+    // (sorted), then the optional span children.
     out.push_str(" id=\"");
     out.push_str(&c.id);
     out.push('"');
@@ -95,6 +96,7 @@ pub(super) fn write_connector(c: &ConnectorNode, out: &mut String, depth: usize)
     write_opt_bool(out, "locked", &c.locked);
     write_opt_dimension(out, "rotate", &c.rotate);
     write_opt_str(out, "style", &c.style);
+    write_opt_str(out, "text-style", &c.text_style);
 
     // Unknown properties in sorted key order (BTreeMap iteration is sorted).
     for (key, prop) in &c.unknown_props {
@@ -104,7 +106,19 @@ pub(super) fn write_connector(c: &ConnectorNode, out: &mut String, depth: usize)
         out.push_str(&fmt_unknown_property(prop));
     }
 
-    out.push('\n');
+    // Emit a brace block with span children ONLY when the connector has a label.
+    // A span-less connector must be byte-identical to before: close with `\n`,
+    // no `{ }` block.
+    if c.spans.is_empty() {
+        out.push('\n');
+    } else {
+        out.push_str(" {\n");
+        for span in &c.spans {
+            write_span(span, out, depth + 1);
+        }
+        indent(out, depth);
+        out.push_str("}\n");
+    }
 }
 
 pub(super) fn write_field(f: &FieldNode, out: &mut String, depth: usize) {

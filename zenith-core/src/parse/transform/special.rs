@@ -140,10 +140,21 @@ pub(crate) const CONNECTOR_KNOWN_PROPS: &[&str] = &[
     "locked",
     "rotate",
     "style",
+    "text-style",
+    "text_style",
 ];
 
 pub(super) fn transform_connector(node: &KdlNode) -> Result<ConnectorNode, ParseError> {
     let id = required_string_prop(node, "id")?.to_owned();
+
+    let mut spans: Vec<TextSpan> = Vec::new();
+    if let Some(children) = node.children() {
+        for child in children.nodes() {
+            if child.name().value() == "span" {
+                spans.push(transform_span(child)?);
+            }
+        }
+    }
 
     let unknown_props = collect_unknown_props(node, CONNECTOR_KNOWN_PROPS);
 
@@ -168,6 +179,9 @@ pub(super) fn transform_connector(node: &KdlNode) -> Result<ConnectorNode, Parse
         locked: optional_bool_prop(node, "locked"),
         rotate: optional_dimension_prop(node, "rotate"),
         style: optional_string_prop(node, "style").map(str::to_owned),
+        text_style: optional_string_prop_aliased(node, "text-style", "text_style")
+            .map(str::to_owned),
+        spans,
         source_span: node_span(node),
         unknown_props,
     })

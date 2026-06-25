@@ -202,8 +202,18 @@ pub fn node_content(kind: &str) -> Option<NodeContentDescriptor> {
             example: "content \"fn main() {\\n    println!(\\\"hello\\\");\\n}\"",
         }),
 
+        // ── Connector label ───────────────────────────────────────────────────
+        "connector" => Some(NodeContentDescriptor {
+            description: "Optional `span` children form a text label rendered at the \
+                connector's geometric midpoint (the mid-point of the routed polyline). \
+                Use `text-style` on the connector node to apply a style ref to the label. \
+                Omit the block entirely (or author no `span` children) for an unlabelled \
+                connector — the render output is byte-identical when no spans are present.",
+            example: "span \"Yes\"",
+        }),
+
         // ── No authorable child content ───────────────────────────────────────
-        "rect" | "ellipse" | "line" | "image" | "field" | "toc" | "connector" => None,
+        "rect" | "ellipse" | "line" | "image" | "field" | "toc" => None,
 
         // Any unrecognised kind also has no content description.
         _ => None,
@@ -884,12 +894,23 @@ mod tests {
     /// return `Some` from `node_content`, and the example must be non-empty.
     ///
     /// Kinds confirmed to carry authorable child content (parser-verified):
-    /// text, shape, footnote, polygon, polyline, table, frame, group, pattern, instance, code.
+    /// text, shape, footnote, polygon, polyline, table, frame, group, pattern, instance, code,
+    /// connector (optional span label).
     #[test]
     fn node_content_returns_some_for_content_bearing_kinds() {
         let content_kinds = &[
-            "text", "shape", "footnote", "polygon", "polyline", "table", "frame", "group",
-            "pattern", "instance", "code",
+            "text",
+            "shape",
+            "footnote",
+            "polygon",
+            "polyline",
+            "table",
+            "frame",
+            "group",
+            "pattern",
+            "instance",
+            "code",
+            "connector",
         ];
         for &kind in content_kinds {
             let desc = node_content(kind);
@@ -912,15 +933,7 @@ mod tests {
     /// Kinds with no authorable child content must return `None` from `node_content`.
     #[test]
     fn node_content_returns_none_for_no_content_kinds() {
-        let no_content_kinds = &[
-            "rect",
-            "ellipse",
-            "line",
-            "image",
-            "field",
-            "toc",
-            "connector",
-        ];
+        let no_content_kinds = &["rect", "ellipse", "line", "image", "field", "toc"];
         for &kind in no_content_kinds {
             assert!(
                 node_content(kind).is_none(),

@@ -88,8 +88,14 @@ pub struct ShapeNode {
 /// A connector has NO authored geometry (`x`/`y`/`w`/`h`): its endpoints are
 /// DERIVED from the resolved boxes of `from` and `to`, so when a target moves
 /// the connector reroutes automatically (the boxes are recomputed each compile).
-/// It is a stroke-only LEAF: it has a `stroke`/`stroke_width` (no `fill`), no
-/// text/spans, and no children.
+/// It is a stroke-only LEAF: it has a `stroke`/`stroke_width` (no `fill`).
+///
+/// An optional owned **label** is authored as `span` children inside the
+/// connector's `{ … }` block (the same model as a `shape` or `text` node).
+/// When spans are present the label is rendered at the geometric midpoint of the
+/// routed polyline, centered in a small auto-sized text box. `text-style` is
+/// the style ref applied to those spans. When `spans` is empty (the default)
+/// the connector renders exactly as today — no extra output, byte-identical.
 ///
 /// Unit 1 renders a STRAIGHT line between the two resolved anchors with NO
 /// arrowhead markers (Unit 2) and NO orthogonal routing (Unit 3); the `route`
@@ -124,6 +130,13 @@ pub struct ConnectorNode {
     pub locked: Option<bool>,
     pub rotate: Option<Dimension>,
     pub style: Option<String>,
+    /// Style ref applied to the owned label text (mirrors `ShapeNode::text_style`).
+    /// `None` when no label style is authored (label inherits document defaults).
+    pub text_style: Option<String>,
+    /// The owned label spans rendered at the connector's midpoint. Empty (the
+    /// default) means no label — the connector renders exactly as a span-less
+    /// connector. Same model as `ShapeNode::spans` and `TextNode::spans`.
+    pub spans: Vec<TextSpan>,
     /// Source declaration span, when available.
     pub source_span: Option<Span>,
     /// Unknown properties preserved for forward-compat.

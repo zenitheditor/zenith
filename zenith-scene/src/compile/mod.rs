@@ -837,7 +837,12 @@ pub(in crate::compile) fn compile_node(
                 ConnectorEnv {
                     resolved,
                     style_map,
+                    fonts,
+                    engine,
+                    chains,
+                    footnote_markers: field_ctx.footnote_markers,
                     node_boxes: field_ctx.node_boxes,
+                    anchors,
                     ctx,
                 },
             );
