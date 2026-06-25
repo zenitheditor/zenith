@@ -197,6 +197,145 @@ fn horizontal_rule_emits_rule_fill_rect() {
     );
 }
 
+// ── Test 5: overflow warning when markdown content exceeds a short box ───────
+
+/// A markdown node with multiple blocks in a deliberately short box must emit
+/// a `text.overflow` WARNING diagnostic (and still draw — no hard fail).
+#[test]
+fn markdown_overflow_short_box_emits_overflow_warning() {
+    // Two paragraphs at 18px font → total height will exceed 30px.
+    let src = r##"zenith version=1 {
+  project id="proj.ov1" name="OV1"
+  tokens format="zenith-token-v1" {
+    token id="color.ink" type="color" value="#111827"
+    token id="font.body" type="fontFamily" value="Noto Sans"
+    token id="size.body" type="dimension" value=(px)18
+  }
+  styles {}
+  document id="doc.ov1" title="OV1" {
+    page id="page.ov1" w=(px)600 h=(px)400 {
+      text id="t.ov1" x=(px)20 y=(px)20 w=(px)560 h=(px)30 fill=(token)"color.ink" font-family=(token)"font.body" font-size=(token)"size.body" format="markdown" {
+        span "First paragraph of text here.\n\nSecond paragraph of text here."
+      }
+    }
+  }
+}"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+
+    let overflow_warns: Vec<_> = result
+        .diagnostics
+        .iter()
+        .filter(|d| d.code == "text.overflow")
+        .collect();
+    assert_eq!(
+        overflow_warns.len(),
+        1,
+        "expected exactly one text.overflow warning for a short-box markdown node; got: {:?}",
+        result.diagnostics
+    );
+    assert_eq!(
+        overflow_warns[0].severity,
+        zenith_core::Severity::Warning,
+        "text.overflow must be Warning severity, not a hard error"
+    );
+    assert!(
+        overflow_warns[0]
+            .subject_id
+            .as_deref()
+            .map(|s| s.contains("t.ov1"))
+            .unwrap_or(false),
+        "subject_id must reference the overflowing text node; got {:?}",
+        overflow_warns[0].subject_id
+    );
+    // Glyph runs must still be emitted despite the warning.
+    assert!(
+        result
+            .scene
+            .commands
+            .iter()
+            .any(|c| matches!(c, SceneCommand::DrawGlyphRun { .. })),
+        "glyph runs must still be emitted even when markdown content overflows"
+    );
+}
+
+/// A markdown node whose content fits a tall box must emit NO `text.overflow`
+/// diagnostic.
+#[test]
+fn markdown_overflow_tall_box_no_warning() {
+    let src = r##"zenith version=1 {
+  project id="proj.ov2" name="OV2"
+  tokens format="zenith-token-v1" {
+    token id="color.ink" type="color" value="#111827"
+    token id="font.body" type="fontFamily" value="Noto Sans"
+    token id="size.body" type="dimension" value=(px)18
+  }
+  styles {}
+  document id="doc.ov2" title="OV2" {
+    page id="page.ov2" w=(px)600 h=(px)800 {
+      text id="t.ov2" x=(px)20 y=(px)20 w=(px)560 h=(px)600 fill=(token)"color.ink" font-family=(token)"font.body" font-size=(token)"size.body" format="markdown" {
+        span "Short paragraph."
+      }
+    }
+  }
+}"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+
+    let overflow_warns: Vec<_> = result
+        .diagnostics
+        .iter()
+        .filter(|d| d.code == "text.overflow")
+        .collect();
+    assert!(
+        overflow_warns.is_empty(),
+        "markdown content that fits its box must not emit text.overflow; got: {:?}",
+        overflow_warns
+    );
+}
+
+/// A markdown node with `overflow="visible"` that exceeds the box height must
+/// STILL emit a `text.overflow` WARNING — visible overflow intentionally draws
+/// beyond the box but the author should still be told content was clipped/excess.
+#[test]
+fn markdown_overflow_visible_still_warns() {
+    let src = r##"zenith version=1 {
+  project id="proj.ov3" name="OV3"
+  tokens format="zenith-token-v1" {
+    token id="color.ink" type="color" value="#111827"
+    token id="font.body" type="fontFamily" value="Noto Sans"
+    token id="size.body" type="dimension" value=(px)18
+  }
+  styles {}
+  document id="doc.ov3" title="OV3" {
+    page id="page.ov3" w=(px)600 h=(px)400 {
+      text id="t.ov3" x=(px)20 y=(px)20 w=(px)560 h=(px)30 overflow="visible" fill=(token)"color.ink" font-family=(token)"font.body" font-size=(token)"size.body" format="markdown" {
+        span "First paragraph.\n\nSecond paragraph.\n\nThird paragraph."
+      }
+    }
+  }
+}"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+
+    let overflow_warns: Vec<_> = result
+        .diagnostics
+        .iter()
+        .filter(|d| d.code == "text.overflow")
+        .collect();
+    assert_eq!(
+        overflow_warns.len(),
+        1,
+        "overflow=\"visible\" markdown node that exceeds box must still emit text.overflow warning; got: {:?}",
+        result.diagnostics
+    );
+    assert_eq!(
+        overflow_warns[0].severity,
+        zenith_core::Severity::Warning,
+        "must be Warning, not an error"
+    );
+}
+
 // ── Test 4: byte-identity for a lone paragraph with no block decls ──────────
 
 #[test]

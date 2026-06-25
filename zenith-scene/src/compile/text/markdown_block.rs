@@ -455,7 +455,33 @@ pub(in crate::compile) fn compile_markdown_blocks(
     }
 
     // Total consumed height (matches `compile_text_sized`'s f64 height return).
-    (y_cursor - box_y).max(0.0)
+    let total_height = (y_cursor - box_y).max(0.0);
+
+    // ── Overflow warning ─────────────────────────────────────────────────────
+    // When the stacked blocks are taller than the declared box, emit a warning
+    // so the author knows to enlarge the box, reduce sizing, or chain a
+    // continuation box. This fires regardless of the node's `overflow` value
+    // (including `overflow="visible"`) — the markdown path always warns on
+    // excess height. When `h` is absent there is no box constraint to check.
+    if let Some(box_h) = text.h.as_ref().and_then(|d| dim_to_px(d.value, &d.unit)) {
+        const EPSILON: f64 = 0.5;
+        if total_height > box_h + EPSILON {
+            let delta = total_height - box_h;
+            diagnostics.push(Diagnostic::warning(
+                "text.overflow",
+                format!(
+                    "text '{}': markdown content ({:.0}px) exceeds the box height ({:.0}px) \
+                     by {:.0}px; enlarge the box height, reduce font-size/spacing, \
+                     or add a chained continuation box (chain=\"{}\") on another page",
+                    text.id, total_height, box_h, delta, text.id
+                ),
+                text.source_span,
+                Some(text.id.clone()),
+            ));
+        }
+    }
+
+    total_height
 }
 
 /// A plain literal span carrying `text` and no styling.
