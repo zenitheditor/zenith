@@ -8,6 +8,8 @@
 
 use kdl::KdlNode;
 
+use crate::ast::block_style::BlockStyle;
+
 /// Canonical set of property names recognised on a `page` node.
 ///
 /// Both the hyphenated spelling (canonical) and the underscored alias are
@@ -41,6 +43,7 @@ use crate::ast::document::{Fold, Page, SafeZone, SafeZoneType};
 use crate::ast::node::Node;
 use crate::error::{ParseError, ParseErrorCode};
 
+use super::block_style::transform_block_style;
 use super::helpers::{
     entry_to_dimension, entry_to_property_value, node_span, optional_dimension_prop,
     optional_string_prop, required_string_prop,
@@ -120,18 +123,20 @@ pub(super) fn transform_page(node: &KdlNode) -> Result<Page, ParseError> {
 
     let source_span = node_span(node);
 
-    // A page's children block mixes `safe-zone` and `fold` declarations (page
-    // metadata, not rendering nodes) with renderable nodes. Split them here:
-    // safe-zones go to `page.safe_zones`; folds to `page.folds`; everything
-    // else through `transform_node`.
+    // A page's children block mixes `safe-zone`, `fold`, and `block` declarations
+    // (page metadata, not rendering nodes) with renderable nodes. Split them here:
+    // safe-zones go to `page.safe_zones`; folds to `page.folds`; block style decls
+    // to `page.block_styles`; everything else through `transform_node`.
     let mut safe_zones: Vec<SafeZone> = Vec::new();
     let mut folds: Vec<Fold> = Vec::new();
+    let mut block_styles: Vec<BlockStyle> = Vec::new();
     let mut children: Vec<Node> = Vec::new();
     if let Some(doc) = node.children() {
         for child in doc.nodes() {
             match child.name().value() {
                 "safe-zone" => safe_zones.push(transform_safe_zone(child)?),
                 "fold" => folds.push(transform_fold(child)?),
+                "block" => block_styles.push(transform_block_style(child)?),
                 _ => children.push(transform_node(child)?),
             }
         }
@@ -154,6 +159,7 @@ pub(super) fn transform_page(node: &KdlNode) -> Result<Page, ParseError> {
         master,
         safe_zones,
         folds,
+        block_styles,
         children,
         source_span,
     })

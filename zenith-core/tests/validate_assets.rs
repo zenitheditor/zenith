@@ -52,6 +52,7 @@ fn doc_with_assets(assets: Vec<AssetDecl>) -> Document {
         body: DocumentBody {
             id: "doc.asset-test".to_owned(),
             title: None,
+            block_styles: Vec::new(),
             // A valid document needs ≥1 page; these asset tests don't care about
             // page content, so use a single minimal page.
             pages: vec![minimal_page("page.one", vec![])],

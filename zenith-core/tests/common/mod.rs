@@ -14,6 +14,7 @@
 
 use std::collections::BTreeMap;
 
+pub use zenith_core::ast::block_style::BlockStyle;
 pub use zenith_core::ast::document::Fold;
 pub use zenith_core::{
     ActionDef, AssetBlock, AssetDecl, AssetKind, BrandContract, CodeNode, ConnectorNode, Dimension,
@@ -169,6 +170,7 @@ pub fn minimal_text(id: &str, fill: Option<PropertyValue>) -> Node {
         anchor_gap: None,
         anchor_parent: None,
         spans: vec![],
+        block_styles: Vec::new(),
         source_span: None,
         unknown_props: BTreeMap::new(),
     }))
@@ -192,6 +194,7 @@ pub fn minimal_page(id: &str, children: Vec<Node>) -> Page {
         master: None,
         safe_zones: Vec::new(),
         folds: Vec::new(),
+        block_styles: Vec::new(),
         children,
         source_span: None,
     }
@@ -231,6 +234,7 @@ pub fn doc_with(tokens: Vec<Token>, pages: Vec<Page>) -> Document {
         body: DocumentBody {
             id: "doc.main".to_owned(),
             title: None,
+            block_styles: Vec::new(),
             pages,
         },
     }
@@ -274,6 +278,7 @@ pub fn bounded_page(id: &str, w: f64, h: f64, children: Vec<Node>) -> Page {
         master: None,
         safe_zones: Vec::new(),
         folds: Vec::new(),
+        block_styles: Vec::new(),
         children,
         source_span: None,
     }

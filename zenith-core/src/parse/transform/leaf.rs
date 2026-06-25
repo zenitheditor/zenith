@@ -11,6 +11,9 @@ use crate::data::DataFormat;
 use crate::error::{ParseError, ParseErrorCode};
 use crate::tokens::SyntaxTheme;
 
+use crate::ast::block_style::BlockStyle;
+
+use super::block_style::transform_block_style;
 use super::helpers::{
     collect_unknown_props, entry_to_property_value, node_span, optional_bool_prop,
     optional_dimension_prop, optional_f64_prop, optional_object_position_prop,
@@ -579,10 +582,13 @@ pub(super) fn transform_text(node: &KdlNode) -> Result<TextNode, ParseError> {
     let src = optional_string_prop(node, "src").map(str::to_owned);
 
     let mut spans: Vec<TextSpan> = Vec::new();
+    let mut block_styles: Vec<BlockStyle> = Vec::new();
     if let Some(children) = node.children() {
         for child in children.nodes() {
-            if child.name().value() == "span" {
-                spans.push(transform_span(child)?);
+            match child.name().value() {
+                "block" => block_styles.push(transform_block_style(child)?),
+                "span" => spans.push(transform_span(child)?),
+                _ => {}
             }
         }
     }
@@ -636,6 +642,7 @@ pub(super) fn transform_text(node: &KdlNode) -> Result<TextNode, ParseError> {
         bullet,
         bullet_gap,
         spans,
+        block_styles,
         anchor: optional_string_prop(node, "anchor").map(str::to_owned),
         anchor_zone: optional_string_prop(node, "anchor-zone")
             .or_else(|| optional_string_prop(node, "anchor_zone"))

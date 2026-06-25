@@ -1,5 +1,5 @@
 //! The `document` body, the `page` node, and its page-metadata children
-//! (`safe-zone`, `fold`).
+//! (`safe-zone`, `fold`, `block`).
 
 use crate::ast::{DocumentBody, Fold, Page, SafeZone, SafeZoneType};
 
@@ -8,6 +8,7 @@ use crate::format::writer::{
     write_opt_str_escaped,
 };
 
+use super::helpers::write_block_style;
 use super::write_children_block;
 
 // ---------------------------------------------------------------------------
@@ -26,6 +27,11 @@ pub(in crate::format::writer) fn write_document_body(
     out.push('"');
     write_opt_str(out, "title", &body.title);
     out.push_str(" {\n");
+
+    // Block style decls at document scope emitted before pages.
+    for bs in &body.block_styles {
+        write_block_style(bs, out, depth + 1);
+    }
 
     for page in &body.pages {
         write_page(page, out, depth + 1);
@@ -63,13 +69,17 @@ fn write_page(page: &Page, out: &mut String, depth: usize) {
     write_opt_str(out, "master", &page.master);
 
     out.push_str(" {\n");
-    // Safe-zones and folds are page metadata, emitted before the renderable
-    // children.
+    // Safe-zones and folds are page metadata, emitted before block decls and
+    // renderable children.
     for zone in &page.safe_zones {
         write_safe_zone(zone, out, depth + 1);
     }
     for fold in &page.folds {
         write_fold(fold, out, depth + 1);
+    }
+    // Block style decls at page scope emitted after safe-zones/folds, before children.
+    for bs in &page.block_styles {
+        write_block_style(bs, out, depth + 1);
     }
     write_children_block(&page.children, out, depth);
     indent(out, depth);

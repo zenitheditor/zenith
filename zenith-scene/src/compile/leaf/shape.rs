@@ -351,6 +351,7 @@ fn emit_shape_label(
         anchor_gap: None,
         anchor_parent: None,
         spans: shape.spans.clone(),
+        block_styles: Vec::new(),
         source_span: shape.source_span,
         unknown_props: BTreeMap::new(),
     };

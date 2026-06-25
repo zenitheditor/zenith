@@ -7,6 +7,7 @@ use kdl::{KdlDocument, KdlNode, KdlValue};
 use crate::ast::{
     action::ActionDef,
     asset::{AssetBlock, AssetDecl, AssetKind},
+    block_style::BlockStyle,
     brand::BrandContract,
     document::{ComponentDef, Document, DocumentBody, MasterDef, Page, Project, SectionDef},
     library::LibraryDef,
@@ -20,6 +21,7 @@ use crate::ast::{
 };
 use crate::error::{ParseError, ParseErrorCode};
 
+use super::block_style::transform_block_style;
 use super::helpers::{
     collect_unknown_props, entry_to_dimension, entry_to_property_value, node_span,
     optional_bool_prop, optional_dimension_prop, optional_i64_prop, optional_string_prop,
@@ -1013,16 +1015,24 @@ fn transform_document_body(node: &KdlNode) -> Result<DocumentBody, ParseError> {
     let id = required_string_prop(node, "id")?.to_owned();
     let title = optional_string_prop(node, "title").map(str::to_owned);
 
+    let mut block_styles: Vec<BlockStyle> = Vec::new();
     let mut pages: Vec<Page> = Vec::new();
     if let Some(children) = node.children() {
         for child in children.nodes() {
-            if child.name().value() == "page" {
-                pages.push(transform_page(child)?);
+            match child.name().value() {
+                "block" => block_styles.push(transform_block_style(child)?),
+                "page" => pages.push(transform_page(child)?),
+                _ => {}
             }
         }
     }
 
-    Ok(DocumentBody { id, title, pages })
+    Ok(DocumentBody {
+        id,
+        title,
+        block_styles,
+        pages,
+    })
 }
 
 /// Iterate a KDL node's children block and transform each child into a

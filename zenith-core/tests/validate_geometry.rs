@@ -132,6 +132,7 @@ fn text_font_family_with_font_family_token_is_clean() {
                 anchor_gap: None,
                 anchor_parent: None,
                 spans: vec![],
+                block_styles: Vec::new(),
                 source_span: None,
                 unknown_props: BTreeMap::new(),
             }))],

@@ -438,6 +438,7 @@ fn emit_connector_label(
         anchor_gap: None,
         anchor_parent: None,
         spans: connector.spans.clone(),
+        block_styles: Vec::new(),
         source_span: connector.source_span,
         unknown_props: BTreeMap::new(),
     };

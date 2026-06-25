@@ -224,6 +224,7 @@ pub(in crate::compile) fn resolve_field_to_text(
             code: None,
             link: None,
         }],
+        block_styles: Vec::new(),
         source_span: field.source_span,
         unknown_props: BTreeMap::new(),
     })

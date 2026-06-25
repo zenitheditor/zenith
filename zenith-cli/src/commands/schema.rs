@@ -43,7 +43,7 @@ pub fn overview(json: bool) -> (String, u8) {
         let diag_count = core_schema::diagnostic_codes().len();
         let text = format!(
             "Zenith schema — {node_count} node kinds, {op_count} tx ops, \
-             {token_type_count} token types, 4 non-node surfaces, \
+             {token_type_count} token types, 7 non-node surfaces, \
              {diag_count} diagnostic codes\n\n\
              Drill in:\n  \
              zenith schema nodes              # list all node kinds\n  \
@@ -57,7 +57,8 @@ pub fn overview(json: bool) -> (String, u8) {
              zenith schema document           # document root attributes\n  \
              zenith schema variant            # variants block + override entry structure\n  \
              zenith schema diagnostics        # diagnostic-policy verbs + codes\n  \
-             zenith schema brand              # brand-contract block (allowed colors/fonts/weights)\n\n\
+             zenith schema brand              # brand-contract block (allowed colors/fonts/weights)\n  \
+             zenith schema block              # block role declaration: vocab, props, scopes\n\n\
              Attribute types, required-ness, and valid values are enforced by \
              `zenith validate`."
         );
@@ -669,6 +670,135 @@ pub fn brand(json: bool) -> (String, u8) {
             diagnostics { deny \"brand.color_off_palette\" }\n",
         );
 
+        text.push_str(&format!("\nExample:\n  {}", EXAMPLE.replace('\n', "\n  ")));
+        (text, 0)
+    }
+}
+
+/// `zenith schema block`: role vocabulary, properties, scopes, and cascade for
+/// the `block role="…"` declaration.
+///
+/// Returns `(stdout, exit_code)`.
+pub fn block(json: bool) -> (String, u8) {
+    // Single source of truth lives in zenith-core; no need to duplicate it here.
+    let role_vocab = zenith_core::BLOCK_ROLE_VOCAB;
+
+    const PROPS: &[(&str, &str)] = &[
+        (
+            "role",
+            "string — required; the markdown block role to target (see vocab above)",
+        ),
+        (
+            "font-family",
+            "token ref or literal string — override font family for this role",
+        ),
+        (
+            "font-size",
+            "token ref, (px) literal, or dimension — override font size",
+        ),
+        (
+            "font-weight",
+            "token ref or literal — override font weight (100–900)",
+        ),
+        (
+            "fill",
+            "token ref or color literal — override text fill color",
+        ),
+        (
+            "align",
+            r#"string — text alignment: "left", "center", "right", "justify""#,
+        ),
+        ("italic", "#true / #false — override italic rendering"),
+        (
+            "line-height",
+            "token ref, (px) literal, or dimension — override line height",
+        ),
+        (
+            "space-before",
+            "(px) or other dimension — extra space above the block",
+        ),
+        (
+            "space-after",
+            "(px) or other dimension — extra space below the block",
+        ),
+    ];
+
+    const SCOPES: &[(&str, &str)] = &[
+        (
+            "document",
+            "Declared as a direct child of the `document id=… { … }` block. \
+          Lowest cascade precedence — applies when neither the page nor the text node \
+          declares a matching role.",
+        ),
+        (
+            "page",
+            "Declared as a child of a `page id=… { … }` block (alongside `safe-zone` and `fold`). \
+          Middle cascade precedence — overrides the document scope for this page's text nodes.",
+        ),
+        (
+            "text",
+            "Declared as a child of a `text id=… { … }` block (before `span` children). \
+          Highest cascade precedence — overrides both document and page scope for this node.",
+        ),
+    ];
+
+    const CASCADE_NOTE: &str = "Cascade precedence: text > page > document. \
+        When the same `role` is declared at multiple scopes, the most-specific scope wins \
+        property-by-property (fine-grained merging is a later unit; in this unit the whole \
+        `BlockStyle` struct is stored per scope and the layout engine merges at consume time). \
+        Block decls are consumed ONLY on text nodes with `format=\"markdown\"`; they have no \
+        effect on plain-text or non-markdown nodes.";
+
+    const EXAMPLE: &str = concat!(
+        "document id=\"doc.main\" {\n",
+        "  block role=\"h1\" font-size=(token)\"size.h1\" font-weight=(token)\"weight.bold\" space-after=(px)16\n",
+        "  block role=\"p\"  space-after=(px)8\n",
+        "  page id=\"pg.cover\" w=(px)1280 h=(px)720 {\n",
+        "    block role=\"h1\" fill=(token)\"color.accent\"\n",
+        "    text id=\"body\" format=\"markdown\" src=\"article.md\" x=(px)80 y=(px)80 w=(px)1120 h=(px)560 {\n",
+        "      block role=\"p\" space-after=(px)4\n",
+        "    }\n",
+        "  }\n",
+        "}",
+    );
+
+    if json {
+        use serde_json::{json, to_string_pretty};
+        let roles: Vec<&str> = role_vocab.to_vec();
+        let props: Vec<serde_json::Value> = PROPS
+            .iter()
+            .map(|(name, desc)| json!({ "name": name, "description": desc }))
+            .collect();
+        let scopes: Vec<serde_json::Value> = SCOPES
+            .iter()
+            .map(|(name, desc)| json!({ "scope": name, "description": desc }))
+            .collect();
+        let out = json!({
+            "schema": "zenith-schema-v1",
+            "surface": "block",
+            "role_vocabulary": roles,
+            "properties": props,
+            "scopes": scopes,
+            "cascade": CASCADE_NOTE,
+            "example": EXAMPLE,
+        });
+        (to_string_pretty(&out).unwrap_or_else(|e| e.to_string()), 0)
+    } else {
+        let mut text = String::new();
+        text.push_str("block role=\"…\" — per-role markdown block style declaration\n");
+        text.push_str("\nRole vocabulary:\n");
+        for role in role_vocab {
+            text.push_str(&format!("  {role}\n"));
+        }
+        text.push_str("\nProperties:\n");
+        for (name, desc) in PROPS {
+            text.push_str(&format!("  {name:<16}  {desc}\n"));
+        }
+        text.push_str("\nScopes:\n");
+        for (scope, desc) in SCOPES {
+            text.push_str(&format!("  {scope:<12}  {desc}\n"));
+        }
+        text.push_str(&format!("\nCascade:\n  {CASCADE_NOTE}\n"));
         text.push_str(&format!("\nExample:\n  {}", EXAMPLE.replace('\n', "\n  ")));
         (text, 0)
     }
@@ -1446,8 +1576,12 @@ mod tests {
             "overview must mention 'zenith schema brand'; got:\n{text}"
         );
         assert!(
-            text.contains("4 non-node surfaces"),
-            "overview must count 4 non-node surfaces after adding brand; got:\n{text}"
+            text.contains("zenith schema block"),
+            "overview must mention 'zenith schema block'; got:\n{text}"
+        );
+        assert!(
+            text.contains("7 non-node surfaces"),
+            "overview must count 5 non-node surfaces after adding block; got:\n{text}"
         );
     }
 }

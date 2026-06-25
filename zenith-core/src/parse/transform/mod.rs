@@ -14,6 +14,7 @@
 //! - [`chart`]: `chart` node transform.
 //! - [`leaf`]/[`container`]/[`special`]: the renderable node transforms.
 
+mod block_style;
 mod chart;
 mod container;
 mod document;

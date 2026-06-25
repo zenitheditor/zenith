@@ -14,7 +14,7 @@ use crate::format::writer::{
     write_opt_str,
 };
 
-use super::helpers::{write_points, write_span};
+use super::helpers::{write_block_style, write_points, write_span};
 use super::write_node;
 
 pub(super) fn write_rect(r: &RectNode, out: &mut String, depth: usize) {
@@ -297,6 +297,11 @@ pub(super) fn write_text(t: &TextNode, out: &mut String, depth: usize) {
     }
 
     out.push_str(" {\n");
+    // Block style decls at text-node scope emitted before spans (highest
+    // cascade precedence). Empty vec emits nothing — additive byte-identity.
+    for bs in &t.block_styles {
+        write_block_style(bs, out, depth + 1);
+    }
     for span in &t.spans {
         write_span(span, out, depth + 1);
     }

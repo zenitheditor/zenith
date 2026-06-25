@@ -18,6 +18,7 @@ zenith schema document              # attributes for the document root\n  \
 zenith schema variant               # variants block and override entry structure\n  \
 zenith schema diagnostics           # diagnostic-policy verbs + governable codes\n  \
 zenith schema brand                 # brand-contract block (allowed colors/fonts/weights)\n  \
+zenith schema block                 # block role declaration: vocab, props, scopes, cascade\n  \
 zenith schema nodes --json          # machine-readable JSON")]
 pub struct SchemaArgs {
     #[command(subcommand)]
@@ -120,4 +121,13 @@ pub enum SchemaSub {
     /// blocking Errors for a CI gate via `--deny` or an in-file `diagnostics`
     /// policy. Includes a complete worked example.
     Brand,
+
+    /// Show the `block role="…"` declaration: role vocabulary, properties, scopes, and cascade.
+    ///
+    /// Documents the `block` leaf declaration that maps a markdown block role
+    /// (h1–h6, p, blockquote, li, code-block, hr) to style and spacing overrides.
+    /// Declarable at three scopes: document body, page, and text node. The cascade
+    /// precedence is text > page > document (highest specificity wins). Block decls
+    /// are consumed only on text nodes with `format="markdown"`.
+    Block,
 }

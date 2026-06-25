@@ -2,6 +2,7 @@
 
 pub mod action;
 pub mod asset;
+pub mod block_style;
 pub mod brand;
 pub mod document;
 pub mod library;
@@ -18,6 +19,7 @@ pub mod variant;
 // Flat re-exports used throughout the crate.
 pub use action::ActionDef;
 pub use asset::{AssetBlock, AssetDecl, AssetKind};
+pub use block_style::{BLOCK_ROLE_VOCAB, BlockStyle};
 pub use brand::BrandContract;
 pub use document::{
     ComponentDef, Document, DocumentBody, Fold, MasterDef, Page, Project, SafeZone, SafeZoneType,

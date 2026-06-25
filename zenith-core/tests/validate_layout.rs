@@ -490,6 +490,7 @@ fn page_with_folds(id: &str, w: f64, h: f64, folds: Vec<Fold>, children: Vec<Nod
         master: None,
         safe_zones: Vec::new(),
         folds,
+        block_styles: Vec::new(),
         children,
         source_span: None,
     }
@@ -671,6 +672,7 @@ fn page_with_zones(
         master: None,
         safe_zones,
         folds: Vec::new(),
+        block_styles: Vec::new(),
         children,
         source_span: None,
     }

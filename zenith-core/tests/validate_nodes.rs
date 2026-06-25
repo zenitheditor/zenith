@@ -200,6 +200,7 @@ fn font_weight_with_missing_token_ref_produces_unknown_reference() {
         anchor_gap: None,
         anchor_parent: None,
         spans: vec![],
+        block_styles: Vec::new(),
         source_span: None,
         unknown_props: BTreeMap::new(),
     }));
@@ -433,6 +434,7 @@ fn page_unknown_unit_produces_invalid_geometry() {
             master: None,
             safe_zones: Vec::new(),
             folds: Vec::new(),
+            block_styles: Vec::new(),
             children: vec![],
             source_span: None,
         }],

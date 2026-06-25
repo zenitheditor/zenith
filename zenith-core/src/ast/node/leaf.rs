@@ -5,6 +5,7 @@
 use std::collections::BTreeMap;
 
 use crate::ast::Span;
+use crate::ast::block_style::BlockStyle;
 use crate::ast::value::{Dimension, PropertyValue};
 use crate::tokens::SyntaxTheme;
 
@@ -497,6 +498,11 @@ pub struct TextNode {
     pub src: Option<String>,
     /// Inline text spans.
     pub spans: Vec<TextSpan>,
+    /// Per-role markdown block style declarations at text-node scope. Empty when
+    /// no `block role="…"` children are declared on this text node. Highest
+    /// cascade precedence (text > page > document). Data-only in this unit; the
+    /// layout engine consumes them later.
+    pub block_styles: Vec<BlockStyle>,
     /// Page-relative placement anchor (one of the nine named positions, e.g.
     /// `"bottom-right"`). When present and recognized, the compile step derives
     /// the node's x and/or y from the page and node dimensions. An explicitly-

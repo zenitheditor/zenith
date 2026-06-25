@@ -3,6 +3,7 @@
 use super::Span;
 use super::action::ActionDef;
 use super::asset::AssetBlock;
+use super::block_style::BlockStyle;
 use super::brand::BrandContract;
 use super::library::LibraryDef;
 use super::node::Node;
@@ -86,6 +87,11 @@ pub struct Page {
     /// print). These are non-printing page metadata, not rendering nodes; the
     /// validator advises when content crosses a fold line.
     pub folds: Vec<Fold>,
+    /// Per-role markdown block style declarations at page scope. Empty when no
+    /// `block role="…"` children are declared on this page. Cascade precedence:
+    /// page < text (the text node's own decls override these). `block` decls are
+    /// data-only in this unit; the layout engine consumes them later.
+    pub block_styles: Vec<BlockStyle>,
     /// Optional explicit recto/verso parity OVERRIDE for this page. `Some("recto")`
     /// or `Some("verso")` forces this page's parity regardless of its 1-based
     /// position and the document `page_parity_start`. `None` (default) → parity is
@@ -157,6 +163,10 @@ pub struct Fold {
 pub struct DocumentBody {
     pub id: String,
     pub title: Option<String>,
+    /// Per-role markdown block style declarations at document scope. Empty when
+    /// no `block role="…"` children are declared on the document node. Lowest
+    /// cascade precedence: document < page < text. Data-only in this unit.
+    pub block_styles: Vec<BlockStyle>,
     pub pages: Vec<Page>,
 }
 
@@ -450,6 +460,7 @@ mod parity_tests {
             master: None,
             safe_zones: Vec::new(),
             folds: Vec::new(),
+            block_styles: Vec::new(),
             children: Vec::new(),
             source_span: None,
         }
@@ -486,6 +497,7 @@ mod parity_tests {
             body: DocumentBody {
                 id: "body".to_owned(),
                 title: None,
+                block_styles: Vec::new(),
                 pages: Vec::new(),
             },
         }

@@ -133,8 +133,13 @@ pub fn node_content(kind: &str) -> Option<NodeContentDescriptor> {
                 with `format=\"markdown\"`, the loaded text is parsed as inline markdown by the \
                 scene compile pass. A missing or unreadable file emits a `text.src_missing` \
                 Error diagnostic (same gate as `asset.missing`). The `src` field is retained \
-                on the node so a future editor can write edits back to the original file.",
+                on the node so a future editor can write edits back to the original file. \
+                A `block role=\"…\"` declaration may appear BEFORE span children to set per-role \
+                markdown block style at this text node's scope (highest cascade precedence: \
+                text > page > document). Block decls affect only nodes with `format=\"markdown\"` \
+                and have no effect on plain-text nodes (`see zenith schema block`).",
             example: concat!(
+                "block role=\"h1\" font-size=(token)\"size.h1\" font-weight=(token)\"weight.bold\"\n",
                 "span \"Hello \"\n",
                 "span \"world\" font-weight=(token)\"weight.bold\" italic=#true",
             ),

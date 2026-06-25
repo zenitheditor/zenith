@@ -1,14 +1,35 @@
 //! Shared leaf emitters reused across the node writers: the inline `span`
-//! line (text/shape/footnote/override children) and the `point` line
-//! (polygon/polyline vertices).
+//! line (text/shape/footnote/override children), the `point` line
+//! (polygon/polyline vertices), and the `block` role-style declaration.
 
-use crate::ast::{Point, TextSpan};
+use crate::ast::{BlockStyle, Point, TextSpan};
 use crate::data::DataFormat;
 
 use crate::format::writer::{
     escape_kdl_string, indent, write_opt_bool, write_opt_dimension, write_opt_property_value,
     write_opt_str,
 };
+
+/// Emit a single `block role="…" …` declaration line (no child block — leaf
+/// decl like `fold`). Canonical property order: role, font-family, font-size,
+/// font-weight, fill, align, italic, line-height, space-before, space-after.
+/// Fields absent from the declaration are silently skipped.
+pub(super) fn write_block_style(bs: &BlockStyle, out: &mut String, depth: usize) {
+    indent(out, depth);
+    out.push_str("block role=\"");
+    out.push_str(&bs.role);
+    out.push('"');
+    write_opt_property_value(out, "font-family", &bs.font_family);
+    write_opt_property_value(out, "font-size", &bs.font_size);
+    write_opt_property_value(out, "font-weight", &bs.font_weight);
+    write_opt_property_value(out, "fill", &bs.fill);
+    write_opt_str(out, "align", &bs.align);
+    write_opt_bool(out, "italic", &bs.italic);
+    write_opt_property_value(out, "line-height", &bs.line_height);
+    write_opt_dimension(out, "space-before", &bs.space_before);
+    write_opt_dimension(out, "space-after", &bs.space_after);
+    out.push('\n');
+}
 
 pub(super) fn write_span(span: &TextSpan, out: &mut String, depth: usize) {
     indent(out, depth);

@@ -56,6 +56,7 @@ fn page_with_bg(id: &str, bg_token_id: &str, children: Vec<Node>) -> Page {
         master: None,
         safe_zones: Vec::new(),
         folds: Vec::new(),
+        block_styles: Vec::new(),
         children,
         source_span: None,
     }
@@ -118,6 +119,7 @@ fn text_with_fill_and_size(
         anchor_gap: None,
         anchor_parent: None,
         spans: vec![],
+        block_styles: Vec::new(),
         source_span: None,
         unknown_props: BTreeMap::new(),
     }))
@@ -341,6 +343,7 @@ fn text_with_fill_and_contrast_bg(id: &str, fill_token: &str, contrast_bg_token:
         anchor_gap: None,
         anchor_parent: None,
         spans: vec![],
+        block_styles: Vec::new(),
         source_span: None,
         unknown_props: BTreeMap::new(),
     }))

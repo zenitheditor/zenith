@@ -130,6 +130,7 @@ pub(in crate::engine) fn apply_add_page(
         master: None,
         safe_zones: Vec::new(),
         folds: Vec::new(),
+        block_styles: Vec::new(),
         children: Vec::new(),
         source_span: None,
     };

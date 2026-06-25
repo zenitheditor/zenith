@@ -131,6 +131,7 @@ pub(super) fn resolve_toc_to_text(
         anchor_edge: None,
         anchor_gap: None,
         anchor_parent: None,
+        block_styles: Vec::new(),
         spans: vec![TextSpan {
             text: combined,
             fill: None,
@@ -318,6 +319,7 @@ mod tests {
             bullet: None,
             bullet_gap: None,
             spans: vec![make_span(text)],
+            block_styles: Vec::new(),
             source_span: None,
             unknown_props: BTreeMap::new(),
         }))
@@ -341,6 +343,7 @@ mod tests {
             master: None,
             safe_zones: Vec::new(),
             folds: Vec::new(),
+            block_styles: Vec::new(),
             children,
             source_span: None,
         }

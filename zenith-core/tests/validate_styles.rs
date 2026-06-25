@@ -49,6 +49,7 @@ fn doc_with_styles(tokens: Vec<Token>, styles: Vec<Style>, pages: Vec<Page>) -> 
         body: DocumentBody {
             id: "doc.main".to_owned(),
             title: None,
+            block_styles: Vec::new(),
             pages,
         },
     }
