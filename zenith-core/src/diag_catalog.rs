@@ -449,6 +449,21 @@ pub const DIAGNOSTIC_CODES: &[DiagnosticCodeInfo] = &[
         "Chart `kind` is not one of bar|line|sparkline|pie|donut.",
     ),
     info(
+        "chart.invalid_legend_align",
+        Severity::Warning,
+        "Chart `legend-align` is not one of `center`, `left`, or `right`.",
+    ),
+    info(
+        "chart.invalid_legend_layout",
+        Severity::Warning,
+        "Chart `legend-layout` is not `wrapped` or `list`.",
+    ),
+    info(
+        "chart.invalid_legend_position",
+        Severity::Warning,
+        "Chart `legend-position` is not one of `right`, `left`, `top`, or `bottom`.",
+    ),
+    info(
         "chart.invalid_point_placement",
         Severity::Warning,
         "Chart `point-placement` is not `edge` or `center`.",

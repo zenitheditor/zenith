@@ -380,6 +380,174 @@ fn chart_invalid_value_labels_fires_diagnostic() {
     );
 }
 
+/// Valid `legend-position` values ("right", "left", "top", "bottom") produce no diagnostic.
+#[test]
+fn chart_valid_legend_position_no_diagnostic() {
+    for value in ["right", "left", "top", "bottom"] {
+        let src = format!(
+            r##"zenith version=1 {{
+  project id="proj.lp" name="LegendPosition"
+  styles {{
+  }}
+  document id="doc.lp" title="LegendPosition" {{
+    page id="page.lp" w=(px)800 h=(px)600 {{
+      chart id="c.lp" kind="bar" legend-position="{value}" x=(px)0 y=(px)0 w=(px)400 h=(px)300 {{
+        series 1.0 2.0 label="S"
+      }}
+    }}
+  }}
+}}
+"##
+        );
+        let adapter = KdlAdapter;
+        let doc = adapter.parse(src.as_bytes()).expect("parse must succeed");
+        let report = validate(&doc);
+        assert!(
+            !has_code(&report, "chart.invalid_legend_position"),
+            "legend-position={value:?} must not fire chart.invalid_legend_position; got: {:?}",
+            codes(&report)
+        );
+    }
+}
+
+/// A bogus `legend-position` value fires `chart.invalid_legend_position`.
+#[test]
+fn chart_invalid_legend_position_fires_diagnostic() {
+    let src = r##"zenith version=1 {
+  project id="proj.ilp" name="InvalidLegendPosition"
+  styles {
+  }
+  document id="doc.ilp" title="InvalidLegendPosition" {
+    page id="page.ilp" w=(px)800 h=(px)600 {
+      chart id="c.ilp" kind="bar" legend-position="center" x=(px)0 y=(px)0 w=(px)400 h=(px)300 {
+        series 1.0 2.0 label="S"
+      }
+    }
+  }
+}
+"##;
+    let adapter = KdlAdapter;
+    let doc = adapter.parse(src.as_bytes()).expect("parse must succeed");
+    let report = validate(&doc);
+    assert!(
+        has_code(&report, "chart.invalid_legend_position"),
+        "bogus legend-position must fire chart.invalid_legend_position; got: {:?}",
+        codes(&report)
+    );
+}
+
+/// Valid `legend-layout` values ("wrapped", "list") produce no diagnostic.
+#[test]
+fn chart_valid_legend_layout_no_diagnostic() {
+    for value in ["wrapped", "list"] {
+        let src = format!(
+            r##"zenith version=1 {{
+  project id="proj.ll" name="LegendLayout"
+  styles {{
+  }}
+  document id="doc.ll" title="LegendLayout" {{
+    page id="page.ll" w=(px)800 h=(px)600 {{
+      chart id="c.ll" kind="bar" legend-layout="{value}" x=(px)0 y=(px)0 w=(px)400 h=(px)300 {{
+        series 1.0 2.0 label="S"
+      }}
+    }}
+  }}
+}}
+"##
+        );
+        let adapter = KdlAdapter;
+        let doc = adapter.parse(src.as_bytes()).expect("parse must succeed");
+        let report = validate(&doc);
+        assert!(
+            !has_code(&report, "chart.invalid_legend_layout"),
+            "legend-layout={value:?} must not fire chart.invalid_legend_layout; got: {:?}",
+            codes(&report)
+        );
+    }
+}
+
+/// A bogus `legend-layout` value fires `chart.invalid_legend_layout`.
+#[test]
+fn chart_invalid_legend_layout_fires_diagnostic() {
+    let src = r##"zenith version=1 {
+  project id="proj.ill" name="InvalidLegendLayout"
+  styles {
+  }
+  document id="doc.ill" title="InvalidLegendLayout" {
+    page id="page.ill" w=(px)800 h=(px)600 {
+      chart id="c.ill" kind="bar" legend-layout="grid" x=(px)0 y=(px)0 w=(px)400 h=(px)300 {
+        series 1.0 2.0 label="S"
+      }
+    }
+  }
+}
+"##;
+    let adapter = KdlAdapter;
+    let doc = adapter.parse(src.as_bytes()).expect("parse must succeed");
+    let report = validate(&doc);
+    assert!(
+        has_code(&report, "chart.invalid_legend_layout"),
+        "bogus legend-layout must fire chart.invalid_legend_layout; got: {:?}",
+        codes(&report)
+    );
+}
+
+/// Valid `legend-align` values ("center", "left", "right") produce no diagnostic.
+#[test]
+fn chart_valid_legend_align_no_diagnostic() {
+    for value in ["center", "left", "right"] {
+        let src = format!(
+            r##"zenith version=1 {{
+  project id="proj.la" name="LegendAlign"
+  styles {{
+  }}
+  document id="doc.la" title="LegendAlign" {{
+    page id="page.la" w=(px)800 h=(px)600 {{
+      chart id="c.la" kind="bar" legend-align="{value}" x=(px)0 y=(px)0 w=(px)400 h=(px)300 {{
+        series 1.0 2.0 label="S"
+      }}
+    }}
+  }}
+}}
+"##
+        );
+        let adapter = KdlAdapter;
+        let doc = adapter.parse(src.as_bytes()).expect("parse must succeed");
+        let report = validate(&doc);
+        assert!(
+            !has_code(&report, "chart.invalid_legend_align"),
+            "legend-align={value:?} must not fire chart.invalid_legend_align; got: {:?}",
+            codes(&report)
+        );
+    }
+}
+
+/// A bogus `legend-align` value fires `chart.invalid_legend_align`.
+#[test]
+fn chart_invalid_legend_align_fires_diagnostic() {
+    let src = r##"zenith version=1 {
+  project id="proj.ila" name="InvalidLegendAlign"
+  styles {
+  }
+  document id="doc.ila" title="InvalidLegendAlign" {
+    page id="page.ila" w=(px)800 h=(px)600 {
+      chart id="c.ila" kind="bar" legend-align="justify" x=(px)0 y=(px)0 w=(px)400 h=(px)300 {
+        series 1.0 2.0 label="S"
+      }
+    }
+  }
+}
+"##;
+    let adapter = KdlAdapter;
+    let doc = adapter.parse(src.as_bytes()).expect("parse must succeed");
+    let report = validate(&doc);
+    assert!(
+        has_code(&report, "chart.invalid_legend_align"),
+        "bogus legend-align must fire chart.invalid_legend_align; got: {:?}",
+        codes(&report)
+    );
+}
+
 /// A chart missing geometry (x/y/w/h absent) outside a flow parent fires
 /// `node.missing_geometry`, proving that geometry validation runs on chart nodes.
 #[test]

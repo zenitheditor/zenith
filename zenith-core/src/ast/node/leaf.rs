@@ -719,7 +719,8 @@ pub struct ChartSeries {
 /// The common visual/geometry fields mirror [`PatternNode`]; the chart-specific
 /// fields (`kind`, `title`, `caption`, `legend`, `axis_*`, `bar_mode`,
 /// `point_placement`, `value_labels`, `value_color`, `label_colors`, `categories`,
-/// `series`) describe the chart content.
+/// `series`, `legend_position`, `legend_layout`, `legend_align`) describe the chart
+/// content.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ChartNode {
     pub id: String,
@@ -797,6 +798,16 @@ pub struct ChartNode {
     pub caption: Option<String>,
     /// Whether to render a legend. `None` defers to the renderer default.
     pub legend: Option<bool>,
+    /// Legend placement: `"right"` (default) | `"left"` | `"top"` | `"bottom"`.
+    /// freeform, validated later.
+    pub legend_position: Option<String>,
+    /// Legend layout for top/bottom placement: `"wrapped"` (default; horizontal
+    /// flow) | `"list"` (vertical stack). Ignored for left/right (always a
+    /// vertical list). freeform, validated later.
+    pub legend_layout: Option<String>,
+    /// Legend alignment for top/bottom placement: `"center"` (default) | `"left"`
+    /// | `"right"`. freeform, validated later.
+    pub legend_align: Option<String>,
     /// Minimum value for the value axis. `None` = auto-fit to data.
     pub axis_min: Option<f64>,
     /// Maximum value for the value axis. `None` = auto-fit to data.

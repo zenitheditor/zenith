@@ -490,3 +490,122 @@ fn chart_without_label_colors_byte_identical() {
         "chart without label-colors must round-trip identically"
     );
 }
+
+/// **legend-position + legend-layout + legend-align round-trip**: a chart with
+/// all three new legend configuration props parses correctly and round-trips
+/// through format → re-parse to an identical AST.
+#[test]
+fn chart_legend_position_layout_align_round_trip() {
+    let src = r##"zenith version=1 {
+  project id="proj.leg" name="LegendConfig"
+  styles {
+  }
+  document id="doc.leg" title="LegendConfig" {
+    page id="page.leg" w=(px)800 h=(px)600 {
+      chart id="c.leg" kind="bar" legend-position="bottom" legend-layout="wrapped" legend-align="left" x=(px)50 y=(px)50 w=(px)600 h=(px)400 {
+        series 1.0 2.0 3.0 label="A"
+      }
+    }
+  }
+}
+"##;
+    let adapter = KdlAdapter;
+    let doc = adapter.parse(src.as_bytes()).expect("parse must succeed");
+
+    let chart = match &doc.body.pages[0].children[0] {
+        Node::Chart(c) => c,
+        other => panic!("expected Chart node, got {other:?}"),
+    };
+    assert_eq!(chart.id, "c.leg");
+    assert_eq!(
+        chart.legend_position,
+        Some("bottom".to_owned()),
+        "legend_position must be parsed"
+    );
+    assert_eq!(
+        chart.legend_layout,
+        Some("wrapped".to_owned()),
+        "legend_layout must be parsed"
+    );
+    assert_eq!(
+        chart.legend_align,
+        Some("left".to_owned()),
+        "legend_align must be parsed"
+    );
+
+    let formatted = format_document(&doc).expect("format must succeed");
+    let formatted_str = String::from_utf8(formatted.clone()).expect("formatted must be utf8");
+
+    assert!(
+        formatted_str.contains("legend-position=\"bottom\""),
+        "formatter must emit legend-position; got:\n{formatted_str}"
+    );
+    assert!(
+        formatted_str.contains("legend-layout=\"wrapped\""),
+        "formatter must emit legend-layout; got:\n{formatted_str}"
+    );
+    assert!(
+        formatted_str.contains("legend-align=\"left\""),
+        "formatter must emit legend-align; got:\n{formatted_str}"
+    );
+
+    let reparsed = adapter.parse(&formatted).expect("re-parse after format");
+    assert_eq!(
+        strip_spans(doc),
+        strip_spans(reparsed),
+        "chart (with legend-position + legend-layout + legend-align) must round-trip identically"
+    );
+}
+
+/// **Legend props absent = byte-identical**: a chart without legend-position,
+/// legend-layout, or legend-align must not emit those keywords in the formatter
+/// output, and must still round-trip.
+#[test]
+fn chart_without_legend_props_byte_identical() {
+    let src = r##"zenith version=1 {
+  project id="proj.nleg" name="NoLegendProps"
+  styles {
+  }
+  document id="doc.nleg" title="NoLegendProps" {
+    page id="page.nleg" w=(px)800 h=(px)600 {
+      chart id="c.nleg" kind="bar" x=(px)50 y=(px)50 w=(px)600 h=(px)400 {
+        series 1.0 2.0 3.0 label="S"
+      }
+    }
+  }
+}
+"##;
+    let adapter = KdlAdapter;
+    let doc = adapter.parse(src.as_bytes()).expect("parse must succeed");
+
+    let chart = match &doc.body.pages[0].children[0] {
+        Node::Chart(c) => c,
+        other => panic!("expected Chart node, got {other:?}"),
+    };
+    assert_eq!(chart.legend_position, None, "legend_position must be None");
+    assert_eq!(chart.legend_layout, None, "legend_layout must be None");
+    assert_eq!(chart.legend_align, None, "legend_align must be None");
+
+    let formatted = format_document(&doc).expect("format must succeed");
+    let formatted_str = String::from_utf8(formatted.clone()).expect("formatted must be utf8");
+
+    assert!(
+        !formatted_str.contains("legend-position"),
+        "absent legend-position must not be emitted; got:\n{formatted_str}"
+    );
+    assert!(
+        !formatted_str.contains("legend-layout"),
+        "absent legend-layout must not be emitted; got:\n{formatted_str}"
+    );
+    assert!(
+        !formatted_str.contains("legend-align"),
+        "absent legend-align must not be emitted; got:\n{formatted_str}"
+    );
+
+    let reparsed = adapter.parse(&formatted).expect("re-parse after format");
+    assert_eq!(
+        strip_spans(doc),
+        strip_spans(reparsed),
+        "chart without legend props must round-trip identically"
+    );
+}

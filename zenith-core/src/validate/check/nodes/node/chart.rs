@@ -204,6 +204,60 @@ pub(in crate::validate::check) fn check_chart(
         }
     }
 
+    // Validate legend-position against the recognized set {"right", "left", "top", "bottom"}.
+    if let Some(legend_position) = &c.legend_position {
+        let legend_position_known = matches!(
+            legend_position.as_str(),
+            "right" | "left" | "top" | "bottom"
+        );
+        if !legend_position_known {
+            diagnostics.push(Diagnostic::warning(
+                "chart.invalid_legend_position",
+                format!(
+                    "chart '{}': legend-position '{}' is not recognized; \
+                     expected \"right\", \"left\", \"top\", or \"bottom\"",
+                    c.id, legend_position
+                ),
+                c.source_span,
+                Some(c.id.clone()),
+            ));
+        }
+    }
+
+    // Validate legend-layout against the recognized set {"wrapped", "list"}.
+    if let Some(legend_layout) = &c.legend_layout {
+        let legend_layout_known = matches!(legend_layout.as_str(), "wrapped" | "list");
+        if !legend_layout_known {
+            diagnostics.push(Diagnostic::warning(
+                "chart.invalid_legend_layout",
+                format!(
+                    "chart '{}': legend-layout '{}' is not recognized; \
+                     expected \"wrapped\" or \"list\"",
+                    c.id, legend_layout
+                ),
+                c.source_span,
+                Some(c.id.clone()),
+            ));
+        }
+    }
+
+    // Validate legend-align against the recognized set {"center", "left", "right"}.
+    if let Some(legend_align) = &c.legend_align {
+        let legend_align_known = matches!(legend_align.as_str(), "center" | "left" | "right");
+        if !legend_align_known {
+            diagnostics.push(Diagnostic::warning(
+                "chart.invalid_legend_align",
+                format!(
+                    "chart '{}': legend-align '{}' is not recognized; \
+                     expected \"center\", \"left\", or \"right\"",
+                    c.id, legend_align
+                ),
+                c.source_span,
+                Some(c.id.clone()),
+            ));
+        }
+    }
+
     // Validate categories count vs. series data length.
     // Emitted as Advisory (governable) when categories is non-empty and its count
     // does not match the maximum series value count.

@@ -522,9 +522,9 @@ pub(super) fn write_chart(c: &ChartNode, out: &mut String, depth: usize) {
     out.push_str("chart");
 
     // Canonical property order mirrors `pattern`, with the chart-specific props
-    // (kind, title, caption, legend, axis-min, axis-max, axis-style) emitted right
-    // after the common geometry/visual spread, then unknown props, then the series
-    // block.
+    // (kind, title, caption, legend, legend-position, legend-layout, legend-align,
+    // axis-min, axis-max, axis-style) emitted right after the common geometry/visual
+    // spread, then unknown props, then the series block.
     out.push_str(" id=\"");
     out.push_str(&c.id);
     out.push('"');
@@ -546,6 +546,9 @@ pub(super) fn write_chart(c: &ChartNode, out: &mut String, depth: usize) {
     write_opt_str(out, "title", &c.title);
     write_opt_str(out, "caption", &c.caption);
     write_opt_bool(out, "legend", &c.legend);
+    write_opt_str(out, "legend-position", &c.legend_position);
+    write_opt_str(out, "legend-layout", &c.legend_layout);
+    write_opt_str(out, "legend-align", &c.legend_align);
     if let Some(v) = c.axis_min {
         let _ = write!(out, " axis-min={v}");
     }

@@ -2,10 +2,10 @@
 //! carries one or more `series` data children and optional `categories` and
 //! `label-colors` children. The common visual/geometry props are read exactly
 //! like `pattern`; the chart-specific props (`kind`, `title`, `caption`,
-//! `legend`, `axis-min`, `axis-max`, `axis-style`, `bar-mode`,
-//! `point-placement`, `value-labels`, `value-color`) describe the chart
-//! presentation. Series, categories, and label-colors children are pure data
-//! (not renderable nodes).
+//! `legend`, `legend-position`, `legend-layout`, `legend-align`, `axis-min`,
+//! `axis-max`, `axis-style`, `bar-mode`, `point-placement`, `value-labels`,
+//! `value-color`) describe the chart presentation. Series, categories, and
+//! label-colors children are pure data (not renderable nodes).
 
 use kdl::{KdlNode, KdlValue};
 
@@ -103,6 +103,12 @@ pub(crate) const CHART_KNOWN_PROPS: &[&str] = &[
     "value_labels",
     "value-color",
     "value_color",
+    "legend-position",
+    "legend_position",
+    "legend-layout",
+    "legend_layout",
+    "legend-align",
+    "legend_align",
 ];
 
 pub(super) fn transform_chart(node: &KdlNode) -> Result<ChartNode, ParseError> {
@@ -147,6 +153,12 @@ pub(super) fn transform_chart(node: &KdlNode) -> Result<ChartNode, ParseError> {
     let value_labels =
         optional_string_prop_aliased(node, "value-labels", "value_labels").map(str::to_owned);
     let value_color = optional_property_value_aliased(node, "value-color", "value_color");
+    let legend_position =
+        optional_string_prop_aliased(node, "legend-position", "legend_position").map(str::to_owned);
+    let legend_layout =
+        optional_string_prop_aliased(node, "legend-layout", "legend_layout").map(str::to_owned);
+    let legend_align =
+        optional_string_prop_aliased(node, "legend-align", "legend_align").map(str::to_owned);
 
     // Series, categories, and label-colors: each `series` child node becomes a
     // ChartSeries; the single `categories` child carries string positional args as
@@ -294,6 +306,9 @@ pub(super) fn transform_chart(node: &KdlNode) -> Result<ChartNode, ParseError> {
         title: optional_string_prop(node, "title").map(str::to_owned),
         caption: optional_string_prop(node, "caption").map(str::to_owned),
         legend: optional_bool_prop(node, "legend"),
+        legend_position,
+        legend_layout,
+        legend_align,
         axis_min,
         axis_max,
         axis_style,

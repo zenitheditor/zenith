@@ -412,11 +412,14 @@ fn attribute_type_for_kind_inner(kind: &str, name: &str, fallback: &'static str)
         ("shape", "kind") => "enum: process|decision|terminator|ellipse",
         ("pattern", "kind") => "enum: grid|scatter",
         ("chart", "kind") => "enum: bar|line|area|sparkline|pie|donut",
-        // chart axis/legend/caption/bar-mode: chart-only attributes (validate/check/nodes/node/chart.rs).
+        // chart axis/legend/caption/bar-mode/legend-position/legend-layout/legend-align: chart-only attributes (validate/check/nodes/node/chart.rs).
         ("chart", "legend") => "bool",
         ("chart", "caption") => "string",
         ("chart", "axis-min" | "axis-max") => "f64",
         ("chart", "axis-style") => "string",
+        ("chart", "legend-position") => "enum: right|left|top|bottom",
+        ("chart", "legend-layout") => "enum: wrapped|list",
+        ("chart", "legend-align") => "enum: center|left|right",
         ("chart", "bar-mode") => "enum: grouped|stacked",
         ("chart", "point-placement") => "enum: edge|center",
         ("chart", "value-labels") => "enum: auto|none|top|center",
