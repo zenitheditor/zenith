@@ -375,7 +375,25 @@ fn emit_value_label(
 
 // ── emit_category_labels ──────────────────────────────────────────────────────
 
-/// Emit X-axis category labels centered under each category slot.
+/// Layout inputs for category labels, bundled to keep the emitter's argument
+/// list within bounds.
+#[derive(Clone, Copy)]
+pub(super) struct CatLabels<'a> {
+    /// Plot rectangle the labels sit beneath.
+    pub plot: &'a PlotArea,
+    /// Label text color.
+    pub color: Color,
+    /// `true` → labels under category-band centers (bars); `false` → under
+    /// edge-to-edge vertex positions (line/area).
+    pub slot_center: bool,
+}
+
+/// Emit X-axis category labels under each category.
+///
+/// When `slot_center` is true, each label is centered under its category band
+/// (`plot.x + (c + 0.5) * slot_w`) — the placement bars use. When false, labels
+/// sit at the edge-to-edge vertex positions (`plot.x + c * plot.w/(n-1)`, single
+/// category centered) so they line up under line/area vertices.
 ///
 /// When `categories` is shorter than `n_categories`, the remaining slots are
 /// labelled by 1-based index (`"1"`, `"2"`, …). Empty label strings are
@@ -383,17 +401,17 @@ fn emit_value_label(
 pub(super) fn emit_category_labels(
     categories: &[String],
     n_categories: usize,
-    plot: &PlotArea,
-    label_color: Color,
+    layout: CatLabels,
     cx: NodeCtx,
     commands: &mut Vec<SceneCommand>,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
+    let plot = layout.plot;
+    let label_color = layout.color;
     if n_categories == 0 || plot.w <= 0.0 {
         return;
     }
 
-    let slot_w = plot.w / n_categories as f64;
     let baseline_y = plot.y + plot.h + 14.0;
     let families = [String::from("Noto Sans")];
 
@@ -430,7 +448,14 @@ pub(super) fn emit_category_labels(
             }
             Ok(result) => {
                 let total_advance: f64 = result.runs.iter().map(|r| r.advance_width as f64).sum();
-                let center_x = plot.x + c as f64 * slot_w + slot_w / 2.0;
+                // Match line_points' X placement so labels sit under vertices.
+                let center_x = if layout.slot_center {
+                    plot.x + (c as f64 + 0.5) * (plot.w / n_categories as f64)
+                } else if n_categories <= 1 {
+                    plot.x + plot.w / 2.0
+                } else {
+                    plot.x + c as f64 * (plot.w / (n_categories - 1) as f64)
+                };
                 let mut label_x = center_x - total_advance / 2.0;
 
                 for run in result.runs {

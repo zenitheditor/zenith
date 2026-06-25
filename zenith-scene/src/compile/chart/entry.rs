@@ -19,7 +19,7 @@ use super::super::paint::resolve_property_color;
 use super::super::text::run_to_scene_glyphs;
 use super::super::util::{missing_geometry_diag, resolve_anchored_axis, unsupported_unit_diag};
 use super::axis::{AxisColors, emit_axis_lines, emit_gridlines_and_labels};
-use super::bar::{BarMode, emit_bars, emit_category_labels, stacked_max};
+use super::bar::{BarMode, CatLabels, emit_bars, emit_category_labels, stacked_max};
 use super::frame::{PlotArea, plot_area};
 use super::line::{emit_area_fill, emit_line_series, line_points};
 use super::palette::series_color;
@@ -224,8 +224,11 @@ pub(in crate::compile) fn compile_chart(
             emit_category_labels(
                 &chart.categories,
                 n_categories,
-                &plot,
-                colors.label,
+                CatLabels {
+                    plot: &plot,
+                    color: colors.label,
+                    slot_center: true,
+                },
                 cx,
                 commands,
                 diagnostics,
@@ -234,6 +237,9 @@ pub(in crate::compile) fn compile_chart(
         }
         "line" | "area" => {
             let is_area = chart.kind.as_str() == "area";
+            // Default edge-to-edge (first point on the value axis, last at the
+            // right edge); point-placement="center" insets onto category bands.
+            let slot_center = chart.point_placement.as_deref() == Some("center");
             let n_categories = chart
                 .series
                 .iter()
@@ -256,7 +262,7 @@ pub(in crate::compile) fn compile_chart(
                 Vec::with_capacity(chart.series.len());
             for (idx, series) in chart.series.iter().enumerate() {
                 let c = series_color(series, idx, cx.resolved, diagnostics, &chart.id);
-                let pts = line_points(&series.values, &plot, &y_scale, true);
+                let pts = line_points(&series.values, &plot, &y_scale, slot_center);
                 series_geom.push((pts, c));
             }
 
@@ -280,8 +286,11 @@ pub(in crate::compile) fn compile_chart(
                 emit_category_labels(
                     &chart.categories,
                     n_categories,
-                    &plot,
-                    colors.label,
+                    CatLabels {
+                        plot: &plot,
+                        color: colors.label,
+                        slot_center,
+                    },
                     cx,
                     commands,
                     diagnostics,
