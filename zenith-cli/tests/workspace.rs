@@ -439,6 +439,121 @@ fn promote_missing_target_page_errors() {
     );
 }
 
+// ── Token-palette promote tests ───────────────────────────────────────────────
+
+/// Deliverable with palette B: has `color.shared` (value "#ffffff") and
+/// `color.del-only` ("#aabbcc"). The candidate will carry a DIFFERENT value for
+/// `color.shared` and an additional `color.cand-only` token.
+const DELIVERABLE_PALETTE_B: &str = r##"zenith version=1 doc-id="01HWSCRATCHTEST000000000002" {
+  project id="proj.del2" name="Deliverable-B"
+  tokens format="zenith-token-v1" {
+    token id="color.shared" type="color" value="#ffffff"
+    token id="color.del-only" type="color" value="#aabbcc"
+  }
+  styles {
+  }
+  document id="doc.del2" title="Deliverable-B" {
+    page id="page.export" w=(px)400 h=(px)300 {
+      rect id="placeholder" x=(px)0 y=(px)0 w=(px)400 h=(px)300
+    }
+  }
+}
+"##;
+
+/// Candidate snapshot with palette A: `color.shared` has a DIFFERENT value
+/// ("#000000"), and it introduces `color.cand-only` ("#112233") while being
+/// silent about `color.del-only`.
+const CANDIDATE_PALETTE_A: &str = r##"zenith version=1 doc-id="01HWSCRATCHTEST000000000002" {
+  project id="proj.cand2" name="Candidate-A"
+  tokens format="zenith-token-v1" {
+    token id="color.shared" type="color" value="#000000"
+    token id="color.cand-only" type="color" value="#112233"
+  }
+  styles {
+  }
+  document id="doc.cand2" title="Candidate-A" {
+    page id="page.source" w=(px)400 h=(px)300 {
+      rect id="hero2" x=(px)0 y=(px)0 w=(px)400 h=(px)300
+    }
+  }
+}
+"##;
+
+fn setup_promote_palette() -> (TempDir, StorePaths, std::path::PathBuf) {
+    let tmp = TempDir::new().unwrap();
+    let paths = StorePaths::new(tmp.path());
+    let doc_path = tmp.path().join("deliver2.zen");
+    std::fs::write(&doc_path, DELIVERABLE_PALETTE_B).unwrap();
+    (tmp, paths, doc_path)
+}
+
+/// Promoting a candidate whose palette diverges from the deliverable must:
+/// - overwrite the shared token id with the candidate's value,
+/// - retain the deliverable-only token,
+/// - append the candidate-only token,
+/// - produce a deterministic final ordering.
+#[test]
+fn promote_reconciles_candidate_tokens_into_deliverable() {
+    use zenith_core::{KdlAdapter, KdlSource as _};
+
+    let (_tmp, paths, doc_path) = setup_promote_palette();
+    let cand_id = record_selected_candidate(
+        &paths,
+        &doc_path,
+        "page.source",
+        CANDIDATE_PALETTE_A.as_bytes(),
+    );
+
+    let out = promote_in(&paths, &doc_path, &cand_id, "page.export", ".p").unwrap();
+    assert!(
+        out.contains(&cand_id),
+        "confirmation must mention candidate id"
+    );
+
+    // Parse the written document and inspect its token block.
+    let written_bytes = std::fs::read(&doc_path).unwrap();
+    let doc = KdlAdapter.parse(written_bytes.as_slice()).unwrap();
+    let tokens = &doc.tokens.tokens;
+
+    // Collect ids in order for determinism checks.
+    let ids: Vec<&str> = tokens.iter().map(|t| t.id.as_str()).collect();
+
+    // shared id must be present and carry the candidate's value.
+    let shared = tokens
+        .iter()
+        .find(|t| t.id == "color.shared")
+        .expect("color.shared must be present after promote");
+    let shared_val = match &shared.value {
+        zenith_core::ast::token::TokenValue::Literal(
+            zenith_core::ast::token::TokenLiteral::String(s),
+        ) => s.as_str(),
+        other => panic!("unexpected token value kind: {other:?}"),
+    };
+    assert_eq!(
+        shared_val, "#000000",
+        "color.shared must carry the candidate's value '#000000'; got: {shared_val}"
+    );
+
+    // deliverable-only token must be retained.
+    assert!(
+        tokens.iter().any(|t| t.id == "color.del-only"),
+        "color.del-only must be retained; ids present: {ids:?}"
+    );
+
+    // candidate-only token must be appended.
+    assert!(
+        tokens.iter().any(|t| t.id == "color.cand-only"),
+        "color.cand-only must be appended; ids present: {ids:?}"
+    );
+
+    // Ordering: deliverable order first (shared, del-only), then appended cand-only.
+    assert_eq!(
+        ids,
+        ["color.shared", "color.del-only", "color.cand-only"],
+        "token order must be deterministic; got: {ids:?}"
+    );
+}
+
 // ── Bundle / unbundle tests ───────────────────────────────────────────────────
 
 #[test]

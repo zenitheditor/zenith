@@ -5,7 +5,7 @@ use std::path::Path;
 use zenith_core::{KdlAdapter, KdlSource, Severity, validate};
 use zenith_session::adapter::OsFs;
 use zenith_session::{CandidateStatus, StorePaths, get_scratch_snapshot, list_scratch};
-use zenith_tx::merge_candidate_page;
+use zenith_tx::{merge_candidate_page, reconcile_candidate_tokens};
 
 use crate::commands::workspace::scratch::open_store;
 use crate::history::{Recorded, record_edit_in};
@@ -117,6 +117,12 @@ pub fn promote_in(
 
     // 7. Merge. Source and target are in DIFFERENT documents — no borrow conflict.
     merge_candidate_page(source_page, target_page, id_suffix);
+
+    // 7b. Reconcile the candidate's design tokens into the deliverable: additive
+    //     upsert — shared ids overwrite in place, candidate-only ids are appended,
+    //     deliverable-only ids are retained. This ensures the promoted page
+    //     reproduces its snapshotted appearance.
+    reconcile_candidate_tokens(&cand_doc.tokens, &mut main_doc.tokens);
 
     // 8. Validate the mutated main document.
     let report = validate(&main_doc);
