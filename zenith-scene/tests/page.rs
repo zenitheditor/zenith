@@ -53,7 +53,7 @@ page id="page.t6" w=(px)200 h=(px)100 {
 #[test]
 fn compile_page_selects_second_page() {
     let doc = parse(TWO_PAGE_DOC);
-    let result = compile_page(&doc, &default_provider(), 1);
+    let result = compile_page(&doc, &default_provider(), 1, None);
 
     // Page 2 size is 200×200 (page 1 is 100×100).
     assert_eq!(result.scene.width, 200.0, "must be page 2's width");
@@ -73,7 +73,7 @@ fn compile_page_selects_second_page() {
 #[test]
 fn compile_page_out_of_range_is_empty_with_advisory() {
     let doc = parse(TWO_PAGE_DOC);
-    let result = compile_page(&doc, &default_provider(), 9);
+    let result = compile_page(&doc, &default_provider(), 9, None);
 
     assert_eq!(result.scene.width, 0.0, "out-of-range scene must be 0 wide");
     assert_eq!(
@@ -119,7 +119,7 @@ fn compile_no_pages_still_yields_no_pages_advisory() {
 fn compile_equals_compile_page_zero() {
     let doc = parse(TWO_PAGE_DOC);
     let via_compile = compile(&doc, &default_provider());
-    let via_page0 = compile_page(&doc, &default_provider(), 0);
+    let via_page0 = compile_page(&doc, &default_provider(), 0, None);
 
     // compile renders page 1 (index 0): same dimensions and fills.
     assert_eq!(via_compile.scene.width, via_page0.scene.width);

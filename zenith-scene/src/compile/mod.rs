@@ -20,6 +20,7 @@ mod chain;
 mod container;
 mod crop;
 mod ctx;
+mod data_resolve;
 mod field;
 mod footnote;
 mod image;
@@ -36,8 +37,8 @@ mod util;
 use std::collections::BTreeMap;
 
 use zenith_core::{
-    ComponentDef, Diagnostic, Document, FontProvider, MasterDef, Node, PropertyValue, Style,
-    dim_to_px, resolve_tokens,
+    ComponentDef, DataContext, Diagnostic, Document, FontProvider, MasterDef, Node, PropertyValue,
+    Style, dim_to_px, resolve_tokens,
 };
 use zenith_layout::RustybuzzEngine;
 
@@ -53,8 +54,8 @@ use field::{
 };
 use image::compile_image;
 use leaf::{
-    ConnectorEnv, ShapeCompileEnv, compile_connector, compile_ellipse, compile_line,
-    compile_polygon, compile_polyline, compile_rect, compile_shape,
+    ConnectorEnv, RectEllipseEnv, ShapeCompileEnv, compile_connector, compile_ellipse,
+    compile_line, compile_polygon, compile_polyline, compile_rect, compile_shape,
 };
 use paint::{resolve_property_color, resolve_property_gradient};
 use pattern::compile_pattern;
@@ -177,7 +178,7 @@ pub(super) fn style_prop<'a>(
 /// `unimplemented!`, or performs unchecked indexing.  All failure paths push a
 /// diagnostic and continue.
 pub fn compile(doc: &Document, fonts: &dyn FontProvider) -> CompileResult {
-    compile_page(doc, fonts, 0)
+    compile_page(doc, fonts, 0, None)
 }
 
 /// Compile the page at `page_index` (0-based) of `doc` into a [`CompileResult`],
@@ -190,12 +191,21 @@ pub fn compile(doc: &Document, fonts: &dyn FontProvider) -> CompileResult {
 /// Pass `&zenith_core::default_provider()` to use the bundled Noto Sans
 /// font, which is sufficient for basic text rendering.
 ///
+/// Pass `Some(&data_ctx)` to resolve `(data)"field.path"` property references at
+/// compile time. Pass `None` to skip data binding — a document with no `(data)`
+/// refs and `data: None` is byte-identical to previous behavior.
+///
 /// # No-panic guarantee
 ///
 /// This function never calls `unwrap`, `expect`, `panic!`, `todo!`,
 /// `unimplemented!`, or performs unchecked indexing (page lookup uses `.get()`).
 /// All failure paths push a diagnostic and continue.
-pub fn compile_page(doc: &Document, fonts: &dyn FontProvider, page_index: usize) -> CompileResult {
+pub fn compile_page(
+    doc: &Document,
+    fonts: &dyn FontProvider,
+    page_index: usize,
+    data: Option<&DataContext>,
+) -> CompileResult {
     let mut diagnostics: Vec<Diagnostic> = Vec::new();
 
     // ── Step 1: resolve tokens ────────────────────────────────────────────
@@ -455,6 +465,7 @@ pub fn compile_page(doc: &Document, fonts: &dyn FontProvider, page_index: usize)
         flows: &flows,
         anchors: &anchors,
         field_ctx: &field_ctx,
+        data,
     };
 
     // ── Resolve the page baseline grid ───────────────────────────────────
@@ -646,17 +657,21 @@ pub(in crate::compile) fn compile_node(
         flows,
         anchors,
         field_ctx,
+        data,
     } = cx;
 
     match node {
         Node::Rect(rect) => {
             compile_rect(
                 rect,
-                resolved,
-                style_map,
+                RectEllipseEnv {
+                    resolved,
+                    style_map,
+                    anchors,
+                    data,
+                },
                 commands,
                 diagnostics,
-                anchors,
                 ctx,
             );
             0.0
@@ -664,11 +679,14 @@ pub(in crate::compile) fn compile_node(
         Node::Ellipse(ellipse) => {
             compile_ellipse(
                 ellipse,
-                resolved,
-                style_map,
+                RectEllipseEnv {
+                    resolved,
+                    style_map,
+                    anchors,
+                    data,
+                },
                 commands,
                 diagnostics,
-                anchors,
                 ctx,
             );
             0.0
@@ -798,6 +816,7 @@ pub(in crate::compile) fn compile_node(
                     flows,
                     anchors,
                     field_ctx,
+                    data,
                 },
                 commands,
                 diagnostics,
@@ -820,6 +839,7 @@ pub(in crate::compile) fn compile_node(
                     node_boxes: field_ctx.node_boxes,
                     anchors,
                     ctx,
+                    data,
                 },
             );
             0.0

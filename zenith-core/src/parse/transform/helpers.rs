@@ -51,6 +51,13 @@ pub(super) fn entry_to_property_value(entry: &KdlEntry) -> Result<PropertyValue,
                 format!("(token) annotation requires a string value, got: {other:?}"),
             )),
         },
+        Some("data") => match entry.value() {
+            KdlValue::String(s) => Ok(PropertyValue::DataRef(s.clone())),
+            other => Err(ParseError::spanless(
+                ParseErrorCode::InvalidPropertyValue,
+                format!("(data) annotation requires a string value, got: {other:?}"),
+            )),
+        },
         // A known/unknown unit annotation on a numeric value → dimension literal.
         // This brings literal visual dimensions (e.g. `font-size=(px)24`) to
         // parity with token-backed dimensions. Non-numeric annotated values fall

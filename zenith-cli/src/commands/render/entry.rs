@@ -91,7 +91,7 @@ pub fn to_scene_json(
     let (doc, policy) = parse_validate(src, project_dir, flags)?;
     let fonts = build_font_provider(&doc, project_dir, false)?;
     let page_index = resolve_page_index(&doc, page)?;
-    let compile_result = compile_page(&doc, &fonts, page_index);
+    let compile_result = compile_page(&doc, &fonts, page_index, None);
     let json = compile_result
         .scene
         .to_json()
@@ -157,7 +157,7 @@ pub fn to_png_with_dir(
         Some(dir) => build_asset_provider(&doc, dir, locked)?,
         None => BytesAssetProvider::new(),
     };
-    let compile_result = compile_page(&doc, &fonts, page_index);
+    let compile_result = compile_page(&doc, &fonts, page_index, None);
     let png = render_png(&compile_result.scene, &fonts, &assets)
         .map_err(|e| RenderCmdErr::new(format!("render error: {e}"), 2))?;
     let mut diagnostics = disk_diagnostics(&doc, project_dir);
@@ -192,7 +192,7 @@ pub fn to_pdf_with_dir(
         Some(dir) => build_asset_provider(&doc, dir, locked)?,
         None => BytesAssetProvider::new(),
     };
-    let compile_result = compile_page(&doc, &fonts, page_index);
+    let compile_result = compile_page(&doc, &fonts, page_index, None);
     let pdf = render_pdf(&compile_result.scene, &fonts, &assets);
     let mut diagnostics = disk_diagnostics(&doc, project_dir);
     diagnostics.extend(govern_compile_diagnostics(
@@ -233,7 +233,7 @@ pub fn to_png_all_pages(
     let disk_diagnostics = disk_diagnostics(&doc, project_dir);
     let mut artifacts = Vec::with_capacity(page_count);
     for page_index in 0..page_count {
-        let compile_result = compile_page(&doc, &fonts, page_index);
+        let compile_result = compile_page(&doc, &fonts, page_index, None);
         let png = render_png(&compile_result.scene, &fonts, &assets)
             .map_err(|e| RenderCmdErr::new(format!("render error on page {page_index}: {e}"), 2))?;
         let mut diagnostics = disk_diagnostics.clone();
@@ -292,8 +292,8 @@ pub fn to_png_spread(
             .map(|px| px.max(0.0) as u32)
             .unwrap_or(0)
     });
-    let compile_a = compile_page(&doc, &fonts, index_a);
-    let compile_b = compile_page(&doc, &fonts, index_b);
+    let compile_a = compile_page(&doc, &fonts, index_a, None);
+    let compile_b = compile_page(&doc, &fonts, index_b, None);
     let png = render_spread_png(
         &compile_a.scene,
         &compile_b.scene,

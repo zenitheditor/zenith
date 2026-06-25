@@ -157,6 +157,6 @@ pub(super) fn resolve_property_dimension_px(
         // A literal dimension (e.g. `font-size=(px)24`) resolves directly,
         // bringing literal visual dimensions to parity with token-backed ones.
         Some(PropertyValue::Dimension(dim)) => dim_to_px(dim.value, &dim.unit).unwrap_or(default),
-        Some(PropertyValue::Literal(_)) | None => default,
+        Some(PropertyValue::Literal(_)) | Some(PropertyValue::DataRef(_)) | None => default,
     }
 }

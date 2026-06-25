@@ -618,7 +618,7 @@ pub fn run(
         let mut page_pngs: Vec<(String, Vec<u8>)> = Vec::new();
 
         for (page_index, page_fname) in page_filenames.iter().enumerate() {
-            let compile_result = compile_page(&row_doc, &fonts, page_index);
+            let compile_result = compile_page(&row_doc, &fonts, page_index, None);
 
             // Block on Error-severity compile diagnostics.
             let hard_diags: Vec<String> = compile_result

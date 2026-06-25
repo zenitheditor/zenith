@@ -131,7 +131,7 @@ pub(super) fn resolve_border_width(
             None => default,
         },
         Some(PropertyValue::Dimension(dim)) => dim_to_px(dim.value, &dim.unit).unwrap_or(default),
-        Some(PropertyValue::Literal(_)) | None => default,
+        Some(PropertyValue::Literal(_)) | Some(PropertyValue::DataRef(_)) | None => default,
     }
 }
 

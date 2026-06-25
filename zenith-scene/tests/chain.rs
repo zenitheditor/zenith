@@ -173,9 +173,9 @@ page id="p3" w=(px)600 h=(px)400 {
 }
 "##;
     let doc = parse(src);
-    let p1 = compile_page(&doc, &default_provider(), 0);
-    let p2 = compile_page(&doc, &default_provider(), 1);
-    let p3 = compile_page(&doc, &default_provider(), 2);
+    let p1 = compile_page(&doc, &default_provider(), 0, None);
+    let p2 = compile_page(&doc, &default_provider(), 1, None);
+    let p3 = compile_page(&doc, &default_provider(), 2, None);
 
     let runs1 = glyph_runs_in_y(&p1.scene.commands, 0.0, 400.0);
     let runs2 = glyph_runs_in_y(&p2.scene.commands, 0.0, 400.0);
@@ -193,8 +193,8 @@ page id="p3" w=(px)600 h=(px)400 {
 
     // Determinism: each page recompiles byte-identical.
     for idx in 0..3 {
-        let a = compile_page(&doc, &default_provider(), idx);
-        let b = compile_page(&doc, &default_provider(), idx);
+        let a = compile_page(&doc, &default_provider(), idx, None);
+        let b = compile_page(&doc, &default_provider(), idx, None);
         assert_eq!(
             a.scene.commands, b.scene.commands,
             "cross-page chain page {idx} must compile deterministically"

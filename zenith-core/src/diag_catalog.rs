@@ -199,6 +199,16 @@ pub const DIAGNOSTIC_CODES: &[DiagnosticCodeInfo] = &[
         "Text/background contrast is below the WCAG 2.2 threshold.",
     ),
     info(
+        "data.missing_field",
+        Severity::Advisory,
+        "A `(data)` property references a field path not present in the data context.",
+    ),
+    info(
+        "data.no_context",
+        Severity::Advisory,
+        "A `(data)` property was encountered but no data context was provided at compile time.",
+    ),
+    info(
         "document.invalid_colorspace",
         Severity::Warning,
         "Document `colorspace` value is unrecognized.",

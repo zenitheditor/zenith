@@ -9,7 +9,7 @@ fn master_projects_running_head_and_folio_on_every_page() {
     let doc = parse(BOOK_SRC);
     let provider = default_provider();
     for page_index in 0..4 {
-        let r = compile_page(&doc, &provider, page_index);
+        let r = compile_page(&doc, &provider, page_index, None);
         assert!(
             !r.diagnostics
                 .iter()
@@ -31,9 +31,9 @@ fn running_head_x_mirrors_recto_vs_verso() {
     let doc = parse(BOOK_SRC);
     let provider = default_provider();
     // Recto (page 1, index 0): live_x = margin_inner = 160.
-    let recto = compile_page(&doc, &provider, 0);
+    let recto = compile_page(&doc, &provider, 0, None);
     // Verso (page 2, index 1): live_x = margin_outer = 100 (mirrored).
-    let verso = compile_page(&doc, &provider, 1);
+    let verso = compile_page(&doc, &provider, 1, None);
 
     // The running-head run is the one whose baseline sits just below y=80
     // (text_box_top 80 + ascent). Its x is the live-area left inset.
@@ -63,8 +63,8 @@ fn running_head_recto_verso_text_differs_by_parity() {
     let doc = parse(BOOK_SRC);
     let provider = default_provider();
     // Recto and verso strings have very different lengths → different glyph runs.
-    let recto = compile_page(&doc, &provider, 0);
-    let verso = compile_page(&doc, &provider, 1);
+    let recto = compile_page(&doc, &provider, 0, None);
+    let verso = compile_page(&doc, &provider, 1, None);
 
     let rh_glyph_count = |r: &CompileResult| -> Option<usize> {
         r.scene.commands.iter().find_map(|c| match c {
@@ -92,7 +92,7 @@ fn folio_renders_one_per_page_and_two_run_byte_identical() {
     let provider = default_provider();
     // The folio sits at the bottom (text_box_top 1820); exactly one per page.
     for page_index in 0..4 {
-        let r = compile_page(&doc, &provider, page_index);
+        let r = compile_page(&doc, &provider, page_index, None);
         let folios = glyph_run_origins(&r)
             .into_iter()
             .filter(|(_, y)| *y > 1820.0 && *y < 1900.0)
@@ -100,8 +100,8 @@ fn folio_renders_one_per_page_and_two_run_byte_identical() {
         assert_eq!(folios, 1, "page {page_index}: exactly one folio run");
 
         // Two-run byte-identical determinism per page.
-        let a = compile_page(&doc, &provider, page_index);
-        let b = compile_page(&doc, &provider, page_index);
+        let a = compile_page(&doc, &provider, page_index, None);
+        let b = compile_page(&doc, &provider, page_index, None);
         assert_eq!(
             a.scene.to_json().expect("a"),
             b.scene.to_json().expect("b"),
@@ -116,13 +116,13 @@ fn page_parity_start_verso_flips_page_one_running_head() {
 
     // Default book: page 1 is recto (long "Chapter One…" text, inner=160 inset).
     let default_doc = parse(BOOK_SRC);
-    let default_p1 = compile_page(&default_doc, &provider, 0);
+    let default_p1 = compile_page(&default_doc, &provider, 0, None);
     let (_, default_p1_glyphs) =
         running_head_x_and_glyphs(&default_p1).expect("default page 1 running head");
 
     // verso-start book: page 1 is now a verso (short "Verso" text, outer=100 inset).
     let verso_doc = parse(BOOK_SRC_VERSO_START);
-    let verso_p1 = compile_page(&verso_doc, &provider, 0);
+    let verso_p1 = compile_page(&verso_doc, &provider, 0, None);
     let (_, verso_p1_glyphs) =
         running_head_x_and_glyphs(&verso_p1).expect("verso-start page 1 running head");
 
@@ -133,7 +133,7 @@ fn page_parity_start_verso_flips_page_one_running_head() {
 
     // The verso-start page 1 must match the DEFAULT page 2 (also a verso): same
     // verso text glyph count.
-    let default_p2 = compile_page(&default_doc, &provider, 1);
+    let default_p2 = compile_page(&default_doc, &provider, 1, None);
     let (_, default_p2_glyphs) =
         running_head_x_and_glyphs(&default_p2).expect("default page 2 running head");
     assert_eq!(
@@ -149,12 +149,12 @@ fn page_parity_override_recto_restores_page_one() {
     // Force page 1 back to recto via the per-page override.
     doc.body.pages[0].parity = Some("recto".to_owned());
 
-    let p1 = compile_page(&doc, &provider, 0);
+    let p1 = compile_page(&doc, &provider, 0, None);
     let (_, p1_glyphs) = running_head_x_and_glyphs(&p1).expect("page 1 running head");
 
     // Compare against the default book's page 1 (a recto): same long recto text.
     let default_doc = parse(BOOK_SRC);
-    let default_p1 = compile_page(&default_doc, &provider, 0);
+    let default_p1 = compile_page(&default_doc, &provider, 0, None);
     let (_, default_p1_glyphs) =
         running_head_x_and_glyphs(&default_p1).expect("default page 1 running head");
     assert_eq!(
@@ -185,8 +185,8 @@ page id="ip2" w=(px)400 h=(px)300 {
 "##;
     let doc = parse(src);
     let provider = default_provider();
-    let p1 = compile_page(&doc, &provider, 0);
-    let p2 = compile_page(&doc, &provider, 1);
+    let p1 = compile_page(&doc, &provider, 0, None);
+    let p2 = compile_page(&doc, &provider, 1, None);
     assert_eq!(glyph_run_origins(&p1).len(), 1, "page 1 folio renders");
     assert_eq!(glyph_run_origins(&p2).len(), 1, "page 2 folio renders");
 }
@@ -215,7 +215,7 @@ page id="rp3" w=(px)400 h=(px)300 {
 "##;
     let doc = parse(src);
     let provider = default_provider();
-    let p1 = compile_page(&doc, &provider, 0);
+    let p1 = compile_page(&doc, &provider, 0, None);
     // The page-ref renders a single glyph run (the digit "3").
     assert_eq!(
         glyph_run_origins(&p1).len(),

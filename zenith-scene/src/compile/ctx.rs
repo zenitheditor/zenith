@@ -14,7 +14,7 @@
 
 use std::collections::BTreeMap;
 
-use zenith_core::{FontProvider, ResolvedToken, Style};
+use zenith_core::{DataContext, FontProvider, ResolvedToken, Style};
 use zenith_layout::RustybuzzEngine;
 
 use super::ComponentMap;
@@ -49,4 +49,7 @@ pub(in crate::compile) struct NodeCtx<'a> {
     pub(in crate::compile) anchors: &'a AnchorMap,
     /// Per-page field context (page index, live area, footnote markers, …).
     pub(in crate::compile) field_ctx: &'a FieldCtx<'a>,
+    /// Optional runtime data context for `(data)"field.path"` resolution.
+    /// `None` → any `DataRef` property emits `data.no_context` and is skipped.
+    pub(in crate::compile) data: Option<&'a DataContext>,
 }

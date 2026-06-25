@@ -90,4 +90,6 @@ pub enum PropertyValue {
     Literal(String),
     /// A literal dimension with an explicit unit, e.g. `(px)24` or `(pt)13`.
     Dimension(Dimension),
+    /// A typed reference to a runtime data field, e.g. `(data)"revenue.total"`.
+    DataRef(String),
 }

@@ -164,6 +164,11 @@ pub(super) fn check_visual_prop(
                 Some(node_id.to_owned()),
             ));
         }
+
+        // A data-binding reference is a valid future-facing value; no error is
+        // emitted here — scene-side resolution emits `data.missing_field` or
+        // `data.no_context` advisories at compile time when needed.
+        PropertyValue::DataRef(_) => {}
     }
 }
 

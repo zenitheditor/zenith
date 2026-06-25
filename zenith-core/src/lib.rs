@@ -8,6 +8,7 @@
 pub mod asset;
 pub mod ast;
 pub mod color;
+pub mod data;
 pub mod diag_catalog;
 pub mod diagnostics;
 pub mod error;
@@ -40,6 +41,7 @@ pub use ast::{
 pub use color::{
     Cmyk, cmyk_to_hex, cmyk_to_srgb, contrast_ratio, parse_cmyk, parse_rgb, relative_luminance,
 };
+pub use data::{DataContext, DataFormat, format_data_value};
 pub use diagnostics::{Diagnostic, Severity};
 pub use error::{FormatError, ParseError, ParseErrorCode};
 pub use font::{

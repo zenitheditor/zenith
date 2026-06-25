@@ -111,6 +111,7 @@ pub fn property_value_str(pv: &PropertyValue) -> String {
         PropertyValue::TokenRef(id) => id.clone(),
         PropertyValue::Literal(s) => s.clone(),
         PropertyValue::Dimension(d) => d.to_kdl_string(),
+        PropertyValue::DataRef(path) => path.clone(),
     }
 }
 

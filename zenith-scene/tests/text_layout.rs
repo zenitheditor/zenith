@@ -177,8 +177,12 @@ page id="page.b" w=(px)1200 h=(px)2000 {{
         )
     };
     let doc = parse(&doc_src());
-    let r1 = compile_page(&doc, &default_provider(), 0).scene.commands;
-    let r2 = compile_page(&doc, &default_provider(), 0).scene.commands;
+    let r1 = compile_page(&doc, &default_provider(), 0, None)
+        .scene
+        .commands;
+    let r2 = compile_page(&doc, &default_provider(), 0, None)
+        .scene
+        .commands;
     assert_eq!(
         r1, r2,
         "widow/orphan-off chain render must be deterministic"

@@ -139,6 +139,7 @@ pub(super) fn fmt_property_value(pv: &PropertyValue) -> String {
         PropertyValue::TokenRef(id) => format!("(token)\"{id}\""),
         PropertyValue::Literal(s) => format!("\"{s}\""),
         PropertyValue::Dimension(d) => fmt_dimension(d),
+        PropertyValue::DataRef(path) => format!("(data)\"{path}\""),
     }
 }
 

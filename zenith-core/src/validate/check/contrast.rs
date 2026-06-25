@@ -179,9 +179,13 @@ pub(super) fn check_text_contrast(
                         }
                     })
                 }
-                // Literal / Dimension fills are caught as raw_visual_literal errors
-                // elsewhere; no need to chase them here.
-                Some(PropertyValue::Literal(_)) | Some(PropertyValue::Dimension(_)) | None => None,
+                // Literal / Dimension / DataRef fills are either caught as
+                // raw_visual_literal errors elsewhere or will resolve at scene time;
+                // no need to chase them here.
+                Some(PropertyValue::Literal(_))
+                | Some(PropertyValue::Dimension(_))
+                | Some(PropertyValue::DataRef(_))
+                | None => None,
             };
 
             let Some(fg_rgb) = text_rgb else {
@@ -201,9 +205,12 @@ pub(super) fn check_text_contrast(
                         }
                     })
                 }
-                // Literal / Dimension hints are caught as raw_visual_literal
-                // errors elsewhere; no need to chase them here.
-                Some(PropertyValue::Literal(_)) | Some(PropertyValue::Dimension(_)) | None => None,
+                // Literal / Dimension / DataRef hints are caught as raw_visual_literal
+                // errors elsewhere or resolve at scene time; no need to chase them here.
+                Some(PropertyValue::Literal(_))
+                | Some(PropertyValue::Dimension(_))
+                | Some(PropertyValue::DataRef(_))
+                | None => None,
             };
 
             // Resolve the EFFECTIVE background. Precedence:

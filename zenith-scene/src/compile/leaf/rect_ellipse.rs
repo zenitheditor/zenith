@@ -2,12 +2,17 @@
 
 use std::collections::BTreeMap;
 
-use zenith_core::{Diagnostic, EllipseNode, RectNode, ResolvedToken, Style, dim_to_px};
+use std::borrow::Cow;
+
+use zenith_core::{
+    DataContext, Diagnostic, EllipseNode, PropertyValue, RectNode, ResolvedToken, Style, dim_to_px,
+};
 
 use crate::ir::{Paint, SceneCommand};
 
 use super::super::RenderCtx;
 use super::super::anchor::AnchorMap;
+use super::super::data_resolve::resolve_data_prop;
 use super::super::paint::{
     NodeEffect, apply_gradient_opacity, emit_node_with_effects, resolve_property_color,
     resolve_property_filter, resolve_property_gradient, resolve_property_mask,
@@ -20,16 +25,31 @@ use super::super::util::{
 };
 use super::common::resolve_dash_params;
 
+/// Read-only environment references shared by both `compile_rect` and
+/// `compile_ellipse`. Bundled into a `Copy` struct so callers pass one
+/// argument instead of four and the value cascades cheaply.
+#[derive(Clone, Copy)]
+pub(in crate::compile) struct RectEllipseEnv<'a> {
+    pub resolved: &'a BTreeMap<String, ResolvedToken>,
+    pub style_map: &'a BTreeMap<&'a str, &'a Style>,
+    pub anchors: &'a AnchorMap,
+    pub data: Option<&'a DataContext>,
+}
+
 /// Compile a `rect` leaf node.
 pub(in crate::compile) fn compile_rect(
     rect: &RectNode,
-    resolved: &BTreeMap<String, ResolvedToken>,
-    style_map: &BTreeMap<&str, &Style>,
+    env: RectEllipseEnv<'_>,
     commands: &mut Vec<SceneCommand>,
     diagnostics: &mut Vec<Diagnostic>,
-    anchors: &AnchorMap,
     ctx: RenderCtx,
 ) {
+    let RectEllipseEnv {
+        resolved,
+        style_map,
+        anchors,
+        data,
+    } = env;
     // Skip invisible rects.
     if rect.visible == Some(false) {
         return;
@@ -201,11 +221,17 @@ pub(in crate::compile) fn compile_rect(
     let mut draws: Vec<SceneCommand> = Vec::new();
 
     // FILL (emitted first, under the stroke) — node-local prop overrides
-    // style cascade.
-    let fill_prop = rect
+    // style cascade. A `(data)` ref is resolved first via `resolve_data_prop`
+    // so the rest of the paint pipeline sees a plain `Literal` or `TokenRef`.
+    let fill_raw = rect
         .fill
         .as_ref()
         .or_else(|| style_prop(&rect.style, style_map, "fill"));
+    // Resolve any DataRef → Literal before paint resolution.
+    // Hold the Cow to keep any owned value alive for the duration of the fill block.
+    let fill_cow: Option<Cow<'_, PropertyValue>> =
+        fill_raw.map(|pv| resolve_data_prop(pv, data, "fill", &rect.id, diagnostics));
+    let fill_prop: Option<&PropertyValue> = fill_cow.as_deref();
     if let Some(fill_prop) = fill_prop {
         if let Some(mut gradient) = resolve_property_gradient(fill_prop, resolved, &rect.id) {
             apply_gradient_opacity(&mut gradient, color_op, 1.0);
@@ -465,13 +491,17 @@ pub(in crate::compile) fn compile_rect(
 /// Compile an `ellipse` leaf node.
 pub(in crate::compile) fn compile_ellipse(
     ellipse: &EllipseNode,
-    resolved: &BTreeMap<String, ResolvedToken>,
-    style_map: &BTreeMap<&str, &Style>,
+    env: RectEllipseEnv<'_>,
     commands: &mut Vec<SceneCommand>,
     diagnostics: &mut Vec<Diagnostic>,
-    anchors: &AnchorMap,
     ctx: RenderCtx,
 ) {
+    let RectEllipseEnv {
+        resolved,
+        style_map,
+        anchors,
+        data,
+    } = env;
     // Skip invisible ellipses.
     if ellipse.visible == Some(false) {
         return;
@@ -612,11 +642,14 @@ pub(in crate::compile) fn compile_ellipse(
     let mut draws: Vec<SceneCommand> = Vec::new();
 
     // FILL (emitted first, under the stroke) — node-local prop overrides
-    // style cascade.
-    let fill_prop = ellipse
+    // style cascade. A `(data)` ref is resolved first via `resolve_data_prop`.
+    let fill_raw = ellipse
         .fill
         .as_ref()
         .or_else(|| style_prop(&ellipse.style, style_map, "fill"));
+    let fill_cow: Option<Cow<'_, PropertyValue>> =
+        fill_raw.map(|pv| resolve_data_prop(pv, data, "fill", &ellipse.id, diagnostics));
+    let fill_prop: Option<&PropertyValue> = fill_cow.as_deref();
     if let Some(fill_prop) = fill_prop {
         if let Some(mut gradient) = resolve_property_gradient(fill_prop, resolved, &ellipse.id) {
             apply_gradient_opacity(&mut gradient, color_op, 1.0);

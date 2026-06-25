@@ -64,8 +64,8 @@ fn flow_src() -> &'static str {
 fn flow_splits_body_and_repeats_header_across_pages() {
     let doc = parse(flow_src());
     let fonts = default_provider();
-    let p1 = compile_page(&doc, &fonts, 0);
-    let p2 = compile_page(&doc, &fonts, 1);
+    let p1 = compile_page(&doc, &fonts, 0, None);
+    let p2 = compile_page(&doc, &fonts, 1, None);
 
     let c1 = glyph_run_count(&p1);
     let c2 = glyph_run_count(&p2);
@@ -131,8 +131,8 @@ fn flow_rowspan_src() -> &'static str {
 fn flow_rowspan_group_not_split_across_pages() {
     let doc = parse(flow_rowspan_src());
     let fonts = default_provider();
-    let p1 = compile_page(&doc, &fonts, 0);
-    let p2 = compile_page(&doc, &fonts, 1);
+    let p1 = compile_page(&doc, &fonts, 0, None);
+    let p2 = compile_page(&doc, &fonts, 1, None);
 
     // The rowspan group (rows containing SPAN/B2 + C2) must land WHOLE on page 2.
     // Page 1 fits the header (H1,H2) + the first body row (A1,A2): 4 runs, and

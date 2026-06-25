@@ -4,8 +4,8 @@
 use std::collections::BTreeMap;
 
 use zenith_core::{
-    Diagnostic, FontProvider, Node, PropertyValue, ResolvedToken, Style, TableColumn, TableNode,
-    TableRow, dim_to_px,
+    DataContext, Diagnostic, FontProvider, Node, PropertyValue, ResolvedToken, Style, TableColumn,
+    TableNode, TableRow, dim_to_px,
 };
 use zenith_layout::RustybuzzEngine;
 
@@ -51,6 +51,8 @@ pub(in crate::compile) struct TableEmitCtx<'a> {
     pub(in crate::compile) anchors: &'a AnchorMap,
     /// Per-page field context (page index, live area, footnote markers, …).
     pub(in crate::compile) field_ctx: &'a FieldCtx<'a>,
+    /// Optional runtime data context for `(data)"field.path"` resolution.
+    pub(in crate::compile) data: Option<&'a DataContext>,
 }
 
 impl<'a> TableEmitCtx<'a> {
@@ -78,6 +80,7 @@ impl<'a> TableEmitCtx<'a> {
             flows: self.flows,
             anchors: self.anchors,
             field_ctx: self.field_ctx,
+            data: self.data,
         }
     }
 }

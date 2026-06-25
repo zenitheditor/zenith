@@ -327,8 +327,12 @@ page id="page.b" w=(px)1200 h=(px)2000 {{
 "##
     );
     let doc = parse(&src);
-    let p0 = compile_page(&doc, &default_provider(), 0).scene.commands;
-    let p1c = compile_page(&doc, &default_provider(), 1).scene.commands;
+    let p0 = compile_page(&doc, &default_provider(), 0, None)
+        .scene
+        .commands;
+    let p1c = compile_page(&doc, &default_provider(), 1, None)
+        .scene
+        .commands;
     (distinct_line_count(&p0), distinct_line_count(&p1c))
 }
 

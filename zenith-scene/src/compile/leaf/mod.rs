@@ -16,5 +16,5 @@ mod shape;
 
 pub(super) use connector::{ConnectorEnv, compile_connector};
 pub(super) use poly::{compile_line, compile_polygon, compile_polyline};
-pub(super) use rect_ellipse::{compile_ellipse, compile_rect};
+pub(super) use rect_ellipse::{RectEllipseEnv, compile_ellipse, compile_rect};
 pub(super) use shape::{ShapeCompileEnv, compile_shape};

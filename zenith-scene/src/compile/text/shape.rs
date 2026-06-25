@@ -275,8 +275,8 @@ pub(in crate::compile) fn resolve_font_weight(
             None => default,
         },
         Some(PropertyValue::Literal(s)) => s.parse::<u16>().unwrap_or(default),
-        // A dimension is not a weight → fall back to the default.
-        Some(PropertyValue::Dimension(_)) => default,
+        // A dimension or data ref is not a weight → fall back to the default.
+        Some(PropertyValue::Dimension(_)) | Some(PropertyValue::DataRef(_)) => default,
         None => default,
     }
 }
@@ -346,7 +346,9 @@ pub(in crate::compile) fn resolve_font_family_name(
             None => default.to_owned(),
         },
         Some(PropertyValue::Literal(name)) => name.clone(),
-        Some(PropertyValue::Dimension(_)) | None => default.to_owned(),
+        Some(PropertyValue::Dimension(_)) | Some(PropertyValue::DataRef(_)) | None => {
+            default.to_owned()
+        }
     }
 }
 

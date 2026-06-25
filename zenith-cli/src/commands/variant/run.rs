@@ -258,7 +258,7 @@ pub fn run_variant(
                 }
 
                 // ── 6d. Compile the source page ───────────────────────────
-                let compile_result = compile_page(&materialized, &fonts, page_index);
+                let compile_result = compile_page(&materialized, &fonts, page_index, None);
 
                 let hard_diags: Vec<String> = compile_result
                     .diagnostics

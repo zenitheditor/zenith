@@ -114,6 +114,11 @@ pub(super) fn resolve_property_color(
             ));
             None
         }
+
+        // A data reference is unresolved at this point; the caller (data_resolve)
+        // should have substituted the resolved value before reaching here. Treat
+        // as unresolvable and skip without emitting a redundant diagnostic.
+        PropertyValue::DataRef(_) => None,
     }
 }
 
