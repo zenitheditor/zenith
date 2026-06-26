@@ -21,7 +21,7 @@ use super::dropcap::{
 use super::emit::{emit_lines, emit_lines_profiled};
 use super::hyphen::{HyphenationContext, en_us_hyphenator};
 use super::pack::{
-    Line, WidthProfile, pack_lines_core, pack_lines_reporting, pack_lines_runaround,
+    Line, LineMetrics, WidthProfile, pack_lines_core, pack_lines_reporting, pack_lines_runaround,
     pack_lines_variable,
 };
 use super::shape::{
@@ -295,7 +295,7 @@ fn emit_drop_cap(a: EmitDropCap) -> usize {
         full_w: box_w,
     };
 
-    let lines = pack_lines_variable(tokens, profile, metrics.space_advance);
+    let lines = pack_lines_variable(tokens, profile, metrics.space_advance, metrics.line_height);
     let fit_line_count = lines.len();
 
     // Drop-cap baseline sits on line `n`'s baseline (body ascent +
@@ -424,6 +424,7 @@ fn emit_runaround(a: EmitRunaround) -> usize {
         metrics.space_advance,
         min_w,
         max_lines,
+        emit_metrics.line_height,
     );
     let fit_line_count = lines.len();
 
@@ -645,6 +646,7 @@ fn emit_plain_wrap(
             metrics.space_advance,
             hyph_ctx.as_ref(),
             &mut forced_break,
+            emit_metrics.line_height,
         )
     } else {
         // Line 0 measure is `box_w - pl - ti`; lines ≥1 are `box_w - pl`.
@@ -659,9 +661,12 @@ fn emit_plain_wrap(
         pack_lines_core(
             tokens,
             width_for,
-            metrics.space_advance,
+            LineMetrics {
+                space_advance: metrics.space_advance,
+                min_line_width: f64::NEG_INFINITY,
+                line_height: emit_metrics.line_height,
+            },
             hyph_ctx.as_ref(),
-            f64::NEG_INFINITY,
             usize::MAX,
             &mut forced_break,
         )
@@ -766,7 +771,8 @@ mod indent_tests {
     //! full font stack. A glyph-bearing token is built so `emit_lines_profiled`
     //! emits a `DrawGlyphRun` whose `x` is the line origin we assert.
     use super::{
-        EmitStyle, emit_lines, emit_lines_profiled, pack_lines_core, pack_lines_reporting,
+        EmitStyle, LineMetrics, emit_lines, emit_lines_profiled, pack_lines_core,
+        pack_lines_reporting,
     };
     use zenith_core::FontStyle;
     use zenith_layout::{TextDirection, ZenithGlyphRun};
@@ -843,7 +849,14 @@ mod indent_tests {
         let m = metrics();
         let mut forced = false;
         let lines = if pl == 0.0 && ti == 0.0 {
-            pack_lines_reporting(tokens(advances), box_w, m.space_advance, None, &mut forced)
+            pack_lines_reporting(
+                tokens(advances),
+                box_w,
+                m.space_advance,
+                None,
+                &mut forced,
+                m.line_height,
+            )
         } else {
             let width_for = |i: usize| {
                 if i == 0 {
@@ -855,9 +868,12 @@ mod indent_tests {
             pack_lines_core(
                 tokens(advances),
                 width_for,
-                m.space_advance,
+                LineMetrics {
+                    space_advance: m.space_advance,
+                    min_line_width: f64::NEG_INFINITY,
+                    line_height: m.line_height,
+                },
                 None,
-                f64::NEG_INFINITY,
                 usize::MAX,
                 &mut forced,
             )

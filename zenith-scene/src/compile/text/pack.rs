@@ -6,6 +6,21 @@
 use super::hyphen::{HyphenationContext, try_break_word, try_hyphenate};
 use super::shape::WordToken;
 
+/// Line-level scalar metrics threaded into the core packer.
+///
+/// Bundled into a single `Copy` struct so [`pack_lines_core`] stays under the
+/// argument-count limit enforced by `clippy::too_many_arguments`.
+#[derive(Clone, Copy)]
+pub(in crate::compile) struct LineMetrics {
+    /// Width of a single inter-word space in pixels.
+    pub(in crate::compile) space_advance: f64,
+    /// Minimum usable band width for runaround (set to `f64::NEG_INFINITY` on
+    /// the uniform/drop-cap paths to make the blocked-line skip unreachable).
+    pub(in crate::compile) min_line_width: f64,
+    /// Vertical advance stored in every emitted [`Line`].
+    pub(in crate::compile) line_height: f64,
+}
+
 /// One packed line: its words plus the summed content width (no trailing space).
 pub(in crate::compile) struct Line {
     pub(in crate::compile) words: Vec<WordToken>,
@@ -15,6 +30,12 @@ pub(in crate::compile) struct Line {
     /// single-box path ignores it. A line is always within ONE paragraph because
     /// the packer never mixes words from different paragraphs onto one line.
     pub(in crate::compile) paragraph: usize,
+    /// The vertical advance (height) for THIS line in pixels. Currently always
+    /// set to the uniform `WordMetrics.line_height` at construction, making
+    /// cumulative-height stacking identical to `index * line_height`. A later
+    /// unit will vary this per-line (e.g. markdown headings vs body in one flow)
+    /// without changing any existing output.
+    pub(in crate::compile) height_px: f64,
 }
 
 /// Greedy-pack word tokens into lines for a given box width, left-to-right and
@@ -26,6 +47,7 @@ pub(in crate::compile) fn pack_lines(
     box_w: f64,
     space_advance: f64,
     hyph: Option<&HyphenationContext>,
+    line_height: f64,
 ) -> Vec<Line> {
     // `min_line_width = NEG_INFINITY` disables the blocked-line skip (a width is
     // never `< -inf`), so uniform packing is byte-identical to before. `max_lines`
@@ -35,9 +57,12 @@ pub(in crate::compile) fn pack_lines(
     pack_lines_core(
         tokens,
         |_| box_w,
-        space_advance,
+        LineMetrics {
+            space_advance,
+            min_line_width: f64::NEG_INFINITY,
+            line_height,
+        },
         hyph,
-        f64::NEG_INFINITY,
         usize::MAX,
         &mut forced_break,
     )
@@ -52,13 +77,17 @@ pub(in crate::compile) fn pack_lines_reporting(
     space_advance: f64,
     hyph: Option<&HyphenationContext>,
     forced_break: &mut bool,
+    line_height: f64,
 ) -> Vec<Line> {
     pack_lines_core(
         tokens,
         |_| box_w,
-        space_advance,
+        LineMetrics {
+            space_advance,
+            min_line_width: f64::NEG_INFINITY,
+            line_height,
+        },
         hyph,
-        f64::NEG_INFINITY,
         usize::MAX,
         forced_break,
     )
@@ -78,14 +107,18 @@ pub(in crate::compile) fn pack_lines_runaround(
     space_advance: f64,
     min_line_width: f64,
     max_lines: usize,
+    line_height: f64,
 ) -> Vec<Line> {
     let mut forced_break = false;
     pack_lines_core(
         tokens,
         band_width,
-        space_advance,
+        LineMetrics {
+            space_advance,
+            min_line_width,
+            line_height,
+        },
         None,
-        min_line_width,
         max_lines,
         &mut forced_break,
     )
@@ -125,6 +158,7 @@ pub(in crate::compile) fn pack_lines_variable(
     tokens: Vec<WordToken>,
     profile: WidthProfile,
     space_advance: f64,
+    line_height: f64,
 ) -> Vec<Line> {
     // The drop-cap path does not hyphenate (a documented v0 follow-up like the
     // chain/flow drop-cap combination), so it threads `None`. Drop-cap widths are
@@ -134,9 +168,12 @@ pub(in crate::compile) fn pack_lines_variable(
     pack_lines_core(
         tokens,
         |i| profile.width_for(i),
-        space_advance,
+        LineMetrics {
+            space_advance,
+            min_line_width: f64::NEG_INFINITY,
+            line_height,
+        },
         None,
-        f64::NEG_INFINITY,
         usize::MAX,
         &mut forced_break,
     )
@@ -180,12 +217,16 @@ pub(in crate::compile) fn pack_lines_variable(
 pub(in crate::compile) fn pack_lines_core(
     tokens: Vec<WordToken>,
     width_for: impl Fn(usize) -> f64,
-    space_advance: f64,
+    metrics: LineMetrics,
     hyph: Option<&HyphenationContext>,
-    min_line_width: f64,
     max_lines: usize,
     forced_break: &mut bool,
 ) -> Vec<Line> {
+    let LineMetrics {
+        space_advance,
+        min_line_width,
+        line_height,
+    } = metrics;
     let mut lines: Vec<Line> = Vec::new();
     let mut cur: Vec<WordToken> = Vec::new();
     let mut line_w: f64 = 0.0;
@@ -214,6 +255,7 @@ pub(in crate::compile) fn pack_lines_core(
                     words: Vec::new(),
                     content_w: 0.0,
                     paragraph: tok.src.paragraph,
+                    height_px: line_height,
                 });
             }
         }
@@ -254,6 +296,7 @@ pub(in crate::compile) fn pack_lines_core(
                         words: std::mem::take(&mut cur),
                         content_w: line_w,
                         paragraph: cur_para,
+                        height_px: line_height,
                     });
                     line_w = 0.0;
                     // The tail becomes the first word of the next line.
@@ -288,6 +331,7 @@ pub(in crate::compile) fn pack_lines_core(
                     words: vec![tok],
                     content_w: advance,
                     paragraph,
+                    height_px: line_height,
                 });
                 return lines;
             }
@@ -299,6 +343,7 @@ pub(in crate::compile) fn pack_lines_core(
                     words: vec![head],
                     content_w: head_advance,
                     paragraph: head_para,
+                    height_px: line_height,
                 });
                 queue.push_front(tail);
                 continue;
@@ -313,6 +358,7 @@ pub(in crate::compile) fn pack_lines_core(
                 words: std::mem::take(&mut cur),
                 content_w,
                 paragraph: cur_para,
+                height_px: line_height,
             });
             line_w = 0.0;
             // Re-queue this word and restart the loop so the blocked-line skip at
@@ -339,6 +385,7 @@ pub(in crate::compile) fn pack_lines_core(
             words: cur,
             content_w: line_w,
             paragraph: cur_para,
+            height_px: line_height,
         });
     }
     lines
@@ -408,7 +455,7 @@ mod packer_tests {
         let box_w = 70.0;
         let space = 5.0;
         let advances = [10.0, 20.0, 30.0, 40.0, 15.0];
-        let packed = pack_lines(tokens(&advances), box_w, space, None);
+        let packed = pack_lines(tokens(&advances), box_w, space, None, 18.0);
         assert_eq!(
             shape(&packed),
             vec![(70.0, vec![10.0, 20.0, 30.0]), (60.0, vec![40.0, 15.0]),],
@@ -422,7 +469,7 @@ mod packer_tests {
     fn runaround_blocked_band_emits_empty_line() {
         // Line 0 blocked (width 0 < min 1), line 1+ full width 100.
         let band = |i: usize| if i == 0 { 0.0 } else { 100.0 };
-        let lines = pack_lines_runaround(tokens(&[10.0, 20.0]), band, 5.0, 1.0, 16);
+        let lines = pack_lines_runaround(tokens(&[10.0, 20.0]), band, 5.0, 1.0, 16, 18.0);
         // line0 is empty (blocked), line1 packs both words: 10 +5+20 = 35.
         assert_eq!(
             shape(&lines),
@@ -436,11 +483,42 @@ mod packer_tests {
     fn runaround_narrow_band_breaks_more() {
         // band width 30 on every line, space 5. advances 10,20,30.
         // 10 (+5+20=35>30) → line0 [10]; 20 (+5+30=55>30) → line1 [20]; 30 → line2.
-        let lines = pack_lines_runaround(tokens(&[10.0, 20.0, 30.0]), |_| 30.0, 5.0, 1.0, 64);
+        let lines = pack_lines_runaround(tokens(&[10.0, 20.0, 30.0]), |_| 30.0, 5.0, 1.0, 64, 18.0);
         assert_eq!(
             shape(&lines),
             vec![(10.0, vec![10.0]), (20.0, vec![20.0]), (30.0, vec![30.0])],
         );
+    }
+
+    /// When every line carries the same `height_px` (the uniform case), accumulating
+    /// `height_px` left-to-right produces the same offset as `index * line_height`.
+    /// This is the byte-identity guarantee for the emit / chain height-cut
+    /// refactor: as long as `height_px` is always set to the uniform `line_height`,
+    /// the cumulative-sum path and the old multiplication path agree exactly.
+    #[test]
+    fn uniform_height_px_cumulative_equals_index_times_line_height() {
+        // Use a representative line_height. All packed lines must carry it.
+        let line_height = 18.0_f64;
+        let space = 5.0;
+        let advances = [10.0_f64, 20.0, 30.0, 15.0, 25.0];
+        let lines = pack_lines(tokens(&advances), 70.0, space, None, line_height);
+        assert!(
+            !lines.is_empty(),
+            "test requires at least one line to be meaningful"
+        );
+        for (i, line) in lines.iter().enumerate() {
+            assert_eq!(
+                line.height_px, line_height,
+                "line {i}: height_px must equal the uniform line_height"
+            );
+            // Cumulative offset = sum of height_px for lines 0..i.
+            let cumulative: f64 = lines[..i].iter().map(|l| l.height_px).sum();
+            let by_index = (i as f64) * line_height;
+            assert_eq!(
+                cumulative, by_index,
+                "line {i}: cumulative sum ({cumulative}) must equal index*line_height ({by_index})"
+            );
+        }
     }
 
     /// The `max_lines` cap stops an all-blocked tail from looping forever; the
@@ -448,7 +526,7 @@ mod packer_tests {
     #[test]
     fn runaround_all_blocked_respects_max_lines() {
         // Every band blocked → after `max_lines` empty lines, clip remaining words.
-        let lines = pack_lines_runaround(tokens(&[10.0, 20.0]), |_| 0.0, 5.0, 1.0, 3);
+        let lines = pack_lines_runaround(tokens(&[10.0, 20.0]), |_| 0.0, 5.0, 1.0, 3, 18.0);
         assert_eq!(lines.len(), 3, "blocked tail must be capped at max_lines");
         assert!(
             lines.iter().all(|l| l.words.is_empty()),

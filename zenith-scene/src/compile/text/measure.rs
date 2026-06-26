@@ -208,7 +208,13 @@ pub(in crate::compile) fn measure_text_natural(
     }
     // Pack at an effectively-infinite width so the only breaks are authored
     // newlines; the natural width is the widest resulting line.
-    let lines = pack_lines(tokens, f64::INFINITY, metrics.space_advance, None);
+    let lines = pack_lines(
+        tokens,
+        f64::INFINITY,
+        metrics.space_advance,
+        None,
+        metrics.line_height,
+    );
     let natural_w = lines
         .iter()
         .map(|l| l.content_w)
@@ -257,7 +263,13 @@ pub(in crate::compile) fn measure_text_wrapped_height(
         return None;
     }
     let safe_w = box_w.max(1.0);
-    let lines = pack_lines(tokens, safe_w, metrics.space_advance, None);
+    let lines = pack_lines(
+        tokens,
+        safe_w,
+        metrics.space_advance,
+        None,
+        metrics.line_height,
+    );
     let line_count = lines.len().max(1);
     Some(line_count as f64 * metrics.line_height)
 }

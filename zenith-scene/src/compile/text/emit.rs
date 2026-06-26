@@ -64,13 +64,17 @@ pub(in crate::compile) fn emit_lines_profiled<F>(
     let glyph_stroke = style.glyph_stroke;
 
     let ascent = metrics.ascent;
-    let line_height = metrics.line_height;
     let space_advance = metrics.space_advance;
     let last_idx = lines.len().saturating_sub(1);
     let is_rtl = direction == TextDirection::Rtl;
+    // Cumulative vertical advance: sum of preceding lines' per-line heights.
+    // When all heights equal the uniform `metrics.line_height` this produces the
+    // same value as `i * line_height` (both are exact for common integer/simple
+    // line-height values). See the `height_px` field on [`Line`].
+    let mut y_offset: f64 = 0.0;
     for (i, line) in lines.iter().enumerate() {
         let (text_x, box_w) = geom(i);
-        let baseline_y = text_y + ascent + (i as f64) * line_height;
+        let baseline_y = text_y + ascent + y_offset;
         let word_count = line.words.len();
 
         // Visual left-to-right word order. LTR is logical order (byte-identical
@@ -245,6 +249,9 @@ pub(in crate::compile) fn emit_lines_profiled<F>(
                 run_x += run.advance_width as f64;
             }
         }
+
+        // Advance the vertical cursor by THIS line's own height for the next line.
+        y_offset += line.height_px;
     }
 }
 
@@ -408,6 +415,7 @@ mod rtl_tests {
             words: vec![word(10.0), word(20.0), word(30.0)],
             content_w: 70.0,
             paragraph: 0,
+            height_px: 18.0,
         };
         let mut commands = Vec::new();
         emit_lines(

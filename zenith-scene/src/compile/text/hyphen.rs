@@ -434,6 +434,7 @@ mod break_word_tests {
             space_advance,
             Some(&c),
             &mut forced,
+            18.0,
         );
 
         assert!(!forced, "no forced break: the word fits a line by itself");

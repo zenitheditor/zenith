@@ -400,6 +400,7 @@ fn distribute_chains(
                 member.w,
                 metrics.space_advance,
                 hyph_ctx.as_ref(),
+                metrics.line_height,
             );
 
             if mi == last_member {
@@ -417,11 +418,24 @@ fn distribute_chains(
                 break;
             }
 
-            // How many leading lines fit this box height (≥1 unless the box is
-            // too short for even one line, in which case 0 lines are taken so
-            // the content cascades into the next box).
-            let line_h = metrics.line_height.max(1.0);
-            let max_lines = (member.h / line_h).floor() as usize;
+            // How many leading lines fit this box height: include lines while
+            // their cumulative `height_px` does not exceed `member.h`. When all
+            // heights are the uniform `metrics.line_height` this is identical to
+            // `floor(member.h / line_height)` (the previous formula) — both count
+            // the same number of lines at every boundary. A zero-height box yields
+            // 0 so content cascades into the next box, matching the prior guard.
+            let max_lines = {
+                let mut cum = 0.0_f64;
+                let mut count = 0usize;
+                for l in &lines {
+                    cum += l.height_px;
+                    if cum > member.h {
+                        break;
+                    }
+                    count += 1;
+                }
+                count
+            };
             let mut take = max_lines.min(lines.len());
 
             // Widow/orphan adjustment: if the greedy cut splits a paragraph
@@ -529,6 +543,7 @@ mod widow_orphan_tests {
                 words: Vec::new(),
                 content_w: 0.0,
                 paragraph: p,
+                height_px: 0.0,
             })
             .collect()
     }
