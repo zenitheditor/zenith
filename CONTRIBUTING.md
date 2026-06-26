@@ -2,7 +2,7 @@
 
 Thanks for your interest in Zenith. This guide covers contributing to the **engine** (this repository). For sharing finished designs, see the separate [zenith-showcase](https://github.com/zenitheditor/zenith-showcase) repository.
 
-Zenith is pre-`0.1`. The format and APIs are still moving, so opening an issue to discuss a change before you write it is usually the fastest path.
+Zenith is in active public release. The format and APIs can still evolve, so opening an issue to discuss a change before you write it is usually the fastest path.
 
 > **Before writing any code, read [AGENTS.md](AGENTS.md).** It is the source of truth for the repository's conventions and hard rules (determinism, C-free dependencies, no `unwrap`/`panic` in library code, `BTreeMap`-only, exhaustive enum matches, lean `mod.rs`, files under ~1000 lines, and more). Changes that violate those invariants will be sent back.
 

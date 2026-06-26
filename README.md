@@ -41,29 +41,6 @@ A `.zen` file is human-readable [KDL](https://kdl.dev) text. The engine parses i
 
 ## Install
 
-Zenith is pre-release and not yet published to crates.io. Build from source:
-
-```bash
-git clone --recurse-submodules https://github.com/zenitheditor/zenith
-cd zenith
-cargo build --release            # builds the workspace, including the `zenith` CLI
-```
-
-The release binary lands at `target/release/zenith`. No C toolchain or system libraries are required — the dependency graph is C-free and `unsafe` is forbidden workspace-wide.
-
-**Build from source / local install (contributors).** To put the binary on your `PATH` from a checkout:
-
-```bash
-cargo install --path zenith-cli   # builds and installs `zenith` to ~/.cargo/bin (already on PATH)
-./scripts/install.sh --local      # builds from this checkout and installs to ~/.local/bin
-```
-
-Or just run the build output directly at `target/release/zenith` after `cargo build --release`.
-
-<details><summary><strong>Released install channels</strong> — install script · cargo · prebuilt binaries · update (available once version tags are cut; see <a href="#status">Status</a>).</summary>
-
-### Install script
-
 The recommended way to install the `zenith` CLI is the install script, which detects your platform and downloads the matching prebuilt binary from GitHub Releases.
 
 **Linux / macOS**
@@ -94,7 +71,7 @@ cargo install --git https://github.com/zenitheditor/zenith zenith-tool   # from 
 
 The library crates (`zenith-core`, `zenith-layout`, `zenith-scene`, `zenith-render`, `zenith-tx`, `zenith-session`) are published under their own names for Rust projects that want to build on the engine directly.
 
-### Prebuilt binaries
+### GitHub Releases
 
 Download directly from [GitHub Releases](https://github.com/zenitheditor/zenith/releases):
 
@@ -116,7 +93,19 @@ zenith update --version <tag>   # a specific release tag, e.g. the ones on the R
 
 Verify with `zenith --version`.
 
-</details>
+### Build from source
+
+For local development or source installs:
+
+```bash
+git clone --recurse-submodules https://github.com/zenitheditor/zenith
+cd zenith
+cargo build --release
+cargo install --path zenith-cli   # installs `zenith` to ~/.cargo/bin
+./scripts/install.sh --local      # installs the local build to ~/.local/bin
+```
+
+The release binary lands at `target/release/zenith`. No C toolchain or system libraries are required — the dependency graph is C-free and `unsafe` is forbidden workspace-wide.
 
 ## Quick start
 
@@ -543,7 +532,7 @@ Only put files in the showcase if you have the rights to share them and you allo
 
 ## Status
 
-🚧 **Early, pre-`0.1`.** The author → validate → edit → render pipeline works end-to-end: parsing, the diagnostic set, the transaction engine, PNG/PDF rendering, local history, the library subsystem, and variable-data merge are all implemented and tested. The format, wire types, and command surface may still change before `0.1`. Nothing here is stable yet, and there's no published build to download.
+Zenith is in its first public release series. The author → validate → edit → render pipeline works end-to-end: parsing, the diagnostic set, the transaction engine, PNG/PDF rendering, local history, the library subsystem, and variable-data merge are implemented and tested. The format, wire types, and command surface may still evolve while the project matures.
 
 ## Contributing
 
