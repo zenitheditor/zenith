@@ -1,20 +1,23 @@
 zenith version=1 {
   project id="@zenith/theme.zenith" name="Theme: zenith"
   assets {
+    asset id="asset.logo" kind="svg" src="zenith-logo.svg"
   }
   tokens format="zenith-token-v1" {
-    token id="color.base.100" type="color" value="#10121d"
-    token id="color.base.200" type="color" value="#1a1c28"
-    token id="color.base.300" type="color" value="#262a3a"
-    token id="color.base.content" type="color" value="#f7f8fa"
-    token id="color.primary" type="color" value="#6366f1"
-    token id="color.primary.content" type="color" value="#f7f8fa"
-    token id="color.secondary" type="color" value="#818cf8"
-    token id="color.secondary.content" type="color" value="#f7f8fa"
-    token id="color.accent" type="color" value="#22d3ee"
-    token id="color.accent.content" type="color" value="#181a1e"
-    token id="color.neutral" type="color" value="#8a93a8"
-    token id="color.neutral.content" type="color" value="#f7f8fa"
+    token id="color.base.100" type="color" value="#061d3d"
+    token id="color.base.200" type="color" value="#092a55"
+    token id="color.base.300" type="color" value="#123d70"
+    token id="color.base.content" type="color" value="#f8fbff"
+    token id="color.paper" type="color" value="#f8fbff"
+    token id="color.paper.content" type="color" value="#061d3d"
+    token id="color.primary" type="color" value="#20b8d8"
+    token id="color.primary.content" type="color" value="#061d3d"
+    token id="color.secondary" type="color" value="#0b6ea8"
+    token id="color.secondary.content" type="color" value="#f8fbff"
+    token id="color.accent" type="color" value="#0a4b85"
+    token id="color.accent.content" type="color" value="#f8fbff"
+    token id="color.neutral" type="color" value="#7f98ad"
+    token id="color.neutral.content" type="color" value="#061d3d"
     token id="color.info" type="color" value="#0ea5e9"
     token id="color.info.content" type="color" value="#f7f8fa"
     token id="color.success" type="color" value="#16a34a"
@@ -30,9 +33,9 @@ zenith version=1 {
     token id="space.unit" type="dimension" value=(px)4
     token id="font.heading" type="fontFamily" value="Noto Sans"
     token id="font.body" type="fontFamily" value="Noto Sans"
-    token id="size.h1" type="dimension" value=(px)64
+    token id="size.h1" type="dimension" value=(px)56
     token id="size.h2" type="dimension" value=(px)40
-    token id="size.body" type="dimension" value=(px)28
+    token id="size.body" type="dimension" value=(px)24
     token id="size.caption" type="dimension" value=(px)18
     token id="color.shadow" type="color" value="#0000002a"
     token id="shadow.depth" type="shadow" {
@@ -42,14 +45,21 @@ zenith version=1 {
   styles {
   }
   document id="theme.zenith.preview" title="Theme zenith" {
-    page id="pg" w=(px)760 h=(px)220 background=(token)"color.base.100" {
-      text id="t.title" x=(px)40 y=(px)28 w=(px)680 h=(px)52 fill=(token)"color.base.content" font-family=(token)"font.heading" font-size=(token)"size.h2" {
-        span "zenith"
+    page id="pg" w=(px)960 h=(px)360 background=(token)"color.paper" {
+      rect id="panel.navy" x=(px)0 y=(px)0 w=(px)328 h=(px)360 fill=(token)"color.base.100"
+      rect id="logo.tile" x=(px)52 y=(px)68 w=(px)224 h=(px)224 fill=(token)"color.paper" radius=(token)"radius.box" shadow=(token)"shadow.depth"
+      image id="logo.real" asset="asset.logo" x=(px)72 y=(px)88 w=(px)184 h=(px)184 fit="contain"
+      text id="t.title" x=(px)376 y=(px)46 w=(px)520 h=(px)82 fill=(token)"color.paper.content" font-family=(token)"font.heading" font-size=(token)"size.h1" {
+        span "Zenith"
       }
-      rect id="sw.primary" x=(px)40 y=(px)104 w=(px)160 h=(px)84 radius=(token)"radius.box" fill=(token)"color.primary" shadow=(token)"shadow.depth"
-      rect id="sw.secondary" x=(px)220 y=(px)104 w=(px)160 h=(px)84 radius=(token)"radius.box" fill=(token)"color.secondary" shadow=(token)"shadow.depth"
-      rect id="sw.accent" x=(px)400 y=(px)104 w=(px)160 h=(px)84 radius=(token)"radius.box" fill=(token)"color.accent" shadow=(token)"shadow.depth"
-      rect id="sw.neutral" x=(px)580 y=(px)104 w=(px)160 h=(px)84 radius=(token)"radius.box" fill=(token)"color.neutral" shadow=(token)"shadow.depth"
+      text id="t.body" x=(px)380 y=(px)132 w=(px)490 h=(px)100 fill=(token)"color.neutral" font-family=(token)"font.body" font-size=(token)"size.body" {
+        span "Deterministic design documents for agents: source-owned, token-governed, validated, and rendered to PNG/PDF."
+      }
+      rect id="rule.brand" x=(px)380 y=(px)236 w=(px)188 h=(px)8 radius=(token)"radius.field" fill=(token)"color.primary"
+      rect id="sw.primary" x=(px)380 y=(px)270 w=(px)112 h=(px)58 radius=(token)"radius.box" fill=(token)"color.primary" shadow=(token)"shadow.depth"
+      rect id="sw.secondary" x=(px)514 y=(px)270 w=(px)112 h=(px)58 radius=(token)"radius.box" fill=(token)"color.secondary" shadow=(token)"shadow.depth"
+      rect id="sw.accent" x=(px)648 y=(px)270 w=(px)112 h=(px)58 radius=(token)"radius.box" fill=(token)"color.accent" shadow=(token)"shadow.depth"
+      rect id="sw.navy" x=(px)782 y=(px)270 w=(px)112 h=(px)58 radius=(token)"radius.box" fill=(token)"color.base.100" shadow=(token)"shadow.depth"
     }
   }
 }

@@ -1,13 +1,16 @@
 zenith version=1 {
   project id="proj.variants" name="Zenith Variants"
+  assets {
+    asset id="asset.logo" kind="svg" src="zenith-logo.svg"
+  }
   tokens format="zenith-token-v1" {
-    token id="color.ink" type="color" value="#10121d"
-    token id="color.surface" type="color" value="#191c29"
-    token id="color.border" type="color" value="#33384a"
-    token id="color.text" type="color" value="#f7f8fa"
-    token id="color.muted" type="color" value="#aab4c6"
-    token id="color.primary" type="color" value="#6366f1"
-    token id="color.accent" type="color" value="#22d3ee"
+    token id="color.ink" type="color" value="#061d3d"
+    token id="color.surface" type="color" value="#092a55"
+    token id="color.border" type="color" value="#255a83"
+    token id="color.text" type="color" value="#f8fbff"
+    token id="color.muted" type="color" value="#a7c4d9"
+    token id="color.primary" type="color" value="#20b8d8"
+    token id="color.accent" type="color" value="#0b6ea8"
     token id="grad.brand" type="gradient" angle=(deg)120 {
       stop offset=0.0 color=(token)"color.primary"
       stop offset=1.0 color=(token)"color.accent"
@@ -33,26 +36,26 @@ zenith version=1 {
 
       // ── Square 1080×1080 ──
       rect id="sq.bg" x=(px)150 y=(px)120 w=(px)240 h=(px)240 fill=(token)"color.surface" stroke=(token)"color.border" stroke-width=(token)"size.bw" radius=(token)"radius.card"
-      polygon id="sq.peak" fill=(token)"grad.brand" { point x=(px)332 y=(px)142; point x=(px)372 y=(px)210; point x=(px)292 y=(px)210 }
+      image id="sq.logo" asset="asset.logo" x=(px)294 y=(px)140 w=(px)74 h=(px)74 fit="contain"
       rect id="sq.rule" x=(px)170 y=(px)286 w=(px)64 h=(px)5 fill=(token)"grad.brand" radius=(token)"radius.sm"
       text id="sq.word" x=(px)168 y=(px)298 w=(px)210 h=(px)46 fill=(token)"color.text" font-family=(token)"font.body" font-size=(token)"size.wsq" font-weight=(token)"weight.bold" { span "ZENITH" }
 
       // ── Story 1080×1920 ──
       rect id="st.bg" x=(px)470 y=(px)96 w=(px)180 h=(px)300 fill=(token)"color.surface" stroke=(token)"color.border" stroke-width=(token)"size.bw" radius=(token)"radius.card"
-      polygon id="st.peak" fill=(token)"grad.brand" { point x=(px)598 y=(px)124; point x=(px)634 y=(px)190; point x=(px)562 y=(px)190 }
+      image id="st.logo" asset="asset.logo" x=(px)562 y=(px)124 w=(px)72 h=(px)72 fit="contain"
       rect id="st.rule" x=(px)490 y=(px)320 w=(px)56 h=(px)5 fill=(token)"grad.brand" radius=(token)"radius.sm"
       text id="st.word" x=(px)488 y=(px)332 w=(px)150 h=(px)40 fill=(token)"color.text" font-family=(token)"font.body" font-size=(token)"size.wst" font-weight=(token)"weight.bold" { span "ZENITH" }
 
       // ── Banner 1200×628 ──
       rect id="bn.bg" x=(px)730 y=(px)146 w=(px)400 h=(px)200 fill=(token)"color.surface" stroke=(token)"color.border" stroke-width=(token)"size.bw" radius=(token)"radius.card"
-      polygon id="bn.peak" fill=(token)"grad.brand" { point x=(px)1058 y=(px)166; point x=(px)1098 y=(px)234; point x=(px)1018 y=(px)234 }
+      image id="bn.logo" asset="asset.logo" x=(px)1018 y=(px)166 w=(px)80 h=(px)80 fit="contain"
       rect id="bn.rule" x=(px)754 y=(px)268 w=(px)64 h=(px)5 fill=(token)"grad.brand" radius=(token)"radius.sm"
       text id="bn.word" x=(px)752 y=(px)280 w=(px)320 h=(px)46 fill=(token)"color.text" font-family=(token)"font.body" font-size=(token)"size.wbn" font-weight=(token)"weight.bold" { span "ZENITH" }
 
       // ── Size labels ──
-      text id="sq.lbl" x=(px)150 y=(px)372 w=(px)240 h=(px)24 fill=(token)"color.accent" font-family=(token)"font.body" font-size=(token)"size.lbl" font-weight=(token)"weight.semi" { span "square · 1080×1080" }
-      text id="st.lbl" x=(px)470 y=(px)408 w=(px)200 h=(px)24 fill=(token)"color.accent" font-family=(token)"font.body" font-size=(token)"size.lbl" font-weight=(token)"weight.semi" { span "story · 1080×1920" }
-      text id="bn.lbl" x=(px)730 y=(px)358 w=(px)300 h=(px)24 fill=(token)"color.accent" font-family=(token)"font.body" font-size=(token)"size.lbl" font-weight=(token)"weight.semi" { span "banner · 1200×628" }
+      text id="sq.lbl" x=(px)150 y=(px)372 w=(px)240 h=(px)24 fill=(token)"color.text" font-family=(token)"font.body" font-size=(token)"size.lbl" font-weight=(token)"weight.semi" { span "square · 1080×1080" }
+      text id="st.lbl" x=(px)470 y=(px)408 w=(px)200 h=(px)24 fill=(token)"color.text" font-family=(token)"font.body" font-size=(token)"size.lbl" font-weight=(token)"weight.semi" { span "story · 1080×1920" }
+      text id="bn.lbl" x=(px)730 y=(px)358 w=(px)300 h=(px)24 fill=(token)"color.text" font-family=(token)"font.body" font-size=(token)"size.lbl" font-weight=(token)"weight.semi" { span "banner · 1200×628" }
     }
   }
 }

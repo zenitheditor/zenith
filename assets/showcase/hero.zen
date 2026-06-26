@@ -1,11 +1,14 @@
 zenith version=1 {
   project id="proj.hero" name="Zenith Hero"
+  assets {
+    asset id="asset.logo" kind="svg" src="zenith-logo.svg"
+  }
   tokens format="zenith-token-v1" {
-    token id="color.ink" type="color" value="#10121d"
-    token id="color.text" type="color" value="#f7f8fa"
-    token id="color.muted" type="color" value="#aab4c6"
-    token id="color.primary" type="color" value="#6366f1"
-    token id="color.accent" type="color" value="#22d3ee"
+    token id="color.ink" type="color" value="#061d3d"
+    token id="color.text" type="color" value="#f8fbff"
+    token id="color.muted" type="color" value="#a7c4d9"
+    token id="color.primary" type="color" value="#20b8d8"
+    token id="color.accent" type="color" value="#0b6ea8"
     token id="grad.brand" type="gradient" angle=(deg)110 {
       stop offset=0.0 color=(token)"color.primary"
       stop offset=1.0 color=(token)"color.accent"
@@ -36,30 +39,8 @@ zenith version=1 {
       line id="ln.4" x1=(px)290 y1=(px)440 x2=(px)460 y2=(px)0 stroke=(token)"color.primary" stroke-width=(token)"size.line" opacity=0.1
       line id="ln.5" x1=(px)380 y1=(px)440 x2=(px)550 y2=(px)0 stroke=(token)"color.primary" stroke-width=(token)"size.line" opacity=0.05
       line id="ln.6" x1=(px)470 y1=(px)440 x2=(px)640 y2=(px)0 stroke=(token)"color.primary" stroke-width=(token)"size.line" opacity=0.03
-      // Layered, tilted, fading gradient peaks — receding behind the front
-      // one (painted back-to-front; each less opaque). Shows layers + rotation
-      // + per-shape opacity + gradient fill on rotated polygons.
-      polygon id="peak.b3" fill=(token)"grad.brand" opacity=0.1 rotate=(deg)-24 {
-        point x=(px)1070 y=(px)110
-        point x=(px)1190 y=(px)312
-        point x=(px)950 y=(px)312
-      }
-      polygon id="peak.b2" fill=(token)"grad.brand" opacity=0.18 rotate=(deg)-16 {
-        point x=(px)1070 y=(px)110
-        point x=(px)1190 y=(px)312
-        point x=(px)950 y=(px)312
-      }
-      polygon id="peak.b1" fill=(token)"grad.brand" opacity=0.32 rotate=(deg)-8 {
-        point x=(px)1070 y=(px)110
-        point x=(px)1190 y=(px)312
-        point x=(px)950 y=(px)312
-      }
-      polygon id="peak.main" fill=(token)"grad.brand" opacity=0.95 {
-        point x=(px)1070 y=(px)110
-        point x=(px)1190 y=(px)312
-        point x=(px)950 y=(px)312
-      }
-      text id="kicker" x=(px)84 y=(px)92 w=(px)700 h=(px)28 fill=(token)"color.accent" font-family=(token)"font.body" font-size=(token)"size.kicker" font-weight=(token)"weight.semi" { span "THE  DESIGN  COMPILER" }
+      image id="logo.real" asset="asset.logo" x=(px)936 y=(px)78 w=(px)252 h=(px)252 fit="contain" opacity=0.95
+      text id="kicker" x=(px)84 y=(px)92 w=(px)700 h=(px)28 fill=(token)"color.text" font-family=(token)"font.body" font-size=(token)"size.kicker" font-weight=(token)"weight.semi" { span "THE  DESIGN  COMPILER" }
       text id="wordmark" x=(px)80 y=(px)120 w=(px)860 h=(px)180 fill=(token)"color.text" font-family=(token)"font.body" font-size=(token)"size.word" font-weight=(token)"weight.bold" { span "ZENITH" }
       rect id="rule" x=(px)88 y=(px)286 w=(px)260 h=(px)8 fill=(token)"grad.brand" radius=(token)"radius.sm"
       text id="tagline" x=(px)84 y=(px)306 w=(px)760 h=(px)96 fill=(token)"color.muted" font-family=(token)"font.body" font-size=(token)"size.tag" font-weight=(token)"weight.semi" { span "Give your AI agent the power to create and edit real designs." }

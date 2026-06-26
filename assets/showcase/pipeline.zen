@@ -1,13 +1,13 @@
 zenith version=1 {
   project id="proj.pipeline" name="Zenith Pipeline"
   tokens format="zenith-token-v1" {
-    token id="color.ink" type="color" value="#10121d"
-    token id="color.surface" type="color" value="#1a1c28"
-    token id="color.border" type="color" value="#33384a"
-    token id="color.text" type="color" value="#f7f8fa"
-    token id="color.muted" type="color" value="#aab4c6"
-    token id="color.primary" type="color" value="#6366f1"
-    token id="color.accent" type="color" value="#22d3ee"
+    token id="color.ink" type="color" value="#061d3d"
+    token id="color.surface" type="color" value="#092a55"
+    token id="color.border" type="color" value="#255a83"
+    token id="color.text" type="color" value="#f8fbff"
+    token id="color.muted" type="color" value="#a7c4d9"
+    token id="color.primary" type="color" value="#20b8d8"
+    token id="color.accent" type="color" value="#0b6ea8"
     token id="font.body" type="fontFamily" value="Noto Sans"
     token id="weight.semi" type="fontWeight" value=600
     token id="size.bw" type="dimension" value=(px)1.5
