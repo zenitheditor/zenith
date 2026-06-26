@@ -338,6 +338,7 @@ fn emit_shape_label(
         opacity: None,
         visible: None,
         locked: None,
+        selectable: None,
         rotate: None,
         chain: None,
         drop_cap_lines: None,

@@ -202,6 +202,7 @@ pub(in crate::compile) fn resolve_field_to_text(
         opacity: field.opacity,
         visible: field.visible,
         locked: field.locked,
+        selectable: None,
         rotate: None,
         chain: None,
         drop_cap_lines: None,

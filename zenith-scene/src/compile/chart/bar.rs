@@ -460,6 +460,8 @@ fn emit_value_label(
                     color,
                     stroke_color: None,
                     stroke_width: None,
+                    link: None,
+                    selectable: true,
                     glyphs,
                 });
                 label_x += advance;
@@ -564,6 +566,8 @@ pub(super) fn emit_category_labels(
                         color: label_color,
                         stroke_color: None,
                         stroke_width: None,
+                        link: None,
+                        selectable: true,
                         glyphs,
                     });
                     label_x += advance;

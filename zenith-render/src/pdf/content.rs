@@ -17,6 +17,8 @@
 //! crops to the opaque bounding box, and embeds the result as an image XObject
 //! (see [`embed_rasterized_region`]). All four are honored, not no-ops.
 
+use std::collections::BTreeSet;
+
 use pdf_writer::Content;
 use zenith_core::{AssetProvider, FontProvider};
 use zenith_scene::{
@@ -24,7 +26,8 @@ use zenith_scene::{
 };
 
 use super::color;
-use super::geometry::{GlyphPen, ellipse_path, poly_path, rounded_rect_path};
+use super::font::FontPlan;
+use super::geometry::{ellipse_path, poly_path, rounded_rect_path};
 use super::gradient::{AxialGradient, resolve as resolve_gradient};
 use super::image::{DecodedImage, decode_for_pdf};
 
@@ -39,6 +42,28 @@ pub(super) struct PageResources {
     pub(super) gradients: Vec<AxialGradient>,
     /// Decoded image XObjects, in first-seen order. Index = resource id.
     pub(super) images: Vec<DecodedImage>,
+    /// Document-level font resource indices this page's content references (it
+    /// emitted selectable text in each), used to build the page `/Font` dict.
+    pub(super) font_indices: BTreeSet<usize>,
+    /// Clickable link annotations collected from selectable linked glyph runs,
+    /// in scene coordinates (top-left origin, y-down). Materialized as `/Link`
+    /// annotations by the document writer.
+    pub(super) links: Vec<LinkAnnot>,
+}
+
+/// A clickable link rectangle in scene coordinates (top-left origin, y-down) plus
+/// its target URL, accumulated from a selectable `DrawGlyphRun` carrying a `link`.
+pub(super) struct LinkAnnot {
+    /// Left edge in scene px.
+    pub(super) x0: f64,
+    /// Top edge in scene px.
+    pub(super) y0: f64,
+    /// Right edge in scene px.
+    pub(super) x1: f64,
+    /// Bottom edge in scene px.
+    pub(super) y1: f64,
+    /// Target URL.
+    pub(super) url: String,
 }
 
 impl PageResources {
@@ -59,6 +84,7 @@ impl PageResources {
 pub(super) const ALPHA_PREFIX: &str = "ga";
 pub(super) const SHADING_PREFIX: &str = "sh";
 pub(super) const IMAGE_PREFIX: &str = "im";
+pub(super) const FONT_PREFIX: &str = "f";
 
 /// Translate `scene` into a single content stream plus the [`PageResources`] it
 /// references. `fonts` resolves glyph outlines; `assets` resolves image bytes.
@@ -66,6 +92,7 @@ pub(super) fn translate(
     scene: &Scene,
     fonts: &dyn FontProvider,
     assets: &dyn AssetProvider,
+    font_plan: &FontPlan,
 ) -> (Content, PageResources) {
     let mut content = Content::new();
     let mut res = PageResources::default();
@@ -112,6 +139,7 @@ pub(super) fn translate(
                         page,
                         fonts,
                         assets,
+                        font_plan,
                     );
                 }
             }
@@ -127,7 +155,7 @@ pub(super) fn translate(
             continue;
         }
 
-        emit_command(&mut content, &mut res, cmd, page, fonts, assets);
+        emit_command(&mut content, &mut res, cmd, page, fonts, assets, font_plan);
     }
 
     (content, res)
@@ -203,7 +231,7 @@ fn is_empty_filter(cmd: &SceneCommand) -> bool {
 
 /// Apply the fill-alpha ExtGState for `color` if it is non-opaque (interning the
 /// alpha into `res`). Returns nothing; emits `/ga<i> gs` when needed.
-fn apply_alpha(content: &mut Content, res: &mut PageResources, color: &Color) {
+pub(super) fn apply_alpha(content: &mut Content, res: &mut PageResources, color: &Color) {
     if color.a == 255 {
         return;
     }
@@ -307,6 +335,7 @@ pub(super) fn emit_command(
     page: (f64, f64),
     fonts: &dyn FontProvider,
     assets: &dyn AssetProvider,
+    font_plan: &FontPlan,
 ) {
     match cmd {
         // ── Filled shapes ─────────────────────────────────────────────────
@@ -561,18 +590,23 @@ pub(super) fn emit_command(
             // are intentionally ignored here.
             stroke_color: _,
             stroke_width: _,
+            link,
+            selectable,
             glyphs,
         } => {
-            emit_glyph_run(
+            super::glyph::emit_glyph_run(
                 content,
                 res,
                 fonts,
-                GlyphRun {
+                font_plan,
+                super::glyph::GlyphRun {
                     x: *x,
                     y: *y,
                     font_id,
                     font_size: *font_size,
                     color,
+                    link: link.as_deref(),
+                    selectable: *selectable,
                     glyphs,
                 },
             );
@@ -687,85 +721,6 @@ pub(super) fn push_gradient(res: &mut PageResources, g: AxialGradient) -> usize 
     let id = res.gradients.len();
     res.gradients.push(g);
     id
-}
-
-/// Borrow/scalar context for one [`SceneCommand::DrawGlyphRun`] emission,
-/// bundled into a `Copy` struct so [`emit_glyph_run`] stays within the
-/// argument-count budget without an `#[allow]`.
-#[derive(Clone, Copy)]
-struct GlyphRun<'a> {
-    /// Text-box origin x in pixels.
-    x: f64,
-    /// Baseline y in pixels.
-    y: f64,
-    /// Stable font-face identifier; resolved via `FontProvider::by_id`.
-    font_id: &'a str,
-    /// Font size at which glyphs were shaped, in pixels.
-    font_size: f32,
-    /// Fill color of the glyph run.
-    color: &'a Color,
-    /// Positioned glyphs, baseline-relative.
-    glyphs: &'a [zenith_scene::SceneGlyph],
-}
-
-fn emit_glyph_run(
-    content: &mut Content,
-    res: &mut PageResources,
-    fonts: &dyn FontProvider,
-    run: GlyphRun<'_>,
-) {
-    let GlyphRun {
-        x,
-        y,
-        font_id,
-        font_size,
-        color,
-        glyphs,
-    } = run;
-    let Some(font_data) = fonts.by_id(font_id) else {
-        return;
-    };
-    let Ok(face) = ttf_parser::Face::parse(&font_data.bytes, font_data.index) else {
-        return;
-    };
-    let units_per_em = face.units_per_em();
-    if units_per_em == 0 {
-        return;
-    }
-    let scale = font_size / f32::from(units_per_em);
-
-    content.save_state();
-    apply_alpha(content, res, color);
-    color::set_fill(content, color);
-
-    // Build one combined path of all glyph outlines, then a single fill. Color
-    // bitmap (emoji) glyphs would return Some from `glyph_raster_image`; for PDF
-    // v0 they are skipped (documented). Outline fonts never hit that branch.
-    let mut any = false;
-    for glyph in glyphs {
-        if face
-            .glyph_raster_image(ttf_parser::GlyphId(glyph.glyph_id), font_size as u16)
-            .is_some()
-        {
-            // Color-bitmap emoji: omitted in PDF v0 (no scenario uses emoji).
-            continue;
-        }
-        let origin_x = x as f32 + glyph.dx;
-        let baseline_y = y as f32 + glyph.dy;
-        let mut pen = GlyphPen::new(content, origin_x, baseline_y, scale);
-        if face
-            .outline_glyph(ttf_parser::GlyphId(glyph.glyph_id), &mut pen)
-            .is_some()
-        {
-            any = true;
-        }
-    }
-    if any {
-        content.fill_nonzero();
-    } else {
-        content.end_path();
-    }
-    content.restore_state();
 }
 
 /// Borrow/scalar context for one [`SceneCommand::DrawImage`] emission, bundled

@@ -303,6 +303,8 @@ pub(in crate::compile) fn emit_lines_profiled<F>(
                     color: word.color,
                     stroke_color: glyph_stroke.0,
                     stroke_width: glyph_stroke.1,
+                    link: word.link.clone(),
+                    selectable: true,
                     glyphs: run_to_scene_glyphs(run),
                 });
                 run_x += run.advance_width as f64;

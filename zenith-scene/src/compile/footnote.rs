@@ -135,6 +135,7 @@ fn synth_footnote_text(fnote: &FootnoteNode, marker: &str, x: f64, y: f64, w: f6
         opacity: None,
         visible: None,
         locked: None,
+        selectable: None,
         rotate: None,
         chain: None,
         drop_cap_lines: None,

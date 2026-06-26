@@ -588,6 +588,19 @@ pub enum SceneCommand {
         /// `stroke_color` is `None` or `stroke_width` is `<= 0`.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         stroke_width: Option<f64>,
+        /// Optional hyperlink URL for this run. When set and the run is
+        /// `selectable`, the PDF backend emits a clickable Link annotation over
+        /// the run's bounds. `None` = no link — byte-identical to a run without
+        /// one. The raster backend ignores it (no clickable concept).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        link: Option<String>,
+        /// Whether this run's text is selectable / searchable / indexable in the
+        /// PDF backend. `true` (default) → real embedded text + ToUnicode;
+        /// `false` → filled glyph outlines (visually identical, not extractable).
+        /// The raster backend ignores it. Serialized only when `false`, so
+        /// default runs stay byte-identical.
+        #[serde(skip_serializing_if = "is_selectable")]
+        selectable: bool,
         /// Positioned glyphs, baseline-relative.
         glyphs: Vec<SceneGlyph>,
     },
@@ -648,6 +661,11 @@ pub enum SceneCommand {
     EndMask,
 }
 
+/// Serde skip predicate for `DrawGlyphRun::selectable`: omit the default `true`.
+fn is_selectable(selectable: &bool) -> bool {
+    *selectable
+}
+
 // ── Scene glyph ───────────────────────────────────────────────────────────────
 
 /// A single positioned glyph within a [`SceneCommand::DrawGlyphRun`].
@@ -663,6 +681,12 @@ pub struct SceneGlyph {
     pub dx: f32,
     /// Vertical offset from the baseline, in pixels (positive = below baseline).
     pub dy: f32,
+    /// Source Unicode text this glyph maps back to, for text extraction
+    /// (PDF ToUnicode CMap). Empty for the trailing glyphs of a multi-glyph
+    /// cluster and for runs that carry no source mapping. Serialized only when
+    /// non-empty, so scenes without it stay byte-identical.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub text: String,
 }
 
 // ── Trim rect ───────────────────────────────────────────────────────────────

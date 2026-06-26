@@ -56,11 +56,21 @@ pub(in crate::compile) fn compile_text(
     diagnostics: &mut Vec<Diagnostic>,
     ctx: RenderCtx,
 ) -> f64 {
-    if text.overflow.as_deref() != Some("autofit") {
+    // Emit, then (only when the node opts out of selectable text) downgrade this
+    // node's glyph runs to outlines. `selectable` is purely a PDF render concern,
+    // so it never affects layout — it is applied as a post-pass over exactly the
+    // commands this node produced. Default (`None`/`Some(true)`) is byte-identical.
+    let start = commands.len();
+    let height = if text.overflow.as_deref() != Some("autofit") {
         // Pass-through: byte-identical command stream for every non-autofit node.
-        return compile_text_sized(text, env, commands, diagnostics, ctx);
+        compile_text_sized(text, env, commands, diagnostics, ctx)
+    } else {
+        compile_text_autofit(text, env, commands, diagnostics, ctx)
+    };
+    if text.selectable == Some(false) {
+        super::shape::mark_runs_unselectable(&mut commands[start..]);
     }
-    compile_text_autofit(text, env, commands, diagnostics, ctx)
+    height
 }
 
 /// PowerPoint-style shrink-to-fit search for an `overflow="autofit"` text node.
@@ -934,6 +944,8 @@ pub(in crate::compile) fn compile_text_sized(
                 color: shaped.color,
                 stroke_color: glyph_stroke.0,
                 stroke_width: glyph_stroke.1,
+                link: shaped.link.clone(),
+                selectable: true,
                 glyphs,
             });
 

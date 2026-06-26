@@ -359,9 +359,15 @@ fn to_png_overflow_fit_fits_no_error_diagnostic() {
 
 #[test]
 fn to_pdf_all_pages_produces_one_pdf_page_per_document_page() {
-    let artifact =
-        to_pdf_all_pages_with_dir(TWO_PAGE_DOC, None, false, &CliPolicyFlags::default(), None)
-            .expect("all-pages PDF render must succeed");
+    let artifact = to_pdf_all_pages_with_dir(
+        TWO_PAGE_DOC,
+        None,
+        false,
+        true,
+        &CliPolicyFlags::default(),
+        None,
+    )
+    .expect("all-pages PDF render must succeed");
     let text = String::from_utf8_lossy(&artifact.pdf);
     assert!(
         text.contains("/Count 2"),
@@ -376,10 +382,24 @@ fn to_pdf_all_pages_produces_one_pdf_page_per_document_page() {
 
 #[test]
 fn to_pdf_all_pages_is_deterministic() {
-    let a = to_pdf_all_pages_with_dir(TWO_PAGE_DOC, None, false, &CliPolicyFlags::default(), None)
-        .expect("render must succeed");
-    let b = to_pdf_all_pages_with_dir(TWO_PAGE_DOC, None, false, &CliPolicyFlags::default(), None)
-        .expect("render must succeed");
+    let a = to_pdf_all_pages_with_dir(
+        TWO_PAGE_DOC,
+        None,
+        false,
+        true,
+        &CliPolicyFlags::default(),
+        None,
+    )
+    .expect("render must succeed");
+    let b = to_pdf_all_pages_with_dir(
+        TWO_PAGE_DOC,
+        None,
+        false,
+        true,
+        &CliPolicyFlags::default(),
+        None,
+    )
+    .expect("render must succeed");
     assert_eq!(
         a.pdf, b.pdf,
         "two all-pages PDF renders must be byte-identical"

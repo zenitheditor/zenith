@@ -10,7 +10,7 @@ use zenith_core::{
 };
 use zenith_layout::{ShapeRequest, TextDirection, TextLayoutEngine, ZenithGlyphRun};
 
-use crate::ir::{Color, SceneGlyph};
+use crate::ir::{Color, SceneCommand, SceneGlyph};
 
 use super::ctx::{NodeShape, ShapeEnv};
 
@@ -42,9 +42,9 @@ pub(in crate::compile) struct WordToken {
     /// `true` when this word was shaped from a `code=#true` span. Causes a
     /// `CODE_BG` background FillRect to be emitted behind the glyph run.
     pub(in crate::compile) code: bool,
-    /// Retained hyperlink URL from a `link="…"` span. `None` = no link.
-    /// Carried for future PDF annotation / GUI use; not rendered beyond the
-    /// color + underline treatment applied during resolution.
+    /// Hyperlink URL from a `link="…"` span. `None` = no link. Drives the link
+    /// color + underline during resolution and is threaded onto the emitted
+    /// `DrawGlyphRun` so the PDF backend can emit a clickable `/Link` annotation.
     pub(in crate::compile) link: Option<String>,
     /// Super/subscript baseline shift in pixels (negative = up; 0 = baseline).
     /// Applied per-glyph-run by [`super::emit::emit_lines`] on top of the line
@@ -107,8 +107,8 @@ pub(in crate::compile) struct ResolvedSpan {
     /// switches the family to [`CODE_MONO_FAMILY`] and the emit path emits
     /// a [`CODE_BG`] background rect (like highlight but fixed color).
     pub(in crate::compile) code: bool,
-    /// Retained hyperlink URL (`None` = no link). Carried through to
-    /// [`WordToken`] for future PDF annotation use.
+    /// Hyperlink URL (`None` = no link). Carried through to [`WordToken`] and
+    /// onto the emitted `DrawGlyphRun` for the PDF `/Link` annotation.
     pub(in crate::compile) link: Option<String>,
     pub(in crate::compile) weight: u16,
     pub(in crate::compile) style: FontStyle,
@@ -319,6 +319,19 @@ pub(in crate::compile) fn shape_words(
     (tokens, metrics)
 }
 
+/// Mark every [`SceneCommand::DrawGlyphRun`] in `commands` as non-selectable, so
+/// the PDF backend renders them as filled glyph outlines (visually identical, but
+/// not selectable / searchable / indexable) instead of extractable text. Called
+/// from the `text` / `code` node compile boundary when the node declares
+/// `selectable=#false`. A no-op for every other command kind.
+pub(in crate::compile) fn mark_runs_unselectable(commands: &mut [SceneCommand]) {
+    for cmd in commands {
+        if let SceneCommand::DrawGlyphRun { selectable, .. } = cmd {
+            *selectable = false;
+        }
+    }
+}
+
 /// Map a [`ZenithGlyphRun`]'s positioned glyphs into [`SceneGlyph`] records.
 ///
 /// Used by every shaped-run emit site (Text, highlighted Code, plain Code) so
@@ -330,6 +343,7 @@ pub(in crate::compile) fn run_to_scene_glyphs(run: &ZenithGlyphRun) -> Vec<Scene
             glyph_id: g.glyph_id,
             dx: g.x,
             dy: g.y,
+            text: g.text.clone(),
         })
         .collect()
 }

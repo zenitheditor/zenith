@@ -223,10 +223,13 @@ fn run_render(args: &Value) -> Result<Value, String> {
         }
         "pdf" => {
             let art = match explicit_page {
-                Some(n) => commands::render::to_pdf_with_dir(&src, parent, n, locked, &flags, None),
-                None => {
-                    commands::render::to_pdf_all_pages_with_dir(&src, parent, locked, &flags, None)
+                // MCP renders always subset (small PDFs); the full-font knob is a CLI flag.
+                Some(n) => {
+                    commands::render::to_pdf_with_dir(&src, parent, n, locked, true, &flags, None)
                 }
+                None => commands::render::to_pdf_all_pages_with_dir(
+                    &src, parent, locked, true, &flags, None,
+                ),
             }
             .map_err(|e| e.message)?;
             blocked(&art.diagnostics)?;

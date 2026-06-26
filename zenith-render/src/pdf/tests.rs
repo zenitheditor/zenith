@@ -73,16 +73,20 @@ fn render_is_byte_identical_across_runs() {
         color: Color::srgb(0, 0, 0, 255),
         stroke_color: None,
         stroke_width: None,
+        link: None,
+        selectable: true,
         glyphs: vec![
             SceneGlyph {
                 glyph_id: 5,
                 dx: 0.0,
                 dy: 0.0,
+                text: String::new(),
             },
             SceneGlyph {
                 glyph_id: 8,
                 dx: 14.0,
                 dy: 0.0,
+                text: String::new(),
             },
         ],
     });
@@ -193,16 +197,24 @@ fn glyph_run_emits_path_fill_ops() {
         color: Color::srgb(0, 0, 0, 255),
         stroke_color: None,
         stroke_width: None,
+        link: None,
+        // selectable=false → the outline-fallback path under test.
+        selectable: false,
         glyphs: vec![SceneGlyph {
             glyph_id: 36, // 'A' in many fonts; any outlined glyph works
             dx: 0.0,
             dy: 0.0,
+            text: String::new(),
         }],
     });
     let bytes = render(&scene);
     let text = String::from_utf8_lossy(&bytes);
-    // Glyphs are drawn as filled outlines: the content stream must contain a
-    // curve op (`c`) and a nonzero fill (`f`).
+    // A non-selectable run is drawn as filled outlines: the content stream must
+    // contain a curve op (`c`) and a nonzero fill (`f`), and NO embedded font.
+    assert!(
+        !text.contains("/Type0"),
+        "non-selectable run must not embed a Type0 font"
+    );
     assert!(
         text.contains(" c\n"),
         "glyph outline must emit cubic-curve `c` ops"
@@ -440,5 +452,157 @@ fn single_scene_multi_is_byte_identical_to_render_pdf() {
     assert_eq!(
         via_wrapper, via_multi,
         "single-scene multi-page path must be byte-identical to render_pdf"
+    );
+}
+
+/// A selectable run (the default) emits a real embedded `Type0` font with a
+/// `ToUnicode` CMap and text-showing operators, not filled outlines.
+#[test]
+fn selectable_glyph_run_emits_embedded_text() {
+    let fonts = default_provider();
+    let font_id = a_font_id(&fonts);
+    let mut scene = Scene::new(200.0, 60.0);
+    scene.commands.push(SceneCommand::DrawGlyphRun {
+        x: 10.0,
+        y: 40.0,
+        font_id,
+        font_size: 32.0,
+        color: Color::srgb(0, 0, 0, 255),
+        stroke_color: None,
+        stroke_width: None,
+        link: None,
+        selectable: true,
+        glyphs: vec![SceneGlyph {
+            glyph_id: 36,
+            dx: 0.0,
+            dy: 0.0,
+            text: "A".to_owned(),
+        }],
+    });
+    let bytes = render(&scene);
+    let text = String::from_utf8_lossy(&bytes);
+    assert!(
+        text.contains("/Type0"),
+        "selectable run must embed a Type0 font"
+    );
+    assert!(
+        text.contains("/CIDFontType2"),
+        "selectable run must embed a CIDFontType2 descendant"
+    );
+    assert!(
+        text.contains("/ToUnicode"),
+        "selectable run must carry a ToUnicode CMap for extraction"
+    );
+    // The ToUnicode CMap maps the glyph's CID to U+0041 ('A').
+    assert!(
+        text.contains("beginbfchar"),
+        "ToUnicode CMap must contain a bfchar block"
+    );
+}
+
+/// A selectable run carrying a link emits a clickable `/Link` annotation with a
+/// `/URI` action over the run's bounds.
+#[test]
+fn selectable_link_run_emits_link_annotation() {
+    let fonts = default_provider();
+    let font_id = a_font_id(&fonts);
+    let mut scene = Scene::new(200.0, 60.0);
+    scene.commands.push(SceneCommand::DrawGlyphRun {
+        x: 10.0,
+        y: 40.0,
+        font_id,
+        font_size: 32.0,
+        color: Color::srgb(0, 0, 0, 255),
+        stroke_color: None,
+        stroke_width: None,
+        link: Some("https://zenith.example/".to_owned()),
+        selectable: true,
+        glyphs: vec![SceneGlyph {
+            glyph_id: 36,
+            dx: 0.0,
+            dy: 0.0,
+            text: "A".to_owned(),
+        }],
+    });
+    let bytes = render(&scene);
+    let text = String::from_utf8_lossy(&bytes);
+    assert!(
+        text.contains("/Link"),
+        "a linked run must emit a /Link annotation"
+    );
+    assert!(
+        text.contains("/URI"),
+        "the link annotation must carry a /URI action"
+    );
+    assert!(
+        text.contains("https://zenith.example/"),
+        "the link URL must appear in the annotation"
+    );
+}
+
+/// A `selectable=false` run carrying a link is drawn as outlines and emits no
+/// embedded text — and therefore no link annotation either.
+#[test]
+fn non_selectable_run_has_no_font_or_link() {
+    let fonts = default_provider();
+    let font_id = a_font_id(&fonts);
+    let mut scene = Scene::new(200.0, 60.0);
+    scene.commands.push(SceneCommand::DrawGlyphRun {
+        x: 10.0,
+        y: 40.0,
+        font_id,
+        font_size: 32.0,
+        color: Color::srgb(0, 0, 0, 255),
+        stroke_color: None,
+        stroke_width: None,
+        link: Some("https://zenith.example/".to_owned()),
+        selectable: false,
+        glyphs: vec![SceneGlyph {
+            glyph_id: 36,
+            dx: 0.0,
+            dy: 0.0,
+            text: "A".to_owned(),
+        }],
+    });
+    let bytes = render(&scene);
+    let text = String::from_utf8_lossy(&bytes);
+    assert!(
+        !text.contains("/Type0"),
+        "non-selectable run must not embed a font"
+    );
+    assert!(
+        !text.contains("/Link"),
+        "non-selectable run must not emit a link annotation"
+    );
+}
+
+/// A scene with no glyph runs embeds no fonts and is byte-identical regardless of
+/// the subset option — the additive invariant for documents without text.
+#[test]
+fn textless_scene_identical_under_subset_options() {
+    use super::{PdfOptions, render_pdf_with};
+    let (fonts, assets) = providers();
+    let mut scene = Scene::new(40.0, 40.0);
+    scene.commands.push(SceneCommand::FillRect {
+        x: 0.0,
+        y: 0.0,
+        w: 40.0,
+        h: 40.0,
+        paint: Paint::solid(Color::srgb(9, 9, 9, 255)),
+    });
+    let subset = render_pdf_with(&scene, &fonts, &assets, PdfOptions { subset: true });
+    let full = render_pdf_with(&scene, &fonts, &assets, PdfOptions { subset: false });
+    let plain = render(&scene);
+    assert_eq!(
+        subset, full,
+        "textless scene must not depend on the subset option"
+    );
+    assert_eq!(
+        subset, plain,
+        "textless scene must match the default render"
+    );
+    assert!(
+        !String::from_utf8_lossy(&subset).contains("/Type0"),
+        "a textless scene must embed no fonts"
     );
 }

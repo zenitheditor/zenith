@@ -107,6 +107,8 @@ fn emit_tab_leader_runs(
             color,
             stroke_color: glyph_stroke.0,
             stroke_width: glyph_stroke.1,
+            link: None,
+            selectable: true,
             glyphs: run_to_scene_glyphs(run),
         });
         x += run.advance_width as f64;
@@ -304,6 +306,8 @@ pub(in crate::compile) fn compile_tab_leader(
                     color,
                     stroke_color: glyph_stroke.0,
                     stroke_width: glyph_stroke.1,
+                    link: None,
+                    selectable: true,
                     glyphs: run_to_scene_glyphs(run),
                 });
                 x += leader_advance;

@@ -28,6 +28,13 @@ pub struct RenderArgs {
     #[arg(long, value_name = "OUT")]
     pub pdf: Option<PathBuf>,
 
+    /// Embed whole font programs in the PDF instead of subsetting to used glyphs.
+    ///
+    /// PDF text is always selectable and searchable; this only trades a larger
+    /// file for embedding the complete face (default: subset for small files).
+    #[arg(long)]
+    pub embed_full_fonts: bool,
+
     /// 1-based page number to render; for `--pdf`, the default renders all pages.
     ///
     /// Without `--page`, single-output flags (`--scene`/`--png`) render page 1,

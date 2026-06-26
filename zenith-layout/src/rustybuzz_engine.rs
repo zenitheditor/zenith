@@ -108,10 +108,34 @@ impl RustybuzzEngine {
         let infos = glyph_buffer.glyph_infos();
         let positions = glyph_buffer.glyph_positions();
 
+        // ── Cluster → source-text boundaries ──────────────────────────────────
+        // Each glyph carries `cluster`: the byte offset into `text` it derives
+        // from. The sorted, deduplicated set of cluster offsets gives the source
+        // substring boundaries: a cluster starting at offset `c` spans up to the
+        // next greater offset (or `text.len()`). The FIRST glyph of each cluster
+        // carries that whole substring (so a ligature's single glyph maps to all
+        // its chars); later glyphs of the same cluster carry the empty string (so
+        // a one-char→many-glyph decomposition is not duplicated). This per-glyph
+        // Unicode mapping is what the PDF backend turns into a ToUnicode CMap.
+        let mut boundaries: Vec<u32> = infos.iter().map(|i| i.cluster).collect();
+        boundaries.sort_unstable();
+        boundaries.dedup();
+        let cluster_text = |cluster: u32| -> String {
+            let start = cluster as usize;
+            let end = match boundaries.binary_search(&cluster) {
+                Ok(i) => boundaries.get(i + 1).map_or(text.len(), |&b| b as usize),
+                // A cluster value not in the set cannot happen (it was collected
+                // from the same infos); fall back to a single source char span.
+                Err(_) => text.len(),
+            };
+            text.get(start..end).unwrap_or("").to_string()
+        };
+
         // ── Build glyph list ──────────────────────────────────────────────────
         let mut glyphs: Vec<PositionedGlyph> = Vec::with_capacity(infos.len());
         let mut pen_x: f32 = 0.0;
         let mut pen_y: f32 = 0.0;
+        let mut prev_cluster: Option<u32> = None;
 
         for (info, pos) in infos.iter().zip(positions.iter()) {
             // glyph_id is u32 in rustybuzz; OTF glyph IDs fit in u16 (max 65535).
@@ -123,7 +147,20 @@ impl RustybuzzEngine {
             // y_offset is in font units; positive = up in font coords → negative screen y.
             let y = pen_y - pos.y_offset as f32 * scale;
 
-            glyphs.push(PositionedGlyph { glyph_id, x, y });
+            // First glyph of a new cluster carries the source text; repeats are empty.
+            let glyph_text = if prev_cluster == Some(info.cluster) {
+                String::new()
+            } else {
+                cluster_text(info.cluster)
+            };
+            prev_cluster = Some(info.cluster);
+
+            glyphs.push(PositionedGlyph {
+                glyph_id,
+                x,
+                y,
+                text: glyph_text,
+            });
 
             pen_x += pos.x_advance as f32 * scale;
             pen_y += pos.y_advance as f32 * scale;

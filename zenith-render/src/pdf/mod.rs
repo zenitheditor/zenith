@@ -41,7 +41,9 @@
 mod color;
 mod content;
 mod document;
+mod font;
 mod geometry;
+mod glyph;
 mod gradient;
 mod image;
 mod raster_embed;
@@ -50,4 +52,6 @@ mod svg;
 #[cfg(test)]
 mod tests;
 
-pub use document::{render_pdf, render_pdf_multi};
+pub use document::{
+    PdfOptions, render_pdf, render_pdf_multi, render_pdf_multi_with, render_pdf_with,
+};

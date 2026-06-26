@@ -45,6 +45,7 @@ fn glyph_run_draws_pixels() {
             glyph_id: g.glyph_id,
             dx: g.x,
             dy: g.y,
+            text: String::new(),
         })
         .collect();
 
@@ -57,6 +58,8 @@ fn glyph_run_draws_pixels() {
         color: ink_color,
         stroke_color: None,
         stroke_width: None,
+        link: None,
+        selectable: true,
         glyphs,
     });
 
@@ -105,6 +108,7 @@ fn glyph_run_deterministic_png() {
             glyph_id: g.glyph_id,
             dx: g.x,
             dy: g.y,
+            text: String::new(),
         })
         .collect();
 
@@ -117,6 +121,8 @@ fn glyph_run_deterministic_png() {
         color: Color::srgb(10, 10, 10, 255),
         stroke_color: None,
         stroke_width: None,
+        link: None,
+        selectable: true,
         glyphs,
     });
 
@@ -143,10 +149,13 @@ fn glyph_run_missing_font_id_succeeds_silently() {
         color: Color::srgb(255, 0, 0, 255),
         stroke_color: None,
         stroke_width: None,
+        link: None,
+        selectable: true,
         glyphs: vec![SceneGlyph {
             glyph_id: 36,
             dx: 0.0,
             dy: 0.0,
+            text: String::new(),
         }],
     });
 
@@ -201,6 +210,7 @@ fn glyph_run_clipped_to_subpage_clip() {
             glyph_id: g.glyph_id,
             dx: g.x,
             dy: g.y,
+            text: String::new(),
         })
         .collect();
 
@@ -221,6 +231,8 @@ fn glyph_run_clipped_to_subpage_clip() {
         color: Color::srgb(0, 0, 200, 255),
         stroke_color: None,
         stroke_width: None,
+        link: None,
+        selectable: true,
         glyphs,
     });
     scene.commands.push(SceneCommand::PopClip);
@@ -273,6 +285,7 @@ fn glyph_run_with_stroke_renders_without_panic() {
             glyph_id: g.glyph_id,
             dx: g.x,
             dy: g.y,
+            text: String::new(),
         })
         .collect();
 
@@ -286,6 +299,8 @@ fn glyph_run_with_stroke_renders_without_panic() {
         color: Color::srgb(0, 0, 200, 255),
         stroke_color: Some(Color::srgb(200, 0, 0, 255)),
         stroke_width: Some(3.0),
+        link: None,
+        selectable: true,
         glyphs: glyphs.clone(),
     });
 
@@ -299,6 +314,8 @@ fn glyph_run_with_stroke_renders_without_panic() {
         color: Color::srgb(0, 0, 200, 255),
         stroke_color: None,
         stroke_width: None,
+        link: None,
+        selectable: true,
         glyphs,
     });
 
@@ -344,6 +361,7 @@ fn glyph_run_without_stroke_is_byte_identical() {
             glyph_id: g.glyph_id,
             dx: g.x,
             dy: g.y,
+            text: String::new(),
         })
         .collect();
 
@@ -357,6 +375,8 @@ fn glyph_run_without_stroke_is_byte_identical() {
             color: Color::srgb(10, 10, 10, 255),
             stroke_color: sc,
             stroke_width: sw,
+            link: None,
+            selectable: true,
             glyphs: glyphs.clone(),
         });
         scene

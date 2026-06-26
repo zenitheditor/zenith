@@ -178,6 +178,7 @@ fn font_weight_with_missing_token_ref_produces_unknown_reference() {
         opacity: None,
         visible: None,
         locked: None,
+        selectable: None,
         rotate: None,
         blend_mode: None,
         blur: None,

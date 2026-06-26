@@ -117,7 +117,14 @@ pub fn node_content(kind: &str) -> Option<NodeContentDescriptor> {
                 `code=#true` renders the span in the bundled monospace family with a subtle \
                 background, suitable for inline code. \
                 `link=\"url\"` renders the span underlined in the default link color (unless \
-                `fill` is set) and retains the URL for future PDF annotation / GUI use. \
+                `fill` is set); in PDF output the URL becomes a clickable `/Link` annotation \
+                over the span. \
+                `selectable` (node attribute, default `#true`) controls PDF text extraction: \
+                by default the text is emitted as real, selectable / searchable / indexable \
+                text (with a ToUnicode map, so copy and search work and links are clickable); \
+                `selectable=#false` renders the glyphs as filled outlines instead — visually \
+                identical but not selectable, searchable, or extractable. The PNG backend is \
+                unaffected. \
                 The `format` node attribute (values: `markdown` | `plain`) opts into \
                 markdown rendering of the concatenated span text. \
                 When `format=\"markdown\"`, the scene compile pass re-parses the span content \
@@ -561,7 +568,7 @@ fn attribute_type_generic(name: &str, fallback: &'static str) -> &'static str {
         "layer-priority" => "i64",
 
         // ── Booleans ─────────────────────────────────────────────────────
-        "visible" | "locked" | "anchor-parent" => "bool",
+        "visible" | "locked" | "anchor-parent" | "selectable" => "bool",
         "hyphenate" | "suppress-first" | "border-collapse" => "bool",
         "mirror-margins" | "facing-pages" => "bool",
         "line-jumps" => "bool",

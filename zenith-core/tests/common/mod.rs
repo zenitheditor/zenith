@@ -154,6 +154,7 @@ pub fn minimal_text(id: &str, fill: Option<PropertyValue>) -> Node {
         opacity: None,
         visible: None,
         locked: None,
+        selectable: None,
         rotate: None,
         blend_mode: None,
         blur: None,

@@ -24,6 +24,10 @@ pub(in crate::tiny_skia) fn draw_glyph_run(
         color,
         stroke_color,
         stroke_width,
+        // The raster backend has no clickable-link or text-extraction concept;
+        // both are PDF-only and render-identical here.
+        link: _,
+        selectable: _,
         glyphs,
     } = cmd
     else {

@@ -54,6 +54,25 @@ pub(in crate::compile) fn compile_code(
     diagnostics: &mut Vec<Diagnostic>,
     ctx: RenderCtx,
 ) -> f64 {
+    // Emit, then downgrade this node's glyph runs to outlines when the node opts
+    // out of selectable text. Purely a PDF render concern, applied as a post-pass
+    // over exactly the commands this node produced (see `compile_text`). Default
+    // (`None`/`Some(true)`) is byte-identical.
+    let start = commands.len();
+    let height = compile_code_impl(code, env, commands, diagnostics, ctx);
+    if code.selectable == Some(false) {
+        super::shape::mark_runs_unselectable(&mut commands[start..]);
+    }
+    height
+}
+
+fn compile_code_impl(
+    code: &CodeNode,
+    env: TextCompileEnv,
+    commands: &mut Vec<SceneCommand>,
+    diagnostics: &mut Vec<Diagnostic>,
+    ctx: RenderCtx,
+) -> f64 {
     let resolved = env.resolved;
     let style_map = env.style_map;
     let fonts = env.fonts;
@@ -395,6 +414,8 @@ pub(in crate::compile) fn compile_code(
                     color: g.number_color,
                     stroke_color: None,
                     stroke_width: None,
+                    link: None,
+                    selectable: true,
                     glyphs,
                 });
             }
@@ -486,6 +507,8 @@ pub(in crate::compile) fn compile_code(
                         color: seg_color,
                         stroke_color: None,
                         stroke_width: None,
+                        link: None,
+                        selectable: true,
                         glyphs,
                     });
                     x_cursor += advance;
@@ -531,6 +554,8 @@ pub(in crate::compile) fn compile_code(
                         color,
                         stroke_color: None,
                         stroke_width: None,
+                        link: None,
+                        selectable: true,
                         glyphs,
                     });
                 }

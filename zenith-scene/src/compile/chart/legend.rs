@@ -324,6 +324,8 @@ fn draw_entry(
                     color: LEGEND_TEXT_COLOR,
                     stroke_color: None,
                     stroke_width: None,
+                    link: None,
+                    selectable: true,
                     glyphs,
                 });
                 text_x += advance;

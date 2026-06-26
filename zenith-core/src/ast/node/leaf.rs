@@ -375,6 +375,13 @@ pub struct TextNode {
     pub opacity: Option<f64>,
     pub visible: Option<bool>,
     pub locked: Option<bool>,
+    /// PDF text-extraction toggle. `None`/`Some(true)` (default) → the text is
+    /// emitted as real, selectable/searchable/indexable text with a ToUnicode
+    /// map, and any `link` spans become clickable. `Some(false)` → the text is
+    /// drawn as filled glyph outlines instead, so it is visually identical but
+    /// cannot be selected, copied, searched, or indexed. PDF-only; the raster
+    /// backend renders identically either way. KDL: `selectable=#false`.
+    pub selectable: Option<bool>,
     pub rotate: Option<Dimension>,
     /// Threaded-text-flow chain id. When `Some(id)`, this text node is a member
     /// of the chain named `id`; all text nodes sharing the same `chain` id form
@@ -567,6 +574,10 @@ pub struct CodeNode {
     pub opacity: Option<f64>,
     pub visible: Option<bool>,
     pub locked: Option<bool>,
+    /// PDF text-extraction toggle (see [`TextNode::selectable`]). `None`/
+    /// `Some(true)` (default) → real selectable/searchable text; `Some(false)` →
+    /// filled glyph outlines (visually identical, not extractable). PDF-only.
+    pub selectable: Option<bool>,
     pub rotate: Option<Dimension>,
     /// Verbatim source text (decoded; newlines/tabs are literal characters).
     pub content: String,

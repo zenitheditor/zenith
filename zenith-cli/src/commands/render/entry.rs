@@ -3,7 +3,9 @@
 use std::path::Path;
 
 use zenith_core::{BytesAssetProvider, DataContext, Diagnostic, dim_to_px};
-use zenith_render::{render_pdf, render_pdf_multi, render_png, render_spread_png};
+use zenith_render::{
+    PdfOptions, render_pdf_multi_with, render_pdf_with, render_png, render_spread_png,
+};
 use zenith_scene::{Scene, compile_page};
 
 use crate::config::CliPolicyFlags;
@@ -205,6 +207,7 @@ pub fn to_pdf_with_dir(
     project_dir: Option<&Path>,
     page: usize,
     locked: bool,
+    subset: bool,
     flags: &CliPolicyFlags,
     data: Option<&DataContext>,
 ) -> Result<PdfArtifact, RenderCmdErr> {
@@ -218,7 +221,12 @@ pub fn to_pdf_with_dir(
         None => BytesAssetProvider::new(),
     };
     let compile_result = compile_page(&doc, &fonts, page_index, data);
-    let pdf = render_pdf(&compile_result.scene, &fonts, &assets);
+    let pdf = render_pdf_with(
+        &compile_result.scene,
+        &fonts,
+        &assets,
+        PdfOptions { subset },
+    );
     let mut diagnostics = text_src_diagnostics;
     diagnostics.extend(disk_diagnostics(&doc, project_dir));
     diagnostics.extend(govern_compile_diagnostics(
@@ -252,6 +260,7 @@ pub fn to_pdf_all_pages_with_dir(
     src: &str,
     project_dir: Option<&Path>,
     locked: bool,
+    subset: bool,
     flags: &CliPolicyFlags,
     data: Option<&DataContext>,
 ) -> Result<PdfArtifact, RenderCmdErr> {
@@ -277,7 +286,7 @@ pub fn to_pdf_all_pages_with_dir(
             &policy,
         ));
     }
-    let pdf = render_pdf_multi(&scenes, &fonts, &assets);
+    let pdf = render_pdf_multi_with(&scenes, &fonts, &assets, PdfOptions { subset });
     Ok(PdfArtifact { pdf, diagnostics })
 }
 

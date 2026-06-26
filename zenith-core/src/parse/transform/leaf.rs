@@ -504,6 +504,7 @@ pub(crate) const TEXT_KNOWN_PROPS: &[&str] = &[
     "opacity",
     "visible",
     "locked",
+    "selectable",
     "rotate",
     "chain",
     "drop-cap-lines",
@@ -628,6 +629,7 @@ pub(super) fn transform_text(node: &KdlNode) -> Result<TextNode, ParseError> {
         opacity: optional_f64_prop(node, "opacity"),
         visible: optional_bool_prop(node, "visible"),
         locked: optional_bool_prop(node, "locked"),
+        selectable: optional_bool_prop(node, "selectable"),
         rotate: optional_dimension_prop(node, "rotate"),
         chain: optional_string_prop(node, "chain").map(str::to_owned),
         drop_cap_lines,
@@ -689,6 +691,7 @@ pub(crate) const CODE_KNOWN_PROPS: &[&str] = &[
     "opacity",
     "visible",
     "locked",
+    "selectable",
     "rotate",
     "anchor",
     "anchor-zone",
@@ -757,6 +760,7 @@ pub(super) fn transform_code(node: &KdlNode) -> Result<CodeNode, ParseError> {
         opacity: optional_f64_prop(node, "opacity"),
         visible: optional_bool_prop(node, "visible"),
         locked: optional_bool_prop(node, "locked"),
+        selectable: optional_bool_prop(node, "selectable"),
         rotate: optional_dimension_prop(node, "rotate"),
         content,
         anchor: optional_string_prop(node, "anchor").map(str::to_owned),
@@ -951,8 +955,8 @@ pub(super) fn transform_span(node: &KdlNode) -> Result<TextSpan, ParseError> {
     let code = optional_bool_prop(node, "code");
 
     // Hyperlink URL: `link="https://…"` renders the span underlined in the
-    // internal link color (unless `fill` is set) and retains the URL for
-    // future PDF annotation. Absent → `None` (byte-identical).
+    // internal link color (unless `fill` is set) and becomes a clickable PDF
+    // `/Link` annotation on selectable text. Absent → `None` (byte-identical).
     let link = optional_string_prop(node, "link").map(str::to_owned);
 
     Ok(TextSpan {

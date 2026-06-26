@@ -319,6 +319,7 @@ fn minimal_code(id: &str, fill: Option<PropertyValue>) -> Node {
         opacity: None,
         visible: None,
         locked: None,
+        selectable: None,
         rotate: None,
         anchor: None,
         anchor_zone: None,

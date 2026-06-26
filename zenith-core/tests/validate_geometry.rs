@@ -110,6 +110,7 @@ fn text_font_family_with_font_family_token_is_clean() {
                 opacity: None,
                 visible: None,
                 locked: None,
+                selectable: None,
                 rotate: None,
                 blend_mode: None,
                 blur: None,

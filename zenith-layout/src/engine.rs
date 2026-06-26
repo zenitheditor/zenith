@@ -50,6 +50,12 @@ pub struct PositionedGlyph {
     pub x: f32,
     /// Vertical offset from the baseline, in pixels (positive = below baseline).
     pub y: f32,
+    /// Source Unicode text this glyph maps back to, for text extraction
+    /// (PDF ToUnicode). The first glyph of a shaping cluster carries the whole
+    /// cluster's source substring (so a ligature maps to all its chars); later
+    /// glyphs of the same cluster carry an empty string. Empty means "no source
+    /// text" — extraction emits nothing for this glyph.
+    pub text: String,
 }
 
 /// A shaped run of text in a single resolved font.

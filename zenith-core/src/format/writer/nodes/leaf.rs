@@ -269,6 +269,7 @@ pub(super) fn write_text(t: &TextNode, out: &mut String, depth: usize) {
     write_opt_f64(out, "opacity", &t.opacity);
     write_opt_bool(out, "visible", &t.visible);
     write_opt_bool(out, "locked", &t.locked);
+    write_opt_bool(out, "selectable", &t.selectable);
     write_opt_dimension(out, "rotate", &t.rotate);
     write_opt_str(out, "style", &t.style);
     write_opt_str(out, "chain", &t.chain);
@@ -348,6 +349,7 @@ pub(super) fn write_code(c: &CodeNode, out: &mut String, depth: usize) {
     write_opt_f64(out, "opacity", &c.opacity);
     write_opt_bool(out, "visible", &c.visible);
     write_opt_bool(out, "locked", &c.locked);
+    write_opt_bool(out, "selectable", &c.selectable);
     write_opt_dimension(out, "rotate", &c.rotate);
 
     // Unknown properties in sorted key order.

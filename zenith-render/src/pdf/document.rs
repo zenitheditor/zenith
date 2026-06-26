@@ -1,13 +1,32 @@
 //! Top-level PDF document assembly: page boxes, object-id allocation, resource
 //! materialization, and the deterministic trailer.
 
-use pdf_writer::types::FunctionShadingType;
-use pdf_writer::{Filter, Finish, Pdf, Rect as PdfRect, Ref};
+use pdf_writer::types::{ActionType, AnnotationType, FunctionShadingType};
+use pdf_writer::{Filter, Finish, Pdf, Rect as PdfRect, Ref, Str};
 use zenith_core::{AssetProvider, FontProvider};
 use zenith_scene::Scene;
 
-use super::content::{ALPHA_PREFIX, IMAGE_PREFIX, PageResources, SHADING_PREFIX, name, translate};
+use super::content::{
+    ALPHA_PREFIX, FONT_PREFIX, IMAGE_PREFIX, LinkAnnot, PageResources, SHADING_PREFIX, name,
+    translate,
+};
+use super::font::{self, FontPlan};
 use super::gradient::AxialGradient;
+
+/// Options controlling PDF emission.
+#[derive(Clone, Copy)]
+pub struct PdfOptions {
+    /// Subset embedded fonts to just the glyphs used (`true`, default → small
+    /// files) or embed the whole font program (`false`). Either way the text is
+    /// selectable and searchable.
+    pub subset: bool,
+}
+
+impl Default for PdfOptions {
+    fn default() -> Self {
+        Self { subset: true }
+    }
+}
 
 /// Render `scene` to a deterministic vector PDF (a single page).
 ///
@@ -28,6 +47,17 @@ pub fn render_pdf(scene: &Scene, fonts: &dyn FontProvider, assets: &dyn AssetPro
     render_pdf_multi(std::slice::from_ref(scene), fonts, assets)
 }
 
+/// Like [`render_pdf`] but with explicit [`PdfOptions`] (e.g. font subsetting).
+#[must_use]
+pub fn render_pdf_with(
+    scene: &Scene,
+    fonts: &dyn FontProvider,
+    assets: &dyn AssetProvider,
+    options: PdfOptions,
+) -> Vec<u8> {
+    render_pdf_multi_with(std::slice::from_ref(scene), fonts, assets, options)
+}
+
 /// Render `scenes` (one per document page, in order) to a single deterministic
 /// multi-page vector PDF, sharing one sequential object-id space.
 ///
@@ -46,13 +76,35 @@ pub fn render_pdf_multi(
     fonts: &dyn FontProvider,
     assets: &dyn AssetProvider,
 ) -> Vec<u8> {
+    render_pdf_multi_with(scenes, fonts, assets, PdfOptions::default())
+}
+
+/// Like [`render_pdf_multi`] but with explicit [`PdfOptions`].
+///
+/// Allocation order: `catalog=1`, `page_tree=2`, then a shared **font block**
+/// (`REFS_PER_FONT` ids per embedded font), then per-page (page dict, content
+/// stream, link-annotation dicts, then resource objects). A document with no
+/// selectable text embeds no fonts and has no links, so the font block is empty
+/// and the id stream + bytes are identical to the historical output (the
+/// additive invariant).
+#[must_use]
+pub fn render_pdf_multi_with(
+    scenes: &[Scene],
+    fonts: &dyn FontProvider,
+    assets: &dyn AssetProvider,
+    options: PdfOptions,
+) -> Vec<u8> {
     let mut pdf = Pdf::new();
 
     let catalog_id = Ref::new(1);
     let page_tree_id = Ref::new(2);
-    // One shared monotonic id space for every page's dict, content stream, and
-    // resource objects, allocated in document order.
-    let mut next: i32 = 3;
+
+    // Build the document-wide font plan from every selectable glyph run, then
+    // reserve its object-id block immediately after the catalog + page tree.
+    let usage = font::collect_usage(scenes);
+    let font_plan = font::build_plan(&usage, fonts, options.subset);
+    let font_base: i32 = 3;
+    let mut next: i32 = font_base + (font_plan.fonts.len() as i32) * font::REFS_PER_FONT;
     let mut alloc = || {
         let r = Ref::new(next);
         next += 1;
@@ -63,7 +115,7 @@ pub fn render_pdf_multi(
     // page-tree's /Kids can list every page id before any page body is written.
     let mut pages: Vec<PreparedPage<'_>> = Vec::with_capacity(scenes.len());
     for scene in scenes {
-        pages.push(prepare_page(scene, fonts, assets, &mut alloc));
+        pages.push(prepare_page(scene, fonts, assets, &font_plan, &mut alloc));
     }
 
     // ── Catalog + page tree ──────────────────────────────────────────────
@@ -71,6 +123,12 @@ pub fn render_pdf_multi(
     pdf.pages(page_tree_id)
         .kids(pages.iter().map(|p| p.page_id))
         .count(pages.len() as i32);
+
+    // ── Embedded fonts (shared across pages) ─────────────────────────────
+    for (idx, font) in font_plan.fonts.iter().enumerate() {
+        let refs = font::font_refs_at(font_base, idx);
+        font::write_font(&mut pdf, font, &refs);
+    }
 
     // ── Per-page bodies ──────────────────────────────────────────────────
     for prepared in pages {
@@ -89,6 +147,8 @@ struct PreparedPage<'a> {
     content: Vec<u8>,
     scene: &'a Scene,
     res: PageResources,
+    /// One ref per link annotation, in `res.links` order.
+    annot_ids: Vec<Ref>,
     alpha_ids: Vec<Ref>,
     gradient_refs: Vec<GradientRefs>,
     image_refs: Vec<ImageRefs>,
@@ -102,13 +162,18 @@ fn prepare_page<'a>(
     scene: &'a Scene,
     fonts: &dyn FontProvider,
     assets: &dyn AssetProvider,
+    font_plan: &FontPlan,
     alloc: &mut impl FnMut() -> Ref,
 ) -> PreparedPage<'a> {
     let page_id = alloc();
     let content_id = alloc();
 
     // Translate the scene to a content stream + the resources it references.
-    let (content, res) = translate(scene, fonts, assets);
+    let (content, res) = translate(scene, fonts, assets, font_plan);
+
+    // Reserve one ref per link annotation (in res.links order), before the
+    // resource refs, so the page's /Annots array can list them.
+    let annot_ids: Vec<Ref> = res.links.iter().map(|_| alloc()).collect();
 
     // Allocate refs for every resource up front so the page's resource dict can
     // reference them. Order is fixed: ExtGStates, then gradient shadings (each
@@ -155,6 +220,7 @@ fn prepare_page<'a>(
         content: content.finish().into_vec(),
         scene,
         res,
+        annot_ids,
         alpha_ids,
         gradient_refs,
         image_refs,
@@ -171,6 +237,7 @@ fn write_prepared_page(pdf: &mut Pdf, page_tree_id: Ref, prepared: PreparedPage<
         content,
         scene,
         res,
+        annot_ids,
         alpha_ids,
         gradient_refs,
         image_refs,
@@ -185,6 +252,7 @@ fn write_prepared_page(pdf: &mut Pdf, page_tree_id: Ref, prepared: PreparedPage<
             content_id,
             scene,
             res: &res,
+            annot_ids: &annot_ids,
             alpha_ids: &alpha_ids,
             gradient_refs: &gradient_refs,
             image_refs: &image_refs,
@@ -194,10 +262,38 @@ fn write_prepared_page(pdf: &mut Pdf, page_tree_id: Ref, prepared: PreparedPage<
     // ── Content stream ───────────────────────────────────────────────────
     pdf.stream(content_id, &content);
 
+    // ── Link annotations ─────────────────────────────────────────────────
+    write_link_annotations(pdf, scene, &res.links, &annot_ids);
+
     // ── Resource objects ─────────────────────────────────────────────────
     write_alpha_states(pdf, &res, &alpha_ids);
     write_gradients(pdf, &res, &gradient_refs);
     write_images(pdf, &res, &image_refs);
+}
+
+/// Write one `/Link` annotation per collected [`LinkAnnot`], converting the
+/// scene-space rect (top-left origin, y-down) to PDF user space (bottom-left,
+/// y-up) and attaching a URI action. Borders are suppressed so the link is
+/// invisible (only the hit region is active), matching common web→PDF output.
+fn write_link_annotations(pdf: &mut Pdf, scene: &Scene, links: &[LinkAnnot], annot_ids: &[Ref]) {
+    let h = scene.height as f32;
+    for (link, id) in links.iter().zip(annot_ids) {
+        let x0 = link.x0 as f32;
+        let x1 = link.x1 as f32;
+        // Scene y grows downward; flip both edges. y0 (top) → larger PDF y.
+        let y_top = h - link.y0 as f32;
+        let y_bottom = h - link.y1 as f32;
+        let mut annot = pdf.annotation(*id);
+        annot.subtype(AnnotationType::Link);
+        annot.rect(PdfRect::new(x0, y_bottom, x1, y_top));
+        // No visible border.
+        annot.border(0.0, 0.0, 0.0, None);
+        annot
+            .action()
+            .action_type(ActionType::Uri)
+            .uri(Str(link.url.as_bytes()));
+        annot.finish();
+    }
 }
 
 /// Indirect references backing one axial gradient: its shading dict and its
@@ -228,6 +324,7 @@ struct PageWrite<'a> {
     content_id: Ref,
     scene: &'a Scene,
     res: &'a PageResources,
+    annot_ids: &'a [Ref],
     alpha_ids: &'a [Ref],
     gradient_refs: &'a [GradientRefs],
     image_refs: &'a [ImageRefs],
@@ -240,6 +337,7 @@ fn write_page(pdf: &mut Pdf, ctx: PageWrite<'_>) {
         content_id,
         scene,
         res,
+        annot_ids,
         alpha_ids,
         gradient_refs,
         image_refs,
@@ -276,9 +374,23 @@ fn write_page(pdf: &mut Pdf, ctx: PageWrite<'_>) {
 
     page.contents(content_id);
 
+    // Link annotations (clickable hyperlinks). Absent → no /Annots key, so a
+    // page without links is byte-identical to the historical output.
+    if !annot_ids.is_empty() {
+        page.annotations(annot_ids.iter().copied());
+    }
+
     // Resource dictionary referencing every interned resource by its stable
     // `<prefix><index>` name.
     let mut resources = page.resources();
+    if !res.font_indices.is_empty() {
+        let mut fonts = resources.fonts();
+        for &idx in &res.font_indices {
+            let nm = name(FONT_PREFIX, idx);
+            fonts.pair(nm.as_name(), font::font_refs_at(3, idx).type0_ref());
+        }
+        fonts.finish();
+    }
     if !res.alphas.is_empty() {
         let mut gs = resources.ext_g_states();
         for (i, r) in alpha_ids.iter().enumerate() {

@@ -101,9 +101,9 @@ pub struct TextSpan {
     /// Hyperlink URL carried on the span. `None` = no link (byte-identical to a
     /// span without it). When `Some(url)`, the span is rendered with an underline
     /// and the internal `LINK_COLOR` default color when the span has no explicit
-    /// `fill`; a span that already has a `fill` keeps its author color. The URL
-    /// is retained on the span for future PDF annotation / GUI use; no annotation
-    /// is emitted now. KDL: `span "text" link="https://example.com"`.
+    /// `fill`; a span that already has a `fill` keeps its author color. In PDF
+    /// output the URL becomes a clickable `/Link` annotation over the span (when
+    /// the text is `selectable`). KDL: `span "text" link="https://example.com"`.
     pub link: Option<String>,
 }
 

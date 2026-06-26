@@ -147,6 +147,8 @@ pub(super) fn emit_gridlines_and_labels(
                         color: colors.label,
                         stroke_color: None,
                         stroke_width: None,
+                        link: None,
+                        selectable: true,
                         glyphs,
                     });
                     label_x += advance;

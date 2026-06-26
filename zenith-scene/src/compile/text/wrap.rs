@@ -312,6 +312,8 @@ fn emit_drop_cap(a: EmitDropCap) -> usize {
         color: cap.color,
         stroke_color: glyph_stroke.0,
         stroke_width: glyph_stroke.1,
+        link: None,
+        selectable: true,
         glyphs: run_to_scene_glyphs(&cap.run),
     });
 
@@ -706,6 +708,8 @@ fn emit_plain_wrap(
             color: marker_color,
             stroke_color: glyph_stroke.0,
             stroke_width: glyph_stroke.1,
+            link: None,
+            selectable: true,
             glyphs,
         });
     }
@@ -795,6 +799,7 @@ mod indent_tests {
                     glyph_id: 1,
                     x: 0.0,
                     y: 0.0,
+                    text: String::new(),
                 }],
             }],
             advance,

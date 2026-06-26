@@ -11,6 +11,7 @@ use zenith_core::{AssetProvider, FontProvider};
 use zenith_scene::{Scene, SceneCommand};
 
 use super::content::{IMAGE_PREFIX, PageResources, emit_command, name};
+use super::font::FontPlan;
 use super::image::decoded_image_from_straight_rgba;
 
 /// Rasterize a self-applying effect bracket (blur, shadow, filter, or mask —
@@ -33,6 +34,7 @@ pub(super) fn embed_rasterized_region(
     page: (f64, f64),
     fonts: &dyn FontProvider,
     assets: &dyn AssetProvider,
+    font_plan: &FontPlan,
 ) {
     let (pw, ph) = page;
     let mut sub_scene = Scene::new(pw, ph);
@@ -45,7 +47,7 @@ pub(super) fn embed_rasterized_region(
             // EndMask no-op arms drop the bracket markers; the body draws
             // unmasked).
             for c in sub_commands {
-                emit_command(content, res, c, page, fonts, assets);
+                emit_command(content, res, c, page, fonts, assets, font_plan);
             }
             return;
         }

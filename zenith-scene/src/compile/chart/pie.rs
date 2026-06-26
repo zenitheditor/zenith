@@ -224,6 +224,8 @@ fn emit_slice_label(
                     color: label_color,
                     stroke_color: None,
                     stroke_width: None,
+                    link: None,
+                    selectable: true,
                     glyphs,
                 });
                 label_x += advance;

@@ -601,6 +601,8 @@ pub(super) fn emit_title(
                     color,
                     stroke_color: None,
                     stroke_width: None,
+                    link: None,
+                    selectable: true,
                     glyphs,
                 });
                 label_x += advance;
