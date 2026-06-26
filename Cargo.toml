@@ -11,7 +11,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.0.0"
+version = "0.0.1"
 edition = "2024"
 rust-version = "1.85"
 license = "Apache-2.0"
@@ -27,12 +27,12 @@ publish = true
 # stamped at release time (see .github/workflows/release.yml). The `version`
 # requirement is what ships to crates.io; the `path` is used for local builds.
 [workspace.dependencies]
-zenith-core = { version = "0.0.0", path = "zenith-core" }
-zenith-layout = { version = "0.0.0", path = "zenith-layout" }
-zenith-scene = { version = "0.0.0", path = "zenith-scene" }
-zenith-render = { version = "0.0.0", path = "zenith-render" }
-zenith-tx = { version = "0.0.0", path = "zenith-tx" }
-zenith-session = { version = "0.0.0", path = "zenith-session" }
+zenith-core = { version = "0", path = "zenith-core" }
+zenith-layout = { version = "0", path = "zenith-layout" }
+zenith-scene = { version = "0", path = "zenith-scene" }
+zenith-render = { version = "0", path = "zenith-render" }
+zenith-tx = { version = "0", path = "zenith-tx" }
+zenith-session = { version = "0", path = "zenith-session" }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

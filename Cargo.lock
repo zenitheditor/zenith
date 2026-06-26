@@ -1410,7 +1410,7 @@ checksum = "ec7a2a501ed189703dba8b08142f057e887dfc4b2cc4db2d343ac6376ba3e0b9"
 
 [[package]]
 name = "zenith-core"
-version = "0.0.0"
+version = "0.0.1"
 dependencies = [
  "kdl",
  "oxidoc-highlight",
@@ -1419,7 +1419,7 @@ dependencies = [
 
 [[package]]
 name = "zenith-layout"
-version = "0.0.0"
+version = "0.0.1"
 dependencies = [
  "rustybuzz 0.20.1",
  "zenith-core",
@@ -1427,7 +1427,7 @@ dependencies = [
 
 [[package]]
 name = "zenith-render"
-version = "0.0.0"
+version = "0.0.1"
 dependencies = [
  "jpeg-decoder",
  "miniz_oxide",
@@ -1443,7 +1443,7 @@ dependencies = [
 
 [[package]]
 name = "zenith-scene"
-version = "0.0.0"
+version = "0.0.1"
 dependencies = [
  "hyphenation",
  "serde",
@@ -1454,7 +1454,7 @@ dependencies = [
 
 [[package]]
 name = "zenith-session"
-version = "0.0.0"
+version = "0.0.1"
 dependencies = [
  "dirs",
  "flate2",
@@ -1467,7 +1467,7 @@ dependencies = [
 
 [[package]]
 name = "zenith-tool"
-version = "0.0.0"
+version = "0.0.1"
 dependencies = [
  "clap",
  "csv",
@@ -1488,7 +1488,7 @@ dependencies = [
 
 [[package]]
 name = "zenith-tx"
-version = "0.0.0"
+version = "0.0.1"
 dependencies = [
  "serde",
  "serde_json",
