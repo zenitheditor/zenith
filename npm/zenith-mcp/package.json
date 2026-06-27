@@ -1,6 +1,6 @@
 {
   "name": "@zenitheditor/zenith-mcp",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "MCP launcher for the Zenith deterministic .zen design engine.",
   "license": "Apache-2.0",
   "homepage": "https://github.com/zenitheditor/zenith#readme",
