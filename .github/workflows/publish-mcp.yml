@@ -76,7 +76,19 @@ jobs:
         working-directory: npm/zenith-mcp
         run: |
           VERSION="${{ steps.version.outputs.version }}"
-          npm view "@zenitheditor/zenith-mcp@$VERSION" version
+          echo "Waiting for @zenitheditor/zenith-mcp@$VERSION to be visible on npm..."
+          for attempt in $(seq 1 30); do
+            if npm view "@zenitheditor/zenith-mcp@$VERSION" version > /dev/null 2>&1; then
+              npm view "@zenitheditor/zenith-mcp@$VERSION" version
+              exit 0
+            fi
+
+            echo "npm package not visible yet (attempt $attempt/30); sleeping 10s"
+            sleep 10
+          done
+
+          echo "::error::@zenitheditor/zenith-mcp@$VERSION is not visible on npm after waiting"
+          exit 1
 
       - name: Stamp server.json
         run: |
