@@ -24,7 +24,7 @@ Plain-text <strong>.zen</strong> design files that you can read, diff, review, v
   <a href="https://github.com/zenitheditor/zenith/releases"><img src="https://img.shields.io/github/v/release/zenitheditor/zenith?include_prereleases&label=release" alt="Latest GitHub release"></a>
   <a href="https://crates.io/crates/zenith-tool"><img src="https://img.shields.io/crates/v/zenith-tool?label=crates.io" alt="zenith-tool on crates.io"></a>
   <a href="https://crates.io/crates/zenith-tool"><img src="https://img.shields.io/crates/d/zenith-tool?label=downloads" alt="crates.io downloads"></a>
-  <a href="https://github.com/mcp/zenitheditor/zenith"><img src="https://img.shields.io/badge/MCP-registry-5b5bd6" alt="MCP registry listing"></a>
+  <a href="https://registry.modelcontextprotocol.io/v0/servers/io.github.zenitheditor%2Fzenith/versions/latest"><img src="https://img.shields.io/badge/MCP-registry-5b5bd6" alt="MCP registry listing"></a>
   <a href="https://github.com/zenitheditor/zenith-showcase"><img src="https://img.shields.io/badge/showcase-examples-0a7f5a" alt="Zenith showcase examples"></a>
   <a href="LICENSE"><img src="https://img.shields.io/github/license/zenitheditor/zenith" alt="License"></a>
 </p>
@@ -72,6 +72,16 @@ cargo install --git https://github.com/zenitheditor/zenith zenith-tool   # from 
 ```
 
 The library crates (`zenith-core`, `zenith-layout`, `zenith-scene`, `zenith-render`, `zenith-tx`, `zenith-session`) are published under their own names for Rust projects that want to build on the engine directly.
+
+### With npm
+
+```bash
+npm install -g @zenitheditor/zenith-mcp
+npx -y @zenitheditor/zenith-mcp --help
+```
+
+The npm package installs the matching prebuilt `zenith` binary from GitHub Releases and is focused
+on the MCP Registry launch path. The unscoped `zenith` binary remains the Rust CLI.
 
 ### GitHub Releases
 
@@ -477,9 +487,12 @@ relocate it for isolated/hosted deployments.
 > for the MCP server when it can't — remote hosts, CI, sandboxes, or hosted/production services
 > where you want the full read+write surface behind a protocol. The server is first-class there.
 
-The repo ships a [`server.json`](./server.json) (MCP registry manifest); the release workflow
-publishes it to the [MCP registry](https://registry.modelcontextprotocol.io) on each stable tag
-(via GitHub OIDC — no token needed), so Zenith stays discoverable from MCP directories.
+The repo ships a [`server.json`](./server.json) (MCP registry manifest). The manual
+**Publish MCP** workflow publishes the matching npm launcher and registry entry for a selected
+stable tag (via GitHub OIDC — no registry token needed), so Zenith stays discoverable from MCP
+directories and can be launched by clients through `npx -y @zenitheditor/zenith-mcp`.
+
+- MCP Registry name: `mcp-name: io.github.zenitheditor/zenith`
 
 </details>
 
