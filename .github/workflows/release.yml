@@ -148,33 +148,6 @@ jobs:
           publish_tier "4 (render, tx)"     zenith-render zenith-tx
           publish_tier "5 (cli)"            zenith-tool
 
-  publish-mcp-registry:
-    name: Publish to MCP Registry
-    # Runs after the crate is published AND indexed (publish-crates waits for
-    # crates.io to index zenith-tool), so the registry's cargo-package check
-    # passes. Stable releases only — prereleases stay off the public registry.
-    needs: [validate-version, publish-crates]
-    if: needs.validate-version.outputs.is_prerelease == 'false'
-    runs-on: ubuntu-latest
-    permissions:
-      id-token: write # GitHub OIDC — authenticates the io.github.zenitheditor/* namespace
-      contents: read
-    steps:
-      - uses: actions/checkout@v6
-      - name: Stamp release version into server.json
-        run: |
-          VERSION="${{ needs.validate-version.outputs.version }}"
-          jq --arg v "$VERSION" '.version = $v' server.json > server.json.tmp
-          mv server.json.tmp server.json
-          cat server.json
-      - name: Install mcp-publisher
-        run: |
-          curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
-      - name: Login to MCP Registry (GitHub OIDC)
-        run: ./mcp-publisher login github-oidc
-      - name: Publish server.json
-        run: ./mcp-publisher publish
-
   build-binaries:
     name: Build (${{ matrix.label }})
     needs: validate-version

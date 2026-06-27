@@ -1,0 +1,99 @@
+name: Publish MCP
+run-name: Publish MCP ${{ inputs.tag }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to publish, e.g. v0.0.2"
+        required: true
+        type: string
+      publish_npm:
+        description: "Publish @zenitheditor/zenith-mcp before MCP registry"
+        required: true
+        default: true
+        type: boolean
+
+concurrency:
+  group: publish-mcp-${{ inputs.tag }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    name: Publish npm package and MCP registry entry
+    runs-on: ubuntu-latest
+    environment: npm
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Resolve version
+        id: version
+        run: |
+          TAG="${{ inputs.tag }}"
+          VERSION="${TAG#v}"
+
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::MCP publish only supports stable release tags like v0.0.2"
+            exit 1
+          fi
+
+          if ! gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null; then
+            echo "::error::GitHub Release '$TAG' does not exist"
+            exit 1
+          fi
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - name: Stamp npm package version
+        working-directory: npm/zenith-mcp
+        run: npm version "${{ steps.version.outputs.version }}" --no-git-tag-version --allow-same-version
+
+      - name: Publish npm package
+        if: inputs.publish_npm
+        working-directory: npm/zenith-mcp
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          if npm view "@zenitheditor/zenith-mcp@$VERSION" version > /dev/null 2>&1; then
+            echo "@zenitheditor/zenith-mcp@$VERSION already exists; skipping npm publish"
+          else
+            npm publish --access public
+          fi
+
+      - name: Verify npm package exists
+        working-directory: npm/zenith-mcp
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          npm view "@zenitheditor/zenith-mcp@$VERSION" version
+
+      - name: Stamp server.json
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          jq --arg v "$VERSION" '.version = $v | (.packages[]?.version) = $v' server.json > server.json.tmp
+          mv server.json.tmp server.json
+          cat server.json
+
+      - name: Install mcp-publisher
+        run: |
+          curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
+
+      - name: Validate server.json
+        run: ./mcp-publisher validate server.json
+
+      - name: Login to MCP Registry (GitHub OIDC)
+        run: ./mcp-publisher login github-oidc
+
+      - name: Publish server.json
+        run: ./mcp-publisher publish server.json

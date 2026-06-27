@@ -1,0 +1,30 @@
+{
+  "name": "@zenitheditor/zenith-mcp",
+  "version": "0.0.3",
+  "description": "MCP launcher for the Zenith deterministic .zen design engine.",
+  "license": "Apache-2.0",
+  "homepage": "https://github.com/zenitheditor/zenith#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zenitheditor/zenith.git",
+    "directory": "npm/zenith-mcp"
+  },
+  "bugs": {
+    "url": "https://github.com/zenitheditor/zenith/issues"
+  },
+  "mcpName": "io.github.zenitheditor/zenith",
+  "bin": {
+    "zenith-mcp": "bin/zenith.js"
+  },
+  "scripts": {
+    "postinstall": "node scripts/postinstall.js"
+  },
+  "files": [
+    "bin/",
+    "scripts/",
+    "vendor/"
+  ],
+  "engines": {
+    "node": ">=18"
+  }
+}
