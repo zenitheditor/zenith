@@ -224,18 +224,57 @@ repo_root() {
 }
 
 # Place a binary at INSTALL_DIR with execute permission, using sudo if needed.
+#
+# The target may be the currently-running binary (`zenith update` replacing
+# itself). A running executable cannot be overwritten in place:
+#   - Linux fails a direct `cp` with ETXTBSY ("Text file busy").
+#   - Windows locks the `.exe` so it can be neither overwritten nor deleted.
+# Both platforms, however, allow *renaming* a running binary. So the new binary
+# is staged to a temp file, the existing binary is moved aside, and the new one
+# is renamed into the freed name — a rename never opens the busy file for
+# writing. On macOS/Linux the old inode lives until the process exits; on
+# Windows the moved-aside file is deleted on the next install (it is still
+# locked while its process runs).
 place_binary() {
     src="$1"
     bin_name="$2"
-    mkdir -p "$INSTALL_DIR" 2>/dev/null || true
-    if [ -w "$INSTALL_DIR" ]; then
-        cp "$src" "$INSTALL_DIR/$bin_name"
-        chmod +x "$INSTALL_DIR/$bin_name" 2>/dev/null || true
+    if [ -w "$INSTALL_DIR" ] || { [ ! -d "$INSTALL_DIR" ] && mkdir -p "$INSTALL_DIR" 2>/dev/null; }; then
+        _place_binary "" "$src" "$bin_name"
     else
         sudo mkdir -p "$INSTALL_DIR"
-        sudo cp "$src" "$INSTALL_DIR/$bin_name"
-        sudo chmod +x "$INSTALL_DIR/$bin_name" 2>/dev/null || true
+        _place_binary "sudo" "$src" "$bin_name"
     fi
+}
+
+# Internal: stage-then-rename a binary into INSTALL_DIR. `$1` is an optional
+# privilege-escalation prefix ("" or "sudo"); unquoted so an empty value expands
+# to nothing.
+_place_binary() {
+    run="$1"
+    src="$2"
+    bin_name="$3"
+    dest="$INSTALL_DIR/$bin_name"
+    tmp="$INSTALL_DIR/.${bin_name}.new.$$"
+    old="$INSTALL_DIR/.${bin_name}.old.$$"
+
+    # Reap stale aside-files left by earlier updates (e.g. a Windows .exe that
+    # was still locked at the time). Harmless no-op when there are none.
+    $run rm -f "$INSTALL_DIR/.${bin_name}.old."* 2>/dev/null || true
+
+    $run cp "$src" "$tmp"
+    $run chmod +x "$tmp" 2>/dev/null || true
+
+    # Move any existing (possibly-running) binary aside, then rename the new one
+    # into place. Renaming avoids ETXTBSY (Linux) and the sharing violation
+    # (Windows) that a direct overwrite would hit.
+    if [ -e "$dest" ]; then
+        $run mv -f "$dest" "$old" 2>/dev/null || true
+    fi
+    $run mv -f "$tmp" "$dest"
+
+    # Best-effort: drop the moved-aside binary now. On Windows this fails while
+    # its process is still running; the reap above clears it next time.
+    $run rm -f "$old" 2>/dev/null || true
 }
 
 print_get_started() {
