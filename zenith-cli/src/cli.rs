@@ -46,10 +46,12 @@ The core loop: author/edit source → `validate` → `render` to inspect → ite
 existing documents should go through `tx` (typed, dry-run by default). Every command accepts \
 `--json` for machine-readable output; run `zenith <command> --help` for exact flags.",
     after_help = "QUICK START:\n  \
-zenith validate poster.zen --json     # check for hard diagnostics\n  \
-zenith render poster.zen --png out.png # render a page to inspect\n  \
-zenith theme new acme --scheme light --primary '#3b5bdb' --out acme.zen\n  \
-zenith plugin install --claude         # teach your AI agent to use zenith\n\n\
+zenith new poster.zen --name \"My Poster\"  # 1. create a new document\n  \
+zenith render poster.zen --png out.png     # 2. render it to a PNG to inspect\n  \
+zenith validate poster.zen --json          # check for problems (they block render)\n  \
+zenith plugin install --claude             # teach your AI agent to use zenith\n\n\
+New documents default to a 1080x1080 square; use `--format a4|letter|…`, `--width`, \
+`--height`, or `--pages` to change that (see `zenith new --help`).\n\n\
 Run `zenith <command> --help` for details on any command."
 )]
 pub struct Cli {

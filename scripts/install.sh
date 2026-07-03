@@ -280,9 +280,12 @@ _place_binary() {
 print_get_started() {
     echo ""
     echo "Get started:"
-    echo "  zenith --help"
-    echo "  zenith validate document.zen"
-    echo "  zenith render document.zen --png out.png"
+    echo "  zenith new poster.zen --name \"My Poster\"   # create a new document"
+    echo "  zenith render poster.zen --png out.png       # render it to a PNG"
+    echo ""
+    echo "  zenith new --help      # page sizes: --format a4|letter, --width, --pages"
+    echo "  zenith validate poster.zen   # check a document for problems"
+    echo "  zenith --help          # all commands"
 }
 
 do_uninstall() {
