@@ -6,39 +6,39 @@ zenith version=1 {
     library id="@zenith/theme.volt" version="1.0.0"
   }
   tokens format="zenith-token-v1" {
-    token id="color.base.100" type="color" value="#f8f8f8"
-    token id="color.base.200" type="color" value="#f5f5f4"
-    token id="color.base.300" type="color" value="#e6e4e3"
-    token id="color.base.content" type="color" value="#1b1816"
-    token id="color.primary" type="color" value="#b9f14e"
-    token id="color.primary.content" type="color" value="#182d02"
-    token id="color.secondary" type="color" value="#000000"
-    token id="color.secondary.content" type="color" value="#ffffff"
-    token id="color.accent" type="color" value="#000000"
-    token id="color.accent.content" type="color" value="#ffffff"
-    token id="color.neutral" type="color" value="#272322"
-    token id="color.neutral.content" type="color" value="#f8f8f8"
-    token id="color.info" type="color" value="#00bafe"
-    token id="color.info.content" type="color" value="#042e49"
-    token id="color.success" type="color" value="#99e600"
-    token id="color.success.content" type="color" value="#182d02"
-    token id="color.warning" type="color" value="#fcb700"
-    token id="color.warning.content" type="color" value="#431700"
-    token id="color.error" type="color" value="#f861b4"
-    token id="color.error.content" type="color" value="#500323"
-    token id="radius.box" type="dimension" value=(px)32
-    token id="radius.field" type="dimension" value=(px)16
-    token id="radius.selector" type="dimension" value=(px)0
-    token id="border.width" type="dimension" value=(px)1
-    token id="space.unit" type="dimension" value=(px)4
-    token id="font.heading" type="fontFamily" value="Noto Sans"
-    token id="font.body" type="fontFamily" value="Noto Sans"
-    token id="size.h1" type="dimension" value=(px)64
-    token id="size.h2" type="dimension" value=(px)40
-    token id="size.body" type="dimension" value=(px)28
-    token id="size.caption" type="dimension" value=(px)18
-    token id="color.shadow" type="color" value="#0000002a"
-    token id="shadow.depth" type="shadow" { layer dx=(px)0 dy=(px)8 blur=(px)24 color=(token)"color.shadow" }
+    token id="color.base.100" type="color" set="@zenith/theme.volt" value="#f8f8f8"
+    token id="color.base.200" type="color" set="@zenith/theme.volt" value="#f5f5f4"
+    token id="color.base.300" type="color" set="@zenith/theme.volt" value="#e6e4e3"
+    token id="color.base.content" type="color" set="@zenith/theme.volt" value="#1b1816"
+    token id="color.primary" type="color" set="@zenith/theme.volt" value="#b9f14e"
+    token id="color.primary.content" type="color" set="@zenith/theme.volt" value="#182d02"
+    token id="color.secondary" type="color" set="@zenith/theme.volt" value="#000000"
+    token id="color.secondary.content" type="color" set="@zenith/theme.volt" value="#ffffff"
+    token id="color.accent" type="color" set="@zenith/theme.volt" value="#000000"
+    token id="color.accent.content" type="color" set="@zenith/theme.volt" value="#ffffff"
+    token id="color.neutral" type="color" set="@zenith/theme.volt" value="#272322"
+    token id="color.neutral.content" type="color" set="@zenith/theme.volt" value="#f8f8f8"
+    token id="color.info" type="color" set="@zenith/theme.volt" value="#00bafe"
+    token id="color.info.content" type="color" set="@zenith/theme.volt" value="#042e49"
+    token id="color.success" type="color" set="@zenith/theme.volt" value="#99e600"
+    token id="color.success.content" type="color" set="@zenith/theme.volt" value="#182d02"
+    token id="color.warning" type="color" set="@zenith/theme.volt" value="#fcb700"
+    token id="color.warning.content" type="color" set="@zenith/theme.volt" value="#431700"
+    token id="color.error" type="color" set="@zenith/theme.volt" value="#f861b4"
+    token id="color.error.content" type="color" set="@zenith/theme.volt" value="#500323"
+    token id="radius.box" type="dimension" set="@zenith/theme.volt" value=(px)32
+    token id="radius.field" type="dimension" set="@zenith/theme.volt" value=(px)16
+    token id="radius.selector" type="dimension" set="@zenith/theme.volt" value=(px)0
+    token id="border.width" type="dimension" set="@zenith/theme.volt" value=(px)1
+    token id="space.unit" type="dimension" set="@zenith/theme.volt" value=(px)4
+    token id="font.heading" type="fontFamily" set="@zenith/theme.volt" value="Noto Sans"
+    token id="font.body" type="fontFamily" set="@zenith/theme.volt" value="Noto Sans"
+    token id="size.h1" type="dimension" set="@zenith/theme.volt" value=(px)64
+    token id="size.h2" type="dimension" set="@zenith/theme.volt" value=(px)40
+    token id="size.body" type="dimension" set="@zenith/theme.volt" value=(px)28
+    token id="size.caption" type="dimension" set="@zenith/theme.volt" value=(px)18
+    token id="color.shadow" type="color" set="@zenith/theme.volt" value="#0000002a"
+    token id="shadow.depth" type="shadow" set="@zenith/theme.volt" { layer dx=(px)0 dy=(px)8 blur=(px)24 color=(token)"color.shadow" }
   }
   styles {}
   document id="theme.volt.preview" title="Theme volt" {

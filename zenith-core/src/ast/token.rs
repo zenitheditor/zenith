@@ -277,6 +277,12 @@ pub struct Token {
     pub token_type: TokenType,
     /// The token's declared value (literal or reference).
     pub value: TokenValue,
+    /// Free-form provenance id (e.g. a theme/pack id such as
+    /// `"@zenith/theme.cobalt"`), when the token was stamped by a pack or
+    /// tool. This is never resolved as a reference — it is only grouped and
+    /// echoed back (e.g. by `token.set_partially_used` and provenance
+    /// tooling).
+    pub set: Option<String>,
     /// Source declaration span, when available.
     pub source_span: Option<Span>,
 }

@@ -754,6 +754,11 @@ pub const DIAGNOSTIC_CODES: &[DiagnosticCodeInfo] = &[
         "A visual property uses a raw literal instead of a token.",
     ),
     info(
+        "token.set_partially_used",
+        Severity::Advisory,
+        "A multi-token provenance `set` has some but not all of its tokens referenced.",
+    ),
+    info(
         "token.type_mismatch",
         Severity::Error,
         "A token value does not match its declared type.",

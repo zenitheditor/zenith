@@ -79,6 +79,7 @@ mod tests {
             id: id.to_owned(),
             token_type: TokenType::Color,
             value: TokenValue::Literal(TokenLiteral::String(value.to_owned())),
+            set: None,
             source_span: None,
         }
     }

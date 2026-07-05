@@ -391,3 +391,45 @@ fn no_theme_scaffold_unchanged() {
         "no theme token must leak in; got:\n{src}"
     );
 }
+
+/// A themed scaffold's contract tokens are all stamped with the same `set`
+/// (the pack id), so validation must never spam per-token `token.unused` for
+/// them — at most a single `token.set_partially_used` advisory summarizes any
+/// unused subset instead.
+#[test]
+fn theme_scaffold_reports_set_partially_used_not_per_token_unused() {
+    let tmp = TempDir::new().unwrap();
+    let paths = store_in(&tmp);
+    let path = doc_path(&tmp, "poster.zen");
+
+    new::run_in(&paths, &path, Some("Poster"), DEFAULT_PAGE, Some("sunset"))
+        .expect("themed new must succeed");
+    let src = std::fs::read_to_string(&path).unwrap();
+
+    let out = validate::run(
+        &src,
+        path.parent(),
+        false,
+        &zenith_cli::config::CliPolicyFlags::default(),
+    );
+    assert_eq!(
+        out.exit_code, 0,
+        "themed scaffold must validate with no errors; got:\n{}",
+        out.stdout
+    );
+
+    let unused_count = out.stdout.matches("token.unused").count();
+    assert_eq!(
+        unused_count, 0,
+        "themed scaffold must not emit per-token token.unused for set-stamped \
+         contract tokens; got:\n{}",
+        out.stdout
+    );
+
+    let set_partial_count = out.stdout.matches("token.set_partially_used").count();
+    assert!(
+        set_partial_count <= 1,
+        "themed scaffold must emit at most one token.set_partially_used advisory; got:\n{}",
+        out.stdout
+    );
+}

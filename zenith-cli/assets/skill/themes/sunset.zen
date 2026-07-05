@@ -6,37 +6,37 @@ zenith version=1 {
     library id="@zenith/theme.sunset" version="1.0.0"
   }
   tokens format="zenith-token-v1" {
-    token id="color.base.100" type="color" value="#010515"
-    token id="color.base.200" type="color" value="#0d1529"
-    token id="color.base.300" type="color" value="#1a273a"
-    token id="color.base.content" type="color" value="#eef2f6"
-    token id="color.primary" type="color" value="#ff8904"
-    token id="color.primary.content" type="color" value="#421104"
-    token id="color.secondary" type="color" value="#fdc700"
-    token id="color.secondary.content" type="color" value="#411e03"
-    token id="color.accent" type="color" value="#7c85ff"
-    token id="color.accent.content" type="color" value="#1c184b"
-    token id="color.neutral" type="color" value="#43546a"
-    token id="color.neutral.content" type="color" value="#f7f9fa"
-    token id="color.info" type="color" value="#4ea0ff"
-    token id="color.info.content" type="color" value="#162455"
-    token id="color.success" type="color" value="#00d390"
-    token id="color.success.content" type="color" value="#002c21"
-    token id="color.warning" type="color" value="#fcb700"
-    token id="color.warning.content" type="color" value="#431700"
-    token id="color.error" type="color" value="#ff6266"
-    token id="color.error.content" type="color" value="#440607"
-    token id="radius.box" type="dimension" value=(px)4
-    token id="radius.field" type="dimension" value=(px)16
-    token id="radius.selector" type="dimension" value=(px)16
-    token id="border.width" type="dimension" value=(px)1
-    token id="space.unit" type="dimension" value=(px)4
-    token id="font.heading" type="fontFamily" value="Noto Sans"
-    token id="font.body" type="fontFamily" value="Noto Sans"
-    token id="size.h1" type="dimension" value=(px)64
-    token id="size.h2" type="dimension" value=(px)40
-    token id="size.body" type="dimension" value=(px)28
-    token id="size.caption" type="dimension" value=(px)18
+    token id="color.base.100" type="color" set="@zenith/theme.sunset" value="#010515"
+    token id="color.base.200" type="color" set="@zenith/theme.sunset" value="#0d1529"
+    token id="color.base.300" type="color" set="@zenith/theme.sunset" value="#1a273a"
+    token id="color.base.content" type="color" set="@zenith/theme.sunset" value="#eef2f6"
+    token id="color.primary" type="color" set="@zenith/theme.sunset" value="#ff8904"
+    token id="color.primary.content" type="color" set="@zenith/theme.sunset" value="#421104"
+    token id="color.secondary" type="color" set="@zenith/theme.sunset" value="#fdc700"
+    token id="color.secondary.content" type="color" set="@zenith/theme.sunset" value="#411e03"
+    token id="color.accent" type="color" set="@zenith/theme.sunset" value="#7c85ff"
+    token id="color.accent.content" type="color" set="@zenith/theme.sunset" value="#1c184b"
+    token id="color.neutral" type="color" set="@zenith/theme.sunset" value="#43546a"
+    token id="color.neutral.content" type="color" set="@zenith/theme.sunset" value="#f7f9fa"
+    token id="color.info" type="color" set="@zenith/theme.sunset" value="#4ea0ff"
+    token id="color.info.content" type="color" set="@zenith/theme.sunset" value="#162455"
+    token id="color.success" type="color" set="@zenith/theme.sunset" value="#00d390"
+    token id="color.success.content" type="color" set="@zenith/theme.sunset" value="#002c21"
+    token id="color.warning" type="color" set="@zenith/theme.sunset" value="#fcb700"
+    token id="color.warning.content" type="color" set="@zenith/theme.sunset" value="#431700"
+    token id="color.error" type="color" set="@zenith/theme.sunset" value="#ff6266"
+    token id="color.error.content" type="color" set="@zenith/theme.sunset" value="#440607"
+    token id="radius.box" type="dimension" set="@zenith/theme.sunset" value=(px)4
+    token id="radius.field" type="dimension" set="@zenith/theme.sunset" value=(px)16
+    token id="radius.selector" type="dimension" set="@zenith/theme.sunset" value=(px)16
+    token id="border.width" type="dimension" set="@zenith/theme.sunset" value=(px)1
+    token id="space.unit" type="dimension" set="@zenith/theme.sunset" value=(px)4
+    token id="font.heading" type="fontFamily" set="@zenith/theme.sunset" value="Noto Sans"
+    token id="font.body" type="fontFamily" set="@zenith/theme.sunset" value="Noto Sans"
+    token id="size.h1" type="dimension" set="@zenith/theme.sunset" value=(px)64
+    token id="size.h2" type="dimension" set="@zenith/theme.sunset" value=(px)40
+    token id="size.body" type="dimension" set="@zenith/theme.sunset" value=(px)28
+    token id="size.caption" type="dimension" set="@zenith/theme.sunset" value=(px)18
   }
   styles {}
   document id="theme.sunset.preview" title="Theme sunset" {

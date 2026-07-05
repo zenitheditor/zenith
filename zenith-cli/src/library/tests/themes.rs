@@ -57,3 +57,32 @@ fn load_embedded_packs_includes_all_themes() {
         );
     }
 }
+
+/// Every embedded `@zenith/theme.*` pack must stamp `set` equal to the pack id
+/// on 100% of its tokens — this is the provenance contract `theme apply` (and
+/// downstream `token.set_partially_used` grouping) relies on.
+#[test]
+fn embedded_theme_packs_stamp_set_on_every_token() {
+    for (id, src) in EMBEDDED_PACKS
+        .iter()
+        .filter(|(id, _)| id.starts_with(THEME_ID_PREFIX))
+    {
+        let doc = KdlAdapter
+            .parse(src.as_bytes())
+            .unwrap_or_else(|e| panic!("theme pack '{}' must parse: {}", id, e));
+        assert!(
+            !doc.tokens.tokens.is_empty(),
+            "theme pack '{}' must declare at least one token",
+            id
+        );
+        for token in &doc.tokens.tokens {
+            assert_eq!(
+                token.set.as_deref(),
+                Some(*id),
+                "theme pack '{}' token '{}' must carry set == pack id",
+                id,
+                token.id
+            );
+        }
+    }
+}

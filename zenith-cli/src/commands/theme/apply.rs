@@ -7,8 +7,11 @@
 //!
 //! For each token in the resolved theme pack:
 //! - a same-id, same-[`TokenType`] token in the target doc gets an
-//!   `Op::UpdateTokenValue`;
-//! - an id absent from the target doc gets an `Op::CreateToken`;
+//!   `Op::UpdateTokenValue`, with `set` stamped to the theme pack's resolved
+//!   id so the re-skinned token's provenance reflects the applied theme;
+//! - an id absent from the target doc gets an `Op::CreateToken`, stamped with
+//!   `set` set to the theme pack's resolved id (e.g. `"@zenith/theme.cobalt"`)
+//!   so the created token's provenance is recorded;
 //! - a same-id token of a *different* type is left untouched and reported as
 //!   a skip (`SkipReason::TypeMismatch`);
 //! - a theme token whose value can't be expressed as an op literal string (a
@@ -128,7 +131,19 @@ pub fn run(
             exit_code: 2,
         })?;
 
-    let (ops, added_tokens, skipped) = plan_ops(&doc.tokens.tokens, &theme_doc.tokens.tokens);
+    // The resolved pack id (e.g. `@zenith/theme.cobalt`), not the possibly-bare
+    // user arg (`pack_ref` may just be `"cobalt"`) — stamped onto every newly
+    // created token as `set` provenance. Every theme pack declares its own
+    // `project id="..."`; fall back to `pack_ref` only in the (unexpected)
+    // case a resolved pack is missing a project block.
+    let pack_id = theme_doc
+        .project
+        .as_ref()
+        .map(|p| p.id.clone())
+        .unwrap_or_else(|| pack_ref.to_owned());
+
+    let (ops, added_tokens, skipped) =
+        plan_ops(&doc.tokens.tokens, &theme_doc.tokens.tokens, &pack_id);
 
     let tx = Transaction {
         ops,
@@ -171,6 +186,7 @@ pub fn run(
 fn plan_ops(
     doc_tokens: &[zenith_core::Token],
     theme_tokens: &[zenith_core::Token],
+    pack_id: &str,
 ) -> (Vec<Op>, Vec<String>, Vec<SkippedToken>) {
     let mut ops = Vec::new();
     let mut added = Vec::new();
@@ -213,6 +229,7 @@ fn plan_ops(
                     id: theme_token.id.clone(),
                     token_type: type_str.to_owned(),
                     value: value_str,
+                    set: Some(pack_id.to_owned()),
                 });
                 added.push(theme_token.id.clone());
             }
@@ -220,6 +237,7 @@ fn plan_ops(
                 ops.push(Op::UpdateTokenValue {
                     id: theme_token.id.clone(),
                     value: value_str,
+                    set: Some(pack_id.to_owned()),
                 });
             }
             Some(existing) => {
@@ -360,6 +378,7 @@ mod tests {
             id: id.to_owned(),
             token_type,
             value: TokenValue::Literal(lit),
+            set: None,
             source_span: None,
         }
     }
@@ -371,9 +390,14 @@ mod tests {
             value: TokenValue::Reference {
                 token_id: target.to_owned(),
             },
+            set: None,
             source_span: None,
         }
     }
+
+    /// The pack id used across tests; matches the shape of a resolved embedded
+    /// theme pack id.
+    const TEST_PACK_ID: &str = "@zenith/theme.test";
 
     #[test]
     fn same_type_becomes_update() {
@@ -387,12 +411,13 @@ mod tests {
             TokenType::Color,
             TokenLiteral::String("#222222".into()),
         )];
-        let (ops, added, skipped) = plan_ops(&doc, &theme);
+        let (ops, added, skipped) = plan_ops(&doc, &theme, TEST_PACK_ID);
         assert_eq!(ops.len(), 1);
         assert!(matches!(
             &ops[0],
-            Op::UpdateTokenValue { id, value }
+            Op::UpdateTokenValue { id, value, set }
                 if id == "color.primary" && value == "#222222"
+                    && set.as_deref() == Some(TEST_PACK_ID)
         ));
         assert!(added.is_empty());
         assert!(skipped.is_empty());
@@ -406,12 +431,13 @@ mod tests {
             TokenType::Color,
             TokenLiteral::String("#333333".into()),
         )];
-        let (ops, added, skipped) = plan_ops(&doc, &theme);
+        let (ops, added, skipped) = plan_ops(&doc, &theme, TEST_PACK_ID);
         assert_eq!(ops.len(), 1);
         assert!(matches!(
             &ops[0],
-            Op::CreateToken { id, token_type, value }
+            Op::CreateToken { id, token_type, value, set }
                 if id == "color.new" && token_type == "color" && value == "#333333"
+                    && set.as_deref() == Some(TEST_PACK_ID)
         ));
         assert_eq!(added, vec!["color.new".to_string()]);
         assert!(skipped.is_empty());
@@ -432,7 +458,7 @@ mod tests {
                 unit: Unit::Px,
             }),
         )];
-        let (ops, added, skipped) = plan_ops(&doc, &theme);
+        let (ops, added, skipped) = plan_ops(&doc, &theme, TEST_PACK_ID);
         assert!(ops.is_empty());
         assert!(added.is_empty());
         assert_eq!(skipped.len(), 1);
@@ -448,9 +474,10 @@ mod tests {
             id: "shadow.depth".to_owned(),
             token_type: TokenType::Shadow,
             value: TokenValue::Literal(TokenLiteral::Shadow(ShadowLiteral { layers: vec![] })),
+            set: None,
             source_span: None,
         }];
-        let (ops, added, skipped) = plan_ops(&doc, &theme);
+        let (ops, added, skipped) = plan_ops(&doc, &theme, TEST_PACK_ID);
         assert!(ops.is_empty());
         assert!(added.is_empty());
         assert_eq!(skipped.len(), 1);
@@ -461,7 +488,7 @@ mod tests {
     fn alias_reference_is_unencodable() {
         let doc: Vec<Token> = vec![];
         let theme = vec![ref_token("color.alias", TokenType::Color, "color.primary")];
-        let (ops, added, skipped) = plan_ops(&doc, &theme);
+        let (ops, added, skipped) = plan_ops(&doc, &theme, TEST_PACK_ID);
         assert!(ops.is_empty());
         assert!(added.is_empty());
         assert_eq!(skipped.len(), 1);
@@ -476,7 +503,7 @@ mod tests {
             TokenLiteral::String("#abcabc".into()),
         )];
         let theme: Vec<Token> = vec![];
-        let (ops, added, skipped) = plan_ops(&doc, &theme);
+        let (ops, added, skipped) = plan_ops(&doc, &theme, TEST_PACK_ID);
         assert!(ops.is_empty());
         assert!(added.is_empty());
         assert!(skipped.is_empty());

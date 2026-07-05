@@ -88,6 +88,20 @@ fn full_reskin_sunset_to_cobalt_dry_run_then_validates_clean() {
         "re-skinned source must carry cobalt's primary colour; got:\n{}",
         outcome.result.source_after
     );
+    assert!(
+        outcome
+            .result
+            .source_after
+            .contains("id=\"color.primary\" type=\"color\" set=\"@zenith/theme.cobalt\""),
+        "re-skinned token must carry the NEW pack id in `set`, not the original \
+         sunset provenance; got:\n{}",
+        outcome.result.source_after
+    );
+    assert!(
+        !outcome.result.source_after.contains("@zenith/theme.sunset"),
+        "re-skinned document must not retain the old theme's set provenance; got:\n{}",
+        outcome.result.source_after
+    );
     assert_eq!(
         hard_error_count(&outcome.result.source_after),
         0,

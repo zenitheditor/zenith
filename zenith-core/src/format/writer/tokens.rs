@@ -24,7 +24,7 @@ pub(super) fn write_token_block(block: &TokenBlock, out: &mut String, depth: usi
 fn write_token(token: &Token, out: &mut String, depth: usize) {
     indent(out, depth);
     out.push_str("token");
-    // Canonical order: id, type, value
+    // Canonical order: id, type, set, value
     out.push_str(" id=\"");
     out.push_str(&token.id);
     out.push('"');
@@ -45,6 +45,14 @@ fn write_token(token: &Token, out: &mut String, depth: usize) {
     out.push_str(" type=\"");
     out.push_str(type_str);
     out.push('"');
+
+    // Provenance set id (e.g. a theme/pack id), when present. Never resolved —
+    // only grouped/echoed. Emitted immediately after `type=` per canonical order.
+    if let Some(set) = &token.set {
+        out.push_str(" set=\"");
+        out.push_str(set);
+        out.push('"');
+    }
 
     // Gradient tokens have no scalar `value=`; linear gradients emit an `angle`
     // prop; radial gradients emit `radial=#true` plus optional geometry params.

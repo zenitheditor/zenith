@@ -13,7 +13,7 @@ const TOKEN_DOC: &str = r##"zenith version=1 {
   project id="proj" name="Test"
   tokens format="zenith-token-v1" {
     token id="color.accent" type="color" value="#3b82f6"
-    token id="size.base" type="dimension" value=(px)16
+    token id="size.base" type="dimension" value=(px)16 set="@zenith/theme.sunset"
   }
   styles { }
   document id="doc1" title="T" {
@@ -37,6 +37,7 @@ fn create_token_color_accepted() {
             id: "color.brand".to_owned(),
             token_type: "color".to_owned(),
             value: "#e11d48".to_owned(),
+            set: None,
         }],
         permissions: Permissions::default(),
     };
@@ -86,6 +87,7 @@ fn create_token_dimension_accepted() {
             id: "size.new".to_owned(),
             token_type: "dimension".to_owned(),
             value: "(px)40".to_owned(),
+            set: None,
         }],
         permissions: Permissions::default(),
     };
@@ -122,6 +124,7 @@ fn create_token_duplicate_id_rejected() {
             id: "color.accent".to_owned(),
             token_type: "color".to_owned(),
             value: "#ffffff".to_owned(),
+            set: None,
         }],
         permissions: Permissions::default(),
     };
@@ -155,6 +158,7 @@ fn create_token_gradient_type_rejected() {
             id: "grad.new".to_owned(),
             token_type: "gradient".to_owned(),
             value: "#ff0000".to_owned(),
+            set: None,
         }],
         permissions: Permissions::default(),
     };
@@ -189,6 +193,7 @@ fn create_token_unparseable_dimension_rejected() {
             id: "size.bad".to_owned(),
             token_type: "dimension".to_owned(),
             value: "not-a-dimension".to_owned(),
+            set: None,
         }],
         permissions: Permissions::default(),
     };
@@ -223,6 +228,7 @@ fn create_token_unparseable_number_rejected() {
             id: "num.bad".to_owned(),
             token_type: "number".to_owned(),
             value: "NaN".to_owned(),
+            set: None,
         }],
         permissions: Permissions::default(),
     };
@@ -248,7 +254,9 @@ fn create_token_unparseable_number_rejected() {
 // ── update_token_value: dimension token → Accepted ───────────────────────────
 
 /// (g) update_token_value on an existing dimension token to `(px)40` → Accepted;
-/// source reflects the new value, type is preserved.
+/// source reflects the new value, type is preserved.  `set` is omitted (`None`),
+/// so the token's existing `set` provenance (`@zenith/theme.sunset`, from the
+/// fixture) must be left untouched.
 #[test]
 fn update_token_value_dimension_accepted() {
     let doc = parse(TOKEN_DOC);
@@ -257,6 +265,7 @@ fn update_token_value_dimension_accepted() {
         ops: vec![Op::UpdateTokenValue {
             id: "size.base".to_owned(),
             value: "(px)40".to_owned(),
+            set: None,
         }],
         permissions: Permissions::default(),
     };
@@ -291,6 +300,82 @@ fn update_token_value_dimension_accepted() {
         "token type must remain Dimension; got: {:?}",
         updated.token_type
     );
+    assert_eq!(
+        updated.set.as_deref(),
+        Some("@zenith/theme.sunset"),
+        "set: None must leave the token's existing set provenance untouched"
+    );
+}
+
+// ── update_token_value: with `set` → re-stamps provenance ───────────────────
+
+/// (g2) update_token_value with `set` populated re-stamps the token's `set`
+/// provenance to the new value, replacing the fixture's original
+/// `@zenith/theme.sunset`.
+#[test]
+fn update_token_value_with_set_restamps_provenance() {
+    let doc = parse(TOKEN_DOC);
+
+    let tx = Transaction {
+        ops: vec![Op::UpdateTokenValue {
+            id: "size.base".to_owned(),
+            value: "(px)40".to_owned(),
+            set: Some("@zenith/theme.cobalt".to_owned()),
+        }],
+        permissions: Permissions::default(),
+    };
+    let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
+
+    assert_eq!(
+        result.status,
+        TxStatus::Accepted,
+        "expected Accepted; diagnostics: {:?}",
+        result.diagnostics
+    );
+    assert!(
+        result.source_after.contains("set=\"@zenith/theme.cobalt\""),
+        "source_after must carry the new set provenance; got:\n{}",
+        result.source_after
+    );
+
+    let after_doc = parse(&result.source_after);
+    let updated = after_doc
+        .tokens
+        .tokens
+        .iter()
+        .find(|t| t.id == "size.base")
+        .expect("size.base must still exist");
+    assert_eq!(
+        updated.set.as_deref(),
+        Some("@zenith/theme.cobalt"),
+        "set: Some(_) must re-stamp the token's set provenance"
+    );
+}
+
+// ── update_token_value: JSON round-trip omits absent `set` key ──────────────
+
+/// (g3) An `UpdateTokenValue` op with `set: None` serializes to JSON without a
+/// `"set"` key at all, and deserializes back to `set: None`.
+#[test]
+fn update_token_value_json_roundtrip_omits_absent_set() {
+    let op = Op::UpdateTokenValue {
+        id: "size.base".to_owned(),
+        value: "(px)40".to_owned(),
+        set: None,
+    };
+    let json = serde_json::to_string(&op).expect("serialize");
+    assert!(
+        !json.contains("\"set\""),
+        "absent set must be omitted from JSON; got: {json}"
+    );
+
+    let round_tripped: Op = serde_json::from_str(&json).expect("deserialize");
+    match round_tripped {
+        Op::UpdateTokenValue { set, .. } => {
+            assert_eq!(set, None, "round-tripped op must still have set: None");
+        }
+        other => panic!("expected UpdateTokenValue, got {other:?}"),
+    }
 }
 
 // ── update_token_value: unknown id → Rejected ─────────────────────────────────
@@ -304,6 +389,7 @@ fn update_token_value_unknown_id_rejected() {
         ops: vec![Op::UpdateTokenValue {
             id: "color.does_not_exist".to_owned(),
             value: "#ffffff".to_owned(),
+            set: None,
         }],
         permissions: Permissions::default(),
     };
@@ -339,6 +425,7 @@ fn update_token_value_type_mismatch_rejected() {
         ops: vec![Op::UpdateTokenValue {
             id: "size.base".to_owned(),
             value: "Inter".to_owned(),
+            set: None,
         }],
         permissions: Permissions::default(),
     };
@@ -359,4 +446,49 @@ fn update_token_value_type_mismatch_rejected() {
         result.diagnostics
     );
     assert_eq!(result.source_after, result.source_before);
+}
+
+// ── create_token: with `set` provenance → applied doc token carries it ──────
+
+/// (j) create_token with `set` populated is accepted; the re-parsed document's
+/// new token carries the same `set` id, and it round-trips in source_after.
+#[test]
+fn create_token_with_set_is_applied() {
+    let doc = parse(TOKEN_DOC);
+
+    let tx = Transaction {
+        ops: vec![Op::CreateToken {
+            id: "color.themed".to_owned(),
+            token_type: "color".to_owned(),
+            value: "#123456".to_owned(),
+            set: Some("@zenith/theme.cobalt".to_owned()),
+        }],
+        permissions: Permissions::default(),
+    };
+    let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
+
+    assert_eq!(
+        result.status,
+        TxStatus::Accepted,
+        "expected Accepted; diagnostics: {:?}",
+        result.diagnostics
+    );
+    assert!(
+        result.source_after.contains("set=\"@zenith/theme.cobalt\""),
+        "source_after must contain the set provenance; got:\n{}",
+        result.source_after
+    );
+
+    let after_doc = parse(&result.source_after);
+    let created = after_doc
+        .tokens
+        .tokens
+        .iter()
+        .find(|t| t.id == "color.themed")
+        .expect("color.themed must exist");
+    assert_eq!(
+        created.set.as_deref(),
+        Some("@zenith/theme.cobalt"),
+        "applied doc token must carry the set id"
+    );
 }

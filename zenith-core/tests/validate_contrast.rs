@@ -23,6 +23,7 @@ fn dim_token_pt(id: &str, value: f64) -> Token {
             value,
             unit: Unit::Pt,
         })),
+        set: None,
         source_span: None,
     }
 }
@@ -33,6 +34,7 @@ fn fw_token(id: &str, weight: f64) -> Token {
         id: id.to_owned(),
         token_type: TokenType::FontWeight,
         value: TokenValue::Literal(TokenLiteral::Number(weight)),
+        set: None,
         source_span: None,
     }
 }

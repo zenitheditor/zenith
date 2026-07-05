@@ -261,10 +261,12 @@ fn op_tag_strings_match_exhaustive_set() {
             id: String::new(),
             token_type: String::new(),
             value: String::new(),
+            set: None,
         },
         Op::UpdateTokenValue {
             id: String::new(),
             value: String::new(),
+            set: None,
         },
         Op::SetStyleProperty {
             style_id: String::new(),
@@ -579,6 +581,7 @@ fn op_fields_names_match_serde_keys() {
                 id: "color.brand".into(),
                 token_type: "color".into(),
                 value: "#e11d48".into(),
+                set: Some("@zenith/theme.cobalt".into()),
             },
         ),
         (
@@ -586,6 +589,7 @@ fn op_fields_names_match_serde_keys() {
             Op::UpdateTokenValue {
                 id: "color.brand".into(),
                 value: "#3b82f6".into(),
+                set: Some("@zenith/theme.cobalt".into()),
             },
         ),
         (

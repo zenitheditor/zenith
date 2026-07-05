@@ -66,12 +66,13 @@ fn token_type_name(token_type: &TokenType) -> &str {
 /// Eagerly rejects with `tx.duplicate_id` if a token with `id` already exists.
 /// Rejects with `tx.invalid_value` if `token_type` maps to a gradient, shadow,
 /// or unknown type (v0: scalar types only), or if `value` does not parse for
-/// the given type.  On success pushes the new token and records `id` in
-/// `affected`.
+/// the given type.  On success pushes the new token (carrying `set`, when
+/// given, as free-form provenance) and records `id` in `affected`.
 pub(super) fn apply_create_token(
     id: &str,
     token_type: &str,
     value: &str,
+    set: Option<&str>,
     doc: &mut Document,
     diagnostics: &mut Vec<Diagnostic>,
     affected: &mut Vec<String>,
@@ -134,6 +135,7 @@ pub(super) fn apply_create_token(
         id: id.to_owned(),
         token_type: ty,
         value: TokenValue::Literal(lit),
+        set: set.map(str::to_owned),
         source_span: None,
     });
 
@@ -148,9 +150,14 @@ pub(super) fn apply_create_token(
 /// `tx.invalid_value` if the token is a gradient or shadow type (unsupported via
 /// this op), or if `value` does not parse for the token's existing type.  On
 /// success replaces `token.value` and records `id` in `affected`.
+///
+/// When `set` is `Some`, the token's `set` provenance is re-stamped to it
+/// (e.g. a theme apply re-skinning the token to a new theme/pack); `None`
+/// leaves the token's existing `set` untouched.
 pub(super) fn apply_update_token_value(
     id: &str,
     value: &str,
+    set: Option<&str>,
     doc: &mut Document,
     diagnostics: &mut Vec<Diagnostic>,
     affected: &mut Vec<String>,
@@ -218,6 +225,9 @@ pub(super) fn apply_update_token_value(
     // SAFETY: idx is still valid — no insertions/removals since .position().
     if let Some(t) = doc.tokens.tokens.get_mut(idx) {
         t.value = TokenValue::Literal(lit);
+        if let Some(set) = set {
+            t.set = Some(set.to_owned());
+        }
     }
 
     record_affected(id, affected);

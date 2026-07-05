@@ -34,6 +34,7 @@ pub fn color_token(id: &str) -> Token {
         id: id.to_owned(),
         token_type: TokenType::Color,
         value: TokenValue::Literal(TokenLiteral::String("#112233".to_owned())),
+        set: None,
         source_span: None,
     }
 }
@@ -46,6 +47,7 @@ pub fn dim_token(id: &str) -> Token {
             value: 12.0,
             unit: Unit::Px,
         })),
+        set: None,
         source_span: None,
     }
 }
@@ -55,6 +57,18 @@ pub fn font_family_token(id: &str) -> Token {
         id: id.to_owned(),
         token_type: TokenType::FontFamily,
         value: TokenValue::Literal(TokenLiteral::String("Inter".to_owned())),
+        set: None,
+        source_span: None,
+    }
+}
+
+/// A color token stamped with a provenance `set` id (e.g. a theme/pack id).
+pub fn color_token_with_set(id: &str, set_id: &str) -> Token {
+    Token {
+        id: id.to_owned(),
+        token_type: TokenType::Color,
+        value: TokenValue::Literal(TokenLiteral::String("#112233".to_owned())),
+        set: Some(set_id.to_owned()),
         source_span: None,
     }
 }
@@ -347,6 +361,7 @@ pub fn color_token_hex(id: &str, hex: &str) -> Token {
         id: id.to_owned(),
         token_type: TokenType::Color,
         value: TokenValue::Literal(TokenLiteral::String(hex.to_owned())),
+        set: None,
         source_span: None,
     }
 }

@@ -17,6 +17,7 @@ fn literal_token(id: &str, token_type: TokenType, literal: TokenLiteral) -> Toke
         id: id.to_owned(),
         token_type,
         value: TokenValue::Literal(literal),
+        set: None,
         source_span: None,
     }
 }
@@ -28,6 +29,7 @@ fn alias_token(id: &str, token_type: TokenType, target: &str) -> Token {
         value: TokenValue::Reference {
             token_id: target.to_owned(),
         },
+        set: None,
         source_span: None,
     }
 }
@@ -65,6 +67,7 @@ fn gradient_token(id: &str, angle_deg: f64, stops: Vec<(f64, &str)>) -> Token {
                 })
                 .collect(),
         })),
+        set: None,
         source_span: None,
     }
 }

@@ -18,7 +18,7 @@ use crate::error::{ParseError, ParseErrorCode};
 use super::helpers::{
     entry_annotation, entry_to_property_value, kdl_value_to_literal_string, node_span,
     optional_bool_prop, optional_dimension_prop, optional_f64_prop, optional_i64_prop,
-    optional_token_ref_prop, required_string_prop,
+    optional_string_prop, optional_token_ref_prop, required_string_prop,
 };
 
 pub(super) fn transform_tokens(node: &KdlNode) -> Result<TokenBlock, ParseError> {
@@ -43,6 +43,7 @@ fn transform_token(node: &KdlNode) -> Result<Token, ParseError> {
     let id = required_string_prop(node, "id")?.to_owned();
     let type_str = required_string_prop(node, "type")?;
     let token_type = TokenType::from_type_name(type_str);
+    let set = optional_string_prop(node, "set").map(str::to_owned);
 
     // Gradient tokens carry no scalar `value=`; they are built from an optional
     // `angle=(deg)N` prop plus child `stop` nodes. Prefer this child-node form
@@ -54,6 +55,7 @@ fn transform_token(node: &KdlNode) -> Result<Token, ParseError> {
             id,
             token_type,
             value: token_value,
+            set,
             source_span,
         });
     }
@@ -67,6 +69,7 @@ fn transform_token(node: &KdlNode) -> Result<Token, ParseError> {
             id,
             token_type,
             value: token_value,
+            set,
             source_span,
         });
     }
@@ -80,6 +83,7 @@ fn transform_token(node: &KdlNode) -> Result<Token, ParseError> {
             id,
             token_type,
             value: token_value,
+            set,
             source_span,
         });
     }
@@ -93,6 +97,7 @@ fn transform_token(node: &KdlNode) -> Result<Token, ParseError> {
             id,
             token_type,
             value: token_value,
+            set,
             source_span,
         });
     }
@@ -157,6 +162,7 @@ fn transform_token(node: &KdlNode) -> Result<Token, ParseError> {
         id,
         token_type,
         value: token_value,
+        set,
         source_span,
     })
 }

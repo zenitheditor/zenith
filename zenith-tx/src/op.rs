@@ -665,6 +665,10 @@ pub enum Op {
     /// a color/family string (`"#e11d48"`, `"Inter"`), a dimension string
     /// (`"(px)40"`), or a number (`"700"`, `"1.05"`).
     ///
+    /// `set` is an optional free-form provenance id (e.g. a theme/pack id such
+    /// as `"@zenith/theme.cobalt"`) recorded on the created token. It is never
+    /// resolved — only grouped/echoed (e.g. by `token.set_partially_used`).
+    ///
     /// Eagerly rejected with `tx.duplicate_id` if a token with `id` already
     /// exists.  Gradient/shadow/unknown types are rejected with
     /// `tx.invalid_value` (v0: scalar literal token types only; gradient/shadow
@@ -683,6 +687,10 @@ pub enum Op {
         token_type: String,
         /// Literal value in string form appropriate for the declared type.
         value: String,
+        /// Optional free-form provenance id (e.g. a theme/pack id). Omit for a
+        /// plain, unstamped token.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        set: Option<String>,
     },
     /// Replace the literal value of an existing token, preserving its declared
     /// type.
@@ -691,6 +699,10 @@ pub enum Op {
     /// that does not parse for that type is rejected with `tx.invalid_value`.
     /// Rejected with `tx.unknown_token` if no token with `id` exists.
     /// Gradient/shadow tokens cannot be updated via this op → `tx.invalid_value`.
+    ///
+    /// `set`, when present, re-stamps the token's provenance id (e.g. when a
+    /// theme apply re-skins the token to a new theme/pack). `None` leaves the
+    /// token's existing `set` untouched.
     ///
     /// JSON example:
     /// ```json
@@ -701,6 +713,10 @@ pub enum Op {
         id: String,
         /// New literal value in string form appropriate for the token's existing type.
         value: String,
+        /// Optional new provenance id to stamp on the token. Omit to leave the
+        /// existing `set` unchanged.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        set: Option<String>,
     },
     /// Set one recognized visual property on a named style to a token reference.
     ///

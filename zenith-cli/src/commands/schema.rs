@@ -335,9 +335,18 @@ pub fn token_detail(ty: &str, json: bool) -> (String, u8) {
             "\nExample:\n  {}",
             desc.example.replace('\n', "\n  ")
         ));
+        text.push_str(&format!("\n\n{TOKEN_SET_NOTE}"));
         (text, 0)
     }
 }
+
+/// Every token — regardless of type — accepts an optional `set=` provenance
+/// attribute, documented once here rather than duplicated per type.
+const TOKEN_SET_NOTE: &str = "Every token type also accepts an optional `set=\"…\"` \
+attribute: a free-form provenance id (e.g. a theme/pack id such as \
+\"@zenith/theme.cobalt\") stamped by tooling. It is never resolved as a \
+reference — only grouped and echoed (see token.set_partially_used in \
+`zenith schema diagnostics`).";
 
 // ── Non-node surface formatters ───────────────────────────────────────────────
 
@@ -1283,6 +1292,18 @@ mod tests {
     }
 
     #[test]
+    fn token_detail_human_documents_set_attribute() {
+        // Every token type's human detail must mention the common `set=`
+        // provenance attribute (documented once, not duplicated per type).
+        let (text, code) = token_detail("color", false);
+        assert_eq!(code, 0);
+        assert!(
+            text.contains("set=") && text.contains("provenance"),
+            "must document the set= provenance attribute; got:\n{text}"
+        );
+    }
+
+    #[test]
     fn token_detail_unknown_type_returns_error() {
         let (text, code) = token_detail("bogus", false);
         assert_eq!(code, 1);
@@ -1667,6 +1688,30 @@ mod tests {
         assert!(
             text.contains("allow \\\"<code>\\\" \\\"<subject-id>\\\""),
             "JSON must include scoped diagnostic policy syntax; got:\n{text}"
+        );
+    }
+
+    /// `token.set_partially_used` is defined in the core diagnostic catalog and
+    /// must flow through automatically to the `zenith schema diagnostics`
+    /// listing (both human and JSON), with no CLI-side row needed.
+    #[test]
+    fn diagnostics_listing_includes_token_set_partially_used() {
+        let (human, code) = diagnostics(false);
+        assert_eq!(code, 0);
+        assert!(
+            human.contains("token.set_partially_used"),
+            "human diagnostics listing must include the new code; got:\n{human}"
+        );
+
+        let (json, code) = diagnostics(true);
+        assert_eq!(code, 0);
+        assert!(
+            json.contains("\"token.set_partially_used\""),
+            "JSON diagnostics listing must include the new code; got:\n{json}"
+        );
+        assert!(
+            json.contains("\"advisory\""),
+            "JSON diagnostics listing must carry a severity string; got:\n{json}"
         );
     }
 

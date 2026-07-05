@@ -449,6 +449,11 @@ pub fn op_fields(name: &str) -> Option<&'static [OpFieldSchema]> {
                     ty: "string",
                     required: true,
                 },
+                OpFieldSchema {
+                    name: "set",
+                    ty: "string",
+                    required: false,
+                },
             ];
             Some(F)
         }
@@ -463,6 +468,11 @@ pub fn op_fields(name: &str) -> Option<&'static [OpFieldSchema]> {
                     name: "value",
                     ty: "string",
                     required: true,
+                },
+                OpFieldSchema {
+                    name: "set",
+                    ty: "string",
+                    required: false,
                 },
             ];
             Some(F)

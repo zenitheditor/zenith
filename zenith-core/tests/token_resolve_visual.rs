@@ -18,6 +18,7 @@ fn literal_token(id: &str, token_type: TokenType, literal: TokenLiteral) -> Toke
         id: id.to_owned(),
         token_type,
         value: TokenValue::Literal(literal),
+        set: None,
         source_span: None,
     }
 }
@@ -55,6 +56,7 @@ fn gradient_token(id: &str, angle_deg: f64, stops: Vec<(f64, &str)>) -> Token {
                 })
                 .collect(),
         })),
+        set: None,
         source_span: None,
     }
 }
@@ -83,6 +85,7 @@ fn radial_gradient_token(
                 })
                 .collect(),
         })),
+        set: None,
         source_span: None,
     }
 }
@@ -102,6 +105,7 @@ fn shadow_token(id: &str, layers: Vec<(f64, f64, f64, &str)>) -> Token {
                 })
                 .collect(),
         })),
+        set: None,
         source_span: None,
     }
 }
@@ -123,6 +127,7 @@ fn filter_token(id: &str, ops: Vec<(FilterKind, Option<f64>)>) -> Token {
                 })
                 .collect(),
         })),
+        set: None,
         source_span: None,
     }
 }
@@ -149,6 +154,7 @@ fn duotone_filter_token(
                 scale: None,
             }],
         })),
+        set: None,
         source_span: None,
     }
 }
@@ -174,6 +180,7 @@ fn noise_filter_token(
                 scale,
             }],
         })),
+        set: None,
         source_span: None,
     }
 }
@@ -194,6 +201,7 @@ fn mask_token(
             feather,
             invert,
         })),
+        set: None,
         source_span: None,
     }
 }

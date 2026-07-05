@@ -443,6 +443,137 @@ fn unused_token_produces_advisory() {
     assert_eq!(diag.subject_id.as_deref(), Some("color.unused"));
 }
 
+// ── Test 8b: set-aware token.unused / token.set_partially_used ─────────
+
+/// A single-token `set` (only one token carries a given `set` id) behaves
+/// exactly like the no-`set` case: an unreferenced member still gets a plain
+/// per-token `token.unused`, not `token.set_partially_used`.
+#[test]
+fn singleton_set_still_produces_plain_token_unused() {
+    let doc = doc_with(
+        vec![color_token_with_set("color.lonely", "@zenith/theme.solo")],
+        vec![minimal_page("page.one", vec![])],
+    );
+    let report = validate(&doc);
+    assert!(
+        has_code(&report, "token.unused"),
+        "codes: {:?}",
+        codes(&report)
+    );
+    assert!(
+        !has_code(&report, "token.set_partially_used"),
+        "a singleton set must not emit token.set_partially_used; codes: {:?}",
+        codes(&report)
+    );
+}
+
+/// A multi-token `set` with none of its members referenced collapses into a
+/// single `token.set_partially_used` advisory; no per-token `token.unused` is
+/// emitted for any set member.
+#[test]
+fn multi_token_set_fully_unused_collapses_to_one_advisory() {
+    let doc = doc_with(
+        vec![
+            color_token_with_set("color.a", "@zenith/theme.cobalt"),
+            color_token_with_set("color.b", "@zenith/theme.cobalt"),
+            color_token_with_set("color.c", "@zenith/theme.cobalt"),
+        ],
+        vec![minimal_page("page.one", vec![])],
+    );
+    let report = validate(&doc);
+    assert!(
+        !has_code(&report, "token.unused"),
+        "multi-token set must suppress per-token token.unused; codes: {:?}",
+        codes(&report)
+    );
+    let matches: Vec<_> = report
+        .diagnostics
+        .iter()
+        .filter(|d| d.code == "token.set_partially_used")
+        .collect();
+    assert_eq!(
+        matches.len(),
+        1,
+        "exactly one set_partially_used advisory expected; got: {:?}",
+        codes(&report)
+    );
+    assert_eq!(matches[0].severity, Severity::Advisory);
+    assert_eq!(
+        matches[0].subject_id.as_deref(),
+        Some("@zenith/theme.cobalt")
+    );
+    assert!(
+        matches[0].message.contains("none of 3 tokens referenced"),
+        "message should report 0/3; got: {}",
+        matches[0].message
+    );
+}
+
+/// A multi-token `set` with some (but not all) members referenced still
+/// collapses into a single `token.set_partially_used` advisory reporting the
+/// used/total split.
+#[test]
+fn multi_token_set_partially_used_reports_used_count() {
+    let doc = doc_with(
+        vec![
+            color_token_with_set("color.a", "@zenith/theme.cobalt"),
+            color_token_with_set("color.b", "@zenith/theme.cobalt"),
+            color_token_with_set("color.c", "@zenith/theme.cobalt"),
+        ],
+        vec![minimal_page(
+            "page.one",
+            vec![minimal_rect("rect.one", Some(token_ref("color.a")))],
+        )],
+    );
+    let report = validate(&doc);
+    assert!(
+        !has_code(&report, "token.unused"),
+        "multi-token set must suppress per-token token.unused; codes: {:?}",
+        codes(&report)
+    );
+    let matches: Vec<_> = report
+        .diagnostics
+        .iter()
+        .filter(|d| d.code == "token.set_partially_used")
+        .collect();
+    assert_eq!(matches.len(), 1, "codes: {:?}", codes(&report));
+    assert!(
+        matches[0].message.contains("1 of 3 tokens referenced"),
+        "message should report 1/3; got: {}",
+        matches[0].message
+    );
+}
+
+/// A multi-token `set` with every member referenced emits nothing at all for
+/// that set — no `token.unused`, no `token.set_partially_used`.
+#[test]
+fn multi_token_set_fully_used_emits_nothing() {
+    let doc = doc_with(
+        vec![
+            color_token_with_set("color.a", "@zenith/theme.cobalt"),
+            color_token_with_set("color.b", "@zenith/theme.cobalt"),
+        ],
+        vec![minimal_page(
+            "page.one",
+            vec![
+                minimal_rect("rect.one", Some(token_ref("color.a"))),
+                minimal_rect("rect.two", Some(token_ref("color.b"))),
+            ],
+        )],
+    );
+    let report = validate(&doc);
+    assert!(
+        !has_code(&report, "token.unused"),
+        "codes: {:?}",
+        codes(&report)
+    );
+    assert!(
+        !has_code(&report, "token.set_partially_used"),
+        "fully-used set must emit nothing; codes: {:?}",
+        codes(&report)
+    );
+}
+
 // ── Bonus: duplicate id between token and node ────────────────────────
 
 #[test]

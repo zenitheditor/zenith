@@ -315,11 +315,20 @@ fn apply_op(
             id,
             token_type,
             value,
+            set,
         } => {
-            apply_create_token(id, token_type, value, doc, diagnostics, affected);
+            apply_create_token(
+                id,
+                token_type,
+                value,
+                set.as_deref(),
+                doc,
+                diagnostics,
+                affected,
+            );
         }
-        Op::UpdateTokenValue { id, value } => {
-            apply_update_token_value(id, value, doc, diagnostics, affected);
+        Op::UpdateTokenValue { id, value, set } => {
+            apply_update_token_value(id, value, set.as_deref(), doc, diagnostics, affected);
         }
         Op::SetStyleProperty {
             style_id,
