@@ -30,8 +30,8 @@ fn creates_valid_document_with_doc_id() {
     let paths = store_in(&tmp);
     let path = doc_path(&tmp, "poster.zen");
 
-    let result =
-        new::run_in(&paths, &path, Some("Launch Poster"), DEFAULT_PAGE).expect("new must succeed");
+    let result = new::run_in(&paths, &path, Some("Launch Poster"), DEFAULT_PAGE, None)
+        .expect("new must succeed");
     assert_eq!(
         result.doc_id.len(),
         26,
@@ -65,7 +65,8 @@ fn refuses_to_overwrite_existing_file() {
     let path = doc_path(&tmp, "exists.zen");
     std::fs::write(&path, b"ORIGINAL").unwrap();
 
-    let err = new::run_in(&paths, &path, None, DEFAULT_PAGE).expect_err("must refuse to overwrite");
+    let err =
+        new::run_in(&paths, &path, None, DEFAULT_PAGE, None).expect_err("must refuse to overwrite");
     assert_ne!(err.exit_code, 0, "overwrite refusal must be non-zero exit");
     assert!(
         err.message.contains("refusing to overwrite"),
@@ -84,7 +85,7 @@ fn slug_derives_from_name() {
     let paths = store_in(&tmp);
     let path = doc_path(&tmp, "whatever.zen");
 
-    new::run_in(&paths, &path, Some("Acme Brand"), DEFAULT_PAGE).expect("new must succeed");
+    new::run_in(&paths, &path, Some("Acme Brand"), DEFAULT_PAGE, None).expect("new must succeed");
     let src = std::fs::read_to_string(&path).unwrap();
     assert!(
         src.contains("doc.acme-brand"),
@@ -104,7 +105,7 @@ fn slug_derives_from_file_stem() {
     let paths = store_in(&tmp);
     let path = doc_path(&tmp, "my-flyer.zen");
 
-    new::run_in(&paths, &path, None, DEFAULT_PAGE).expect("new must succeed");
+    new::run_in(&paths, &path, None, DEFAULT_PAGE, None).expect("new must succeed");
     let src = std::fs::read_to_string(&path).unwrap();
     assert!(
         src.contains("doc.my-flyer"),
@@ -122,7 +123,7 @@ fn appends_zen_extension_when_absent() {
     let path = doc_path(&tmp, "poster"); // no extension
 
     let result =
-        new::run_in(&paths, &path, Some("Poster"), DEFAULT_PAGE).expect("new must succeed");
+        new::run_in(&paths, &path, Some("Poster"), DEFAULT_PAGE, None).expect("new must succeed");
     let expected = tmp.path().join("poster.zen");
     assert_eq!(result.path, expected, "must append .zen");
     assert!(expected.exists(), "poster.zen must be created");
@@ -139,7 +140,8 @@ fn creates_missing_parent_directories() {
     let paths = store_in(&tmp);
     let path = tmp.path().join("sub").join("deep").join("doc.zen");
 
-    new::run_in(&paths, &path, Some("Deep"), DEFAULT_PAGE).expect("new must create parent dirs");
+    new::run_in(&paths, &path, Some("Deep"), DEFAULT_PAGE, None)
+        .expect("new must create parent dirs");
     assert!(path.exists(), "doc.zen must be created in the new subtree");
 }
 
@@ -156,7 +158,7 @@ fn creates_document_when_history_store_unavailable() {
     let paths = StorePaths::new(&blocker);
 
     let path = doc_path(&tmp, "resilient.zen");
-    let result = new::run_in(&paths, &path, Some("Resilient"), DEFAULT_PAGE)
+    let result = new::run_in(&paths, &path, Some("Resilient"), DEFAULT_PAGE, None)
         .expect("new must succeed despite no store");
 
     assert_eq!(
@@ -188,7 +190,7 @@ fn format_sets_page_dimensions() {
     let path = doc_path(&tmp, "flyer.zen");
 
     let page = resolve_page(Some(PaperFormat::A4), None, None, false, 1).unwrap();
-    new::run_in(&paths, &path, Some("Flyer"), page).expect("new must succeed");
+    new::run_in(&paths, &path, Some("Flyer"), page, None).expect("new must succeed");
 
     let src = std::fs::read_to_string(&path).unwrap();
     assert!(src.contains("(px)794"), "A4 width; got:\n{src}");
@@ -216,7 +218,7 @@ fn explicit_dimensions_and_multiple_pages() {
     let path = doc_path(&tmp, "deck.zen");
 
     let page = resolve_page(None, Some(1600), Some(900), false, 3).unwrap();
-    new::run_in(&paths, &path, Some("Deck"), page).expect("new must succeed");
+    new::run_in(&paths, &path, Some("Deck"), page, None).expect("new must succeed");
 
     let src = std::fs::read_to_string(&path).unwrap();
     assert!(
@@ -252,11 +254,140 @@ fn rejects_directory_path() {
     let dir = tmp.path().join("adir");
     std::fs::create_dir(&dir).unwrap();
 
-    let err = new::run_in(&paths, &dir, None, DEFAULT_PAGE).expect_err("must reject a directory");
+    let err =
+        new::run_in(&paths, &dir, None, DEFAULT_PAGE, None).expect_err("must reject a directory");
     assert_ne!(err.exit_code, 0);
     assert!(
         err.message.contains("is a directory"),
         "message must identify a directory; got: {}",
         err.message
+    );
+}
+
+/// `--theme sunset` copies the theme's full token contract into the scaffold:
+/// its color/radius/type tokens are present, the page background references
+/// `color.base.100` instead of the default `color.bg`, and the document still
+/// validates with zero Error diagnostics.
+#[test]
+fn theme_scaffold_carries_full_token_contract() {
+    let tmp = TempDir::new().unwrap();
+    let paths = store_in(&tmp);
+    let path = doc_path(&tmp, "poster.zen");
+
+    new::run_in(&paths, &path, Some("Poster"), DEFAULT_PAGE, Some("sunset"))
+        .expect("themed new must succeed");
+
+    let src = std::fs::read_to_string(&path).unwrap();
+    assert!(
+        src.contains("color.base.100"),
+        "missing base token; got:\n{src}"
+    );
+    assert!(
+        src.contains("color.primary"),
+        "missing primary token; got:\n{src}"
+    );
+    assert!(
+        src.contains("size.h1"),
+        "missing type-scale token; got:\n{src}"
+    );
+    assert!(
+        src.contains("background=(token)\"color.base.100\""),
+        "page background must reference the theme base token; got:\n{src}"
+    );
+    assert!(
+        !src.contains("color.bg"),
+        "the default color.bg token must not be present; got:\n{src}"
+    );
+
+    let out = validate::run(
+        &src,
+        path.parent(),
+        false,
+        &zenith_cli::config::CliPolicyFlags::default(),
+    );
+    assert_eq!(
+        out.exit_code, 0,
+        "themed scaffold must validate clean; got:\n{}",
+        out.stdout
+    );
+}
+
+/// An unknown `--theme` name is rejected with exit code 2 and a message naming
+/// both the failure and the offending value.
+#[test]
+fn unknown_theme_is_rejected() {
+    let tmp = TempDir::new().unwrap();
+    let paths = store_in(&tmp);
+    let path = doc_path(&tmp, "poster.zen");
+
+    let err = new::run_in(
+        &paths,
+        &path,
+        Some("Poster"),
+        DEFAULT_PAGE,
+        Some("sunset-nope"),
+    )
+    .expect_err("must reject an unknown theme");
+    assert_eq!(
+        err.exit_code, 2,
+        "unknown theme must exit 2; got: {}",
+        err.exit_code
+    );
+    assert!(
+        err.message.contains("unknown theme"),
+        "message must say 'unknown theme'; got: {}",
+        err.message
+    );
+    assert!(
+        err.message.contains("sunset-nope"),
+        "message must name the offending value; got: {}",
+        err.message
+    );
+    assert!(!path.exists(), "no file must be written on a bad theme");
+}
+
+/// A themed scaffold still mints a doc-id and records its initial history
+/// version, exactly like the untheme path.
+#[test]
+fn theme_scaffold_still_mints_doc_id_and_records_history() {
+    let tmp = TempDir::new().unwrap();
+    let paths = store_in(&tmp);
+    let path = doc_path(&tmp, "poster.zen");
+
+    let result = new::run_in(&paths, &path, Some("Poster"), DEFAULT_PAGE, Some("sunset"))
+        .expect("themed new must succeed");
+    assert_eq!(
+        result.doc_id.len(),
+        26,
+        "doc-id must be a 26-char ULID; got {:?}",
+        result.doc_id
+    );
+
+    let bytes = std::fs::read(&path).expect("created file must exist");
+    let doc = KdlAdapter.parse(&bytes).expect("created file must parse");
+    assert_eq!(doc.doc_id.as_deref(), Some(result.doc_id.as_str()));
+}
+
+/// Without `--theme`, the scaffold's output is unchanged: still the bare
+/// `color.bg` token and no theme tokens leak in.
+#[test]
+fn no_theme_scaffold_unchanged() {
+    let tmp = TempDir::new().unwrap();
+    let paths = store_in(&tmp);
+    let path = doc_path(&tmp, "poster.zen");
+
+    new::run_in(&paths, &path, Some("Poster"), DEFAULT_PAGE, None).expect("new must succeed");
+    let src = std::fs::read_to_string(&path).unwrap();
+    assert!(
+        src.contains("token id=\"color.bg\" type=\"color\" value=\"#ffffff\""),
+        "default color.bg token must be present; got:\n{src}"
+    );
+    assert!(
+        src.contains("background=(token)\"color.bg\""),
+        "page background must reference color.bg; got:\n{src}"
+    );
+    assert!(
+        !src.contains("color.base.100"),
+        "no theme token must leak in; got:\n{src}"
     );
 }

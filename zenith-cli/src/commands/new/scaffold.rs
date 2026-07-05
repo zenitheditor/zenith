@@ -14,12 +14,13 @@
 
 use std::path::{Path, PathBuf};
 
-use zenith_core::{KdlAdapter, KdlSource as _};
+use zenith_core::{Document, KdlAdapter, KdlSource as _};
 use zenith_session::StorePaths;
 use zenith_session::adapter::{OsClock, OsRng};
 
 use super::page::PageSpec;
 use crate::history::record_edit_in;
+use crate::library::EMBEDDED_PACKS;
 
 // ── Result / error types ────────────────────────────────────────────────────────
 
@@ -53,7 +54,12 @@ pub struct NewResult {
 /// `name` is the optional display name; when absent, "Untitled" is used and the
 /// slug is derived from `path`'s file stem. `page` gives the per-page dimensions
 /// and page count.
-pub fn run(path: &Path, name: Option<&str>, page: PageSpec) -> Result<NewResult, NewErr> {
+pub fn run(
+    path: &Path,
+    name: Option<&str>,
+    page: PageSpec,
+    theme: Option<&str>,
+) -> Result<NewResult, NewErr> {
     let paths = match zenith_session::resolve_data_dir() {
         Ok(data_dir) => StorePaths::new(data_dir),
         Err(e) => {
@@ -63,19 +69,23 @@ pub fn run(path: &Path, name: Option<&str>, page: PageSpec) -> Result<NewResult,
             });
         }
     };
-    run_in(&paths, path, name, page)
+    run_in(&paths, path, name, page, theme)
 }
 
 /// Same as [`run`] but with an explicit store root (used by tests).
 ///
 /// Refuses to overwrite an existing `path`. On success, the file at `path` has
 /// been written with a freshly minted + stamped `doc-id`, and the initial
-/// version has been recorded into `paths`.
+/// version has been recorded into `paths`. When `theme` is given, it names an
+/// embedded theme pack (`@zenith/theme.<name>`, e.g. `sunset`) whose full token
+/// contract is copied in and whose `color.base.100` token becomes the page
+/// background, in place of the bare default `color.bg` token.
 pub fn run_in(
     paths: &StorePaths,
     path: &Path,
     name: Option<&str>,
     page: PageSpec,
+    theme: Option<&str>,
 ) -> Result<NewResult, NewErr> {
     // A directory can't be a document target.
     if path.is_dir() {
@@ -100,9 +110,16 @@ pub fn run_in(
     let display_name = name.unwrap_or("Untitled");
     let slug = slug_for(name, &target);
 
+    // Resolve the requested theme pack up front so a bad `--theme` name fails
+    // fast, before any file is touched. `theme_bg_token` is `Some` exactly when
+    // a theme was applied, driving `emit`'s choice of background token and
+    // tokens-block shape explicitly (no string-sentinel comparison).
+    let theme_pack = theme.map(resolve_theme_pack).transpose()?;
+    let theme_bg_token = theme_pack.is_some().then_some("color.base.100");
+
     // Synthesize the template, then canonicalize through the engine formatter so
     // the output is valid + canonical and any emission bug surfaces as an error.
-    let raw = emit(&slug, display_name, page);
+    let raw = emit(&slug, display_name, page, theme_bg_token);
     let canonical = crate::commands::fmt::run(&raw).map_err(|e| NewErr {
         message: format!(
             "internal: scaffolded document failed to format: {}",
@@ -111,9 +128,30 @@ pub fn run_in(
         exit_code: 2,
     })?;
 
+    // When a theme was requested, splice its full token block into the
+    // canonical document and re-format; without a theme this is a no-op and
+    // the output is byte-identical to before `--theme` existed.
+    let canonical_bytes = match theme_pack {
+        Some(theme_doc) => {
+            let mut doc = KdlAdapter.parse(&canonical.formatted).map_err(|e| NewErr {
+                message: format!(
+                    "internal: scaffolded document failed to parse: {}",
+                    e.message
+                ),
+                exit_code: 2,
+            })?;
+            doc.tokens = theme_doc.tokens;
+            KdlAdapter.format(&doc).map_err(|e| NewErr {
+                message: format!("internal: failed to apply theme tokens: {}", e.message),
+                exit_code: 2,
+            })?
+        }
+        None => canonical.formatted,
+    };
+
     // Mint + stamp the doc-id and record the initial version through the shared
     // history pipeline. The returned bytes carry the stamped identity.
-    let recorded = record_edit_in(paths, &canonical.formatted, &target, "document.new");
+    let recorded = record_edit_in(paths, &canonical_bytes, &target, "document.new");
 
     // History recording is best-effort and must never block creating the file.
     // In the normal path `record_edit_in` mints, stamps, and records a doc-id.
@@ -123,7 +161,7 @@ pub fn run_in(
     // a valid, identity-carrying `.zen`, surfacing the recording failure as a
     // (non-fatal) warning rather than aborting.
     let (bytes, doc_id, warning) = if recorded.doc_id.is_empty() {
-        let (stamped, minted) = mint_and_stamp(&canonical.formatted)?;
+        let (stamped, minted) = mint_and_stamp(&canonical_bytes)?;
         let warning = Some(match recorded.warning {
             Some(w) => format!("history unavailable, doc-id minted locally: {w}"),
             None => "history unavailable; doc-id minted locally".to_string(),
@@ -238,12 +276,18 @@ fn slugify(input: &str) -> String {
 }
 
 /// Emit the minimal valid `.zen` source for `slug` / `name` at the given page
-/// geometry.
+/// geometry, with each page's `background` referencing the resolved background
+/// token.
 ///
 /// Each of `page.pages` pages gets a stable `page.N` id (1-based) at the
-/// requested pixel size. A single default-square page reproduces the original
-/// hard-coded template byte-for-byte after canonicalization.
-fn emit(slug: &str, name: &str, page: PageSpec) -> String {
+/// requested pixel size. When `theme_bg_token` is `None` (no theme requested),
+/// the background is the default `"color.bg"`, the tokens block carries the
+/// white `color.bg` token, and a single default-square page reproduces the
+/// original hard-coded template byte-for-byte after canonicalization. When
+/// `theme_bg_token` is `Some` (a themed scaffold), every page's background
+/// references that token instead and the tokens block is left empty — the
+/// caller splices in a full theme token pack after canonicalization.
+fn emit(slug: &str, name: &str, page: PageSpec, theme_bg_token: Option<&str>) -> String {
     // `name` may contain characters that need escaping inside a KDL string; the
     // formatter re-quotes canonically, so a backslash/quote escape here is enough
     // to keep the intermediate source parseable.
@@ -254,24 +298,69 @@ fn emit(slug: &str, name: &str, page: PageSpec) -> String {
         pages,
     } = page;
 
+    let bg_token = theme_bg_token.unwrap_or("color.bg");
     let mut page_nodes = String::new();
     for n in 1..=pages {
         page_nodes.push_str(&format!(
-            "    page id=\"page.{n}\" w=(px){width} h=(px){height} background=(token)\"color.bg\" {{}}\n"
+            "    page id=\"page.{n}\" w=(px){width} h=(px){height} background=(token)\"{bg_token}\" {{}}\n"
         ));
     }
+
+    let tokens_block = if theme_bg_token.is_none() {
+        "  tokens format=\"zenith-token-v1\" {\n    token id=\"color.bg\" type=\"color\" value=\"#ffffff\"\n  }\n"
+            .to_string()
+    } else {
+        "  tokens format=\"zenith-token-v1\" {\n  }\n".to_string()
+    };
 
     format!(
         r##"zenith version=1 {{
   project id="proj.{slug}" name="{esc}"
-  tokens format="zenith-token-v1" {{
-    token id="color.bg" type="color" value="#ffffff"
-  }}
-  document id="doc.{slug}" title="{esc}" {{
+{tokens_block}  document id="doc.{slug}" title="{esc}" {{
 {page_nodes}  }}
 }}
 "##
     )
+}
+
+/// Resolve `--theme <name>` to its embedded token pack's parsed [`Document`],
+/// for splicing its token block into a themed scaffold.
+///
+/// Looks up `@zenith/theme.<name>` in [`EMBEDDED_PACKS`] by exact id match. On
+/// a miss, returns a [`NewErr`] listing the available bare theme names (sorted,
+/// prefix stripped), mirroring `unknown_package_error`'s convention in
+/// `zenith-cli/src/library/add.rs`.
+fn resolve_theme_pack(name: &str) -> Result<Document, NewErr> {
+    let pkg_id = format!("@zenith/theme.{name}");
+    let source = EMBEDDED_PACKS
+        .iter()
+        .find(|(id, _)| *id == pkg_id)
+        .map(|(_, src)| *src)
+        .ok_or_else(|| {
+            let mut available: Vec<&str> = EMBEDDED_PACKS
+                .iter()
+                .filter_map(|(id, _)| id.strip_prefix("@zenith/theme."))
+                .collect();
+            available.sort_unstable();
+            NewErr {
+                message: format!(
+                    "unknown theme '{}' (available: {})",
+                    name,
+                    available.join(", ")
+                ),
+                exit_code: 2,
+            }
+        })?;
+
+    // Defensive: the source is embedded (bundled at build time), so a parse
+    // failure here indicates an internal packaging bug, not bad user input.
+    KdlAdapter.parse(source.as_bytes()).map_err(|e| NewErr {
+        message: format!(
+            "internal: embedded theme '{}' failed to parse: {}",
+            name, e.message
+        ),
+        exit_code: 2,
+    })
 }
 
 /// Escape characters that require backslash encoding inside a double-quoted KDL string.
@@ -317,7 +406,7 @@ mod tests {
 
     #[test]
     fn template_formats_clean() {
-        let raw = emit("demo", "Demo", DEFAULT_PAGE);
+        let raw = emit("demo", "Demo", DEFAULT_PAGE, None);
         let r = crate::commands::fmt::run(&raw).expect("template must format");
         let s = String::from_utf8(r.formatted).unwrap();
         assert!(s.contains("doc.demo"));
@@ -331,12 +420,30 @@ mod tests {
             height: 1123,
             pages: 3,
         };
-        let raw = emit("demo", "Demo", spec);
+        let raw = emit("demo", "Demo", spec, None);
         let r = crate::commands::fmt::run(&raw).expect("template must format");
         let s = String::from_utf8(r.formatted).unwrap();
         assert!(s.contains("(px)794"), "width honored; got:\n{s}");
         assert!(s.contains("(px)1123"), "height honored; got:\n{s}");
         assert!(s.contains("page.1") && s.contains("page.2") && s.contains("page.3"));
+    }
+
+    /// A `Some` `theme_bg_token` (the themed-scaffold path) references that
+    /// token on every page's `background` and emits no `color.bg` token —
+    /// the caller splices in the theme's own token block afterward.
+    #[test]
+    fn emit_with_theme_token_swaps_background_and_omits_default_tokens() {
+        let raw = emit("demo", "Demo", DEFAULT_PAGE, Some("color.base.100"));
+        let r = crate::commands::fmt::run(&raw).expect("template must format");
+        let s = String::from_utf8(r.formatted).unwrap();
+        assert!(
+            s.contains("background=(token)\"color.base.100\""),
+            "background must reference the theme token; got:\n{s}"
+        );
+        assert!(
+            !s.contains("color.bg"),
+            "the default color.bg token must be absent; got:\n{s}"
+        );
     }
 
     #[test]

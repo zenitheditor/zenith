@@ -395,7 +395,8 @@ pub struct VariantArgs {
     zenith new poster.zen --name \"Launch Poster\"\n  \
     zenith new flyer.zen --format a4\n  \
     zenith new deck.zen --format letter --landscape --pages 12\n  \
-    zenith new banner.zen --width 1600 --height 400")]
+    zenith new banner.zen --width 1600 --height 400\n  \
+    zenith new poster.zen --theme sunset")]
 pub struct NewArgs {
     /// Path to create the new document at (must not already exist). A `.zen`
     /// extension is appended if absent, and missing parent directories are created.
@@ -427,6 +428,14 @@ pub struct NewArgs {
     /// Number of pages to create (each a stable `page.N` id at the page size).
     #[arg(long, default_value_t = 1, value_name = "N", value_parser = clap::value_parser!(u32).range(1..))]
     pub pages: u32,
+
+    /// Apply an embedded theme token pack (e.g. `sunset`, `cobalt`) to the new
+    /// document instead of the bare default tokens. The theme's full token
+    /// contract (color, radius, border, spacing, type scale) is copied in, and
+    /// the page background references the theme's `color.base.100` token
+    /// instead of the default `color.bg`.
+    #[arg(long, value_name = "NAME")]
+    pub theme: Option<String>,
 }
 
 /// Arguments for `zenith validate`.

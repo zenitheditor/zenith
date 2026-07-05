@@ -34,7 +34,12 @@ pub fn run() -> ExitCode {
                     return ExitCode::from(2);
                 }
             };
-            match commands::new::run(&args.path, args.name.as_deref(), page) {
+            match commands::new::run(
+                &args.path,
+                args.name.as_deref(),
+                page,
+                args.theme.as_deref(),
+            ) {
                 Ok(result) => {
                     if let Some(w) = &result.warning {
                         eprintln!("warning: {w}");
