@@ -21,4 +21,5 @@ Follow the `zenith` skill. Steps:
 4. `zenith validate <file> --json` — fix every hard diagnostic at the source.
 5. `zenith render <file> --png <file>.png`, then describe what you produced and the output path.
 
-Do not invent syntax — mirror `examples/*.zen` and verify with `zenith <cmd> --help`.
+Do not invent syntax — verify with `zenith schema node <kind>` and `zenith <cmd> --help`, and
+mirror the skill's `templates/*.zen` starters.

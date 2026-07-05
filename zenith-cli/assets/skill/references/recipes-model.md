@@ -70,4 +70,4 @@ Errors mirror token ops: `tx.duplicate_id`, `tx.unknown_recipe`.
 > Note: the `pattern` node (grid and scatter tiling) **is now shipped** — see
 > `references/pattern.md` for attributes, diagnostics, and the `detach_pattern` op. Procedural
 > **noise/grain** is also shipped, as a `noise` filter kind (`noise seed=.. scale=.. amount=..`
-> inside a `filter` token); see `zenith schema node filter`.
+> inside a `filter` token); see `zenith schema token filter`.
