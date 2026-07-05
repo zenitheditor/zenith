@@ -55,6 +55,9 @@ pub enum LibrarySub {
     ///
     /// Lists every available pack and its exported items.  Run `zenith library
     /// show <package>#<item>` to inspect any item in detail before adding it.
+    /// A pack's header line shows `(tokens: N)` when it carries a token set
+    /// beyond its exported items; merge that whole set into a document with
+    /// `zenith theme apply <pack-id> <doc>`.
     List(LibraryListArgs),
 
     /// Inspect a library item in detail before adding it.
@@ -65,6 +68,11 @@ pub enum LibrarySub {
     Show(LibraryShowArgs),
 
     /// Materialize a library item into a target `.zen` document.
+    ///
+    /// Adds ONE named item (a component, filter/mask token, or action). To merge
+    /// a pack's WHOLE token set into a document instead, use `zenith theme apply
+    /// <pack-id> <doc>` — it works with any pack id that carries tokens, not
+    /// just `@zenith/theme.*` presets.
     Add(LibraryAddArgs),
 }
 

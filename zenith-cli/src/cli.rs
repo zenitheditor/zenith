@@ -386,7 +386,10 @@ zenith theme apply cobalt poster.zen\n  \
 zenith theme apply cobalt poster.zen --apply\n\n\
 `<pack>` is a bare embedded theme name (e.g. `cobalt`) or a full pack id \
 (e.g. `@zenith/theme.cobalt`); a project pack of the same id, under \
-`libraries/`, shadows the embedded preset.")]
+`libraries/`, shadows the embedded preset. `<pack>` is not limited to \
+`@zenith/theme.*` presets — ANY pack id that carries a `tokens` block \
+(project or embedded, see `zenith library list`) can be applied this way to \
+merge its whole token set into `<doc>`.")]
 pub struct ThemeApplyArgs {
     /// Theme pack to apply: a bare name (e.g. `cobalt`) or a full pack id.
     pub pack: String,

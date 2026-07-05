@@ -277,3 +277,99 @@ fn mixed_doc_fixture_parses() {
         .parse(MIXED_DOC.as_bytes())
         .expect("MIXED_DOC fixture must parse");
 }
+
+// ── A PROJECT pack (not `@zenith/theme.*`) is a valid `theme apply` target ──
+
+/// A minimal project pack, self-identified via its `libraries` self-entry as
+/// `@acme/brand` (not a `@zenith/theme.*` preset), carrying a handful of color
+/// tokens. `theme apply` is not theme-preset-specific: any pack id carrying a
+/// `tokens` block should be mergeable this way.
+const ACME_PACK_SRC: &str = r##"zenith version=1 {
+  project id="@acme/brand" name="Acme Brand"
+  libraries {
+    library id="@acme/brand" version="1.0.0"
+  }
+  tokens format="zenith-token-v1" {
+    token id="color.primary" type="color" value="#1d4ed8"
+    token id="color.secondary" type="color" value="#7c3aed"
+    token id="color.accent" type="color" value="#f59e0b"
+  }
+  styles {}
+  document id="acme.preview" title="Acme brand preview" {
+    page id="pg" w=(px)200 h=(px)200 {}
+  }
+}
+"##;
+
+const ACME_TARGET_DOC: &str = r##"zenith version=1 {
+  project id="proj.acme.target" name="Target"
+  tokens format="zenith-token-v1" {
+    token id="color.primary" type="color" value="#000000"
+  }
+  styles {}
+  document id="doc.acme.target" title="Target" {
+    page id="pg" w=(px)400 h=(px)300 {}
+  }
+}
+"##;
+
+#[test]
+fn project_pack_tokens_land_with_pack_id_set_provenance() {
+    let tmp = TempDir::new().unwrap();
+    let lib_dir = tmp.path().join("libraries");
+    std::fs::create_dir_all(&lib_dir).expect("create libraries dir");
+    std::fs::write(lib_dir.join("acme.zen"), ACME_PACK_SRC).expect("write project pack");
+
+    let outcome =
+        apply_run(Some(tmp.path()), "@acme/brand", ACME_TARGET_DOC).expect("acme pack resolves");
+
+    assert_eq!(outcome.exit_code, 0, "accepted re-skin must exit 0");
+
+    // `color.primary` already exists in the target → updated in place, with
+    // `set` stamped to the project pack's own id.
+    assert!(
+        outcome
+            .result
+            .source_after
+            .contains("id=\"color.primary\" type=\"color\" set=\"@acme/brand\" value=\"#1d4ed8\""),
+        "existing token must be updated with the project pack's set provenance; got:\n{}",
+        outcome.result.source_after
+    );
+
+    // `color.secondary` / `color.accent` are absent from the target → created,
+    // also stamped with the project pack's id.
+    assert!(
+        outcome
+            .added_tokens
+            .contains(&"color.secondary".to_string()),
+        "color.secondary must be reported as added; got: {:?}",
+        outcome.added_tokens
+    );
+    assert!(
+        outcome.added_tokens.contains(&"color.accent".to_string()),
+        "color.accent must be reported as added; got: {:?}",
+        outcome.added_tokens
+    );
+    assert!(
+        outcome.result.source_after.contains(
+            "id=\"color.secondary\" type=\"color\" set=\"@acme/brand\" value=\"#7c3aed\""
+        ),
+        "created token must carry the project pack's set provenance; got:\n{}",
+        outcome.result.source_after
+    );
+    assert!(
+        outcome
+            .result
+            .source_after
+            .contains("id=\"color.accent\" type=\"color\" set=\"@acme/brand\" value=\"#f59e0b\""),
+        "created token must carry the project pack's set provenance; got:\n{}",
+        outcome.result.source_after
+    );
+
+    assert_eq!(
+        hard_error_count(&outcome.result.source_after),
+        0,
+        "re-skinned document must validate clean; got:\n{}",
+        outcome.result.source_after
+    );
+}

@@ -145,6 +145,12 @@ pub struct LibraryPack {
     /// then exportable token ids (in source order), then action ids (in source
     /// order).
     pub items: Vec<PackItem>,
+    /// The pack's WHOLE token count (every token in its `tokens` block,
+    /// unfiltered — not just the exportable filter/mask tokens counted in
+    /// [`Self::items`]). This is the size of the token set `zenith theme apply`
+    /// would merge into a document, and drives the `(tokens: N)` indicator in
+    /// `library list`.
+    pub token_count: usize,
 }
 
 /// Whether a token type is an EXPORTABLE library item (addressable as
@@ -190,8 +196,12 @@ impl std::error::Error for PackError {}
 /// (a pack MUST declare its identity).
 ///
 /// Items are the document's component ids in source order, followed by its
-/// FILTER token ids in source order. (Only filter tokens are exported items;
-/// color/dimension tokens are dependencies, not items.)
+/// FILTER token ids in source order, followed by its action ids in source
+/// order. (Only filter tokens are exported items; color/dimension tokens are
+/// dependencies, not items.) [`LibraryPack::token_count`]
+/// separately captures the SIZE OF THE WHOLE `tokens` block, unfiltered — the
+/// set `zenith theme apply` would merge wholesale, as opposed to the individually
+/// addressable filter/mask token items.
 ///
 /// # Errors
 ///
@@ -249,6 +259,7 @@ pub fn parse_pack(source: &str, source_kind: PackSource) -> Result<LibraryPack, 
         id: self_entry.id.clone(),
         version: self_entry.version.clone(),
         source: source_kind,
+        token_count: doc.tokens.tokens.len(),
         items,
     })
 }

@@ -58,7 +58,7 @@ pub fn materialize(
         .find(|c| c.id == item)
         .ok_or_else(|| {
             let available: Vec<&str> = pack_doc.components.iter().map(|c| c.id.as_str()).collect();
-            AddError::new(format!(
+            let mut message = format!(
                 "unknown item '{}' in package '{}' (available: {})",
                 item,
                 pkg_id,
@@ -67,7 +67,18 @@ pub fn materialize(
                 } else {
                     available.join(", ")
                 }
-            ))
+            );
+            // `tokens` is a common but non-existent item name: a pack's whole
+            // token set is not an addressable item, it's merged wholesale via
+            // `theme apply`. Point users there instead of leaving them stuck on
+            // a plain "unknown item" message.
+            if item == "tokens" && pack.token_count > 0 {
+                message.push_str(&format!(
+                    " (to merge the pack's token set, run: zenith theme apply {} <doc>)",
+                    pkg_id
+                ));
+            }
+            AddError::new(message)
         })?;
 
     // Verify the target page exists BEFORE mutating anything, so an unknown page

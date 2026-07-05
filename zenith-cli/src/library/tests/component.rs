@@ -242,6 +242,31 @@ fn materialize_unknown_item_errors_with_available() {
 }
 
 #[test]
+fn materialize_unknown_tokens_item_suggests_theme_apply() {
+    // theme.cobalt carries a full token set but exports no items (no
+    // components, no filter/mask tokens), so `tokens` is always an unknown
+    // item for it — the natural place to point users at `theme apply` instead.
+    let mut target = parse_target();
+    let packs = resolve_packs(None);
+    let err = materialize(
+        &mut target,
+        &packs,
+        "@zenith/theme.cobalt",
+        "tokens",
+        "pg",
+        "tokens",
+        (0.0, 0.0),
+    )
+    .expect_err("unknown item errors");
+    assert!(
+        err.message
+            .contains("zenith theme apply @zenith/theme.cobalt <doc>"),
+        "should suggest theme apply: {}",
+        err.message
+    );
+}
+
+#[test]
 fn materialize_id_override_used_as_base() {
     let mut target = parse_target();
     let packs = resolve_packs(None);

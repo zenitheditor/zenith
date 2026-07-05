@@ -14,6 +14,7 @@ struct PackJson<'a> {
     id: &'a str,
     version: Option<&'a str>,
     source: &'static str,
+    token_count: usize,
     items: Vec<PackItemJson<'a>>,
 }
 
@@ -30,8 +31,10 @@ struct PackItemJson<'a> {
 /// item order is preserved from the pack's component order.
 ///
 /// - Human (default): one header line per pack
-///   (`<id>  <version>  [preset|project]`) followed by indented `#<item>` lines.
-/// - `--json`: a `{"schema":"zenith-library-v1","packs":[…]}` document.
+///   (`<id>  <version>  [preset|project]`, with a trailing `(tokens: N)` when
+///   the pack's token block is non-empty) followed by indented `#<item>` lines.
+/// - `--json`: a `{"schema":"zenith-library-v1","packs":[…]}` document; each
+///   pack entry carries `token_count` alongside its exported `items`.
 pub fn list(packs: &[LibraryPack], json: bool) -> String {
     if json {
         let out = LibraryListOutput {
@@ -42,6 +45,7 @@ pub fn list(packs: &[LibraryPack], json: bool) -> String {
                     id: &p.id,
                     version: p.version.as_deref(),
                     source: p.source.label(),
+                    token_count: p.token_count,
                     items: p
                         .items
                         .iter()
@@ -67,11 +71,17 @@ fn format_human(packs: &[LibraryPack]) -> String {
     let mut lines = Vec::new();
     for pack in packs {
         let version = pack.version.as_deref().unwrap_or("-");
+        let tokens_suffix = if pack.token_count > 0 {
+            format!("  (tokens: {})", pack.token_count)
+        } else {
+            String::new()
+        };
         lines.push(format!(
-            "{}  {}  [{}]",
+            "{}  {}  [{}]{}",
             pack.id,
             version,
-            pack.source.label()
+            pack.source.label(),
+            tokens_suffix
         ));
         for item in &pack.items {
             lines.push(format!("  #{} ({})", item.id, item.kind.label()));
@@ -187,6 +197,79 @@ mod tests {
         );
     }
 
+    // ── `library list` token-count indicator ───────────────────────────────────
+
+    #[test]
+    fn human_and_json_show_token_count_for_pack_with_tokens() {
+        // theme.cobalt has zero exportable ITEMS but a full token set — the
+        // `(tokens: N)` indicator surfaces that whole set as discoverable.
+        let packs = resolve_packs(None);
+
+        let theme_pack = packs
+            .iter()
+            .find(|p| p.id == "@zenith/theme.cobalt")
+            .expect("theme.cobalt pack resolved");
+        assert!(
+            theme_pack.token_count > 0,
+            "theme.cobalt must carry tokens for this test to be meaningful"
+        );
+
+        let human = list(&packs, false);
+        let header_line = human
+            .lines()
+            .find(|line| line.contains("@zenith/theme.cobalt"))
+            .unwrap_or_else(|| panic!("theme.cobalt header line present; got: {}", human));
+        assert!(
+            header_line.contains(&format!("(tokens: {})", theme_pack.token_count)),
+            "got: {}",
+            header_line
+        );
+
+        let json = list(&packs, true);
+        let value: serde_json::Value = serde_json::from_str(&json).expect("valid JSON");
+        let packs_json = value["packs"].as_array().expect("packs array");
+        let theme = packs_json
+            .iter()
+            .find(|p| p["id"] == "@zenith/theme.cobalt")
+            .expect("theme.cobalt pack present in JSON");
+        assert_eq!(theme["token_count"], theme_pack.token_count as u64);
+    }
+
+    #[test]
+    fn human_and_json_no_token_indicator_for_tokens_free_pack() {
+        // brand-kit declares no tokens block at all.
+        let packs = resolve_packs(None);
+
+        let brand_kit = packs
+            .iter()
+            .find(|p| p.id == "@zenith/brand-kit")
+            .expect("brand-kit pack resolved");
+        assert_eq!(
+            brand_kit.token_count, 0,
+            "brand-kit must be tokens-free for this test to be meaningful"
+        );
+
+        let human = list(&packs, false);
+        let header_line = human
+            .lines()
+            .find(|line| line.contains("@zenith/brand-kit"))
+            .unwrap_or_else(|| panic!("brand-kit header line present; got: {}", human));
+        assert!(
+            !header_line.contains("(tokens:"),
+            "tokens-free pack must show no token indicator: {}",
+            header_line
+        );
+
+        let json = list(&packs, true);
+        let value: serde_json::Value = serde_json::from_str(&json).expect("valid JSON");
+        let packs_json = value["packs"].as_array().expect("packs array");
+        let brand = packs_json
+            .iter()
+            .find(|p| p["id"] == "@zenith/brand-kit")
+            .expect("brand-kit pack present in JSON");
+        assert_eq!(brand["token_count"], 0);
+    }
+
     #[test]
     fn version_falls_back_to_dash() {
         let pack = LibraryPack {
@@ -194,6 +277,7 @@ mod tests {
             version: None,
             source: PackSource::Preset,
             items: vec![],
+            token_count: 0,
         };
         let out = list(std::slice::from_ref(&pack), false);
         assert!(out.contains("@x/y  -  [preset]"), "got: {}", out);
