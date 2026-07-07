@@ -18,5 +18,8 @@ pub use engine::{
 };
 pub use error::LayoutError;
 pub use font_meta::{FaceMetadata, face_metadata};
-pub use glyph_outline::{GlyphOutline, GlyphOutlineRequest, GlyphOutlineSegment, glyph_outline};
+pub use glyph_outline::{
+    GlyphOutline, GlyphOutlineRequest, GlyphOutlineSegment, GlyphRunOutline,
+    GlyphRunOutlineRequest, OutlinedGlyph, glyph_outline, glyph_run_outline,
+};
 pub use rustybuzz_engine::RustybuzzEngine;

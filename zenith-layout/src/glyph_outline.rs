@@ -1,9 +1,10 @@
 //! Backend-neutral glyph outline extraction for editable text-to-path conversion.
 
 use rustybuzz::ttf_parser;
+use zenith_core::FontProvider;
 use zenith_geometry::Point2;
 
-use crate::LayoutError;
+use crate::{LayoutError, ZenithGlyphRun};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct GlyphOutlineRequest<'a> {
@@ -17,6 +18,26 @@ pub struct GlyphOutlineRequest<'a> {
 #[derive(Debug, Clone, PartialEq)]
 pub struct GlyphOutline {
     pub segments: Vec<GlyphOutlineSegment>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct GlyphRunOutlineRequest<'a> {
+    pub run: &'a ZenithGlyphRun,
+    pub origin: Point2,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct GlyphRunOutline {
+    pub glyphs: Vec<OutlinedGlyph>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct OutlinedGlyph {
+    pub glyph_index: usize,
+    pub glyph_id: u16,
+    pub text: String,
+    pub origin: Point2,
+    pub outline: GlyphOutline,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -35,8 +56,61 @@ pub fn glyph_outline(
     request: GlyphOutlineRequest<'_>,
 ) -> Result<Option<GlyphOutline>, LayoutError> {
     validate_request(request)?;
-    let face = ttf_parser::Face::parse(request.font_bytes, request.face_index)
-        .map_err(|_| LayoutError::new("failed to parse font face for glyph outline"))?;
+    let face = parse_face(request.font_bytes, request.face_index)?;
+    glyph_outline_with_face(&face, request.glyph_id, request.font_size, request.origin)
+}
+
+pub fn glyph_run_outline(
+    request: GlyphRunOutlineRequest<'_>,
+    provider: &dyn FontProvider,
+) -> Result<Option<GlyphRunOutline>, LayoutError> {
+    request
+        .origin
+        .validate()
+        .map_err(|_| LayoutError::new("glyph run outline requires finite origin coordinates"))?;
+    let font_data = provider.by_id(&request.run.font_id).ok_or_else(|| {
+        LayoutError::new(format!(
+            "no font resolved for glyph run id '{}'",
+            request.run.font_id
+        ))
+    })?;
+    let face = parse_face(&font_data.bytes, font_data.index)?;
+    let mut glyphs = Vec::with_capacity(request.run.glyphs.len());
+
+    for (glyph_index, glyph) in request.run.glyphs.iter().enumerate() {
+        let origin = Point2::new(
+            request.origin.x + f64::from(glyph.x),
+            request.origin.y + f64::from(glyph.y),
+        )
+        .map_err(|_| LayoutError::new("glyph run outline requires finite origin coordinates"))?;
+        let Some(outline) =
+            glyph_outline_with_face(&face, glyph.glyph_id, request.run.font_size, origin)?
+        else {
+            continue;
+        };
+        glyphs.push(OutlinedGlyph {
+            glyph_index,
+            glyph_id: glyph.glyph_id,
+            text: glyph.text.clone(),
+            origin,
+            outline,
+        });
+    }
+
+    if glyphs.is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(GlyphRunOutline { glyphs }))
+    }
+}
+
+fn glyph_outline_with_face(
+    face: &ttf_parser::Face<'_>,
+    glyph_id: u16,
+    font_size: f32,
+    origin: Point2,
+) -> Result<Option<GlyphOutline>, LayoutError> {
+    validate_outline_geometry(font_size, origin)?;
     let units_per_em = face.units_per_em();
     if units_per_em == 0 {
         return Err(LayoutError::new(
@@ -44,9 +118,9 @@ pub fn glyph_outline(
         ));
     }
 
-    let scale = f64::from(request.font_size) / f64::from(units_per_em);
-    let mut pen = GlyphOutlinePen::new(request.origin, scale);
-    let glyph_id = ttf_parser::GlyphId(request.glyph_id);
+    let scale = f64::from(font_size) / f64::from(units_per_em);
+    let mut pen = GlyphOutlinePen::new(origin, scale);
+    let glyph_id = ttf_parser::GlyphId(glyph_id);
 
     if face.outline_glyph(glyph_id, &mut pen).is_none() {
         return Ok(None);
@@ -56,19 +130,27 @@ pub fn glyph_outline(
     }))
 }
 
+fn parse_face(bytes: &[u8], index: u32) -> Result<ttf_parser::Face<'_>, LayoutError> {
+    ttf_parser::Face::parse(bytes, index)
+        .map_err(|_| LayoutError::new("failed to parse font face for glyph outline"))
+}
+
 fn validate_request(request: GlyphOutlineRequest<'_>) -> Result<(), LayoutError> {
     if request.font_bytes.is_empty() {
         return Err(LayoutError::new(
             "glyph outline requires non-empty font bytes",
         ));
     }
-    if !request.font_size.is_finite() || request.font_size <= 0.0 {
+    validate_outline_geometry(request.font_size, request.origin)
+}
+
+fn validate_outline_geometry(font_size: f32, origin: Point2) -> Result<(), LayoutError> {
+    if !font_size.is_finite() || font_size <= 0.0 {
         return Err(LayoutError::new(
             "glyph outline requires a positive finite font size",
         ));
     }
-    request
-        .origin
+    origin
         .validate()
         .map_err(|_| LayoutError::new("glyph outline requires finite origin coordinates"))?;
     Ok(())
@@ -231,6 +313,110 @@ mod tests {
 
         assert_eq!(outline, None);
         Ok(())
+    }
+
+    #[test]
+    fn outlines_shaped_run_with_glyph_offsets() -> Result<(), LayoutError> {
+        let provider = default_provider();
+        let engine = crate::RustybuzzEngine::new();
+        let run = crate::TextLayoutEngine::shape(
+            &engine,
+            &crate::ShapeRequest {
+                text: "A B",
+                families: &["Noto Sans".to_owned()],
+                weight: 400,
+                style: FontStyle::Normal,
+                font_size: 24.0,
+                direction: crate::TextDirection::Ltr,
+                features: &[],
+            },
+            &provider,
+        )?;
+
+        let outlined = glyph_run_outline(
+            GlyphRunOutlineRequest {
+                run: &run,
+                origin: Point2::new_unchecked(100.0, 40.0),
+            },
+            &provider,
+        )?
+        .ok_or_else(|| LayoutError::new("mixed run should include drawable glyph outlines"))?;
+
+        assert_eq!(outlined.glyphs.len(), 2);
+        assert_eq!(outlined.glyphs[0].glyph_index, 0);
+        assert_eq!(outlined.glyphs[0].glyph_id, run.glyphs[0].glyph_id);
+        assert_eq!(outlined.glyphs[0].text, "A");
+        assert_eq!(
+            outlined.glyphs[0].origin,
+            Point2::new_unchecked(100.0, 40.0)
+        );
+        assert_eq!(outlined.glyphs[1].glyph_index, 2);
+        assert_eq!(outlined.glyphs[1].glyph_id, run.glyphs[2].glyph_id);
+        assert_eq!(
+            outlined.glyphs[1].origin,
+            Point2::new_unchecked(100.0 + f64::from(run.glyphs[2].x), 40.0)
+        );
+        assert!(
+            outlined
+                .glyphs
+                .iter()
+                .all(|glyph| !glyph.outline.segments.is_empty())
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn glyph_run_outline_returns_none_for_space_only_run() -> Result<(), LayoutError> {
+        let provider = default_provider();
+        let engine = crate::RustybuzzEngine::new();
+        let run = crate::TextLayoutEngine::shape(
+            &engine,
+            &crate::ShapeRequest {
+                text: " ",
+                families: &["Noto Sans".to_owned()],
+                weight: 400,
+                style: FontStyle::Normal,
+                font_size: 24.0,
+                direction: crate::TextDirection::Ltr,
+                features: &[],
+            },
+            &provider,
+        )?;
+
+        let outlined = glyph_run_outline(
+            GlyphRunOutlineRequest {
+                run: &run,
+                origin: Point2::new_unchecked(0.0, 0.0),
+            },
+            &provider,
+        )?;
+
+        assert_eq!(outlined, None);
+        Ok(())
+    }
+
+    #[test]
+    fn glyph_run_outline_reports_missing_font_id() {
+        let provider = default_provider();
+        let run = ZenithGlyphRun {
+            font_id: "missing-font".to_owned(),
+            font_size: 12.0,
+            ascent: 0.0,
+            descent: 0.0,
+            line_height: 0.0,
+            advance_width: 0.0,
+            glyphs: Vec::new(),
+        };
+
+        let result = glyph_run_outline(
+            GlyphRunOutlineRequest {
+                run: &run,
+                origin: Point2::new_unchecked(0.0, 0.0),
+            },
+            &provider,
+        );
+
+        assert!(result.is_err());
     }
 
     #[test]
