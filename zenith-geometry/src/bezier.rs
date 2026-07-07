@@ -1,4 +1,4 @@
-use crate::{GeometryError, Point2, RectBounds};
+use crate::{GeometryError, Point2, RectBounds, validation::validate_tolerance};
 
 const MAX_FLATTEN_DEPTH: usize = 18;
 const EXTREMA_DEDUP_EPSILON: f64 = 1.0e-12;
@@ -152,16 +152,6 @@ impl CubicBezier {
         p1.validate()?;
         p2.validate()?;
         p3.validate()?;
-        Ok(())
-    }
-}
-
-fn validate_tolerance(tolerance: f64) -> Result<(), GeometryError> {
-    if !tolerance.is_finite() {
-        Err(GeometryError::NonFiniteTolerance)
-    } else if tolerance <= 0.0 {
-        Err(GeometryError::NonPositiveTolerance)
-    } else {
         Ok(())
     }
 }

@@ -59,6 +59,22 @@ impl Point2 {
     }
 
     #[must_use]
+    pub fn distance_squared_to_segment(self, segment_start: Self, segment_end: Self) -> f64 {
+        let dx = segment_end.x - segment_start.x;
+        let dy = segment_end.y - segment_start.y;
+        let length_squared = dx.mul_add(dx, dy * dy);
+
+        if length_squared == 0.0 {
+            return self.distance_squared(segment_start);
+        }
+
+        let projection =
+            ((self.x - segment_start.x) * dx + (self.y - segment_start.y) * dy) / length_squared;
+        let t = projection.clamp(0.0, 1.0);
+        self.distance_squared(segment_start.lerp(segment_end, t))
+    }
+
+    #[must_use]
     pub fn distance_squared(self, other: Self) -> f64 {
         let dx = self.x - other.x;
         let dy = self.y - other.y;
@@ -89,5 +105,21 @@ mod tests {
 
         assert_eq!(a.lerp(b, 0.25), Point2::new_unchecked(4.0, 8.0));
         assert_eq!(a.midpoint(b), Point2::new_unchecked(6.0, 12.0));
+    }
+
+    #[test]
+    fn measures_distance_to_bounded_segment() {
+        let point = Point2::new_unchecked(2.0, 0.0);
+        let segment_start = Point2::new_unchecked(0.0, 0.0);
+        let segment_end = Point2::new_unchecked(1.0, 0.0);
+
+        assert_eq!(
+            point.distance_squared_to_segment(segment_start, segment_end),
+            1.0
+        );
+        assert_eq!(
+            point.distance_squared_to_line(segment_start, segment_end),
+            0.0
+        );
     }
 }
