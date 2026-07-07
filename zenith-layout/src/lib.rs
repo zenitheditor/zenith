@@ -21,6 +21,6 @@ pub use font_meta::{FaceMetadata, face_metadata};
 pub use glyph_outline::{
     GlyphOutline, GlyphOutlineContour, GlyphOutlineRequest, GlyphOutlineSegment, GlyphRunOutline,
     GlyphRunOutlineRequest, OutlinedGlyph, glyph_outline, glyph_outline_contours,
-    glyph_run_outline,
+    glyph_outline_path_node, glyph_outline_path_subpaths, glyph_run_outline,
 };
 pub use rustybuzz_engine::RustybuzzEngine;

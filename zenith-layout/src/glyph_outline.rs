@@ -1,7 +1,9 @@
 //! Backend-neutral glyph outline extraction for editable text-to-path conversion.
 
+use std::collections::BTreeMap;
+
 use rustybuzz::ttf_parser;
-use zenith_core::{Dimension, FontProvider, PathAnchor, Unit};
+use zenith_core::{Dimension, FontProvider, PathAnchor, PathNode, PathSubpath, Unit};
 use zenith_geometry::Point2;
 
 use crate::{LayoutError, ZenithGlyphRun};
@@ -150,6 +152,54 @@ pub fn glyph_outline_contours(
     Ok(contours)
 }
 
+pub fn glyph_outline_path_subpaths(
+    outline: &GlyphOutline,
+) -> Result<Vec<PathSubpath>, LayoutError> {
+    let contours = glyph_outline_contours(outline)?;
+    Ok(contours
+        .into_iter()
+        .map(|contour| PathSubpath {
+            closed: contour.closed.then_some(true),
+            anchors: contour.anchors,
+        })
+        .collect())
+}
+
+pub fn glyph_outline_path_node(
+    id: impl Into<String>,
+    outline: &GlyphOutline,
+) -> Result<PathNode, LayoutError> {
+    let subpaths = glyph_outline_path_subpaths(outline)?;
+    if subpaths.is_empty() {
+        return Err(LayoutError::new(
+            "glyph outline path node requires at least one contour",
+        ));
+    }
+
+    Ok(PathNode {
+        id: id.into(),
+        name: None,
+        role: None,
+        closed: None,
+        fill: None,
+        stroke: None,
+        stroke_width: None,
+        stroke_alignment: None,
+        stroke_linejoin: None,
+        stroke_miter_limit: None,
+        fill_rule: None,
+        opacity: None,
+        visible: None,
+        locked: None,
+        rotate: None,
+        style: None,
+        anchors: Vec::new(),
+        subpaths,
+        source_span: None,
+        unknown_props: BTreeMap::new(),
+    })
+}
+
 fn glyph_outline_with_face(
     face: &ttf_parser::Face<'_>,
     glyph_id: u16,
@@ -231,16 +281,14 @@ fn finish_contour(
     builder: Option<ContourBuilder>,
     closed: bool,
 ) {
-    let Some(builder) = builder else {
-        return;
-    };
-    if builder.anchors.is_empty() {
-        return;
+    if let Some(builder) = builder {
+        if !builder.anchors.is_empty() {
+            contours.push(GlyphOutlineContour {
+                anchors: builder.anchors,
+                closed,
+            });
+        }
     }
-    contours.push(GlyphOutlineContour {
-        anchors: builder.anchors,
-        closed,
-    });
 }
 
 fn path_anchor(point: Point2, in_handle: Option<Point2>, out_handle: Option<Point2>) -> PathAnchor {
@@ -582,6 +630,72 @@ mod tests {
         assert_eq!(contours[0].anchors[0].x, Some(px(0.0)));
         assert_eq!(contours[1].anchors[0].x, Some(px(10.0)));
         Ok(())
+    }
+
+    #[test]
+    fn glyph_outline_path_subpaths_preserve_contours() -> Result<(), LayoutError> {
+        let outline = GlyphOutline {
+            segments: vec![
+                GlyphOutlineSegment::MoveTo(Point2::new_unchecked(0.0, 0.0)),
+                GlyphOutlineSegment::LineTo(Point2::new_unchecked(10.0, 0.0)),
+                GlyphOutlineSegment::LineTo(Point2::new_unchecked(10.0, 10.0)),
+                GlyphOutlineSegment::Close,
+                GlyphOutlineSegment::MoveTo(Point2::new_unchecked(30.0, 30.0)),
+                GlyphOutlineSegment::LineTo(Point2::new_unchecked(40.0, 30.0)),
+                GlyphOutlineSegment::LineTo(Point2::new_unchecked(40.0, 40.0)),
+                GlyphOutlineSegment::Close,
+            ],
+        };
+
+        let subpaths = glyph_outline_path_subpaths(&outline)?;
+
+        assert_eq!(subpaths.len(), 2);
+        assert!(subpaths.iter().all(|subpath| subpath.closed == Some(true)));
+        assert_eq!(subpaths[0].anchors.len(), 3);
+        assert_eq!(subpaths[1].anchors[0].x, Some(px(30.0)));
+        Ok(())
+    }
+
+    #[test]
+    fn glyph_outline_path_node_materializes_compound_path() -> Result<(), LayoutError> {
+        let outline = GlyphOutline {
+            segments: vec![
+                GlyphOutlineSegment::MoveTo(Point2::new_unchecked(0.0, 0.0)),
+                GlyphOutlineSegment::CubicTo {
+                    ctrl1: Point2::new_unchecked(5.0, 0.0),
+                    ctrl2: Point2::new_unchecked(10.0, 5.0),
+                    to: Point2::new_unchecked(10.0, 10.0),
+                },
+                GlyphOutlineSegment::LineTo(Point2::new_unchecked(0.0, 10.0)),
+                GlyphOutlineSegment::Close,
+                GlyphOutlineSegment::MoveTo(Point2::new_unchecked(3.0, 3.0)),
+                GlyphOutlineSegment::LineTo(Point2::new_unchecked(7.0, 3.0)),
+                GlyphOutlineSegment::LineTo(Point2::new_unchecked(7.0, 7.0)),
+                GlyphOutlineSegment::Close,
+            ],
+        };
+
+        let path = glyph_outline_path_node("glyph.o", &outline)?;
+
+        assert_eq!(path.id, "glyph.o");
+        assert!(path.anchors.is_empty());
+        assert!(path.closed.is_none());
+        assert_eq!(path.subpaths.len(), 2);
+        assert_eq!(path.subpaths[0].anchors[0].out_x, Some(px(5.0)));
+        assert_eq!(path.subpaths[0].anchors[1].in_y, Some(px(5.0)));
+        assert_eq!(path.subpaths[1].closed, Some(true));
+        Ok(())
+    }
+
+    #[test]
+    fn glyph_outline_path_node_rejects_empty_outline() {
+        let outline = GlyphOutline {
+            segments: Vec::new(),
+        };
+
+        let result = glyph_outline_path_node("glyph.empty", &outline);
+
+        assert!(result.is_err());
     }
 
     #[test]
