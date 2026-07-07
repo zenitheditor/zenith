@@ -1,14 +1,20 @@
 use crate::{
-    PerceptionDiagnostic, PerceptionSeverity,
+    PerceptionDiagnostic, PerceptionSeverity, VectorPathContourInput,
     path_geometry::{geometry_anchor, geometry_path},
 };
 use zenith_core::PathAnchor;
-use zenith_geometry::{ConstructionGuide, Point2, RectBounds};
+use zenith_geometry::{CompoundPathGeometry, ConstructionGuide, Point2, RectBounds};
 
 #[derive(Debug, Clone, Copy)]
 pub struct GridConformanceInput<'a> {
     pub anchors: &'a [PathAnchor],
     pub closed: bool,
+    pub guides: &'a [ConstructionGuide],
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct CompoundGridConformanceInput<'a> {
+    pub contours: &'a [VectorPathContourInput<'a>],
     pub guides: &'a [ConstructionGuide],
 }
 
@@ -25,10 +31,24 @@ pub struct GridConformanceReport {
 pub fn grid_conformance(input: GridConformanceInput<'_>) -> GridConformanceReport {
     let mut diagnostics = Vec::new();
     let key_points = key_points(input.anchors, input.closed, &mut diagnostics);
-    let valid_guides = valid_guides(input.guides, &mut diagnostics);
+    grid_conformance_for_key_points(input.guides, key_points, diagnostics)
+}
+
+pub fn compound_grid_conformance(input: CompoundGridConformanceInput<'_>) -> GridConformanceReport {
+    let mut diagnostics = Vec::new();
+    let key_points = compound_key_points(input.contours, &mut diagnostics);
+    grid_conformance_for_key_points(input.guides, key_points, diagnostics)
+}
+
+fn grid_conformance_for_key_points(
+    guides: &[ConstructionGuide],
+    key_points: Vec<Point2>,
+    mut diagnostics: Vec<PerceptionDiagnostic>,
+) -> GridConformanceReport {
+    let valid_guides = valid_guides(guides, &mut diagnostics);
     let has_measurement = !key_points.is_empty() && !valid_guides.is_empty();
 
-    if input.guides.is_empty() {
+    if guides.is_empty() {
         diagnostics.push(PerceptionDiagnostic::new(
             "grid_conformance.no_guides",
             PerceptionSeverity::Info,
@@ -64,7 +84,7 @@ pub fn grid_conformance(input: GridConformanceInput<'_>) -> GridConformanceRepor
     }
 
     GridConformanceReport {
-        guide_count: input.guides.len(),
+        guide_count: guides.len(),
         evaluated_key_point_count: key_points.len(),
         maximum_guide_distance,
         normalized_distance,
@@ -87,13 +107,7 @@ fn key_points(
 
     match geometry_path(anchors, closed) {
         Ok(path) => match path.bounds() {
-            Ok(Some(bounds)) => {
-                points.push(Point2::new_unchecked(bounds.min_x, bounds.min_y));
-                points.push(Point2::new_unchecked(bounds.max_x, bounds.min_y));
-                points.push(Point2::new_unchecked(bounds.max_x, bounds.max_y));
-                points.push(Point2::new_unchecked(bounds.min_x, bounds.max_y));
-                points.push(Point2::new_unchecked(bounds.center_x(), bounds.center_y()));
-            }
+            Ok(Some(bounds)) => push_bounds_key_points(bounds, &mut points),
             Ok(None) => {}
             Err(_) => diagnostics.push(invalid_path_diagnostic()),
         },
@@ -101,6 +115,47 @@ fn key_points(
     }
 
     points
+}
+
+fn compound_key_points(
+    contours: &[VectorPathContourInput<'_>],
+    diagnostics: &mut Vec<PerceptionDiagnostic>,
+) -> Vec<Point2> {
+    let anchor_count = contours
+        .iter()
+        .map(|contour| contour.anchors.len())
+        .sum::<usize>();
+    let mut points = Vec::with_capacity(anchor_count + 5);
+    let mut geometry_contours = Vec::with_capacity(contours.len());
+
+    for contour in contours {
+        for anchor in contour.anchors {
+            if let Some(anchor) = geometry_anchor(anchor) {
+                points.push(anchor.point);
+            }
+        }
+
+        match geometry_path(contour.anchors, contour.closed) {
+            Ok(geometry) => geometry_contours.push(geometry),
+            Err(()) => diagnostics.push(invalid_path_diagnostic()),
+        }
+    }
+
+    match CompoundPathGeometry::new(geometry_contours).bounds() {
+        Ok(Some(bounds)) => push_bounds_key_points(bounds, &mut points),
+        Ok(None) => {}
+        Err(_) => diagnostics.push(invalid_path_diagnostic()),
+    }
+
+    points
+}
+
+fn push_bounds_key_points(bounds: RectBounds, points: &mut Vec<Point2>) {
+    points.push(Point2::new_unchecked(bounds.min_x, bounds.min_y));
+    points.push(Point2::new_unchecked(bounds.max_x, bounds.min_y));
+    points.push(Point2::new_unchecked(bounds.max_x, bounds.max_y));
+    points.push(Point2::new_unchecked(bounds.min_x, bounds.max_y));
+    points.push(Point2::new_unchecked(bounds.center_x(), bounds.center_y()));
 }
 
 fn valid_guides(
@@ -315,6 +370,83 @@ mod tests {
                 .diagnostics
                 .iter()
                 .any(|diagnostic| diagnostic.code == "grid_conformance.no_guides")
+        );
+    }
+
+    #[test]
+    fn compound_grid_conformance_uses_aggregate_bounds() {
+        let first = [anchor(0.0, 0.0), anchor(10.0, 0.0)];
+        let second = [anchor(20.0, 0.0), anchor(30.0, 0.0), anchor(30.0, 10.0)];
+        let contours = [
+            VectorPathContourInput {
+                anchors: &first,
+                closed: false,
+            },
+            VectorPathContourInput {
+                anchors: &second,
+                closed: true,
+            },
+        ];
+        let guides = [
+            ConstructionGuide::segment(point(0.0, 0.0), point(30.0, 0.0)).expect("valid guide"),
+            ConstructionGuide::segment(point(30.0, 0.0), point(30.0, 10.0)).expect("valid guide"),
+            ConstructionGuide::segment(point(0.0, 10.0), point(30.0, 10.0)).expect("valid guide"),
+            ConstructionGuide::segment(point(0.0, 0.0), point(0.0, 10.0)).expect("valid guide"),
+        ];
+
+        let report = compound_grid_conformance(CompoundGridConformanceInput {
+            contours: &contours,
+            guides: &guides,
+        });
+
+        assert_eq!(report.guide_count, 4);
+        assert_eq!(report.evaluated_key_point_count, 10);
+        assert_eq!(report.maximum_guide_distance, 5.0);
+        assert!(report.score < 1.0);
+        assert!(
+            report
+                .diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.code == "grid_conformance.low_conformance")
+        );
+    }
+
+    #[test]
+    fn compound_grid_conformance_invalid_contour_scores_zero() {
+        let valid = [anchor(0.0, 0.0), anchor(10.0, 0.0)];
+        let invalid = [PathAnchor {
+            x: Some(px(20.0)),
+            y: None,
+            kind: None,
+            in_x: None,
+            in_y: None,
+            out_x: None,
+            out_y: None,
+        }];
+        let contours = [
+            VectorPathContourInput {
+                anchors: &valid,
+                closed: false,
+            },
+            VectorPathContourInput {
+                anchors: &invalid,
+                closed: false,
+            },
+        ];
+        let guide =
+            ConstructionGuide::segment(point(0.0, 0.0), point(10.0, 0.0)).expect("valid guide");
+
+        let report = compound_grid_conformance(CompoundGridConformanceInput {
+            contours: &contours,
+            guides: &[guide],
+        });
+
+        assert_eq!(report.score, 0.0);
+        assert!(
+            report
+                .diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.code == "grid_conformance.invalid_path_geometry")
         );
     }
 
