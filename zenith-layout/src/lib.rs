@@ -8,6 +8,7 @@
 pub mod engine;
 pub mod error;
 pub mod font_meta;
+pub mod glyph_outline;
 pub mod rustybuzz_engine;
 
 // Curated flat re-exports for the public surface.
@@ -17,4 +18,5 @@ pub use engine::{
 };
 pub use error::LayoutError;
 pub use font_meta::{FaceMetadata, face_metadata};
+pub use glyph_outline::{GlyphOutline, GlyphOutlineRequest, GlyphOutlineSegment, glyph_outline};
 pub use rustybuzz_engine::RustybuzzEngine;

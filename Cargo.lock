@@ -1428,6 +1428,7 @@ version = "0.0.8"
 dependencies = [
  "rustybuzz 0.20.1",
  "zenith-core",
+ "zenith-geometry",
 ]
 
 [[package]]
