@@ -5,6 +5,7 @@ pub mod clearspace;
 pub mod density_map;
 pub mod diagnostic;
 pub mod edge_map;
+pub mod grid_conformance;
 pub mod histogram;
 pub mod optical_balance;
 mod path_geometry;
@@ -19,6 +20,7 @@ pub use clearspace::{ClearspaceInput, ClearspaceReport, clearspace};
 pub use density_map::{DensityCell, DensityRatioSummary, DensityReport, density_map};
 pub use diagnostic::{PerceptionDiagnostic, PerceptionSeverity};
 pub use edge_map::{EdgeReport, edge_map};
+pub use grid_conformance::{GridConformanceInput, GridConformanceReport, grid_conformance};
 pub use histogram::{Histogram, histogram};
 pub use optical_balance::{OpticalBalanceInput, OpticalBalanceReport, optical_balance};
 pub use path_tangent_quality::{
