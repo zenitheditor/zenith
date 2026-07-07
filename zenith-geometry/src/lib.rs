@@ -6,6 +6,7 @@ pub mod error;
 pub mod guide;
 pub mod intersection;
 pub mod offset;
+pub mod outline;
 pub mod path;
 pub mod point;
 pub mod polyline;
@@ -22,6 +23,10 @@ pub use intersection::{
 pub use offset::{
     OffsetRailJoin, SegmentOffset, join_adjacent_segment_offsets, offset_open_polyline_segments,
     offset_segment,
+};
+pub use outline::{
+    OpenPolylineCap, OpenPolylineJoin, OpenPolylineOutline, OpenPolylineOutlinePolicy,
+    outline_open_polyline,
 };
 pub use path::{
     PathAnchor, PathGeometry, PathJoinVectors, PathProjection, PathSegment, PathTopology,
