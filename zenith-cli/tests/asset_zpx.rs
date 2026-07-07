@@ -1,6 +1,9 @@
 use std::fs;
 use std::process::Command;
 
+use zenith_cli::commands::render::to_png_with_dir;
+use zenith_cli::config::CliPolicyFlags;
+
 fn minimal_doc() -> &'static str {
     r#"zenith version=1 {
   project id="proj.asset" name="Asset Test"
@@ -9,6 +12,20 @@ fn minimal_doc() -> &'static str {
   assets { }
   document id="doc.asset" title="Asset Test" {
     page id="page.main" w=(px)100 h=(px)100 { }
+  }
+}"#
+}
+
+fn image_doc() -> &'static str {
+    r#"zenith version=1 {
+  project id="proj.asset" name="Asset Test"
+  tokens format="zenith-token-v1" { }
+  styles { }
+  assets { }
+  document id="doc.asset" title="Asset Test" {
+    page id="page.main" w=(px)100 h=(px)100 {
+      image id="img.paint" asset="asset.paint" x=(px)10 y=(px)10 w=(px)80 h=(px)80 fit="stretch"
+    }
   }
 }"#
 }
@@ -82,4 +99,47 @@ fn asset_zpx_apply_writes_png_asset_and_doc_sha256() {
     assert!(updated.contains(r#"kind="image""#));
     assert!(updated.contains(r#"src="assets/paint.png""#));
     assert!(updated.contains("sha256="));
+}
+
+#[test]
+fn asset_zpx_apply_renders_attached_asset_deterministically() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let doc = tmp.path().join("poster.zen");
+    let manifest = tmp.path().join("paint.zpx");
+    fs::write(&doc, image_doc()).expect("write doc");
+    fs::write(&manifest, minimal_zpx_manifest()).expect("write manifest");
+
+    let output = asset_zpx_command(&manifest, &doc)
+        .arg("--apply")
+        .output()
+        .expect("run zenith");
+
+    assert!(output.status.success());
+    let updated = fs::read_to_string(&doc).expect("read doc");
+    let first = to_png_with_dir(
+        &updated,
+        Some(tmp.path()),
+        1,
+        true,
+        &CliPolicyFlags::default(),
+        None,
+    )
+    .unwrap_or_else(|e| panic!("first render failed (exit {}): {}", e.exit_code, e.message))
+    .png;
+    let second = to_png_with_dir(
+        &updated,
+        Some(tmp.path()),
+        1,
+        true,
+        &CliPolicyFlags::default(),
+        None,
+    )
+    .unwrap_or_else(|e| panic!("second render failed (exit {}): {}", e.exit_code, e.message))
+    .png;
+
+    assert!(first.starts_with(b"\x89PNG\r\n\x1a\n"));
+    assert_eq!(
+        first, second,
+        "ZPX-baked image asset must render byte-identically through .zen"
+    );
 }
