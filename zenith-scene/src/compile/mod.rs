@@ -9,7 +9,7 @@
 //! [`compile`] renders page 0; [`compile_page`] renders a chosen page by index.
 //!
 //! The compiler is split across submodules: `leaf` (rect/ellipse/line/
-//! polygon/polyline), `text` (text + code shaping), `container` (group +
+//! polygon/polyline/path), `text` (text + code shaping), `container` (group +
 //! frame), `image`, `paint` (color/gradient/shadow resolvers), and
 //! `util` (small geometry/diagnostic helpers). This module keeps the public
 //! entry points, the per-subtree `RenderCtx`, and the `compile_node`
@@ -61,7 +61,7 @@ use field::{
 use image::compile_image;
 use leaf::{
     ConnectorEnv, RectEllipseEnv, ShapeCompileEnv, compile_connector, compile_ellipse,
-    compile_line, compile_polygon, compile_polyline, compile_rect, compile_shape,
+    compile_line, compile_path, compile_polygon, compile_polyline, compile_rect, compile_shape,
 };
 use markdown_resolve::{resolve_markdown, scan_for_markdown_text};
 use paint::{resolve_property_color, resolve_property_gradient};
@@ -878,15 +878,7 @@ pub(in crate::compile) fn compile_node(
             0.0
         }
         Node::Path(path) => {
-            diagnostics.push(Diagnostic::advisory(
-                "scene.unsupported_node",
-                format!(
-                    "path node '{}' cannot be compiled yet; the node is skipped",
-                    path.id
-                ),
-                path.source_span,
-                Some(path.id.clone()),
-            ));
+            compile_path(path, resolved, style_map, commands, diagnostics, ctx);
             0.0
         }
         Node::Code(code) => compile_code(

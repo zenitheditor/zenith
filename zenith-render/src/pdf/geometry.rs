@@ -8,6 +8,7 @@
 //! here.
 
 use pdf_writer::Content;
+use zenith_scene::ir::PathSegment;
 
 /// Circle-approximation constant κ for a 90° cubic arc (matches the raster
 /// backend's `build_rounded_rect_path`).
@@ -128,6 +129,61 @@ pub(super) fn poly_path(content: &mut Content, points: &[f64], closed: bool) -> 
         content.close_path();
     }
     true
+}
+
+/// Axis-aligned bounding box `(x, y, w, h)` of a flat `[x0,y0,x1,y1,...]`
+/// point list.
+pub(super) fn poly_bbox(points: &[f64]) -> (f64, f64, f64, f64) {
+    let mut min_x = f64::INFINITY;
+    let mut min_y = f64::INFINITY;
+    let mut max_x = f64::NEG_INFINITY;
+    let mut max_y = f64::NEG_INFINITY;
+    for pair in points.chunks_exact(2) {
+        let &[x, y] = pair else { continue };
+        min_x = min_x.min(x);
+        max_x = max_x.max(x);
+        min_y = min_y.min(y);
+        max_y = max_y.max(y);
+    }
+    (min_x, min_y, max_x - min_x, max_y - min_y)
+}
+
+/// Append structured scene path segments to `content`.
+pub(super) fn scene_path(content: &mut Content, segments: &[PathSegment]) -> bool {
+    let mut subpath_open = false;
+    let mut produced = false;
+    for segment in segments {
+        match segment {
+            PathSegment::MoveTo { x, y } => {
+                content.move_to(*x as f32, *y as f32);
+                subpath_open = true;
+                produced = true;
+            }
+            PathSegment::LineTo { x, y } if subpath_open => {
+                content.line_to(*x as f32, *y as f32);
+            }
+            PathSegment::CubicTo {
+                x1,
+                y1,
+                x2,
+                y2,
+                x,
+                y,
+            } if subpath_open => {
+                content.cubic_to(
+                    *x1 as f32, *y1 as f32, *x2 as f32, *y2 as f32, *x as f32, *y as f32,
+                );
+            }
+            PathSegment::Close if subpath_open => {
+                content.close_path();
+                subpath_open = false;
+            }
+            PathSegment::LineTo { .. } | PathSegment::CubicTo { .. } | PathSegment::Close => {
+                return false;
+            }
+        }
+    }
+    produced
 }
 
 // ── Glyph outline pen ─────────────────────────────────────────────────────────

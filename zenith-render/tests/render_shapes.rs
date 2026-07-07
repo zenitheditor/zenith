@@ -4,6 +4,7 @@
 
 mod common;
 use common::*;
+use zenith_scene::ir::PathSegment;
 
 // ── pixel correctness ─────────────────────────────────────────────────
 
@@ -42,6 +43,52 @@ fn determinism_identical_png_bytes() {
         png1, png2,
         "PNG output must be byte-identical for the same scene"
     );
+}
+
+#[test]
+fn cubic_path_renders_ink_deterministically() {
+    let mut scene = Scene::new(80.0, 80.0);
+    scene.commands.push(SceneCommand::PushClip {
+        x: 0.0,
+        y: 0.0,
+        w: 80.0,
+        h: 80.0,
+    });
+    scene.commands.push(SceneCommand::FillPath {
+        segments: vec![
+            PathSegment::MoveTo { x: 10.0, y: 60.0 },
+            PathSegment::CubicTo {
+                x1: 20.0,
+                y1: 5.0,
+                x2: 60.0,
+                y2: 5.0,
+                x: 70.0,
+                y: 60.0,
+            },
+            PathSegment::LineTo { x: 10.0, y: 60.0 },
+            PathSegment::Close,
+        ],
+        paint: Paint::solid(Color::srgb(0, 180, 80, 255)),
+        even_odd: false,
+    });
+    scene.commands.push(SceneCommand::PopClip);
+
+    let backend = TinySkiaBackend;
+    let provider = default_provider();
+    let img = backend
+        .rasterize(&scene, &provider, &no_assets())
+        .expect("path render");
+    assert!(
+        img.rgba.chunks_exact(4).any(|px| px[3] > 0),
+        "cubic path must render at least one ink pixel"
+    );
+
+    let png1 = backend.encode_png(&img).expect("first png");
+    let png2 = backend
+        .rasterize(&scene, &provider, &no_assets())
+        .and_then(|next| backend.encode_png(&next))
+        .expect("second png");
+    assert_eq!(png1, png2, "cubic path PNG must be byte-identical");
 }
 
 // ── PNG validity ──────────────────────────────────────────────────────

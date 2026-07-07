@@ -3,7 +3,7 @@
 //! outline pen.
 
 use tiny_skia::{FillRule, Mask, Path, PathBuilder, Rect, Transform};
-use zenith_scene::StrokeAlign;
+use zenith_scene::{StrokeAlign, ir::PathSegment};
 
 /// Build a clip `Mask` from the current effective clip rectangle.
 ///
@@ -65,13 +65,58 @@ pub(super) fn build_align_mask(
     };
 
     let fill_path = build_poly_path(points, true)?;
+    build_align_mask_for_path(
+        &fill_path,
+        invert,
+        fill_even_odd,
+        effective_clip,
+        width,
+        height,
+        device_ts,
+    )
+}
+
+pub(super) fn build_path_align_mask(
+    path: &Path,
+    align: StrokeAlign,
+    fill_even_odd: bool,
+    effective_clip: (f64, f64, f64, f64),
+    width: u32,
+    height: u32,
+    device_ts: Transform,
+) -> Option<Mask> {
+    let invert = match align {
+        StrokeAlign::Inside => false,
+        StrokeAlign::Outside => true,
+        StrokeAlign::Center => return None,
+    };
+    build_align_mask_for_path(
+        path,
+        invert,
+        fill_even_odd,
+        effective_clip,
+        width,
+        height,
+        device_ts,
+    )
+}
+
+fn build_align_mask_for_path(
+    fill_path: &Path,
+    invert: bool,
+    fill_even_odd: bool,
+    effective_clip: (f64, f64, f64, f64),
+    width: u32,
+    height: u32,
+    device_ts: Transform,
+) -> Option<Mask> {
     let mut mask = Mask::new(width, height)?;
     let fill_rule = if fill_even_odd {
         FillRule::EvenOdd
     } else {
         FillRule::Winding
     };
-    mask.fill_path(&fill_path, fill_rule, true, device_ts);
+    mask.fill_path(fill_path, fill_rule, true, device_ts);
     if invert {
         mask.invert();
     }
@@ -139,6 +184,43 @@ pub(super) fn build_poly_path(points: &[f64], closed: bool) -> Option<Path> {
     }
     if closed {
         pb.close();
+    }
+    pb.finish()
+}
+
+/// Build a `tiny_skia::Path` from structured scene path segments.
+pub(super) fn build_scene_path(segments: &[PathSegment]) -> Option<Path> {
+    let mut pb = PathBuilder::new();
+    let mut subpath_open = false;
+    for segment in segments {
+        match segment {
+            PathSegment::MoveTo { x, y } => {
+                pb.move_to(*x as f32, *y as f32);
+                subpath_open = true;
+            }
+            PathSegment::LineTo { x, y } if subpath_open => {
+                pb.line_to(*x as f32, *y as f32);
+            }
+            PathSegment::CubicTo {
+                x1,
+                y1,
+                x2,
+                y2,
+                x,
+                y,
+            } if subpath_open => {
+                pb.cubic_to(
+                    *x1 as f32, *y1 as f32, *x2 as f32, *y2 as f32, *x as f32, *y as f32,
+                );
+            }
+            PathSegment::Close if subpath_open => {
+                pb.close();
+                subpath_open = false;
+            }
+            PathSegment::LineTo { .. } | PathSegment::CubicTo { .. } | PathSegment::Close => {
+                return None;
+            }
+        }
     }
     pb.finish()
 }

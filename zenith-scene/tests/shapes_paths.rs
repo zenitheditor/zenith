@@ -1,0 +1,88 @@
+mod common;
+use common::*;
+use zenith_core::default_provider;
+use zenith_scene::compile;
+use zenith_scene::ir::{Paint, PathSegment, SceneCommand, StrokeAlign};
+
+#[test]
+fn path_emits_cubic_fill_and_stroke_metadata() {
+    let src = r##"zenith version=1 {
+  project id="proj.path" name="Path"
+  tokens format="zenith-token-v1" {
+token id="color.fill" type="color" value="#00ff00"
+token id="color.stroke" type="color" value="#0000ff"
+  }
+  styles {}
+  document id="doc.path" title="Path" {
+page id="page.path" w=(px)320 h=(px)220 {
+  path id="path.curve" closed=#true fill=(token)"color.fill" stroke=(token)"color.stroke" stroke-width=(px)3 stroke-alignment="inside" fill-rule="evenodd" {
+    anchor x=(px)50 y=(px)150 out-x=(px)80 out-y=(px)30
+    anchor x=(px)160 y=(px)50 in-x=(px)120 in-y=(px)20 out-x=(px)210 out-y=(px)80
+    anchor x=(px)260 y=(px)150 in-x=(px)230 in-y=(px)30
+  }
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+
+    let cmds = &result.scene.commands;
+    assert_eq!(
+        cmds.len(),
+        4,
+        "expected clip, fill, stroke, clip; got {cmds:?}"
+    );
+
+    match &cmds[1] {
+        SceneCommand::FillPath {
+            segments,
+            paint: Paint::Solid { color },
+            even_odd,
+        } => {
+            assert_eq!(color.g, 255);
+            assert!(*even_odd);
+            assert!(
+                segments
+                    .iter()
+                    .any(|s| matches!(s, PathSegment::CubicTo { .. })),
+                "path fill must preserve cubic segments: {segments:?}"
+            );
+            assert!(
+                matches!(segments.last(), Some(PathSegment::Close)),
+                "closed path fill must end with Close"
+            );
+        }
+        other => panic!("cmd[1] must be FillPath, got {other:?}"),
+    }
+
+    match &cmds[2] {
+        SceneCommand::StrokePath {
+            segments,
+            color,
+            stroke_width,
+            closed,
+            align,
+            fill_even_odd,
+        } => {
+            assert_eq!(color.b, 255);
+            assert!((*stroke_width - 3.0).abs() < 1e-9);
+            assert!(*closed);
+            assert_eq!(*align, StrokeAlign::Inside);
+            assert!(*fill_even_odd);
+            assert!(
+                segments
+                    .iter()
+                    .any(|s| matches!(s, PathSegment::CubicTo { .. })),
+                "path stroke must preserve cubic segments: {segments:?}"
+            );
+        }
+        other => panic!("cmd[2] must be StrokePath, got {other:?}"),
+    }
+}

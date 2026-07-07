@@ -3,7 +3,7 @@
 use zenith_core::{AssetKind, AssetProvider, BytesAssetProvider, FontProvider, default_provider};
 use zenith_scene::{
     Color, FilterSpec, FitMode, GradientPaint, GradientStop, Paint, Rect, Scene, SceneCommand,
-    SceneGlyph,
+    SceneGlyph, ir::PathSegment,
 };
 
 use super::render_pdf;
@@ -132,6 +132,35 @@ fn srgb_color_emits_device_rgb_operator() {
     assert!(
         !text.contains(" k\n"),
         "sRGB-only scene must not emit a DeviceCMYK `k` operator"
+    );
+}
+
+#[test]
+fn cubic_path_emits_native_pdf_curve_operator() {
+    let mut scene = Scene::new(80.0, 80.0);
+    scene.commands.push(SceneCommand::FillPath {
+        segments: vec![
+            PathSegment::MoveTo { x: 10.0, y: 60.0 },
+            PathSegment::CubicTo {
+                x1: 20.0,
+                y1: 5.0,
+                x2: 60.0,
+                y2: 5.0,
+                x: 70.0,
+                y: 60.0,
+            },
+            PathSegment::LineTo { x: 10.0, y: 60.0 },
+            PathSegment::Close,
+        ],
+        paint: Paint::solid(Color::srgb(0, 120, 200, 255)),
+        even_odd: false,
+    });
+
+    let bytes = render(&scene);
+    let text = String::from_utf8_lossy(&bytes);
+    assert!(
+        text.contains(" c\n") || text.contains(" c "),
+        "cubic path must emit PDF `c` operator"
     );
 }
 

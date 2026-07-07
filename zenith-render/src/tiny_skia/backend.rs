@@ -536,6 +536,8 @@ impl RasterBackend for TinySkiaBackend {
                 | SceneCommand::StrokeLine { .. }
                 | SceneCommand::FillPolygon { .. }
                 | SceneCommand::StrokePolyline { .. }
+                | SceneCommand::FillPath { .. }
+                | SceneCommand::StrokePath { .. }
                 | SceneCommand::DrawImage { .. }
                 | SceneCommand::DrawSvgAsset { .. }
                 | SceneCommand::DrawGlyphRun { .. } => {}

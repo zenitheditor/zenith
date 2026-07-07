@@ -45,6 +45,94 @@ pub enum StrokeAlign {
     Outside,
 }
 
+/// Structured scene path segment, preserving cubic Bezier geometry for native
+/// raster and PDF backends.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(tag = "kind")]
+pub enum PathSegment {
+    MoveTo {
+        x: f64,
+        y: f64,
+    },
+    LineTo {
+        x: f64,
+        y: f64,
+    },
+    CubicTo {
+        x1: f64,
+        y1: f64,
+        x2: f64,
+        y2: f64,
+        x: f64,
+        y: f64,
+    },
+    Close,
+}
+
+/// Return `true` when every coordinate in `segments` is finite.
+pub fn path_segments_finite(segments: &[PathSegment]) -> bool {
+    segments.iter().all(|segment| match segment {
+        PathSegment::MoveTo { x, y } | PathSegment::LineTo { x, y } => {
+            x.is_finite() && y.is_finite()
+        }
+        PathSegment::CubicTo {
+            x1,
+            y1,
+            x2,
+            y2,
+            x,
+            y,
+        } => {
+            x1.is_finite()
+                && y1.is_finite()
+                && x2.is_finite()
+                && y2.is_finite()
+                && x.is_finite()
+                && y.is_finite()
+        }
+        PathSegment::Close => true,
+    })
+}
+
+/// Axis-aligned bounding box `(x, y, w, h)` of a structured path segment list.
+pub fn path_segments_bbox(segments: &[PathSegment]) -> Option<(f64, f64, f64, f64)> {
+    let mut min_x = f64::INFINITY;
+    let mut min_y = f64::INFINITY;
+    let mut max_x = f64::NEG_INFINITY;
+    let mut max_y = f64::NEG_INFINITY;
+    let mut saw = false;
+    let mut include = |x: f64, y: f64| {
+        saw = true;
+        min_x = min_x.min(x);
+        max_x = max_x.max(x);
+        min_y = min_y.min(y);
+        max_y = max_y.max(y);
+    };
+    for segment in segments {
+        match segment {
+            PathSegment::MoveTo { x, y } | PathSegment::LineTo { x, y } => include(*x, *y),
+            PathSegment::CubicTo {
+                x1,
+                y1,
+                x2,
+                y2,
+                x,
+                y,
+            } => {
+                include(*x1, *y1);
+                include(*x2, *y2);
+                include(*x, *y);
+            }
+            PathSegment::Close => {}
+        }
+    }
+    if saw {
+        Some((min_x, min_y, max_x - min_x, max_y - min_y))
+    } else {
+        None
+    }
+}
+
 // ── Paint ───────────────────────────────────────────────────────────────────
 
 /// How a filled region is painted.
@@ -398,6 +486,29 @@ pub enum SceneCommand {
         /// Fill rule of the clip region used for `Inside`/`Outside` alignment.
         /// `true` = even-odd, `false` = nonzero. Only meaningful when
         /// `align != Center` and `closed` is `true`.
+        #[serde(default, skip_serializing_if = "is_false")]
+        fill_even_odd: bool,
+    },
+    /// Fill a structured path with line and cubic Bezier segments.
+    FillPath {
+        segments: Vec<PathSegment>,
+        paint: Paint,
+        /// When `true`, use the even-odd fill rule; otherwise nonzero (winding).
+        #[serde(default)]
+        even_odd: bool,
+    },
+    /// Stroke a structured path with line and cubic Bezier segments.
+    StrokePath {
+        segments: Vec<PathSegment>,
+        color: Color,
+        stroke_width: f64,
+        /// Whether the source path is closed; used for stroke-alignment semantics.
+        #[serde(default)]
+        closed: bool,
+        /// Stroke alignment relative to the closed-path boundary.
+        #[serde(default, skip_serializing_if = "is_center")]
+        align: StrokeAlign,
+        /// Fill rule of the clip region used for `Inside`/`Outside` alignment.
         #[serde(default, skip_serializing_if = "is_false")]
         fill_even_odd: bool,
     },

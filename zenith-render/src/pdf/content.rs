@@ -23,11 +23,12 @@ use pdf_writer::Content;
 use zenith_core::{AssetProvider, FontProvider};
 use zenith_scene::{
     Color, FitMode, ImageClip, Paint as ScenePaint, Scene, SceneCommand, StrokeAlign,
+    ir::{path_segments_bbox, path_segments_finite},
 };
 
 use super::color;
 use super::font::FontPlan;
-use super::geometry::{ellipse_path, poly_path, rounded_rect_path};
+use super::geometry::{ellipse_path, poly_bbox, poly_path, rounded_rect_path, scene_path};
 use super::gradient::{AxialGradient, resolve as resolve_gradient};
 use super::image::{DecodedImage, decode_for_pdf};
 
@@ -198,6 +199,8 @@ fn effect_bracket(cmd: &SceneCommand) -> EffectBracket {
         | SceneCommand::StrokeLine { .. }
         | SceneCommand::FillPolygon { .. }
         | SceneCommand::StrokePolyline { .. }
+        | SceneCommand::FillPath { .. }
+        | SceneCommand::StrokePath { .. }
         | SceneCommand::DrawImage { .. }
         | SceneCommand::DrawSvgAsset { .. }
         | SceneCommand::DrawGlyphRun { .. }
@@ -309,23 +312,6 @@ fn fill_region<F: Fn(&mut Content) -> bool>(
             }
         }
     }
-}
-
-/// Axis-aligned bounding box `(x, y, w, h)` of a flat `[x0,y0,x1,y1,…]` point
-/// list, used to resolve a gradient line for polygon fills. The caller has
-/// already verified at least three finite points.
-fn poly_bbox(points: &[f64]) -> (f64, f64, f64, f64) {
-    let mut min_x = f64::INFINITY;
-    let mut min_y = f64::INFINITY;
-    let mut max_x = f64::NEG_INFINITY;
-    let mut max_y = f64::NEG_INFINITY;
-    for pair in points.chunks_exact(2) {
-        min_x = min_x.min(pair[0]);
-        max_x = max_x.max(pair[0]);
-        min_y = min_y.min(pair[1]);
-        max_y = max_y.max(pair[1]);
-    }
-    (min_x, min_y, max_x - min_x, max_y - min_y)
 }
 
 pub(super) fn emit_command(
@@ -579,7 +565,103 @@ pub(super) fn emit_command(
             content.restore_state();
         }
 
-        // ── Text ──────────────────────────────────────────────────────────
+        SceneCommand::FillPath {
+            segments,
+            paint,
+            even_odd,
+        } => {
+            if segments.len() < 3 || !path_segments_finite(segments) {
+                return;
+            }
+            let Some(bbox) = path_segments_bbox(segments) else {
+                return;
+            };
+            fill_region(content, res, paint, bbox, *even_odd, |c| {
+                scene_path(c, segments)
+            });
+        }
+
+        SceneCommand::StrokePath {
+            segments,
+            color,
+            stroke_width,
+            closed,
+            align,
+            fill_even_odd,
+        } => {
+            if segments.len() < 2 || !path_segments_finite(segments) || !finite(*stroke_width) {
+                return;
+            }
+
+            let aligned = *closed && !matches!(align, StrokeAlign::Center);
+
+            content.save_state();
+            apply_alpha(content, res, color);
+            color::set_stroke(content, color);
+
+            if aligned {
+                match align {
+                    StrokeAlign::Inside => {
+                        if !scene_path(content, segments) {
+                            content.end_path();
+                            content.restore_state();
+                            return;
+                        }
+                        if *fill_even_odd {
+                            content.clip_even_odd();
+                        } else {
+                            content.clip_nonzero();
+                        }
+                        content.end_path();
+                    }
+                    StrokeAlign::Outside => {
+                        let (pw, ph) = page;
+                        let m = pw.max(ph).max(1.0);
+                        content.move_to(-m as f32, -m as f32);
+                        content.line_to((pw + m) as f32, -m as f32);
+                        content.line_to((pw + m) as f32, (ph + m) as f32);
+                        content.line_to(-m as f32, (ph + m) as f32);
+                        content.close_path();
+                        if !scene_path(content, segments) {
+                            content.end_path();
+                            content.restore_state();
+                            return;
+                        }
+                        content.clip_even_odd();
+                        content.end_path();
+                    }
+                    StrokeAlign::Center => {}
+                }
+                let stroke_width = if aligned {
+                    *stroke_width * 2.0
+                } else {
+                    *stroke_width
+                };
+                if !stroke_width.is_finite() || stroke_width > f64::from(f32::MAX) {
+                    content.restore_state();
+                    return;
+                }
+                content.set_line_width(stroke_width as f32);
+                if scene_path(content, segments) {
+                    content.stroke();
+                } else {
+                    content.end_path();
+                }
+            } else {
+                if *stroke_width > f64::from(f32::MAX) {
+                    content.restore_state();
+                    return;
+                }
+                content.set_line_width(*stroke_width as f32);
+                if scene_path(content, segments) {
+                    content.stroke();
+                } else {
+                    content.end_path();
+                }
+            }
+            content.restore_state();
+        }
+
         SceneCommand::DrawGlyphRun {
             x,
             y,
@@ -612,7 +694,6 @@ pub(super) fn emit_command(
             );
         }
 
-        // ── Images ────────────────────────────────────────────────────────
         SceneCommand::DrawImage {
             x,
             y,

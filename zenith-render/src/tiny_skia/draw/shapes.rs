@@ -1,15 +1,19 @@
 //! Solid-fill and solid-stroke primitive draws (rect, rounded-rect, ellipse,
-//! line, polygon, polyline). Each function pulls its fields from the matching
+//! line, polygon, polyline, path). Each function pulls its fields from the matching
 //! [`SceneCommand`] variant and draws into `target` under the shared
 //! [`DrawCtx`]; behavior is byte-identical to the prior inline match arms.
 
 use tiny_skia::{FillRule, Mask, Paint, PathBuilder, Pixmap, Rect, Stroke, Transform};
-use zenith_scene::{Paint as ScenePaint, SceneCommand, StrokeAlign};
+use zenith_scene::{
+    Paint as ScenePaint, SceneCommand, StrokeAlign, ir::path_segments_bbox,
+    ir::path_segments_finite,
+};
 
 use super::super::commands::{DrawCtx, build_stroke_dash, map_line_cap};
 use super::super::gradient::gradient_shader;
 use super::super::paths::{
-    build_align_mask, build_poly_path, build_rounded_rect_path, clip_mask, intersect_rects,
+    build_align_mask, build_path_align_mask, build_poly_path, build_rounded_rect_path,
+    build_scene_path, clip_mask, intersect_rects,
 };
 
 /// Build a tiny-skia fill paint from a scene [`ScenePaint`] over the bounding
@@ -517,6 +521,104 @@ pub(in crate::tiny_skia) fn stroke_polyline(target: &mut Pixmap, ctx: DrawCtx, c
         None => mask.as_ref(),
     };
 
+    target.stroke_path(&path, &paint, &stroke, ctx.current_ts, draw_mask);
+}
+
+pub(in crate::tiny_skia) fn fill_path(target: &mut Pixmap, ctx: DrawCtx, cmd: &SceneCommand) {
+    let SceneCommand::FillPath {
+        segments,
+        paint,
+        even_odd,
+    } = cmd
+    else {
+        return;
+    };
+    if segments.len() < 3 || !path_segments_finite(segments) {
+        return;
+    }
+    let path = match build_scene_path(segments) {
+        Some(p) => p,
+        None => return,
+    };
+    let effective_clip = ctx.effective_clip;
+    let mask = match clip_mask(effective_clip, ctx.width, ctx.height) {
+        None => return,
+        Some(m) => m,
+    };
+    let fill_rule = if *even_odd {
+        FillRule::EvenOdd
+    } else {
+        FillRule::Winding
+    };
+    let Some((bx, by, bw, bh)) = path_segments_bbox(segments) else {
+        return;
+    };
+    let Some(paint_ts) = ts_fill_paint(paint, bx, by, bw, bh) else {
+        return;
+    };
+    target.fill_path(&path, &paint_ts, fill_rule, ctx.current_ts, mask.as_ref());
+}
+
+pub(in crate::tiny_skia) fn stroke_path(target: &mut Pixmap, ctx: DrawCtx, cmd: &SceneCommand) {
+    let SceneCommand::StrokePath {
+        segments,
+        color,
+        stroke_width,
+        closed,
+        align,
+        fill_even_odd,
+    } = cmd
+    else {
+        return;
+    };
+    if segments.len() < 2
+        || !path_segments_finite(segments)
+        || !stroke_width.is_finite()
+        || *stroke_width > f64::from(f32::MAX)
+    {
+        return;
+    }
+    let path = match build_scene_path(segments) {
+        Some(p) => p,
+        None => return,
+    };
+    let effective_clip = ctx.effective_clip;
+    let mask = match clip_mask(effective_clip, ctx.width, ctx.height) {
+        None => return,
+        Some(m) => m,
+    };
+    let mut paint = Paint::default();
+    paint.set_color_rgba8(color.r, color.g, color.b, color.a);
+    paint.anti_alias = true;
+    let aligned_mask: Option<Mask> = match align {
+        StrokeAlign::Center => None,
+        StrokeAlign::Inside | StrokeAlign::Outside if *closed => build_path_align_mask(
+            &path,
+            *align,
+            *fill_even_odd,
+            effective_clip,
+            ctx.width,
+            ctx.height,
+            ctx.current_ts,
+        ),
+        StrokeAlign::Inside | StrokeAlign::Outside => None,
+    };
+    let stroke_width_px = if aligned_mask.is_some() {
+        *stroke_width * 2.0
+    } else {
+        *stroke_width
+    };
+    if !stroke_width_px.is_finite() || stroke_width_px > f64::from(f32::MAX) {
+        return;
+    }
+    let stroke = Stroke {
+        width: stroke_width_px as f32,
+        ..Default::default()
+    };
+    let draw_mask: Option<&Mask> = match &aligned_mask {
+        Some(m) => Some(m),
+        None => mask.as_ref(),
+    };
     target.stroke_path(&path, &paint, &stroke, ctx.current_ts, draw_mask);
 }
 

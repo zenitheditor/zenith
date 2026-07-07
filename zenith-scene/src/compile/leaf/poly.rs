@@ -4,10 +4,11 @@
 use std::collections::BTreeMap;
 
 use zenith_core::{
-    Diagnostic, LineNode, Point, PolygonNode, PolylineNode, ResolvedToken, Span, Style, dim_to_px,
+    Diagnostic, Dimension, LineNode, PathAnchor, PathNode, Point, PolygonNode, PolylineNode,
+    ResolvedToken, Span, Style, dim_to_px,
 };
 
-use crate::ir::{Paint, SceneCommand, StrokeAlign};
+use crate::ir::{Paint, PathSegment, SceneCommand, StrokeAlign};
 
 use super::super::RenderCtx;
 use super::super::paint::{
@@ -186,6 +187,251 @@ fn resolve_flat_points(
         flat.push(py + ctx.dy);
     }
     Some(flat)
+}
+
+fn resolve_path_anchor_point(
+    anchor: &PathAnchor,
+    node_id: &str,
+    idx: usize,
+    source_span: Option<Span>,
+    ctx: RenderCtx,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<(f64, f64)> {
+    let (Some(xd), Some(yd)) = (&anchor.x, &anchor.y) else {
+        diagnostics.push(Diagnostic::advisory(
+            "scene.missing_geometry",
+            format!(
+                "path '{}' anchor[{}] is missing x or y coordinate; skipped",
+                node_id, idx
+            ),
+            source_span,
+            Some(node_id.to_owned()),
+        ));
+        return None;
+    };
+    let Some(px) = dim_to_px(xd.value, &xd.unit) else {
+        diagnostics.push(unsupported_unit_diag(
+            "path",
+            node_id,
+            "anchor x",
+            source_span,
+        ));
+        return None;
+    };
+    let Some(py) = dim_to_px(yd.value, &yd.unit) else {
+        diagnostics.push(unsupported_unit_diag(
+            "path",
+            node_id,
+            "anchor y",
+            source_span,
+        ));
+        return None;
+    };
+    Some((px + ctx.dx, py + ctx.dy))
+}
+
+struct PathBuildCtx<'a, 'b> {
+    node_id: &'a str,
+    source_span: Option<Span>,
+    render: RenderCtx,
+    diagnostics: &'b mut Vec<Diagnostic>,
+}
+
+struct PathHandleInput<'a> {
+    x: &'a Option<Dimension>,
+    y: &'a Option<Dimension>,
+    fallback: (f64, f64),
+    label: &'static str,
+}
+
+struct PathEdgeInput<'a> {
+    prev_anchor: &'a PathAnchor,
+    prev_point: (f64, f64),
+    next_anchor: &'a PathAnchor,
+    next_point: (f64, f64),
+}
+
+struct ResolvedPathSegments {
+    segments: Vec<PathSegment>,
+    anchor_points: Vec<(f64, f64)>,
+    closed: bool,
+}
+
+fn resolve_path_handle_point(
+    input: PathHandleInput<'_>,
+    ctx: &mut PathBuildCtx<'_, '_>,
+) -> Option<(f64, f64)> {
+    let PathHandleInput {
+        x,
+        y,
+        fallback,
+        label,
+    } = input;
+    let (Some(xd), Some(yd)) = (x, y) else {
+        return Some(fallback);
+    };
+    let Some(px) = dim_to_px(xd.value, &xd.unit) else {
+        ctx.diagnostics.push(unsupported_unit_diag(
+            "path",
+            ctx.node_id,
+            label,
+            ctx.source_span,
+        ));
+        return None;
+    };
+    let Some(py) = dim_to_px(yd.value, &yd.unit) else {
+        ctx.diagnostics.push(unsupported_unit_diag(
+            "path",
+            ctx.node_id,
+            label,
+            ctx.source_span,
+        ));
+        return None;
+    };
+    Some((px + ctx.render.dx, py + ctx.render.dy))
+}
+
+fn path_anchor_bbox_center(points: &[(f64, f64)]) -> (f64, f64) {
+    let mut min_x = f64::INFINITY;
+    let mut max_x = f64::NEG_INFINITY;
+    let mut min_y = f64::INFINITY;
+    let mut max_y = f64::NEG_INFINITY;
+    for &(x, y) in points {
+        min_x = min_x.min(x);
+        max_x = max_x.max(x);
+        min_y = min_y.min(y);
+        max_y = max_y.max(y);
+    }
+    if min_x.is_infinite() {
+        return (0.0, 0.0);
+    }
+    ((min_x + max_x) / 2.0, (min_y + max_y) / 2.0)
+}
+
+fn push_path_segment(
+    segments: &mut Vec<PathSegment>,
+    edge: PathEdgeInput<'_>,
+    ctx: &mut PathBuildCtx<'_, '_>,
+) -> Option<()> {
+    let PathEdgeInput {
+        prev_anchor,
+        prev_point,
+        next_anchor,
+        next_point,
+    } = edge;
+    let has_prev_out = prev_anchor.out_x.is_some() || prev_anchor.out_y.is_some();
+    let has_next_in = next_anchor.in_x.is_some() || next_anchor.in_y.is_some();
+    if !has_prev_out && !has_next_in {
+        segments.push(PathSegment::LineTo {
+            x: next_point.0,
+            y: next_point.1,
+        });
+        return Some(());
+    }
+
+    let c1 = resolve_path_handle_point(
+        PathHandleInput {
+            x: &prev_anchor.out_x,
+            y: &prev_anchor.out_y,
+            fallback: prev_point,
+            label: "out handle",
+        },
+        ctx,
+    )?;
+    let c2 = resolve_path_handle_point(
+        PathHandleInput {
+            x: &next_anchor.in_x,
+            y: &next_anchor.in_y,
+            fallback: next_point,
+            label: "in handle",
+        },
+        ctx,
+    )?;
+    segments.push(PathSegment::CubicTo {
+        x1: c1.0,
+        y1: c1.1,
+        x2: c2.0,
+        y2: c2.1,
+        x: next_point.0,
+        y: next_point.1,
+    });
+    Some(())
+}
+
+fn resolve_path_segments(
+    path: &PathNode,
+    ctx: RenderCtx,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<ResolvedPathSegments> {
+    let closed = path.closed == Some(true);
+    let mut build_ctx = PathBuildCtx {
+        node_id: &path.id,
+        source_span: path.source_span,
+        render: ctx,
+        diagnostics,
+    };
+    let mut points = Vec::with_capacity(path.anchors.len());
+    for (idx, anchor) in path.anchors.iter().enumerate() {
+        points.push(resolve_path_anchor_point(
+            anchor,
+            &path.id,
+            idx,
+            path.source_span,
+            ctx,
+            build_ctx.diagnostics,
+        )?);
+    }
+
+    let first = points.first().copied()?;
+    let mut segments = Vec::with_capacity(path.anchors.len() + 2);
+    segments.push(PathSegment::MoveTo {
+        x: first.0,
+        y: first.1,
+    });
+
+    for pair in path.anchors.windows(2).zip(points.windows(2)) {
+        let (anchor_pair, point_pair) = pair;
+        let (Some(prev_anchor), Some(next_anchor)) = (anchor_pair.first(), anchor_pair.get(1))
+        else {
+            return None;
+        };
+        let (Some(&prev_point), Some(&next_point)) = (point_pair.first(), point_pair.get(1)) else {
+            return None;
+        };
+        push_path_segment(
+            &mut segments,
+            PathEdgeInput {
+                prev_anchor,
+                prev_point,
+                next_anchor,
+                next_point,
+            },
+            &mut build_ctx,
+        )?;
+    }
+
+    if closed
+        && let (Some(prev_anchor), Some(first_anchor), Some(&prev_point)) =
+            (path.anchors.last(), path.anchors.first(), points.last())
+    {
+        push_path_segment(
+            &mut segments,
+            PathEdgeInput {
+                prev_anchor,
+                prev_point,
+                next_anchor: first_anchor,
+                next_point: first,
+            },
+            &mut build_ctx,
+        )?;
+        segments.push(PathSegment::Close);
+    }
+
+    Some(ResolvedPathSegments {
+        segments,
+        anchor_points: points,
+        closed,
+    })
 }
 
 /// Compile a `polygon` leaf node.
@@ -405,6 +651,105 @@ pub(in crate::compile) fn compile_polyline(
             // polyline is an open path: alignment never applies.
             align: StrokeAlign::Center,
             fill_even_odd: false,
+        });
+    }
+
+    if rot.is_some() {
+        commands.push(SceneCommand::PopTransform);
+    }
+}
+
+/// Compile a structured cubic Bezier `path` leaf node.
+pub(in crate::compile) fn compile_path(
+    path: &PathNode,
+    resolved: &BTreeMap<String, ResolvedToken>,
+    style_map: &BTreeMap<&str, &Style>,
+    commands: &mut Vec<SceneCommand>,
+    diagnostics: &mut Vec<Diagnostic>,
+    ctx: RenderCtx,
+) {
+    if path.visible == Some(false) {
+        return;
+    }
+
+    let Some(resolved_path) = resolve_path_segments(path, ctx, diagnostics) else {
+        return;
+    };
+    let ResolvedPathSegments {
+        segments,
+        anchor_points,
+        closed,
+    } = resolved_path;
+    if anchor_points.len() < 2 {
+        return;
+    }
+
+    let node_opacity = path.opacity.unwrap_or(1.0).clamp(0.0, 1.0);
+    let even_odd = path.fill_rule.as_deref() == Some("evenodd");
+
+    let rot = rotation_degrees(path.rotate.as_ref());
+    if let Some(angle) = rot {
+        let (cx, cy) = path_anchor_bbox_center(&anchor_points);
+        commands.push(SceneCommand::PushTransform {
+            angle_deg: angle,
+            cx,
+            cy,
+        });
+    }
+
+    let fill_prop = path
+        .fill
+        .as_ref()
+        .or_else(|| style_prop(&path.style, style_map, "fill"));
+    if anchor_points.len() >= 3
+        && let Some(fill_prop) = fill_prop
+    {
+        let fill_op = node_opacity * ctx.opacity;
+        if let Some(mut gradient) = resolve_property_gradient(fill_prop, resolved, &path.id) {
+            apply_gradient_opacity(&mut gradient, fill_op, 1.0);
+            commands.push(SceneCommand::FillPath {
+                segments: segments.clone(),
+                paint: Paint::Gradient(gradient),
+                even_odd,
+            });
+        } else if let Some(mut color) =
+            resolve_property_color(fill_prop, resolved, diagnostics, &path.id)
+        {
+            color.a = (color.a as f64 * fill_op).round() as u8;
+            commands.push(SceneCommand::FillPath {
+                segments: segments.clone(),
+                paint: Paint::solid(color),
+                even_odd,
+            });
+        }
+    }
+
+    let stroke_prop = path
+        .stroke
+        .as_ref()
+        .or_else(|| style_prop(&path.style, style_map, "stroke"));
+    if let Some(stroke_prop) = stroke_prop
+        && let Some(mut color) =
+            resolve_property_color(stroke_prop, resolved, diagnostics, &path.id)
+    {
+        color.a = (color.a as f64 * node_opacity * ctx.opacity).round() as u8;
+        let sw = path
+            .stroke_width
+            .clone()
+            .or_else(|| style_prop(&path.style, style_map, "stroke-width").cloned());
+        let stroke_width = resolve_property_dimension_px(sw.as_ref(), resolved, 1.0);
+        let align = match path.stroke_alignment.as_deref() {
+            Some("inside") => StrokeAlign::Inside,
+            Some("outside") => StrokeAlign::Outside,
+            _ => StrokeAlign::Center,
+        };
+        commands.push(SceneCommand::StrokePath {
+            segments,
+            color,
+            stroke_width,
+            closed,
+            align,
+            fill_even_odd: even_odd,
         });
     }
 

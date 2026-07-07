@@ -50,6 +50,8 @@ pub(in crate::tiny_skia) fn draw_command(
         SceneCommand::StrokeLine { .. } => draw::shapes::stroke_line(target, ctx, cmd),
         SceneCommand::FillPolygon { .. } => draw::shapes::fill_polygon(target, ctx, cmd),
         SceneCommand::StrokePolyline { .. } => draw::shapes::stroke_polyline(target, ctx, cmd),
+        SceneCommand::FillPath { .. } => draw::shapes::fill_path(target, ctx, cmd),
+        SceneCommand::StrokePath { .. } => draw::shapes::stroke_path(target, ctx, cmd),
         SceneCommand::StrokeRect { .. } => draw::shapes::stroke_rect(target, ctx, cmd),
         SceneCommand::FillRoundedRect { .. } => draw::shapes::fill_rounded_rect(target, ctx, cmd),
         SceneCommand::StrokeRoundedRect { .. } => {

@@ -1,5 +1,5 @@
-//! Vector leaf-node compilation: rect, ellipse, line, polygon, polyline, shape,
-//! and connector.
+//! Vector leaf-node compilation: rect, ellipse, line, polygon, polyline, path,
+//! shape, and connector.
 //!
 //! Each `compile_*` entry mirrors the shared leaf signature and emits the same
 //! `SceneCommand` stream that the original inline `compile_node` arms produced.
@@ -16,6 +16,6 @@ mod shape;
 
 pub(in crate::compile) use common::resolve_dash_params;
 pub(super) use connector::{ConnectorEnv, compile_connector};
-pub(super) use poly::{compile_line, compile_polygon, compile_polyline};
+pub(super) use poly::{compile_line, compile_path, compile_polygon, compile_polyline};
 pub(super) use rect_ellipse::{RectEllipseEnv, compile_ellipse, compile_rect};
 pub(super) use shape::{ShapeCompileEnv, compile_shape};
