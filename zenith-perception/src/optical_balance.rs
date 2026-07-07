@@ -19,18 +19,18 @@ pub struct OpticalBalanceReport {
 }
 
 pub fn optical_balance(input: OpticalBalanceInput) -> OpticalBalanceReport {
-    let center_dx = center_x(input.subject) - center_x(input.container);
-    let center_dy = center_y(input.subject) - center_y(input.container);
+    let center_dx = input.subject.center_x() - input.container.center_x();
+    let center_dy = input.subject.center_y() - input.container.center_y();
     let mut diagnostics = Vec::new();
 
-    if !valid_bounds(input.subject) {
+    if !input.subject.is_valid() {
         diagnostics.push(PerceptionDiagnostic::new(
             "optical_balance.invalid_subject",
             PerceptionSeverity::Warning,
             "subject bounds must be finite and ordered",
         ));
     }
-    if !valid_bounds(input.container)
+    if !input.container.is_valid()
         || input.container.width() <= 0.0
         || input.container.height() <= 0.0
     {
@@ -65,23 +65,6 @@ pub fn optical_balance(input: OpticalBalanceInput) -> OpticalBalanceReport {
         score: optical_balance_score(valid, offset_magnitude),
         diagnostics,
     }
-}
-
-fn center_x(bounds: RectBounds) -> f64 {
-    (bounds.min_x + bounds.max_x) * 0.5
-}
-
-fn center_y(bounds: RectBounds) -> f64 {
-    (bounds.min_y + bounds.max_y) * 0.5
-}
-
-fn valid_bounds(bounds: RectBounds) -> bool {
-    bounds.min_x.is_finite()
-        && bounds.min_y.is_finite()
-        && bounds.max_x.is_finite()
-        && bounds.max_y.is_finite()
-        && bounds.max_x >= bounds.min_x
-        && bounds.max_y >= bounds.min_y
 }
 
 fn optical_balance_score(valid: bool, offset_magnitude: f32) -> f32 {

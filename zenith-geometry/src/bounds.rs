@@ -48,6 +48,26 @@ impl RectBounds {
     pub fn height(self) -> f64 {
         self.max_y - self.min_y
     }
+
+    #[must_use]
+    pub fn center_x(self) -> f64 {
+        (self.min_x + self.max_x) * 0.5
+    }
+
+    #[must_use]
+    pub fn center_y(self) -> f64 {
+        (self.min_y + self.max_y) * 0.5
+    }
+
+    #[must_use]
+    pub fn is_valid(self) -> bool {
+        self.min_x.is_finite()
+            && self.min_y.is_finite()
+            && self.max_x.is_finite()
+            && self.max_y.is_finite()
+            && self.max_x >= self.min_x
+            && self.max_y >= self.min_y
+    }
 }
 
 #[cfg(test)]
@@ -71,6 +91,9 @@ mod tests {
         );
         assert_eq!(bounds.width(), 5.0);
         assert_eq!(bounds.height(), 7.0);
+        assert_eq!(bounds.center_x(), 1.5);
+        assert_eq!(bounds.center_y(), 1.5);
+        assert!(bounds.is_valid());
     }
 
     #[test]
@@ -91,6 +114,28 @@ mod tests {
                 max_x: 8.0,
                 max_y: 9.0
             }
+        );
+    }
+
+    #[test]
+    fn invalid_bounds_are_detected() {
+        assert!(
+            !RectBounds {
+                min_x: 2.0,
+                min_y: 0.0,
+                max_x: 1.0,
+                max_y: 1.0
+            }
+            .is_valid()
+        );
+        assert!(
+            !RectBounds {
+                min_x: 0.0,
+                min_y: f64::NAN,
+                max_x: 1.0,
+                max_y: 1.0
+            }
+            .is_valid()
         );
     }
 }

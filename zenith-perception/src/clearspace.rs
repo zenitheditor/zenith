@@ -29,7 +29,7 @@ pub fn clearspace(input: ClearspaceInput) -> ClearspaceReport {
     let minimum = left.min(right).min(top).min(bottom);
 
     let mut diagnostics = Vec::new();
-    if !valid_bounds(input.subject) || !valid_bounds(input.container) {
+    if !input.subject.is_valid() || !input.container.is_valid() {
         diagnostics.push(PerceptionDiagnostic::new(
             "clearspace.invalid_bounds",
             PerceptionSeverity::Warning,
@@ -67,15 +67,6 @@ pub fn clearspace(input: ClearspaceInput) -> ClearspaceReport {
         score: clearspace_score(valid, minimum, input.required),
         diagnostics,
     }
-}
-
-fn valid_bounds(bounds: RectBounds) -> bool {
-    bounds.min_x.is_finite()
-        && bounds.min_y.is_finite()
-        && bounds.max_x.is_finite()
-        && bounds.max_y.is_finite()
-        && bounds.max_x >= bounds.min_x
-        && bounds.max_y >= bounds.min_y
 }
 
 fn clearspace_score(valid: bool, minimum: f64, required: f64) -> f32 {
