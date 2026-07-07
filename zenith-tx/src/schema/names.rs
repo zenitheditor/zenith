@@ -21,6 +21,7 @@ pub fn op_names() -> &'static [&'static str] {
         "find_replace_text",
         "group",
         "insert_path_anchor",
+        "insert_path_anchor_at_point",
         "move_backward",
         "move_forward",
         "move_path_anchor",

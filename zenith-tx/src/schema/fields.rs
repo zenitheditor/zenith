@@ -223,6 +223,31 @@ pub fn op_fields(name: &str) -> Option<&'static [OpFieldSchema]> {
             ];
             Some(F)
         }
+        "insert_path_anchor_at_point" => {
+            static F: &[OpFieldSchema] = &[
+                OpFieldSchema {
+                    name: "node",
+                    ty: "node id",
+                    required: true,
+                },
+                OpFieldSchema {
+                    name: "x",
+                    ty: "px",
+                    required: true,
+                },
+                OpFieldSchema {
+                    name: "y",
+                    ty: "px",
+                    required: true,
+                },
+                OpFieldSchema {
+                    name: "tolerance",
+                    ty: "px",
+                    required: true,
+                },
+            ];
+            Some(F)
+        }
         "move_path_anchor" => {
             static F: &[OpFieldSchema] = &[
                 OpFieldSchema {

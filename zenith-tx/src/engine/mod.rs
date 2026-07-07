@@ -28,8 +28,9 @@ use geometry::{
     apply_set_geometry,
 };
 use path::{
-    apply_insert_path_anchor, apply_move_path_anchor, apply_set_path_anchor_kind,
-    apply_set_path_anchors, apply_simplify_path_anchors, apply_transform_path_anchors,
+    apply_insert_path_anchor, apply_insert_path_anchor_at_point, apply_move_path_anchor,
+    apply_set_path_anchor_kind, apply_set_path_anchors, apply_simplify_path_anchors,
+    apply_transform_path_anchors,
 };
 use path_handle::{MovePathHandleArgs, apply_move_path_handle};
 use pattern::apply_detach_pattern;
@@ -250,6 +251,22 @@ fn apply_op(
             t,
         } => {
             apply_insert_path_anchor(node_id, *segment_index, *t, doc, diagnostics, affected);
+        }
+        Op::InsertPathAnchorAtPoint {
+            node: node_id,
+            x,
+            y,
+            tolerance,
+        } => {
+            apply_insert_path_anchor_at_point(
+                node_id,
+                *x,
+                *y,
+                *tolerance,
+                doc,
+                diagnostics,
+                affected,
+            );
         }
         Op::MovePathAnchor {
             node: node_id,
@@ -521,6 +538,7 @@ fn op_lock_targets(op: &Op) -> Vec<&str> {
         | Op::SetPathAnchors { node, .. }
         | Op::SetPathAnchorKind { node, .. }
         | Op::InsertPathAnchor { node, .. }
+        | Op::InsertPathAnchorAtPoint { node, .. }
         | Op::MovePathAnchor { node, .. }
         | Op::MovePathHandle { node, .. }
         | Op::SimplifyPathAnchors { node, .. }

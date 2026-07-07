@@ -24,6 +24,9 @@ pub fn op_summary(name: &str) -> Option<&'static str> {
         "set_path_anchors" => Some("Replace the full anchor list of a path node."),
         "set_path_anchor_kind" => Some("Set or clear one path anchor's authoring intent metadata."),
         "insert_path_anchor" => Some("Insert a path anchor by splitting an existing segment."),
+        "insert_path_anchor_at_point" => {
+            Some("Insert a path anchor at the nearest path projection within a tolerance.")
+        }
         "move_path_anchor" => Some("Move one path anchor and its handles by a pixel delta."),
         "move_path_handle" => {
             Some("Move one path handle by a pixel delta, preserving anchor intent.")

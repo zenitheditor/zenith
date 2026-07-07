@@ -54,6 +54,8 @@ mod anchor_kind;
 mod anchor_movement;
 #[path = "path_ops/handle_movement.rs"]
 mod handle_movement;
+#[path = "path_ops/projection_insertion.rs"]
+mod projection_insertion;
 
 #[test]
 fn insert_path_anchor_open_line_split_inserts_midpoint() {

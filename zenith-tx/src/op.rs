@@ -500,6 +500,30 @@ pub enum Op {
         /// Normalized position along the segment. Must be finite and in the range 0..=1.
         t: f64,
     },
+    /// Insert an anchor into a `path` node at the nearest point on the path.
+    ///
+    /// The query point and tolerance are expressed in document pixels. The
+    /// nearest path projection must be within `tolerance`, otherwise the op is
+    /// rejected without changing the source. Anchor coordinates and complete
+    /// in/out handle pairs must already be stored as px values.
+    ///
+    /// Supported nodes: `path`.
+    /// Unsupported: all other variants — yields `tx.unsupported_property`.
+    ///
+    /// JSON example:
+    /// ```json
+    /// {"op":"insert_path_anchor_at_point","node":"path.logo","x":50,"y":2,"tolerance":4}
+    /// ```
+    InsertPathAnchorAtPoint {
+        /// The stable node `id` to target.
+        node: String,
+        /// Query point X coordinate in document pixels. Must be finite.
+        x: f64,
+        /// Query point Y coordinate in document pixels. Must be finite.
+        y: f64,
+        /// Maximum accepted projection distance in pixels. Must be finite and positive.
+        tolerance: f64,
+    },
     /// Simplify an open `path` node's anchors using a pixel tolerance.
     ///
     /// This operation accepts path anchors with required `x`/`y` pixel

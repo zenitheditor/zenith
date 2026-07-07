@@ -1,5 +1,6 @@
 //! Path op application: `set_path_anchors`, `insert_path_anchor`,
-//! `move_path_anchor`, `simplify_path_anchors`, and `transform_path_anchors`.
+//! `insert_path_anchor_at_point`, `move_path_anchor`, `simplify_path_anchors`,
+//! and `transform_path_anchors`.
 
 use zenith_core::{
     AnchorKind, Diagnostic, Dimension, Document, Node, PathAnchor as CorePathAnchor, Unit,
@@ -14,6 +15,33 @@ use crate::op::{OpPathAnchor, OpPathTransform};
 use super::{find_node_any_mut, node_kind_str, px, record_affected};
 
 const MAX_SIMPLIFY_INTERMEDIATE_POINTS: usize = 8192;
+
+macro_rules! non_path_nodes {
+    () => {
+        Node::Rect(_)
+            | Node::Ellipse(_)
+            | Node::Line(_)
+            | Node::Text(_)
+            | Node::Code(_)
+            | Node::Frame(_)
+            | Node::Group(_)
+            | Node::Image(_)
+            | Node::Polygon(_)
+            | Node::Polyline(_)
+            | Node::Instance(_)
+            | Node::Field(_)
+            | Node::Footnote(_)
+            | Node::Toc(_)
+            | Node::Table(_)
+            | Node::Shape(_)
+            | Node::Connector(_)
+            | Node::Pattern(_)
+            | Node::Chart(_)
+            | Node::Light(_)
+            | Node::Mesh(_)
+            | Node::Unknown(_)
+    };
+}
 
 pub(super) fn apply_set_path_anchors(
     node_id: &str,
@@ -42,28 +70,7 @@ pub(super) fn apply_set_path_anchors(
                         .collect();
                     record_affected(node_id, affected);
                 }
-                Node::Rect(_)
-                | Node::Ellipse(_)
-                | Node::Line(_)
-                | Node::Text(_)
-                | Node::Code(_)
-                | Node::Frame(_)
-                | Node::Group(_)
-                | Node::Image(_)
-                | Node::Polygon(_)
-                | Node::Polyline(_)
-                | Node::Instance(_)
-                | Node::Field(_)
-                | Node::Footnote(_)
-                | Node::Toc(_)
-                | Node::Table(_)
-                | Node::Shape(_)
-                | Node::Connector(_)
-                | Node::Pattern(_)
-                | Node::Chart(_)
-                | Node::Light(_)
-                | Node::Mesh(_)
-                | Node::Unknown(_) => {
+                non_path_nodes!() => {
                     diagnostics.push(Diagnostic::error(
                         "tx.unsupported_property",
                         format!("set_path_anchors is not supported on a {} node", kind),
@@ -105,28 +112,7 @@ pub(super) fn apply_set_path_anchor_kind(
                     anchor.kind = kind.map(AnchorKind::from_kind_str);
                     record_affected(node_id, affected);
                 }
-                Node::Rect(_)
-                | Node::Ellipse(_)
-                | Node::Line(_)
-                | Node::Text(_)
-                | Node::Code(_)
-                | Node::Frame(_)
-                | Node::Group(_)
-                | Node::Image(_)
-                | Node::Polygon(_)
-                | Node::Polyline(_)
-                | Node::Instance(_)
-                | Node::Field(_)
-                | Node::Footnote(_)
-                | Node::Toc(_)
-                | Node::Table(_)
-                | Node::Shape(_)
-                | Node::Connector(_)
-                | Node::Pattern(_)
-                | Node::Chart(_)
-                | Node::Light(_)
-                | Node::Mesh(_)
-                | Node::Unknown(_) => {
+                non_path_nodes!() => {
                     diagnostics.push(Diagnostic::error(
                         "tx.unsupported_property",
                         format!(
@@ -194,28 +180,7 @@ pub(super) fn apply_simplify_path_anchors(
                         Err(error) => diagnostics.push(geometry_diagnostic(node_id, error)),
                     }
                 }
-                Node::Rect(_)
-                | Node::Ellipse(_)
-                | Node::Line(_)
-                | Node::Text(_)
-                | Node::Code(_)
-                | Node::Frame(_)
-                | Node::Group(_)
-                | Node::Image(_)
-                | Node::Polygon(_)
-                | Node::Polyline(_)
-                | Node::Instance(_)
-                | Node::Field(_)
-                | Node::Footnote(_)
-                | Node::Toc(_)
-                | Node::Table(_)
-                | Node::Shape(_)
-                | Node::Connector(_)
-                | Node::Pattern(_)
-                | Node::Chart(_)
-                | Node::Light(_)
-                | Node::Mesh(_)
-                | Node::Unknown(_) => {
+                non_path_nodes!() => {
                     diagnostics.push(Diagnostic::error(
                         "tx.unsupported_property",
                         format!("simplify_path_anchors is not supported on a {} node", kind),
@@ -253,62 +218,115 @@ pub(super) fn apply_insert_path_anchor(
                             return;
                         }
                     };
-                    let inserted_kind = match segment_kind(&geometry, segment_index) {
-                        Ok(PathSegment::Cubic { .. }) => Some(AnchorKind::Smooth),
-                        Ok(PathSegment::Line { .. }) => None,
-                        Err(error) => {
-                            diagnostics.push(insert_geometry_diagnostic(node_id, error));
+                    path.anchors = match split_geometry_anchors(
+                        node_id,
+                        &geometry,
+                        &path.anchors,
+                        segment_index,
+                        t,
+                    ) {
+                        Ok(anchors) => anchors,
+                        Err(diagnostic) => {
+                            diagnostics.push(diagnostic);
                             return;
                         }
                     };
-                    let (split, inserted_index) = match geometry.split_segment(segment_index, t) {
-                        Ok(split) => split,
-                        Err(error) => {
-                            diagnostics.push(insert_geometry_diagnostic(node_id, error));
-                            return;
-                        }
-                    };
-
-                    path.anchors = split
-                        .anchors()
-                        .iter()
-                        .enumerate()
-                        .map(|(index, anchor)| {
-                            let kind = if index == inserted_index {
-                                inserted_kind.clone()
-                            } else {
-                                existing_anchor_kind_at(&path.anchors, index, inserted_index)
-                            };
-                            geometry_anchor_to_core(*anchor, kind)
-                        })
-                        .collect();
                     record_affected(node_id, affected);
                 }
-                Node::Rect(_)
-                | Node::Ellipse(_)
-                | Node::Line(_)
-                | Node::Text(_)
-                | Node::Code(_)
-                | Node::Frame(_)
-                | Node::Group(_)
-                | Node::Image(_)
-                | Node::Polygon(_)
-                | Node::Polyline(_)
-                | Node::Instance(_)
-                | Node::Field(_)
-                | Node::Footnote(_)
-                | Node::Toc(_)
-                | Node::Table(_)
-                | Node::Shape(_)
-                | Node::Connector(_)
-                | Node::Pattern(_)
-                | Node::Chart(_)
-                | Node::Light(_)
-                | Node::Mesh(_)
-                | Node::Unknown(_) => {
+                non_path_nodes!() => {
                     diagnostics.push(Diagnostic::error(
                         "tx.unsupported_property",
                         format!("insert_path_anchor is not supported on a {} node", kind),
+                        None,
+                        Some(node_id.to_owned()),
+                    ));
+                }
+            }
+        }
+    }
+}
+
+pub(super) fn apply_insert_path_anchor_at_point(
+    node_id: &str,
+    x: f64,
+    y: f64,
+    tolerance: f64,
+    doc: &mut Document,
+    diagnostics: &mut Vec<Diagnostic>,
+    affected: &mut Vec<String>,
+) {
+    match find_node_any_mut(doc, node_id) {
+        None => diagnostics.push(unknown_node(node_id)),
+        Some(node) => {
+            let kind = node_kind_str(node);
+            match node {
+                Node::Path(path) => {
+                    let point = match Point2::new(x, y) {
+                        Ok(point) => point,
+                        Err(error) => {
+                            diagnostics.push(insert_at_point_geometry_diagnostic(node_id, error));
+                            return;
+                        }
+                    };
+                    let geometry = match resolved_path_geometry(
+                        node_id,
+                        &path.anchors,
+                        path.closed == Some(true),
+                    ) {
+                        Ok(geometry) => geometry,
+                        Err(diagnostic) => {
+                            diagnostics.push(diagnostic);
+                            return;
+                        }
+                    };
+                    let projection = match geometry.project(point, tolerance) {
+                        Ok(Some(projection)) => projection,
+                        Ok(None) => {
+                            diagnostics.push(Diagnostic::error(
+                                "tx.invalid_geometry",
+                                "insert_path_anchor_at_point requires a path segment to project onto",
+                                None,
+                                Some(node_id.to_owned()),
+                            ));
+                            return;
+                        }
+                        Err(error) => {
+                            diagnostics.push(insert_at_point_geometry_diagnostic(node_id, error));
+                            return;
+                        }
+                    };
+                    if projection.distance_squared > tolerance * tolerance {
+                        diagnostics.push(Diagnostic::error(
+                            "tx.invalid_geometry",
+                            "insert_path_anchor_at_point found no path projection within tolerance",
+                            None,
+                            Some(node_id.to_owned()),
+                        ));
+                        return;
+                    }
+
+                    path.anchors = match split_geometry_anchors(
+                        node_id,
+                        &geometry,
+                        &path.anchors,
+                        projection.segment_index,
+                        projection.segment_t,
+                    ) {
+                        Ok(anchors) => anchors,
+                        Err(diagnostic) => {
+                            diagnostics.push(diagnostic);
+                            return;
+                        }
+                    };
+                    record_affected(node_id, affected);
+                }
+                non_path_nodes!() => {
+                    diagnostics.push(Diagnostic::error(
+                        "tx.unsupported_property",
+                        format!(
+                            "insert_path_anchor_at_point is not supported on a {} node",
+                            kind
+                        ),
                         None,
                         Some(node_id.to_owned()),
                     ));
@@ -462,28 +480,7 @@ pub(super) fn apply_move_path_anchor(
                     }
                     record_affected(node_id, affected);
                 }
-                Node::Rect(_)
-                | Node::Ellipse(_)
-                | Node::Line(_)
-                | Node::Text(_)
-                | Node::Code(_)
-                | Node::Frame(_)
-                | Node::Group(_)
-                | Node::Image(_)
-                | Node::Polygon(_)
-                | Node::Polyline(_)
-                | Node::Instance(_)
-                | Node::Field(_)
-                | Node::Footnote(_)
-                | Node::Toc(_)
-                | Node::Table(_)
-                | Node::Shape(_)
-                | Node::Connector(_)
-                | Node::Pattern(_)
-                | Node::Chart(_)
-                | Node::Light(_)
-                | Node::Mesh(_)
-                | Node::Unknown(_) => {
+                non_path_nodes!() => {
                     diagnostics.push(Diagnostic::error(
                         "tx.unsupported_property",
                         format!("move_path_anchor is not supported on a {} node", kind),
@@ -545,28 +542,7 @@ pub(super) fn apply_transform_path_anchors(
                         .collect();
                     record_affected(node_id, affected);
                 }
-                Node::Rect(_)
-                | Node::Ellipse(_)
-                | Node::Line(_)
-                | Node::Text(_)
-                | Node::Code(_)
-                | Node::Frame(_)
-                | Node::Group(_)
-                | Node::Image(_)
-                | Node::Polygon(_)
-                | Node::Polyline(_)
-                | Node::Instance(_)
-                | Node::Field(_)
-                | Node::Footnote(_)
-                | Node::Toc(_)
-                | Node::Table(_)
-                | Node::Shape(_)
-                | Node::Connector(_)
-                | Node::Pattern(_)
-                | Node::Chart(_)
-                | Node::Light(_)
-                | Node::Mesh(_)
-                | Node::Unknown(_) => {
+                non_path_nodes!() => {
                     diagnostics.push(Diagnostic::error(
                         "tx.unsupported_property",
                         format!("transform_path_anchors is not supported on a {} node", kind),
@@ -688,6 +664,37 @@ fn segment_kind(
         .get(segment_index)
         .copied()
         .ok_or(GeometryError::CountOutOfRange)
+}
+
+fn split_geometry_anchors(
+    node_id: &str,
+    geometry: &PathGeometry,
+    original_anchors: &[CorePathAnchor],
+    segment_index: usize,
+    t: f64,
+) -> Result<Vec<CorePathAnchor>, Diagnostic> {
+    let inserted_kind = match segment_kind(geometry, segment_index) {
+        Ok(PathSegment::Cubic { .. }) => Some(AnchorKind::Smooth),
+        Ok(PathSegment::Line { .. }) => None,
+        Err(error) => return Err(insert_geometry_diagnostic(node_id, error)),
+    };
+    let (split, inserted_index) = geometry
+        .split_segment(segment_index, t)
+        .map_err(|error| insert_geometry_diagnostic(node_id, error))?;
+
+    Ok(split
+        .anchors()
+        .iter()
+        .enumerate()
+        .map(|(index, anchor)| {
+            let kind = if index == inserted_index {
+                inserted_kind.clone()
+            } else {
+                existing_anchor_kind_at(original_anchors, index, inserted_index)
+            };
+            geometry_anchor_to_core(*anchor, kind)
+        })
+        .collect())
 }
 
 fn existing_anchor_kind_at(
@@ -836,6 +843,41 @@ fn insert_geometry_diagnostic(node_id: &str, error: GeometryError) -> Diagnostic
         None,
         Some(node_id.to_owned()),
     )
+}
+
+fn insert_at_point_geometry_diagnostic(node_id: &str, error: GeometryError) -> Diagnostic {
+    match error {
+        GeometryError::NonFiniteTolerance => Diagnostic::error(
+            "tx.invalid_geometry_tolerance",
+            "insert_path_anchor_at_point tolerance must be finite",
+            None,
+            Some(node_id.to_owned()),
+        ),
+        GeometryError::NonPositiveTolerance => Diagnostic::error(
+            "tx.invalid_geometry_tolerance",
+            "insert_path_anchor_at_point tolerance must be positive",
+            None,
+            Some(node_id.to_owned()),
+        ),
+        GeometryError::NonFinitePoint => Diagnostic::error(
+            "tx.invalid_geometry",
+            "insert_path_anchor_at_point point coordinates must be finite",
+            None,
+            Some(node_id.to_owned()),
+        ),
+        GeometryError::NonFiniteParameter
+        | GeometryError::ParameterOutOfRange
+        | GeometryError::NonPositiveCount
+        | GeometryError::CountOutOfRange
+        | GeometryError::DegenerateLine
+        | GeometryError::NonFiniteTransform
+        | GeometryError::SingularTransform => Diagnostic::error(
+            "tx.invalid_geometry",
+            "insert_path_anchor_at_point geometry is invalid",
+            None,
+            Some(node_id.to_owned()),
+        ),
+    }
 }
 
 fn move_anchor_geometry_diagnostic(node_id: &str, error: GeometryError) -> Diagnostic {
