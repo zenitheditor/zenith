@@ -14,6 +14,7 @@ pub mod path_tangent_quality;
 pub mod report;
 pub mod scalar;
 pub mod value_zones;
+pub mod vector_mark;
 pub mod vector_report;
 
 pub use anchor_economy::{AnchorEconomyInput, AnchorEconomyReport, anchor_economy};
@@ -32,6 +33,10 @@ pub use path_tangent_quality::{
 };
 pub use report::{PerceptionReport, analyze};
 pub use value_zones::{ValueZone, ZoneMetrics, ZoneReport, value_zones};
+pub use vector_mark::{
+    VectorMarkCollisionReport, VectorMarkPathInput, VectorMarkPerceptionInput,
+    VectorMarkPerceptionReport, analyze_vector_mark,
+};
 pub use vector_report::{
     VectorPathPerceptionInput, VectorPathPerceptionReport, analyze_vector_path,
 };
