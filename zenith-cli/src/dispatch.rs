@@ -238,6 +238,7 @@ pub fn run() -> ExitCode {
 
         Command::Asset(args) => match args.command {
             cli::AssetSub::Import(a) => dispatch_asset_import(a),
+            cli::AssetSub::ZpxBake(a) => dispatch_asset_zpx_bake(a),
         },
 
         Command::Library(args) => library::dispatch_library(args),
@@ -697,7 +698,7 @@ fn dispatch_asset_import(a: cli::AssetImportArgs) -> ExitCode {
     };
 
     if a.apply && outcome.exit_code != 1 {
-        if let Err(code) = apply_asset_import(&a, &outcome) {
+        if let Err(code) = apply_asset_outcome(&a.into, &a.src, "asset.import", &outcome) {
             return code;
         }
     }
@@ -710,16 +711,64 @@ fn dispatch_asset_import(a: cli::AssetImportArgs) -> ExitCode {
     ExitCode::from(outcome.exit_code)
 }
 
-fn apply_asset_import(
-    a: &cli::AssetImportArgs,
+fn dispatch_asset_zpx_bake(a: cli::AssetZpxBakeArgs) -> ExitCode {
+    let doc_src = match read_file(&a.into) {
+        Ok(s) => s,
+        Err(msg) => {
+            eprintln!("{}", msg);
+            return ExitCode::from(2);
+        }
+    };
+    let manifest_src = match read_file(&a.manifest) {
+        Ok(s) => s,
+        Err(msg) => {
+            eprintln!("{}", msg);
+            return ExitCode::from(2);
+        }
+    };
+    let source_label = a.manifest.display().to_string();
+    let outcome = match commands::asset::zpx_bake_run(
+        &doc_src,
+        &manifest_src,
+        commands::asset::AssetImportInput {
+            id: &a.id,
+            src: &a.src,
+            kind: "image",
+            source_label: &source_label,
+        },
+    ) {
+        Ok(o) => o,
+        Err(e) => {
+            eprintln!("{}", e.message);
+            return ExitCode::from(e.exit_code);
+        }
+    };
+
+    if a.apply && outcome.exit_code != 1 {
+        if let Err(code) = apply_asset_outcome(&a.into, &a.src, "asset.zpx_bake", &outcome) {
+            return code;
+        }
+    }
+
+    if a.json {
+        println!("{}", outcome.json_str);
+    } else {
+        println!("{}", outcome.human);
+    }
+    ExitCode::from(outcome.exit_code)
+}
+
+fn apply_asset_outcome(
+    doc_path: &Path,
+    src: &str,
+    history_label: &str,
     outcome: &commands::asset::AssetImportOutcome,
 ) -> Result<(), ExitCode> {
-    let doc_parent = a
-        .into
+    let doc_parent = doc_path
         .parent()
         .filter(|p| !p.as_os_str().is_empty())
         .unwrap_or_else(|| Path::new("."));
-    let asset_path = doc_parent.join(&a.src);
+    let asset_path = doc_parent.join(src);
     match std::fs::read(&asset_path) {
         Ok(existing) => {
             if existing.as_slice() != outcome.produced.bytes.as_ref() {
@@ -753,14 +802,14 @@ fn apply_asset_import(
     }
     let recorded = history::record_edit(
         outcome.result.source_after.as_bytes(),
-        &a.into,
-        "asset.import",
+        doc_path,
+        history_label,
     );
     if let Some(w) = &recorded.warning {
         eprintln!("warning: {w}");
     }
-    if let Err(e) = std::fs::write(&a.into, &recorded.bytes) {
-        eprintln!("error writing '{}': {}", a.into.display(), e);
+    if let Err(e) = std::fs::write(doc_path, &recorded.bytes) {
+        eprintln!("error writing '{}': {}", doc_path.display(), e);
         return Err(ExitCode::from(2));
     }
     Ok(())

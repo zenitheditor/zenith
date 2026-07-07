@@ -1509,6 +1509,7 @@ dependencies = [
  "zenith-scene",
  "zenith-session",
  "zenith-tx",
+ "zenith-zpx",
 ]
 
 [[package]]

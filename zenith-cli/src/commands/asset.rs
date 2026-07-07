@@ -7,6 +7,7 @@ use serde::Serialize;
 use zenith_core::{AssetKind, KdlAdapter, KdlSource as _};
 use zenith_producers::{
     AssetProducer, FileImportProducer, FileImportProvenance, ProduceRequest, ProducedAsset,
+    ZpxBakeProducer,
 };
 use zenith_tx::{Op, Permissions, Transaction, TxResult, TxStatus, run_transaction};
 
@@ -55,6 +56,34 @@ pub fn import_run(
             exit_code: 2,
         })?;
 
+    finish_asset_run(doc_src, input, produced)
+}
+
+pub fn zpx_bake_run(
+    doc_src: &str,
+    manifest_src: &str,
+    input: AssetImportInput<'_>,
+) -> Result<AssetImportOutcome, AssetImportErr> {
+    validate_asset_src(input.src)?;
+    let zpx_doc = zenith_zpx::parse_manifest(manifest_src).map_err(|e| AssetImportErr {
+        message: format!("error[asset.zpx_bake]: {e}"),
+        exit_code: 2,
+    })?;
+    let produced = ZpxBakeProducer
+        .produce(ProduceRequest::ZpxBake { doc: zpx_doc })
+        .map_err(|e| AssetImportErr {
+            message: format!("error[asset.zpx_bake]: {e}"),
+            exit_code: 2,
+        })?;
+
+    finish_asset_run(doc_src, input, produced)
+}
+
+fn finish_asset_run(
+    doc_src: &str,
+    input: AssetImportInput<'_>,
+    produced: ProducedAsset,
+) -> Result<AssetImportOutcome, AssetImportErr> {
     let doc = KdlAdapter
         .parse(doc_src.as_bytes())
         .map_err(|e| AssetImportErr {
@@ -317,5 +346,51 @@ mod tests {
 
         assert_eq!(err.exit_code, 2);
         assert!(err.message.contains("asset.invalid_src"));
+    }
+
+    #[test]
+    fn asset_zpx_bake_builds_image_add_asset_transaction() {
+        let manifest = r##"zpx version=1 {
+    canvas width=4 height=4 color-space="srgb" alpha="premultiplied"
+    layers {
+        layer id="paint" blend="normal" opacity=1.0 visible=#true clipping=#false {
+            source kind="program" {
+                stroke color="#ff0000ff" opacity=1.0 blend="normal" seed=1 {
+                    brush kind="round" radius=3.0 hardness=1.0 spacing=1.0
+                    sample x=2.0 y=2.0 pressure=1.0
+                }
+            }
+        }
+    }
+}"##;
+
+        let outcome = zpx_bake_run(
+            DOC,
+            manifest,
+            AssetImportInput {
+                id: "asset.paint",
+                src: "assets/paint.png",
+                kind: "image",
+                source_label: "paint.zpx",
+            },
+        )
+        .expect("zpx bake should run");
+
+        assert_eq!(outcome.exit_code, 0);
+        assert!(outcome.produced.bytes.starts_with(b"\x89PNG\r\n\x1a\n"));
+        assert!(outcome.result.source_after.contains(r#"id="asset.paint""#));
+        assert!(outcome.result.source_after.contains(r#"kind="image""#));
+        assert!(
+            outcome
+                .result
+                .source_after
+                .contains(r#"src="assets/paint.png""#)
+        );
+        assert!(
+            outcome
+                .result
+                .source_after
+                .contains(&outcome.produced.sha256)
+        );
     }
 }

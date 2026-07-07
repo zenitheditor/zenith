@@ -7,7 +7,7 @@
 //! so that all existing `crate::cli::*` paths continue to resolve unchanged.
 //!
 //! Submodules:
-//! - `asset` — `AssetArgs`, `AssetSub`, `AssetImportArgs`.
+//! - `asset` — `AssetArgs`, `AssetSub`, `AssetImportArgs`, `AssetZpxBakeArgs`.
 //! - `library` — `LibraryArgs`, `LibrarySub`, and library item arg types.
 //! - `plugin` — `PluginArgs`, `PluginSub`, `ScopeArg`, `AgentFlags`, and install/uninstall args.
 //! - `render` — `RenderArgs`.
@@ -21,7 +21,7 @@ mod render;
 mod schema;
 mod workspace;
 
-pub use asset::{AssetArgs, AssetImportArgs, AssetSub};
+pub use asset::{AssetArgs, AssetImportArgs, AssetSub, AssetZpxBakeArgs};
 pub use library::{LibraryAddArgs, LibraryArgs, LibraryListArgs, LibraryShowArgs, LibrarySub};
 pub use plugin::{
     AgentFlags, PluginArgs, PluginInstallArgs, PluginSub, PluginUninstallArgs, ScopeArg,
