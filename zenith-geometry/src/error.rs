@@ -10,6 +10,7 @@ pub enum GeometryError {
     NonPositiveCount,
     CountOutOfRange,
     DegenerateLine,
+    InvalidContour,
     NonFiniteTransform,
     SingularTransform,
 }
@@ -27,6 +28,9 @@ impl fmt::Display for GeometryError {
             GeometryError::NonPositiveCount => f.write_str("count must be positive"),
             GeometryError::CountOutOfRange => f.write_str("count is outside the supported range"),
             GeometryError::DegenerateLine => f.write_str("line endpoints must be distinct"),
+            GeometryError::InvalidContour => {
+                f.write_str("closed contour must be simple and have non-zero area")
+            }
             GeometryError::NonFiniteTransform => {
                 f.write_str("transform coefficients must be finite")
             }
@@ -66,6 +70,10 @@ mod tests {
         assert_eq!(
             GeometryError::DegenerateLine.to_string(),
             "line endpoints must be distinct"
+        );
+        assert_eq!(
+            GeometryError::InvalidContour.to_string(),
+            "closed contour must be simple and have non-zero area"
         );
         assert_eq!(
             GeometryError::NonFiniteTransform.to_string(),

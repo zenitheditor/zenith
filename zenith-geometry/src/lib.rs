@@ -2,6 +2,7 @@
 
 pub mod bezier;
 pub mod bounds;
+pub mod contour;
 pub mod error;
 pub mod guide;
 pub mod intersection;
@@ -15,6 +16,9 @@ mod validation;
 
 pub use bezier::{CubicBezier, CubicBezierProjection, project_onto_cubic_bezier};
 pub use bounds::RectBounds;
+pub use contour::{
+    ClosedPolyline, ClosedPolylineWinding, PointLocation, collect_raw_closed_polyline_intersections,
+};
 pub use error::GeometryError;
 pub use guide::{ConstructionGuide, modular_guides, polar_guides, ratio_guides};
 pub use intersection::{

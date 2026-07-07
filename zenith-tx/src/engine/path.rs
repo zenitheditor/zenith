@@ -633,6 +633,7 @@ fn resolved_path_geometry(
             | Err(GeometryError::NonPositiveCount)
             | Err(GeometryError::CountOutOfRange)
             | Err(GeometryError::DegenerateLine)
+            | Err(GeometryError::InvalidContour)
             | Err(GeometryError::NonFiniteTransform)
             | Err(GeometryError::SingularTransform) => {
                 return Err(Diagnostic::error(
@@ -785,6 +786,7 @@ fn geometry_diagnostic(node_id: &str, error: GeometryError) -> Diagnostic {
         | GeometryError::NonPositiveCount
         | GeometryError::CountOutOfRange
         | GeometryError::DegenerateLine
+        | GeometryError::InvalidContour
         | GeometryError::NonFiniteTransform
         | GeometryError::SingularTransform => Diagnostic::error(
             "tx.invalid_geometry",
@@ -802,6 +804,7 @@ fn transform_geometry_diagnostic(node_id: &str, error: GeometryError) -> Diagnos
         GeometryError::DegenerateLine => {
             "transform_path_anchors reflect line must use two distinct points"
         }
+        GeometryError::InvalidContour => "transform_path_anchors contour geometry is invalid",
         GeometryError::NonFiniteTransform => {
             "transform_path_anchors produced a non-finite transform"
         }
@@ -833,6 +836,7 @@ fn insert_geometry_diagnostic(node_id: &str, error: GeometryError) -> Diagnostic
         | GeometryError::NonPositiveTolerance
         | GeometryError::NonPositiveCount
         | GeometryError::DegenerateLine
+        | GeometryError::InvalidContour
         | GeometryError::NonFiniteTransform
         | GeometryError::SingularTransform => "insert_path_anchor geometry is invalid",
     };
@@ -870,6 +874,7 @@ fn insert_at_point_geometry_diagnostic(node_id: &str, error: GeometryError) -> D
         | GeometryError::NonPositiveCount
         | GeometryError::CountOutOfRange
         | GeometryError::DegenerateLine
+        | GeometryError::InvalidContour
         | GeometryError::NonFiniteTransform
         | GeometryError::SingularTransform => Diagnostic::error(
             "tx.invalid_geometry",
@@ -890,6 +895,7 @@ fn move_anchor_geometry_diagnostic(node_id: &str, error: GeometryError) -> Diagn
         | GeometryError::NonPositiveCount
         | GeometryError::CountOutOfRange
         | GeometryError::DegenerateLine
+        | GeometryError::InvalidContour
         | GeometryError::NonFiniteTransform
         | GeometryError::SingularTransform => "move_path_anchor geometry is invalid",
     };

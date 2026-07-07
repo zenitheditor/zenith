@@ -296,6 +296,7 @@ fn move_handle_geometry_diagnostic(node_id: &str, error: GeometryError) -> Diagn
         | GeometryError::NonPositiveCount
         | GeometryError::CountOutOfRange
         | GeometryError::DegenerateLine
+        | GeometryError::InvalidContour
         | GeometryError::NonFiniteTransform
         | GeometryError::SingularTransform => "move_path_handle geometry is invalid",
     };
