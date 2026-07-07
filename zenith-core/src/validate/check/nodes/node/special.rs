@@ -11,7 +11,8 @@ use crate::ast::node::{
 use crate::diagnostics::Diagnostic;
 
 use super::shared::{
-    AnchorParentCtx, AnchorProps, check_anchor, check_dimension_geom, check_spans, check_style_ref,
+    AnchorParentCtx, AnchorProps, check_anchor, check_dimension_geom, check_spans,
+    check_stroke_join_props, check_style_ref,
 };
 use super::suggest::check_unknown_props;
 use crate::validate::check::nodes::WalkCtx;
@@ -361,6 +362,14 @@ pub(in crate::validate::check) fn check_path(
             Some(path.id.clone()),
         ));
     }
+    check_stroke_join_props(
+        "path",
+        &path.id,
+        path.stroke_linejoin.as_deref(),
+        path.stroke_miter_limit,
+        path.source_span,
+        diagnostics,
+    );
 
     check_unknown_props(
         "path",

@@ -178,7 +178,7 @@ fn path_node_parse_format_round_trip() {
   }
   document id="doc.path" title="Path" {
     page id="page.path" w=(px)400 h=(px)300 {
-      path id="logo.mark" closed=#true fill=(token)"color.brand" stroke=(token)"color.ink" stroke-width=(token)"size.stroke" stroke-alignment="center" fill-rule="evenodd" {
+      path id="logo.mark" closed=#true fill=(token)"color.brand" stroke=(token)"color.ink" stroke-width=(token)"size.stroke" stroke-alignment="center" stroke-linejoin="round" stroke-miter-limit=7 fill-rule="evenodd" {
         anchor x=(px)0 y=(px)0 out-x=(px)20 out-y=(px)0
         anchor x=(px)80 y=(px)0 kind="smooth" in-x=(px)60 in-y=(px)0 out-x=(px)100 out-y=(px)40
         anchor x=(px)80 y=(px)80 kind="symmetric" in-x=(px)100 in-y=(px)40
@@ -196,6 +196,8 @@ fn path_node_parse_format_round_trip() {
     };
     assert_eq!(path.id, "logo.mark");
     assert_eq!(path.closed, Some(true));
+    assert_eq!(path.stroke_linejoin.as_deref(), Some("round"));
+    assert_eq!(path.stroke_miter_limit, Some(7.0));
     assert_eq!(path.anchors.len(), 3);
     assert_eq!(path.anchors[1].kind, Some(AnchorKind::Smooth));
     assert_eq!(path.anchors[2].kind, Some(AnchorKind::Symmetric));
@@ -206,7 +208,7 @@ fn path_node_parse_format_round_trip() {
     let formatted_str = String::from_utf8(formatted.clone()).expect("formatted must be utf8");
     assert!(
         formatted_str.contains(
-            "path id=\"logo.mark\" closed=#true fill=(token)\"color.brand\" stroke=(token)\"color.ink\" stroke-width=(token)\"size.stroke\" stroke-alignment=\"center\" fill-rule=\"evenodd\""
+            "path id=\"logo.mark\" closed=#true fill=(token)\"color.brand\" stroke=(token)\"color.ink\" stroke-width=(token)\"size.stroke\" stroke-alignment=\"center\" stroke-linejoin=\"round\" stroke-miter-limit=7 fill-rule=\"evenodd\""
         ),
         "formatted path line missing canonical attrs; got:\n{formatted_str}"
     );

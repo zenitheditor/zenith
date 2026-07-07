@@ -26,6 +26,21 @@ pub enum LineCap {
     Square,
 }
 
+// ── LineJoin ──────────────────────────────────────────────────────────────────
+
+/// Stroke corner join style.
+///
+/// `None` at command sites means the renderer default (`Miter`) and preserves
+/// prior serialized IR. Serialized in lowercase JSON to match the KDL
+/// `stroke-linejoin` values.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum LineJoin {
+    Miter,
+    Round,
+    Bevel,
+}
+
 // ── StrokeAlign ─────────────────────────────────────────────────────────────────
 
 /// Stroke alignment relative to a closed polygon's boundary.
@@ -511,6 +526,12 @@ pub enum SceneCommand {
         /// Fill rule of the clip region used for `Inside`/`Outside` alignment.
         #[serde(default, skip_serializing_if = "is_false")]
         fill_even_odd: bool,
+        /// Stroke corner join style. `None` = Miter (renderer default).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        stroke_linejoin: Option<LineJoin>,
+        /// Stroke miter limit. `None` = renderer default.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        stroke_miter_limit: Option<f64>,
     },
     // ── Asset commands ────────────────────────────────────────────────────
     /// Draw a raster image asset clipped to its declared box.

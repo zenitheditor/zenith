@@ -537,6 +537,8 @@ fn attribute_type_for_kind_inner(kind: &str, name: &str, fallback: &'static str)
         | ("mesh", "extend") => "dimension literal or token ref: dimension",
         ("mesh", "rows") | ("mesh", "columns") => "u32 (>0)",
         ("mesh", "stroke-linecap") => "enum: butt|round|square",
+        ("path", "stroke-linejoin") => "enum: miter|round|bevel",
+        ("path", "stroke-miter-limit") => "f64 (>0)",
         // chart axis/legend/caption/bar-mode/orientation/legend-position/legend-layout/legend-align: chart-only attributes (validate/check/nodes/node/chart.rs).
         ("chart", "legend") => "bool",
         ("chart", "caption") => "string",

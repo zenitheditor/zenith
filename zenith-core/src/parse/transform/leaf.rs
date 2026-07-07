@@ -832,6 +832,10 @@ pub(crate) const PATH_KNOWN_PROPS: &[&str] = &[
     "stroke_width",
     "stroke-alignment",
     "stroke_alignment",
+    "stroke-linejoin",
+    "stroke_linejoin",
+    "stroke-miter-limit",
+    "stroke_miter_limit",
     "fill-rule",
     "fill_rule",
     "opacity",
@@ -956,6 +960,10 @@ pub(super) fn transform_path(node: &KdlNode) -> Result<PathNode, ParseError> {
     let stroke_alignment =
         optional_string_prop_aliased(node, "stroke-alignment", "stroke_alignment")
             .map(str::to_owned);
+    let stroke_linejoin =
+        optional_string_prop_aliased(node, "stroke-linejoin", "stroke_linejoin").map(str::to_owned);
+    let stroke_miter_limit = optional_f64_prop(node, "stroke-miter-limit")
+        .or_else(|| optional_f64_prop(node, "stroke_miter_limit"));
     let fill_rule = optional_string_prop_aliased(node, "fill-rule", "fill_rule").map(str::to_owned);
 
     let mut anchors: Vec<PathAnchor> = Vec::new();
@@ -978,6 +986,8 @@ pub(super) fn transform_path(node: &KdlNode) -> Result<PathNode, ParseError> {
         stroke: optional_property_value(node, "stroke"),
         stroke_width,
         stroke_alignment,
+        stroke_linejoin,
+        stroke_miter_limit,
         fill_rule,
         opacity: optional_f64_prop(node, "opacity"),
         visible: optional_bool_prop(node, "visible"),

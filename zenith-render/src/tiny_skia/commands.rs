@@ -7,9 +7,9 @@
 //! dispatcher only as already-consumed markers — they are matched explicitly
 //! (no wildcard over [`SceneCommand`]) and no-op here.
 
-use tiny_skia::{LineCap, StrokeDash, Transform};
+use tiny_skia::{LineCap, LineJoin, StrokeDash, Transform};
 use zenith_core::{AssetProvider, FontProvider};
-use zenith_scene::{LineCap as IrLineCap, SceneCommand};
+use zenith_scene::{LineCap as IrLineCap, LineJoin as IrLineJoin, SceneCommand};
 
 use super::draw;
 
@@ -102,6 +102,17 @@ pub(in crate::tiny_skia) fn map_line_cap(lc: Option<IrLineCap>) -> LineCap {
         Some(IrLineCap::Square) => LineCap::Square,
         // Butt or absent — matches Stroke::default().line_cap.
         Some(IrLineCap::Butt) | None => LineCap::Butt,
+    }
+}
+
+/// Map an IR [`IrLineJoin`] to the tiny-skia [`LineJoin`].
+///
+/// `None` -> `LineJoin::Miter`, matching `Stroke::default()`.
+pub(in crate::tiny_skia) fn map_line_join(line_join: Option<IrLineJoin>) -> LineJoin {
+    match line_join {
+        Some(IrLineJoin::Round) => LineJoin::Round,
+        Some(IrLineJoin::Bevel) => LineJoin::Bevel,
+        Some(IrLineJoin::Miter) | None => LineJoin::Miter,
     }
 }
 

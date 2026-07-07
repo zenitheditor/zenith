@@ -9,7 +9,7 @@ use zenith_scene::{
     ir::path_segments_finite,
 };
 
-use super::super::commands::{DrawCtx, build_stroke_dash, map_line_cap};
+use super::super::commands::{DrawCtx, build_stroke_dash, map_line_cap, map_line_join};
 use super::super::gradient::gradient_shader;
 use super::super::paths::{
     build_align_mask, build_path_align_mask, build_poly_path, build_rounded_rect_path,
@@ -567,6 +567,8 @@ pub(in crate::tiny_skia) fn stroke_path(target: &mut Pixmap, ctx: DrawCtx, cmd: 
         closed,
         align,
         fill_even_odd,
+        stroke_linejoin,
+        stroke_miter_limit,
     } = cmd
     else {
         return;
@@ -611,8 +613,17 @@ pub(in crate::tiny_skia) fn stroke_path(target: &mut Pixmap, ctx: DrawCtx, cmd: 
     if !stroke_width_px.is_finite() || stroke_width_px > f64::from(f32::MAX) {
         return;
     }
+    let miter_limit = match stroke_miter_limit {
+        Some(limit) if limit.is_finite() && *limit > 0.0 && *limit <= f64::from(f32::MAX) => {
+            *limit as f32
+        }
+        Some(_) => return,
+        None => Stroke::default().miter_limit,
+    };
     let stroke = Stroke {
         width: stroke_width_px as f32,
+        line_join: map_line_join(*stroke_linejoin),
+        miter_limit,
         ..Default::default()
     };
     let draw_mask: Option<&Mask> = match &aligned_mask {

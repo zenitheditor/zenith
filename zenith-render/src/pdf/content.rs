@@ -19,10 +19,10 @@
 
 use std::collections::BTreeSet;
 
-use pdf_writer::Content;
+use pdf_writer::{Content, types::LineJoinStyle};
 use zenith_core::{AssetProvider, FontProvider};
 use zenith_scene::{
-    Color, FitMode, ImageClip, Paint as ScenePaint, Scene, SceneCommand, StrokeAlign,
+    Color, FitMode, ImageClip, LineJoin, Paint as ScenePaint, Scene, SceneCommand, StrokeAlign,
     ir::{path_segments_bbox, path_segments_finite},
 };
 
@@ -588,6 +588,8 @@ pub(super) fn emit_command(
             closed,
             align,
             fill_even_odd,
+            stroke_linejoin,
+            stroke_miter_limit,
         } => {
             if segments.len() < 2 || !path_segments_finite(segments) || !finite(*stroke_width) {
                 return;
@@ -642,6 +644,11 @@ pub(super) fn emit_command(
                     return;
                 }
                 content.set_line_width(stroke_width as f32);
+                set_line_join(content, *stroke_linejoin);
+                if !set_miter_limit(content, *stroke_miter_limit) {
+                    content.restore_state();
+                    return;
+                }
                 if scene_path(content, segments) {
                     content.stroke();
                 } else {
@@ -653,6 +660,11 @@ pub(super) fn emit_command(
                     return;
                 }
                 content.set_line_width(*stroke_width as f32);
+                set_line_join(content, *stroke_linejoin);
+                if !set_miter_limit(content, *stroke_miter_limit) {
+                    content.restore_state();
+                    return;
+                }
                 if scene_path(content, segments) {
                     content.stroke();
                 } else {
@@ -977,6 +989,26 @@ fn emit_image(
 #[inline]
 fn finite(v: f64) -> bool {
     v.is_finite()
+}
+
+fn set_line_join(content: &mut Content, line_join: Option<LineJoin>) {
+    let style = match line_join {
+        Some(LineJoin::Round) => LineJoinStyle::RoundJoin,
+        Some(LineJoin::Bevel) => LineJoinStyle::BevelJoin,
+        Some(LineJoin::Miter) | None => LineJoinStyle::MiterJoin,
+    };
+    content.set_line_join(style);
+}
+
+fn set_miter_limit(content: &mut Content, miter_limit: Option<f64>) -> bool {
+    let Some(limit) = miter_limit else {
+        return true;
+    };
+    if !finite(limit) || limit <= 0.0 || limit > f64::from(f32::MAX) {
+        return false;
+    }
+    content.set_miter_limit(limit as f32);
+    true
 }
 
 #[inline]

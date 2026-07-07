@@ -1173,3 +1173,33 @@ pub(super) fn check_visual_props(
         ));
     }
 }
+
+pub(super) fn check_stroke_join_props(
+    kind: &str,
+    id: &str,
+    stroke_linejoin: Option<&str>,
+    stroke_miter_limit: Option<f64>,
+    source_span: Option<crate::ast::Span>,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    if let Some(lj) = stroke_linejoin
+        && !matches!(lj, "miter" | "round" | "bevel")
+    {
+        diagnostics.push(Diagnostic::warning(
+            "node.unknown_property",
+            format!("{kind} '{id}': stroke-linejoin '{lj}' is not one of miter/round/bevel"),
+            source_span,
+            Some(id.to_owned()),
+        ));
+    }
+    if let Some(limit) = stroke_miter_limit
+        && (!limit.is_finite() || limit <= 0.0)
+    {
+        diagnostics.push(Diagnostic::error(
+            "node.invalid_geometry",
+            format!("{kind} '{id}': stroke-miter-limit must be a positive finite number"),
+            source_span,
+            Some(id.to_owned()),
+        ));
+    }
+}

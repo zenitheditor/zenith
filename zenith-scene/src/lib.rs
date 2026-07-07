@@ -38,6 +38,6 @@ pub mod ir;
 pub use compile::{CompileResult, compile, compile_page};
 pub use ir::{
     BlendMode, Color, FilterSpec, FitMode, GradientPaint, GradientStop, ImageClip, LineCap,
-    MaskShape, MaskSpec, Paint, Rect, Scene, SceneCommand, SceneGlyph, ShadowSpec, SrcRect,
-    StrokeAlign,
+    LineJoin, MaskShape, MaskSpec, Paint, Rect, Scene, SceneCommand, SceneGlyph, ShadowSpec,
+    SrcRect, StrokeAlign,
 };

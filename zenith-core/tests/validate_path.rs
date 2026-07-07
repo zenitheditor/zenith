@@ -147,3 +147,43 @@ fn unknown_anchor_kind_warns_without_parse_failure() {
         "expected anchor kind warning; got {diag:?}"
     );
 }
+
+#[test]
+fn unknown_path_stroke_linejoin_warns_without_parse_failure() {
+    let doc = parse_doc(
+        r##"path id="line.curve" stroke-linejoin="arced" {
+        anchor x=(px)0 y=(px)0
+        anchor x=(px)80 y=(px)0
+      }"##,
+    );
+
+    let report = validate(&doc);
+    let diag = report
+        .diagnostics
+        .iter()
+        .find(|d| d.code == "node.unknown_property" && d.message.contains("stroke-linejoin"))
+        .expect("unknown stroke-linejoin diagnostic");
+
+    assert_eq!(diag.severity, Severity::Warning);
+    assert!(!report.has_errors());
+}
+
+#[test]
+fn invalid_path_stroke_miter_limit_is_geometry_error() {
+    let doc = parse_doc(
+        r##"path id="line.curve" stroke-miter-limit=0 {
+        anchor x=(px)0 y=(px)0
+        anchor x=(px)80 y=(px)0
+      }"##,
+    );
+
+    let report = validate(&doc);
+    let diag = report
+        .diagnostics
+        .iter()
+        .find(|d| d.code == "node.invalid_geometry" && d.message.contains("stroke-miter-limit"))
+        .expect("invalid stroke-miter-limit diagnostic");
+
+    assert_eq!(diag.severity, Severity::Error);
+    assert!(report.has_errors());
+}

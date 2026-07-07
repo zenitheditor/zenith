@@ -4,7 +4,7 @@ use std::collections::BTreeMap;
 
 use zenith_core::{PropertyValue, ResolvedToken};
 
-use crate::ir::LineCap;
+use crate::ir::{LineCap, LineJoin};
 
 use super::super::util::resolve_property_dimension_px;
 
@@ -36,4 +36,22 @@ pub(in crate::compile) fn resolve_dash_params(
     // Only emit linecap when dash is active (solid strokes ignore it).
     let stroke_linecap = stroke_dash.and(stroke_linecap);
     (stroke_dash, stroke_gap, stroke_linecap)
+}
+
+/// Resolve stroke corner state from raw node fields.
+///
+/// Unknown joins fall back to `Miter`; validation owns author-facing warnings.
+/// Invalid miter limits are dropped so absent/invalid values keep renderer
+/// defaults and never reach backend APIs.
+pub(in crate::compile) fn resolve_join_params(
+    linejoin_str: Option<&str>,
+    miter_limit: Option<f64>,
+) -> (Option<LineJoin>, Option<f64>) {
+    let stroke_linejoin = linejoin_str.map(|s| match s {
+        "round" => LineJoin::Round,
+        "bevel" => LineJoin::Bevel,
+        _ => LineJoin::Miter,
+    });
+    let stroke_miter_limit = miter_limit.filter(|value| value.is_finite() && *value > 0.0);
+    (stroke_linejoin, stroke_miter_limit)
 }

@@ -705,6 +705,10 @@ pub struct PathNode {
     pub stroke_width: Option<PropertyValue>,
     /// Stroke alignment: `"center"` (default), `"inside"`, or `"outside"`.
     pub stroke_alignment: Option<String>,
+    /// Stroke corner join style: `"miter"` (default), `"round"`, or `"bevel"`.
+    pub stroke_linejoin: Option<String>,
+    /// Positive finite miter limit for miter joins.
+    pub stroke_miter_limit: Option<f64>,
     /// `"nonzero"` (default) or `"evenodd"`.
     pub fill_rule: Option<String>,
     pub opacity: Option<f64>,

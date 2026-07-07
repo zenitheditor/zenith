@@ -20,7 +20,7 @@ use super::super::paint::{
 };
 use super::super::style_prop;
 use super::super::util::{resolve_property_dimension_px, rotation_degrees, unsupported_unit_diag};
-use super::common::resolve_dash_params;
+use super::common::{resolve_dash_params, resolve_join_params};
 
 /// Compile a `line` leaf node.
 pub(in crate::compile) fn compile_line(
@@ -784,6 +784,8 @@ pub(in crate::compile) fn compile_path(
             Some("outside") => StrokeAlign::Outside,
             _ => StrokeAlign::Center,
         };
+        let (stroke_linejoin, stroke_miter_limit) =
+            resolve_join_params(path.stroke_linejoin.as_deref(), path.stroke_miter_limit);
         commands.push(SceneCommand::StrokePath {
             segments,
             color,
@@ -791,6 +793,8 @@ pub(in crate::compile) fn compile_path(
             closed,
             align,
             fill_even_odd: even_odd,
+            stroke_linejoin,
+            stroke_miter_limit,
         });
     }
 
