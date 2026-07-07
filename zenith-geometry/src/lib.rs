@@ -34,8 +34,8 @@ pub use contour::{
 };
 pub use error::GeometryError;
 pub use fit::{
-    PolylineEndpointTangentDirections, chord_length_parameters,
-    estimate_endpoint_tangent_directions,
+    PolylineCubicFit, PolylineEndpointTangentDirections, chord_length_parameters,
+    estimate_endpoint_tangent_directions, fit_cubic_bezier_to_points,
 };
 pub use guide::{ConstructionGuide, modular_guides, polar_guides, ratio_guides};
 pub use intersection::{
