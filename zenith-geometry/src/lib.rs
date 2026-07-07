@@ -19,7 +19,10 @@ pub use guide::{ConstructionGuide, modular_guides, polar_guides, ratio_guides};
 pub use intersection::{
     IntersectionPoint, LineIntersection, SegmentIntersection, intersect_lines, intersect_segments,
 };
-pub use offset::{SegmentOffset, offset_open_polyline_segments, offset_segment};
+pub use offset::{
+    OffsetRailJoin, SegmentOffset, join_adjacent_segment_offsets, offset_open_polyline_segments,
+    offset_segment,
+};
 pub use path::{
     PathAnchor, PathGeometry, PathJoinVectors, PathProjection, PathSegment, PathTopology,
 };

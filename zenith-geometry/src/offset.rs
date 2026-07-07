@@ -1,4 +1,4 @@
-use crate::{GeometryError, Point2};
+use crate::{GeometryError, LineIntersection, Point2, intersect_lines};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct SegmentOffset {
@@ -8,6 +8,17 @@ pub struct SegmentOffset {
     pub end: Point2,
     pub unit_normal: Point2,
     pub distance: f64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum OffsetRailJoin {
+    Point {
+        point: Point2,
+        first_on_segment: bool,
+        second_on_segment: bool,
+    },
+    Parallel,
+    Collinear,
 }
 
 pub fn offset_segment(
@@ -52,6 +63,21 @@ pub fn offset_segment(
     })
 }
 
+pub fn join_adjacent_segment_offsets(
+    first: SegmentOffset,
+    second: SegmentOffset,
+) -> Result<OffsetRailJoin, GeometryError> {
+    match intersect_lines(first.start, first.end, second.start, second.end)? {
+        LineIntersection::Point(intersection) => Ok(OffsetRailJoin::Point {
+            point: intersection.point,
+            first_on_segment: in_unit_range(intersection.first_t),
+            second_on_segment: in_unit_range(intersection.second_t),
+        }),
+        LineIntersection::Parallel => Ok(OffsetRailJoin::Parallel),
+        LineIntersection::Collinear => Ok(OffsetRailJoin::Collinear),
+    }
+}
+
 pub fn offset_open_polyline_segments(
     points: &[Point2],
     distance: f64,
@@ -77,6 +103,10 @@ pub fn offset_open_polyline_segments(
 
 fn validate_points(points: &[Point2]) -> Result<(), GeometryError> {
     points.iter().try_for_each(|point| point.validate())
+}
+
+fn in_unit_range(t: f64) -> bool {
+    (0.0..=1.0).contains(&t)
 }
 
 #[cfg(test)]
@@ -164,6 +194,73 @@ mod tests {
         assert_eq!(offsets[1].start, point(8.0, 0.0));
         assert_eq!(offsets[1].end, point(8.0, 10.0));
         assert_ne!(offsets[0].end, offsets[1].start);
+    }
+
+    #[test]
+    fn joins_perpendicular_adjacent_offsets_at_point() {
+        let offsets = offset_open_polyline_segments(
+            &[point(0.0, 0.0), point(10.0, 0.0), point(10.0, 10.0)],
+            2.0,
+        )
+        .expect("valid offsets");
+
+        assert_eq!(
+            join_adjacent_segment_offsets(offsets[0], offsets[1]),
+            Ok(OffsetRailJoin::Point {
+                point: point(8.0, 2.0),
+                first_on_segment: true,
+                second_on_segment: true,
+            })
+        );
+    }
+
+    #[test]
+    fn join_reports_when_point_is_outside_finite_rails() {
+        let first = offset_segment(point(0.0, 0.0), point(10.0, 0.0), 0.0).expect("valid offset");
+        let second =
+            offset_segment(point(20.0, 10.0), point(20.0, 20.0), 0.0).expect("valid offset");
+
+        assert_eq!(
+            join_adjacent_segment_offsets(first, second),
+            Ok(OffsetRailJoin::Point {
+                point: point(20.0, 0.0),
+                first_on_segment: false,
+                second_on_segment: false,
+            })
+        );
+    }
+
+    #[test]
+    fn parallel_rails_are_classified() {
+        let first = offset_segment(point(0.0, 0.0), point(10.0, 0.0), 2.0).expect("valid offset");
+        let second = offset_segment(point(0.0, 5.0), point(10.0, 5.0), 2.0).expect("valid offset");
+
+        assert_eq!(
+            join_adjacent_segment_offsets(first, second),
+            Ok(OffsetRailJoin::Parallel)
+        );
+    }
+
+    #[test]
+    fn collinear_rails_are_classified() {
+        let first = offset_segment(point(0.0, 0.0), point(10.0, 0.0), 0.0).expect("valid offset");
+        let second = offset_segment(point(10.0, 0.0), point(20.0, 0.0), 0.0).expect("valid offset");
+
+        assert_eq!(
+            join_adjacent_segment_offsets(first, second),
+            Ok(OffsetRailJoin::Collinear)
+        );
+    }
+
+    #[test]
+    fn joins_are_deterministic_for_same_inputs() {
+        let first = offset_segment(point(0.0, 0.0), point(8.0, 2.0), 1.0).expect("valid offset");
+        let second = offset_segment(point(8.0, 2.0), point(10.0, 9.0), 1.0).expect("valid offset");
+
+        assert_eq!(
+            join_adjacent_segment_offsets(first, second),
+            join_adjacent_segment_offsets(first, second)
+        );
     }
 
     #[test]
