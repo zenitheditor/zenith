@@ -59,6 +59,10 @@ fn map_blend_mode(b: Option<IrBlendMode>) -> tiny_skia::BlendMode {
         Some(IrBlendMode::SoftLight) => Tk::SoftLight,
         Some(IrBlendMode::Difference) => Tk::Difference,
         Some(IrBlendMode::Exclusion) => Tk::Exclusion,
+        Some(IrBlendMode::Hue) => Tk::Hue,
+        Some(IrBlendMode::Saturation) => Tk::Saturation,
+        Some(IrBlendMode::Color) => Tk::Color,
+        Some(IrBlendMode::Luminosity) => Tk::Luminosity,
     }
 }
 

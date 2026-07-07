@@ -1414,6 +1414,7 @@ version = "0.0.8"
 dependencies = [
  "kdl",
  "oxidoc-highlight",
+ "serde",
  "ttf-parser 0.25.1",
 ]
 

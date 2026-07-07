@@ -24,8 +24,8 @@ pub(in crate::validate::check) fn resolve_axis(dim: &Dimension, basis: f64) -> O
     }
 }
 
-/// Whether `s` is one of the 12 recognized `blend-mode` values (`normal` plus
-/// the 11 separable blends). Unknown values warn at validation time.
+/// Whether `s` is one of the recognized `blend-mode` values. Unknown values
+/// warn at validation time.
 pub(super) fn is_valid_blend_mode(s: &str) -> bool {
     matches!(
         s,
@@ -41,6 +41,10 @@ pub(super) fn is_valid_blend_mode(s: &str) -> bool {
             | "soft-light"
             | "difference"
             | "exclusion"
+            | "hue"
+            | "saturation"
+            | "color"
+            | "luminosity"
     )
 }
 

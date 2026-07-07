@@ -15,6 +15,7 @@ description = "Zenith core: KDL parser adapter, semantic AST, canonical formatte
 [dependencies]
 kdl = "6.7.1"
 oxidoc-highlight = "0.1.1"
+serde = { version = "1", features = ["derive"] }
 # Pure-Rust, C-free font parser. Already present in Cargo.lock transitively via
 # rustybuzz (zenith-layout); declaring it here as a direct dependency introduces
 # NO new crate to the graph. Used to read family/weight/style from local/system

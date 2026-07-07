@@ -10,6 +10,8 @@
 
 use serde::Serialize;
 
+pub use zenith_core::{BlendMode, Color, GradientPaint, GradientStop};
+
 // ── LineCap ───────────────────────────────────────────────────────────────────
 
 /// Dash end-cap style for dashed strokes.
@@ -41,131 +43,6 @@ pub enum StrokeAlign {
     Center,
     Inside,
     Outside,
-}
-
-// ── BlendMode ─────────────────────────────────────────────────────────────────
-
-/// Compositing blend mode for a layer's ink onto what lies beneath it.
-///
-/// `Normal` is plain source-over compositing (the default). Every other variant
-/// is a separable Porter-Duff/PDF blend that maps directly onto the
-/// `tiny_skia::BlendMode` of the same name. Serialized in kebab-case so the JSON
-/// matches the KDL attribute values (`color-dodge`, `hard-light`, …).
-#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum BlendMode {
-    Normal,
-    Multiply,
-    Screen,
-    Overlay,
-    Darken,
-    Lighten,
-    ColorDodge,
-    ColorBurn,
-    HardLight,
-    SoftLight,
-    Difference,
-    Exclusion,
-}
-
-// ── Color ─────────────────────────────────────────────────────────────────────
-
-/// An sRGB 8-bit color with pre-multiplied-independent alpha.
-///
-/// `r`, `g`, `b`, `a` are all in `0..=255` (linear 8-bit sRGB per channel,
-/// straight / un-pre-multiplied alpha).
-///
-/// `cmyk` is `None` for sRGB-origin colors. When a color token was declared in
-/// CMYK (`cmyk(c,m,y,k)`), this carries the original `[c, m, y, k]` percentages
-/// (`0.0..=100.0`) so a future PDF backend can emit native DeviceCMYK; the
-/// `r`/`g`/`b` channels then hold the naive device sRGB conversion. The PNG
-/// renderer ignores `cmyk` entirely and paints with `r`/`g`/`b`/`a`.
-#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
-pub struct Color {
-    pub r: u8,
-    pub g: u8,
-    pub b: u8,
-    pub a: u8,
-    /// Original CMYK channels `[c, m, y, k]` (percentages) when this color was
-    /// declared in CMYK; `None` for sRGB-origin colors. Skipped in JSON when
-    /// absent so existing sRGB scenes serialize byte-identically.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub cmyk: Option<[f32; 4]>,
-}
-
-impl Color {
-    /// Construct an sRGB-origin color (`cmyk` is `None`).
-    pub const fn srgb(r: u8, g: u8, b: u8, a: u8) -> Self {
-        Self {
-            r,
-            g,
-            b,
-            a,
-            cmyk: None,
-        }
-    }
-
-    /// Construct a CMYK-origin opaque color from the original channels plus the
-    /// already-converted sRGB triple. `c`/`m`/`y`/`k` are percentages
-    /// (`0.0..=100.0`); the converted `r`/`g`/`b` are supplied by the caller so
-    /// the deterministic conversion lives in exactly one place
-    /// (`zenith_core::cmyk_to_srgb`). Alpha is always `255`.
-    pub const fn cmyk(c: f32, m: f32, y: f32, k: f32, r: u8, g: u8, b: u8) -> Self {
-        Self {
-            r,
-            g,
-            b,
-            a: 255,
-            cmyk: Some([c, m, y, k]),
-        }
-    }
-}
-
-// ── Gradient paint ────────────────────────────────────────────────────────────
-
-/// A single color stop within a [`GradientPaint`].
-///
-/// `offset` is the normalized position along the gradient line in `0.0..=1.0`;
-/// `color` is the (alpha-cascaded) stop color.
-#[derive(Debug, Clone, PartialEq, Serialize)]
-pub struct GradientStop {
-    /// Normalized position along the gradient line, `0.0..=1.0`.
-    pub offset: f64,
-    /// Stop color (straight / un-pre-multiplied alpha).
-    pub color: Color,
-}
-
-fn is_false(b: &bool) -> bool {
-    !*b
-}
-
-/// A gradient fill paint — either linear (default) or radial.
-///
-/// For linear gradients, `angle_deg` controls the gradient line.
-/// For radial gradients, `radial=true` is set and `center_x/center_y/radius_frac`
-/// control the radial geometry (all as fractions of the bounding box).
-///
-/// The `radial` field and the three radial-geometry fields are omitted from
-/// JSON when they hold their zero/none defaults, so existing linear `GradientPaint`
-/// values serialize byte-identically.
-#[derive(Debug, Clone, PartialEq, Serialize)]
-pub struct GradientPaint {
-    /// Gradient-line angle in degrees, clockwise from +x. Ignored for radial.
-    pub angle_deg: f64,
-    /// Ordered color stops (at least two).
-    pub stops: Vec<GradientStop>,
-    /// `true` when this is a radial gradient. Omitted (default false) for linear.
-    #[serde(default, skip_serializing_if = "is_false")]
-    pub radial: bool,
-    /// Radial center X as a fraction of bounding-box width. `None` → 0.5.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub center_x: Option<f64>,
-    /// Radial center Y as a fraction of bounding-box height. `None` → 0.5.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub center_y: Option<f64>,
-    /// Radial radius as a fraction of `hypot(w, h) / 2`. `None` → 1.0.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub radius_frac: Option<f64>,
 }
 
 // ── Paint ───────────────────────────────────────────────────────────────────
@@ -359,6 +236,10 @@ pub enum ImageClip {
 
 fn is_center(a: &StrokeAlign) -> bool {
     matches!(a, StrokeAlign::Center)
+}
+
+fn is_false(b: &bool) -> bool {
+    !*b
 }
 
 // ── Scene commands ────────────────────────────────────────────────────────────
@@ -853,5 +734,15 @@ mod tests {
             json.contains(r#""cmyk":[59.0,85.0,0.0,7.0]"#),
             "got: {json}"
         );
+    }
+
+    #[test]
+    fn nonseparable_blend_mode_serializes_kebab_case() {
+        let cmd = SceneCommand::PushLayer {
+            opacity: 1.0,
+            blend_mode: Some(BlendMode::Luminosity),
+        };
+        let json = serde_json::to_string(&cmd).expect("serialize");
+        assert!(json.contains(r#""blend_mode":"luminosity""#), "got: {json}");
     }
 }

@@ -40,7 +40,8 @@ pub use ast::{
     anchor_xy, canonicalize_style_key, dim_to_px, parse_anchor, parse_anchor_edge,
 };
 pub use color::{
-    Cmyk, cmyk_to_hex, cmyk_to_srgb, contrast_ratio, parse_cmyk, parse_rgb, relative_luminance,
+    BlendMode, Cmyk, Color, GradientPaint, GradientStop, cmyk_to_hex, cmyk_to_srgb, contrast_ratio,
+    parse_cmyk, parse_rgb, relative_luminance,
 };
 pub use data::{DataContext, DataFormat, format_data_value};
 pub use diagnostics::{Diagnostic, Severity};

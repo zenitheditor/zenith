@@ -25,7 +25,7 @@ pub(super) fn rotation_degrees(rotate: Option<&Dimension>) -> Option<f64> {
 ///
 /// `None`, `"normal"`, and any unrecognized value all return `None` — those
 /// nodes compile to a plain (layer-free) command stream, byte-identical to
-/// before blend-mode existed. Only the 11 separable blends open a layer.
+/// before blend-mode existed. Only non-normal recognized blends open a layer.
 pub(super) fn blend_mode_ir(s: Option<&str>) -> Option<BlendMode> {
     match s {
         Some("multiply") => Some(BlendMode::Multiply),
@@ -39,6 +39,10 @@ pub(super) fn blend_mode_ir(s: Option<&str>) -> Option<BlendMode> {
         Some("soft-light") => Some(BlendMode::SoftLight),
         Some("difference") => Some(BlendMode::Difference),
         Some("exclusion") => Some(BlendMode::Exclusion),
+        Some("hue") => Some(BlendMode::Hue),
+        Some("saturation") => Some(BlendMode::Saturation),
+        Some("color") => Some(BlendMode::Color),
+        Some("luminosity") => Some(BlendMode::Luminosity),
         // "normal", None, and unrecognized values: no layer.
         _ => None,
     }
@@ -220,5 +224,31 @@ pub(super) fn resolve_geometry_px(
         },
         PropertyValue::Dimension(d) => dim_to_px(d.value, &d.unit),
         PropertyValue::Literal(_) | PropertyValue::DataRef(_) => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn blend_mode_ir_maps_nonseparable_modes() {
+        assert_eq!(blend_mode_ir(Some("hue")), Some(BlendMode::Hue));
+        assert_eq!(
+            blend_mode_ir(Some("saturation")),
+            Some(BlendMode::Saturation)
+        );
+        assert_eq!(blend_mode_ir(Some("color")), Some(BlendMode::Color));
+        assert_eq!(
+            blend_mode_ir(Some("luminosity")),
+            Some(BlendMode::Luminosity)
+        );
+    }
+
+    #[test]
+    fn blend_mode_ir_keeps_normal_and_unknown_layer_free() {
+        assert_eq!(blend_mode_ir(None), None);
+        assert_eq!(blend_mode_ir(Some("normal")), None);
+        assert_eq!(blend_mode_ir(Some("unknown")), None);
     }
 }
