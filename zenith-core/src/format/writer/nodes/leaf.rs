@@ -14,7 +14,9 @@ use crate::format::writer::{
     write_opt_str,
 };
 
-use super::helpers::{write_block_style, write_path_anchors, write_points, write_span};
+use super::helpers::{
+    write_block_style, write_path_anchors, write_path_subpaths, write_points, write_span,
+};
 use super::write_node;
 
 pub(super) fn write_rect(r: &RectNode, out: &mut String, depth: usize) {
@@ -485,6 +487,7 @@ pub(super) fn write_path(p: &PathNode, out: &mut String, depth: usize) {
 
     out.push_str(" {\n");
     write_path_anchors(&p.anchors, out, depth + 1);
+    write_path_subpaths(&p.subpaths, out, depth + 1);
     indent(out, depth);
     out.push_str("}\n");
 }

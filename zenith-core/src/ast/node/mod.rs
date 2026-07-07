@@ -19,7 +19,8 @@ pub use container::{
 pub use effect::{LightNode, MeshNode};
 pub use leaf::{
     AnchorKind, ChartNode, ChartSeries, CodeNode, EllipseNode, ImageNode, LineNode, PathAnchor,
-    PathNode, PatternNode, PolygonNode, PolylineNode, RectNode, TextNode,
+    PathNode, PathSubpath, PathSubpathRef, PatternNode, PolygonNode, PolylineNode, RectNode,
+    TextNode,
 };
 pub use special::{
     ConnectorNode, FieldNode, FootnoteNode, InstanceNode, Override, ShapeNode, TocNode, UnknownNode,

@@ -7,7 +7,9 @@ use zenith_geometry::{GeometryError, Point2};
 
 use crate::op::OpPathHandle;
 
-use super::path::{anchor_coordinate, invalid_anchor, optional_handle, unknown_node};
+use super::path::{
+    anchor_coordinate, invalid_anchor, optional_handle, reject_compound_path, unknown_node,
+};
 use super::{find_node_any_mut, node_kind_str, px, record_affected};
 
 #[derive(Debug, Clone, Copy)]
@@ -45,6 +47,9 @@ pub(super) fn apply_move_path_handle(
             let kind = node_kind_str(node);
             match node {
                 Node::Path(path) => {
+                    if reject_compound_path(node_id, "move_path_handle", path, diagnostics) {
+                        return;
+                    }
                     if !dx.is_finite() || !dy.is_finite() {
                         diagnostics.push(Diagnostic::error(
                             "tx.invalid_geometry",

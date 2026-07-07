@@ -92,6 +92,68 @@ page id="page.path" w=(px)320 h=(px)220 {
 }
 
 #[test]
+fn compound_path_emits_multiple_contours() {
+    let src = r##"zenith version=1 {
+  project id="proj.path" name="Path"
+  tokens format="zenith-token-v1" {
+token id="color.fill" type="color" value="#00ff00"
+token id="color.stroke" type="color" value="#0000ff"
+  }
+  styles {}
+  document id="doc.path" title="Path" {
+page id="page.path" w=(px)320 h=(px)220 {
+  path id="path.compound" fill=(token)"color.fill" stroke=(token)"color.stroke" stroke-width=(px)2 fill-rule="evenodd" {
+    subpath closed=#true {
+      anchor x=(px)10 y=(px)10
+      anchor x=(px)110 y=(px)10
+      anchor x=(px)110 y=(px)110
+    }
+    subpath closed=#true {
+      anchor x=(px)40 y=(px)40
+      anchor x=(px)80 y=(px)40
+      anchor x=(px)80 y=(px)80
+    }
+  }
+}
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+
+    let fill_segments = result
+        .scene
+        .commands
+        .iter()
+        .find_map(|command| match command {
+            SceneCommand::FillPath { segments, .. } => Some(segments),
+            _ => None,
+        })
+        .expect("compound path should emit a fill path");
+
+    assert_eq!(
+        fill_segments
+            .iter()
+            .filter(|segment| matches!(segment, PathSegment::MoveTo { .. }))
+            .count(),
+        2
+    );
+    assert_eq!(
+        fill_segments
+            .iter()
+            .filter(|segment| matches!(segment, PathSegment::Close))
+            .count(),
+        2
+    );
+}
+
+#[test]
 fn path_missing_anchor_coordinate_reports_scene_diagnostic() {
     let src = r##"zenith version=1 {
   project id="proj.path" name="Path"

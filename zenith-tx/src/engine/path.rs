@@ -43,6 +43,24 @@ macro_rules! non_path_nodes {
     };
 }
 
+pub(super) fn reject_compound_path(
+    node_id: &str,
+    op_name: &str,
+    path: &zenith_core::PathNode,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> bool {
+    if path.subpaths.is_empty() {
+        return false;
+    }
+    diagnostics.push(Diagnostic::error(
+        "tx.unsupported_property",
+        format!("{op_name} is not supported on compound path '{node_id}'"),
+        None,
+        Some(node_id.to_owned()),
+    ));
+    true
+}
+
 pub(super) fn apply_set_path_anchors(
     node_id: &str,
     anchors: &[OpPathAnchor],
@@ -56,6 +74,9 @@ pub(super) fn apply_set_path_anchors(
             let kind = node_kind_str(node);
             match node {
                 Node::Path(path) => {
+                    if reject_compound_path(node_id, "set_path_anchors", path, diagnostics) {
+                        return;
+                    }
                     path.anchors = anchors
                         .iter()
                         .map(|anchor| CorePathAnchor {
@@ -97,6 +118,9 @@ pub(super) fn apply_set_path_anchor_kind(
             let node_kind = node_kind_str(node);
             match node {
                 Node::Path(path) => {
+                    if reject_compound_path(node_id, "set_path_anchor_kind", path, diagnostics) {
+                        return;
+                    }
                     let Some(anchor) = path.anchors.get_mut(anchor_index) else {
                         diagnostics.push(Diagnostic::error(
                             "tx.out_of_range",
@@ -141,6 +165,9 @@ pub(super) fn apply_simplify_path_anchors(
             let kind = node_kind_str(node);
             match node {
                 Node::Path(path) => {
+                    if reject_compound_path(node_id, "simplify_path_anchors", path, diagnostics) {
+                        return;
+                    }
                     if path.closed == Some(true) {
                         diagnostics.push(Diagnostic::error(
                             "tx.unsupported_closed_path",
@@ -213,6 +240,9 @@ pub(super) fn apply_insert_path_anchor(
             let kind = node_kind_str(node);
             match node {
                 Node::Path(path) => {
+                    if reject_compound_path(node_id, "insert_path_anchor", path, diagnostics) {
+                        return;
+                    }
                     let geometry = match resolved_path_geometry(
                         node_id,
                         &path.anchors,
@@ -267,6 +297,14 @@ pub(super) fn apply_insert_path_anchor_at_point(
             let kind = node_kind_str(node);
             match node {
                 Node::Path(path) => {
+                    if reject_compound_path(
+                        node_id,
+                        "insert_path_anchor_at_point",
+                        path,
+                        diagnostics,
+                    ) {
+                        return;
+                    }
                     let point = match Point2::new(x, y) {
                         Ok(point) => point,
                         Err(error) => {
@@ -357,6 +395,9 @@ pub(super) fn apply_move_path_anchor(
             let kind = node_kind_str(node);
             match node {
                 Node::Path(path) => {
+                    if reject_compound_path(node_id, "move_path_anchor", path, diagnostics) {
+                        return;
+                    }
                     if !dx.is_finite() || !dy.is_finite() {
                         diagnostics.push(Diagnostic::error(
                             "tx.invalid_geometry",
@@ -512,6 +553,9 @@ pub(super) fn apply_transform_path_anchors(
             let kind = node_kind_str(node);
             match node {
                 Node::Path(path) => {
+                    if reject_compound_path(node_id, "transform_path_anchors", path, diagnostics) {
+                        return;
+                    }
                     let affine = match path_transform(transform) {
                         Ok(affine) => affine,
                         Err(error) => {

@@ -86,6 +86,104 @@ fn closed_path_requires_three_anchors() {
 }
 
 #[test]
+fn compound_path_subpaths_validate_per_contour() {
+    let doc = parse_doc(
+        r##"path id="glyph.o" fill=(token)"color.brand" fill-rule="evenodd" {
+        subpath closed=#true {
+          anchor x=(px)0 y=(px)0
+          anchor x=(px)80 y=(px)0
+          anchor x=(px)80 y=(px)80
+        }
+        subpath closed=#true {
+          anchor x=(px)20 y=(px)20
+          anchor x=(px)60 y=(px)20
+          anchor x=(px)60 y=(px)60
+        }
+      }"##,
+    );
+
+    let report = validate(&doc);
+
+    assert!(
+        report
+            .diagnostics
+            .iter()
+            .all(|d| d.severity != Severity::Error),
+        "expected no validation errors; got {:?}",
+        report.diagnostics
+    );
+}
+
+#[test]
+fn compound_path_rejects_mixed_direct_anchors() {
+    let doc = parse_doc(
+        r##"path id="glyph.mixed" {
+        anchor x=(px)0 y=(px)0
+        anchor x=(px)80 y=(px)0
+        subpath closed=#true {
+          anchor x=(px)0 y=(px)0
+          anchor x=(px)80 y=(px)0
+          anchor x=(px)80 y=(px)80
+        }
+      }"##,
+    );
+
+    let report = validate(&doc);
+
+    assert!(
+        report.diagnostics.iter().any(|d| {
+            d.code == "node.invalid_geometry"
+                && d.message.contains("cannot mix direct anchor children")
+        }),
+        "expected mixed-anchor invalid geometry diagnostic; got {:?}",
+        report.diagnostics
+    );
+}
+
+#[test]
+fn compound_path_rejects_parent_closed() {
+    let doc = parse_doc(
+        r##"path id="glyph.closed" closed=#true {
+        subpath closed=#true {
+          anchor x=(px)0 y=(px)0
+          anchor x=(px)80 y=(px)0
+          anchor x=(px)80 y=(px)80
+        }
+      }"##,
+    );
+
+    let report = validate(&doc);
+
+    assert!(
+        report.diagnostics.iter().any(|d| {
+            d.code == "node.invalid_geometry" && d.message.contains("parent closed is invalid")
+        }),
+        "expected parent-closed invalid geometry diagnostic; got {:?}",
+        report.diagnostics
+    );
+}
+
+#[test]
+fn compound_path_checks_subpath_anchor_count() {
+    let doc = parse_doc(
+        r##"path id="glyph.short" {
+        subpath closed=#true {
+          anchor x=(px)0 y=(px)0
+          anchor x=(px)80 y=(px)0
+        }
+      }"##,
+    );
+
+    let report = validate(&doc);
+
+    assert!(
+        has_code(&report, "shape.insufficient_points"),
+        "expected subpath insufficient anchors diagnostic; got {:?}",
+        report.diagnostics
+    );
+}
+
+#[test]
 fn missing_handle_pair_is_invalid_geometry() {
     let doc = parse_doc(
         r##"path id="line.curve" {

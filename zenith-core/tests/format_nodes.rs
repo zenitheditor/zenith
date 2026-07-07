@@ -227,6 +227,66 @@ fn path_node_parse_format_round_trip() {
     );
 }
 
+#[test]
+fn path_subpaths_parse_format_round_trip() {
+    let src = r##"zenith version=1 {
+  project id="proj.path" name="Path"
+  tokens format="zenith-token-v1" {
+  }
+  styles {
+  }
+  document id="doc.path" title="Path" {
+    page id="page.path" w=(px)400 h=(px)300 {
+      path id="glyph.o" fill-rule="evenodd" {
+        subpath closed=#true {
+          anchor x=(px)0 y=(px)0
+          anchor x=(px)80 y=(px)0
+          anchor x=(px)80 y=(px)80
+        }
+        subpath closed=#true {
+          anchor x=(px)20 y=(px)20
+          anchor x=(px)60 y=(px)20
+          anchor x=(px)60 y=(px)60
+        }
+      }
+    }
+  }
+}
+"##;
+
+    let adapter = KdlAdapter;
+    let doc = adapter.parse(src.as_bytes()).expect("parse must succeed");
+    let path = match &doc.body.pages[0].children[0] {
+        Node::Path(path) => path,
+        other => panic!("expected path node, got {other:?}"),
+    };
+    assert!(path.anchors.is_empty());
+    assert_eq!(path.subpaths.len(), 2);
+    assert_eq!(path.subpaths[0].closed, Some(true));
+    assert_eq!(path.subpaths[1].anchors.len(), 3);
+
+    let formatted = format_document(&doc).expect("format must succeed");
+    let formatted_str = String::from_utf8(formatted.clone()).expect("formatted must be utf8");
+    assert!(
+        formatted_str.contains("subpath closed=#true"),
+        "formatted path missing subpath block; got:\n{formatted_str}"
+    );
+    assert!(
+        formatted_str.contains("anchor x=(px)20 y=(px)20"),
+        "formatted subpath missing nested anchors; got:\n{formatted_str}"
+    );
+
+    let reparsed = adapter
+        .parse(&formatted)
+        .expect("formatted subpath path must reparse");
+    let reparsed_path = match &reparsed.body.pages[0].children[0] {
+        Node::Path(path) => path,
+        other => panic!("expected path node after reparse, got {other:?}"),
+    };
+    assert_eq!(reparsed_path.subpaths.len(), 2);
+    assert!(reparsed_path.anchors.is_empty());
+}
+
 /// A `.zen` document with an image node exercising the string and `(pct)`
 /// object-position forms.
 const WITH_IMAGE: &str = r##"zenith version=1 {

@@ -48,6 +48,28 @@ const TRANSFORM_PATH_DOC: &str = r##"zenith version=1 {
   }
 }"##;
 
+const COMPOUND_PATH_DOC: &str = r##"zenith version=1 {
+  project id="proj" name="Test"
+  tokens format="zenith-token-v1" { }
+  styles { }
+  document id="doc1" title="T" {
+    page id="pg1" w=(px)400 h=(px)300 {
+      path id="compound" fill-rule="evenodd" {
+        subpath closed=#true {
+          anchor x=(px)0 y=(px)0
+          anchor x=(px)100 y=(px)0
+          anchor x=(px)100 y=(px)100
+        }
+        subpath closed=#true {
+          anchor x=(px)25 y=(px)25
+          anchor x=(px)75 y=(px)25
+          anchor x=(px)75 y=(px)75
+        }
+      }
+    }
+  }
+}"##;
+
 #[path = "path_ops/anchor_kind.rs"]
 mod anchor_kind;
 #[path = "path_ops/anchor_movement.rs"]
@@ -85,6 +107,37 @@ fn insert_path_anchor_open_line_split_inserts_midpoint() {
         !anchor_line(&result.source_after, 1).contains("kind="),
         "line split anchor should not claim smooth/symmetric intent; got:\n{}",
         result.source_after
+    );
+}
+
+#[test]
+fn anchor_indexed_path_ops_reject_compound_paths() {
+    let doc = parse(COMPOUND_PATH_DOC);
+    let tx = Transaction {
+        ops: vec![Op::SetPathAnchors {
+            node: "compound".to_owned(),
+            anchors: vec![zenith_tx::op::OpPathAnchor {
+                x: 0.0,
+                y: 0.0,
+                kind: None,
+                in_x: None,
+                in_y: None,
+                out_x: None,
+                out_y: None,
+            }],
+        }],
+        permissions: Permissions::default(),
+    };
+    let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
+
+    assert_eq!(result.status, TxStatus::Rejected);
+    assert!(
+        result.diagnostics.iter().any(|diagnostic| {
+            diagnostic.code == "tx.unsupported_property"
+                && diagnostic.message.contains("compound path")
+        }),
+        "expected compound path rejection diagnostic; got {:?}",
+        result.diagnostics
     );
 }
 

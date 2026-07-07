@@ -286,23 +286,62 @@ pub(in crate::validate::check) fn check_path(
         diagnostics,
     );
 
-    for (idx, anchor) in path.anchors.iter().enumerate() {
-        check_path_anchor(&path.id, idx, anchor, path.source_span, diagnostics);
+    if !path.subpaths.is_empty() {
+        if !path.anchors.is_empty() {
+            diagnostics.push(Diagnostic::error(
+                "node.invalid_geometry",
+                format!(
+                    "path '{}': cannot mix direct anchor children with subpath children",
+                    path.id
+                ),
+                path.source_span,
+                Some(path.id.clone()),
+            ));
+        }
+        if path.closed.is_some() {
+            diagnostics.push(Diagnostic::error(
+                "node.invalid_geometry",
+                format!(
+                    "path '{}': parent closed is invalid when subpath children are present",
+                    path.id
+                ),
+                path.source_span,
+                Some(path.id.clone()),
+            ));
+        }
     }
 
-    let required_anchors = if path.closed == Some(true) { 3 } else { 2 };
-    if path.anchors.len() < required_anchors {
-        diagnostics.push(Diagnostic::error(
-            "shape.insufficient_points",
-            format!(
-                "path '{}': requires at least {} anchors, got {}",
-                path.id,
-                required_anchors,
-                path.anchors.len()
-            ),
-            path.source_span,
-            Some(path.id.clone()),
-        ));
+    let compound = !path.subpaths.is_empty();
+    for (subpath_index, subpath) in path.effective_subpaths().enumerate() {
+        for (idx, anchor) in subpath.anchors.iter().enumerate() {
+            check_path_anchor(&path.id, idx, anchor, path.source_span, diagnostics);
+        }
+
+        let required_anchors = if subpath.closed == Some(true) { 3 } else { 2 };
+        if subpath.anchors.len() < required_anchors {
+            let message = if compound {
+                format!(
+                    "path '{}': subpath[{}] requires at least {} anchors, got {}",
+                    path.id,
+                    subpath_index,
+                    required_anchors,
+                    subpath.anchors.len()
+                )
+            } else {
+                format!(
+                    "path '{}': requires at least {} anchors, got {}",
+                    path.id,
+                    required_anchors,
+                    subpath.anchors.len()
+                )
+            };
+            diagnostics.push(Diagnostic::error(
+                "shape.insufficient_points",
+                message,
+                path.source_span,
+                Some(path.id.clone()),
+            ));
+        }
     }
 
     check_visual_prop(

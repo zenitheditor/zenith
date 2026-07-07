@@ -233,14 +233,25 @@ pub fn node_content(kind: &str) -> Option<NodeContentDescriptor> {
             ),
         }),
         "path" => Some(NodeContentDescriptor {
-            description: "Two or more `anchor` children define an open Bezier path; three or more \
-                are required when `closed=#true`. Each anchor carries required `x` and `y` \
-                dimensions, optional authoring intent `kind` (corner|smooth|symmetric), plus \
-                optional paired `in-x`/`in-y` and `out-x`/`out-y` handles.",
+            description: "A path is either a legacy direct-anchor contour or a compound path made \
+                from one or more `subpath` children; do not mix both forms. Direct paths use two or \
+                more `anchor` children for an open Bezier path, or three or more when `closed=#true`. \
+                Compound paths put the same anchor rules inside each `subpath`, with optional \
+                per-subpath `closed=#true`; parent `closed` is not accepted with subpaths. Each anchor \
+                carries required `x` and `y` dimensions, optional authoring intent `kind` \
+                (corner|smooth|symmetric), plus optional paired `in-x`/`in-y` and `out-x`/`out-y` \
+                handles.",
             example: concat!(
-                "anchor x=(px)0 y=(px)0 out-x=(px)20 out-y=(px)0\n",
-                "anchor x=(px)80 y=(px)0 kind=\"smooth\" in-x=(px)60 in-y=(px)0 out-x=(px)100 out-y=(px)40\n",
-                "anchor x=(px)80 y=(px)80 in-x=(px)100 in-y=(px)40",
+                "subpath closed=#true {\n",
+                "    anchor x=(px)0 y=(px)0 out-x=(px)20 out-y=(px)0\n",
+                "    anchor x=(px)80 y=(px)0 kind=\"smooth\" in-x=(px)60 in-y=(px)0 out-x=(px)100 out-y=(px)40\n",
+                "    anchor x=(px)80 y=(px)80 in-x=(px)100 in-y=(px)40\n",
+                "}\n",
+                "subpath closed=#true {\n",
+                "    anchor x=(px)24 y=(px)24\n",
+                "    anchor x=(px)56 y=(px)24\n",
+                "    anchor x=(px)56 y=(px)56\n",
+                "}",
             ),
         }),
 

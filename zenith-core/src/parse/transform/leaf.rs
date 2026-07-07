@@ -5,8 +5,8 @@
 use kdl::{KdlNode, KdlValue};
 
 use crate::ast::node::{
-    AnchorKind, CodeNode, EllipseNode, ImageNode, LineNode, PathAnchor, PathNode, Point,
-    PolygonNode, PolylineNode, RectNode, TextNode, TextSpan,
+    AnchorKind, CodeNode, EllipseNode, ImageNode, LineNode, PathAnchor, PathNode, PathSubpath,
+    Point, PolygonNode, PolylineNode, RectNode, TextNode, TextSpan,
 };
 use crate::data::DataFormat;
 use crate::error::{ParseError, ParseErrorCode};
@@ -885,6 +885,22 @@ fn transform_path_anchor(node: &KdlNode) -> PathAnchor {
     }
 }
 
+fn transform_path_subpath(node: &KdlNode) -> PathSubpath {
+    let mut anchors: Vec<PathAnchor> = Vec::new();
+    if let Some(children) = node.children() {
+        for child in children.nodes() {
+            if child.name().value() == "anchor" {
+                anchors.push(transform_path_anchor(child));
+            }
+        }
+    }
+
+    PathSubpath {
+        closed: optional_bool_prop(node, "closed"),
+        anchors,
+    }
+}
+
 pub(super) fn transform_polygon(node: &KdlNode) -> Result<PolygonNode, ParseError> {
     let id = required_string_prop(node, "id")?.to_owned();
 
@@ -977,10 +993,13 @@ pub(super) fn transform_path(node: &KdlNode) -> Result<PathNode, ParseError> {
     let fill_rule = optional_string_prop_aliased(node, "fill-rule", "fill_rule").map(str::to_owned);
 
     let mut anchors: Vec<PathAnchor> = Vec::new();
+    let mut subpaths: Vec<PathSubpath> = Vec::new();
     if let Some(children) = node.children() {
         for child in children.nodes() {
-            if child.name().value() == "anchor" {
-                anchors.push(transform_path_anchor(child));
+            match child.name().value() {
+                "anchor" => anchors.push(transform_path_anchor(child)),
+                "subpath" => subpaths.push(transform_path_subpath(child)),
+                _ => {}
             }
         }
     }
@@ -1005,6 +1024,7 @@ pub(super) fn transform_path(node: &KdlNode) -> Result<PathNode, ParseError> {
         rotate: optional_dimension_prop(node, "rotate"),
         style: optional_string_prop(node, "style").map(str::to_owned),
         anchors,
+        subpaths,
         source_span: node_span(node),
         unknown_props,
     })

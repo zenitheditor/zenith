@@ -2,7 +2,9 @@ use zenith_core::{Diagnostic, Document, Node, PathNode};
 use zenith_geometry::{AffineTransform, GeometryError, Point2};
 
 use super::{find_node_shared, node_id_of, node_kind_str, record_affected, subtree_contains};
-use crate::engine::path::{geometry_anchor_to_core, resolved_path_geometry, unknown_node};
+use crate::engine::path::{
+    geometry_anchor_to_core, reject_compound_path, resolved_path_geometry, unknown_node,
+};
 
 pub(super) struct MakePathSymmetricArgs<'a> {
     pub node_id: &'a str,
@@ -34,7 +36,7 @@ pub(super) fn apply_make_path_symmetric(
 
     for page in &mut doc.body.pages {
         if subtree_contains_path(&page.children, args.node_id) {
-            insert_after_source(&mut page.children, args.node_id, copies);
+            insert_after_source(&mut page.children, args.node_id, &copies);
             for index in 1..args.count {
                 record_affected(&format!("{}{}", args.id_prefix, index), affected);
             }
@@ -51,7 +53,13 @@ fn source_path(
     for page in &doc.body.pages {
         if let Some(node) = find_node_shared(&page.children, node_id) {
             return match node {
-                Node::Path(path) => Some(path.clone()),
+                Node::Path(path) => {
+                    if reject_compound_path(node_id, "make_path_symmetric", path, diagnostics) {
+                        None
+                    } else {
+                        Some(path.clone())
+                    }
+                }
                 Node::Rect(_)
                 | Node::Ellipse(_)
                 | Node::Line(_)
@@ -156,40 +164,38 @@ fn symmetry_copies(
     Some(copies)
 }
 
-fn insert_after_source(children: &mut Vec<Node>, node_id: &str, copies: Vec<Node>) -> bool {
+fn insert_after_source(children: &mut Vec<Node>, node_id: &str, copies: &[Node]) -> bool {
     if let Some(index) = children
         .iter()
         .position(|node| node_id_of(node) == Some(node_id))
     {
-        for (offset, copy) in copies.into_iter().enumerate() {
-            children.insert(index + 1 + offset, copy);
-        }
+        children.splice(index + 1..index + 1, copies.iter().cloned());
         return true;
     }
 
     for child in children.iter_mut() {
         match child {
             Node::Frame(frame) => {
-                if insert_after_source(&mut frame.children, node_id, copies.clone()) {
+                if insert_after_source(&mut frame.children, node_id, copies) {
                     return true;
                 }
             }
             Node::Group(group) => {
-                if insert_after_source(&mut group.children, node_id, copies.clone()) {
+                if insert_after_source(&mut group.children, node_id, copies) {
                     return true;
                 }
             }
             Node::Table(table) => {
                 for row in &mut table.rows {
                     for cell in &mut row.cells {
-                        if insert_after_source(&mut cell.children, node_id, copies.clone()) {
+                        if insert_after_source(&mut cell.children, node_id, copies) {
                             return true;
                         }
                     }
                 }
             }
             Node::Unknown(unknown) => {
-                if insert_after_source(&mut unknown.children, node_id, copies.clone()) {
+                if insert_after_source(&mut unknown.children, node_id, copies) {
                     return true;
                 }
             }

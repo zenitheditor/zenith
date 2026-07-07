@@ -3,7 +3,7 @@
 //! (polygon/polyline vertices), the `anchor` line (path anchors), and the
 //! `block` role-style declaration.
 
-use crate::ast::{BlockStyle, PathAnchor, Point, TextSpan};
+use crate::ast::{BlockStyle, PathAnchor, PathSubpath, Point, TextSpan};
 use crate::data::DataFormat;
 
 use crate::format::writer::{
@@ -114,5 +114,17 @@ pub(super) fn write_path_anchors(anchors: &[PathAnchor], out: &mut String, depth
         write_opt_dimension(out, "out-x", &anchor.out_x);
         write_opt_dimension(out, "out-y", &anchor.out_y);
         out.push('\n');
+    }
+}
+
+pub(super) fn write_path_subpaths(subpaths: &[PathSubpath], out: &mut String, depth: usize) {
+    for subpath in subpaths {
+        indent(out, depth);
+        out.push_str("subpath");
+        write_opt_bool(out, "closed", &subpath.closed);
+        out.push_str(" {\n");
+        write_path_anchors(&subpath.anchors, out, depth + 1);
+        indent(out, depth);
+        out.push_str("}\n");
     }
 }

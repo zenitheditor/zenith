@@ -4,7 +4,9 @@ use zenith_core::{Diagnostic, Document, Node};
 use zenith_geometry::{AffineTransform, GeometryError, PathGeometry, nearest_path_geometry_points};
 
 use super::{find_node_any_mut, node_kind_str, record_affected};
-use crate::engine::path::{geometry_anchor_to_core, resolved_path_geometry, unknown_node};
+use crate::engine::path::{
+    geometry_anchor_to_core, reject_compound_path, resolved_path_geometry, unknown_node,
+};
 
 pub(super) fn apply_snap_path_anchors(
     node_id: &str,
@@ -87,6 +89,9 @@ pub(super) fn apply_snap_path_anchors(
             let kind = node_kind_str(node);
             match node {
                 Node::Path(path) => {
+                    if reject_compound_path(node_id, "snap_path_anchors", path, diagnostics) {
+                        return;
+                    }
                     path.anchors = snapped
                         .anchors()
                         .iter()
@@ -133,6 +138,14 @@ fn path_geometry_from_doc(doc: &Document, node_id: &str) -> Result<PathGeometry,
     match find_node_any(doc, node_id) {
         None => Err(unknown_node(node_id)),
         Some(Node::Path(path)) => {
+            if !path.subpaths.is_empty() {
+                return Err(Diagnostic::error(
+                    "tx.unsupported_property",
+                    format!("snap_path_anchors is not supported on compound path '{node_id}'"),
+                    None,
+                    Some(node_id.to_owned()),
+                ));
+            }
             resolved_path_geometry(node_id, &path.anchors, path.closed == Some(true))
         }
         Some(node) => Err(Diagnostic::error(

@@ -413,59 +413,80 @@ fn resolve_path_segments(
     ctx: RenderCtx,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<ResolvedPathSegments> {
-    let closed = path.closed == Some(true);
-    let mut anchors = Vec::with_capacity(path.anchors.len());
-    let mut anchor_points = Vec::with_capacity(path.anchors.len());
-    for (idx, anchor) in path.anchors.iter().enumerate() {
-        let geometry_anchor = resolve_geometry_path_anchor(
-            anchor,
-            &path.id,
-            idx,
-            path.source_span,
-            ctx,
-            diagnostics,
-        )?;
-        anchor_points.push((geometry_anchor.point.x, geometry_anchor.point.y));
-        anchors.push(geometry_anchor);
-    }
-
-    let geometry = match PathGeometry::new(anchors, closed) {
-        Ok(geometry) => geometry,
-        Err(error) => {
-            diagnostics.push(invalid_path_geometry_diag(
-                &path.id,
-                "topology",
-                path.source_span,
-                error,
-            ));
-            return None;
-        }
+    let closed = if path.subpaths.is_empty() {
+        path.closed == Some(true)
+    } else {
+        path.subpaths
+            .iter()
+            .all(|subpath| subpath.closed == Some(true))
     };
-    let first = geometry.anchors().first()?;
-    let mut segments = Vec::with_capacity(path.anchors.len() + 2);
-    segments.push(PathSegment::MoveTo {
-        x: first.point.x,
-        y: first.point.y,
-    });
-
-    let geometry_segments = match geometry.segments() {
-        Ok(segments) => segments,
-        Err(error) => {
-            diagnostics.push(invalid_path_geometry_diag(
-                &path.id,
-                "segments",
-                path.source_span,
-                error,
-            ));
-            return None;
-        }
+    let contour_count = path.subpaths.len().max(1);
+    let total_anchor_count = if path.subpaths.is_empty() {
+        path.anchors.len()
+    } else {
+        path.subpaths
+            .iter()
+            .map(|subpath| subpath.anchors.len())
+            .sum::<usize>()
     };
-    for segment in geometry_segments {
-        segments.push(map_geometry_path_segment(segment));
-    }
+    let mut segments = Vec::with_capacity(total_anchor_count + contour_count * 2);
+    let mut anchor_points = Vec::with_capacity(total_anchor_count);
 
-    if closed {
-        segments.push(PathSegment::Close);
+    for subpath in path.effective_subpaths() {
+        let subpath_closed = subpath.closed == Some(true);
+        let mut anchors = Vec::with_capacity(subpath.anchors.len());
+        for (idx, anchor) in subpath.anchors.iter().enumerate() {
+            let geometry_anchor = resolve_geometry_path_anchor(
+                anchor,
+                &path.id,
+                idx,
+                path.source_span,
+                ctx,
+                diagnostics,
+            )?;
+            anchor_points.push((geometry_anchor.point.x, geometry_anchor.point.y));
+            anchors.push(geometry_anchor);
+        }
+
+        let geometry = match PathGeometry::new(anchors, subpath_closed) {
+            Ok(geometry) => geometry,
+            Err(error) => {
+                diagnostics.push(invalid_path_geometry_diag(
+                    &path.id,
+                    "topology",
+                    path.source_span,
+                    error,
+                ));
+                return None;
+            }
+        };
+        let Some(first) = geometry.anchors().first() else {
+            continue;
+        };
+        segments.push(PathSegment::MoveTo {
+            x: first.point.x,
+            y: first.point.y,
+        });
+
+        let geometry_segments = match geometry.segments() {
+            Ok(segments) => segments,
+            Err(error) => {
+                diagnostics.push(invalid_path_geometry_diag(
+                    &path.id,
+                    "segments",
+                    path.source_span,
+                    error,
+                ));
+                return None;
+            }
+        };
+        for segment in geometry_segments {
+            segments.push(map_geometry_path_segment(segment));
+        }
+
+        if subpath_closed {
+            segments.push(PathSegment::Close);
+        }
     }
 
     Some(ResolvedPathSegments {

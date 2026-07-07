@@ -660,6 +660,63 @@ pub struct PathAnchor {
     pub out_y: Option<Dimension>,
 }
 
+/// One contour within a compound `path` node.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PathSubpath {
+    /// Per-contour closure. Defaults to open when absent.
+    pub closed: Option<bool>,
+    /// Ordered anchor list for this contour.
+    pub anchors: Vec<PathAnchor>,
+}
+
+/// Borrowed view over either legacy direct anchors or an authored subpath.
+#[derive(Debug, Clone, Copy)]
+pub struct PathSubpathRef<'a> {
+    pub closed: Option<bool>,
+    pub anchors: &'a [PathAnchor],
+}
+
+struct EffectiveSubpaths<'a> {
+    direct: Option<PathSubpathRef<'a>>,
+    iter: Option<std::slice::Iter<'a, PathSubpath>>,
+}
+
+impl<'a> EffectiveSubpaths<'a> {
+    fn new(path: &'a PathNode) -> Self {
+        if path.subpaths.is_empty() {
+            Self {
+                direct: Some(PathSubpathRef {
+                    closed: path.closed,
+                    anchors: &path.anchors,
+                }),
+                iter: None,
+            }
+        } else {
+            Self {
+                direct: None,
+                iter: Some(path.subpaths.iter()),
+            }
+        }
+    }
+}
+
+impl<'a> Iterator for EffectiveSubpaths<'a> {
+    type Item = PathSubpathRef<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(direct) = self.direct.take() {
+            return Some(direct);
+        }
+
+        self.iter.as_mut().and_then(|iter| {
+            iter.next().map(|subpath| PathSubpathRef {
+                closed: subpath.closed,
+                anchors: &subpath.anchors,
+            })
+        })
+    }
+}
+
 /// Authoring intent for a path anchor.
 ///
 /// Unknown strings are preserved for forward-compatibility; validation warns
@@ -723,10 +780,18 @@ pub struct PathNode {
     pub style: Option<String>,
     /// Ordered anchor list parsed from `anchor` child nodes.
     pub anchors: Vec<PathAnchor>,
+    /// Ordered compound contours parsed from `subpath` child nodes.
+    pub subpaths: Vec<PathSubpath>,
     /// Source declaration span, when available.
     pub source_span: Option<Span>,
     /// Unknown properties preserved for forward-compat.
     pub unknown_props: BTreeMap<String, UnknownProperty>,
+}
+
+impl PathNode {
+    pub fn effective_subpaths(&self) -> impl Iterator<Item = PathSubpathRef<'_>> + '_ {
+        EffectiveSubpaths::new(self)
+    }
 }
 
 /// A `pattern` node — a compact procedural primitive.
