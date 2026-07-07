@@ -3,6 +3,7 @@
 pub mod bezier;
 pub mod boolean;
 pub mod boolean_piece;
+pub mod boolean_reconstruct;
 pub mod bounds;
 pub mod collision;
 pub mod contour;
@@ -27,6 +28,7 @@ pub use boolean::{
     select_contour_boolean_spans,
 };
 pub use boolean_piece::{ContourBooleanPiece, materialize_contour_boolean_pieces};
+pub use boolean_reconstruct::reconstruct_contour_boolean_result;
 pub use bounds::RectBounds;
 pub use collision::{
     PathGeometryIntersections, PathGeometryNearestPoints, collect_path_geometry_intersections,
