@@ -31,7 +31,8 @@ pub use offset::{
     offset_segment,
 };
 pub use outline::{
-    OpenPolylineCap, OpenPolylineJoin, OpenPolylineOutline, OpenPolylineOutlinePolicy,
+    ClosedPolylineJoin, ClosedPolylineOutline, ClosedPolylineOutlinePolicy, OpenPolylineCap,
+    OpenPolylineJoin, OpenPolylineOutline, OpenPolylineOutlinePolicy, outline_closed_polyline,
     outline_open_polyline,
 };
 pub use path::{

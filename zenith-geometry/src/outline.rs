@@ -1,6 +1,6 @@
 use crate::{
-    GeometryError, OffsetRailJoin, Point2, SegmentOffset, join_adjacent_segment_offsets,
-    offset_open_polyline_segments,
+    ClosedPolyline, GeometryError, OffsetRailJoin, Point2, SegmentOffset,
+    join_adjacent_segment_offsets, offset_open_polyline_segments, offset_segment,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -14,9 +14,19 @@ pub enum OpenPolylineJoin {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ClosedPolylineJoin {
+    FiniteRailIntersection,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct OpenPolylineOutlinePolicy {
     pub cap: OpenPolylineCap,
     pub join: OpenPolylineJoin,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ClosedPolylineOutlinePolicy {
+    pub join: ClosedPolylineJoin,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -24,11 +34,25 @@ pub struct OpenPolylineOutline {
     pub points: Vec<Point2>,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct ClosedPolylineOutline {
+    pub left_ring: Vec<Point2>,
+    pub right_ring: Vec<Point2>,
+}
+
 impl Default for OpenPolylineOutlinePolicy {
     fn default() -> Self {
         Self {
             cap: OpenPolylineCap::Butt,
             join: OpenPolylineJoin::FiniteRailIntersection,
+        }
+    }
+}
+
+impl Default for ClosedPolylineOutlinePolicy {
+    fn default() -> Self {
+        Self {
+            join: ClosedPolylineJoin::FiniteRailIntersection,
         }
     }
 }
@@ -71,6 +95,42 @@ pub fn outline_open_polyline(
     }
 }
 
+pub fn outline_closed_polyline(
+    contour: &ClosedPolyline,
+    stroke_width: f64,
+    policy: ClosedPolylineOutlinePolicy,
+) -> Result<Option<ClosedPolylineOutline>, GeometryError> {
+    validate_closed_policy(policy);
+    if !stroke_width.is_finite() {
+        return Err(GeometryError::NonFiniteParameter);
+    }
+    if stroke_width < 0.0 {
+        return Err(GeometryError::CountOutOfRange);
+    }
+    if stroke_width == 0.0 {
+        return Ok(None);
+    }
+
+    let half_width = stroke_width * 0.5;
+    if !half_width.is_finite() {
+        return Err(GeometryError::CountOutOfRange);
+    }
+
+    let left_rails = offset_closed_polyline_segments(contour.points(), half_width)?;
+    let right_rails = offset_closed_polyline_segments(contour.points(), -half_width)?;
+    let left_ring = closed_ring_from_rails(&left_rails)?;
+    let right_ring = closed_ring_from_rails(&right_rails)?;
+
+    if left_ring.len() < 3 || right_ring.len() < 3 {
+        Ok(None)
+    } else {
+        Ok(Some(ClosedPolylineOutline {
+            left_ring,
+            right_ring,
+        }))
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum SideDirection {
     Forward,
@@ -99,7 +159,7 @@ fn append_forward_side(
 
     for pair in rails.windows(2) {
         if let [first, second] = pair {
-            append_forward_join(outline, *first, *second)?;
+            append_forward_bridge_join(outline, *first, *second)?;
         }
     }
 
@@ -130,7 +190,7 @@ fn append_reverse_side(
     Ok(())
 }
 
-fn append_forward_join(
+fn append_forward_bridge_join(
     outline: &mut Vec<Point2>,
     first: SegmentOffset,
     second: SegmentOffset,
@@ -170,6 +230,51 @@ fn append_reverse_join(
     Ok(())
 }
 
+fn closed_ring_from_rails(rails: &[SegmentOffset]) -> Result<Vec<Point2>, GeometryError> {
+    let mut ring = Vec::with_capacity(rails.len());
+    for index in 0..rails.len() {
+        let Some(previous) = previous_rail(rails, index) else {
+            continue;
+        };
+        let Some(current) = rails.get(index).copied() else {
+            continue;
+        };
+        append_forward_bridge_join(&mut ring, previous, current)?;
+    }
+    remove_closing_duplicate(&mut ring);
+    Ok(ring)
+}
+
+fn previous_rail(rails: &[SegmentOffset], index: usize) -> Option<SegmentOffset> {
+    if index == 0 {
+        rails.last().copied()
+    } else {
+        rails.get(index.saturating_sub(1)).copied()
+    }
+}
+
+fn offset_closed_polyline_segments(
+    points: &[Point2],
+    distance: f64,
+) -> Result<Vec<SegmentOffset>, GeometryError> {
+    let mut offsets = Vec::with_capacity(points.len());
+    for index in 0..points.len() {
+        let Some(start) = points.get(index).copied() else {
+            continue;
+        };
+        let next_index = if index + 1 == points.len() {
+            0
+        } else {
+            index + 1
+        };
+        let Some(end) = points.get(next_index).copied() else {
+            continue;
+        };
+        offsets.push(offset_segment(start, end, distance)?);
+    }
+    Ok(offsets)
+}
+
 fn push_unique(points: &mut Vec<Point2>, point: Point2) {
     if points.last().copied() != Some(point) {
         points.push(point);
@@ -198,6 +303,12 @@ fn validate_policy(policy: OpenPolylineOutlinePolicy) {
     }
 }
 
+fn validate_closed_policy(policy: ClosedPolylineOutlinePolicy) {
+    match policy.join {
+        ClosedPolylineJoin::FiniteRailIntersection => {}
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -211,6 +322,21 @@ mod tests {
         stroke_width: f64,
     ) -> Result<Option<OpenPolylineOutline>, GeometryError> {
         outline_open_polyline(points, stroke_width, OpenPolylineOutlinePolicy::default())
+    }
+
+    fn closed_contour(points: &[Point2]) -> ClosedPolyline {
+        ClosedPolyline::new(points.to_vec()).expect("valid contour")
+    }
+
+    fn closed_outline(
+        points: &[Point2],
+        stroke_width: f64,
+    ) -> Result<Option<ClosedPolylineOutline>, GeometryError> {
+        outline_closed_polyline(
+            &closed_contour(points),
+            stroke_width,
+            ClosedPolylineOutlinePolicy::default(),
+        )
     }
 
     #[test]
@@ -320,5 +446,141 @@ mod tests {
         let points = [point(0.0, 0.0), point(6.0, 2.0), point(8.0, 9.0)];
 
         assert_eq!(outline(&points, 3.0), outline(&points, 3.0));
+    }
+
+    #[test]
+    fn closed_zero_width_returns_none_and_invalid_widths_error() {
+        assert_eq!(
+            closed_outline(
+                &[
+                    point(0.0, 0.0),
+                    point(10.0, 0.0),
+                    point(10.0, 10.0),
+                    point(0.0, 10.0),
+                ],
+                0.0
+            ),
+            Ok(None)
+        );
+        assert_eq!(
+            closed_outline(
+                &[
+                    point(0.0, 0.0),
+                    point(10.0, 0.0),
+                    point(10.0, 10.0),
+                    point(0.0, 10.0),
+                ],
+                f64::NAN
+            ),
+            Err(GeometryError::NonFiniteParameter)
+        );
+        assert_eq!(
+            closed_outline(
+                &[
+                    point(0.0, 0.0),
+                    point(10.0, 0.0),
+                    point(10.0, 10.0),
+                    point(0.0, 10.0),
+                ],
+                -1.0
+            ),
+            Err(GeometryError::CountOutOfRange)
+        );
+    }
+
+    #[test]
+    fn closed_rectangle_returns_left_and_right_offset_rings() {
+        let outline = closed_outline(
+            &[
+                point(0.0, 0.0),
+                point(10.0, 0.0),
+                point(10.0, 10.0),
+                point(0.0, 10.0),
+            ],
+            4.0,
+        )
+        .expect("valid outline")
+        .expect("outline");
+
+        assert_eq!(
+            outline.left_ring,
+            vec![
+                point(2.0, 2.0),
+                point(8.0, 2.0),
+                point(8.0, 8.0),
+                point(2.0, 8.0),
+            ]
+        );
+        assert_eq!(
+            outline.right_ring,
+            vec![
+                point(-2.0, 0.0),
+                point(0.0, -2.0),
+                point(10.0, -2.0),
+                point(12.0, 0.0),
+                point(12.0, 10.0),
+                point(10.0, 12.0),
+                point(0.0, 12.0),
+                point(-2.0, 10.0),
+            ]
+        );
+    }
+
+    #[test]
+    fn closed_concave_outline_keeps_deterministic_left_and_right_rings() {
+        let outline = closed_outline(
+            &[
+                point(0.0, 0.0),
+                point(8.0, 0.0),
+                point(8.0, 4.0),
+                point(4.0, 4.0),
+                point(4.0, 8.0),
+                point(0.0, 8.0),
+            ],
+            2.0,
+        )
+        .expect("valid outline")
+        .expect("outline");
+
+        assert_eq!(
+            outline.left_ring,
+            vec![
+                point(1.0, 1.0),
+                point(7.0, 1.0),
+                point(7.0, 3.0),
+                point(4.0, 3.0),
+                point(3.0, 4.0),
+                point(3.0, 7.0),
+                point(1.0, 7.0),
+            ]
+        );
+        assert_eq!(
+            outline.right_ring,
+            vec![
+                point(-1.0, 0.0),
+                point(0.0, -1.0),
+                point(8.0, -1.0),
+                point(9.0, 0.0),
+                point(9.0, 4.0),
+                point(8.0, 5.0),
+                point(5.0, 5.0),
+                point(5.0, 8.0),
+                point(4.0, 9.0),
+                point(0.0, 9.0),
+                point(-1.0, 8.0),
+            ]
+        );
+    }
+
+    #[test]
+    fn repeated_closed_call_is_deterministic() {
+        let points = [
+            point(0.0, 0.0),
+            point(6.0, 2.0),
+            point(8.0, 9.0),
+            point(1.0, 6.0),
+        ];
+
+        assert_eq!(closed_outline(&points, 3.0), closed_outline(&points, 3.0));
     }
 }
