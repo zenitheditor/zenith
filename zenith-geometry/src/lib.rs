@@ -1,6 +1,7 @@
 //! Deterministic vector geometry math for Zenith.
 
 pub mod bezier;
+pub mod boolean;
 pub mod bounds;
 pub mod contour;
 pub mod error;
@@ -15,6 +16,7 @@ pub mod transform;
 mod validation;
 
 pub use bezier::{CubicBezier, CubicBezierProjection, project_onto_cubic_bezier};
+pub use boolean::{ClosedPolylineBooleanOp, ClosedPolylineBooleanResult, boolean_closed_polylines};
 pub use bounds::RectBounds;
 pub use contour::{
     ClosedPolyline, ClosedPolylineIntersectionEvent, ClosedPolylineRelation, ClosedPolylineWinding,
