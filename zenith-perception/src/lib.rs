@@ -6,6 +6,7 @@ pub mod density_map;
 pub mod diagnostic;
 pub mod edge_map;
 pub mod histogram;
+pub mod optical_balance;
 mod path_geometry;
 pub mod path_tangent_quality;
 pub mod report;
@@ -19,6 +20,7 @@ pub use density_map::{DensityCell, DensityRatioSummary, DensityReport, density_m
 pub use diagnostic::{PerceptionDiagnostic, PerceptionSeverity};
 pub use edge_map::{EdgeReport, edge_map};
 pub use histogram::{Histogram, histogram};
+pub use optical_balance::{OpticalBalanceInput, OpticalBalanceReport, optical_balance};
 pub use path_tangent_quality::{
     PathTangentQualityInput, PathTangentQualityReport, path_tangent_quality,
 };
