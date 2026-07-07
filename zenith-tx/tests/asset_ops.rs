@@ -30,6 +30,8 @@ fn add_asset_op(id: &str, kind: &str, src: &str) -> Op {
         kind: kind.to_owned(),
         src: src.to_owned(),
         sha256: None,
+        producer_kind: None,
+        producer_source: None,
         ai_prompt: None,
         ai_model: None,
         ai_provider: None,
@@ -106,6 +108,8 @@ fn add_asset_with_provenance_formats_asset_declaration() {
             kind: "image".to_owned(),
             src: "images/ai.png".to_owned(),
             sha256: Some("abc123".to_owned()),
+            producer_kind: None,
+            producer_source: None,
             ai_prompt: Some("A geometric poster".to_owned()),
             ai_model: Some("gpt-image-1".to_owned()),
             ai_provider: Some("openai".to_owned()),
@@ -131,6 +135,46 @@ fn add_asset_with_provenance_formats_asset_declaration() {
             r#"asset id="asset.ai" kind="image" src="images/ai.png" sha256="abc123" ai-prompt="A geometric poster" ai-model="gpt-image-1" ai-provider="openai" ai-seed=42 ai-generation-date="2026-07-07" ai-license="project-owned" ai-source-rights="original" ai-safety-status="reviewed" ai-reuse-policy="internal""#
         ),
         "source_after must contain the canonical asset provenance fields; got:\n{}",
+        result.source_after
+    );
+}
+
+#[test]
+fn add_asset_with_producer_provenance_formats_asset_declaration() {
+    let doc = parse(IMAGE_DOC);
+    let tx = Transaction {
+        ops: vec![Op::AddAsset {
+            id: "asset.baked".to_owned(),
+            kind: "image".to_owned(),
+            src: "images/baked.png".to_owned(),
+            sha256: Some("def456".to_owned()),
+            producer_kind: Some("zpx-bake".to_owned()),
+            producer_source: Some("painting.zpx".to_owned()),
+            ai_prompt: None,
+            ai_model: None,
+            ai_provider: None,
+            ai_seed: None,
+            ai_generation_date: None,
+            ai_license: None,
+            ai_source_rights: None,
+            ai_safety_status: None,
+            ai_reuse_policy: None,
+        }],
+        permissions: Permissions::default(),
+    };
+    let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
+
+    assert_eq!(
+        result.status,
+        TxStatus::Accepted,
+        "expected Accepted; diagnostics: {:?}",
+        result.diagnostics
+    );
+    assert!(
+        result.source_after.contains(
+            r#"asset id="asset.baked" kind="image" src="images/baked.png" sha256="def456" producer-kind="zpx-bake" producer-source="painting.zpx""#
+        ),
+        "source_after must contain the producer provenance fields; got:\n{}",
         result.source_after
     );
 }

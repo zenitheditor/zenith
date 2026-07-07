@@ -688,6 +688,8 @@ fn attribute_type_generic(name: &str, fallback: &'static str) -> &'static str {
         // ── Asset provenance ──────────────────────────────────────────────
         "src" => "string",
         "sha256" => "string",
+        "producer-kind" => "string",
+        "producer-source" => "string",
         "ai-prompt" => "string",
         "ai-model" => "string",
         "ai-provider" => "string",

@@ -60,8 +60,9 @@ pub enum SchemaSub {
     /// Show the recognized attributes for an `asset` declaration.
     ///
     /// Lists every attribute the parser recognises on an `asset` node inside
-    /// the `assets { … }` block: id, kind, src, sha256, and the full suite of
-    /// AI-provenance fields (ai-prompt, ai-model, ai-provider, …).
+    /// the `assets { … }` block: id, kind, src, sha256, producer provenance
+    /// (producer-kind, producer-source), and the full suite of AI-provenance
+    /// fields (ai-prompt, ai-model, ai-provider, …).
     Asset,
 
     /// Show the recognized attributes for the document root (`zenith` node).

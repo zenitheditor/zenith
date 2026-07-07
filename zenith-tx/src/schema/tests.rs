@@ -8,6 +8,8 @@ fn add_asset_sample_op() -> Op {
         kind: "image".into(),
         src: "img/logo.png".into(),
         sha256: Some("abc".into()),
+        producer_kind: Some("file-import".into()),
+        producer_source: Some("assets/logo.png".into()),
         ai_prompt: Some("logo prompt".into()),
         ai_model: Some("gpt-image-1".into()),
         ai_provider: Some("openai".into()),
@@ -386,6 +388,8 @@ fn add_asset_schema_lists_optional_provenance_fields() {
         optional_names,
         BTreeSet::from([
             "sha256",
+            "producer_kind",
+            "producer_source",
             "ai_prompt",
             "ai_model",
             "ai_provider",

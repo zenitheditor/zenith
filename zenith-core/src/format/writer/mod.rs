@@ -560,8 +560,9 @@ fn write_asset_decl(decl: &AssetDecl, out: &mut String, depth: usize) {
     indent(out, depth);
     out.push_str("asset");
 
-    // Canonical property order: id, kind, src, sha256, ai-* provenance fields
-    // (in the order below), then unknown_props (sorted).
+    // Canonical property order: id, kind, src, sha256, producer-kind,
+    // producer-source, ai-* provenance fields (in the order below), then
+    // unknown_props (sorted).
     out.push_str(" id=\"");
     out.push_str(&decl.id);
     out.push('"');
@@ -579,6 +580,9 @@ fn write_asset_decl(decl: &AssetDecl, out: &mut String, depth: usize) {
         out.push_str(sha256);
         out.push('"');
     }
+
+    write_opt_str_escaped(out, "producer-kind", &decl.producer_kind);
+    write_opt_str_escaped(out, "producer-source", &decl.producer_source);
 
     // AI-generation provenance fields — all optional, emitted only when Some.
     // Free-form string fields pass through escape_kdl_string so quotes and

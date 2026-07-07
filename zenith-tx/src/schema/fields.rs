@@ -400,6 +400,16 @@ pub fn op_fields(name: &str) -> Option<&'static [OpFieldSchema]> {
                     required: false,
                 },
                 OpFieldSchema {
+                    name: "producer_kind",
+                    ty: "string",
+                    required: false,
+                },
+                OpFieldSchema {
+                    name: "producer_source",
+                    ty: "string",
+                    required: false,
+                },
+                OpFieldSchema {
                     name: "ai_prompt",
                     ty: "string",
                     required: false,

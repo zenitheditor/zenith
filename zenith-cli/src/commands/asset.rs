@@ -7,7 +7,7 @@ use serde::Serialize;
 use zenith_core::{AssetKind, KdlAdapter, KdlSource as _};
 use zenith_producers::{
     AssetProducer, FileImportProducer, FileImportProvenance, ProduceRequest, ProducedAsset,
-    ZpxBakeProducer,
+    Provenance, ZpxBakeProducer,
 };
 use zenith_tx::{Op, Permissions, Transaction, TxResult, TxStatus, run_transaction};
 
@@ -96,6 +96,7 @@ fn finish_asset_run(
             produced.kind.kind_str(),
             input.src,
             &produced.sha256,
+            &produced.provenance,
         )],
         permissions: Permissions::default(),
     };
@@ -169,12 +170,14 @@ fn parse_kind(kind: &str) -> Result<AssetKind, AssetImportErr> {
     }
 }
 
-fn add_asset_op(id: &str, kind: &str, src: &str, sha256: &str) -> Op {
+fn add_asset_op(id: &str, kind: &str, src: &str, sha256: &str, provenance: &Provenance) -> Op {
     Op::AddAsset {
         id: id.to_owned(),
         kind: kind.to_owned(),
         src: src.to_owned(),
         sha256: Some(sha256.to_owned()),
+        producer_kind: Some(provenance.kind_str().to_owned()),
+        producer_source: Some(provenance.source_str().to_owned()),
         ai_prompt: None,
         ai_model: None,
         ai_provider: None,

@@ -35,6 +35,28 @@ pub enum Provenance {
     ZpxBake(ZpxBakeProvenance),
 }
 
+impl Provenance {
+    /// The producer tag recorded as `AssetDecl.producer_kind` /
+    /// `Op::AddAsset.producer_kind` (e.g. `"file-import"`, `"zpx-bake"`).
+    pub fn kind_str(&self) -> &'static str {
+        match self {
+            Provenance::FileImport(_) => "file-import",
+            Provenance::ZpxBake(_) => "zpx-bake",
+        }
+    }
+
+    /// The producer-specific source reference recorded as
+    /// `AssetDecl.producer_source` / `Op::AddAsset.producer_source`: the
+    /// imported file's path for `file-import`, or the source `.zpx`
+    /// manifest's content hash for `zpx-bake`.
+    pub fn source_str(&self) -> &str {
+        match self {
+            Provenance::FileImport(p) => &p.source,
+            Provenance::ZpxBake(p) => &p.source_sha256,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FileImportProvenance {
     pub source: String,

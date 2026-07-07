@@ -750,6 +750,8 @@ fn row_add_asset_op(row_idx: usize, column: &str, src: &str) -> (String, Op) {
         kind: "image".to_owned(),
         src: src.to_owned(),
         sha256: None,
+        producer_kind: None,
+        producer_source: None,
         ai_prompt: None,
         ai_model: None,
         ai_provider: None,

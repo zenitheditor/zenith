@@ -58,6 +58,14 @@ pub struct AssetDecl {
     pub src: String,
     /// Optional SHA-256 hex digest for content integrity.
     pub sha256: Option<String>,
+    /// Which producer froze this asset (e.g. `"file-import"`, `"zpx-bake"`),
+    /// when it was produced through the `AssetProducer` seam rather than
+    /// hand-authored.
+    pub producer_kind: Option<String>,
+    /// The producer-specific source reference: the imported file's path for
+    /// `file-import`, or the source `.zpx` manifest's content hash for
+    /// `zpx-bake`.
+    pub producer_source: Option<String>,
     /// The prompt text used to generate this asset, if AI-generated.
     pub ai_prompt: Option<String>,
     /// The model identifier used to generate this asset (e.g. `"dall-e-3"`).

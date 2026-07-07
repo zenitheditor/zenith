@@ -115,6 +115,64 @@ fn test_assets_canonical_property_order() {
     assert!(pos_src < pos_sha256, "src must come before sha256");
 }
 
+// ── Asset producer-provenance tests ────────────────────────────────────
+
+/// `producer-kind`/`producer-source` parse, round-trip, and are emitted
+/// between `sha256` and the `ai-*` block.
+#[test]
+fn test_asset_producer_provenance_round_trip_and_order() {
+    let src = r##"zenith version=1 {
+  assets {
+    asset id="asset.baked" kind="image" src="assets/baked.png" sha256="abc123" producer-kind="zpx-bake" producer-source="painting.zpx" ai-prompt="fox"
+  }
+  tokens format="zenith-token-v1" {
+  }
+  styles {
+  }
+  document id="doc.baked" {
+    page id="page.one" w=(px)640 h=(px)360 {
+    }
+  }
+}
+"##;
+    let adapter = KdlAdapter;
+    let doc1 = adapter.parse(src.as_bytes()).expect("parse 1");
+    let decl1 = &doc1.assets.assets[0];
+    assert_eq!(decl1.producer_kind.as_deref(), Some("zpx-bake"));
+    assert_eq!(decl1.producer_source.as_deref(), Some("painting.zpx"));
+
+    let formatted = format_document(&doc1).expect("format");
+    let doc2 = adapter.parse(&formatted).expect("parse 2");
+    let decl2 = &doc2.assets.assets[0];
+    assert_eq!(decl1.producer_kind, decl2.producer_kind);
+    assert_eq!(decl1.producer_source, decl2.producer_source);
+
+    let text = String::from_utf8(formatted).unwrap();
+    let asset_line = text
+        .lines()
+        .find(|l| l.trim_start().starts_with("asset") && l.contains("asset.baked"))
+        .expect("must find the asset.baked line");
+    let pos_sha256 = asset_line.find("sha256=").expect("sha256= must be present");
+    let pos_producer_kind = asset_line
+        .find("producer-kind=")
+        .expect("producer-kind= must be present");
+    let pos_producer_source = asset_line
+        .find("producer-source=")
+        .expect("producer-source= must be present");
+    let pos_ai_prompt = asset_line
+        .find("ai-prompt=")
+        .expect("ai-prompt= must be present");
+    assert!(pos_sha256 < pos_producer_kind, "sha256 before producer-kind");
+    assert!(
+        pos_producer_kind < pos_producer_source,
+        "producer-kind before producer-source"
+    );
+    assert!(
+        pos_producer_source < pos_ai_prompt,
+        "producer-source before ai-prompt"
+    );
+}
+
 // ── Asset AI-provenance tests ─────────────────────────────────────────
 
 /// Parse an asset with all 9 AI-provenance fields and assert each lands on `AssetDecl`.

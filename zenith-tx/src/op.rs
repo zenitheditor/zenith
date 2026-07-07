@@ -611,6 +611,13 @@ pub enum Op {
         /// Optional SHA-256 hex digest for content integrity.
         #[serde(default)]
         sha256: Option<String>,
+        /// Which producer froze this asset (e.g. `"file-import"`, `"zpx-bake"`).
+        #[serde(default)]
+        producer_kind: Option<String>,
+        /// The producer-specific source reference (imported file path, or
+        /// source `.zpx` manifest hash).
+        #[serde(default)]
+        producer_source: Option<String>,
         /// Prompt text used to generate the asset.
         #[serde(default)]
         ai_prompt: Option<String>,

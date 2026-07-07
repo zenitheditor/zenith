@@ -974,6 +974,8 @@ pub(crate) const ASSET_KNOWN_PROPS: &[&str] = &[
     "kind",
     "src",
     "sha256",
+    "producer-kind",
+    "producer-source",
     "ai-prompt",
     "ai-model",
     "ai-provider",
@@ -1011,6 +1013,8 @@ fn transform_asset_decl(node: &KdlNode) -> Result<AssetDecl, ParseError> {
     let kind = AssetKind::from_kind_str(kind_str);
     let src = required_string_prop(node, "src")?.to_owned();
     let sha256 = optional_string_prop(node, "sha256").map(str::to_owned);
+    let producer_kind = optional_string_prop(node, "producer-kind").map(str::to_owned);
+    let producer_source = optional_string_prop(node, "producer-source").map(str::to_owned);
     let ai_prompt = optional_string_prop(node, "ai-prompt").map(str::to_owned);
     let ai_model = optional_string_prop(node, "ai-model").map(str::to_owned);
     let ai_provider = optional_string_prop(node, "ai-provider").map(str::to_owned);
@@ -1028,6 +1032,8 @@ fn transform_asset_decl(node: &KdlNode) -> Result<AssetDecl, ParseError> {
         kind,
         src,
         sha256,
+        producer_kind,
+        producer_source,
         ai_prompt,
         ai_model,
         ai_provider,
