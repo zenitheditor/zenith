@@ -13,6 +13,7 @@ readme.workspace = true
 description = "Read-only deterministic perception metrics for Zenith raster surfaces and vector inputs."
 
 [dependencies]
+zenith-core = { workspace = true }
 zenith-raster = { workspace = true }
 
 [lints]
