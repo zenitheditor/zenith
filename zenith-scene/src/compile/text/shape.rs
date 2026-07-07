@@ -240,6 +240,7 @@ pub(in crate::compile) fn shape_words(
                     style: shaped.style,
                     font_size: word_font_size,
                     direction,
+                    features: &[],
                 };
                 match engine.shape_with_fallback(&req, fonts) {
                     Err(e) => {
@@ -309,6 +310,7 @@ pub(in crate::compile) fn shape_words(
             // A single space's advance is direction-independent; keep LTR so the
             // inter-word gap measurement is identical for LTR and RTL.
             direction: TextDirection::Ltr,
+            features: &[],
         };
         match engine.shape(&req, fonts) {
             Ok(run) => run.advance_width as f64,

@@ -76,6 +76,7 @@ fn reshape_fragment(
         style: donor.src.style,
         font_size: donor.src.font_size,
         direction: ctx.direction,
+        features: &[],
     };
     let result = ctx.engine.shape_with_fallback(&req, ctx.fonts).ok()?;
     let advance: f64 = result.runs.iter().map(|r| r.advance_width as f64).sum();

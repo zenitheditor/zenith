@@ -109,6 +109,7 @@ pub(super) fn emit_gridlines_and_labels(
             style: FontStyle::Normal,
             font_size: 9.0,
             direction: TextDirection::Ltr,
+            features: &[],
         };
 
         match cx.engine.shape_with_fallback(&req, cx.fonts) {

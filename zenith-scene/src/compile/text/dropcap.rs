@@ -96,6 +96,7 @@ pub(in crate::compile) fn shape_drop_cap(
         // Drop caps are a single glyph; RTL drop caps are a documented v0
         // follow-up, so the cap always shapes LTR.
         direction: TextDirection::Ltr,
+        features: &[],
     };
     let run = engine
         .shape_with_fallback(&req, fonts)

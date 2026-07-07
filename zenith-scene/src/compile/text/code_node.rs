@@ -334,6 +334,7 @@ fn compile_code_impl(
             style: FontStyle::Normal,
             font_size,
             direction: TextDirection::Ltr,
+            features: &[],
         };
         match engine.shape(&digit_req, fonts) {
             Err(_) => {
@@ -397,6 +398,7 @@ fn compile_code_impl(
                 style: FontStyle::Normal,
                 font_size,
                 direction: TextDirection::Ltr,
+                features: &[],
             };
             // If shaping fails for a particular label, skip gracefully.
             if let Ok(num_run) = engine.shape(&num_req, fonts) {
@@ -471,6 +473,7 @@ fn compile_code_impl(
                     font_size,
                     // Code is shaped LTR (source code is left-to-right).
                     direction: TextDirection::Ltr,
+                    features: &[],
                 };
                 match engine.shape(&req, fonts) {
                     Err(e) => {
@@ -526,6 +529,7 @@ fn compile_code_impl(
                 font_size,
                 // Code is shaped LTR (source code is left-to-right).
                 direction: TextDirection::Ltr,
+                features: &[],
             };
 
             match engine.shape(&req, fonts) {

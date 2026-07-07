@@ -587,6 +587,7 @@ fn emit_plain_wrap(
                     // Bullet marker is always LTR (the glyph faces left
                     // regardless of body direction in v0).
                     direction: TextDirection::Ltr,
+                    features: &[],
                 };
                 match engine.shape_with_fallback(&req, fonts) {
                     Ok(result) => result.runs.into_iter().next().map(|r| (r, marker_color)),

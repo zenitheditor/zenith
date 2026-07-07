@@ -567,6 +567,7 @@ pub(super) fn emit_title(
         style: FontStyle::Normal,
         font_size: 13.0,
         direction: TextDirection::Ltr,
+        features: &[],
     };
 
     match cx.engine.shape_with_fallback(&req, cx.fonts) {

@@ -150,6 +150,7 @@ fn entry_advances(entries: &[(String, Color)], cx: NodeCtx<'_>) -> Vec<f64> {
                 style: FontStyle::Normal,
                 font_size: FONT,
                 direction: TextDirection::Ltr,
+                features: &[],
             };
             match cx.engine.shape_with_fallback(&req, cx.fonts) {
                 Ok(result) => result.runs.iter().map(|r| r.advance_width as f64).sum(),
@@ -294,6 +295,7 @@ fn draw_entry(
         style: FontStyle::Normal,
         font_size: FONT,
         direction: TextDirection::Ltr,
+        features: &[],
     };
 
     match cx.engine.shape_with_fallback(&req, cx.fonts) {

@@ -8,7 +8,8 @@ use std::collections::BTreeSet;
 use zenith_core::FontProvider;
 
 use crate::engine::{
-    FallbackResult, PositionedGlyph, ShapeRequest, TextDirection, TextLayoutEngine, ZenithGlyphRun,
+    FallbackResult, FontFeature, PositionedGlyph, ShapeRequest, TextDirection, TextLayoutEngine,
+    ZenithGlyphRun,
 };
 use crate::error::LayoutError;
 
@@ -69,6 +70,7 @@ impl RustybuzzEngine {
         font_id: String,
         font_size: f32,
         direction: TextDirection,
+        features: &[FontFeature],
     ) -> Result<ZenithGlyphRun, LayoutError> {
         // ── Compute pixel scale ───────────────────────────────────────────────
         // `units_per_em` comes from the `ttf_parser::Face` trait exposed by
@@ -102,8 +104,8 @@ impl RustybuzzEngine {
             TextDirection::Rtl => rustybuzz::Direction::RightToLeft,
         });
 
-        // Shape with no extra features; deterministic across machines.
-        let glyph_buffer = rustybuzz::shape(face, &[], buffer);
+        let features = rustybuzz_features(features);
+        let glyph_buffer = rustybuzz::shape(face, &features, buffer);
 
         let infos = glyph_buffer.glyph_infos();
         let positions = glyph_buffer.glyph_positions();
@@ -180,6 +182,22 @@ impl RustybuzzEngine {
     }
 }
 
+fn rustybuzz_features(features: &[FontFeature]) -> Vec<rustybuzz::Feature> {
+    let mut shaped_features = Vec::with_capacity(features.len());
+    for feature in features {
+        let tag = feature.tag();
+        let Ok(tag) = std::str::from_utf8(&tag) else {
+            continue;
+        };
+        let spec = format!("{}={}", tag, feature.value());
+        if let Ok(feature) = spec.parse::<rustybuzz::Feature>() {
+            shaped_features.push(feature);
+        }
+    }
+
+    shaped_features
+}
+
 impl TextLayoutEngine for RustybuzzEngine {
     fn shape(
         &self,
@@ -203,7 +221,14 @@ impl TextLayoutEngine for RustybuzzEngine {
             })?;
 
         // ── 3. Shape via the shared single-face helper ────────────────────────
-        Self::shape_run_with_face(&face, req.text, font_data.id, req.font_size, req.direction)
+        Self::shape_run_with_face(
+            &face,
+            req.text,
+            font_data.id,
+            req.font_size,
+            req.direction,
+            req.features,
+        )
     }
 
     fn shape_with_fallback(
@@ -308,6 +333,7 @@ impl TextLayoutEngine for RustybuzzEngine {
                     font_id.clone(),
                     req.font_size,
                     req.direction,
+                    req.features,
                 )?],
                 missing_chars: missing.into_iter().collect(),
             });
@@ -341,6 +367,7 @@ impl TextLayoutEngine for RustybuzzEngine {
                 font_id.clone(),
                 req.font_size,
                 req.direction,
+                req.features,
             )?);
         }
 
@@ -370,6 +397,7 @@ mod tests {
             style: FontStyle::Normal,
             font_size,
             direction: TextDirection::Ltr,
+            features: &[],
         };
         let provider = default_provider();
         RustybuzzEngine::new().shape(&req, &provider)
@@ -431,6 +459,7 @@ mod tests {
             style: FontStyle::Normal,
             font_size: 16.0,
             direction: TextDirection::Ltr,
+            features: &[],
         };
         let provider = default_provider();
         let result = RustybuzzEngine::new().shape(&req, &provider);
@@ -454,6 +483,7 @@ mod tests {
             style: FontStyle::Normal,
             font_size: 24.0,
             direction: TextDirection::Ltr,
+            features: &[],
         };
         let provider = default_provider();
         let engine = RustybuzzEngine::new();
@@ -490,6 +520,7 @@ mod tests {
             style: FontStyle::Normal,
             font_size: 16.0,
             direction: TextDirection::Ltr,
+            features: &[],
         };
         let provider = default_provider();
         let engine = RustybuzzEngine::new();
@@ -517,6 +548,7 @@ mod tests {
             style: FontStyle::Normal,
             font_size: 16.0,
             direction: TextDirection::Ltr,
+            features: &[],
         };
         let provider = default_provider();
         let result = RustybuzzEngine::new().shape_with_fallback(&req, &provider);
@@ -533,6 +565,7 @@ mod tests {
             style: FontStyle::Normal,
             font_size: 18.0,
             direction: TextDirection::Ltr,
+            features: &[],
         };
         let provider = default_provider();
         let engine = RustybuzzEngine::new();
@@ -563,6 +596,7 @@ mod tests {
                     style: FontStyle::Normal,
                     font_size: 24.0,
                     direction: TextDirection::Ltr,
+                    features: &[],
                 },
                 &provider,
             )
@@ -576,6 +610,7 @@ mod tests {
                     style: FontStyle::Normal,
                     font_size: 24.0,
                     direction: TextDirection::Rtl,
+                    features: &[],
                 },
                 &provider,
             )
@@ -607,6 +642,7 @@ mod tests {
             style: FontStyle::Normal,
             font_size: 20.0,
             direction: TextDirection::Rtl,
+            features: &[],
         };
         let a = engine.shape(&req, &provider).expect("a");
         let b = engine.shape(&req, &provider).expect("b");

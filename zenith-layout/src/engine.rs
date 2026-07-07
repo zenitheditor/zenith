@@ -22,6 +22,41 @@ pub enum TextDirection {
     Rtl,
 }
 
+/// One OpenType feature override for a shaping request.
+///
+/// The tag must be exactly four ASCII bytes, matching OpenType feature tags
+/// such as `liga`, `kern`, `ss01`, or `cv01`. The value follows HarfBuzz
+/// convention: `0` disables a feature, non-zero values enable or select it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FontFeature {
+    tag: [u8; 4],
+    value: u32,
+}
+
+impl FontFeature {
+    pub fn new(tag: &str, value: u32) -> Option<Self> {
+        let bytes = tag.as_bytes();
+        if bytes.len() != 4 || !bytes.iter().all(u8::is_ascii) {
+            return None;
+        }
+
+        Some(Self {
+            tag: [bytes[0], bytes[1], bytes[2], bytes[3]],
+            value,
+        })
+    }
+
+    #[must_use]
+    pub const fn tag(self) -> [u8; 4] {
+        self.tag
+    }
+
+    #[must_use]
+    pub const fn value(self) -> u32 {
+        self.value
+    }
+}
+
 /// A request to shape a run of text into positioned glyphs.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ShapeRequest<'a> {
@@ -37,6 +72,8 @@ pub struct ShapeRequest<'a> {
     pub font_size: f32,
     /// Base writing direction. Defaults to [`TextDirection::Ltr`].
     pub direction: TextDirection,
+    /// OpenType feature overrides. Empty means default shaping behavior.
+    pub features: &'a [FontFeature],
 }
 
 /// One positioned glyph, baseline-relative, measured from the run origin in pixels.
@@ -137,4 +174,21 @@ pub trait TextLayoutEngine {
         req: &ShapeRequest<'_>,
         provider: &dyn FontProvider,
     ) -> Result<FallbackResult, LayoutError>;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn font_feature_requires_four_ascii_tag_bytes() {
+        let feature = FontFeature::new("ss01", 1).expect("valid feature");
+
+        assert_eq!(feature.tag(), *b"ss01");
+        assert_eq!(feature.value(), 1);
+        assert_eq!(FontFeature::new("liga", 0).map(FontFeature::value), Some(0));
+        assert_eq!(FontFeature::new("abc", 1), None);
+        assert_eq!(FontFeature::new("abcde", 1), None);
+        assert_eq!(FontFeature::new("\u{e9}\u{e9}", 1), None);
+    }
 }

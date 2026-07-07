@@ -653,6 +653,7 @@ pub(in crate::compile) fn compile_text_sized(
             style,
             font_size: span_font_size,
             direction: node_direction,
+            features: &[],
         };
 
         // Shape with per-glyph font fallback: a span whose characters are all
