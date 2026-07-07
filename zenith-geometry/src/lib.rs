@@ -4,6 +4,7 @@ pub mod bezier;
 pub mod bounds;
 pub mod error;
 pub mod guide;
+pub mod offset;
 pub mod path;
 pub mod point;
 pub mod polyline;
@@ -14,6 +15,7 @@ pub use bezier::{CubicBezier, CubicBezierProjection, project_onto_cubic_bezier};
 pub use bounds::RectBounds;
 pub use error::GeometryError;
 pub use guide::{ConstructionGuide, modular_guides, polar_guides, ratio_guides};
+pub use offset::{SegmentOffset, offset_open_polyline_segments, offset_segment};
 pub use path::{
     PathAnchor, PathGeometry, PathJoinVectors, PathProjection, PathSegment, PathTopology,
 };
