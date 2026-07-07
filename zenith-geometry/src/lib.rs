@@ -10,5 +10,5 @@ mod validation;
 pub use bezier::CubicBezier;
 pub use bounds::RectBounds;
 pub use error::GeometryError;
-pub use point::Point2;
+pub use point::{Point2, SegmentProjection};
 pub use polyline::simplify_polyline;

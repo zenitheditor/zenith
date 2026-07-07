@@ -6,6 +6,13 @@ pub struct Point2 {
     pub y: f64,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SegmentProjection {
+    pub point: Point2,
+    pub t: f64,
+    pub distance_squared: f64,
+}
+
 impl Point2 {
     #[must_use]
     pub const fn new_unchecked(x: f64, y: f64) -> Self {
@@ -60,18 +67,34 @@ impl Point2 {
 
     #[must_use]
     pub fn distance_squared_to_segment(self, segment_start: Self, segment_end: Self) -> f64 {
+        self.project_onto_segment(segment_start, segment_end)
+            .distance_squared
+    }
+
+    #[must_use]
+    pub fn project_onto_segment(self, segment_start: Self, segment_end: Self) -> SegmentProjection {
         let dx = segment_end.x - segment_start.x;
         let dy = segment_end.y - segment_start.y;
         let length_squared = dx.mul_add(dx, dy * dy);
 
         if length_squared == 0.0 {
-            return self.distance_squared(segment_start);
+            return SegmentProjection {
+                point: segment_start,
+                t: 0.0,
+                distance_squared: self.distance_squared(segment_start),
+            };
         }
 
         let projection =
             ((self.x - segment_start.x) * dx + (self.y - segment_start.y) * dy) / length_squared;
         let t = projection.clamp(0.0, 1.0);
-        self.distance_squared(segment_start.lerp(segment_end, t))
+        let point = segment_start.lerp(segment_end, t);
+
+        SegmentProjection {
+            point,
+            t,
+            distance_squared: self.distance_squared(point),
+        }
     }
 
     #[must_use]
@@ -112,14 +135,96 @@ mod tests {
         let point = Point2::new_unchecked(2.0, 0.0);
         let segment_start = Point2::new_unchecked(0.0, 0.0);
         let segment_end = Point2::new_unchecked(1.0, 0.0);
+        let projection = point.project_onto_segment(segment_start, segment_end);
 
+        assert_eq!(projection.point, Point2::new_unchecked(1.0, 0.0));
+        assert_eq!(projection.t, 1.0);
         assert_eq!(
             point.distance_squared_to_segment(segment_start, segment_end),
-            1.0
+            projection.distance_squared
         );
         assert_eq!(
             point.distance_squared_to_line(segment_start, segment_end),
             0.0
+        );
+    }
+
+    #[test]
+    fn projects_to_interior_of_segment() {
+        let point = Point2::new_unchecked(2.0, 3.0);
+        let segment_start = Point2::new_unchecked(0.0, 0.0);
+        let segment_end = Point2::new_unchecked(4.0, 0.0);
+
+        assert_eq!(
+            point.project_onto_segment(segment_start, segment_end),
+            SegmentProjection {
+                point: Point2::new_unchecked(2.0, 0.0),
+                t: 0.5,
+                distance_squared: 9.0,
+            }
+        );
+    }
+
+    #[test]
+    fn projects_to_interior_of_diagonal_segment() {
+        let point = Point2::new_unchecked(2.0, 0.0);
+        let segment_start = Point2::new_unchecked(0.0, 0.0);
+        let segment_end = Point2::new_unchecked(4.0, 4.0);
+
+        assert_eq!(
+            point.project_onto_segment(segment_start, segment_end),
+            SegmentProjection {
+                point: Point2::new_unchecked(1.0, 1.0),
+                t: 0.25,
+                distance_squared: 2.0,
+            }
+        );
+    }
+
+    #[test]
+    fn clamps_projection_before_segment_start() {
+        let point = Point2::new_unchecked(-2.0, 3.0);
+        let segment_start = Point2::new_unchecked(0.0, 0.0);
+        let segment_end = Point2::new_unchecked(4.0, 0.0);
+
+        assert_eq!(
+            point.project_onto_segment(segment_start, segment_end),
+            SegmentProjection {
+                point: segment_start,
+                t: 0.0,
+                distance_squared: 13.0,
+            }
+        );
+    }
+
+    #[test]
+    fn clamps_projection_after_segment_end() {
+        let point = Point2::new_unchecked(6.0, 3.0);
+        let segment_start = Point2::new_unchecked(0.0, 0.0);
+        let segment_end = Point2::new_unchecked(4.0, 0.0);
+
+        assert_eq!(
+            point.project_onto_segment(segment_start, segment_end),
+            SegmentProjection {
+                point: segment_end,
+                t: 1.0,
+                distance_squared: 13.0,
+            }
+        );
+    }
+
+    #[test]
+    fn projects_degenerate_segment_to_start_point() {
+        let point = Point2::new_unchecked(6.0, 3.0);
+        let segment_start = Point2::new_unchecked(4.0, 0.0);
+
+        assert_eq!(
+            point.project_onto_segment(segment_start, segment_start),
+            SegmentProjection {
+                point: segment_start,
+                t: 0.0,
+                distance_squared: 13.0,
+            }
         );
     }
 }
