@@ -28,7 +28,10 @@ pub use boolean::{
 };
 pub use boolean_piece::{ContourBooleanPiece, materialize_contour_boolean_pieces};
 pub use bounds::RectBounds;
-pub use collision::{PathGeometryIntersections, collect_path_geometry_intersections};
+pub use collision::{
+    PathGeometryIntersections, PathGeometryNearestPoints, collect_path_geometry_intersections,
+    nearest_path_geometry_points,
+};
 pub use contour::{
     ClosedPolyline, ClosedPolylineIntersectionEvent, ClosedPolylineRelation, ClosedPolylineWinding,
     PointLocation, classify_closed_polyline_relation, collect_closed_polyline_intersection_events,
