@@ -59,6 +59,12 @@ pub struct ClassifiedContourBooleanSpans {
     pub second: Vec<ClassifiedContourSpan>,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct SelectedContourBooleanSpans {
+    pub first: Vec<ClassifiedContourSpan>,
+    pub second: Vec<ClassifiedContourSpan>,
+}
+
 pub fn boolean_closed_polylines(
     first: &ClosedPolyline,
     second: &ClosedPolyline,
@@ -75,6 +81,19 @@ pub fn boolean_closed_polylines(
             Ok(Some(second_contains_first_result(first, second, operation)))
         }
     }
+}
+
+pub fn select_contour_boolean_spans(
+    first: &ClosedPolyline,
+    second: &ClosedPolyline,
+    operation: ClosedPolylineBooleanOp,
+    tolerance: f64,
+) -> Result<SelectedContourBooleanSpans, GeometryError> {
+    let classified = classify_contour_boolean_spans(first, second, tolerance)?;
+    Ok(SelectedContourBooleanSpans {
+        first: select_first_spans(&classified.first, operation),
+        second: select_second_spans(&classified.second, operation),
+    })
 }
 
 pub fn classify_contour_boolean_spans(
@@ -98,6 +117,48 @@ pub fn collect_contour_boolean_spans(
         first: spans_for_contour(first, &splits.first),
         second: spans_for_contour(second, &splits.second),
     })
+}
+
+fn select_first_spans(
+    spans: &[ClassifiedContourSpan],
+    operation: ClosedPolylineBooleanOp,
+) -> Vec<ClassifiedContourSpan> {
+    spans
+        .iter()
+        .copied()
+        .filter(|span| keep_first_span(span.location, operation))
+        .collect()
+}
+
+fn select_second_spans(
+    spans: &[ClassifiedContourSpan],
+    operation: ClosedPolylineBooleanOp,
+) -> Vec<ClassifiedContourSpan> {
+    spans
+        .iter()
+        .copied()
+        .filter(|span| keep_second_span(span.location, operation))
+        .collect()
+}
+
+fn keep_first_span(location: PointLocation, operation: ClosedPolylineBooleanOp) -> bool {
+    match operation {
+        ClosedPolylineBooleanOp::Union | ClosedPolylineBooleanOp::Subtract => {
+            location != PointLocation::Inside
+        }
+        ClosedPolylineBooleanOp::Intersect => location != PointLocation::Outside,
+        ClosedPolylineBooleanOp::Exclude => true,
+    }
+}
+
+fn keep_second_span(location: PointLocation, operation: ClosedPolylineBooleanOp) -> bool {
+    match operation {
+        ClosedPolylineBooleanOp::Union => location != PointLocation::Inside,
+        ClosedPolylineBooleanOp::Intersect | ClosedPolylineBooleanOp::Subtract => {
+            location != PointLocation::Outside
+        }
+        ClosedPolylineBooleanOp::Exclude => true,
+    }
 }
 
 fn classify_spans_against_contour(
@@ -736,6 +797,82 @@ mod tests {
                 .iter()
                 .any(|span| span.location == PointLocation::Boundary)
         );
+    }
+
+    #[test]
+    fn selected_spans_apply_union_and_intersect_rules() {
+        let first = square(0.0, 0.0, 10.0);
+        let second = square(5.0, 5.0, 10.0);
+
+        let union =
+            select_contour_boolean_spans(&first, &second, ClosedPolylineBooleanOp::Union, 0.001)
+                .expect("selection");
+        assert_eq!(union.first.len(), 4);
+        assert_eq!(union.second.len(), 4);
+        assert!(
+            union
+                .first
+                .iter()
+                .all(|span| span.location != PointLocation::Inside)
+        );
+        assert!(
+            union
+                .second
+                .iter()
+                .all(|span| span.location != PointLocation::Inside)
+        );
+
+        let intersection = select_contour_boolean_spans(
+            &first,
+            &second,
+            ClosedPolylineBooleanOp::Intersect,
+            0.001,
+        )
+        .expect("selection");
+        assert_eq!(intersection.first.len(), 2);
+        assert_eq!(intersection.second.len(), 2);
+        assert!(
+            intersection
+                .first
+                .iter()
+                .all(|span| span.location != PointLocation::Outside)
+        );
+        assert!(
+            intersection
+                .second
+                .iter()
+                .all(|span| span.location != PointLocation::Outside)
+        );
+    }
+
+    #[test]
+    fn selected_spans_apply_subtract_and_exclude_rules() {
+        let first = square(0.0, 0.0, 10.0);
+        let second = square(5.0, 5.0, 10.0);
+
+        let subtract =
+            select_contour_boolean_spans(&first, &second, ClosedPolylineBooleanOp::Subtract, 0.001)
+                .expect("selection");
+        assert_eq!(subtract.first.len(), 4);
+        assert_eq!(subtract.second.len(), 2);
+        assert!(
+            subtract
+                .first
+                .iter()
+                .all(|span| span.location != PointLocation::Inside)
+        );
+        assert!(
+            subtract
+                .second
+                .iter()
+                .all(|span| span.location != PointLocation::Outside)
+        );
+
+        let exclude =
+            select_contour_boolean_spans(&first, &second, ClosedPolylineBooleanOp::Exclude, 0.001)
+                .expect("selection");
+        assert_eq!(exclude.first.len(), 6);
+        assert_eq!(exclude.second.len(), 6);
     }
 
     #[test]
