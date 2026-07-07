@@ -2,6 +2,7 @@
 
 use zenith_core::BlendMode;
 
+use crate::adjustment::Adjustment;
 use crate::blend_pixel;
 use crate::mask::Mask;
 use crate::surface::{LinearRgba, RasterError, Surface};
@@ -42,6 +43,18 @@ impl<'a> Layer<'a> {
         }
     }
 
+    /// Create a visible normal-blend adjustment layer.
+    pub const fn adjustment(adjustment: Adjustment<'a>) -> Self {
+        Self {
+            visible: true,
+            clipping: false,
+            opacity: 1.0,
+            blend_mode: BlendMode::Normal,
+            mask: None,
+            source: LayerSource::Adjustment(adjustment),
+        }
+    }
+
     /// Return this layer with a new boundary opacity.
     pub const fn with_opacity(mut self, opacity: f32) -> Self {
         self.opacity = opacity;
@@ -78,6 +91,7 @@ impl<'a> Layer<'a> {
 pub enum LayerSource<'a> {
     Surface(&'a Surface),
     Group(&'a [Layer<'a>]),
+    Adjustment(Adjustment<'a>),
 }
 
 /// Compose layers over a transparent target surface.
@@ -139,6 +153,7 @@ fn boundary_surface(target: &Surface, source: LayerSource<'_>) -> Result<Surface
             Ok(surface.clone())
         }
         LayerSource::Group(layers) => compose(target.width(), target.height(), layers),
+        LayerSource::Adjustment(adjustment) => adjustment.apply(target),
     }
 }
 
@@ -220,6 +235,7 @@ fn scale_pixel(pixel: LinearRgba, opacity: f32) -> Result<LinearRgba, RasterErro
 #[cfg(test)]
 mod tests {
     use super::*;
+    use zenith_core::{Color, GradientStop};
 
     fn pixel(r: f32, g: f32, b: f32, a: f32) -> LinearRgba {
         LinearRgba::straight(r, g, b, a).unwrap()
@@ -227,6 +243,17 @@ mod tests {
 
     fn one_pixel_surface(pixel: LinearRgba) -> Surface {
         Surface::filled(1, 1, pixel).unwrap()
+    }
+
+    fn stop(offset: f64, color: Color) -> GradientStop {
+        GradientStop { offset, color }
+    }
+
+    fn black_to_white_stops() -> [GradientStop; 2] {
+        [
+            stop(0.0, Color::srgb(0, 0, 0, 255)),
+            stop(1.0, Color::srgb(255, 255, 255, 255)),
+        ]
     }
 
     fn assert_channels_close(actual: LinearRgba, expected: [f32; 4]) {
@@ -417,5 +444,156 @@ mod tests {
         let composed = compose_onto(&base, &layers).unwrap();
 
         assert_channels_close(composed.get(0, 0).unwrap(), [0.125, 0.25, 0.625, 1.0]);
+    }
+
+    #[test]
+    fn gradient_map_midpoint_remaps_snapshot_luminance() {
+        let base = one_pixel_surface(pixel(0.5, 0.5, 0.5, 1.0));
+        let stops = [
+            stop(0.0, Color::srgb(0, 0, 0, 255)),
+            stop(1.0, Color::srgb(255, 0, 0, 255)),
+        ];
+        let layers = [Layer::adjustment(Adjustment::gradient_map(&stops))];
+
+        let composed = compose_onto(&base, &layers).unwrap();
+
+        assert_channels_close(composed.get(0, 0).unwrap(), [0.5, 0.0, 0.0, 1.0]);
+    }
+
+    #[test]
+    fn gradient_map_clamps_samples_outside_stop_range() {
+        let source = Surface::from_pixels(
+            2,
+            1,
+            vec![pixel(0.0, 0.0, 0.0, 1.0), pixel(1.0, 1.0, 1.0, 1.0)],
+        )
+        .unwrap();
+        let stops = [
+            stop(0.25, Color::srgb(255, 0, 0, 255)),
+            stop(0.75, Color::srgb(0, 0, 255, 255)),
+        ];
+        let layers = [Layer::adjustment(Adjustment::gradient_map(&stops))];
+
+        let composed = compose_onto(&source, &layers).unwrap();
+
+        assert_channels_close(composed.get(0, 0).unwrap(), [1.0, 0.0, 0.0, 1.0]);
+        assert_channels_close(composed.get(1, 0).unwrap(), [0.0, 0.0, 1.0, 1.0]);
+    }
+
+    #[test]
+    fn gradient_map_equal_offsets_use_later_stop_at_offset() {
+        let base = one_pixel_surface(pixel(0.5, 0.5, 0.5, 1.0));
+        let stops = [
+            stop(0.0, Color::srgb(0, 0, 0, 255)),
+            stop(0.5, Color::srgb(255, 0, 0, 255)),
+            stop(0.5, Color::srgb(0, 255, 0, 255)),
+            stop(1.0, Color::srgb(0, 0, 255, 255)),
+        ];
+        let layers = [Layer::adjustment(Adjustment::gradient_map(&stops))];
+
+        let composed = compose_onto(&base, &layers).unwrap();
+
+        assert_channels_close(composed.get(0, 0).unwrap(), [0.0, 1.0, 0.0, 1.0]);
+    }
+
+    #[test]
+    fn gradient_map_duplicate_first_offset_uses_later_stop_at_offset() {
+        let base = one_pixel_surface(pixel(0.0, 0.0, 0.0, 1.0));
+        let stops = [
+            stop(0.0, Color::srgb(255, 0, 0, 255)),
+            stop(0.0, Color::srgb(0, 255, 0, 255)),
+            stop(1.0, Color::srgb(0, 0, 255, 255)),
+        ];
+        let layers = [Layer::adjustment(Adjustment::gradient_map(&stops))];
+
+        let composed = compose_onto(&base, &layers).unwrap();
+
+        assert_channels_close(composed.get(0, 0).unwrap(), [0.0, 1.0, 0.0, 1.0]);
+    }
+
+    #[test]
+    fn gradient_map_preserves_input_alpha() {
+        let base = one_pixel_surface(pixel(0.5, 0.5, 0.5, 0.25));
+        let stops = [
+            stop(0.0, Color::srgb(0, 0, 0, 255)),
+            stop(1.0, Color::srgb(255, 0, 0, 255)),
+        ];
+        let layers = [Layer::adjustment(Adjustment::gradient_map(&stops))];
+
+        let composed = compose_onto(&base, &layers).unwrap();
+
+        assert_channels_close(
+            composed.get(0, 0).unwrap(),
+            [0.21875, 0.09375, 0.09375, 0.4375],
+        );
+    }
+
+    #[test]
+    fn gradient_map_opacity_applies_after_remap() {
+        let base = one_pixel_surface(pixel(0.5, 0.5, 0.5, 1.0));
+        let stops = [
+            stop(0.0, Color::srgb(0, 0, 0, 255)),
+            stop(1.0, Color::srgb(255, 0, 0, 255)),
+        ];
+        let layers = [Layer::adjustment(Adjustment::gradient_map(&stops)).with_opacity(0.5)];
+
+        let composed = compose_onto(&base, &layers).unwrap();
+
+        assert_channels_close(composed.get(0, 0).unwrap(), [0.5, 0.25, 0.25, 1.0]);
+    }
+
+    #[test]
+    fn gradient_map_clipping_uses_previous_boundary_alpha() {
+        let blue = one_pixel_surface(pixel(0.0, 0.0, 1.0, 0.4));
+        let stops = [
+            stop(0.0, Color::srgb(255, 0, 0, 255)),
+            stop(1.0, Color::srgb(255, 0, 0, 255)),
+        ];
+        let layers = [
+            Layer::surface(&blue),
+            Layer::adjustment(Adjustment::gradient_map(&stops)).clipped(),
+        ];
+
+        let composed = compose(1, 1, &layers).unwrap();
+
+        assert_channels_close(composed.get(0, 0).unwrap(), [0.16, 0.0, 0.336, 0.496]);
+    }
+
+    #[test]
+    fn gradient_map_blend_mode_routes_through_pixel_blending() {
+        let base = one_pixel_surface(pixel(0.5, 0.5, 0.5, 1.0));
+        let stops = black_to_white_stops();
+        let layers = [Layer::adjustment(Adjustment::gradient_map(&stops))
+            .with_blend_mode(BlendMode::Multiply)];
+
+        let composed = compose_onto(&base, &layers).unwrap();
+
+        assert_channels_close(composed.get(0, 0).unwrap(), [0.25, 0.25, 0.25, 1.0]);
+    }
+
+    #[test]
+    fn gradient_map_rejects_invalid_stop_data() {
+        let base = one_pixel_surface(pixel(0.5, 0.5, 0.5, 1.0));
+        let too_few = [stop(0.0, Color::srgb(0, 0, 0, 255))];
+        let non_finite = [
+            stop(0.0, Color::srgb(0, 0, 0, 255)),
+            stop(f64::NAN, Color::srgb(255, 255, 255, 255)),
+        ];
+        let out_of_range = [
+            stop(0.0, Color::srgb(0, 0, 0, 255)),
+            stop(1.1, Color::srgb(255, 255, 255, 255)),
+        ];
+        let unsorted = [
+            stop(0.75, Color::srgb(0, 0, 0, 255)),
+            stop(0.25, Color::srgb(255, 255, 255, 255)),
+        ];
+
+        for stops in [&too_few[..], &non_finite, &out_of_range, &unsorted] {
+            let layers = [Layer::adjustment(Adjustment::gradient_map(stops))];
+            assert_eq!(
+                compose_onto(&base, &layers),
+                Err(RasterError::InvalidGradientStops)
+            );
+        }
     }
 }

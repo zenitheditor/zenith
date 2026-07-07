@@ -1,6 +1,6 @@
 //! Premultiplied linear floating-point raster surfaces.
 
-/// Errors returned by raster substrate constructors and conversions.
+/// Errors returned by raster substrate constructors, conversions, and adjustment validation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RasterError {
     EmptySurface,
@@ -9,6 +9,7 @@ pub enum RasterError {
     DimensionMismatch,
     OutOfBounds,
     InvalidOpacity,
+    InvalidGradientStops,
     NonFiniteChannel,
     ChannelOutOfRange,
     NotPremultiplied,
