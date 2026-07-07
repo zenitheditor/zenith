@@ -6,6 +6,7 @@ pub mod boolean_piece;
 pub mod bounds;
 pub mod contour;
 pub mod error;
+pub mod fit;
 pub mod guide;
 pub mod intersection;
 pub mod offset;
@@ -32,6 +33,7 @@ pub use contour::{
     collect_raw_closed_polyline_intersections,
 };
 pub use error::GeometryError;
+pub use fit::chord_length_parameters;
 pub use guide::{ConstructionGuide, modular_guides, polar_guides, ratio_guides};
 pub use intersection::{
     IntersectionPoint, LineIntersection, PolylineIntersection, SegmentIntersection,
