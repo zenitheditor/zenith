@@ -1,5 +1,5 @@
 use super::*;
-use crate::op::{AddAssetMetadata, Op, OpPathAnchor, OpPathTransform};
+use crate::op::{AddAssetMetadata, Op, OpPathAnchor, OpPathHandle, OpPathTransform};
 use std::collections::BTreeSet;
 
 fn add_asset_sample_op() -> Op {
@@ -47,6 +47,7 @@ fn op_tag(op: &Op) -> &'static str {
         Op::SetPathAnchorKind { .. } => "set_path_anchor_kind",
         Op::InsertPathAnchor { .. } => "insert_path_anchor",
         Op::MovePathAnchor { .. } => "move_path_anchor",
+        Op::MovePathHandle { .. } => "move_path_handle",
         Op::SimplifyPathAnchors { .. } => "simplify_path_anchors",
         Op::TransformPathAnchors { .. } => "transform_path_anchors",
         Op::AddNode { .. } => "add_node",
@@ -101,6 +102,7 @@ fn all_exhaustive_tags() -> BTreeSet<&'static str> {
         "set_path_anchors",
         "insert_path_anchor",
         "move_path_anchor",
+        "move_path_handle",
         "simplify_path_anchors",
         "transform_path_anchors",
         "add_node",
@@ -237,6 +239,13 @@ fn op_tag_strings_match_exhaustive_set() {
         Op::MovePathAnchor {
             node: String::new(),
             anchor_index: 0,
+            dx: 0.0,
+            dy: 0.0,
+        },
+        Op::MovePathHandle {
+            node: String::new(),
+            anchor_index: 0,
+            handle: OpPathHandle::Out,
             dx: 0.0,
             dy: 0.0,
         },
@@ -579,6 +588,16 @@ fn op_fields_names_match_serde_keys() {
             Op::MovePathAnchor {
                 node: "n".into(),
                 anchor_index: 0,
+                dx: 10.0,
+                dy: -4.0,
+            },
+        ),
+        (
+            "move_path_handle",
+            Op::MovePathHandle {
+                node: "n".into(),
+                anchor_index: 0,
+                handle: OpPathHandle::Out,
                 dx: 10.0,
                 dy: -4.0,
             },

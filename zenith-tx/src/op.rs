@@ -54,6 +54,18 @@ pub struct OpPathAnchor {
     pub out_y: Option<f64>,
 }
 
+/// Which Bezier handle on a path anchor to move.
+///
+/// JSON values are `"in"` and `"out"`.
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum OpPathHandle {
+    /// The incoming handle (`in_x`, `in_y`).
+    In,
+    /// The outgoing handle (`out_x`, `out_y`).
+    Out,
+}
+
 /// Transform to apply to every editable anchor point in a [`Op::TransformPathAnchors`] op.
 ///
 /// JSON shapes:
@@ -433,6 +445,33 @@ pub enum Op {
         node: String,
         /// Zero-based anchor index to move.
         anchor_index: usize,
+        /// X-axis translation in document pixels. Must be finite.
+        dx: f64,
+        /// Y-axis translation in document pixels. Must be finite.
+        dy: f64,
+    },
+    /// Move one complete handle on a `path` anchor by a pixel delta.
+    ///
+    /// The anchor point itself is not moved. For `smooth` and `symmetric`
+    /// anchors, a complete opposite handle is adjusted to preserve the anchor
+    /// kind's authoring semantics; if the opposite handle is absent, only the
+    /// selected handle moves. The target anchor and selected handle coordinates
+    /// must already be stored as finite px values.
+    ///
+    /// Supported nodes: `path`.
+    /// Unsupported: all other variants — yields `tx.unsupported_property`.
+    ///
+    /// JSON example:
+    /// ```json
+    /// {"op":"move_path_handle","node":"path.logo","anchor_index":1,"handle":"out","dx":10,"dy":-4}
+    /// ```
+    MovePathHandle {
+        /// The stable node `id` to target.
+        node: String,
+        /// Zero-based anchor index whose handle should move.
+        anchor_index: usize,
+        /// Which handle on the anchor to move.
+        handle: OpPathHandle,
         /// X-axis translation in document pixels. Must be finite.
         dx: f64,
         /// Y-axis translation in document pixels. Must be finite.

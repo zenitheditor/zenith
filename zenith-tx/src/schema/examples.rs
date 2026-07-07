@@ -32,6 +32,9 @@ pub fn op_example(name: &str) -> Option<&'static str> {
         "move_path_anchor" => {
             Some(r#"{"op":"move_path_anchor","node":"path.logo","anchor_index":1,"dx":10,"dy":-4}"#)
         }
+        "move_path_handle" => Some(
+            r#"{"op":"move_path_handle","node":"path.logo","anchor_index":1,"handle":"out","dx":10,"dy":-4}"#,
+        ),
         "simplify_path_anchors" => {
             Some(r#"{"op":"simplify_path_anchors","node":"path.logo","tolerance":0.5}"#)
         }

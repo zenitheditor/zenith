@@ -248,6 +248,36 @@ pub fn op_fields(name: &str) -> Option<&'static [OpFieldSchema]> {
             ];
             Some(F)
         }
+        "move_path_handle" => {
+            static F: &[OpFieldSchema] = &[
+                OpFieldSchema {
+                    name: "node",
+                    ty: "node id",
+                    required: true,
+                },
+                OpFieldSchema {
+                    name: "anchor_index",
+                    ty: "usize",
+                    required: true,
+                },
+                OpFieldSchema {
+                    name: "handle",
+                    ty: "enum: in|out",
+                    required: true,
+                },
+                OpFieldSchema {
+                    name: "dx",
+                    ty: "px",
+                    required: true,
+                },
+                OpFieldSchema {
+                    name: "dy",
+                    ty: "px",
+                    required: true,
+                },
+            ];
+            Some(F)
+        }
         "simplify_path_anchors" => {
             static F: &[OpFieldSchema] = &[
                 OpFieldSchema {

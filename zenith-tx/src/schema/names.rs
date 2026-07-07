@@ -24,6 +24,7 @@ pub fn op_names() -> &'static [&'static str] {
         "move_backward",
         "move_forward",
         "move_path_anchor",
+        "move_path_handle",
         "move_to_back",
         "move_to_front",
         "remove_node",

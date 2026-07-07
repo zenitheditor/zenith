@@ -14,6 +14,7 @@ mod asset;
 mod flags;
 mod geometry;
 mod path;
+mod path_handle;
 mod pattern;
 mod recipe;
 pub(crate) mod structure;
@@ -30,6 +31,7 @@ use path::{
     apply_insert_path_anchor, apply_move_path_anchor, apply_set_path_anchor_kind,
     apply_set_path_anchors, apply_simplify_path_anchors, apply_transform_path_anchors,
 };
+use path_handle::{MovePathHandleArgs, apply_move_path_handle};
 use pattern::apply_detach_pattern;
 use recipe::{RecipeScalars, apply_create_recipe, apply_delete_recipe, apply_update_recipe};
 use structure::{
@@ -256,6 +258,26 @@ fn apply_op(
             dy,
         } => {
             apply_move_path_anchor(node_id, *anchor_index, *dx, *dy, doc, diagnostics, affected);
+        }
+        Op::MovePathHandle {
+            node: node_id,
+            anchor_index,
+            handle,
+            dx,
+            dy,
+        } => {
+            apply_move_path_handle(
+                MovePathHandleArgs {
+                    node_id,
+                    anchor_index: *anchor_index,
+                    handle: *handle,
+                    dx: *dx,
+                    dy: *dy,
+                },
+                doc,
+                diagnostics,
+                affected,
+            );
         }
         Op::SimplifyPathAnchors {
             node: node_id,
@@ -500,6 +522,7 @@ fn op_lock_targets(op: &Op) -> Vec<&str> {
         | Op::SetPathAnchorKind { node, .. }
         | Op::InsertPathAnchor { node, .. }
         | Op::MovePathAnchor { node, .. }
+        | Op::MovePathHandle { node, .. }
         | Op::SimplifyPathAnchors { node, .. }
         | Op::TransformPathAnchors { node, .. }
         | Op::SetOpacity { node, .. }

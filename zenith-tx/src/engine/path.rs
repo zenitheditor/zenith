@@ -1,5 +1,5 @@
 //! Path op application: `set_path_anchors`, `insert_path_anchor`,
-//! `simplify_path_anchors`, and `transform_path_anchors`.
+//! `move_path_anchor`, `simplify_path_anchors`, and `transform_path_anchors`.
 
 use zenith_core::{
     AnchorKind, Diagnostic, Dimension, Document, Node, PathAnchor as CorePathAnchor, Unit,
@@ -717,7 +717,7 @@ fn geometry_anchor_to_core(anchor: PathAnchor, kind: Option<AnchorKind>) -> Core
     }
 }
 
-fn anchor_coordinate(
+pub(super) fn anchor_coordinate(
     node_id: &str,
     dimension: &Option<Dimension>,
     field: &str,
@@ -732,7 +732,7 @@ fn anchor_coordinate(
     }
 }
 
-fn optional_handle(
+pub(super) fn optional_handle(
     node_id: &str,
     x: &Option<Dimension>,
     y: &Option<Dimension>,
@@ -860,7 +860,7 @@ fn move_anchor_geometry_diagnostic(node_id: &str, error: GeometryError) -> Diagn
     )
 }
 
-fn invalid_anchor(node_id: &str, message: &str) -> Diagnostic {
+pub(super) fn invalid_anchor(node_id: &str, message: &str) -> Diagnostic {
     Diagnostic::error(
         "tx.invalid_path_anchor",
         message,
@@ -869,7 +869,7 @@ fn invalid_anchor(node_id: &str, message: &str) -> Diagnostic {
     )
 }
 
-fn unknown_node(node_id: &str) -> Diagnostic {
+pub(super) fn unknown_node(node_id: &str) -> Diagnostic {
     Diagnostic::error(
         "tx.unknown_node",
         format!("node {:?} not found in document", node_id),
