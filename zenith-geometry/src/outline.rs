@@ -1,6 +1,7 @@
 use crate::{
-    ClosedPolyline, GeometryError, OffsetRailJoin, Point2, SegmentOffset,
+    ClosedPolyline, GeometryError, OffsetRailJoin, PathGeometry, Point2, SegmentOffset,
     join_adjacent_segment_offsets, offset_open_polyline_segments, offset_segment,
+    validation::validate_tolerance,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -38,6 +39,12 @@ pub struct OpenPolylineOutline {
 pub struct ClosedPolylineOutline {
     pub left_ring: Vec<Point2>,
     pub right_ring: Vec<Point2>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum PathOutline {
+    Open(OpenPolylineOutline),
+    Closed(ClosedPolylineOutline),
 }
 
 impl Default for OpenPolylineOutlinePolicy {
@@ -129,6 +136,31 @@ pub fn outline_closed_polyline(
             right_ring,
         }))
     }
+}
+
+pub fn outline_path_geometry(
+    path: &PathGeometry,
+    tolerance: f64,
+    stroke_width: f64,
+    open_policy: OpenPolylineOutlinePolicy,
+    closed_policy: ClosedPolylineOutlinePolicy,
+) -> Result<Option<PathOutline>, GeometryError> {
+    validate_tolerance(tolerance)?;
+
+    if path.closed() {
+        let Some(contour) = ClosedPolyline::from_path(path, tolerance)? else {
+            return Ok(None);
+        };
+        return Ok(
+            outline_closed_polyline(&contour, stroke_width, closed_policy)?
+                .map(PathOutline::Closed),
+        );
+    }
+
+    Ok(
+        outline_open_polyline(&path.flatten(tolerance)?, stroke_width, open_policy)?
+            .map(PathOutline::Open),
+    )
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -335,6 +367,24 @@ mod tests {
         outline_closed_polyline(
             &closed_contour(points),
             stroke_width,
+            ClosedPolylineOutlinePolicy::default(),
+        )
+    }
+
+    fn anchor(x: f64, y: f64) -> crate::PathAnchor {
+        crate::PathAnchor::new(point(x, y), None, None).expect("valid anchor")
+    }
+
+    fn path_outline(
+        path: &PathGeometry,
+        tolerance: f64,
+        stroke_width: f64,
+    ) -> Result<Option<PathOutline>, GeometryError> {
+        outline_path_geometry(
+            path,
+            tolerance,
+            stroke_width,
+            OpenPolylineOutlinePolicy::default(),
             ClosedPolylineOutlinePolicy::default(),
         )
     }
@@ -582,5 +632,71 @@ mod tests {
         ];
 
         assert_eq!(closed_outline(&points, 3.0), closed_outline(&points, 3.0));
+    }
+
+    #[test]
+    fn path_outline_dispatches_open_paths_to_open_outline() {
+        let path = PathGeometry::new(vec![anchor(0.0, 0.0), anchor(10.0, 0.0)], false)
+            .expect("valid path");
+
+        assert_eq!(
+            path_outline(&path, 0.25, 4.0),
+            Ok(Some(PathOutline::Open(OpenPolylineOutline {
+                points: vec![
+                    point(0.0, 2.0),
+                    point(10.0, 2.0),
+                    point(10.0, -2.0),
+                    point(0.0, -2.0),
+                ],
+            })))
+        );
+    }
+
+    #[test]
+    fn path_outline_dispatches_closed_paths_to_closed_outline() {
+        let path = PathGeometry::new(
+            vec![
+                anchor(0.0, 0.0),
+                anchor(10.0, 0.0),
+                anchor(10.0, 10.0),
+                anchor(0.0, 10.0),
+            ],
+            true,
+        )
+        .expect("valid path");
+
+        assert_eq!(
+            path_outline(&path, 0.25, 4.0),
+            Ok(Some(PathOutline::Closed(ClosedPolylineOutline {
+                left_ring: vec![
+                    point(2.0, 2.0),
+                    point(8.0, 2.0),
+                    point(8.0, 8.0),
+                    point(2.0, 8.0),
+                ],
+                right_ring: vec![
+                    point(-2.0, 0.0),
+                    point(0.0, -2.0),
+                    point(10.0, -2.0),
+                    point(12.0, 0.0),
+                    point(12.0, 10.0),
+                    point(10.0, 12.0),
+                    point(0.0, 12.0),
+                    point(-2.0, 10.0),
+                ],
+            })))
+        );
+    }
+
+    #[test]
+    fn path_outline_preserves_zero_width_and_tolerance_errors() {
+        let path = PathGeometry::new(vec![anchor(0.0, 0.0), anchor(10.0, 0.0)], false)
+            .expect("valid path");
+
+        assert_eq!(path_outline(&path, 0.25, 0.0), Ok(None));
+        assert_eq!(
+            path_outline(&path, 0.0, 4.0),
+            Err(GeometryError::NonPositiveTolerance)
+        );
     }
 }

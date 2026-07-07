@@ -32,8 +32,8 @@ pub use offset::{
 };
 pub use outline::{
     ClosedPolylineJoin, ClosedPolylineOutline, ClosedPolylineOutlinePolicy, OpenPolylineCap,
-    OpenPolylineJoin, OpenPolylineOutline, OpenPolylineOutlinePolicy, outline_closed_polyline,
-    outline_open_polyline,
+    OpenPolylineJoin, OpenPolylineOutline, OpenPolylineOutlinePolicy, PathOutline,
+    outline_closed_polyline, outline_open_polyline, outline_path_geometry,
 };
 pub use path::{
     PathAnchor, PathGeometry, PathJoinVectors, PathProjection, PathSegment, PathTopology,
