@@ -1,0 +1,21 @@
+[package]
+name = "zenith-zpx"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+publish.workspace = true
+readme.workspace = true
+description = "Zenith ZPX raster substrate document model and deterministic manifest codec."
+
+[dependencies]
+kdl = "6.7.1"
+zenith-core = { workspace = true }
+zenith-session = { workspace = true }
+
+[lints]
+workspace = true

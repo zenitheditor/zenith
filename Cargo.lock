@@ -1505,6 +1505,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "zenith-zpx"
+version = "0.0.8"
+dependencies = [
+ "kdl",
+ "zenith-core",
+ "zenith-session",
+]
+
+[[package]]
 name = "zmij"
 version = "1.0.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"

@@ -9,6 +9,7 @@ members = [
     "zenith-tx",
     "zenith-cli",
     "zenith-session",
+    "zenith-zpx",
 ]
 
 [workspace.package]
@@ -35,6 +36,7 @@ zenith-scene = { version = "0", path = "zenith-scene" }
 zenith-render = { version = "0", path = "zenith-render" }
 zenith-tx = { version = "0", path = "zenith-tx" }
 zenith-session = { version = "0", path = "zenith-session" }
+zenith-zpx = { version = "0", path = "zenith-zpx" }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
