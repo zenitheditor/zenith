@@ -1462,6 +1462,7 @@ dependencies = [
  "ttf-parser 0.25.1",
  "zenith-core",
  "zenith-layout",
+ "zenith-raster",
  "zenith-scene",
 ]
 

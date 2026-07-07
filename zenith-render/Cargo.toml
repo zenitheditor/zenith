@@ -14,6 +14,7 @@ description = "Zenith CPU PNG (tiny-skia) and vector PDF rendering backends."
 
 [dependencies]
 zenith-core = { workspace = true }
+zenith-raster = { workspace = true }
 zenith-scene = { workspace = true }
 jpeg-decoder = "0.3"
 miniz_oxide = "0.8"

@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 mod common;
 use common::*;
+use zenith_raster::{LinearRgba, blend_pixel, decode_srgb_u8, encode_linear_to_srgb_u8};
 
 // ── image: stretch renders + determinism ──────────────────────────────
 
@@ -121,6 +122,271 @@ fn draw_image_missing_asset_is_skipped() {
         !any_opaque,
         "no pixels should be drawn when the asset is missing"
     );
+}
+
+#[test]
+fn draw_image_inside_multiply_layer_uses_raster_blend_math() {
+    use tiny_skia::{Pixmap, PremultipliedColorU8};
+
+    let mut pm = Pixmap::new(1, 1).expect("1x1 pixmap");
+    let source = (64, 100, 220);
+    pm.pixels_mut()[0] =
+        PremultipliedColorU8::from_rgba(source.0, source.1, source.2, 255).expect("source pixel");
+    let png = pm.encode_png().expect("PNG encode must succeed");
+
+    let mut assets = BytesAssetProvider::new();
+    assets.register(
+        "asset.layer_source",
+        AssetKind::Image,
+        Arc::from(png.as_slice()),
+    );
+
+    let backdrop = (128, 200, 40);
+    let mut scene = Scene::new(1.0, 1.0);
+    scene.commands.push(SceneCommand::PushClip {
+        x: 0.0,
+        y: 0.0,
+        w: 1.0,
+        h: 1.0,
+    });
+    scene.commands.push(SceneCommand::FillRect {
+        x: 0.0,
+        y: 0.0,
+        w: 1.0,
+        h: 1.0,
+        paint: Paint::solid(Color::srgb(backdrop.0, backdrop.1, backdrop.2, 255)),
+    });
+    let layer_opacity = 0.5;
+    scene.commands.push(SceneCommand::PushLayer {
+        opacity: layer_opacity,
+        blend_mode: Some(BlendMode::Multiply),
+    });
+    scene.commands.push(SceneCommand::DrawImage {
+        x: 0.0,
+        y: 0.0,
+        w: 1.0,
+        h: 1.0,
+        asset_id: "asset.layer_source".to_string(),
+        fit: FitMode::Stretch,
+        pos_x: 50.0,
+        pos_y: 50.0,
+        opacity: 1.0,
+        clip_shape: None,
+        src_rect: None,
+    });
+    scene.commands.push(SceneCommand::PopLayer);
+    scene.commands.push(SceneCommand::PopClip);
+
+    let backend = TinySkiaBackend;
+    let fonts = default_provider();
+    let img = backend
+        .rasterize(&scene, &fonts, &assets)
+        .expect("rasterize must succeed");
+
+    let expected = blend_pixel(
+        BlendMode::Multiply,
+        opaque_linear(backdrop),
+        scaled_alpha(opaque_linear(source), layer_opacity),
+    )
+    .expect("blend must succeed");
+    assert_eq!(
+        pixel(&img.rgba, img.width, 0, 0),
+        straight_srgb_pixel(expected)
+    );
+}
+
+#[test]
+fn draw_image_multiply_layer_preserves_transparent_layer_area() {
+    use tiny_skia::{Pixmap, PremultipliedColorU8};
+
+    let mut pm = Pixmap::new(1, 1).expect("1x1 pixmap");
+    pm.pixels_mut()[0] = PremultipliedColorU8::from_rgba(20, 180, 220, 255).expect("source pixel");
+    let png = pm.encode_png().expect("PNG encode must succeed");
+
+    let mut assets = BytesAssetProvider::new();
+    assets.register(
+        "asset.layer_source",
+        AssetKind::Image,
+        Arc::from(png.as_slice()),
+    );
+
+    let backdrop = Color::srgb(128, 32, 200, 128);
+    let mut base_scene = Scene::new(2.0, 1.0);
+    base_scene.commands.push(SceneCommand::FillRect {
+        x: 0.0,
+        y: 0.0,
+        w: 2.0,
+        h: 1.0,
+        paint: Paint::solid(backdrop),
+    });
+
+    let mut blended_scene = base_scene.clone();
+    blended_scene.commands.push(SceneCommand::PushLayer {
+        opacity: 1.0,
+        blend_mode: Some(BlendMode::Multiply),
+    });
+    blended_scene.commands.push(SceneCommand::DrawImage {
+        x: 0.0,
+        y: 0.0,
+        w: 1.0,
+        h: 1.0,
+        asset_id: "asset.layer_source".to_string(),
+        fit: FitMode::Stretch,
+        pos_x: 50.0,
+        pos_y: 50.0,
+        opacity: 1.0,
+        clip_shape: None,
+        src_rect: None,
+    });
+    blended_scene.commands.push(SceneCommand::PopLayer);
+
+    let backend = TinySkiaBackend;
+    let fonts = default_provider();
+    let base = backend
+        .rasterize(&base_scene, &fonts, &assets)
+        .expect("base rasterize must succeed");
+    let blended = backend
+        .rasterize(&blended_scene, &fonts, &assets)
+        .expect("blended rasterize must succeed");
+
+    assert_ne!(
+        pixel(&base.rgba, base.width, 0, 0),
+        pixel(&blended.rgba, blended.width, 0, 0)
+    );
+    assert_eq!(
+        pixel(&base.rgba, base.width, 1, 0),
+        pixel(&blended.rgba, blended.width, 1, 0),
+        "transparent layer pixels must preserve the existing backdrop bytes"
+    );
+}
+
+#[test]
+fn draw_image_source_over_layers_match_direct_draw_bytes() {
+    use tiny_skia::{Pixmap, PremultipliedColorU8};
+
+    let mut pm = Pixmap::new(1, 1).expect("1x1 pixmap");
+    pm.pixels_mut()[0] = PremultipliedColorU8::from_rgba(210, 40, 90, 255).expect("source pixel");
+    let png = pm.encode_png().expect("PNG encode must succeed");
+
+    let mut assets = BytesAssetProvider::new();
+    assets.register(
+        "asset.layer_source",
+        AssetKind::Image,
+        Arc::from(png.as_slice()),
+    );
+
+    let direct = image_over_backdrop_scene(None);
+    let implicit_source_over = image_over_backdrop_scene(Some(None));
+    let explicit_normal = image_over_backdrop_scene(Some(Some(BlendMode::Normal)));
+
+    let backend = TinySkiaBackend;
+    let fonts = default_provider();
+    let direct_img = backend
+        .rasterize(&direct, &fonts, &assets)
+        .expect("direct rasterize must succeed");
+    let implicit_img = backend
+        .rasterize(&implicit_source_over, &fonts, &assets)
+        .expect("implicit source-over layer rasterize must succeed");
+    let normal_img = backend
+        .rasterize(&explicit_normal, &fonts, &assets)
+        .expect("normal layer rasterize must succeed");
+
+    assert_eq!(
+        direct_img.rgba, implicit_img.rgba,
+        "blend_mode=None layer must stay byte-identical to direct drawing"
+    );
+    assert_eq!(
+        direct_img.rgba, normal_img.rgba,
+        "blend_mode=Normal layer must stay byte-identical to direct drawing"
+    );
+}
+
+fn image_over_backdrop_scene(layer: Option<Option<BlendMode>>) -> Scene {
+    let mut scene = Scene::new(1.0, 1.0);
+    scene.commands.push(SceneCommand::FillRect {
+        x: 0.0,
+        y: 0.0,
+        w: 1.0,
+        h: 1.0,
+        paint: Paint::solid(Color::srgb(30, 120, 200, 255)),
+    });
+    if let Some(blend_mode) = layer {
+        scene.commands.push(SceneCommand::PushLayer {
+            opacity: 1.0,
+            blend_mode,
+        });
+    }
+    scene.commands.push(SceneCommand::DrawImage {
+        x: 0.0,
+        y: 0.0,
+        w: 1.0,
+        h: 1.0,
+        asset_id: "asset.layer_source".to_string(),
+        fit: FitMode::Stretch,
+        pos_x: 50.0,
+        pos_y: 50.0,
+        opacity: 1.0,
+        clip_shape: None,
+        src_rect: None,
+    });
+    if layer.is_some() {
+        scene.commands.push(SceneCommand::PopLayer);
+    }
+    scene
+}
+
+fn opaque_linear(rgb: (u8, u8, u8)) -> LinearRgba {
+    LinearRgba::straight(
+        decode_srgb_u8(rgb.0),
+        decode_srgb_u8(rgb.1),
+        decode_srgb_u8(rgb.2),
+        1.0,
+    )
+    .expect("opaque linear pixel")
+}
+
+fn scaled_alpha(pixel: LinearRgba, opacity: f64) -> LinearRgba {
+    let opacity = opacity as f32;
+    LinearRgba::premultiplied(
+        pixel.r() * opacity,
+        pixel.g() * opacity,
+        pixel.b() * opacity,
+        pixel.a() * opacity,
+    )
+    .expect("scaled linear pixel")
+}
+
+fn straight_srgb_pixel(pixel: LinearRgba) -> (u8, u8, u8, u8) {
+    let alpha = pixel.a();
+    if alpha <= 0.0 {
+        return (0, 0, 0, 0);
+    }
+
+    (
+        encode_linear_to_srgb_u8(pixel.r() / alpha),
+        encode_linear_to_srgb_u8(pixel.g() / alpha),
+        encode_linear_to_srgb_u8(pixel.b() / alpha),
+        quantize_unit_to_u8(alpha),
+    )
+}
+
+fn quantize_unit_to_u8(channel: f32) -> u8 {
+    let scaled = channel.clamp(0.0, 1.0) * 255.0;
+    let lower = scaled.floor();
+    let fraction = scaled - lower;
+    let lower_int = lower as u16;
+
+    let rounded = if fraction < 0.5 {
+        lower_int
+    } else if fraction > 0.5 {
+        lower_int + 1
+    } else if lower_int % 2 == 0 {
+        lower_int
+    } else {
+        lower_int + 1
+    };
+
+    if rounded >= 255 { 255 } else { rounded as u8 }
 }
 
 // ── SVG asset: rasterizes and draws red pixels ────────────────────────

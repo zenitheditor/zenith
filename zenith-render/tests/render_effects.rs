@@ -136,6 +136,13 @@ fn no_layer_scene_unchanged() {
     let img = backend
         .rasterize(&scene, &provider, &no_assets())
         .expect("rasterize must succeed");
+    let img2 = backend
+        .rasterize(&scene, &provider, &no_assets())
+        .expect("second rasterize must succeed");
+    assert_eq!(
+        img.rgba, img2.rgba,
+        "no-layer render must stay byte-identical across runs"
+    );
     assert_eq!(pixel(&img.rgba, img.width, 2, 2), (255, 0, 0, 255));
 }
 

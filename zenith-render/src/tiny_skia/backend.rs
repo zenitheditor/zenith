@@ -10,6 +10,7 @@
 
 use tiny_skia::{FilterQuality, Pixmap, PixmapPaint, Transform};
 use zenith_core::{AssetProvider, FontProvider};
+use zenith_raster::{LinearRgba, blend_pixel, decode_srgb_u8, encode_linear_to_srgb_u8};
 use zenith_scene::{
     BlendMode as IrBlendMode, FilterSpec, MaskSpec, Scene, SceneCommand, ShadowSpec,
 };
@@ -37,32 +38,34 @@ use crate::error::RenderError;
 /// - PNG encoding via `tiny_skia::Pixmap::encode_png` writes no timestamps.
 pub struct TinySkiaBackend;
 
-/// Map a scene-IR [`IrBlendMode`] to the `tiny_skia::BlendMode` used when a
-/// compositing layer is painted back onto its parent.
-///
-/// `None` and `Some(Normal)` both yield `SourceOver` — plain compositing — so a
-/// layer with no blend (or an explicit `normal`) composites byte-identically to
-/// having no layer at all. Every other variant maps to the tiny-skia operator of
-/// the same name. Exhaustive over `IrBlendMode`.
-fn map_blend_mode(b: Option<IrBlendMode>) -> tiny_skia::BlendMode {
-    use tiny_skia::BlendMode as Tk;
+#[derive(Debug, Clone, Copy)]
+enum LayerBlend {
+    SourceOver,
+    Raster(IrBlendMode),
+}
+
+/// Map a scene-IR [`IrBlendMode`] to the compositing path used when a layer is
+/// painted back onto its parent. `None` and `Some(Normal)` keep the existing
+/// tiny-skia source-over path byte-identical; all other modes use the shared
+/// linear-light raster blender at the layer boundary.
+fn map_layer_blend(b: Option<IrBlendMode>) -> LayerBlend {
     match b {
-        None | Some(IrBlendMode::Normal) => Tk::SourceOver,
-        Some(IrBlendMode::Multiply) => Tk::Multiply,
-        Some(IrBlendMode::Screen) => Tk::Screen,
-        Some(IrBlendMode::Overlay) => Tk::Overlay,
-        Some(IrBlendMode::Darken) => Tk::Darken,
-        Some(IrBlendMode::Lighten) => Tk::Lighten,
-        Some(IrBlendMode::ColorDodge) => Tk::ColorDodge,
-        Some(IrBlendMode::ColorBurn) => Tk::ColorBurn,
-        Some(IrBlendMode::HardLight) => Tk::HardLight,
-        Some(IrBlendMode::SoftLight) => Tk::SoftLight,
-        Some(IrBlendMode::Difference) => Tk::Difference,
-        Some(IrBlendMode::Exclusion) => Tk::Exclusion,
-        Some(IrBlendMode::Hue) => Tk::Hue,
-        Some(IrBlendMode::Saturation) => Tk::Saturation,
-        Some(IrBlendMode::Color) => Tk::Color,
-        Some(IrBlendMode::Luminosity) => Tk::Luminosity,
+        None | Some(IrBlendMode::Normal) => LayerBlend::SourceOver,
+        Some(IrBlendMode::Multiply) => LayerBlend::Raster(IrBlendMode::Multiply),
+        Some(IrBlendMode::Screen) => LayerBlend::Raster(IrBlendMode::Screen),
+        Some(IrBlendMode::Overlay) => LayerBlend::Raster(IrBlendMode::Overlay),
+        Some(IrBlendMode::Darken) => LayerBlend::Raster(IrBlendMode::Darken),
+        Some(IrBlendMode::Lighten) => LayerBlend::Raster(IrBlendMode::Lighten),
+        Some(IrBlendMode::ColorDodge) => LayerBlend::Raster(IrBlendMode::ColorDodge),
+        Some(IrBlendMode::ColorBurn) => LayerBlend::Raster(IrBlendMode::ColorBurn),
+        Some(IrBlendMode::HardLight) => LayerBlend::Raster(IrBlendMode::HardLight),
+        Some(IrBlendMode::SoftLight) => LayerBlend::Raster(IrBlendMode::SoftLight),
+        Some(IrBlendMode::Difference) => LayerBlend::Raster(IrBlendMode::Difference),
+        Some(IrBlendMode::Exclusion) => LayerBlend::Raster(IrBlendMode::Exclusion),
+        Some(IrBlendMode::Hue) => LayerBlend::Raster(IrBlendMode::Hue),
+        Some(IrBlendMode::Saturation) => LayerBlend::Raster(IrBlendMode::Saturation),
+        Some(IrBlendMode::Color) => LayerBlend::Raster(IrBlendMode::Color),
+        Some(IrBlendMode::Luminosity) => LayerBlend::Raster(IrBlendMode::Luminosity),
     }
 }
 
@@ -93,7 +96,7 @@ struct CaptureLayer {
 // exactly the old `layer_stack.last() else base` target.
 fn current_target<'a>(
     capture_stack: &'a mut [CaptureLayer],
-    layer_stack: &'a mut [(Pixmap, f32, tiny_skia::BlendMode)],
+    layer_stack: &'a mut [(Pixmap, f32, LayerBlend)],
     base: &'a mut Pixmap,
 ) -> &'a mut Pixmap {
     if let Some(layer) = capture_stack.iter_mut().rev().find(|l| l.pm.is_some()) {
@@ -106,6 +109,138 @@ fn current_target<'a>(
         return pm;
     }
     base
+}
+
+fn composite_raster_blend_layer(
+    target: &mut Pixmap,
+    layer: &Pixmap,
+    opacity: f32,
+    mode: IrBlendMode,
+) -> Result<(), RenderError> {
+    let opacity = opacity.clamp(0.0, 1.0);
+    if opacity <= 0.0 {
+        return Ok(());
+    }
+
+    let target_data = target.data_mut();
+    let layer_data = layer.data();
+    if target_data.len() != layer_data.len() {
+        return Err(RenderError::new(
+            "pixel buffer length mismatch during layer compositing",
+        ));
+    }
+    if target_data.len() % 4 != 0 {
+        return Err(RenderError::new(
+            "invalid RGBA pixel buffer length during layer compositing",
+        ));
+    }
+
+    for (target_pixel, layer_pixel) in target_data
+        .chunks_exact_mut(4)
+        .zip(layer_data.chunks_exact(4))
+    {
+        let [_, _, _, source_alpha] = layer_pixel else {
+            return Err(RenderError::new("invalid premultiplied RGBA pixel length"));
+        };
+        if *source_alpha == 0 {
+            continue;
+        }
+
+        let backdrop = premul_srgb_u8_to_linear_rgba(target_pixel)?;
+        let source = scale_linear_rgba(premul_srgb_u8_to_linear_rgba(layer_pixel)?, opacity)?;
+        let blended = blend_pixel(mode, backdrop, source)
+            .map_err(|e| RenderError::new(format!("layer blend failed: {e:?}")))?;
+        write_linear_rgba_to_premul_srgb_u8(target_pixel, blended)?;
+    }
+
+    Ok(())
+}
+
+fn premul_srgb_u8_to_linear_rgba(pixel: &[u8]) -> Result<LinearRgba, RenderError> {
+    let [r, g, b, a] = pixel else {
+        return Err(RenderError::new("invalid premultiplied RGBA pixel length"));
+    };
+    let (sr, sg, sb, sa) = premultiplied_to_straight(*r, *g, *b, *a);
+    let alpha = f32::from(sa) / 255.0;
+    LinearRgba::straight(
+        decode_srgb_u8(sr),
+        decode_srgb_u8(sg),
+        decode_srgb_u8(sb),
+        alpha,
+    )
+    .map_err(|e| RenderError::new(format!("linear pixel conversion failed: {e:?}")))
+}
+
+fn scale_linear_rgba(pixel: LinearRgba, opacity: f32) -> Result<LinearRgba, RenderError> {
+    LinearRgba::premultiplied(
+        pixel.r() * opacity,
+        pixel.g() * opacity,
+        pixel.b() * opacity,
+        pixel.a() * opacity,
+    )
+    .map_err(|e| RenderError::new(format!("layer opacity application failed: {e:?}")))
+}
+
+fn write_linear_rgba_to_premul_srgb_u8(
+    dst: &mut [u8],
+    pixel: LinearRgba,
+) -> Result<(), RenderError> {
+    let [r, g, b, a] = dst else {
+        return Err(RenderError::new("invalid premultiplied RGBA pixel length"));
+    };
+
+    let alpha = pixel.a();
+    let alpha_u8 = quantize_unit_to_u8(alpha);
+    if alpha_u8 == 0 || alpha <= 0.0 {
+        *r = 0;
+        *g = 0;
+        *b = 0;
+        *a = 0;
+        return Ok(());
+    }
+
+    let straight_r = encode_linear_to_srgb_u8(clamp_unit(pixel.r() / alpha));
+    let straight_g = encode_linear_to_srgb_u8(clamp_unit(pixel.g() / alpha));
+    let straight_b = encode_linear_to_srgb_u8(clamp_unit(pixel.b() / alpha));
+    *r = premultiply_u8(straight_r, alpha_u8);
+    *g = premultiply_u8(straight_g, alpha_u8);
+    *b = premultiply_u8(straight_b, alpha_u8);
+    *a = alpha_u8;
+    Ok(())
+}
+
+fn premultiply_u8(channel: u8, alpha: u8) -> u8 {
+    let result = (u16::from(channel) * u16::from(alpha) + 127) / 255;
+    result.min(255) as u8
+}
+
+fn quantize_unit_to_u8(channel: f32) -> u8 {
+    let scaled = clamp_unit(channel) * 255.0;
+    let lower = scaled.floor();
+    let fraction = scaled - lower;
+    let lower_int = lower as u16;
+
+    let rounded = if fraction < 0.5 {
+        lower_int
+    } else if fraction > 0.5 {
+        lower_int + 1
+    } else if lower_int % 2 == 0 {
+        lower_int
+    } else {
+        lower_int + 1
+    };
+
+    if rounded >= 255 { 255 } else { rounded as u8 }
+}
+
+fn clamp_unit(channel: f32) -> f32 {
+    if !channel.is_finite() || channel <= 0.0 {
+        0.0
+    } else if channel >= 1.0 {
+        1.0
+    } else {
+        channel
+    }
 }
 
 impl RasterBackend for TinySkiaBackend {
@@ -146,11 +281,11 @@ impl RasterBackend for TinySkiaBackend {
 
         // Active compositing layers. Each entry is a full-page offscreen pixmap
         // that buffers the ink of a blend-mode node (or its children), plus the
-        // opacity and tiny-skia blend operator used to composite it back onto
-        // its parent at the matching PopLayer. Empty in the common case — with
-        // no layers active the draw target resolution is byte-identical to
-        // before (the layer check below short-circuits on an empty Vec).
-        let mut layer_stack: Vec<(Pixmap, f32, tiny_skia::BlendMode)> = Vec::new();
+        // opacity and blend route used to composite it back onto its parent at
+        // the matching PopLayer. Empty in the common case — with no layers
+        // active the draw target resolution is byte-identical to before (the
+        // layer check below short-circuits on an empty Vec).
+        let mut layer_stack: Vec<(Pixmap, f32, LayerBlend)> = Vec::new();
 
         for cmd in &scene.commands {
             // Hoist once per iteration. Push/pop arms mutate the stack and
@@ -342,7 +477,7 @@ impl RasterBackend for TinySkiaBackend {
                     blend_mode,
                 } => {
                     if let Some(pm) = Pixmap::new(width, height) {
-                        layer_stack.push((pm, *opacity as f32, map_blend_mode(*blend_mode)));
+                        layer_stack.push((pm, *opacity as f32, map_layer_blend(*blend_mode)));
                     }
                     continue;
                 }
@@ -350,7 +485,7 @@ impl RasterBackend for TinySkiaBackend {
                 // Close the most-recent layer: composite its buffered ink onto
                 // the NEW current target — the next layer down if one remains,
                 // else the active shadow capture, else the canvas — using the
-                // layer's opacity and blend operator.
+                // layer's opacity and blend route.
                 SceneCommand::PopLayer => {
                     if let Some((layer_pm, op, bm)) = layer_stack.pop() {
                         // After popping this blend layer, composite onto the new
@@ -361,18 +496,30 @@ impl RasterBackend for TinySkiaBackend {
                         // the capture pixmap — byte-identical to the old order.
                         let target_after_pop =
                             current_target(&mut capture_stack, &mut layer_stack, &mut pixmap);
-                        target_after_pop.draw_pixmap(
-                            0,
-                            0,
-                            layer_pm.as_ref(),
-                            &PixmapPaint {
-                                opacity: op.clamp(0.0, 1.0),
-                                blend_mode: bm,
-                                quality: FilterQuality::Nearest,
-                            },
-                            Transform::identity(),
-                            None,
-                        );
+                        match bm {
+                            LayerBlend::SourceOver => {
+                                target_after_pop.draw_pixmap(
+                                    0,
+                                    0,
+                                    layer_pm.as_ref(),
+                                    &PixmapPaint {
+                                        opacity: op.clamp(0.0, 1.0),
+                                        blend_mode: tiny_skia::BlendMode::SourceOver,
+                                        quality: FilterQuality::Nearest,
+                                    },
+                                    Transform::identity(),
+                                    None,
+                                );
+                            }
+                            LayerBlend::Raster(mode) => {
+                                composite_raster_blend_layer(
+                                    target_after_pop,
+                                    &layer_pm,
+                                    op,
+                                    mode,
+                                )?;
+                            }
+                        }
                     }
                     continue;
                 }
