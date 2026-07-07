@@ -18,7 +18,8 @@ pub use bounds::RectBounds;
 pub use error::GeometryError;
 pub use guide::{ConstructionGuide, modular_guides, polar_guides, ratio_guides};
 pub use intersection::{
-    IntersectionPoint, LineIntersection, SegmentIntersection, intersect_lines, intersect_segments,
+    IntersectionPoint, LineIntersection, PolylineIntersection, SegmentIntersection,
+    collect_open_polyline_intersections, intersect_lines, intersect_segments,
 };
 pub use offset::{
     OffsetRailJoin, SegmentOffset, join_adjacent_segment_offsets, offset_open_polyline_segments,

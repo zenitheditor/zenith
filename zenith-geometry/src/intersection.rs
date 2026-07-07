@@ -23,6 +23,13 @@ pub enum SegmentIntersection {
     },
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PolylineIntersection {
+    pub first_segment_index: usize,
+    pub second_segment_index: usize,
+    pub intersection: SegmentIntersection,
+}
+
 pub fn intersect_lines(
     first_start: Point2,
     first_end: Point2,
@@ -40,17 +47,47 @@ pub fn intersect_segments(
     second_end: Point2,
 ) -> Result<Option<SegmentIntersection>, GeometryError> {
     let inputs = validate_inputs(first_start, first_end, second_start, second_end)?;
-    match line_intersection(inputs)? {
-        LineIntersection::Point(point) => {
-            if in_unit_range(point.first_t) && in_unit_range(point.second_t) {
-                Ok(Some(SegmentIntersection::Point(point)))
-            } else {
-                Ok(None)
+    segment_intersection(inputs)
+}
+
+pub fn collect_open_polyline_intersections(
+    first: &[Point2],
+    second: &[Point2],
+) -> Result<Vec<PolylineIntersection>, GeometryError> {
+    validate_points(first)?;
+    validate_points(second)?;
+
+    if first.len() < 2 || second.len() < 2 {
+        return Ok(Vec::new());
+    }
+
+    let mut intersections = Vec::new();
+    for (first_segment_index, first_segment) in first.windows(2).enumerate() {
+        let Some(first_start) = first_segment.first().copied() else {
+            continue;
+        };
+        let Some(first_end) = first_segment.get(1).copied() else {
+            continue;
+        };
+        for (second_segment_index, second_segment) in second.windows(2).enumerate() {
+            let Some(second_start) = second_segment.first().copied() else {
+                continue;
+            };
+            let Some(second_end) = second_segment.get(1).copied() else {
+                continue;
+            };
+            let inputs = line_inputs(first_start, first_end, second_start, second_end)?;
+            if let Some(intersection) = segment_intersection(inputs)? {
+                intersections.push(PolylineIntersection {
+                    first_segment_index,
+                    second_segment_index,
+                    intersection,
+                });
             }
         }
-        LineIntersection::Parallel => Ok(None),
-        LineIntersection::Collinear => collinear_segment_intersection(inputs),
     }
+
+    Ok(intersections)
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -74,6 +111,15 @@ fn validate_inputs(
     second_start.validate()?;
     second_end.validate()?;
 
+    line_inputs(first_start, first_end, second_start, second_end)
+}
+
+fn line_inputs(
+    first_start: Point2,
+    first_end: Point2,
+    second_start: Point2,
+    second_end: Point2,
+) -> Result<LineInputs, GeometryError> {
     let first_vector = subtract(first_end, first_start)?;
     let second_vector = subtract(second_end, second_start)?;
     if first_vector.x == 0.0 && first_vector.y == 0.0 {
@@ -91,6 +137,24 @@ fn validate_inputs(
         second_vector,
         start_delta: subtract(second_start, first_start)?,
     })
+}
+
+fn segment_intersection(inputs: LineInputs) -> Result<Option<SegmentIntersection>, GeometryError> {
+    match line_intersection(inputs)? {
+        LineIntersection::Point(point) => {
+            if in_unit_range(point.first_t) && in_unit_range(point.second_t) {
+                Ok(Some(SegmentIntersection::Point(point)))
+            } else {
+                Ok(None)
+            }
+        }
+        LineIntersection::Parallel => Ok(None),
+        LineIntersection::Collinear => collinear_segment_intersection(inputs),
+    }
+}
+
+fn validate_points(points: &[Point2]) -> Result<(), GeometryError> {
+    points.iter().try_for_each(|point| point.validate())
 }
 
 fn line_intersection(inputs: LineInputs) -> Result<LineIntersection, GeometryError> {
@@ -498,6 +562,130 @@ mod tests {
                 point(1.0, 0.0)
             ),
             Err(GeometryError::DegenerateLine)
+        );
+    }
+
+    #[test]
+    fn empty_and_single_point_polylines_have_no_intersections() {
+        assert_eq!(
+            collect_open_polyline_intersections(&[], &[point(0.0, 0.0), point(1.0, 0.0)]),
+            Ok(Vec::new())
+        );
+        assert_eq!(
+            collect_open_polyline_intersections(&[point(0.0, 0.0)], &[point(0.0, 0.0)]),
+            Ok(Vec::new())
+        );
+    }
+
+    #[test]
+    fn polyline_collection_rejects_invalid_points_and_degenerate_segments() {
+        assert_eq!(
+            collect_open_polyline_intersections(
+                &[point(f64::NAN, 0.0)],
+                &[point(0.0, 0.0), point(1.0, 0.0)]
+            ),
+            Err(GeometryError::NonFinitePoint)
+        );
+        assert_eq!(
+            collect_open_polyline_intersections(
+                &[point(0.0, 0.0), point(0.0, 0.0)],
+                &[point(0.0, 0.0), point(1.0, 0.0)]
+            ),
+            Err(GeometryError::DegenerateLine)
+        );
+    }
+
+    #[test]
+    fn polyline_collection_finds_crossing_with_segment_indices() {
+        assert_eq!(
+            collect_open_polyline_intersections(
+                &[point(0.0, 0.0), point(10.0, 10.0)],
+                &[point(0.0, 10.0), point(10.0, 0.0)]
+            ),
+            Ok(vec![PolylineIntersection {
+                first_segment_index: 0,
+                second_segment_index: 0,
+                intersection: SegmentIntersection::Point(IntersectionPoint {
+                    point: point(5.0, 5.0),
+                    first_t: 0.5,
+                    second_t: 0.5,
+                }),
+            }])
+        );
+    }
+
+    #[test]
+    fn polyline_collection_keeps_shared_endpoint_touch() {
+        assert_eq!(
+            collect_open_polyline_intersections(
+                &[point(0.0, 0.0), point(10.0, 0.0)],
+                &[point(10.0, 0.0), point(10.0, 10.0)]
+            ),
+            Ok(vec![PolylineIntersection {
+                first_segment_index: 0,
+                second_segment_index: 0,
+                intersection: SegmentIntersection::Point(IntersectionPoint {
+                    point: point(10.0, 0.0),
+                    first_t: 1.0,
+                    second_t: 0.0,
+                }),
+            }])
+        );
+    }
+
+    #[test]
+    fn polyline_collection_preserves_overlap_results() {
+        assert_eq!(
+            collect_open_polyline_intersections(
+                &[point(0.0, 0.0), point(10.0, 0.0)],
+                &[point(4.0, 0.0), point(12.0, 0.0)]
+            ),
+            Ok(vec![PolylineIntersection {
+                first_segment_index: 0,
+                second_segment_index: 0,
+                intersection: SegmentIntersection::Overlap {
+                    start: IntersectionPoint {
+                        point: point(4.0, 0.0),
+                        first_t: 0.4,
+                        second_t: 0.0,
+                    },
+                    end: IntersectionPoint {
+                        point: point(10.0, 0.0),
+                        first_t: 1.0,
+                        second_t: 0.75,
+                    },
+                },
+            }])
+        );
+    }
+
+    #[test]
+    fn polyline_collection_preserves_segment_pair_order() {
+        assert_eq!(
+            collect_open_polyline_intersections(
+                &[point(0.0, 0.0), point(10.0, 0.0), point(10.0, 10.0)],
+                &[point(5.0, -5.0), point(5.0, 5.0), point(15.0, 5.0)]
+            ),
+            Ok(vec![
+                PolylineIntersection {
+                    first_segment_index: 0,
+                    second_segment_index: 0,
+                    intersection: SegmentIntersection::Point(IntersectionPoint {
+                        point: point(5.0, 0.0),
+                        first_t: 0.5,
+                        second_t: 0.5,
+                    }),
+                },
+                PolylineIntersection {
+                    first_segment_index: 1,
+                    second_segment_index: 1,
+                    intersection: SegmentIntersection::Point(IntersectionPoint {
+                        point: point(10.0, 5.0),
+                        first_t: 0.5,
+                        second_t: 0.5,
+                    }),
+                },
+            ])
         );
     }
 }
