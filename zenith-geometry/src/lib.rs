@@ -7,7 +7,7 @@ pub mod point;
 pub mod polyline;
 mod validation;
 
-pub use bezier::CubicBezier;
+pub use bezier::{CubicBezier, CubicBezierProjection, project_onto_cubic_bezier};
 pub use bounds::RectBounds;
 pub use error::GeometryError;
 pub use point::{Point2, SegmentProjection};

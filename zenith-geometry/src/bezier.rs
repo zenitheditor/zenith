@@ -14,6 +14,13 @@ pub struct CubicBezier {
     pub p3: Point2,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct CubicBezierProjection {
+    pub point: Point2,
+    pub t: f64,
+    pub distance_squared: f64,
+}
+
 impl CubicBezier {
     pub fn new(p0: Point2, p1: Point2, p2: Point2, p3: Point2) -> Result<Self, GeometryError> {
         Self::validate_points(p0, p1, p2, p3)?;
@@ -91,24 +98,10 @@ impl CubicBezier {
         validate_tolerance(tolerance)?;
         Self::validate_points(self.p0, self.p1, self.p2, self.p3)?;
 
-        let tolerance_squared = tolerance * tolerance;
-        let mut points = Vec::new();
-        points.push(self.p0);
-
-        let mut stack = Vec::new();
-        stack.push((self, 0_usize));
-
-        while let Some((curve, depth)) = stack.pop() {
-            if depth >= MAX_FLATTEN_DEPTH || curve.is_flat_enough(tolerance_squared) {
-                points.push(curve.p3);
-            } else {
-                let (left, right) = curve.split_midpoint();
-                stack.push((right, depth + 1));
-                stack.push((left, depth + 1));
-            }
-        }
-
-        Ok(points)
+        Ok(flatten_with_parameters(self, tolerance)
+            .into_iter()
+            .map(|(point, _t)| point)
+            .collect())
     }
 
     pub fn split(self, t: f64) -> Result<(Self, Self), GeometryError> {
@@ -180,6 +173,63 @@ impl CubicBezier {
     }
 }
 
+pub fn project_onto_cubic_bezier(
+    point: Point2,
+    curve: CubicBezier,
+    tolerance: f64,
+) -> Result<CubicBezierProjection, GeometryError> {
+    validate_tolerance(tolerance)?;
+    point.validate()?;
+    CubicBezier::validate_points(curve.p0, curve.p1, curve.p2, curve.p3)?;
+
+    let flattened = flatten_with_parameters(curve, tolerance);
+    let mut nearest = CubicBezierProjection {
+        point: curve.p0,
+        t: 0.0,
+        distance_squared: point.distance_squared(curve.p0),
+    };
+
+    for segment in flattened.windows(2) {
+        let [(segment_start, t0), (segment_end, t1)] = segment else {
+            continue;
+        };
+        let projection = point.project_onto_segment(*segment_start, *segment_end);
+        let candidate = CubicBezierProjection {
+            point: projection.point,
+            t: t0 + (t1 - t0) * projection.t,
+            distance_squared: projection.distance_squared,
+        };
+
+        if candidate.distance_squared < nearest.distance_squared {
+            nearest = candidate;
+        }
+    }
+
+    Ok(nearest)
+}
+
+fn flatten_with_parameters(curve: CubicBezier, tolerance: f64) -> Vec<(Point2, f64)> {
+    let tolerance_squared = tolerance * tolerance;
+    let mut points = Vec::new();
+    points.push((curve.p0, 0.0));
+
+    let mut stack = Vec::new();
+    stack.push((curve, 0.0, 1.0, 0_usize));
+
+    while let Some((curve, t0, t1, depth)) = stack.pop() {
+        if depth >= MAX_FLATTEN_DEPTH || curve.is_flat_enough(tolerance_squared) {
+            points.push((curve.p3, t1));
+        } else {
+            let (left, right) = curve.split_midpoint();
+            let midpoint_t = (t0 + t1) * 0.5;
+            stack.push((right, midpoint_t, t1, depth + 1));
+            stack.push((left, t0, midpoint_t, depth + 1));
+        }
+    }
+
+    points
+}
+
 fn axis_extrema(p0: f64, p1: f64, p2: f64, p3: f64) -> [f64; 2] {
     let a = -p0 + 3.0 * p1 - 3.0 * p2 + p3;
     let b = 2.0 * (p0 - 2.0 * p1 + p2);
@@ -229,6 +279,13 @@ mod tests {
             Point2::new_unchecked(10.0, 10.0),
             Point2::new_unchecked(10.0, 0.0),
         )
+    }
+
+    fn assert_close(actual: f64, expected: f64, epsilon: f64) {
+        assert!(
+            (actual - expected).abs() <= epsilon,
+            "expected {actual} to be within {epsilon} of {expected}"
+        );
     }
 
     #[test]
@@ -351,6 +408,155 @@ mod tests {
             .sum::<f64>();
 
         assert_eq!(curve.length(tolerance), Ok(flattened_length));
+    }
+
+    #[test]
+    fn projects_straight_line_cubic_to_expected_point_and_parameter() {
+        let curve = CubicBezier::new_unchecked(
+            Point2::new_unchecked(0.0, 0.0),
+            Point2::new_unchecked(1.0, 0.0),
+            Point2::new_unchecked(2.0, 0.0),
+            Point2::new_unchecked(3.0, 0.0),
+        );
+        let projection = project_onto_cubic_bezier(Point2::new_unchecked(1.5, 2.0), curve, 0.1)
+            .expect("valid projection");
+
+        assert_eq!(projection.point, Point2::new_unchecked(1.5, 0.0));
+        assert_close(projection.t, 0.5, 1.0e-12);
+        assert_close(projection.distance_squared, 4.0, 1.0e-12);
+    }
+
+    #[test]
+    fn projects_degenerate_cubic_to_start_point() {
+        let point = Point2::new_unchecked(3.0, 4.0);
+        let curve = CubicBezier::new_unchecked(point, point, point, point);
+        let projection = project_onto_cubic_bezier(Point2::new_unchecked(5.0, 7.0), curve, 0.1)
+            .expect("valid projection");
+
+        assert_eq!(projection.point, point);
+        assert_eq!(projection.t, 0.0);
+        assert_close(projection.distance_squared, 13.0, 1.0e-12);
+    }
+
+    #[test]
+    fn projects_curved_cubic_to_interior_parameter() {
+        let curve = sample_curve();
+        let query = Point2::new_unchecked(5.0, 8.0);
+        let projection = project_onto_cubic_bezier(query, curve, 0.05).expect("valid projection");
+
+        assert!(projection.t > 0.0 && projection.t < 1.0);
+        assert!(projection.distance_squared.is_finite());
+        assert!(projection.distance_squared < query.distance_squared(curve.p0));
+        assert!(projection.distance_squared < query.distance_squared(curve.p3));
+    }
+
+    #[test]
+    fn projection_parameter_maps_to_projected_curve_point() {
+        let curve = sample_curve();
+        let tolerance = 0.02;
+        let projection =
+            project_onto_cubic_bezier(Point2::new_unchecked(4.25, 6.8), curve, tolerance)
+                .expect("valid projection");
+        let evaluated = curve.evaluate(projection.t);
+
+        assert!(
+            projection.point.distance_squared(evaluated) <= tolerance * tolerance,
+            "mapped curve point should stay within flatten tolerance"
+        );
+    }
+
+    #[test]
+    fn projection_clamps_to_endpoint_minima() {
+        let curve = CubicBezier::new_unchecked(
+            Point2::new_unchecked(0.0, 0.0),
+            Point2::new_unchecked(1.0, 0.0),
+            Point2::new_unchecked(2.0, 0.0),
+            Point2::new_unchecked(3.0, 0.0),
+        );
+
+        let start_projection =
+            project_onto_cubic_bezier(Point2::new_unchecked(-2.0, 1.0), curve, 0.1)
+                .expect("valid projection");
+        let end_projection = project_onto_cubic_bezier(Point2::new_unchecked(5.0, 1.0), curve, 0.1)
+            .expect("valid projection");
+
+        assert_eq!(start_projection.point, curve.p0);
+        assert_eq!(start_projection.t, 0.0);
+        assert_eq!(end_projection.point, curve.p3);
+        assert_eq!(end_projection.t, 1.0);
+    }
+
+    #[test]
+    fn projection_tie_keeps_earlier_parameter() {
+        let curve = CubicBezier::new_unchecked(
+            Point2::new_unchecked(0.0, 0.0),
+            Point2::new_unchecked(10.0, 0.0),
+            Point2::new_unchecked(-10.0, 0.0),
+            Point2::new_unchecked(0.0, 0.0),
+        );
+        let projection = project_onto_cubic_bezier(Point2::new_unchecked(0.0, 1.0), curve, 0.01)
+            .expect("valid projection");
+
+        assert_eq!(projection.point, curve.p0);
+        assert_eq!(projection.t, 0.0);
+        assert_close(projection.distance_squared, 1.0, 1.0e-12);
+    }
+
+    #[test]
+    fn projection_rejects_invalid_inputs() {
+        let invalid_point = Point2::new_unchecked(f64::NAN, 0.0);
+        let curve = sample_curve();
+
+        assert_eq!(
+            project_onto_cubic_bezier(invalid_point, curve, 0.1),
+            Err(GeometryError::NonFinitePoint)
+        );
+
+        let invalid_curve = CubicBezier::new_unchecked(
+            Point2::new_unchecked(0.0, 0.0),
+            Point2::new_unchecked(1.0, f64::INFINITY),
+            Point2::new_unchecked(2.0, 0.0),
+            Point2::new_unchecked(3.0, 0.0),
+        );
+        assert_eq!(
+            project_onto_cubic_bezier(Point2::new_unchecked(1.0, 1.0), invalid_curve, 0.1),
+            Err(GeometryError::NonFinitePoint)
+        );
+        assert_eq!(
+            project_onto_cubic_bezier(Point2::new_unchecked(1.0, 1.0), curve, f64::NAN),
+            Err(GeometryError::NonFiniteTolerance)
+        );
+        assert_eq!(
+            project_onto_cubic_bezier(Point2::new_unchecked(1.0, 1.0), curve, 0.0),
+            Err(GeometryError::NonPositiveTolerance)
+        );
+    }
+
+    #[test]
+    fn projection_matches_manual_flattened_polyline_scan() {
+        let curve = sample_curve();
+        let query = Point2::new_unchecked(4.25, 6.8);
+        let tolerance = 0.02;
+        let projection =
+            project_onto_cubic_bezier(query, curve, tolerance).expect("valid projection");
+        let points = curve.flatten(tolerance).expect("valid flattening");
+        let mut manual_distance_squared = f64::INFINITY;
+
+        for segment in points.windows(2) {
+            let [start, end] = segment else {
+                continue;
+            };
+            let segment_projection = query.project_onto_segment(*start, *end);
+            if segment_projection.distance_squared < manual_distance_squared {
+                manual_distance_squared = segment_projection.distance_squared;
+            }
+        }
+
+        assert_close(
+            projection.distance_squared,
+            manual_distance_squared,
+            1.0e-12,
+        );
     }
 
     #[test]
