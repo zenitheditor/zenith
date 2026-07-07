@@ -1,0 +1,19 @@
+[package]
+name = "zenith-perception"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+publish.workspace = true
+readme.workspace = true
+description = "Read-only deterministic perception metrics for Zenith raster surfaces."
+
+[dependencies]
+zenith-raster = { workspace = true }
+
+[lints]
+workspace = true
