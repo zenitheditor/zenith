@@ -21,6 +21,7 @@ pub fn op_summary(name: &str) -> Option<&'static str> {
         "set_locked" => Some("Lock or unlock a node to prevent accidental edits."),
         "set_geometry" => Some("Move and/or resize a node by setting x, y, w, h, or rotate."),
         "set_points" => Some("Replace the full vertex list of a polygon or polyline node."),
+        "set_path_anchors" => Some("Replace the full anchor list of a path node."),
         "add_node" => Some("Parse a .zen source fragment and insert it into a container."),
         "remove_node" => Some("Remove a node and its subtree from the document."),
         "set_opacity" => Some("Set the opacity of a node (0.0 = fully transparent, 1.0 = opaque)."),

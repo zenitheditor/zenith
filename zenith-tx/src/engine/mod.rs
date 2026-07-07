@@ -13,6 +13,7 @@ use crate::result::{TxError, TxResult, TxStatus};
 mod asset;
 mod flags;
 mod geometry;
+mod path;
 mod pattern;
 mod recipe;
 pub(crate) mod structure;
@@ -25,6 +26,7 @@ use geometry::{
     GeometryDelta, apply_align_nodes, apply_align_to_edge, apply_distribute_nodes,
     apply_set_geometry,
 };
+use path::apply_set_path_anchors;
 use pattern::apply_detach_pattern;
 use recipe::{RecipeScalars, apply_create_recipe, apply_delete_recipe, apply_update_recipe};
 use structure::{
@@ -216,6 +218,12 @@ fn apply_op(
             points,
         } => {
             apply_set_points(node_id, points, doc, diagnostics, affected);
+        }
+        Op::SetPathAnchors {
+            node: node_id,
+            anchors,
+        } => {
+            apply_set_path_anchors(node_id, anchors, doc, diagnostics, affected);
         }
         Op::AddNode {
             parent,
@@ -444,6 +452,7 @@ fn op_lock_targets(op: &Op) -> Vec<&str> {
         | Op::SetStrokeWidth { node, .. }
         | Op::SetGeometry { node, .. }
         | Op::SetPoints { node, .. }
+        | Op::SetPathAnchors { node, .. }
         | Op::SetOpacity { node, .. }
         | Op::ReplaceText { node, .. }
         | Op::RemoveNode { node }

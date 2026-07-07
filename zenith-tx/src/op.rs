@@ -27,6 +27,30 @@ pub struct OpPoint {
     pub y: f64,
 }
 
+/// A path anchor used by [`Op::SetPathAnchors`], expressed in pixels.
+///
+/// JSON shape: `{"x": 50.0, "y": 80.0, "in_x": 40.0, "in_y": 80.0, "out_x": 60.0, "out_y": 80.0}`.
+/// Handle coordinates are optional and default to absent.
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq)]
+pub struct OpPathAnchor {
+    /// Anchor X coordinate in document pixels.
+    pub x: f64,
+    /// Anchor Y coordinate in document pixels.
+    pub y: f64,
+    /// Optional incoming handle X coordinate in document pixels.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub in_x: Option<f64>,
+    /// Optional incoming handle Y coordinate in document pixels.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub in_y: Option<f64>,
+    /// Optional outgoing handle X coordinate in document pixels.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub out_x: Option<f64>,
+    /// Optional outgoing handle Y coordinate in document pixels.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub out_y: Option<f64>,
+}
+
 /// A single text span used by [`Op::ReplaceText`].
 ///
 /// JSON shape: `{"text":"Hello","fill":"color.brand","italic":true}`.
@@ -323,6 +347,25 @@ pub enum Op {
         node: String,
         /// Replacement vertex list. Each vertex is in document pixels.
         points: Vec<OpPoint>,
+    },
+    /// Replace the entire anchor list of a `path` node.
+    ///
+    /// Post-validation rejects automatically if the new anchor count falls
+    /// below the path's minimum, or if an in/out handle is missing its paired
+    /// coordinate.
+    ///
+    /// Supported nodes: `path`.
+    /// Unsupported: all other variants — yields `tx.unsupported_property`.
+    ///
+    /// JSON example:
+    /// ```json
+    /// {"op":"set_path_anchors","node":"path.logo","anchors":[{"x":0,"y":0,"out_x":40,"out_y":0},{"x":100,"y":0,"in_x":60,"in_y":0}]}
+    /// ```
+    SetPathAnchors {
+        /// The stable node `id` to target.
+        node: String,
+        /// Replacement anchor list. Each coordinate is in document pixels.
+        anchors: Vec<OpPathAnchor>,
     },
     /// Construct a new node from a `.zen` source fragment and insert it into a
     /// container (a page, group, or frame) at a chosen position.

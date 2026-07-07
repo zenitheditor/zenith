@@ -271,6 +271,21 @@ pub const POLY_DOC: &str = r##"zenith version=1 {
   }
 }"##;
 
+/// Path with the minimum valid open anchor count.
+pub const PATH_DOC: &str = r##"zenith version=1 {
+  project id="proj" name="Test"
+  tokens format="zenith-token-v1" { }
+  styles { }
+  document id="doc1" title="T" {
+    page id="pg1" w=(px)400 h=(px)300 {
+      path id="path1" {
+        anchor x=(px)0 y=(px)0
+        anchor x=(px)100 y=(px)0
+      }
+    }
+  }
+}"##;
+
 /// Three rects a (index 0, bottom), b (index 1), c (index 2, top).
 pub const THREE_RECT_DOC: &str = r##"zenith version=1 {
   project id="proj" name="Test"

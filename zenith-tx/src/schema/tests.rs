@@ -1,5 +1,5 @@
 use super::*;
-use crate::op::{AddAssetMetadata, Op};
+use crate::op::{AddAssetMetadata, Op, OpPathAnchor};
 use std::collections::BTreeSet;
 
 fn add_asset_sample_op() -> Op {
@@ -43,6 +43,7 @@ fn op_tag(op: &Op) -> &'static str {
         Op::SetLocked { .. } => "set_locked",
         Op::SetGeometry { .. } => "set_geometry",
         Op::SetPoints { .. } => "set_points",
+        Op::SetPathAnchors { .. } => "set_path_anchors",
         Op::AddNode { .. } => "add_node",
         Op::RemoveNode { .. } => "remove_node",
         Op::SetOpacity { .. } => "set_opacity",
@@ -91,6 +92,7 @@ fn all_exhaustive_tags() -> BTreeSet<&'static str> {
         "set_locked",
         "set_geometry",
         "set_points",
+        "set_path_anchors",
         "add_node",
         "remove_node",
         "set_opacity",
@@ -207,6 +209,10 @@ fn op_tag_strings_match_exhaustive_set() {
         Op::SetPoints {
             node: String::new(),
             points: vec![],
+        },
+        Op::SetPathAnchors {
+            node: String::new(),
+            anchors: vec![],
         },
         Op::AddNode {
             parent: String::new(),
@@ -504,6 +510,20 @@ fn op_fields_names_match_serde_keys() {
             },
         ),
         (
+            "set_path_anchors",
+            Op::SetPathAnchors {
+                node: "n".into(),
+                anchors: vec![OpPathAnchor {
+                    x: 0.0,
+                    y: 0.0,
+                    in_x: Some(-10.0),
+                    in_y: Some(0.0),
+                    out_x: Some(10.0),
+                    out_y: Some(0.0),
+                }],
+            },
+        ),
+        (
             "add_node",
             Op::AddNode {
                 parent: "p".into(),
@@ -743,4 +763,37 @@ fn op_fields_names_match_serde_keys() {
         "op_fields_names_match_serde_keys is missing samples for ops: {:?}",
         missing,
     );
+}
+
+#[test]
+fn path_anchor_optional_fields_are_omitted_when_absent() {
+    let json = serde_json::to_value(Op::SetPathAnchors {
+        node: "n".into(),
+        anchors: vec![OpPathAnchor {
+            x: 1.0,
+            y: 2.0,
+            in_x: None,
+            in_y: None,
+            out_x: None,
+            out_y: None,
+        }],
+    })
+    .expect("serialization should succeed");
+
+    let anchors = json
+        .get("anchors")
+        .and_then(|value| value.as_array())
+        .expect("anchors should serialize as an array");
+    let anchor = anchors
+        .first()
+        .and_then(|value| value.as_object())
+        .expect("anchor should serialize as an object");
+
+    assert_eq!(anchor.len(), 2);
+    assert!(anchor.contains_key("x"));
+    assert!(anchor.contains_key("y"));
+    assert!(!anchor.contains_key("in_x"));
+    assert!(!anchor.contains_key("in_y"));
+    assert!(!anchor.contains_key("out_x"));
+    assert!(!anchor.contains_key("out_y"));
 }
