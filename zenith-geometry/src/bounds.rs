@@ -1,4 +1,4 @@
-use crate::Point2;
+use crate::{GeometryError, Point2};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct RectBounds {
@@ -9,6 +9,31 @@ pub struct RectBounds {
 }
 
 impl RectBounds {
+    pub fn from_xywh(x: f64, y: f64, width: f64, height: f64) -> Result<Self, GeometryError> {
+        if !x.is_finite() || !y.is_finite() {
+            return Err(GeometryError::NonFinitePoint);
+        }
+        if !width.is_finite() || !height.is_finite() {
+            return Err(GeometryError::NonFiniteParameter);
+        }
+        if width < 0.0 || height < 0.0 {
+            return Err(GeometryError::CountOutOfRange);
+        }
+
+        let bounds = Self {
+            min_x: x,
+            min_y: y,
+            max_x: x + width,
+            max_y: y + height,
+        };
+
+        if bounds.is_valid() {
+            Ok(bounds)
+        } else {
+            Err(GeometryError::NonFiniteParameter)
+        }
+    }
+
     #[must_use]
     pub fn from_point(point: Point2) -> Self {
         Self {
@@ -37,6 +62,38 @@ impl RectBounds {
             max_x: self.max_x.max(bounds.max_x),
             max_y: self.max_y.max(bounds.max_y),
         }
+    }
+
+    pub fn outset(self, amount: f64) -> Result<Self, GeometryError> {
+        if !self.is_valid() {
+            return Err(GeometryError::CountOutOfRange);
+        }
+        if !amount.is_finite() {
+            return Err(GeometryError::NonFiniteParameter);
+        }
+
+        let bounds = Self {
+            min_x: self.min_x - amount,
+            min_y: self.min_y - amount,
+            max_x: self.max_x + amount,
+            max_y: self.max_y + amount,
+        };
+
+        if bounds.is_valid() {
+            Ok(bounds)
+        } else {
+            Err(GeometryError::CountOutOfRange)
+        }
+    }
+
+    #[must_use]
+    pub fn contains_bounds(self, bounds: Self) -> bool {
+        self.is_valid()
+            && bounds.is_valid()
+            && self.min_x <= bounds.min_x
+            && self.min_y <= bounds.min_y
+            && self.max_x >= bounds.max_x
+            && self.max_y >= bounds.max_y
     }
 
     #[must_use]
@@ -115,6 +172,54 @@ mod tests {
                 max_y: 9.0
             }
         );
+    }
+
+    #[test]
+    fn builds_from_origin_and_size() {
+        assert_eq!(
+            RectBounds::from_xywh(2.0, 3.0, 5.0, 7.0),
+            Ok(RectBounds {
+                min_x: 2.0,
+                min_y: 3.0,
+                max_x: 7.0,
+                max_y: 10.0
+            })
+        );
+        assert_eq!(
+            RectBounds::from_xywh(f64::NAN, 3.0, 5.0, 7.0),
+            Err(GeometryError::NonFinitePoint)
+        );
+        assert_eq!(
+            RectBounds::from_xywh(2.0, 3.0, f64::INFINITY, 7.0),
+            Err(GeometryError::NonFiniteParameter)
+        );
+        assert_eq!(
+            RectBounds::from_xywh(2.0, 3.0, -1.0, 7.0),
+            Err(GeometryError::CountOutOfRange)
+        );
+    }
+
+    #[test]
+    fn outsets_and_contains_bounds() {
+        let bounds = RectBounds::from_xywh(2.0, 3.0, 5.0, 7.0).expect("valid bounds");
+        let outer = bounds.outset(2.0).expect("valid outset");
+
+        assert_eq!(
+            outer,
+            RectBounds {
+                min_x: 0.0,
+                min_y: 1.0,
+                max_x: 9.0,
+                max_y: 12.0
+            }
+        );
+        assert!(outer.contains_bounds(bounds));
+        assert!(!bounds.contains_bounds(outer));
+        assert_eq!(
+            bounds.outset(f64::NAN),
+            Err(GeometryError::NonFiniteParameter)
+        );
+        assert_eq!(bounds.outset(-4.0), Err(GeometryError::CountOutOfRange));
     }
 
     #[test]

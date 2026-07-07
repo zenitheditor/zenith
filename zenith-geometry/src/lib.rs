@@ -3,6 +3,7 @@
 pub mod bezier;
 pub mod bounds;
 pub mod error;
+pub mod guide;
 pub mod path;
 pub mod point;
 pub mod polyline;
@@ -12,6 +13,7 @@ mod validation;
 pub use bezier::{CubicBezier, CubicBezierProjection, project_onto_cubic_bezier};
 pub use bounds::RectBounds;
 pub use error::GeometryError;
+pub use guide::{ConstructionGuide, modular_guides, polar_guides, ratio_guides};
 pub use path::{
     PathAnchor, PathGeometry, PathJoinVectors, PathProjection, PathSegment, PathTopology,
 };
