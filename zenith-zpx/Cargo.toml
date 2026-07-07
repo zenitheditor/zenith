@@ -15,6 +15,7 @@ description = "Zenith ZPX raster substrate document model and deterministic mani
 [dependencies]
 kdl = "6.7.1"
 zenith-core = { workspace = true }
+zenith-raster = { workspace = true }
 zenith-session = { workspace = true }
 
 [lints]

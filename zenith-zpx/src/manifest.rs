@@ -3,9 +3,10 @@ use zenith_core::{BlendMode, Color, GradientStop};
 
 use crate::error::ZpxError;
 use crate::model::{
-    Adjustment, AlphaMode, BlobRef, Canvas, ColorSpace, ContentHash, Layer, LayerSource, Mask,
-    MaskSource, ZpxDoc,
+    Adjustment, AlphaMode, BlobRef, Brush, Canvas, ColorSpace, ContentHash, DabSample, Layer,
+    LayerSource, Mask, MaskSource, Stroke, StrokeProgram, ZpxDoc,
 };
+use crate::paint::{validate_brush, validate_program, validate_stroke};
 
 const VERSION: i128 = 1;
 
@@ -103,6 +104,7 @@ fn parse_layer_source(node: &KdlNode) -> Result<LayerSource, ZpxError> {
     match required_str(node, "kind")? {
         "buffer" => Ok(LayerSource::Buffer(parse_blob_ref(node)?)),
         "adjustment" => parse_adjustment_source(node),
+        "program" => parse_program_source(node),
         "group" => {
             let children = required_children(node, "group source")?;
             ensure_only_named_nodes(children.nodes(), &["layers"], "group source")?;
@@ -125,6 +127,70 @@ fn parse_adjustment_source(node: &KdlNode) -> Result<LayerSource, ZpxError> {
         }
         other => Err(ZpxError::new(format!("unknown adjustment kind: {other}"))),
     }
+}
+
+fn parse_program_source(node: &KdlNode) -> Result<LayerSource, ZpxError> {
+    let children = required_children(node, "program source")?;
+    ensure_only_named_nodes(children.nodes(), &["stroke"], "program source")?;
+    let mut strokes = Vec::new();
+    for child in children.nodes() {
+        match child.name().value() {
+            "stroke" => strokes.push(parse_stroke(child)?),
+            other => {
+                return Err(ZpxError::new(format!(
+                    "unexpected node in program source: {other}"
+                )));
+            }
+        }
+    }
+    let program = StrokeProgram { strokes };
+    validate_program(&program)?;
+    Ok(LayerSource::Program(program))
+}
+
+fn parse_stroke(node: &KdlNode) -> Result<Stroke, ZpxError> {
+    let children = required_children(node, "stroke")?;
+    ensure_only_named_nodes(children.nodes(), &["brush", "sample"], "stroke")?;
+    let brush = parse_brush(only_named_node(children.nodes(), "brush", "stroke")?)?;
+    let mut path = Vec::new();
+    for child in children.nodes() {
+        match child.name().value() {
+            "brush" => {}
+            "sample" => path.push(parse_sample(child)?),
+            other => return Err(ZpxError::new(format!("unexpected node in stroke: {other}"))),
+        }
+    }
+    let stroke = Stroke {
+        brush,
+        path,
+        color: parse_color(required_str(node, "color")?)?,
+        opacity: required_unit_f64(node, "opacity")?,
+        blend_mode: parse_blend_mode(required_str(node, "blend")?)?,
+        seed: required_u64(node, "seed")?,
+    };
+    validate_stroke(&stroke)?;
+    Ok(stroke)
+}
+
+fn parse_brush(node: &KdlNode) -> Result<Brush, ZpxError> {
+    let brush = match required_str(node, "kind")? {
+        "round" => Brush::Round {
+            radius_px: required_f64(node, "radius")?,
+            hardness: required_unit_f64(node, "hardness")?,
+            spacing: required_f64(node, "spacing")?,
+        },
+        other => return Err(ZpxError::new(format!("unknown brush kind: {other}"))),
+    };
+    validate_brush(brush)?;
+    Ok(brush)
+}
+
+fn parse_sample(node: &KdlNode) -> Result<DabSample, ZpxError> {
+    Ok(DabSample {
+        x: required_f64(node, "x")?,
+        y: required_f64(node, "y")?,
+        pressure: required_unit_f64(node, "pressure")?,
+    })
 }
 
 fn parse_gradient_stops(node: &KdlNode) -> Result<Vec<GradientStop>, ZpxError> {
@@ -233,6 +299,13 @@ fn write_layer_source(out: &mut String, source: &LayerSource, depth: usize) {
             indent(out, depth);
             out.push_str("}\n");
         }
+        LayerSource::Program(program) => {
+            indent(out, depth);
+            out.push_str("source kind=\"program\" {\n");
+            write_program(out, program, depth + 1);
+            indent(out, depth);
+            out.push_str("}\n");
+        }
         LayerSource::Group(layers) => {
             indent(out, depth);
             out.push_str("source kind=\"group\" {\n");
@@ -241,6 +314,61 @@ fn write_layer_source(out: &mut String, source: &LayerSource, depth: usize) {
             out.push_str("}\n");
         }
     }
+}
+
+fn write_program(out: &mut String, program: &StrokeProgram, depth: usize) {
+    for stroke in &program.strokes {
+        write_stroke(out, stroke, depth);
+    }
+}
+
+fn write_stroke(out: &mut String, stroke: &Stroke, depth: usize) {
+    indent(out, depth);
+    out.push_str("stroke color=");
+    out.push_str(&quoted(&format_color(stroke.color)));
+    out.push_str(" opacity=");
+    out.push_str(&format_f64(stroke.opacity));
+    out.push_str(" blend=");
+    out.push_str(&quoted(blend_mode_name(stroke.blend_mode)));
+    out.push_str(" seed=");
+    out.push_str(&stroke.seed.to_string());
+    out.push_str(" {\n");
+    write_brush(out, stroke.brush, depth + 1);
+    for sample in &stroke.path {
+        write_sample(out, *sample, depth + 1);
+    }
+    indent(out, depth);
+    out.push_str("}\n");
+}
+
+fn write_brush(out: &mut String, brush: Brush, depth: usize) {
+    match brush {
+        Brush::Round {
+            radius_px,
+            hardness,
+            spacing,
+        } => {
+            indent(out, depth);
+            out.push_str("brush kind=\"round\" radius=");
+            out.push_str(&format_f64(radius_px));
+            out.push_str(" hardness=");
+            out.push_str(&format_f64(hardness));
+            out.push_str(" spacing=");
+            out.push_str(&format_f64(spacing));
+            out.push('\n');
+        }
+    }
+}
+
+fn write_sample(out: &mut String, sample: DabSample, depth: usize) {
+    indent(out, depth);
+    out.push_str("sample x=");
+    out.push_str(&format_f64(sample.x));
+    out.push_str(" y=");
+    out.push_str(&format_f64(sample.y));
+    out.push_str(" pressure=");
+    out.push_str(&format_f64(sample.pressure));
+    out.push('\n');
 }
 
 fn write_gradient_stops(out: &mut String, stops: &[GradientStop], depth: usize) {
@@ -351,6 +479,11 @@ fn required_i128(node: &KdlNode, key: &str) -> Result<i128, ZpxError> {
 fn required_u32(node: &KdlNode, key: &str) -> Result<u32, ZpxError> {
     let value = required_i128(node, key)?;
     u32::try_from(value).map_err(|_| ZpxError::new(format!("property {key} is out of u32 range")))
+}
+
+fn required_u64(node: &KdlNode, key: &str) -> Result<u64, ZpxError> {
+    let value = required_i128(node, key)?;
+    u64::try_from(value).map_err(|_| ZpxError::new(format!("property {key} is out of u64 range")))
 }
 
 fn required_f64(node: &KdlNode, key: &str) -> Result<f64, ZpxError> {
@@ -545,6 +678,12 @@ mod tests {
         }
     }
 
+    fn program_manifest_with(source_body: &str) -> String {
+        format!(
+            "zpx version=1 {{\n    canvas width=64 height=64 color-space=\"srgb\" alpha=\"premultiplied\"\n    layers {{\n        layer id=\"paint\" blend=\"normal\" opacity=1.0 visible=#true clipping=#false {{\n            source kind=\"program\" {{\n{source_body}\n            }}\n        }}\n    }}\n}}\n"
+        )
+    }
+
     #[test]
     fn parse_serialize_roundtrip_including_buffer_layer() {
         let doc = buffer_doc();
@@ -558,6 +697,111 @@ mod tests {
     fn deterministic_serialize_repeated() {
         let doc = buffer_doc();
         assert_eq!(serialize_manifest(&doc), serialize_manifest(&doc));
+    }
+
+    #[test]
+    fn program_layer_parse_serialize_roundtrip() {
+        let doc = ZpxDoc {
+            canvas: Canvas::new(64, 64),
+            layers: vec![Layer {
+                id: "paint".to_owned(),
+                blend_mode: BlendMode::Normal,
+                opacity: 1.0,
+                visible: true,
+                clipping: false,
+                mask: None,
+                source: LayerSource::Program(StrokeProgram {
+                    strokes: vec![Stroke {
+                        brush: Brush::Round {
+                            radius_px: 8.0,
+                            hardness: 0.8,
+                            spacing: 0.25,
+                        },
+                        path: vec![
+                            DabSample {
+                                x: 10.0,
+                                y: 10.0,
+                                pressure: 1.0,
+                            },
+                            DabSample {
+                                x: 30.0,
+                                y: 10.0,
+                                pressure: 0.5,
+                            },
+                        ],
+                        color: Color::srgb(255, 0, 0, 255),
+                        opacity: 1.0,
+                        blend_mode: BlendMode::Normal,
+                        seed: 1,
+                    }],
+                }),
+            }],
+        };
+        let manifest = serialize_manifest(&doc);
+        let parsed = parse_manifest(&manifest).expect("program should parse");
+
+        assert_eq!(parsed, doc);
+        assert_eq!(serialize_manifest(&parsed), manifest);
+        assert!(manifest.contains("source kind=\"program\""));
+        assert!(manifest.contains("brush kind=\"round\" radius=8.0 hardness=0.8 spacing=0.25"));
+    }
+
+    #[test]
+    fn program_layer_manifest_shape_parses() {
+        let manifest = program_manifest_with(
+            "                stroke color=\"#ff0000ff\" opacity=1.0 blend=\"normal\" seed=1 {\n                    brush kind=\"round\" radius=8.0 hardness=0.8 spacing=0.25\n                    sample x=10.0 y=10.0 pressure=1.0\n                    sample x=30.0 y=10.0 pressure=1.0\n                }",
+        );
+
+        let parsed = parse_manifest(&manifest).expect("program manifest should parse");
+
+        assert!(matches!(
+            parsed.layers.first().map(|layer| &layer.source),
+            Some(LayerSource::Program(StrokeProgram { strokes })) if strokes.len() == 1
+        ));
+    }
+
+    #[test]
+    fn invalid_program_brush_rejected() {
+        let manifest = program_manifest_with(
+            "                stroke color=\"#ff0000ff\" opacity=1.0 blend=\"normal\" seed=1 {\n                    brush kind=\"round\" radius=0.0 hardness=0.8 spacing=0.25\n                    sample x=10.0 y=10.0 pressure=1.0\n                }",
+        );
+
+        let err = parse_manifest(&manifest).expect_err("invalid brush must fail");
+
+        assert!(err.message().contains("radius"));
+    }
+
+    #[test]
+    fn invalid_program_stroke_opacity_rejected() {
+        let manifest = program_manifest_with(
+            "                stroke color=\"#ff0000ff\" opacity=1.5 blend=\"normal\" seed=1 {\n                    brush kind=\"round\" radius=8.0 hardness=0.8 spacing=0.25\n                    sample x=10.0 y=10.0 pressure=1.0\n                }",
+        );
+
+        let err = parse_manifest(&manifest).expect_err("invalid stroke opacity must fail");
+
+        assert!(err.message().contains("opacity"));
+    }
+
+    #[test]
+    fn invalid_program_pressure_rejected() {
+        let manifest = program_manifest_with(
+            "                stroke color=\"#ff0000ff\" opacity=1.0 blend=\"normal\" seed=1 {\n                    brush kind=\"round\" radius=8.0 hardness=0.8 spacing=0.25\n                    sample x=10.0 y=10.0 pressure=1.25\n                }",
+        );
+
+        let err = parse_manifest(&manifest).expect_err("invalid pressure must fail");
+
+        assert!(err.message().contains("pressure"));
+    }
+
+    #[test]
+    fn empty_program_path_rejected() {
+        let manifest = program_manifest_with(
+            "                stroke color=\"#ff0000ff\" opacity=1.0 blend=\"normal\" seed=1 {\n                    brush kind=\"round\" radius=8.0 hardness=0.8 spacing=0.25\n                }",
+        );
+
+        let err = parse_manifest(&manifest).expect_err("empty path must fail");
+
+        assert!(err.message().contains("at least one sample"));
     }
 
     #[test]

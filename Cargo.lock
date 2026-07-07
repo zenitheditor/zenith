@@ -1510,6 +1510,7 @@ version = "0.0.8"
 dependencies = [
  "kdl",
  "zenith-core",
+ "zenith-raster",
  "zenith-session",
 ]
 
