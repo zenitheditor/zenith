@@ -391,6 +391,28 @@ pub enum Op {
         /// Replacement anchor list. Each coordinate is in document pixels.
         anchors: Vec<OpPathAnchor>,
     },
+    /// Set or clear the authoring intent metadata on one anchor of a `path` node.
+    ///
+    /// This operation preserves anchor coordinates and handles. `kind: null`
+    /// clears authoring intent; known string values are `corner`, `smooth`, and
+    /// `symmetric`, while future values are preserved for validation to warn on.
+    ///
+    /// Supported nodes: `path`.
+    /// Unsupported: all other variants — yields `tx.unsupported_property`.
+    ///
+    /// JSON example:
+    /// ```json
+    /// {"op":"set_path_anchor_kind","node":"path.logo","anchor_index":1,"kind":"smooth"}
+    /// ```
+    SetPathAnchorKind {
+        /// The stable node `id` to target.
+        node: String,
+        /// Zero-based anchor index to update.
+        anchor_index: usize,
+        /// Optional authoring intent. `None`/`null` clears it.
+        #[serde(default)]
+        kind: Option<String>,
+    },
     /// Insert an anchor into a `path` node by splitting an existing segment.
     ///
     /// The path's `closed` flag and all non-anchor properties are preserved. Anchor

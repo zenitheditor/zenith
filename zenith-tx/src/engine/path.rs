@@ -76,6 +76,72 @@ pub(super) fn apply_set_path_anchors(
     }
 }
 
+pub(super) fn apply_set_path_anchor_kind(
+    node_id: &str,
+    anchor_index: usize,
+    kind: Option<&str>,
+    doc: &mut Document,
+    diagnostics: &mut Vec<Diagnostic>,
+    affected: &mut Vec<String>,
+) {
+    match find_node_any_mut(doc, node_id) {
+        None => diagnostics.push(unknown_node(node_id)),
+        Some(node) => {
+            let node_kind = node_kind_str(node);
+            match node {
+                Node::Path(path) => {
+                    let Some(anchor) = path.anchors.get_mut(anchor_index) else {
+                        diagnostics.push(Diagnostic::error(
+                            "tx.out_of_range",
+                            format!(
+                                "anchor_index {anchor_index} is out of range for path '{node_id}'"
+                            ),
+                            None,
+                            Some(node_id.to_owned()),
+                        ));
+                        return;
+                    };
+
+                    anchor.kind = kind.map(AnchorKind::from_kind_str);
+                    record_affected(node_id, affected);
+                }
+                Node::Rect(_)
+                | Node::Ellipse(_)
+                | Node::Line(_)
+                | Node::Text(_)
+                | Node::Code(_)
+                | Node::Frame(_)
+                | Node::Group(_)
+                | Node::Image(_)
+                | Node::Polygon(_)
+                | Node::Polyline(_)
+                | Node::Instance(_)
+                | Node::Field(_)
+                | Node::Footnote(_)
+                | Node::Toc(_)
+                | Node::Table(_)
+                | Node::Shape(_)
+                | Node::Connector(_)
+                | Node::Pattern(_)
+                | Node::Chart(_)
+                | Node::Light(_)
+                | Node::Mesh(_)
+                | Node::Unknown(_) => {
+                    diagnostics.push(Diagnostic::error(
+                        "tx.unsupported_property",
+                        format!(
+                            "set_path_anchor_kind is not supported on a {} node",
+                            node_kind
+                        ),
+                        None,
+                        Some(node_id.to_owned()),
+                    ));
+                }
+            }
+        }
+    }
+}
+
 pub(super) fn apply_simplify_path_anchors(
     node_id: &str,
     tolerance: f64,

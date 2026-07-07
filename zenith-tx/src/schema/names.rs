@@ -35,6 +35,7 @@ pub fn op_names() -> &'static [&'static str] {
         "set_locked",
         "set_opacity",
         "set_page_size",
+        "set_path_anchor_kind",
         "set_path_anchors",
         "set_points",
         "set_stroke",

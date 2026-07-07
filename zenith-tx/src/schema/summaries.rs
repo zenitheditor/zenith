@@ -22,6 +22,7 @@ pub fn op_summary(name: &str) -> Option<&'static str> {
         "set_geometry" => Some("Move and/or resize a node by setting x, y, w, h, or rotate."),
         "set_points" => Some("Replace the full vertex list of a polygon or polyline node."),
         "set_path_anchors" => Some("Replace the full anchor list of a path node."),
+        "set_path_anchor_kind" => Some("Set or clear one path anchor's authoring intent metadata."),
         "insert_path_anchor" => Some("Insert a path anchor by splitting an existing segment."),
         "simplify_path_anchors" => {
             Some("Simplify an open path node's anchors using a pixel tolerance.")

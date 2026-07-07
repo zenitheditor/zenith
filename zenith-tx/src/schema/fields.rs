@@ -183,6 +183,26 @@ pub fn op_fields(name: &str) -> Option<&'static [OpFieldSchema]> {
             ];
             Some(F)
         }
+        "set_path_anchor_kind" => {
+            static F: &[OpFieldSchema] = &[
+                OpFieldSchema {
+                    name: "node",
+                    ty: "node id",
+                    required: true,
+                },
+                OpFieldSchema {
+                    name: "anchor_index",
+                    ty: "usize",
+                    required: true,
+                },
+                OpFieldSchema {
+                    name: "kind",
+                    ty: "null | enum/future string: corner|smooth|symmetric",
+                    required: false,
+                },
+            ];
+            Some(F)
+        }
         "insert_path_anchor" => {
             static F: &[OpFieldSchema] = &[
                 OpFieldSchema {

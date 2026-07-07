@@ -44,6 +44,7 @@ fn op_tag(op: &Op) -> &'static str {
         Op::SetGeometry { .. } => "set_geometry",
         Op::SetPoints { .. } => "set_points",
         Op::SetPathAnchors { .. } => "set_path_anchors",
+        Op::SetPathAnchorKind { .. } => "set_path_anchor_kind",
         Op::InsertPathAnchor { .. } => "insert_path_anchor",
         Op::SimplifyPathAnchors { .. } => "simplify_path_anchors",
         Op::TransformPathAnchors { .. } => "transform_path_anchors",
@@ -95,6 +96,7 @@ fn all_exhaustive_tags() -> BTreeSet<&'static str> {
         "set_locked",
         "set_geometry",
         "set_points",
+        "set_path_anchor_kind",
         "set_path_anchors",
         "insert_path_anchor",
         "simplify_path_anchors",
@@ -219,6 +221,11 @@ fn op_tag_strings_match_exhaustive_set() {
         Op::SetPathAnchors {
             node: String::new(),
             anchors: vec![],
+        },
+        Op::SetPathAnchorKind {
+            node: String::new(),
+            anchor_index: 0,
+            kind: Some("smooth".into()),
         },
         Op::InsertPathAnchor {
             node: String::new(),
@@ -541,6 +548,14 @@ fn op_fields_names_match_serde_keys() {
                     out_x: Some(10.0),
                     out_y: Some(0.0),
                 }],
+            },
+        ),
+        (
+            "set_path_anchor_kind",
+            Op::SetPathAnchorKind {
+                node: "n".into(),
+                anchor_index: 1,
+                kind: Some("smooth".into()),
             },
         ),
         (

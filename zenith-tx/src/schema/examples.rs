@@ -23,6 +23,9 @@ pub fn op_example(name: &str) -> Option<&'static str> {
         "set_path_anchors" => Some(
             r#"{"op":"set_path_anchors","node":"path.logo","anchors":[{"x":0,"y":0,"kind":"corner","out_x":40,"out_y":0},{"x":100,"y":0,"kind":"smooth","in_x":60,"in_y":0}]}"#,
         ),
+        "set_path_anchor_kind" => Some(
+            r#"{"op":"set_path_anchor_kind","node":"path.logo","anchor_index":1,"kind":"smooth"}"#,
+        ),
         "insert_path_anchor" => {
             Some(r#"{"op":"insert_path_anchor","node":"path.logo","segment_index":0,"t":0.5}"#)
         }

@@ -397,6 +397,7 @@ fn op_name(op: &zenith_tx::Op) -> String {
         zenith_tx::Op::SetGeometry { .. } => "set_geometry",
         zenith_tx::Op::SetPoints { .. } => "set_points",
         zenith_tx::Op::SetPathAnchors { .. } => "set_path_anchors",
+        zenith_tx::Op::SetPathAnchorKind { .. } => "set_path_anchor_kind",
         zenith_tx::Op::InsertPathAnchor { .. } => "insert_path_anchor",
         zenith_tx::Op::SimplifyPathAnchors { .. } => "simplify_path_anchors",
         zenith_tx::Op::TransformPathAnchors { .. } => "transform_path_anchors",
