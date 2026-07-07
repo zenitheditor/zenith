@@ -2,6 +2,24 @@ use super::*;
 use crate::op::Op;
 use std::collections::BTreeSet;
 
+fn add_asset_sample_op() -> Op {
+    Op::AddAsset {
+        id: "asset.logo".into(),
+        kind: "image".into(),
+        src: "img/logo.png".into(),
+        sha256: Some("abc".into()),
+        ai_prompt: Some("logo prompt".into()),
+        ai_model: Some("gpt-image-1".into()),
+        ai_provider: Some("openai".into()),
+        ai_seed: Some(42),
+        ai_generation_date: Some("2026-07-07".into()),
+        ai_license: Some("project-owned".into()),
+        ai_source_rights: Some("original".into()),
+        ai_safety_status: Some("reviewed".into()),
+        ai_reuse_policy: Some("internal".into()),
+    }
+}
+
 /// Exhaustive map from an `Op` reference to its JSON tag string.
 ///
 /// The exhaustive `match` here is the **compile-time drift guard**: when a
@@ -248,6 +266,15 @@ fn op_tag_strings_match_exhaustive_set() {
             kind: String::new(),
             src: String::new(),
             sha256: None,
+            ai_prompt: None,
+            ai_model: None,
+            ai_provider: None,
+            ai_seed: None,
+            ai_generation_date: None,
+            ai_license: None,
+            ai_source_rights: None,
+            ai_safety_status: None,
+            ai_reuse_policy: None,
         },
         Op::SetAsset {
             node_id: String::new(),
@@ -344,6 +371,32 @@ fn op_fields_covers_every_op() {
             "op_fields(\"{name}\") returned None — add an arm to op_fields()",
         );
     }
+}
+
+#[test]
+fn add_asset_schema_lists_optional_provenance_fields() {
+    let fields = op_fields("add_asset").expect("add_asset fields should be documented");
+    let optional_names: BTreeSet<&str> = fields
+        .iter()
+        .filter(|field| !field.required)
+        .map(|field| field.name)
+        .collect();
+
+    assert_eq!(
+        optional_names,
+        BTreeSet::from([
+            "sha256",
+            "ai_prompt",
+            "ai_model",
+            "ai_provider",
+            "ai_seed",
+            "ai_generation_date",
+            "ai_license",
+            "ai_source_rights",
+            "ai_safety_status",
+            "ai_reuse_policy",
+        ])
+    );
 }
 
 /// Every op must have a non-`None` `op_example` result, and the returned
@@ -552,15 +605,7 @@ fn op_fields_names_match_serde_keys() {
                 order: vec!["a".into()],
             },
         ),
-        (
-            "add_asset",
-            Op::AddAsset {
-                id: "asset.logo".into(),
-                kind: "image".into(),
-                src: "img/logo.png".into(),
-                sha256: Some("abc".into()),
-            },
-        ),
+        ("add_asset", add_asset_sample_op()),
         (
             "set_asset",
             Op::SetAsset {

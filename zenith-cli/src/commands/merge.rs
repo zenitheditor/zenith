@@ -436,13 +436,8 @@ pub fn run(
                 // Empty cell → leave template image in place; no op needed.
                 continue;
             }
-            let asset_id = row_asset_id(row_idx, &binding.column);
-            ops.push(Op::AddAsset {
-                id: asset_id.clone(),
-                kind: "image".to_owned(),
-                src: cell.to_owned(),
-                sha256: None,
-            });
+            let (asset_id, add_asset) = row_add_asset_op(row_idx, &binding.column, cell);
+            ops.push(add_asset);
             ops.push(Op::SetAsset {
                 node_id: binding.node_id.clone(),
                 asset_id,
@@ -746,6 +741,26 @@ fn push_failure(rows: &mut Vec<RowResult>, row: usize, key: Option<String>, reas
 /// ensures they can never diverge.
 fn row_asset_id(row_idx: usize, column: &str) -> String {
     format!("merge.row.{}.asset.{}", row_idx, column)
+}
+
+fn row_add_asset_op(row_idx: usize, column: &str, src: &str) -> (String, Op) {
+    let asset_id = row_asset_id(row_idx, column);
+    let op = Op::AddAsset {
+        id: asset_id.clone(),
+        kind: "image".to_owned(),
+        src: src.to_owned(),
+        sha256: None,
+        ai_prompt: None,
+        ai_model: None,
+        ai_provider: None,
+        ai_seed: None,
+        ai_generation_date: None,
+        ai_license: None,
+        ai_source_rights: None,
+        ai_safety_status: None,
+        ai_reuse_policy: None,
+    };
+    (asset_id, op)
 }
 
 /// Output filename for one page of one row.

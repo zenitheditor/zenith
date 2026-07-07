@@ -591,6 +591,7 @@ pub enum Op {
     ///
     /// `kind` must be one of `"image"`, `"svg"`, or `"font"`. `src` is a relative
     /// path to the asset file. `sha256` is an optional content-integrity digest.
+    /// The `ai_*` fields are optional generation/provenance metadata.
     ///
     /// Rejected immediately with `tx.duplicate_id` if an asset with `id` already
     /// exists. Post-validation catches `asset.invalid_src` (absolute paths, `../`
@@ -598,7 +599,7 @@ pub enum Op {
     ///
     /// JSON example:
     /// ```json
-    /// {"op":"add_asset","id":"asset.logo","kind":"image","src":"images/logo.png","sha256":"abc123"}
+    /// {"op":"add_asset","id":"asset.logo","kind":"image","src":"images/logo.png","sha256":"abc123","ai_model":"gpt-image-1"}
     /// ```
     AddAsset {
         /// Globally unique asset id (e.g. `"asset.logo"`).
@@ -610,6 +611,33 @@ pub enum Op {
         /// Optional SHA-256 hex digest for content integrity.
         #[serde(default)]
         sha256: Option<String>,
+        /// Prompt text used to generate the asset.
+        #[serde(default)]
+        ai_prompt: Option<String>,
+        /// Model identifier used to generate the asset.
+        #[serde(default)]
+        ai_model: Option<String>,
+        /// Provider that hosted the generation model.
+        #[serde(default)]
+        ai_provider: Option<String>,
+        /// Random seed passed to the generation model.
+        #[serde(default)]
+        ai_seed: Option<i64>,
+        /// Date on which the asset was generated.
+        #[serde(default)]
+        ai_generation_date: Option<String>,
+        /// License under which the generated asset may be used.
+        #[serde(default)]
+        ai_license: Option<String>,
+        /// Rights information for source material used during generation.
+        #[serde(default)]
+        ai_source_rights: Option<String>,
+        /// Safety review status of the generated asset.
+        #[serde(default)]
+        ai_safety_status: Option<String>,
+        /// Policy governing reuse of the generated asset.
+        #[serde(default)]
+        ai_reuse_policy: Option<String>,
     },
     /// Set the asset reference on an `image` node.
     ///

@@ -399,6 +399,51 @@ pub fn op_fields(name: &str) -> Option<&'static [OpFieldSchema]> {
                     ty: "string",
                     required: false,
                 },
+                OpFieldSchema {
+                    name: "ai_prompt",
+                    ty: "string",
+                    required: false,
+                },
+                OpFieldSchema {
+                    name: "ai_model",
+                    ty: "string",
+                    required: false,
+                },
+                OpFieldSchema {
+                    name: "ai_provider",
+                    ty: "string",
+                    required: false,
+                },
+                OpFieldSchema {
+                    name: "ai_seed",
+                    ty: "integer",
+                    required: false,
+                },
+                OpFieldSchema {
+                    name: "ai_generation_date",
+                    ty: "string",
+                    required: false,
+                },
+                OpFieldSchema {
+                    name: "ai_license",
+                    ty: "string",
+                    required: false,
+                },
+                OpFieldSchema {
+                    name: "ai_source_rights",
+                    ty: "string",
+                    required: false,
+                },
+                OpFieldSchema {
+                    name: "ai_safety_status",
+                    ty: "string",
+                    required: false,
+                },
+                OpFieldSchema {
+                    name: "ai_reuse_policy",
+                    ty: "string",
+                    required: false,
+                },
             ];
             Some(F)
         }

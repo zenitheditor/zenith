@@ -6,6 +6,22 @@ use super::{find_node_any_mut, node_kind_str, record_affected};
 
 // ── AddAsset ──────────────────────────────────────────────────────────────────
 
+pub(super) struct AddAssetSpec<'a> {
+    pub(super) id: &'a str,
+    pub(super) kind: &'a str,
+    pub(super) src: &'a str,
+    pub(super) sha256: Option<&'a str>,
+    pub(super) ai_prompt: Option<&'a str>,
+    pub(super) ai_model: Option<&'a str>,
+    pub(super) ai_provider: Option<&'a str>,
+    pub(super) ai_seed: Option<i64>,
+    pub(super) ai_generation_date: Option<&'a str>,
+    pub(super) ai_license: Option<&'a str>,
+    pub(super) ai_source_rights: Option<&'a str>,
+    pub(super) ai_safety_status: Option<&'a str>,
+    pub(super) ai_reuse_policy: Option<&'a str>,
+}
+
 /// Add a new [`AssetDecl`] to `doc.assets.assets`.
 ///
 /// Eagerly rejects with `tx.duplicate_id` if an asset with `id` already
@@ -13,10 +29,7 @@ use super::{find_node_any_mut, node_kind_str, record_affected};
 /// and `asset.invalid_kind` (unknown kind strings) — those are not re-checked
 /// here.
 pub(super) fn apply_add_asset(
-    id: &str,
-    kind: &str,
-    src: &str,
-    sha256: Option<&str>,
+    spec: &AddAssetSpec<'_>,
     doc: &mut Document,
     diagnostics: &mut Vec<Diagnostic>,
     affected: &mut Vec<String>,
@@ -25,35 +38,35 @@ pub(super) fn apply_add_asset(
     // `id.duplicate`, but we surface it as `tx.duplicate_id` immediately so
     // the caller sees an actionable engine-level error (matching add_page's
     // pattern).
-    if doc.assets.assets.iter().any(|a| a.id == id) {
+    if doc.assets.assets.iter().any(|a| a.id == spec.id) {
         diagnostics.push(Diagnostic::error(
             "tx.duplicate_id",
-            format!("add_asset: an asset with id {:?} already exists", id),
+            format!("add_asset: an asset with id {:?} already exists", spec.id),
             None,
-            Some(id.to_owned()),
+            Some(spec.id.to_owned()),
         ));
         return;
     }
 
     doc.assets.assets.push(AssetDecl {
-        id: id.to_owned(),
-        kind: AssetKind::from_kind_str(kind),
-        src: src.to_owned(),
-        sha256: sha256.map(str::to_owned),
-        ai_prompt: None,
-        ai_model: None,
-        ai_provider: None,
-        ai_seed: None,
-        ai_generation_date: None,
-        ai_license: None,
-        ai_source_rights: None,
-        ai_safety_status: None,
-        ai_reuse_policy: None,
+        id: spec.id.to_owned(),
+        kind: AssetKind::from_kind_str(spec.kind),
+        src: spec.src.to_owned(),
+        sha256: spec.sha256.map(str::to_owned),
+        ai_prompt: spec.ai_prompt.map(str::to_owned),
+        ai_model: spec.ai_model.map(str::to_owned),
+        ai_provider: spec.ai_provider.map(str::to_owned),
+        ai_seed: spec.ai_seed,
+        ai_generation_date: spec.ai_generation_date.map(str::to_owned),
+        ai_license: spec.ai_license.map(str::to_owned),
+        ai_source_rights: spec.ai_source_rights.map(str::to_owned),
+        ai_safety_status: spec.ai_safety_status.map(str::to_owned),
+        ai_reuse_policy: spec.ai_reuse_policy.map(str::to_owned),
         source_span: None,
         unknown_props: Default::default(),
     });
 
-    record_affected(id, affected);
+    record_affected(spec.id, affected);
 }
 
 // ── SetAsset ──────────────────────────────────────────────────────────────────

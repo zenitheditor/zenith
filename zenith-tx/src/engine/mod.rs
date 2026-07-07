@@ -19,7 +19,7 @@ pub(crate) mod structure;
 mod style;
 mod token;
 
-use asset::{apply_add_asset, apply_set_asset};
+use asset::{AddAssetSpec, apply_add_asset, apply_set_asset};
 use flags::{apply_set_locked, apply_set_points, apply_set_visible};
 use geometry::{
     GeometryDelta, apply_align_nodes, apply_align_to_edge, apply_distribute_nodes,
@@ -305,8 +305,32 @@ fn apply_op(
             kind,
             src,
             sha256,
+            ai_prompt,
+            ai_model,
+            ai_provider,
+            ai_seed,
+            ai_generation_date,
+            ai_license,
+            ai_source_rights,
+            ai_safety_status,
+            ai_reuse_policy,
         } => {
-            apply_add_asset(id, kind, src, sha256.as_deref(), doc, diagnostics, affected);
+            let spec = AddAssetSpec {
+                id,
+                kind,
+                src,
+                sha256: sha256.as_deref(),
+                ai_prompt: ai_prompt.as_deref(),
+                ai_model: ai_model.as_deref(),
+                ai_provider: ai_provider.as_deref(),
+                ai_seed: *ai_seed,
+                ai_generation_date: ai_generation_date.as_deref(),
+                ai_license: ai_license.as_deref(),
+                ai_source_rights: ai_source_rights.as_deref(),
+                ai_safety_status: ai_safety_status.as_deref(),
+                ai_reuse_policy: ai_reuse_policy.as_deref(),
+            };
+            apply_add_asset(&spec, doc, diagnostics, affected);
         }
         Op::SetAsset { node_id, asset_id } => {
             apply_set_asset(node_id, asset_id, doc, diagnostics, affected);

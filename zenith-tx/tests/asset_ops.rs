@@ -24,6 +24,24 @@ const ASSET_DOC: &str = r##"zenith version=1 {
   }
 }"##;
 
+fn add_asset_op(id: &str, kind: &str, src: &str) -> Op {
+    Op::AddAsset {
+        id: id.to_owned(),
+        kind: kind.to_owned(),
+        src: src.to_owned(),
+        sha256: None,
+        ai_prompt: None,
+        ai_model: None,
+        ai_provider: None,
+        ai_seed: None,
+        ai_generation_date: None,
+        ai_license: None,
+        ai_source_rights: None,
+        ai_safety_status: None,
+        ai_reuse_policy: None,
+    }
+}
+
 // ── add_asset: accepted ───────────────────────────────────────────────────────
 
 /// (a) add_asset with a new id is accepted; source_after contains the new id.
@@ -31,12 +49,7 @@ const ASSET_DOC: &str = r##"zenith version=1 {
 fn add_asset_accepted() {
     let doc = parse(IMAGE_DOC);
     let tx = Transaction {
-        ops: vec![Op::AddAsset {
-            id: "asset.hero".to_owned(),
-            kind: "image".to_owned(),
-            src: "images/hero.png".to_owned(),
-            sha256: None,
-        }],
+        ops: vec![add_asset_op("asset.hero", "image", "images/hero.png")],
         permissions: Permissions::default(),
     };
     let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
@@ -60,6 +73,68 @@ fn add_asset_accepted() {
     );
 }
 
+#[test]
+fn add_asset_accepted_from_legacy_json() {
+    let doc = parse(IMAGE_DOC);
+    let tx: Transaction = serde_json::from_str(
+        r#"{"ops":[{"op":"add_asset","id":"asset.hero","kind":"image","src":"images/hero.png","sha256":"abc123"}],"permissions":{}}"#,
+    )
+    .expect("legacy add_asset JSON should deserialize");
+    let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
+
+    assert_eq!(
+        result.status,
+        TxStatus::Accepted,
+        "expected Accepted; diagnostics: {:?}",
+        result.diagnostics
+    );
+    assert!(
+        result.source_after.contains(
+            r#"asset id="asset.hero" kind="image" src="images/hero.png" sha256="abc123""#
+        ),
+        "source_after must contain the legacy asset declaration; got:\n{}",
+        result.source_after
+    );
+}
+
+#[test]
+fn add_asset_with_provenance_formats_asset_declaration() {
+    let doc = parse(IMAGE_DOC);
+    let tx = Transaction {
+        ops: vec![Op::AddAsset {
+            id: "asset.ai".to_owned(),
+            kind: "image".to_owned(),
+            src: "images/ai.png".to_owned(),
+            sha256: Some("abc123".to_owned()),
+            ai_prompt: Some("A geometric poster".to_owned()),
+            ai_model: Some("gpt-image-1".to_owned()),
+            ai_provider: Some("openai".to_owned()),
+            ai_seed: Some(42),
+            ai_generation_date: Some("2026-07-07".to_owned()),
+            ai_license: Some("project-owned".to_owned()),
+            ai_source_rights: Some("original".to_owned()),
+            ai_safety_status: Some("reviewed".to_owned()),
+            ai_reuse_policy: Some("internal".to_owned()),
+        }],
+        permissions: Permissions::default(),
+    };
+    let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
+
+    assert_eq!(
+        result.status,
+        TxStatus::Accepted,
+        "expected Accepted; diagnostics: {:?}",
+        result.diagnostics
+    );
+    assert!(
+        result.source_after.contains(
+            r#"asset id="asset.ai" kind="image" src="images/ai.png" sha256="abc123" ai-prompt="A geometric poster" ai-model="gpt-image-1" ai-provider="openai" ai-seed=42 ai-generation-date="2026-07-07" ai-license="project-owned" ai-source-rights="original" ai-safety-status="reviewed" ai-reuse-policy="internal""#
+        ),
+        "source_after must contain the canonical asset provenance fields; got:\n{}",
+        result.source_after
+    );
+}
+
 // ── add_asset: duplicate id rejected ─────────────────────────────────────────
 
 /// (b) add_asset with an id that already exists → Rejected (tx.duplicate_id).
@@ -68,12 +143,7 @@ fn add_asset_duplicate_id_rejected() {
     let doc = parse(IMAGE_DOC);
     // IMAGE_DOC already declares "asset.pic".
     let tx = Transaction {
-        ops: vec![Op::AddAsset {
-            id: "asset.pic".to_owned(),
-            kind: "image".to_owned(),
-            src: "other/pic.png".to_owned(),
-            sha256: None,
-        }],
+        ops: vec![add_asset_op("asset.pic", "image", "other/pic.png")],
         permissions: Permissions::default(),
     };
     let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
@@ -103,12 +173,7 @@ fn add_asset_duplicate_id_rejected() {
 fn add_asset_invalid_src_rejected() {
     let doc = parse(IMAGE_DOC);
     let tx = Transaction {
-        ops: vec![Op::AddAsset {
-            id: "asset.escape".to_owned(),
-            kind: "image".to_owned(),
-            src: "../escape.png".to_owned(),
-            sha256: None,
-        }],
+        ops: vec![add_asset_op("asset.escape", "image", "../escape.png")],
         permissions: Permissions::default(),
     };
     let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
@@ -141,12 +206,7 @@ fn set_asset_changes_image_node() {
     let doc = parse(ASSET_DOC);
     let tx = Transaction {
         ops: vec![
-            Op::AddAsset {
-                id: "asset.hero".to_owned(),
-                kind: "image".to_owned(),
-                src: "images/hero.png".to_owned(),
-                sha256: None,
-            },
+            add_asset_op("asset.hero", "image", "images/hero.png"),
             Op::SetAsset {
                 node_id: "img1".to_owned(),
                 asset_id: "asset.hero".to_owned(),

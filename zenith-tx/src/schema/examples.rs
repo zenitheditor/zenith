@@ -49,7 +49,7 @@ pub fn op_example(name: &str) -> Option<&'static str> {
         "delete_page" => Some(r#"{"op":"delete_page","page":"page.old"}"#),
         "reorder_pages" => Some(r#"{"op":"reorder_pages","order":["page.b","page.a","page.c"]}"#),
         "add_asset" => Some(
-            r#"{"op":"add_asset","id":"asset.logo","kind":"image","src":"images/logo.png","sha256":"abc123"}"#,
+            r#"{"op":"add_asset","id":"asset.logo","kind":"image","src":"images/logo.png","sha256":"abc123","ai_model":"gpt-image-1","ai_provider":"openai"}"#,
         ),
         "set_asset" => Some(r#"{"op":"set_asset","node_id":"pic","asset_id":"asset.hero"}"#),
         "distribute_nodes" => {
