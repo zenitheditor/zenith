@@ -23,6 +23,9 @@ pub fn op_example(name: &str) -> Option<&'static str> {
         "set_path_anchors" => Some(
             r#"{"op":"set_path_anchors","node":"path.logo","anchors":[{"x":0,"y":0,"out_x":40,"out_y":0},{"x":100,"y":0,"in_x":60,"in_y":0}]}"#,
         ),
+        "simplify_path_anchors" => {
+            Some(r#"{"op":"simplify_path_anchors","node":"path.logo","tolerance":0.5}"#)
+        }
         "add_node" => Some(
             r#"{"op":"add_node","parent":"page.main","source":"rect id=\"box\" x=(px)10 y=(px)10 w=(px)100 h=(px)80 fill=(token)\"color.accent\""}"#,
         ),

@@ -367,6 +367,29 @@ pub enum Op {
         /// Replacement anchor list. Each coordinate is in document pixels.
         anchors: Vec<OpPathAnchor>,
     },
+    /// Simplify a straight-segment `path` node's anchors using a pixel tolerance.
+    ///
+    /// This operation is intentionally conservative: it only accepts path
+    /// anchors with required `x`/`y` pixel coordinates and no in/out Bezier
+    /// handles. Paths with handles are rejected with `tx.unsupported_path_handles`
+    /// rather than approximating curves.
+    ///
+    /// Post-validation rejects automatically if simplification leaves too few
+    /// anchors for the path.
+    ///
+    /// Supported nodes: `path`.
+    /// Unsupported: all other variants — yields `tx.unsupported_property`.
+    ///
+    /// JSON example:
+    /// ```json
+    /// {"op":"simplify_path_anchors","node":"path.logo","tolerance":0.5}
+    /// ```
+    SimplifyPathAnchors {
+        /// The stable node `id` to target.
+        node: String,
+        /// Maximum perpendicular deviation in pixels. Must be finite and positive.
+        tolerance: f64,
+    },
     /// Construct a new node from a `.zen` source fragment and insert it into a
     /// container (a page, group, or frame) at a chosen position.
     ///

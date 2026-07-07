@@ -789,6 +789,16 @@ pub const DIAGNOSTIC_CODES: &[DiagnosticCodeInfo] = &[
         "An align/distribute target has no resolvable geometry and was skipped.",
     ),
     info(
+        "tx.invalid_geometry",
+        Severity::Error,
+        "A transaction geometry operation produced invalid geometry.",
+    ),
+    info(
+        "tx.invalid_geometry_tolerance",
+        Severity::Error,
+        "A transaction geometry tolerance is invalid.",
+    ),
+    info(
         "tx.invalid_node_spec",
         Severity::Error,
         "A transaction `add` op specifies a node that cannot be parsed.",
@@ -797,6 +807,11 @@ pub const DIAGNOSTIC_CODES: &[DiagnosticCodeInfo] = &[
         "tx.invalid_parent",
         Severity::Error,
         "A transaction op targets an invalid or incompatible parent node.",
+    ),
+    info(
+        "tx.invalid_path_anchor",
+        Severity::Error,
+        "A transaction path-anchor operation found invalid anchor coordinates.",
     ),
     info(
         "tx.invalid_value",
@@ -852,6 +867,16 @@ pub const DIAGNOSTIC_CODES: &[DiagnosticCodeInfo] = &[
         "tx.unknown_token",
         Severity::Error,
         "A transaction op references a token id that is not declared.",
+    ),
+    info(
+        "tx.unsupported_closed_path",
+        Severity::Error,
+        "A transaction path operation does not support closed paths.",
+    ),
+    info(
+        "tx.unsupported_path_handles",
+        Severity::Error,
+        "A transaction path operation does not support Bézier handles.",
     ),
     info(
         "tx.unsupported_property",
@@ -1067,8 +1092,11 @@ mod tests {
             ("node.locked", Severity::Error),
             ("tx.duplicate_id", Severity::Error),
             ("tx.geometry_unresolved", Severity::Warning),
+            ("tx.invalid_geometry", Severity::Error),
+            ("tx.invalid_geometry_tolerance", Severity::Error),
             ("tx.invalid_node_spec", Severity::Error),
             ("tx.invalid_parent", Severity::Error),
+            ("tx.invalid_path_anchor", Severity::Error),
             ("tx.invalid_value", Severity::Error),
             ("tx.locked_skipped", Severity::Warning),
             ("tx.noop", Severity::Advisory),
@@ -1080,6 +1108,8 @@ mod tests {
             ("tx.unknown_recipe", Severity::Error),
             ("tx.unknown_style", Severity::Error),
             ("tx.unknown_token", Severity::Error),
+            ("tx.unsupported_closed_path", Severity::Error),
+            ("tx.unsupported_path_handles", Severity::Error),
             ("tx.unsupported_property", Severity::Error),
             ("tx.wrong_node_type", Severity::Error),
         ];
