@@ -3,6 +3,7 @@ use crate::{
     PerceptionDiagnostic, anchor_economy, path_tangent_quality,
 };
 use zenith_core::PathAnchor;
+use zenith_geometry::{PathGeometry, PathTopology};
 
 /// Input for path-level vector perception.
 ///
@@ -34,8 +35,8 @@ pub struct VectorPathPerceptionReport {
 /// path-level entry point for later vector/logo perception modules.
 pub fn analyze_vector_path(input: VectorPathPerceptionInput<'_>) -> VectorPathPerceptionReport {
     let anchor_count = input.anchors.len();
-    let segment_count = segment_count(anchor_count, input.closed);
-    let anchor_economy = anchor_economy(anchor_economy_input(input, anchor_count, segment_count));
+    let topology = PathGeometry::topology_for(anchor_count, input.closed);
+    let anchor_economy = anchor_economy(anchor_economy_input(input, anchor_count, topology));
     let tangent_quality = path_tangent_quality(PathTangentQualityInput {
         anchors: input.anchors,
         closed: input.closed,
@@ -46,7 +47,7 @@ pub fn analyze_vector_path(input: VectorPathPerceptionInput<'_>) -> VectorPathPe
 
     VectorPathPerceptionReport {
         anchor_count,
-        segment_count,
+        segment_count: topology.segment_count,
         closed: input.closed,
         anchor_economy,
         tangent_quality,
@@ -57,29 +58,15 @@ pub fn analyze_vector_path(input: VectorPathPerceptionInput<'_>) -> VectorPathPe
 fn anchor_economy_input(
     input: VectorPathPerceptionInput<'_>,
     anchor_count: usize,
-    segment_count: usize,
+    topology: PathTopology,
 ) -> AnchorEconomyInput {
     AnchorEconomyInput {
         anchor_count,
-        segment_count,
+        segment_count: topology.segment_count,
         handle_count: input.anchors.iter().map(complete_handle_count).sum(),
-        open_subpath_count: usize::from(anchor_count > 0 && !input.closed),
-        closed_subpath_count: closed_subpath_count(anchor_count, input.closed),
+        open_subpath_count: topology.open_subpath_count,
+        closed_subpath_count: topology.closed_subpath_count,
     }
-}
-
-fn segment_count(anchor_count: usize, closed: bool) -> usize {
-    if anchor_count == 0 {
-        0
-    } else if closed {
-        anchor_count
-    } else {
-        anchor_count.saturating_sub(1)
-    }
-}
-
-fn closed_subpath_count(anchor_count: usize, closed: bool) -> usize {
-    usize::from(closed && anchor_count >= 3)
 }
 
 fn complete_handle_count(anchor: &PathAnchor) -> usize {

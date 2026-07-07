@@ -1,8 +1,10 @@
 //! Path op application: `set_path_anchors`, `simplify_path_anchors`, and
 //! `transform_path_anchors`.
 
-use zenith_core::{Diagnostic, Dimension, Document, Node, PathAnchor, Unit};
-use zenith_geometry::{AffineTransform, CubicBezier, GeometryError, Point2, simplify_polyline};
+use zenith_core::{Diagnostic, Dimension, Document, Node, PathAnchor as CorePathAnchor, Unit};
+use zenith_geometry::{
+    AffineTransform, GeometryError, PathAnchor, PathGeometry, Point2, simplify_polyline,
+};
 
 use crate::op::{OpPathAnchor, OpPathTransform};
 
@@ -25,7 +27,7 @@ pub(super) fn apply_set_path_anchors(
                 Node::Path(path) => {
                     path.anchors = anchors
                         .iter()
-                        .map(|anchor| PathAnchor {
+                        .map(|anchor| CorePathAnchor {
                             x: Some(px(anchor.x)),
                             y: Some(px(anchor.y)),
                             in_x: anchor.in_x.map(px),
@@ -107,7 +109,7 @@ pub(super) fn apply_simplify_path_anchors(
                         Ok(simplified) => {
                             path.anchors = simplified
                                 .iter()
-                                .map(|point| PathAnchor {
+                                .map(|point| CorePathAnchor {
                                     x: Some(px(point.x)),
                                     y: Some(px(point.y)),
                                     in_x: None,
@@ -175,22 +177,30 @@ pub(super) fn apply_transform_path_anchors(
                             return;
                         }
                     };
-                    let resolved = match resolved_anchors(node_id, &path.anchors) {
-                        Ok(resolved) => resolved,
+                    let geometry = match resolved_path_geometry(
+                        node_id,
+                        &path.anchors,
+                        path.closed == Some(true),
+                    ) {
+                        Ok(geometry) => geometry,
                         Err(diagnostic) => {
                             diagnostics.push(diagnostic);
                             return;
                         }
                     };
-                    let transformed = match transformed_path_anchors(node_id, &resolved, affine) {
+                    let transformed = match geometry.transform(affine) {
                         Ok(transformed) => transformed,
-                        Err(diagnostic) => {
-                            diagnostics.push(diagnostic);
+                        Err(error) => {
+                            diagnostics.push(transform_geometry_diagnostic(node_id, error));
                             return;
                         }
                     };
 
-                    path.anchors = transformed;
+                    path.anchors = transformed
+                        .anchors()
+                        .iter()
+                        .map(|anchor| geometry_anchor_to_core(*anchor))
+                        .collect();
                     record_affected(node_id, affected);
                 }
                 Node::Rect(_)
@@ -227,26 +237,6 @@ pub(super) fn apply_transform_path_anchors(
     }
 }
 
-#[derive(Clone, Copy)]
-struct ResolvedAnchor {
-    point: Point2,
-    in_handle: Option<Point2>,
-    out_handle: Option<Point2>,
-}
-
-impl ResolvedAnchor {
-    fn into_path_anchor(self) -> PathAnchor {
-        PathAnchor {
-            x: Some(px(self.point.x)),
-            y: Some(px(self.point.y)),
-            in_x: self.in_handle.map(|point| px(point.x)),
-            in_y: self.in_handle.map(|point| px(point.y)),
-            out_x: self.out_handle.map(|point| px(point.x)),
-            out_y: self.out_handle.map(|point| px(point.y)),
-        }
-    }
-}
-
 fn path_transform(transform: &OpPathTransform) -> Result<AffineTransform, GeometryError> {
     match transform {
         OpPathTransform::Translate { dx, dy } => AffineTransform::translation(*dx, *dy),
@@ -266,74 +256,32 @@ fn path_transform(transform: &OpPathTransform) -> Result<AffineTransform, Geomet
     }
 }
 
-fn transformed_path_anchors(
-    node_id: &str,
-    anchors: &[ResolvedAnchor],
-    transform: AffineTransform,
-) -> Result<Vec<PathAnchor>, Diagnostic> {
-    anchors
-        .iter()
-        .map(|anchor| {
-            let transformed = ResolvedAnchor {
-                point: transform
-                    .apply_point(anchor.point)
-                    .map_err(|error| transform_geometry_diagnostic(node_id, error))?,
-                in_handle: transformed_optional_point(node_id, transform, anchor.in_handle)?,
-                out_handle: transformed_optional_point(node_id, transform, anchor.out_handle)?,
-            };
-            Ok(transformed.into_path_anchor())
-        })
-        .collect()
-}
-
-fn transformed_optional_point(
-    node_id: &str,
-    transform: AffineTransform,
-    point: Option<Point2>,
-) -> Result<Option<Point2>, Diagnostic> {
-    point
-        .map(|point| {
-            transform
-                .apply_point(point)
-                .map_err(|error| transform_geometry_diagnostic(node_id, error))
-        })
-        .transpose()
-}
-
 fn flattened_path_points(
     node_id: &str,
-    anchors: &[PathAnchor],
+    anchors: &[CorePathAnchor],
     tolerance: f64,
 ) -> Result<Vec<Point2>, Diagnostic> {
-    let resolved = resolved_anchors(node_id, anchors)?;
-    let mut points = Vec::with_capacity(resolved.len());
-
-    if let Some(first) = resolved.first() {
-        points.push(first.point);
-    }
-
-    for segment in resolved.windows(2) {
-        let [start, end] = segment else {
-            continue;
-        };
-        append_flattened_segment(node_id, &mut points, *start, *end, tolerance)?;
-        if points.len() > MAX_SIMPLIFY_INTERMEDIATE_POINTS {
-            return Err(Diagnostic::error(
-                "tx.invalid_geometry",
-                "path simplification produced too many intermediate anchors",
-                None,
-                Some(node_id.to_owned()),
-            ));
-        }
+    let geometry = resolved_path_geometry(node_id, anchors, false)?;
+    let points = geometry
+        .flatten(tolerance)
+        .map_err(|error| geometry_diagnostic(node_id, error))?;
+    if points.len() > MAX_SIMPLIFY_INTERMEDIATE_POINTS {
+        return Err(Diagnostic::error(
+            "tx.invalid_geometry",
+            "path simplification produced too many intermediate anchors",
+            None,
+            Some(node_id.to_owned()),
+        ));
     }
 
     Ok(points)
 }
 
-fn resolved_anchors(
+fn resolved_path_geometry(
     node_id: &str,
-    anchors: &[PathAnchor],
-) -> Result<Vec<ResolvedAnchor>, Diagnostic> {
+    anchors: &[CorePathAnchor],
+    closed: bool,
+) -> Result<PathGeometry, Diagnostic> {
     let mut resolved = Vec::with_capacity(anchors.len());
 
     for anchor in anchors {
@@ -380,44 +328,24 @@ fn resolved_anchors(
         let in_handle = optional_handle(node_id, &anchor.in_x, &anchor.in_y, "in")?;
         let out_handle = optional_handle(node_id, &anchor.out_x, &anchor.out_y, "out")?;
 
-        resolved.push(ResolvedAnchor {
-            point,
-            in_handle,
-            out_handle,
-        });
+        resolved.push(
+            PathAnchor::new(point, in_handle, out_handle)
+                .map_err(|error| geometry_diagnostic(node_id, error))?,
+        );
     }
 
-    Ok(resolved)
+    PathGeometry::new(resolved, closed).map_err(|error| geometry_diagnostic(node_id, error))
 }
 
-fn append_flattened_segment(
-    node_id: &str,
-    points: &mut Vec<Point2>,
-    start: ResolvedAnchor,
-    end: ResolvedAnchor,
-    tolerance: f64,
-) -> Result<(), Diagnostic> {
-    match (start.out_handle, end.in_handle) {
-        (None, None) => points.push(end.point),
-        (out_handle, in_handle) => {
-            let control_start = match out_handle {
-                Some(point) => point,
-                None => start.point,
-            };
-            let control_end = match in_handle {
-                Some(point) => point,
-                None => end.point,
-            };
-            let curve = CubicBezier::new(start.point, control_start, control_end, end.point)
-                .map_err(|error| geometry_diagnostic(node_id, error))?;
-            let flattened = curve
-                .flatten(tolerance)
-                .map_err(|error| geometry_diagnostic(node_id, error))?;
-
-            points.extend(flattened.into_iter().skip(1));
-        }
+fn geometry_anchor_to_core(anchor: PathAnchor) -> CorePathAnchor {
+    CorePathAnchor {
+        x: Some(px(anchor.point.x)),
+        y: Some(px(anchor.point.y)),
+        in_x: anchor.in_handle.map(|point| px(point.x)),
+        in_y: anchor.in_handle.map(|point| px(point.y)),
+        out_x: anchor.out_handle.map(|point| px(point.x)),
+        out_y: anchor.out_handle.map(|point| px(point.y)),
     }
-    Ok(())
 }
 
 fn anchor_coordinate(

@@ -1,5 +1,6 @@
 use crate::{PerceptionDiagnostic, PerceptionSeverity};
 use zenith_core::{Dimension, PathAnchor, Unit};
+use zenith_geometry::{PathAnchor as GeometryPathAnchor, Point2};
 
 const SMOOTH_ALIGNMENT_THRESHOLD: f64 = 0.95;
 const SHARP_ALIGNMENT_THRESHOLD: f64 = 0.35;
@@ -54,7 +55,9 @@ pub fn path_tangent_quality(input: PathTangentQualityInput<'_>) -> PathTangentQu
     let mut tangent_alignment_total = 0.0;
 
     for anchor in evaluable_anchors(input.anchors, input.closed) {
-        let Some(join) = evaluable_join(anchor) else {
+        let Some(join) =
+            evaluable_geometry_anchor(anchor).and_then(GeometryPathAnchor::join_vectors)
+        else {
             continue;
         };
 
@@ -65,8 +68,8 @@ pub fn path_tangent_quality(input: PathTangentQualityInput<'_>) -> PathTangentQu
             continue;
         }
 
-        let tangent_alignment = tangent_alignment(join);
-        let handle_balance = handle_balance(join);
+        let tangent_alignment = join.opposing_tangent_alignment();
+        let handle_balance = join.handle_length_balance();
 
         if tangent_alignment >= SMOOTH_ALIGNMENT_THRESHOLD {
             smooth_join_count += 1;
@@ -115,43 +118,12 @@ fn complete_handle_count(anchor: &PathAnchor) -> usize {
         + usize::from(anchor.out_x.is_some() && anchor.out_y.is_some())
 }
 
-fn evaluable_join(anchor: &PathAnchor) -> Option<JoinVectors> {
-    let anchor_point = Point {
-        x: px_value(anchor.x.as_ref())?,
-        y: px_value(anchor.y.as_ref())?,
-    };
-    let in_handle = Point {
-        x: px_value(anchor.in_x.as_ref())?,
-        y: px_value(anchor.in_y.as_ref())?,
-    };
-    let out_handle = Point {
-        x: px_value(anchor.out_x.as_ref())?,
-        y: px_value(anchor.out_y.as_ref())?,
-    };
+fn evaluable_geometry_anchor(anchor: &PathAnchor) -> Option<GeometryPathAnchor> {
+    let anchor_point = point_from_px_pair(anchor.x.as_ref(), anchor.y.as_ref())?;
+    let in_handle = point_from_px_pair(anchor.in_x.as_ref(), anchor.in_y.as_ref())?;
+    let out_handle = point_from_px_pair(anchor.out_x.as_ref(), anchor.out_y.as_ref())?;
 
-    let in_vector = Vector {
-        x: in_handle.x - anchor_point.x,
-        y: in_handle.y - anchor_point.y,
-    };
-    let out_vector = Vector {
-        x: out_handle.x - anchor_point.x,
-        y: out_handle.y - anchor_point.y,
-    };
-    if !in_vector.is_finite() || !out_vector.is_finite() {
-        return None;
-    }
-    let in_length = length(in_vector);
-    let out_length = length(out_vector);
-    if !in_length.is_finite() || !out_length.is_finite() {
-        return None;
-    }
-
-    Some(JoinVectors {
-        in_vector,
-        out_vector,
-        in_length,
-        out_length,
-    })
+    GeometryPathAnchor::new(anchor_point, Some(in_handle), Some(out_handle)).ok()
 }
 
 fn evaluable_anchors(anchors: &[PathAnchor], closed: bool) -> &[PathAnchor] {
@@ -160,7 +132,7 @@ fn evaluable_anchors(anchors: &[PathAnchor], closed: bool) -> &[PathAnchor] {
     } else if anchors.len() > 2 {
         &anchors[1..anchors.len() - 1]
     } else {
-        &anchors[0..0]
+        &[]
     }
 }
 
@@ -173,36 +145,8 @@ fn px_value(dimension: Option<&Dimension>) -> Option<f64> {
     }
 }
 
-fn tangent_alignment(join: JoinVectors) -> f64 {
-    let normalized_in = normalize(join.in_vector, join.in_length);
-    let normalized_out = normalize(join.out_vector, join.out_length);
-    let dot = normalized_in.x * normalized_out.x + normalized_in.y * normalized_out.y;
-    (-dot).max(0.0).clamp(0.0, 1.0)
-}
-
-fn handle_balance(join: JoinVectors) -> f64 {
-    let shorter = join.in_length.min(join.out_length);
-    let longer = join.in_length.max(join.out_length);
-    if longer <= ZERO_LENGTH_EPSILON {
-        0.0
-    } else {
-        (shorter / longer).clamp(0.0, 1.0)
-    }
-}
-
-fn normalize(vector: Vector, length: f64) -> Vector {
-    if length <= ZERO_LENGTH_EPSILON || !length.is_finite() {
-        Vector { x: 0.0, y: 0.0 }
-    } else {
-        Vector {
-            x: vector.x / length,
-            y: vector.y / length,
-        }
-    }
-}
-
-fn length(vector: Vector) -> f64 {
-    vector.x.hypot(vector.y)
+fn point_from_px_pair(x: Option<&Dimension>, y: Option<&Dimension>) -> Option<Point2> {
+    Point2::new(px_value(x)?, px_value(y)?).ok()
 }
 
 fn mean(total: f64, count: usize) -> f32 {
@@ -269,32 +213,6 @@ fn diagnostics(
     }
 
     diagnostics
-}
-
-#[derive(Debug, Clone, Copy)]
-struct Point {
-    x: f64,
-    y: f64,
-}
-
-#[derive(Debug, Clone, Copy)]
-struct Vector {
-    x: f64,
-    y: f64,
-}
-
-impl Vector {
-    fn is_finite(self) -> bool {
-        self.x.is_finite() && self.y.is_finite()
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-struct JoinVectors {
-    in_vector: Vector,
-    out_vector: Vector,
-    in_length: f64,
-    out_length: f64,
 }
 
 #[cfg(test)]

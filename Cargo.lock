@@ -1435,6 +1435,7 @@ name = "zenith-perception"
 version = "0.0.8"
 dependencies = [
  "zenith-core",
+ "zenith-geometry",
  "zenith-raster",
 ]
 
