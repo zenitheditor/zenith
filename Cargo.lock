@@ -1509,6 +1509,7 @@ name = "zenith-zpx"
 version = "0.0.8"
 dependencies = [
  "kdl",
+ "png",
  "zenith-core",
  "zenith-raster",
  "zenith-session",

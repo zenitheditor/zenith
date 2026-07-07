@@ -17,6 +17,11 @@ impl<'a> Adjustment<'a> {
         Self::GradientMap { stops }
     }
 
+    /// Apply this adjustment to an input surface and return the adjusted surface.
+    pub fn apply_to(self, input: &Surface) -> Result<Surface, RasterError> {
+        self.apply(input)
+    }
+
     pub(crate) fn apply(self, input: &Surface) -> Result<Surface, RasterError> {
         match self {
             Self::GradientMap { stops } => gradient_map(input, stops),
