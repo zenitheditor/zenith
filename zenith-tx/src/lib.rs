@@ -15,5 +15,5 @@ pub mod schema;
 // Curated flat re-exports.
 pub use engine::run_transaction;
 pub use merge::{merge_candidate_page, reconcile_candidate_tokens};
-pub use op::{Op, OpPoint, OpSpan, Permissions, Position, Transaction};
+pub use op::{AddAssetMetadata, Op, OpPoint, OpSpan, Permissions, Position, Transaction};
 pub use result::{TxError, TxResult, TxStatus};

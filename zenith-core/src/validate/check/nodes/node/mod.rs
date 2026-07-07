@@ -25,6 +25,7 @@ pub(in crate::validate::check) use leaf::{check_code, check_ellipse, check_line,
 pub(in crate::validate::check) use pattern::check_pattern;
 pub(in crate::validate::check) use shape::{check_connector, check_shape, check_unknown};
 pub(in crate::validate::check) use special::{
-    check_field, check_footnote, check_instance, check_polygon, check_polyline, check_toc,
+    check_field, check_footnote, check_instance, check_path, check_polygon, check_polyline,
+    check_toc,
 };
 pub(in crate::validate::check) use text::{check_image, check_text};

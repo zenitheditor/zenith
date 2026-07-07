@@ -680,6 +680,7 @@ pub(super) fn node_role(node: &Node) -> Option<&str> {
         Node::Image(n) => n.role.as_deref(),
         Node::Polygon(n) => n.role.as_deref(),
         Node::Polyline(n) => n.role.as_deref(),
+        Node::Path(n) => n.role.as_deref(),
         Node::Instance(n) => n.role.as_deref(),
         Node::Field(n) => n.role.as_deref(),
         Node::Toc(n) => n.role.as_deref(),
@@ -874,6 +875,18 @@ pub(in crate::compile) fn compile_node(
         }
         Node::Polyline(poly) => {
             compile_polyline(poly, resolved, style_map, commands, diagnostics, ctx);
+            0.0
+        }
+        Node::Path(path) => {
+            diagnostics.push(Diagnostic::advisory(
+                "scene.unsupported_node",
+                format!(
+                    "path node '{}' cannot be compiled yet; the node is skipped",
+                    path.id
+                ),
+                path.source_span,
+                Some(path.id.clone()),
+            ));
             0.0
         }
         Node::Code(code) => compile_code(

@@ -1,5 +1,5 @@
 use super::*;
-use crate::op::Op;
+use crate::op::{AddAssetMetadata, Op};
 use std::collections::BTreeSet;
 
 fn add_asset_sample_op() -> Op {
@@ -8,17 +8,19 @@ fn add_asset_sample_op() -> Op {
         kind: "image".into(),
         src: "img/logo.png".into(),
         sha256: Some("abc".into()),
-        producer_kind: Some("file-import".into()),
-        producer_source: Some("assets/logo.png".into()),
-        ai_prompt: Some("logo prompt".into()),
-        ai_model: Some("gpt-image-1".into()),
-        ai_provider: Some("openai".into()),
-        ai_seed: Some(42),
-        ai_generation_date: Some("2026-07-07".into()),
-        ai_license: Some("project-owned".into()),
-        ai_source_rights: Some("original".into()),
-        ai_safety_status: Some("reviewed".into()),
-        ai_reuse_policy: Some("internal".into()),
+        metadata: Box::new(AddAssetMetadata {
+            producer_kind: Some("file-import".into()),
+            producer_source: Some("assets/logo.png".into()),
+            ai_prompt: Some("logo prompt".into()),
+            ai_model: Some("gpt-image-1".into()),
+            ai_provider: Some("openai".into()),
+            ai_seed: Some(42),
+            ai_generation_date: Some("2026-07-07".into()),
+            ai_license: Some("project-owned".into()),
+            ai_source_rights: Some("original".into()),
+            ai_safety_status: Some("reviewed".into()),
+            ai_reuse_policy: Some("internal".into()),
+        }),
     }
 }
 
@@ -268,15 +270,7 @@ fn op_tag_strings_match_exhaustive_set() {
             kind: String::new(),
             src: String::new(),
             sha256: None,
-            ai_prompt: None,
-            ai_model: None,
-            ai_provider: None,
-            ai_seed: None,
-            ai_generation_date: None,
-            ai_license: None,
-            ai_source_rights: None,
-            ai_safety_status: None,
-            ai_reuse_policy: None,
+            metadata: Box::new(AddAssetMetadata::default()),
         },
         Op::SetAsset {
             node_id: String::new(),

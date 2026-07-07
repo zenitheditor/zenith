@@ -305,34 +305,24 @@ fn apply_op(
             kind,
             src,
             sha256,
-            producer_kind,
-            producer_source,
-            ai_prompt,
-            ai_model,
-            ai_provider,
-            ai_seed,
-            ai_generation_date,
-            ai_license,
-            ai_source_rights,
-            ai_safety_status,
-            ai_reuse_policy,
+            metadata,
         } => {
             let spec = AddAssetSpec {
                 id,
                 kind,
                 src,
                 sha256: sha256.as_deref(),
-                producer_kind: producer_kind.as_deref(),
-                producer_source: producer_source.as_deref(),
-                ai_prompt: ai_prompt.as_deref(),
-                ai_model: ai_model.as_deref(),
-                ai_provider: ai_provider.as_deref(),
-                ai_seed: *ai_seed,
-                ai_generation_date: ai_generation_date.as_deref(),
-                ai_license: ai_license.as_deref(),
-                ai_source_rights: ai_source_rights.as_deref(),
-                ai_safety_status: ai_safety_status.as_deref(),
-                ai_reuse_policy: ai_reuse_policy.as_deref(),
+                producer_kind: metadata.producer_kind.as_deref(),
+                producer_source: metadata.producer_source.as_deref(),
+                ai_prompt: metadata.ai_prompt.as_deref(),
+                ai_model: metadata.ai_model.as_deref(),
+                ai_provider: metadata.ai_provider.as_deref(),
+                ai_seed: metadata.ai_seed,
+                ai_generation_date: metadata.ai_generation_date.as_deref(),
+                ai_license: metadata.ai_license.as_deref(),
+                ai_source_rights: metadata.ai_source_rights.as_deref(),
+                ai_safety_status: metadata.ai_safety_status.as_deref(),
+                ai_reuse_policy: metadata.ai_reuse_policy.as_deref(),
             };
             apply_add_asset(&spec, doc, diagnostics, affected);
         }
@@ -521,6 +511,7 @@ fn node_is_locked(doc: &Document, id: &str) -> bool {
             Node::Image(n) => n.locked,
             Node::Polygon(n) => n.locked,
             Node::Polyline(n) => n.locked,
+            Node::Path(n) => n.locked,
             Node::Instance(n) => n.locked,
             Node::Field(n) => n.locked,
             Node::Toc(n) => n.locked,
@@ -569,6 +560,7 @@ pub(super) fn subtree_contains(node: &Node, id: &str) -> bool {
         | Node::Image(_)
         | Node::Polygon(_)
         | Node::Polyline(_)
+        | Node::Path(_)
         | Node::Instance(_)
         | Node::Field(_)
         | Node::Footnote(_)
@@ -657,6 +649,7 @@ fn find_in_children_any_mut<'a>(children: &'a mut [Node], id: &str) -> Option<&'
             | Node::Image(_)
             | Node::Polygon(_)
             | Node::Polyline(_)
+            | Node::Path(_)
             | Node::Instance(_)
             | Node::Field(_)
             | Node::Footnote(_)
@@ -697,6 +690,7 @@ fn find_in_children_any_mut<'a>(children: &'a mut [Node], id: &str) -> Option<&'
             | Some(Node::Image(_))
             | Some(Node::Polygon(_))
             | Some(Node::Polyline(_))
+            | Some(Node::Path(_))
             | Some(Node::Instance(_))
             | Some(Node::Field(_))
             | Some(Node::Footnote(_))
@@ -751,6 +745,7 @@ pub(super) fn find_node_shared<'a>(children: &'a [Node], id: &str) -> Option<&'a
             | Node::Image(_)
             | Node::Polygon(_)
             | Node::Polyline(_)
+            | Node::Path(_)
             | Node::Instance(_)
             | Node::Field(_)
             | Node::Footnote(_)
@@ -779,6 +774,7 @@ pub(super) fn node_id_of(node: &Node) -> Option<&str> {
         Node::Image(i) => Some(&i.id),
         Node::Polygon(p) => Some(&p.id),
         Node::Polyline(p) => Some(&p.id),
+        Node::Path(p) => Some(&p.id),
         Node::Instance(i) => Some(&i.id),
         Node::Field(f) => Some(&f.id),
         Node::Toc(t) => Some(&t.id),
@@ -809,6 +805,7 @@ pub(super) fn node_kind_str(node: &Node) -> &'static str {
         Node::Image(_) => "image",
         Node::Polygon(_) => "polygon",
         Node::Polyline(_) => "polyline",
+        Node::Path(_) => "path",
         Node::Instance(_) => "instance",
         Node::Field(_) => "field",
         Node::Toc(_) => "toc",

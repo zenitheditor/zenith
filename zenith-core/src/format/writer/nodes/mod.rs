@@ -1,5 +1,5 @@
 //! Node-tree writing: the `document` body, `page`, the per-node writers
-//! (rect/ellipse/line/text/code/image/group/frame/polygon/polyline), and the
+//! (rect/ellipse/line/text/code/image/group/frame/polygon/polyline/path), and the
 //! `span` / `point` / `content` leaf emitters.
 //!
 //! This module root is wiring only: the submodule declarations, the cross-tree
@@ -21,8 +21,8 @@ pub(in crate::format::writer) use document::write_document_body;
 use container::{write_frame, write_group, write_table};
 use effect::{write_light, write_mesh};
 use leaf::{
-    write_chart, write_code, write_ellipse, write_image, write_line, write_pattern, write_polygon,
-    write_polyline, write_rect, write_text,
+    write_chart, write_code, write_ellipse, write_image, write_line, write_path, write_pattern,
+    write_polygon, write_polyline, write_rect, write_text,
 };
 use special::{
     write_connector, write_field, write_footnote, write_instance, write_shape, write_toc,
@@ -42,6 +42,7 @@ pub(super) fn write_node(node: &Node, out: &mut String, depth: usize) {
         Node::Image(i) => write_image(i, out, depth),
         Node::Polygon(p) => write_polygon(p, out, depth),
         Node::Polyline(p) => write_polyline(p, out, depth),
+        Node::Path(p) => write_path(p, out, depth),
         Node::Instance(i) => write_instance(i, out, depth),
         Node::Field(f) => write_field(f, out, depth),
         Node::Toc(t) => write_toc(t, out, depth),

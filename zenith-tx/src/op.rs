@@ -59,6 +59,48 @@ pub struct OpSpan {
     pub footnote_ref: Option<String>,
 }
 
+/// Optional producer and AI provenance carried by [`Op::AddAsset`].
+///
+/// The struct is flattened in JSON so the public operation shape remains
+/// `producer_kind`, `ai_prompt`, and so on at the top level of `add_asset`.
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq, Default)]
+pub struct AddAssetMetadata {
+    /// Which producer froze this asset (e.g. `"file-import"`, `"zpx-bake"`).
+    #[serde(default)]
+    pub producer_kind: Option<String>,
+    /// The producer-specific source reference (imported file path, or source
+    /// `.zpx` manifest hash).
+    #[serde(default)]
+    pub producer_source: Option<String>,
+    /// Prompt text used to generate the asset.
+    #[serde(default)]
+    pub ai_prompt: Option<String>,
+    /// Model identifier used to generate the asset.
+    #[serde(default)]
+    pub ai_model: Option<String>,
+    /// Provider that hosted the generation model.
+    #[serde(default)]
+    pub ai_provider: Option<String>,
+    /// Random seed passed to the generation model.
+    #[serde(default)]
+    pub ai_seed: Option<i64>,
+    /// Date on which the asset was generated.
+    #[serde(default)]
+    pub ai_generation_date: Option<String>,
+    /// License under which the generated asset may be used.
+    #[serde(default)]
+    pub ai_license: Option<String>,
+    /// Rights information for source material used during generation.
+    #[serde(default)]
+    pub ai_source_rights: Option<String>,
+    /// Safety review status of the generated asset.
+    #[serde(default)]
+    pub ai_safety_status: Option<String>,
+    /// Policy governing reuse of the generated asset.
+    #[serde(default)]
+    pub ai_reuse_policy: Option<String>,
+}
+
 /// Insertion position for [`Op::AddNode`] within a container's children.
 ///
 /// JSON shapes: `{"at":"last"}`, `{"at":"first"}`, `{"at":"index","index":2}`,
@@ -611,40 +653,10 @@ pub enum Op {
         /// Optional SHA-256 hex digest for content integrity.
         #[serde(default)]
         sha256: Option<String>,
-        /// Which producer froze this asset (e.g. `"file-import"`, `"zpx-bake"`).
+        /// Optional producer and AI-generation metadata.
         #[serde(default)]
-        producer_kind: Option<String>,
-        /// The producer-specific source reference (imported file path, or
-        /// source `.zpx` manifest hash).
-        #[serde(default)]
-        producer_source: Option<String>,
-        /// Prompt text used to generate the asset.
-        #[serde(default)]
-        ai_prompt: Option<String>,
-        /// Model identifier used to generate the asset.
-        #[serde(default)]
-        ai_model: Option<String>,
-        /// Provider that hosted the generation model.
-        #[serde(default)]
-        ai_provider: Option<String>,
-        /// Random seed passed to the generation model.
-        #[serde(default)]
-        ai_seed: Option<i64>,
-        /// Date on which the asset was generated.
-        #[serde(default)]
-        ai_generation_date: Option<String>,
-        /// License under which the generated asset may be used.
-        #[serde(default)]
-        ai_license: Option<String>,
-        /// Rights information for source material used during generation.
-        #[serde(default)]
-        ai_source_rights: Option<String>,
-        /// Safety review status of the generated asset.
-        #[serde(default)]
-        ai_safety_status: Option<String>,
-        /// Policy governing reuse of the generated asset.
-        #[serde(default)]
-        ai_reuse_policy: Option<String>,
+        #[serde(flatten)]
+        metadata: Box<AddAssetMetadata>,
     },
     /// Set the asset reference on an `image` node.
     ///

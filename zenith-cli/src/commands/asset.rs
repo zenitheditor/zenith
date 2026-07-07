@@ -9,7 +9,9 @@ use zenith_producers::{
     AssetProducer, FileImportProducer, FileImportProvenance, ProduceRequest, ProducedAsset,
     Provenance, ZpxBakeProducer,
 };
-use zenith_tx::{Op, Permissions, Transaction, TxResult, TxStatus, run_transaction};
+use zenith_tx::{
+    AddAssetMetadata, Op, Permissions, Transaction, TxResult, TxStatus, run_transaction,
+};
 
 use crate::commands::serialize_pretty;
 use crate::json_types::DiagnosticJson;
@@ -176,17 +178,11 @@ fn add_asset_op(id: &str, kind: &str, src: &str, sha256: &str, provenance: &Prov
         kind: kind.to_owned(),
         src: src.to_owned(),
         sha256: Some(sha256.to_owned()),
-        producer_kind: Some(provenance.kind_str().to_owned()),
-        producer_source: Some(provenance.source_str().to_owned()),
-        ai_prompt: None,
-        ai_model: None,
-        ai_provider: None,
-        ai_seed: None,
-        ai_generation_date: None,
-        ai_license: None,
-        ai_source_rights: None,
-        ai_safety_status: None,
-        ai_reuse_policy: None,
+        metadata: Box::new(AddAssetMetadata {
+            producer_kind: Some(provenance.kind_str().to_owned()),
+            producer_source: Some(provenance.source_str().to_owned()),
+            ..AddAssetMetadata::default()
+        }),
     }
 }
 

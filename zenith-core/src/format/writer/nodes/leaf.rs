@@ -1,11 +1,11 @@
 //! Leaf and vector node writers: rect, ellipse, line, text, code, image,
-//! polygon, and polyline.
+//! polygon, polyline, and path.
 
 use std::fmt::Write as _;
 
 use crate::ast::{
-    ChartNode, CodeNode, EllipseNode, ImageNode, LineNode, PatternNode, PolygonNode, PolylineNode,
-    RectNode, TextNode,
+    ChartNode, CodeNode, EllipseNode, ImageNode, LineNode, PathNode, PatternNode, PolygonNode,
+    PolylineNode, RectNode, TextNode,
 };
 
 use crate::format::writer::{
@@ -14,7 +14,7 @@ use crate::format::writer::{
     write_opt_str,
 };
 
-use super::helpers::{write_block_style, write_points, write_span};
+use super::helpers::{write_block_style, write_path_anchors, write_points, write_span};
 use super::write_node;
 
 pub(super) fn write_rect(r: &RectNode, out: &mut String, depth: usize) {
@@ -444,6 +444,43 @@ pub(super) fn write_polyline(p: &PolylineNode, out: &mut String, depth: usize) {
     // Points block.
     out.push_str(" {\n");
     write_points(&p.points, out, depth + 1);
+    indent(out, depth);
+    out.push_str("}\n");
+}
+
+pub(super) fn write_path(p: &PathNode, out: &mut String, depth: usize) {
+    indent(out, depth);
+    out.push_str("path");
+
+    // Canonical property order: id, name, role, closed, fill, stroke,
+    // stroke-width, stroke-alignment, fill-rule, opacity, visible, locked,
+    // rotate, style, then unknown props, then the anchor block.
+    out.push_str(" id=\"");
+    out.push_str(&p.id);
+    out.push('"');
+    write_opt_str(out, "name", &p.name);
+    write_opt_str(out, "role", &p.role);
+    write_opt_bool(out, "closed", &p.closed);
+    write_opt_property_value(out, "fill", &p.fill);
+    write_opt_property_value(out, "stroke", &p.stroke);
+    write_opt_property_value(out, "stroke-width", &p.stroke_width);
+    write_opt_str(out, "stroke-alignment", &p.stroke_alignment);
+    write_opt_str(out, "fill-rule", &p.fill_rule);
+    write_opt_f64(out, "opacity", &p.opacity);
+    write_opt_bool(out, "visible", &p.visible);
+    write_opt_bool(out, "locked", &p.locked);
+    write_opt_dimension(out, "rotate", &p.rotate);
+    write_opt_str(out, "style", &p.style);
+
+    for (key, prop) in &p.unknown_props {
+        out.push(' ');
+        out.push_str(key);
+        out.push('=');
+        out.push_str(&fmt_unknown_property(prop));
+    }
+
+    out.push_str(" {\n");
+    write_path_anchors(&p.anchors, out, depth + 1);
     indent(out, depth);
     out.push_str("}\n");
 }

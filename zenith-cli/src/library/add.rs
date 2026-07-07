@@ -193,6 +193,9 @@ fn collect_node_ids(children: &[Node], out: &mut BTreeSet<String>) {
             Node::Polyline(n) => {
                 out.insert(n.id.clone());
             }
+            Node::Path(n) => {
+                out.insert(n.id.clone());
+            }
             Node::Frame(n) => {
                 out.insert(n.id.clone());
                 collect_node_ids(&n.children, out);

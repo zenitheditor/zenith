@@ -137,6 +137,7 @@ fn apply_override(children: &mut [Node], ov: &Override) -> bool {
             | Node::Image(_)
             | Node::Polygon(_)
             | Node::Polyline(_)
+            | Node::Path(_)
             | Node::Instance(_)
             | Node::Field(_)
             | Node::Footnote(_)
@@ -187,6 +188,7 @@ fn set_node_fill(node: &mut Node, fill: PropertyValue) {
         Node::Code(n) => n.fill = Some(fill),
         Node::Polygon(n) => n.fill = Some(fill),
         Node::Polyline(n) => n.fill = Some(fill),
+        Node::Path(n) => n.fill = Some(fill),
         Node::Field(n) => n.fill = Some(fill),
         Node::Toc(n) => n.fill = Some(fill),
         Node::Footnote(n) => n.fill = Some(fill),
@@ -220,6 +222,7 @@ fn set_node_visible(node: &mut Node, v: bool) {
         Node::Image(n) => n.visible = Some(v),
         Node::Polygon(n) => n.visible = Some(v),
         Node::Polyline(n) => n.visible = Some(v),
+        Node::Path(n) => n.visible = Some(v),
         Node::Instance(n) => n.visible = Some(v),
         Node::Field(n) => n.visible = Some(v),
         Node::Toc(n) => n.visible = Some(v),
@@ -249,6 +252,7 @@ fn node_local_id(node: &Node) -> Option<&str> {
         Node::Image(n) => Some(&n.id),
         Node::Polygon(n) => Some(&n.id),
         Node::Polyline(n) => Some(&n.id),
+        Node::Path(n) => Some(&n.id),
         Node::Instance(n) => Some(&n.id),
         Node::Field(n) => Some(&n.id),
         Node::Toc(n) => Some(&n.id),
@@ -290,6 +294,7 @@ pub(in crate::compile) fn prefix_ids_in_children(children: &mut [Node], prefix: 
             | Node::Image(_)
             | Node::Polygon(_)
             | Node::Polyline(_)
+            | Node::Path(_)
             | Node::Instance(_)
             | Node::Field(_)
             | Node::Footnote(_)
@@ -323,6 +328,7 @@ fn prefix_node_id(node: &mut Node, prefix: &str) {
         Node::Image(n) => pre!(n.id),
         Node::Polygon(n) => pre!(n.id),
         Node::Polyline(n) => pre!(n.id),
+        Node::Path(n) => pre!(n.id),
         Node::Instance(n) => pre!(n.id),
         Node::Field(n) => pre!(n.id),
         Node::Toc(n) => pre!(n.id),

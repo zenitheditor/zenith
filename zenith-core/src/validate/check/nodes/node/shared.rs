@@ -4,7 +4,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::ast::node::{Node, TextSpan, parse_anchor, parse_anchor_edge};
+use crate::ast::node::{Node, PathAnchor, Point, TextSpan, parse_anchor, parse_anchor_edge};
 use crate::ast::value::{Dimension, PropertyValue, Unit, dim_to_px};
 use crate::diagnostics::Diagnostic;
 use crate::tokens::ResolvedToken;
@@ -101,6 +101,7 @@ pub(in crate::validate::check) fn node_bbox(
         }
         Node::Polygon(n) => points_bbox(&n.points, page_w, page_h),
         Node::Polyline(n) => points_bbox(&n.points, page_w, page_h),
+        Node::Path(n) => path_anchors_bbox(&n.anchors, page_w, page_h),
         // Groups have no authoritative bbox in v0 — children are checked
         // individually. An instance likewise has no authoritative bbox: its
         // expanded subtree (a translated group) is the renderable geometry. A
@@ -166,11 +167,7 @@ pub(in crate::validate::check) fn node_bbox(
 ///
 /// Returns `Some((min_x, min_y, w, h))` when at least one point resolves
 /// successfully, `None` when no point has resolvable coordinates.
-fn points_bbox(
-    points: &[crate::ast::node::Point],
-    page_w: f64,
-    page_h: f64,
-) -> Option<(f64, f64, f64, f64)> {
+fn points_bbox(points: &[Point], page_w: f64, page_h: f64) -> Option<(f64, f64, f64, f64)> {
     let mut min_x = f64::INFINITY;
     let mut min_y = f64::INFINITY;
     let mut max_x = f64::NEG_INFINITY;
@@ -181,10 +178,9 @@ fn points_bbox(
             pt.x.as_ref().and_then(|d| resolve_axis(d, page_w)),
             pt.y.as_ref().and_then(|d| resolve_axis(d, page_h)),
         ) {
-            min_x = min_x.min(px_val);
-            min_y = min_y.min(py_val);
-            max_x = max_x.max(px_val);
-            max_y = max_y.max(py_val);
+            extend_bbox(
+                &mut min_x, &mut min_y, &mut max_x, &mut max_y, px_val, py_val,
+            );
             any = true;
         }
     }
@@ -193,6 +189,54 @@ fn points_bbox(
     } else {
         None
     }
+}
+
+fn path_anchors_bbox(
+    anchors: &[PathAnchor],
+    page_w: f64,
+    page_h: f64,
+) -> Option<(f64, f64, f64, f64)> {
+    let mut min_x = f64::INFINITY;
+    let mut min_y = f64::INFINITY;
+    let mut max_x = f64::NEG_INFINITY;
+    let mut max_y = f64::NEG_INFINITY;
+    let mut any = false;
+    for anchor in anchors {
+        for (x, y) in [
+            (&anchor.x, &anchor.y),
+            (&anchor.in_x, &anchor.in_y),
+            (&anchor.out_x, &anchor.out_y),
+        ] {
+            if let (Some(px_val), Some(py_val)) = (
+                x.as_ref().and_then(|d| resolve_axis(d, page_w)),
+                y.as_ref().and_then(|d| resolve_axis(d, page_h)),
+            ) {
+                extend_bbox(
+                    &mut min_x, &mut min_y, &mut max_x, &mut max_y, px_val, py_val,
+                );
+                any = true;
+            }
+        }
+    }
+    if any {
+        Some((min_x, min_y, max_x - min_x, max_y - min_y))
+    } else {
+        None
+    }
+}
+
+fn extend_bbox(
+    min_x: &mut f64,
+    min_y: &mut f64,
+    max_x: &mut f64,
+    max_y: &mut f64,
+    px_val: f64,
+    py_val: f64,
+) {
+    *min_x = min_x.min(px_val);
+    *min_y = min_y.min(py_val);
+    *max_x = max_x.max(px_val);
+    *max_y = max_y.max(py_val);
 }
 
 /// Read the authored rotation of a node in degrees, if the node carries a
@@ -204,7 +248,7 @@ fn points_bbox(
 /// produced by forward-compat).
 ///
 /// Covered (have a `rotate` field): `Rect`, `Ellipse`, `Frame`, `Image`,
-/// `Text`, `Code`, `Group`, `Polygon`, `Polyline`, `Table`, `Shape`,
+/// `Text`, `Code`, `Group`, `Polygon`, `Polyline`, `Path`, `Table`, `Shape`,
 /// `Connector`.
 /// Not covered: `Line`, `Instance`, `Field`, `Footnote`, `Unknown`.
 pub(in crate::validate::check) fn node_rotate_deg(node: &Node) -> Option<f64> {
@@ -218,6 +262,7 @@ pub(in crate::validate::check) fn node_rotate_deg(node: &Node) -> Option<f64> {
         Node::Group(n) => n.rotate.as_ref(),
         Node::Polygon(n) => n.rotate.as_ref(),
         Node::Polyline(n) => n.rotate.as_ref(),
+        Node::Path(n) => n.rotate.as_ref(),
         Node::Table(n) => n.rotate.as_ref(),
         Node::Shape(n) => n.rotate.as_ref(),
         Node::Connector(n) => n.rotate.as_ref(),
@@ -252,6 +297,7 @@ pub(in crate::validate::check) fn node_role(node: &Node) -> Option<&str> {
         Node::Image(n) => n.role.as_deref(),
         Node::Polygon(n) => n.role.as_deref(),
         Node::Polyline(n) => n.role.as_deref(),
+        Node::Path(n) => n.role.as_deref(),
         Node::Instance(n) => n.role.as_deref(),
         Node::Field(n) => n.role.as_deref(),
         Node::Toc(n) => n.role.as_deref(),
@@ -282,6 +328,7 @@ pub(in crate::validate::check) fn node_id_and_span(
         Node::Image(n) => (&n.id, n.source_span),
         Node::Polygon(n) => (&n.id, n.source_span),
         Node::Polyline(n) => (&n.id, n.source_span),
+        Node::Path(n) => (&n.id, n.source_span),
         Node::Instance(n) => (&n.id, n.source_span),
         Node::Field(n) => (&n.id, n.source_span),
         Node::Toc(n) => (&n.id, n.source_span),
@@ -549,6 +596,7 @@ fn node_sibling_fields(node: &Node) -> Option<(&str, Option<&str>, Option<crate:
         | Node::Connector(_)
         | Node::Polygon(_)
         | Node::Polyline(_)
+        | Node::Path(_)
         | Node::Footnote(_)
         | Node::Instance(_)
         | Node::Unknown(_) => return None,

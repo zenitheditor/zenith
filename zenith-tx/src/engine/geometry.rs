@@ -79,6 +79,7 @@ pub(in crate::engine) fn node_geometry_mut(node: &mut Node) -> Option<GeometryMu
         Node::Line(_)
         | Node::Polygon(_)
         | Node::Polyline(_)
+        | Node::Path(_)
         | Node::Instance(_)
         | Node::Footnote(_)
         | Node::Connector(_)
@@ -117,6 +118,7 @@ fn node_rotate_mut(node: &mut Node) -> Option<&mut Option<Dimension>> {
         Node::Group(n) => Some(&mut n.rotate),
         Node::Polygon(n) => Some(&mut n.rotate),
         Node::Polyline(n) => Some(&mut n.rotate),
+        Node::Path(n) => Some(&mut n.rotate),
         Node::Table(n) => Some(&mut n.rotate),
         Node::Shape(n) => Some(&mut n.rotate),
         Node::Connector(n) => Some(&mut n.rotate),
@@ -259,6 +261,7 @@ fn read_geometry_px(node: &Node) -> Option<(f64, f64, f64, f64)> {
         Node::Line(_)
         | Node::Polygon(_)
         | Node::Polyline(_)
+        | Node::Path(_)
         | Node::Instance(_)
         | Node::Field(_)
         | Node::Footnote(_)

@@ -12,7 +12,7 @@ use std::path::Path;
 use zenith_core::{AssetKind, BytesAssetProvider, KdlAdapter, KdlSource, Severity};
 use zenith_render::render_png;
 use zenith_scene::compile_page;
-use zenith_tx::{Op, OpSpan, Transaction, TxStatus, run_transaction};
+use zenith_tx::{AddAssetMetadata, Op, OpSpan, Transaction, TxStatus, run_transaction};
 
 use crate::json_types::{DiagnosticJson, MergeOutput, MergeRowResult};
 
@@ -171,6 +171,9 @@ fn collect_data_nodes(
                 reject_data_role_on_non_text(n.role.as_deref(), &n.id)?;
             }
             zenith_core::Node::Polyline(n) => {
+                reject_data_role_on_non_text(n.role.as_deref(), &n.id)?;
+            }
+            zenith_core::Node::Path(n) => {
                 reject_data_role_on_non_text(n.role.as_deref(), &n.id)?;
             }
             zenith_core::Node::Instance(n) => {
@@ -750,17 +753,7 @@ fn row_add_asset_op(row_idx: usize, column: &str, src: &str) -> (String, Op) {
         kind: "image".to_owned(),
         src: src.to_owned(),
         sha256: None,
-        producer_kind: None,
-        producer_source: None,
-        ai_prompt: None,
-        ai_model: None,
-        ai_provider: None,
-        ai_seed: None,
-        ai_generation_date: None,
-        ai_license: None,
-        ai_source_rights: None,
-        ai_safety_status: None,
-        ai_reuse_policy: None,
+        metadata: Box::new(AddAssetMetadata::default()),
     };
     (asset_id, op)
 }

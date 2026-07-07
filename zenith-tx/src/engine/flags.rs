@@ -23,6 +23,7 @@ fn node_visible_mut(node: &mut Node) -> Option<&mut Option<bool>> {
         Node::Image(n) => Some(&mut n.visible),
         Node::Polygon(n) => Some(&mut n.visible),
         Node::Polyline(n) => Some(&mut n.visible),
+        Node::Path(n) => Some(&mut n.visible),
         Node::Instance(n) => Some(&mut n.visible),
         Node::Field(n) => Some(&mut n.visible),
         Node::Toc(n) => Some(&mut n.visible),
@@ -54,6 +55,7 @@ fn node_locked_mut(node: &mut Node) -> Option<&mut Option<bool>> {
         Node::Image(n) => Some(&mut n.locked),
         Node::Polygon(n) => Some(&mut n.locked),
         Node::Polyline(n) => Some(&mut n.locked),
+        Node::Path(n) => Some(&mut n.locked),
         Node::Instance(n) => Some(&mut n.locked),
         Node::Field(n) => Some(&mut n.locked),
         Node::Toc(n) => Some(&mut n.locked),
@@ -85,6 +87,7 @@ fn node_points_mut(node: &mut Node) -> Option<&mut Vec<Point>> {
         | Node::Group(_)
         | Node::Image(_)
         | Node::Instance(_)
+        | Node::Path(_)
         | Node::Field(_)
         | Node::Footnote(_)
         | Node::Toc(_)

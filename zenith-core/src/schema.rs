@@ -42,6 +42,7 @@ pub fn node_kinds() -> &'static [&'static str] {
         "line",
         "light",
         "mesh",
+        "path",
         "pattern",
         "polygon",
         "polyline",
@@ -72,6 +73,7 @@ pub fn node_summary(kind: &str) -> Option<&'static str> {
         "image" => Some("Raster or SVG image positioned within a bounding box."),
         "polygon" => Some("Closed polygon defined by an ordered vertex list."),
         "polyline" => Some("Open polyline defined by an ordered vertex list."),
+        "path" => Some("Structured Bezier path defined by anchors and optional handles."),
         "instance" => Some("Reference to a master component, optionally with overrides."),
         "field" => Some("Editable variable-data text field bound to a named slot."),
         "footnote" => Some("Page-level footnote referenced by text span markers."),
@@ -226,6 +228,16 @@ pub fn node_content(kind: &str) -> Option<NodeContentDescriptor> {
                 "point x=(px)0 y=(px)0\n",
                 "point x=(px)100 y=(px)50\n",
                 "point x=(px)200 y=(px)0",
+            ),
+        }),
+        "path" => Some(NodeContentDescriptor {
+            description: "Two or more `anchor` children define an open Bezier path; three or more \
+                are required when `closed=#true`. Each anchor carries required `x` and `y` \
+                dimensions plus optional paired `in-x`/`in-y` and `out-x`/`out-y` handles.",
+            example: concat!(
+                "anchor x=(px)0 y=(px)0 out-x=(px)20 out-y=(px)0\n",
+                "anchor x=(px)80 y=(px)0 in-x=(px)60 in-y=(px)0 out-x=(px)100 out-y=(px)40\n",
+                "anchor x=(px)80 y=(px)80 in-x=(px)100 in-y=(px)40",
             ),
         }),
 
@@ -469,7 +481,7 @@ fn attribute_type_for_kind_inner(kind: &str, name: &str, fallback: &'static str)
         // fill: ColorOrGradient — rect (leaf.rs check_visual_props→shared.rs:804),
         //   ellipse (leaf.rs:218), polygon (special.rs:83), polyline (special.rs:213),
         //   pattern (pattern.rs:101→shared.rs:804).
-        ("rect" | "ellipse" | "polygon" | "polyline" | "pattern" | "chart", "fill") => {
+        ("rect" | "ellipse" | "polygon" | "polyline" | "path" | "pattern" | "chart", "fill") => {
             "token ref: color/gradient"
         }
         // fill: Color — text (text.rs:113), shape (shape.rs:108), code (leaf.rs:561).
@@ -610,7 +622,7 @@ fn attribute_type_generic(name: &str, fallback: &'static str) -> &'static str {
         "layer-priority" => "i64",
 
         // ── Booleans ─────────────────────────────────────────────────────
-        "visible" | "locked" | "anchor-parent" | "selectable" => "bool",
+        "visible" | "locked" | "anchor-parent" | "selectable" | "closed" => "bool",
         "hyphenate" | "suppress-first" | "border-collapse" => "bool",
         "mirror-margins" | "facing-pages" => "bool",
         "line-jumps" => "bool",
@@ -1003,6 +1015,7 @@ mod tests {
             Node::Image(_) => 1,
             Node::Polygon(_) => 1,
             Node::Polyline(_) => 1,
+            Node::Path(_) => 1,
             Node::Instance(_) => 1,
             Node::Field(_) => 1,
             Node::Footnote(_) => 1,
@@ -1026,7 +1039,7 @@ mod tests {
     /// This is the count returned by `node_variant_count_exhaustive` for any
     /// `Node`, summed across all variants — i.e. the total variant count.
     /// Updated by hand when a variant is added (compile error forces it).
-    const TOTAL_NODE_VARIANTS: usize = 22; // 21 authorable + 1 Unknown
+    const TOTAL_NODE_VARIANTS: usize = 23; // 22 authorable + 1 Unknown
 
     #[test]
     fn node_summary_covers_every_node_kind() {
@@ -1062,7 +1075,7 @@ mod tests {
     /// return `Some` from `node_content`, and the example must be non-empty.
     ///
     /// Kinds confirmed to carry authorable child content (parser-verified):
-    /// text, shape, footnote, polygon, polyline, table, frame, group, pattern, chart, instance,
+    /// text, shape, footnote, polygon, polyline, path, table, frame, group, pattern, chart, instance,
     /// code, connector (optional span label).
     #[test]
     fn node_content_returns_some_for_content_bearing_kinds() {
@@ -1072,6 +1085,7 @@ mod tests {
             "footnote",
             "polygon",
             "polyline",
+            "path",
             "table",
             "frame",
             "group",
@@ -1317,8 +1331,9 @@ mod tests {
     #[test]
     fn fill_type_hint_is_kind_accurate() {
         // ColorOrGradient kinds: rect (shared.rs:804), ellipse (leaf.rs:218),
-        // polygon (special.rs:83), polyline (special.rs:213), pattern (pattern.rs:101).
-        for kind in &["rect", "ellipse", "polygon", "polyline", "pattern"] {
+        // polygon (special.rs:83), polyline (special.rs:213), path (special.rs),
+        // pattern (pattern.rs:101).
+        for kind in &["rect", "ellipse", "polygon", "polyline", "path", "pattern"] {
             assert_eq!(
                 attribute_type_for_kind(kind, "fill"),
                 "token ref: color/gradient",
@@ -1347,6 +1362,7 @@ mod tests {
             "line",
             "polygon",
             "polyline",
+            "path",
             "pattern",
             "text",
             "shape",

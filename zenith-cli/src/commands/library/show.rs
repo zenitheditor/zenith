@@ -362,6 +362,7 @@ fn node_kind_name(node: &zenith_core::Node) -> &'static str {
         zenith_core::Node::Image(_) => "image",
         zenith_core::Node::Polygon(_) => "polygon",
         zenith_core::Node::Polyline(_) => "polyline",
+        zenith_core::Node::Path(_) => "path",
         zenith_core::Node::Frame(_) => "frame",
         zenith_core::Node::Group(_) => "group",
         zenith_core::Node::Instance(_) => "instance",

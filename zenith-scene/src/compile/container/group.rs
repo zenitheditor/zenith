@@ -439,6 +439,7 @@ fn group_children_center(
             | Node::Field(_)
             | Node::Toc(_)
             | Node::Footnote(_)
+            | Node::Path(_)
             | Node::Connector(_)
             | Node::Pattern(_)
             | Node::Chart(_)

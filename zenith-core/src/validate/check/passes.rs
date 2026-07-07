@@ -55,6 +55,9 @@ pub(in crate::validate::check) fn collect_local_ids(
             Node::Polyline(n) => {
                 out.insert(n.id.clone());
             }
+            Node::Path(n) => {
+                out.insert(n.id.clone());
+            }
             Node::Frame(n) => {
                 out.insert(n.id.clone());
                 collect_local_ids(&n.children, out);
@@ -194,6 +197,7 @@ pub(in crate::validate::check) fn check_footnote_refs(
                 | Node::Image(_)
                 | Node::Polygon(_)
                 | Node::Polyline(_)
+                | Node::Path(_)
                 | Node::Instance(_)
                 | Node::Field(_)
                 | Node::Toc(_)

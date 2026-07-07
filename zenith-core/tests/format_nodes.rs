@@ -135,6 +135,7 @@ fn mesh_node_parse_format_round_trip() {
     }
   }
 }
+
 "##;
     let adapter = KdlAdapter;
     let doc = adapter.parse(src.as_bytes()).expect("parse must succeed");
@@ -161,6 +162,64 @@ fn mesh_node_parse_format_round_trip() {
     assert!(
         matches!(&reparsed.body.pages[0].children[0], Node::Mesh(m) if m.id == "bg.mesh"),
         "mesh must survive format round-trip"
+    );
+}
+
+#[test]
+fn path_node_parse_format_round_trip() {
+    let src = r##"zenith version=1 {
+  project id="proj.path" name="Path"
+  tokens format="zenith-token-v1" {
+    token id="color.brand" type="color" value="#112233"
+    token id="color.ink" type="color" value="#000000"
+    token id="size.stroke" type="dimension" value=(px)2
+  }
+  styles {
+  }
+  document id="doc.path" title="Path" {
+    page id="page.path" w=(px)400 h=(px)300 {
+      path id="logo.mark" closed=#true fill=(token)"color.brand" stroke=(token)"color.ink" stroke-width=(token)"size.stroke" stroke-alignment="center" fill-rule="evenodd" {
+        anchor x=(px)0 y=(px)0 out-x=(px)20 out-y=(px)0
+        anchor x=(px)80 y=(px)0 in-x=(px)60 in-y=(px)0 out-x=(px)100 out-y=(px)40
+        anchor x=(px)80 y=(px)80 in-x=(px)100 in-y=(px)40
+      }
+    }
+  }
+}
+"##;
+
+    let adapter = KdlAdapter;
+    let doc = adapter.parse(src.as_bytes()).expect("parse must succeed");
+    let path = match &doc.body.pages[0].children[0] {
+        Node::Path(p) => p,
+        other => panic!("expected path node, got {other:?}"),
+    };
+    assert_eq!(path.id, "logo.mark");
+    assert_eq!(path.closed, Some(true));
+    assert_eq!(path.anchors.len(), 3);
+    assert_eq!(path.anchors[1].in_x, Some(px(60.0)));
+    assert_eq!(path.anchors[1].out_y, Some(px(40.0)));
+
+    let formatted = format_document(&doc).expect("format must succeed");
+    let formatted_str = String::from_utf8(formatted.clone()).expect("formatted must be utf8");
+    assert!(
+        formatted_str.contains(
+            "path id=\"logo.mark\" closed=#true fill=(token)\"color.brand\" stroke=(token)\"color.ink\" stroke-width=(token)\"size.stroke\" stroke-alignment=\"center\" fill-rule=\"evenodd\""
+        ),
+        "formatted path line missing canonical attrs; got:\n{formatted_str}"
+    );
+    assert!(
+        formatted_str
+            .contains("anchor x=(px)80 y=(px)0 in-x=(px)60 in-y=(px)0 out-x=(px)100 out-y=(px)40"),
+        "formatted anchor line missing handles; got:\n{formatted_str}"
+    );
+
+    let reparsed = adapter
+        .parse(&formatted)
+        .expect("re-parse after format must succeed");
+    assert!(
+        matches!(&reparsed.body.pages[0].children[0], Node::Path(p) if p.anchors.len() == 3),
+        "path must survive format round-trip"
     );
 }
 

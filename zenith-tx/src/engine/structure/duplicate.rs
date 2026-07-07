@@ -70,6 +70,10 @@ fn node_set_id(node: &mut Node, new_id: String) -> bool {
             p.id = new_id;
             true
         }
+        Node::Path(p) => {
+            p.id = new_id;
+            true
+        }
         Node::Field(f) => {
             f.id = new_id;
             true
@@ -163,6 +167,7 @@ fn duplicate_in_children(children: &mut Vec<Node>, id: &str, new_id: &str) -> bo
             | Node::Image(_)
             | Node::Polygon(_)
             | Node::Polyline(_)
+            | Node::Path(_)
             | Node::Instance(_)
             | Node::Field(_)
             | Node::Footnote(_)
@@ -284,6 +289,7 @@ pub(crate) fn suffix_ids_in_children(children: &mut [Node], id_suffix: &str) {
             | Node::Image(_)
             | Node::Polygon(_)
             | Node::Polyline(_)
+            | Node::Path(_)
             | Node::Instance(_)
             | Node::Field(_)
             | Node::Footnote(_)
@@ -344,6 +350,7 @@ pub(in crate::engine) fn node_set_id_any(node: &mut Node, new_id: String) {
         | Node::Image(_)
         | Node::Polygon(_)
         | Node::Polyline(_)
+        | Node::Path(_)
         | Node::Field(_)
         | Node::Toc(_)
         | Node::Footnote(_)

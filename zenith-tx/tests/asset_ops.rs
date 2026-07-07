@@ -2,7 +2,7 @@
 
 mod common;
 use common::*;
-use zenith_tx::{Op, Permissions, Transaction, TxStatus, run_transaction};
+use zenith_tx::{AddAssetMetadata, Op, Permissions, Transaction, TxStatus, run_transaction};
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
@@ -30,17 +30,7 @@ fn add_asset_op(id: &str, kind: &str, src: &str) -> Op {
         kind: kind.to_owned(),
         src: src.to_owned(),
         sha256: None,
-        producer_kind: None,
-        producer_source: None,
-        ai_prompt: None,
-        ai_model: None,
-        ai_provider: None,
-        ai_seed: None,
-        ai_generation_date: None,
-        ai_license: None,
-        ai_source_rights: None,
-        ai_safety_status: None,
-        ai_reuse_policy: None,
+        metadata: Box::new(AddAssetMetadata::default()),
     }
 }
 
@@ -108,17 +98,18 @@ fn add_asset_with_provenance_formats_asset_declaration() {
             kind: "image".to_owned(),
             src: "images/ai.png".to_owned(),
             sha256: Some("abc123".to_owned()),
-            producer_kind: None,
-            producer_source: None,
-            ai_prompt: Some("A geometric poster".to_owned()),
-            ai_model: Some("gpt-image-1".to_owned()),
-            ai_provider: Some("openai".to_owned()),
-            ai_seed: Some(42),
-            ai_generation_date: Some("2026-07-07".to_owned()),
-            ai_license: Some("project-owned".to_owned()),
-            ai_source_rights: Some("original".to_owned()),
-            ai_safety_status: Some("reviewed".to_owned()),
-            ai_reuse_policy: Some("internal".to_owned()),
+            metadata: Box::new(AddAssetMetadata {
+                ai_prompt: Some("A geometric poster".to_owned()),
+                ai_model: Some("gpt-image-1".to_owned()),
+                ai_provider: Some("openai".to_owned()),
+                ai_seed: Some(42),
+                ai_generation_date: Some("2026-07-07".to_owned()),
+                ai_license: Some("project-owned".to_owned()),
+                ai_source_rights: Some("original".to_owned()),
+                ai_safety_status: Some("reviewed".to_owned()),
+                ai_reuse_policy: Some("internal".to_owned()),
+                ..AddAssetMetadata::default()
+            }),
         }],
         permissions: Permissions::default(),
     };
@@ -148,17 +139,11 @@ fn add_asset_with_producer_provenance_formats_asset_declaration() {
             kind: "image".to_owned(),
             src: "images/baked.png".to_owned(),
             sha256: Some("def456".to_owned()),
-            producer_kind: Some("zpx-bake".to_owned()),
-            producer_source: Some("painting.zpx".to_owned()),
-            ai_prompt: None,
-            ai_model: None,
-            ai_provider: None,
-            ai_seed: None,
-            ai_generation_date: None,
-            ai_license: None,
-            ai_source_rights: None,
-            ai_safety_status: None,
-            ai_reuse_policy: None,
+            metadata: Box::new(AddAssetMetadata {
+                producer_kind: Some("zpx-bake".to_owned()),
+                producer_source: Some("painting.zpx".to_owned()),
+                ..AddAssetMetadata::default()
+            }),
         }],
         permissions: Permissions::default(),
     };

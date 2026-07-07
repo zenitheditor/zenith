@@ -1,8 +1,9 @@
 //! Shared leaf emitters reused across the node writers: the inline `span`
 //! line (text/shape/footnote/override children), the `point` line
-//! (polygon/polyline vertices), and the `block` role-style declaration.
+//! (polygon/polyline vertices), the `anchor` line (path anchors), and the
+//! `block` role-style declaration.
 
-use crate::ast::{BlockStyle, Point, TextSpan};
+use crate::ast::{BlockStyle, PathAnchor, Point, TextSpan};
 use crate::data::DataFormat;
 
 use crate::format::writer::{
@@ -90,6 +91,24 @@ pub(super) fn write_points(points: &[Point], out: &mut String, depth: usize) {
         out.push_str("point");
         write_opt_dimension(out, "x", &pt.x);
         write_opt_dimension(out, "y", &pt.y);
+        out.push('\n');
+    }
+}
+
+/// Emit an `anchor x=(unit)N y=(unit)N ...` line for each path anchor.
+///
+/// The parent block is always emitted by the path writer; missing fields are
+/// skipped so parse-time optionality remains lossless for invalid drafts.
+pub(super) fn write_path_anchors(anchors: &[PathAnchor], out: &mut String, depth: usize) {
+    for anchor in anchors {
+        indent(out, depth);
+        out.push_str("anchor");
+        write_opt_dimension(out, "x", &anchor.x);
+        write_opt_dimension(out, "y", &anchor.y);
+        write_opt_dimension(out, "in-x", &anchor.in_x);
+        write_opt_dimension(out, "in-y", &anchor.in_y);
+        write_opt_dimension(out, "out-x", &anchor.out_x);
+        write_opt_dimension(out, "out-y", &anchor.out_y);
         out.push('\n');
     }
 }

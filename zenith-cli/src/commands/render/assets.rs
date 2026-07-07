@@ -335,6 +335,7 @@ fn walk_images(nodes: &[Node], doc: &Document, project_dir: &Path, out: &mut Vec
             | Node::Code(_)
             | Node::Polygon(_)
             | Node::Polyline(_)
+            | Node::Path(_)
             | Node::Instance(_)
             | Node::Field(_)
             | Node::Toc(_)

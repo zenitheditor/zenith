@@ -7,8 +7,8 @@ use crate::data::DataFormat;
 use super::container::{FrameNode, GroupNode, TableNode};
 use super::effect::{LightNode, MeshNode};
 use super::leaf::{
-    ChartNode, CodeNode, EllipseNode, ImageNode, LineNode, PatternNode, PolygonNode, PolylineNode,
-    RectNode, TextNode,
+    ChartNode, CodeNode, EllipseNode, ImageNode, LineNode, PathNode, PatternNode, PolygonNode,
+    PolylineNode, RectNode, TextNode,
 };
 use super::special::{
     ConnectorNode, FieldNode, FootnoteNode, InstanceNode, ShapeNode, TocNode, UnknownNode,
@@ -150,6 +150,7 @@ pub enum Node {
     Image(ImageNode),
     Polygon(PolygonNode),
     Polyline(PolylineNode),
+    Path(PathNode),
     Instance(InstanceNode),
     Field(FieldNode),
     Footnote(FootnoteNode),

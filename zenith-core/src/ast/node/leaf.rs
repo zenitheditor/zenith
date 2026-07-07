@@ -638,6 +638,51 @@ pub struct PolygonNode {
     pub unknown_props: BTreeMap<String, UnknownProperty>,
 }
 
+/// A single anchor in a `path` anchor list.
+///
+/// `x` and `y` define the anchor point. `in_*` and `out_*` are optional Bezier
+/// handles, preserved losslessly at parse time and pair-validated later.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PathAnchor {
+    pub x: Option<Dimension>,
+    pub y: Option<Dimension>,
+    pub in_x: Option<Dimension>,
+    pub in_y: Option<Dimension>,
+    pub out_x: Option<Dimension>,
+    pub out_y: Option<Dimension>,
+}
+
+/// A `path` node — a structured Bezier path defined by ordered `anchor`
+/// children with optional in/out handles.
+///
+/// `closed` preserves author intent for open versus closed paths. `fill-rule`
+/// and `stroke-alignment` use the same value model as `polygon`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PathNode {
+    pub id: String,
+    pub name: Option<String>,
+    pub role: Option<String>,
+    pub closed: Option<bool>,
+    pub fill: Option<PropertyValue>,
+    pub stroke: Option<PropertyValue>,
+    pub stroke_width: Option<PropertyValue>,
+    /// Stroke alignment: `"center"` (default), `"inside"`, or `"outside"`.
+    pub stroke_alignment: Option<String>,
+    /// `"nonzero"` (default) or `"evenodd"`.
+    pub fill_rule: Option<String>,
+    pub opacity: Option<f64>,
+    pub visible: Option<bool>,
+    pub locked: Option<bool>,
+    pub rotate: Option<Dimension>,
+    pub style: Option<String>,
+    /// Ordered anchor list parsed from `anchor` child nodes.
+    pub anchors: Vec<PathAnchor>,
+    /// Source declaration span, when available.
+    pub source_span: Option<Span>,
+    /// Unknown properties preserved for forward-compat.
+    pub unknown_props: BTreeMap<String, UnknownProperty>,
+}
+
 /// A `pattern` node — a compact procedural primitive.
 ///
 /// A `pattern` carries one TEMPLATE child — the [`motif`](PatternNode::motif) —

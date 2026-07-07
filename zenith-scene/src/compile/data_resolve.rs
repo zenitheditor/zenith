@@ -103,6 +103,7 @@ fn node_has_data_ref(node: &Node) -> bool {
         Node::Code(n) => any_prop(&[&n.fill, &n.font_family, &n.font_size]),
         Node::Polygon(n) => any_prop(&[&n.fill, &n.stroke, &n.stroke_width]),
         Node::Polyline(n) => any_prop(&[&n.fill, &n.stroke, &n.stroke_width]),
+        Node::Path(n) => any_prop(&[&n.fill, &n.stroke, &n.stroke_width]),
         Node::Image(n) => any_prop(&[&n.shadow, &n.filter, &n.mask, &n.clip_radius]),
         Node::Field(n) => any_prop(&[&n.fill, &n.font_family, &n.font_size]),
         Node::Footnote(n) => {
@@ -204,6 +205,12 @@ fn substitute_node(node: &mut Node, ctx: &DataContext, diagnostics: &mut Vec<Dia
             substitute_dim_prop_opt(&mut n.stroke_width, ctx, &id, "stroke-width", diagnostics);
         }
         Node::Polyline(n) => {
+            let id = n.id.clone();
+            substitute_color_prop_opt(&mut n.fill, ctx, &id, "fill", diagnostics);
+            substitute_color_prop_opt(&mut n.stroke, ctx, &id, "stroke", diagnostics);
+            substitute_dim_prop_opt(&mut n.stroke_width, ctx, &id, "stroke-width", diagnostics);
+        }
+        Node::Path(n) => {
             let id = n.id.clone();
             substitute_color_prop_opt(&mut n.fill, ctx, &id, "fill", diagnostics);
             substitute_color_prop_opt(&mut n.stroke, ctx, &id, "stroke", diagnostics);

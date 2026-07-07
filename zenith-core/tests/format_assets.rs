@@ -162,7 +162,10 @@ fn test_asset_producer_provenance_round_trip_and_order() {
     let pos_ai_prompt = asset_line
         .find("ai-prompt=")
         .expect("ai-prompt= must be present");
-    assert!(pos_sha256 < pos_producer_kind, "sha256 before producer-kind");
+    assert!(
+        pos_sha256 < pos_producer_kind,
+        "sha256 before producer-kind"
+    );
     assert!(
         pos_producer_kind < pos_producer_source,
         "producer-kind before producer-source"

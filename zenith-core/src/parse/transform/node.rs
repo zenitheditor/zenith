@@ -12,8 +12,8 @@ use super::document::transform_children;
 use super::effect::{transform_light, transform_mesh};
 use super::helpers::{collect_unknown_props, node_span, optional_string_prop};
 use super::leaf::{
-    transform_code, transform_ellipse, transform_image, transform_line, transform_polygon,
-    transform_polyline, transform_rect, transform_text,
+    transform_code, transform_ellipse, transform_image, transform_line, transform_path,
+    transform_polygon, transform_polyline, transform_rect, transform_text,
 };
 use super::pattern::transform_pattern;
 use super::special::{
@@ -32,6 +32,7 @@ pub(super) fn transform_node(node: &KdlNode) -> Result<Node, ParseError> {
         "image" => transform_image(node).map(Node::Image),
         "polygon" => transform_polygon(node).map(Node::Polygon),
         "polyline" => transform_polyline(node).map(Node::Polyline),
+        "path" => transform_path(node).map(Node::Path),
         "instance" => transform_instance(node).map(Node::Instance),
         "field" => transform_field(node).map(Node::Field),
         "toc" => transform_toc(node).map(Node::Toc),

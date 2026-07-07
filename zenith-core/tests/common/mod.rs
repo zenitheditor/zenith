@@ -19,11 +19,12 @@ pub use zenith_core::ast::document::Fold;
 pub use zenith_core::{
     ActionDef, AssetBlock, AssetDecl, AssetKind, BrandContract, CodeNode, ConnectorNode, Dimension,
     Document, DocumentBody, EllipseNode, FieldNode, FrameNode, GroupNode, ImageNode, LibraryDef,
-    LineNode, MasterDef, Node, Page, Point, PolygonNode, PolylineNode, PropertyValue,
-    ProtectedRegion, ProvenanceDef, RecipeDef, RecipeParam, RectNode, SafeZone, SafeZoneType,
-    SectionDef, Severity, ShapeNode, Style, StyleBlock, TableCell, TableColumn, TableNode,
-    TableRow, TextNode, TextSpan, TocNode, Token, TokenBlock, TokenLiteral, TokenType, TokenValue,
-    Unit, UnknownNode, UnknownStyleProp, ValidationReport, VariantDef, VariantOverride, validate,
+    LineNode, MasterDef, Node, Page, PathAnchor, PathNode, Point, PolygonNode, PolylineNode,
+    PropertyValue, ProtectedRegion, ProvenanceDef, RecipeDef, RecipeParam, RectNode, SafeZone,
+    SafeZoneType, SectionDef, Severity, ShapeNode, Style, StyleBlock, TableCell, TableColumn,
+    TableNode, TableRow, TextNode, TextSpan, TocNode, Token, TokenBlock, TokenLiteral, TokenType,
+    TokenValue, Unit, UnknownNode, UnknownStyleProp, ValidationReport, VariantDef, VariantOverride,
+    validate,
 };
 pub use zenith_core::{KdlAdapter, KdlSource};
 
@@ -478,6 +479,7 @@ pub fn strip_node_span(node: &mut Node) {
         Node::Image(i) => i.source_span = None,
         Node::Polygon(p) => p.source_span = None,
         Node::Polyline(p) => p.source_span = None,
+        Node::Path(p) => p.source_span = None,
         Node::Instance(i) => {
             i.source_span = None;
             for ov in &mut i.overrides {

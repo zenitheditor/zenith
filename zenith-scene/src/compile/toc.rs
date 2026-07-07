@@ -229,6 +229,7 @@ fn collect_entries(
             | Node::Image(_)
             | Node::Polygon(_)
             | Node::Polyline(_)
+            | Node::Path(_)
             | Node::Instance(_)
             | Node::Field(_)
             | Node::Toc(_)

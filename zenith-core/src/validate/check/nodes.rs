@@ -304,6 +304,9 @@ pub(super) fn walk_node(
         Node::Polyline(poly) => {
             node::check_polyline(poly, ctx, seen_ids, referenced_token_ids, diagnostics);
         }
+        Node::Path(path) => {
+            node::check_path(path, ctx, seen_ids, referenced_token_ids, diagnostics);
+        }
         Node::Instance(inst) => {
             node::check_instance(inst, ctx, seen_ids, referenced_token_ids, diagnostics);
         }

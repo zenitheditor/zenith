@@ -27,6 +27,7 @@ fn node_fill_mut(node: &mut Node) -> Option<&mut Option<PropertyValue>> {
         Node::Code(n) => Some(&mut n.fill),
         Node::Polygon(n) => Some(&mut n.fill),
         Node::Polyline(n) => Some(&mut n.fill),
+        Node::Path(n) => Some(&mut n.fill),
         Node::Field(n) => Some(&mut n.fill),
         Node::Toc(n) => Some(&mut n.fill),
         Node::Footnote(n) => Some(&mut n.fill),
@@ -57,6 +58,7 @@ fn node_stroke_mut(node: &mut Node) -> Option<&mut Option<PropertyValue>> {
         Node::Line(n) => Some(&mut n.stroke),
         Node::Polygon(n) => Some(&mut n.stroke),
         Node::Polyline(n) => Some(&mut n.stroke),
+        Node::Path(n) => Some(&mut n.stroke),
         Node::Ellipse(n) => Some(&mut n.stroke),
         Node::Shape(n) => Some(&mut n.stroke),
         Node::Connector(n) => Some(&mut n.stroke),
@@ -87,6 +89,7 @@ fn node_stroke_width_mut(node: &mut Node) -> Option<&mut Option<PropertyValue>> 
         Node::Line(n) => Some(&mut n.stroke_width),
         Node::Polygon(n) => Some(&mut n.stroke_width),
         Node::Polyline(n) => Some(&mut n.stroke_width),
+        Node::Path(n) => Some(&mut n.stroke_width),
         Node::Ellipse(n) => Some(&mut n.stroke_width),
         Node::Shape(n) => Some(&mut n.stroke_width),
         Node::Connector(n) => Some(&mut n.stroke_width),
@@ -122,6 +125,7 @@ fn node_opacity_mut(node: &mut Node) -> Option<&mut Option<f64>> {
         Node::Image(n) => Some(&mut n.opacity),
         Node::Polygon(n) => Some(&mut n.opacity),
         Node::Polyline(n) => Some(&mut n.opacity),
+        Node::Path(n) => Some(&mut n.opacity),
         Node::Instance(n) => Some(&mut n.opacity),
         Node::Field(n) => Some(&mut n.opacity),
         Node::Toc(n) => Some(&mut n.opacity),
@@ -157,6 +161,7 @@ fn node_overflow_mut(node: &mut Node) -> Option<&mut Option<String>> {
         | Node::Image(_)
         | Node::Polygon(_)
         | Node::Polyline(_)
+        | Node::Path(_)
         | Node::Instance(_)
         | Node::Field(_)
         | Node::Toc(_)
@@ -617,6 +622,7 @@ fn collect_text_entries(children: &[Node], out: &mut Vec<(String, bool)>) {
             | Node::Image(_)
             | Node::Polygon(_)
             | Node::Polyline(_)
+            | Node::Path(_)
             | Node::Instance(_)
             | Node::Field(_)
             | Node::Toc(_)
@@ -746,6 +752,7 @@ pub(super) fn apply_find_replace_text(
                     | Some(Node::Image(_))
                     | Some(Node::Polygon(_))
                     | Some(Node::Polyline(_))
+                    | Some(Node::Path(_))
                     | Some(Node::Instance(_))
                     | Some(Node::Field(_))
                     | Some(Node::Footnote(_))

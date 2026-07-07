@@ -1,10 +1,12 @@
 //! Per-kind checks for the "special" leaf nodes that were already extracted as
-//! helpers: `polygon`, `polyline`, `instance`, `field`, `toc`, and `footnote`.
+//! helpers: `polygon`, `polyline`, `path`, `instance`, `field`, `toc`, and `footnote`.
 //! None of these recurse into laid-out children at this site.
 
 use std::collections::BTreeSet;
 
-use crate::ast::node::{FieldNode, FootnoteNode, InstanceNode, PolygonNode, PolylineNode, TocNode};
+use crate::ast::node::{
+    FieldNode, FootnoteNode, InstanceNode, PathAnchor, PathNode, PolygonNode, PolylineNode, TocNode,
+};
 use crate::diagnostics::Diagnostic;
 
 use super::shared::{
@@ -259,6 +261,190 @@ pub(in crate::validate::check) fn check_polyline(
         diagnostics,
     );
     // polyline is a LEAF: no child-node recursion (points are sub-data).
+}
+
+pub(in crate::validate::check) fn check_path(
+    path: &PathNode,
+    ctx: WalkCtx,
+    seen_ids: &mut BTreeSet<String>,
+    referenced_token_ids: &mut BTreeSet<String>,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    let WalkCtx {
+        resolved_tokens,
+        declared_style_ids,
+        ..
+    } = ctx;
+    register_id(&path.id, seen_ids, diagnostics);
+    check_style_ref(
+        &path.id,
+        path.style.as_deref(),
+        declared_style_ids,
+        path.source_span,
+        diagnostics,
+    );
+
+    for (idx, anchor) in path.anchors.iter().enumerate() {
+        check_path_anchor(&path.id, idx, anchor, path.source_span, diagnostics);
+    }
+
+    let required_anchors = if path.closed == Some(true) { 3 } else { 2 };
+    if path.anchors.len() < required_anchors {
+        diagnostics.push(Diagnostic::error(
+            "shape.insufficient_points",
+            format!(
+                "path '{}': requires at least {} anchors, got {}",
+                path.id,
+                required_anchors,
+                path.anchors.len()
+            ),
+            path.source_span,
+            Some(path.id.clone()),
+        ));
+    }
+
+    check_visual_prop(
+        &path.id,
+        "fill",
+        path.fill.as_ref(),
+        VisualExpect::ColorOrGradient,
+        referenced_token_ids,
+        resolved_tokens,
+        diagnostics,
+    );
+    check_visual_prop(
+        &path.id,
+        "stroke",
+        path.stroke.as_ref(),
+        VisualExpect::Color,
+        referenced_token_ids,
+        resolved_tokens,
+        diagnostics,
+    );
+    check_visual_prop(
+        &path.id,
+        "stroke-width",
+        path.stroke_width.as_ref(),
+        VisualExpect::Dimension,
+        referenced_token_ids,
+        resolved_tokens,
+        diagnostics,
+    );
+
+    if let Some(fr) = &path.fill_rule
+        && !matches!(fr.as_str(), "nonzero" | "evenodd")
+    {
+        diagnostics.push(Diagnostic::warning(
+            "node.unknown_property",
+            format!(
+                "path '{}': unrecognized fill-rule '{}' (version-relative; \
+                 allowed values are nonzero, evenodd)",
+                path.id, fr
+            ),
+            path.source_span,
+            Some(path.id.clone()),
+        ));
+    }
+
+    if let Some(sa) = &path.stroke_alignment
+        && !matches!(sa.as_str(), "inside" | "center" | "outside")
+    {
+        diagnostics.push(Diagnostic::warning(
+            "node.unknown_property",
+            format!(
+                "path '{}': unrecognized stroke-alignment '{}' (version-relative; \
+                 allowed values are inside, center, outside)",
+                path.id, sa
+            ),
+            path.source_span,
+            Some(path.id.clone()),
+        ));
+    }
+
+    check_unknown_props(
+        "path",
+        &path.id,
+        &path.unknown_props,
+        path.source_span,
+        diagnostics,
+    );
+}
+
+fn check_path_anchor(
+    path_id: &str,
+    idx: usize,
+    anchor: &PathAnchor,
+    source_span: Option<crate::ast::Span>,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    let node_id = Some(path_id.to_owned());
+    let x_label = format!("anchor[{idx}].x");
+    let y_label = format!("anchor[{idx}].y");
+    check_dimension_geom(
+        path_id,
+        &x_label,
+        anchor.x.as_ref(),
+        true,
+        source_span,
+        diagnostics,
+    );
+    check_dimension_geom(
+        path_id,
+        &y_label,
+        anchor.y.as_ref(),
+        true,
+        source_span,
+        diagnostics,
+    );
+    check_dimension_geom(
+        path_id,
+        &format!("anchor[{idx}].in-x"),
+        anchor.in_x.as_ref(),
+        false,
+        source_span,
+        diagnostics,
+    );
+    check_dimension_geom(
+        path_id,
+        &format!("anchor[{idx}].in-y"),
+        anchor.in_y.as_ref(),
+        false,
+        source_span,
+        diagnostics,
+    );
+    check_dimension_geom(
+        path_id,
+        &format!("anchor[{idx}].out-x"),
+        anchor.out_x.as_ref(),
+        false,
+        source_span,
+        diagnostics,
+    );
+    check_dimension_geom(
+        path_id,
+        &format!("anchor[{idx}].out-y"),
+        anchor.out_y.as_ref(),
+        false,
+        source_span,
+        diagnostics,
+    );
+
+    if anchor.in_x.is_some() != anchor.in_y.is_some() {
+        diagnostics.push(Diagnostic::error(
+            "node.invalid_geometry",
+            format!("path '{path_id}': anchor[{idx}] in handle requires both in-x and in-y"),
+            source_span,
+            node_id.clone(),
+        ));
+    }
+    if anchor.out_x.is_some() != anchor.out_y.is_some() {
+        diagnostics.push(Diagnostic::error(
+            "node.invalid_geometry",
+            format!("path '{path_id}': anchor[{idx}] out handle requires both out-x and out-y"),
+            source_span,
+            node_id,
+        ));
+    }
 }
 
 // ── instance validation ───────────────────────────────────────────────────────

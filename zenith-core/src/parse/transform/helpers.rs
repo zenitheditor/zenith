@@ -341,7 +341,8 @@ pub(crate) fn known_props_for_kind(kind: &str) -> &'static [&'static str] {
     use super::effect::{LIGHT_KNOWN_PROPS, MESH_KNOWN_PROPS};
     use super::leaf::{
         CODE_KNOWN_PROPS, ELLIPSE_KNOWN_PROPS, IMAGE_KNOWN_PROPS, LINE_KNOWN_PROPS,
-        POLYGON_KNOWN_PROPS, POLYLINE_KNOWN_PROPS, RECT_KNOWN_PROPS, TEXT_KNOWN_PROPS,
+        PATH_KNOWN_PROPS, POLYGON_KNOWN_PROPS, POLYLINE_KNOWN_PROPS, RECT_KNOWN_PROPS,
+        TEXT_KNOWN_PROPS,
     };
     use super::pattern::PATTERN_KNOWN_PROPS;
     use super::special::{
@@ -358,6 +359,7 @@ pub(crate) fn known_props_for_kind(kind: &str) -> &'static [&'static str] {
         "line" => LINE_KNOWN_PROPS,
         "polygon" => POLYGON_KNOWN_PROPS,
         "polyline" => POLYLINE_KNOWN_PROPS,
+        "path" => PATH_KNOWN_PROPS,
         "frame" => FRAME_KNOWN_PROPS,
         "group" => GROUP_KNOWN_PROPS,
         "table" => TABLE_KNOWN_PROPS,

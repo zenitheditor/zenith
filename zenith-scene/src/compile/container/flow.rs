@@ -29,6 +29,7 @@ fn node_visible(node: &Node) -> Option<bool> {
         Node::Image(n) => n.visible,
         Node::Polygon(n) => n.visible,
         Node::Polyline(n) => n.visible,
+        Node::Path(n) => n.visible,
         Node::Instance(n) => n.visible,
         Node::Field(n) => n.visible,
         Node::Toc(n) => n.visible,
@@ -71,6 +72,7 @@ pub(super) fn node_declared_w(
         Node::Line(_)
         | Node::Polygon(_)
         | Node::Polyline(_)
+        | Node::Path(_)
         | Node::Instance(_)
         | Node::Footnote(_)
         | Node::Connector(_)
@@ -104,6 +106,7 @@ pub(super) fn node_declared_h(
         Node::Line(_)
         | Node::Polygon(_)
         | Node::Polyline(_)
+        | Node::Path(_)
         | Node::Instance(_)
         | Node::Footnote(_)
         | Node::Connector(_)
@@ -222,6 +225,7 @@ pub(super) fn with_flow_box(node: &Node, x: f64, y: f64, w: f64, h: Option<f64>)
         Node::Line(_)
         | Node::Polygon(_)
         | Node::Polyline(_)
+        | Node::Path(_)
         | Node::Instance(_)
         | Node::Footnote(_)
         | Node::Connector(_)

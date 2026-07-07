@@ -50,6 +50,7 @@ fn index_nodes(children: &[Node], page_index_1based: usize, map: &mut BTreeMap<S
             | Node::Image(_)
             | Node::Polygon(_)
             | Node::Polyline(_)
+            | Node::Path(_)
             | Node::Instance(_)
             | Node::Field(_)
             | Node::Toc(_)
@@ -129,6 +130,7 @@ fn collect_node_boxes(
             | Node::Image(_)
             | Node::Polygon(_)
             | Node::Polyline(_)
+            | Node::Path(_)
             | Node::Instance(_)
             | Node::Field(_)
             | Node::Toc(_)
@@ -188,6 +190,7 @@ fn node_rect(
         | Node::Line(_)
         | Node::Polygon(_)
         | Node::Polyline(_)
+        | Node::Path(_)
         | Node::Footnote(_)
         | Node::Connector(_)
         | Node::Unknown(_) => None,
@@ -207,6 +210,7 @@ fn node_id(node: &Node) -> Option<&str> {
         Node::Image(n) => Some(&n.id),
         Node::Polygon(n) => Some(&n.id),
         Node::Polyline(n) => Some(&n.id),
+        Node::Path(n) => Some(&n.id),
         Node::Instance(n) => Some(&n.id),
         Node::Field(n) => Some(&n.id),
         Node::Toc(n) => Some(&n.id),

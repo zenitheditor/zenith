@@ -485,6 +485,25 @@ fn build_node_entry(node: &Node, resolved: &Resolved) -> NodeEntry {
             locked: n.locked,
             children: vec![],
         },
+        Node::Path(n) => NodeEntry {
+            id: n.id.clone(),
+            kind: "path".into(),
+            role: n.role.clone(),
+            geometry: Some(NodeGeometry {
+                x: None,
+                y: None,
+                w: None,
+                h: None,
+                x1: None,
+                y1: None,
+                x2: None,
+                y2: None,
+                point_count: Some(n.anchors.len()),
+            }),
+            visible: n.visible,
+            locked: n.locked,
+            children: vec![],
+        },
         Node::Instance(n) => NodeEntry {
             id: n.id.clone(),
             kind: "instance".into(),
@@ -726,6 +745,7 @@ fn node_id_str(node: &Node) -> &str {
         Node::Image(n) => &n.id,
         Node::Polygon(n) => &n.id,
         Node::Polyline(n) => &n.id,
+        Node::Path(n) => &n.id,
         Node::Instance(n) => &n.id,
         Node::Field(n) => &n.id,
         Node::Toc(n) => &n.id,
@@ -757,6 +777,7 @@ fn node_children(node: &Node) -> Option<&[Node]> {
         | Node::Image(_)
         | Node::Polygon(_)
         | Node::Polyline(_)
+        | Node::Path(_)
         | Node::Instance(_)
         | Node::Field(_)
         | Node::Footnote(_)
