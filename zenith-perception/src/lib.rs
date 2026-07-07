@@ -10,6 +10,7 @@ pub mod histogram;
 pub mod optical_balance;
 pub mod path_collision;
 mod path_geometry;
+pub mod path_outline;
 pub mod path_tangent_quality;
 pub mod report;
 pub mod scalar;
@@ -27,6 +28,9 @@ pub use histogram::{Histogram, histogram};
 pub use optical_balance::{OpticalBalanceInput, OpticalBalanceReport, optical_balance};
 pub use path_collision::{
     PathCollisionInput, PathCollisionNearestPoints, PathCollisionReport, path_collision,
+};
+pub use path_outline::{
+    PathOutlineKind, PathOutlinePerceptionInput, PathOutlinePerceptionReport, path_outline,
 };
 pub use path_tangent_quality::{
     PathTangentQualityInput, PathTangentQualityReport, path_tangent_quality,
