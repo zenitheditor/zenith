@@ -2,6 +2,7 @@
 
 pub mod bezier;
 pub mod boolean;
+pub mod boolean_piece;
 pub mod bounds;
 pub mod contour;
 pub mod error;
@@ -23,6 +24,7 @@ pub use boolean::{
     classify_contour_boolean_spans, collect_contour_boolean_spans, collect_contour_boolean_splits,
     select_contour_boolean_spans,
 };
+pub use boolean_piece::{ContourBooleanPiece, materialize_contour_boolean_pieces};
 pub use bounds::RectBounds;
 pub use contour::{
     ClosedPolyline, ClosedPolylineIntersectionEvent, ClosedPolylineRelation, ClosedPolylineWinding,
