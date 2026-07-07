@@ -40,8 +40,8 @@ const TRANSFORM_PATH_DOC: &str = r##"zenith version=1 {
   document id="doc1" title="T" {
     page id="pg1" w=(px)400 h=(px)300 {
       path id="path1" closed=#true {
-        anchor x=(px)0 y=(px)0 out-x=(px)10 out-y=(px)0
-        anchor x=(px)20 y=(px)0 in-x=(px)10 in-y=(px)0
+        anchor x=(px)0 y=(px)0 kind="corner" out-x=(px)10 out-y=(px)0
+        anchor x=(px)20 y=(px)0 kind="smooth" in-x=(px)10 in-y=(px)0
         anchor x=(px)0 y=(px)20
       }
     }
@@ -68,6 +68,11 @@ fn insert_path_anchor_open_line_split_inserts_midpoint() {
     assert_px_close(anchor_px_attr(&result.source_after, 1, "x"), 50.0);
     assert_px_close(anchor_px_attr(&result.source_after, 1, "y"), 0.0);
     assert_px_close(anchor_px_attr(&result.source_after, 2, "x"), 100.0);
+    assert!(
+        !anchor_line(&result.source_after, 1).contains("kind="),
+        "line split anchor should not claim smooth/symmetric intent; got:\n{}",
+        result.source_after
+    );
 }
 
 #[test]
@@ -80,8 +85,8 @@ fn insert_path_anchor_cubic_split_preserves_generated_handles() {
   document id="doc1" title="T" {
     page id="pg1" w=(px)400 h=(px)300 {
       path id="path1" {
-        anchor x=(px)0 y=(px)0 out-x=(px)0 out-y=(px)100
-        anchor x=(px)100 y=(px)0 in-x=(px)100 in-y=(px)100
+        anchor x=(px)0 y=(px)0 kind="corner" out-x=(px)0 out-y=(px)100
+        anchor x=(px)100 y=(px)0 kind="symmetric" in-x=(px)100 in-y=(px)100
       }
     }
   }
@@ -110,6 +115,13 @@ fn insert_path_anchor_cubic_split_preserves_generated_handles() {
     assert_px_close(anchor_px_attr(&result.source_after, 1, "out-y"), 75.0);
     assert_px_close(anchor_px_attr(&result.source_after, 2, "in-x"), 100.0);
     assert_px_close(anchor_px_attr(&result.source_after, 2, "in-y"), 50.0);
+    assert!(
+        anchor_line(&result.source_after, 0).contains("kind=\"corner\"")
+            && anchor_line(&result.source_after, 1).contains("kind=\"smooth\"")
+            && anchor_line(&result.source_after, 2).contains("kind=\"symmetric\""),
+        "cubic split should preserve existing kinds and mark inserted anchor smooth; got:\n{}",
+        result.source_after
+    );
 }
 
 #[test]
@@ -323,10 +335,12 @@ fn transform_path_anchors_translates_anchors_and_handles() {
     assert_px_close(anchor_px_attr(&result.source_after, 0, "y"), -4.0);
     assert_px_close(anchor_px_attr(&result.source_after, 0, "out-x"), 20.0);
     assert_px_close(anchor_px_attr(&result.source_after, 0, "out-y"), -4.0);
+    assert!(anchor_line(&result.source_after, 0).contains("kind=\"corner\""));
     assert_px_close(anchor_px_attr(&result.source_after, 1, "x"), 30.0);
     assert_px_close(anchor_px_attr(&result.source_after, 1, "y"), -4.0);
     assert_px_close(anchor_px_attr(&result.source_after, 1, "in-x"), 20.0);
     assert_px_close(anchor_px_attr(&result.source_after, 1, "in-y"), -4.0);
+    assert!(anchor_line(&result.source_after, 1).contains("kind=\"smooth\""));
 }
 
 #[test]
@@ -601,7 +615,7 @@ fn simplify_path_anchors_removes_near_collinear_middle_anchor() {
     page id="pg1" w=(px)400 h=(px)300 {
       path id="path1" {
         anchor x=(px)0 y=(px)0
-        anchor x=(px)50 y=(px)0.1
+        anchor x=(px)50 y=(px)0.1 kind="smooth"
         anchor x=(px)100 y=(px)0
       }
     }
@@ -624,6 +638,11 @@ fn simplify_path_anchors_removes_near_collinear_middle_anchor() {
     assert!(
         !result.source_after.contains("anchor x=(px)50 y=(px)0.1"),
         "middle anchor should be removed; got:\n{}",
+        result.source_after
+    );
+    assert!(
+        !result.source_after.contains("kind="),
+        "simplified handle-free anchors should not preserve smooth/symmetric intent; got:\n{}",
         result.source_after
     );
 }

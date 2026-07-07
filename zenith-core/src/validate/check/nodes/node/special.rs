@@ -5,7 +5,8 @@
 use std::collections::BTreeSet;
 
 use crate::ast::node::{
-    FieldNode, FootnoteNode, InstanceNode, PathAnchor, PathNode, PolygonNode, PolylineNode, TocNode,
+    AnchorKind, FieldNode, FootnoteNode, InstanceNode, PathAnchor, PathNode, PolygonNode,
+    PolylineNode, TocNode,
 };
 use crate::diagnostics::Diagnostic;
 
@@ -428,6 +429,19 @@ fn check_path_anchor(
         source_span,
         diagnostics,
     );
+
+    if let Some(AnchorKind::Unknown(kind)) = &anchor.kind {
+        diagnostics.push(Diagnostic::warning(
+            "node.unknown_property",
+            format!(
+                "path '{path_id}': anchor[{idx}] has unrecognized kind '{}' \
+                 (version-relative; allowed values are corner, smooth, symmetric)",
+                kind
+            ),
+            source_span,
+            node_id.clone(),
+        ));
+    }
 
     if anchor.in_x.is_some() != anchor.in_y.is_some() {
         diagnostics.push(Diagnostic::error(

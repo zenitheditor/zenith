@@ -8,7 +8,7 @@ use crate::data::DataFormat;
 
 use crate::format::writer::{
     escape_kdl_string, indent, write_opt_bool, write_opt_dimension, write_opt_property_value,
-    write_opt_str,
+    write_opt_str, write_opt_str_escaped,
 };
 
 /// Emit a single `block role="…" …` declaration line (no child block — leaf
@@ -105,6 +105,9 @@ pub(super) fn write_path_anchors(anchors: &[PathAnchor], out: &mut String, depth
         out.push_str("anchor");
         write_opt_dimension(out, "x", &anchor.x);
         write_opt_dimension(out, "y", &anchor.y);
+        if let Some(kind) = &anchor.kind {
+            write_opt_str_escaped(out, "kind", &Some(kind.kind_str().to_owned()));
+        }
         write_opt_dimension(out, "in-x", &anchor.in_x);
         write_opt_dimension(out, "in-y", &anchor.in_y);
         write_opt_dimension(out, "out-x", &anchor.out_x);

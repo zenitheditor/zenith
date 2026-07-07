@@ -353,6 +353,7 @@ mod tests {
             PathAnchor {
                 x: Some(px(0.0)),
                 y: Some(px(0.0)),
+                kind: None,
                 in_x: Some(px(-1.0)),
                 in_y: None,
                 out_x: Some(px(1.0)),
@@ -361,6 +362,7 @@ mod tests {
             PathAnchor {
                 x: Some(px(0.0)),
                 y: Some(px(0.0)),
+                kind: None,
                 in_x: Some(px(-1.0)),
                 in_y: Some(px(0.0)),
                 out_x: Some(pt(1.0)),
@@ -457,6 +459,7 @@ mod tests {
         let anchors = [PathAnchor {
             x: Some(px(f64::INFINITY)),
             y: Some(px(0.0)),
+            kind: None,
             in_x: Some(px(-1.0)),
             in_y: Some(px(0.0)),
             out_x: Some(px(1.0)),
@@ -526,6 +529,7 @@ mod tests {
         PathAnchor {
             x: Some(px(x)),
             y: Some(px(y)),
+            kind: None,
             in_x: Some(px(in_x)),
             in_y: Some(px(in_y)),
             out_x: Some(px(out_x)),

@@ -1,9 +1,12 @@
 //! Path op application: `set_path_anchors`, `insert_path_anchor`,
 //! `simplify_path_anchors`, and `transform_path_anchors`.
 
-use zenith_core::{Diagnostic, Dimension, Document, Node, PathAnchor as CorePathAnchor, Unit};
+use zenith_core::{
+    AnchorKind, Diagnostic, Dimension, Document, Node, PathAnchor as CorePathAnchor, Unit,
+};
 use zenith_geometry::{
-    AffineTransform, GeometryError, PathAnchor, PathGeometry, Point2, simplify_polyline,
+    AffineTransform, GeometryError, PathAnchor, PathGeometry, PathSegment, Point2,
+    simplify_polyline,
 };
 
 use crate::op::{OpPathAnchor, OpPathTransform};
@@ -30,6 +33,7 @@ pub(super) fn apply_set_path_anchors(
                         .map(|anchor| CorePathAnchor {
                             x: Some(px(anchor.x)),
                             y: Some(px(anchor.y)),
+                            kind: anchor.kind.as_deref().map(AnchorKind::from_kind_str),
                             in_x: anchor.in_x.map(px),
                             in_y: anchor.in_y.map(px),
                             out_x: anchor.out_x.map(px),
@@ -112,6 +116,7 @@ pub(super) fn apply_simplify_path_anchors(
                                 .map(|point| CorePathAnchor {
                                     x: Some(px(point.x)),
                                     y: Some(px(point.y)),
+                                    kind: None,
                                     in_x: None,
                                     in_y: None,
                                     out_x: None,
@@ -182,7 +187,15 @@ pub(super) fn apply_insert_path_anchor(
                             return;
                         }
                     };
-                    let (split, _) = match geometry.split_segment(segment_index, t) {
+                    let inserted_kind = match segment_kind(&geometry, segment_index) {
+                        Ok(PathSegment::Cubic { .. }) => Some(AnchorKind::Smooth),
+                        Ok(PathSegment::Line { .. }) => None,
+                        Err(error) => {
+                            diagnostics.push(insert_geometry_diagnostic(node_id, error));
+                            return;
+                        }
+                    };
+                    let (split, inserted_index) = match geometry.split_segment(segment_index, t) {
                         Ok(split) => split,
                         Err(error) => {
                             diagnostics.push(insert_geometry_diagnostic(node_id, error));
@@ -193,7 +206,15 @@ pub(super) fn apply_insert_path_anchor(
                     path.anchors = split
                         .anchors()
                         .iter()
-                        .map(|anchor| geometry_anchor_to_core(*anchor))
+                        .enumerate()
+                        .map(|(index, anchor)| {
+                            let kind = if index == inserted_index {
+                                inserted_kind.clone()
+                            } else {
+                                existing_anchor_kind_at(&path.anchors, index, inserted_index)
+                            };
+                            geometry_anchor_to_core(*anchor, kind)
+                        })
                         .collect();
                     record_affected(node_id, affected);
                 }
@@ -273,7 +294,10 @@ pub(super) fn apply_transform_path_anchors(
                     path.anchors = transformed
                         .anchors()
                         .iter()
-                        .map(|anchor| geometry_anchor_to_core(*anchor))
+                        .zip(path.anchors.iter())
+                        .map(|(anchor, original)| {
+                            geometry_anchor_to_core(*anchor, original.kind.clone())
+                        })
                         .collect();
                     record_affected(node_id, affected);
                 }
@@ -411,10 +435,37 @@ fn resolved_path_geometry(
     PathGeometry::new(resolved, closed).map_err(|error| geometry_diagnostic(node_id, error))
 }
 
-fn geometry_anchor_to_core(anchor: PathAnchor) -> CorePathAnchor {
+fn segment_kind(
+    geometry: &PathGeometry,
+    segment_index: usize,
+) -> Result<PathSegment, GeometryError> {
+    geometry
+        .segments()?
+        .get(segment_index)
+        .copied()
+        .ok_or(GeometryError::CountOutOfRange)
+}
+
+fn existing_anchor_kind_at(
+    anchors: &[CorePathAnchor],
+    index: usize,
+    inserted_index: usize,
+) -> Option<AnchorKind> {
+    let original_index = if index < inserted_index {
+        index
+    } else {
+        index.saturating_sub(1)
+    };
+    anchors
+        .get(original_index)
+        .and_then(|anchor| anchor.kind.clone())
+}
+
+fn geometry_anchor_to_core(anchor: PathAnchor, kind: Option<AnchorKind>) -> CorePathAnchor {
     CorePathAnchor {
         x: Some(px(anchor.point.x)),
         y: Some(px(anchor.point.y)),
+        kind,
         in_x: anchor.in_handle.map(|point| px(point.x)),
         in_y: anchor.in_handle.map(|point| px(point.y)),
         out_x: anchor.out_handle.map(|point| px(point.x)),

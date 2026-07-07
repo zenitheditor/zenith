@@ -535,6 +535,7 @@ fn op_fields_names_match_serde_keys() {
                 anchors: vec![OpPathAnchor {
                     x: 0.0,
                     y: 0.0,
+                    kind: Some("smooth".into()),
                     in_x: Some(-10.0),
                     in_y: Some(0.0),
                     out_x: Some(10.0),
@@ -817,6 +818,7 @@ fn path_anchor_optional_fields_are_omitted_when_absent() {
         anchors: vec![OpPathAnchor {
             x: 1.0,
             y: 2.0,
+            kind: None,
             in_x: None,
             in_y: None,
             out_x: None,

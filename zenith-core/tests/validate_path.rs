@@ -124,3 +124,26 @@ fn path_unknown_property_suggests_fill() {
         "expected fill suggestion; got {diag:?}"
     );
 }
+
+#[test]
+fn unknown_anchor_kind_warns_without_parse_failure() {
+    let doc = parse_doc(
+        r##"path id="line.curve" {
+        anchor x=(px)0 y=(px)0 kind="auto"
+        anchor x=(px)80 y=(px)0
+      }"##,
+    );
+
+    let report = validate(&doc);
+    let diag = report
+        .diagnostics
+        .iter()
+        .find(|d| d.code == "node.unknown_property")
+        .expect("unknown anchor kind diagnostic");
+
+    assert_eq!(diag.severity, Severity::Warning);
+    assert!(
+        diag.message.contains("anchor[0]") && diag.message.contains("kind 'auto'"),
+        "expected anchor kind warning; got {diag:?}"
+    );
+}

@@ -646,10 +646,47 @@ pub struct PolygonNode {
 pub struct PathAnchor {
     pub x: Option<Dimension>,
     pub y: Option<Dimension>,
+    /// Authoring intent for editor handles. This is metadata only; render
+    /// geometry is derived solely from coordinates and handles.
+    pub kind: Option<AnchorKind>,
     pub in_x: Option<Dimension>,
     pub in_y: Option<Dimension>,
     pub out_x: Option<Dimension>,
     pub out_y: Option<Dimension>,
+}
+
+/// Authoring intent for a path anchor.
+///
+/// Unknown strings are preserved for forward-compatibility; validation warns
+/// but parsing and formatting remain lossless.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AnchorKind {
+    Corner,
+    Smooth,
+    Symmetric,
+    Unknown(String),
+}
+
+impl AnchorKind {
+    /// Parse a KDL `kind` attribute value, preserving unknown values.
+    pub fn from_kind_str(value: &str) -> Self {
+        match value {
+            "corner" => Self::Corner,
+            "smooth" => Self::Smooth,
+            "symmetric" => Self::Symmetric,
+            other => Self::Unknown(other.to_owned()),
+        }
+    }
+
+    /// Return the canonical authoring string for this anchor kind.
+    pub fn kind_str(&self) -> &str {
+        match self {
+            Self::Corner => "corner",
+            Self::Smooth => "smooth",
+            Self::Symmetric => "symmetric",
+            Self::Unknown(value) => value.as_str(),
+        }
+    }
 }
 
 /// A `path` node — a structured Bezier path defined by ordered `anchor`

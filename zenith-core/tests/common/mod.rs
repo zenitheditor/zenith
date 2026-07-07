@@ -17,14 +17,14 @@ use std::collections::BTreeMap;
 pub use zenith_core::ast::block_style::BlockStyle;
 pub use zenith_core::ast::document::Fold;
 pub use zenith_core::{
-    ActionDef, AssetBlock, AssetDecl, AssetKind, BrandContract, CodeNode, ConnectorNode, Dimension,
-    Document, DocumentBody, EllipseNode, FieldNode, FrameNode, GroupNode, ImageNode, LibraryDef,
-    LineNode, MasterDef, Node, Page, PathAnchor, PathNode, Point, PolygonNode, PolylineNode,
-    PropertyValue, ProtectedRegion, ProvenanceDef, RecipeDef, RecipeParam, RectNode, SafeZone,
-    SafeZoneType, SectionDef, Severity, ShapeNode, Style, StyleBlock, TableCell, TableColumn,
-    TableNode, TableRow, TextNode, TextSpan, TocNode, Token, TokenBlock, TokenLiteral, TokenType,
-    TokenValue, Unit, UnknownNode, UnknownStyleProp, ValidationReport, VariantDef, VariantOverride,
-    validate,
+    ActionDef, AnchorKind, AssetBlock, AssetDecl, AssetKind, BrandContract, CodeNode,
+    ConnectorNode, Dimension, Document, DocumentBody, EllipseNode, FieldNode, FrameNode, GroupNode,
+    ImageNode, LibraryDef, LineNode, MasterDef, Node, Page, PathAnchor, PathNode, Point,
+    PolygonNode, PolylineNode, PropertyValue, ProtectedRegion, ProvenanceDef, RecipeDef,
+    RecipeParam, RectNode, SafeZone, SafeZoneType, SectionDef, Severity, ShapeNode, Style,
+    StyleBlock, TableCell, TableColumn, TableNode, TableRow, TextNode, TextSpan, TocNode, Token,
+    TokenBlock, TokenLiteral, TokenType, TokenValue, Unit, UnknownNode, UnknownStyleProp,
+    ValidationReport, VariantDef, VariantOverride, validate,
 };
 pub use zenith_core::{KdlAdapter, KdlSource};
 

@@ -177,7 +177,7 @@ pub fn op_fields(name: &str) -> Option<&'static [OpFieldSchema]> {
                 },
                 OpFieldSchema {
                     name: "anchors",
-                    ty: "[{x,y,in_x?,in_y?,out_x?,out_y?}]",
+                    ty: "[{x,y,kind?,in_x?,in_y?,out_x?,out_y?}]",
                     required: true,
                 },
             ];

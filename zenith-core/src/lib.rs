@@ -26,18 +26,19 @@ pub mod validate;
 pub use asset::{AssetData, AssetProvider, BytesAssetProvider};
 pub use ast::brand::merge_brand_contract;
 pub use ast::{
-    ActionDef, Anchor, AnchorEdge, AssetBlock, AssetDecl, AssetKind, BLOCK_ROLE_VOCAB, BlockStyle,
-    BrandContract, ChartNode, ChartSeries, CodeNode, ComponentDef, ConnectorNode, DiagnosticPolicy,
-    Dimension, Document, DocumentBody, EllipseNode, FieldNode, FilterKind, FilterLiteral, FilterOp,
-    FootnoteNode, FrameNode, GradientKind, GradientLiteral, GradientStopRef, GroupNode, ImageNode,
-    InstanceNode, LibraryDef, LightNode, LineNode, MaskLiteral, MaskShape, MasterDef, MeshNode,
-    Node, ObjectPosition, Override, Page, PathAnchor, PathNode, PatternNode, Point, PolicyEntry,
-    PolicyVerb, PolygonNode, PolylineNode, Project, PropertyValue, ProtectedRegion, ProvenanceDef,
-    RecipeDef, RecipeParam, RectNode, STYLE_RECOGNIZED_KEYS, SafeZone, SafeZoneType, SectionDef,
-    ShadowLayerRef, ShadowLiteral, ShapeNode, Span, Style, StyleBlock, TableCell, TableColumn,
-    TableNode, TableRow, TextNode, TextSpan, TocNode, Token, TokenBlock, TokenLiteral, TokenType,
-    TokenValue, Unit, UnknownNode, UnknownProperty, UnknownStyleProp, UnknownValue, VariantDef,
-    VariantOverride, anchor_xy, canonicalize_style_key, dim_to_px, parse_anchor, parse_anchor_edge,
+    ActionDef, Anchor, AnchorEdge, AnchorKind, AssetBlock, AssetDecl, AssetKind, BLOCK_ROLE_VOCAB,
+    BlockStyle, BrandContract, ChartNode, ChartSeries, CodeNode, ComponentDef, ConnectorNode,
+    DiagnosticPolicy, Dimension, Document, DocumentBody, EllipseNode, FieldNode, FilterKind,
+    FilterLiteral, FilterOp, FootnoteNode, FrameNode, GradientKind, GradientLiteral,
+    GradientStopRef, GroupNode, ImageNode, InstanceNode, LibraryDef, LightNode, LineNode,
+    MaskLiteral, MaskShape, MasterDef, MeshNode, Node, ObjectPosition, Override, Page, PathAnchor,
+    PathNode, PatternNode, Point, PolicyEntry, PolicyVerb, PolygonNode, PolylineNode, Project,
+    PropertyValue, ProtectedRegion, ProvenanceDef, RecipeDef, RecipeParam, RectNode,
+    STYLE_RECOGNIZED_KEYS, SafeZone, SafeZoneType, SectionDef, ShadowLayerRef, ShadowLiteral,
+    ShapeNode, Span, Style, StyleBlock, TableCell, TableColumn, TableNode, TableRow, TextNode,
+    TextSpan, TocNode, Token, TokenBlock, TokenLiteral, TokenType, TokenValue, Unit, UnknownNode,
+    UnknownProperty, UnknownStyleProp, UnknownValue, VariantDef, VariantOverride, anchor_xy,
+    canonicalize_style_key, dim_to_px, parse_anchor, parse_anchor_edge,
 };
 pub use color::{
     BlendMode, Cmyk, Color, GradientPaint, GradientStop, cmyk_to_hex, cmyk_to_srgb, contrast_ratio,

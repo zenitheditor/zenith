@@ -233,10 +233,11 @@ pub fn node_content(kind: &str) -> Option<NodeContentDescriptor> {
         "path" => Some(NodeContentDescriptor {
             description: "Two or more `anchor` children define an open Bezier path; three or more \
                 are required when `closed=#true`. Each anchor carries required `x` and `y` \
-                dimensions plus optional paired `in-x`/`in-y` and `out-x`/`out-y` handles.",
+                dimensions, optional authoring intent `kind` (corner|smooth|symmetric), plus \
+                optional paired `in-x`/`in-y` and `out-x`/`out-y` handles.",
             example: concat!(
                 "anchor x=(px)0 y=(px)0 out-x=(px)20 out-y=(px)0\n",
-                "anchor x=(px)80 y=(px)0 in-x=(px)60 in-y=(px)0 out-x=(px)100 out-y=(px)40\n",
+                "anchor x=(px)80 y=(px)0 kind=\"smooth\" in-x=(px)60 in-y=(px)0 out-x=(px)100 out-y=(px)40\n",
                 "anchor x=(px)80 y=(px)80 in-x=(px)100 in-y=(px)40",
             ),
         }),

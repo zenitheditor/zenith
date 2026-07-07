@@ -180,8 +180,8 @@ fn path_node_parse_format_round_trip() {
     page id="page.path" w=(px)400 h=(px)300 {
       path id="logo.mark" closed=#true fill=(token)"color.brand" stroke=(token)"color.ink" stroke-width=(token)"size.stroke" stroke-alignment="center" fill-rule="evenodd" {
         anchor x=(px)0 y=(px)0 out-x=(px)20 out-y=(px)0
-        anchor x=(px)80 y=(px)0 in-x=(px)60 in-y=(px)0 out-x=(px)100 out-y=(px)40
-        anchor x=(px)80 y=(px)80 in-x=(px)100 in-y=(px)40
+        anchor x=(px)80 y=(px)0 kind="smooth" in-x=(px)60 in-y=(px)0 out-x=(px)100 out-y=(px)40
+        anchor x=(px)80 y=(px)80 kind="symmetric" in-x=(px)100 in-y=(px)40
       }
     }
   }
@@ -197,6 +197,8 @@ fn path_node_parse_format_round_trip() {
     assert_eq!(path.id, "logo.mark");
     assert_eq!(path.closed, Some(true));
     assert_eq!(path.anchors.len(), 3);
+    assert_eq!(path.anchors[1].kind, Some(AnchorKind::Smooth));
+    assert_eq!(path.anchors[2].kind, Some(AnchorKind::Symmetric));
     assert_eq!(path.anchors[1].in_x, Some(px(60.0)));
     assert_eq!(path.anchors[1].out_y, Some(px(40.0)));
 
@@ -210,7 +212,7 @@ fn path_node_parse_format_round_trip() {
     );
     assert!(
         formatted_str
-            .contains("anchor x=(px)80 y=(px)0 in-x=(px)60 in-y=(px)0 out-x=(px)100 out-y=(px)40"),
+            .contains("anchor x=(px)80 y=(px)0 kind=\"smooth\" in-x=(px)60 in-y=(px)0 out-x=(px)100 out-y=(px)40"),
         "formatted anchor line missing handles; got:\n{formatted_str}"
     );
 
@@ -218,7 +220,7 @@ fn path_node_parse_format_round_trip() {
         .parse(&formatted)
         .expect("re-parse after format must succeed");
     assert!(
-        matches!(&reparsed.body.pages[0].children[0], Node::Path(p) if p.anchors.len() == 3),
+        matches!(&reparsed.body.pages[0].children[0], Node::Path(p) if p.anchors.len() == 3 && p.anchors[1].kind == Some(AnchorKind::Smooth)),
         "path must survive format round-trip"
     );
 }

@@ -88,6 +88,7 @@ mod tests {
             PathAnchor {
                 x: Some(px(20.0)),
                 y: Some(px(0.0)),
+                kind: None,
                 in_x: Some(px(10.0)),
                 in_y: Some(px(0.0)),
                 out_x: None,
@@ -171,6 +172,7 @@ mod tests {
             PathAnchor {
                 x: Some(px(50.0)),
                 y: Some(px(0.0)),
+                kind: None,
                 in_x: None,
                 in_y: None,
                 out_x: None,
@@ -179,6 +181,7 @@ mod tests {
             PathAnchor {
                 x: Some(px(100.0)),
                 y: Some(px(0.0)),
+                kind: None,
                 in_x: None,
                 in_y: None,
                 out_x: None,
@@ -208,6 +211,7 @@ mod tests {
         PathAnchor {
             x: Some(px(x)),
             y: Some(px(y)),
+            kind: None,
             in_x: Some(px(in_x)),
             in_y: Some(px(in_y)),
             out_x: Some(px(out_x)),

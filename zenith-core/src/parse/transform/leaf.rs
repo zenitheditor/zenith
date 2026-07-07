@@ -5,8 +5,8 @@
 use kdl::{KdlNode, KdlValue};
 
 use crate::ast::node::{
-    CodeNode, EllipseNode, ImageNode, LineNode, PathAnchor, PathNode, Point, PolygonNode,
-    PolylineNode, RectNode, TextNode, TextSpan,
+    AnchorKind, CodeNode, EllipseNode, ImageNode, LineNode, PathAnchor, PathNode, Point,
+    PolygonNode, PolylineNode, RectNode, TextNode, TextSpan,
 };
 use crate::data::DataFormat;
 use crate::error::{ParseError, ParseErrorCode};
@@ -859,6 +859,7 @@ fn transform_path_anchor(node: &KdlNode) -> PathAnchor {
     PathAnchor {
         x: optional_dimension_prop(node, "x"),
         y: optional_dimension_prop(node, "y"),
+        kind: optional_string_prop(node, "kind").map(AnchorKind::from_kind_str),
         in_x: optional_dimension_prop(node, "in-x")
             .or_else(|| optional_dimension_prop(node, "in_x")),
         in_y: optional_dimension_prop(node, "in-y")

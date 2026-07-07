@@ -29,14 +29,17 @@ pub struct OpPoint {
 
 /// A path anchor used by [`Op::SetPathAnchors`], expressed in pixels.
 ///
-/// JSON shape: `{"x": 50.0, "y": 80.0, "in_x": 40.0, "in_y": 80.0, "out_x": 60.0, "out_y": 80.0}`.
-/// Handle coordinates are optional and default to absent.
+/// JSON shape: `{"x": 50.0, "y": 80.0, "kind": "smooth", "in_x": 40.0, "in_y": 80.0, "out_x": 60.0, "out_y": 80.0}`.
+/// Handle coordinates and authoring kind are optional and default to absent.
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq)]
 pub struct OpPathAnchor {
     /// Anchor X coordinate in document pixels.
     pub x: f64,
     /// Anchor Y coordinate in document pixels.
     pub y: f64,
+    /// Optional authoring intent: `corner`, `smooth`, `symmetric`, or a preserved future value.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub kind: Option<String>,
     /// Optional incoming handle X coordinate in document pixels.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub in_x: Option<f64>,

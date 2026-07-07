@@ -850,6 +850,7 @@ fn set_path_anchors_replaces_path_with_handles() {
                 OpPathAnchor {
                     x: 10.0,
                     y: 20.0,
+                    kind: Some("smooth".to_owned()),
                     in_x: None,
                     in_y: None,
                     out_x: Some(40.0),
@@ -858,6 +859,7 @@ fn set_path_anchors_replaces_path_with_handles() {
                 OpPathAnchor {
                     x: 90.0,
                     y: 20.0,
+                    kind: None,
                     in_x: Some(60.0),
                     in_y: Some(20.0),
                     out_x: None,
@@ -874,7 +876,7 @@ fn set_path_anchors_replaces_path_with_handles() {
     assert!(
         result
             .source_after
-            .contains("anchor x=(px)10 y=(px)20 out-x=(px)40 out-y=(px)20"),
+            .contains("anchor x=(px)10 y=(px)20 kind=\"smooth\" out-x=(px)40 out-y=(px)20"),
         "source_after must contain outgoing handle; got:\n{}",
         result.source_after
     );
@@ -902,6 +904,7 @@ fn set_path_anchors_unsupported_on_rect_and_polygon() {
                     OpPathAnchor {
                         x: 0.0,
                         y: 0.0,
+                        kind: None,
                         in_x: None,
                         in_y: None,
                         out_x: None,
@@ -910,6 +913,7 @@ fn set_path_anchors_unsupported_on_rect_and_polygon() {
                     OpPathAnchor {
                         x: 100.0,
                         y: 0.0,
+                        kind: None,
                         in_x: None,
                         in_y: None,
                         out_x: None,
@@ -943,6 +947,7 @@ fn set_path_anchors_too_few_rejected_by_validation() {
             anchors: vec![OpPathAnchor {
                 x: 0.0,
                 y: 0.0,
+                kind: None,
                 in_x: None,
                 in_y: None,
                 out_x: None,
@@ -975,6 +980,7 @@ fn set_path_anchors_incomplete_handle_pair_rejected_by_validation() {
                 OpPathAnchor {
                     x: 0.0,
                     y: 0.0,
+                    kind: None,
                     in_x: None,
                     in_y: None,
                     out_x: Some(40.0),
@@ -983,6 +989,7 @@ fn set_path_anchors_incomplete_handle_pair_rejected_by_validation() {
                 OpPathAnchor {
                     x: 100.0,
                     y: 0.0,
+                    kind: None,
                     in_x: None,
                     in_y: None,
                     out_x: None,
