@@ -17,8 +17,9 @@ mod validation;
 
 pub use bezier::{CubicBezier, CubicBezierProjection, project_onto_cubic_bezier};
 pub use boolean::{
-    ClosedPolylineBooleanOp, ClosedPolylineBooleanResult, ContourBooleanSpans,
-    ContourBooleanSplits, ContourSegmentSpan, ContourSegmentSplit, boolean_closed_polylines,
+    ClassifiedContourBooleanSpans, ClassifiedContourSpan, ClosedPolylineBooleanOp,
+    ClosedPolylineBooleanResult, ContourBooleanSpans, ContourBooleanSplits, ContourSegmentSpan,
+    ContourSegmentSplit, boolean_closed_polylines, classify_contour_boolean_spans,
     collect_contour_boolean_spans, collect_contour_boolean_splits,
 };
 pub use bounds::RectBounds;

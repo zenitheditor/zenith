@@ -1,6 +1,6 @@
 use crate::{
     ClosedPolyline, ClosedPolylineIntersectionEvent, ClosedPolylineRelation, GeometryError, Point2,
-    classify_closed_polyline_relation, collect_closed_polyline_intersection_events,
+    PointLocation, classify_closed_polyline_relation, collect_closed_polyline_intersection_events,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -46,6 +46,19 @@ pub struct ContourBooleanSpans {
     pub second: Vec<ContourSegmentSpan>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ClassifiedContourSpan {
+    pub span: ContourSegmentSpan,
+    pub midpoint: Point2,
+    pub location: PointLocation,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ClassifiedContourBooleanSpans {
+    pub first: Vec<ClassifiedContourSpan>,
+    pub second: Vec<ClassifiedContourSpan>,
+}
+
 pub fn boolean_closed_polylines(
     first: &ClosedPolyline,
     second: &ClosedPolyline,
@@ -64,6 +77,18 @@ pub fn boolean_closed_polylines(
     }
 }
 
+pub fn classify_contour_boolean_spans(
+    first: &ClosedPolyline,
+    second: &ClosedPolyline,
+    tolerance: f64,
+) -> Result<ClassifiedContourBooleanSpans, GeometryError> {
+    let spans = collect_contour_boolean_spans(first, second)?;
+    Ok(ClassifiedContourBooleanSpans {
+        first: classify_spans_against_contour(first, second, &spans.first, tolerance)?,
+        second: classify_spans_against_contour(second, first, &spans.second, tolerance)?,
+    })
+}
+
 pub fn collect_contour_boolean_spans(
     first: &ClosedPolyline,
     second: &ClosedPolyline,
@@ -73,6 +98,32 @@ pub fn collect_contour_boolean_spans(
         first: spans_for_contour(first, &splits.first),
         second: spans_for_contour(second, &splits.second),
     })
+}
+
+fn classify_spans_against_contour(
+    source: &ClosedPolyline,
+    target: &ClosedPolyline,
+    spans: &[ContourSegmentSpan],
+    tolerance: f64,
+) -> Result<Vec<ClassifiedContourSpan>, GeometryError> {
+    let mut classified = Vec::with_capacity(spans.len());
+    for span in spans {
+        let midpoint = span_midpoint(source, *span)?;
+        classified.push(ClassifiedContourSpan {
+            span: *span,
+            midpoint,
+            location: target.locate_point(midpoint, tolerance)?,
+        });
+    }
+    Ok(classified)
+}
+
+fn span_midpoint(
+    contour: &ClosedPolyline,
+    span: ContourSegmentSpan,
+) -> Result<Point2, GeometryError> {
+    let (start, end) = contour_segment(contour, span.segment_index)?;
+    Ok(start.lerp(end, (span.start_t + span.end_t) * 0.5))
 }
 
 pub fn collect_contour_boolean_splits(
@@ -601,6 +652,89 @@ mod tests {
                     },
                 ],
             })
+        );
+    }
+
+    #[test]
+    fn classified_spans_sample_midpoints_against_opposite_contour() {
+        let first = square(0.0, 0.0, 10.0);
+        let second = square(5.0, 5.0, 10.0);
+
+        let classified = classify_contour_boolean_spans(&first, &second, 0.001).expect("spans");
+
+        assert_eq!(
+            classified.first,
+            vec![
+                ClassifiedContourSpan {
+                    span: ContourSegmentSpan {
+                        segment_index: 0,
+                        start_t: 0.0,
+                        end_t: 1.0,
+                    },
+                    midpoint: point(5.0, 0.0),
+                    location: PointLocation::Outside,
+                },
+                ClassifiedContourSpan {
+                    span: ContourSegmentSpan {
+                        segment_index: 1,
+                        start_t: 0.0,
+                        end_t: 0.5,
+                    },
+                    midpoint: point(10.0, 2.5),
+                    location: PointLocation::Outside,
+                },
+                ClassifiedContourSpan {
+                    span: ContourSegmentSpan {
+                        segment_index: 1,
+                        start_t: 0.5,
+                        end_t: 1.0,
+                    },
+                    midpoint: point(10.0, 7.5),
+                    location: PointLocation::Inside,
+                },
+                ClassifiedContourSpan {
+                    span: ContourSegmentSpan {
+                        segment_index: 2,
+                        start_t: 0.0,
+                        end_t: 0.5,
+                    },
+                    midpoint: point(7.5, 10.0),
+                    location: PointLocation::Inside,
+                },
+                ClassifiedContourSpan {
+                    span: ContourSegmentSpan {
+                        segment_index: 2,
+                        start_t: 0.5,
+                        end_t: 1.0,
+                    },
+                    midpoint: point(2.5, 10.0),
+                    location: PointLocation::Outside,
+                },
+                ClassifiedContourSpan {
+                    span: ContourSegmentSpan {
+                        segment_index: 3,
+                        start_t: 0.0,
+                        end_t: 1.0,
+                    },
+                    midpoint: point(0.0, 5.0),
+                    location: PointLocation::Outside,
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn classified_spans_can_report_boundary_midpoints() {
+        let first = square(0.0, 0.0, 10.0);
+        let second = square(2.0, 0.0, 4.0);
+
+        let classified = classify_contour_boolean_spans(&first, &second, 0.001).expect("spans");
+
+        assert!(
+            classified
+                .first
+                .iter()
+                .any(|span| span.location == PointLocation::Boundary)
         );
     }
 
