@@ -398,6 +398,7 @@ fn op_name(op: &zenith_tx::Op) -> String {
         zenith_tx::Op::SetPoints { .. } => "set_points",
         zenith_tx::Op::SetPathAnchors { .. } => "set_path_anchors",
         zenith_tx::Op::SimplifyPathAnchors { .. } => "simplify_path_anchors",
+        zenith_tx::Op::TransformPathAnchors { .. } => "transform_path_anchors",
         zenith_tx::Op::ReplaceText { .. } => "replace_text",
         zenith_tx::Op::DuplicateNode { .. } => "duplicate_node",
         zenith_tx::Op::DuplicatePage { .. } => "duplicate_page",

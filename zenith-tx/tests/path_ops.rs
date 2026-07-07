@@ -1,6 +1,342 @@
 mod common;
 use common::*;
+use zenith_tx::op::OpPathTransform;
 use zenith_tx::{Op, Permissions, Transaction, TxStatus, run_transaction};
+
+fn anchor_line(source: &str, index: usize) -> &str {
+    source
+        .lines()
+        .filter(|line| line.trim_start().starts_with("anchor "))
+        .nth(index)
+        .expect("anchor line should exist")
+}
+
+fn anchor_px_attr(source: &str, index: usize, attr: &str) -> f64 {
+    let line = anchor_line(source, index);
+    let needle = format!("{attr}=(px)");
+    let start = line.find(&needle).expect("attribute should exist") + needle.len();
+    let rest = &line[start..];
+    let end = rest
+        .find(|c: char| {
+            !c.is_ascii_digit() && c != '.' && c != '-' && c != '+' && c != 'e' && c != 'E'
+        })
+        .unwrap_or(rest.len());
+    rest[..end]
+        .parse::<f64>()
+        .expect("px attribute should parse")
+}
+
+fn assert_px_close(actual: f64, expected: f64) {
+    assert!(
+        (actual - expected).abs() <= 1.0e-9,
+        "expected {actual} to be within tolerance of {expected}"
+    );
+}
+
+const TRANSFORM_PATH_DOC: &str = r##"zenith version=1 {
+  project id="proj" name="Test"
+  tokens format="zenith-token-v1" { }
+  styles { }
+  document id="doc1" title="T" {
+    page id="pg1" w=(px)400 h=(px)300 {
+      path id="path1" closed=#true {
+        anchor x=(px)0 y=(px)0 out-x=(px)10 out-y=(px)0
+        anchor x=(px)20 y=(px)0 in-x=(px)10 in-y=(px)0
+        anchor x=(px)0 y=(px)20
+      }
+    }
+  }
+}"##;
+
+#[test]
+fn transform_path_anchors_translates_anchors_and_handles() {
+    let doc = parse(TRANSFORM_PATH_DOC);
+    let tx = Transaction {
+        ops: vec![Op::TransformPathAnchors {
+            node: "path1".to_owned(),
+            transform: OpPathTransform::Translate { dx: 10.0, dy: -4.0 },
+        }],
+        permissions: Permissions::default(),
+    };
+    let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
+
+    assert_eq!(result.status, TxStatus::Accepted);
+    assert_eq!(result.affected_node_ids, vec!["path1".to_owned()]);
+    assert!(
+        result
+            .source_after
+            .contains("path id=\"path1\" closed=#true")
+    );
+    assert_px_close(anchor_px_attr(&result.source_after, 0, "x"), 10.0);
+    assert_px_close(anchor_px_attr(&result.source_after, 0, "y"), -4.0);
+    assert_px_close(anchor_px_attr(&result.source_after, 0, "out-x"), 20.0);
+    assert_px_close(anchor_px_attr(&result.source_after, 0, "out-y"), -4.0);
+    assert_px_close(anchor_px_attr(&result.source_after, 1, "x"), 30.0);
+    assert_px_close(anchor_px_attr(&result.source_after, 1, "y"), -4.0);
+    assert_px_close(anchor_px_attr(&result.source_after, 1, "in-x"), 20.0);
+    assert_px_close(anchor_px_attr(&result.source_after, 1, "in-y"), -4.0);
+}
+
+#[test]
+fn transform_path_anchors_rotates_around_pivot() {
+    let doc = parse(TRANSFORM_PATH_DOC);
+    let tx = Transaction {
+        ops: vec![Op::TransformPathAnchors {
+            node: "path1".to_owned(),
+            transform: OpPathTransform::Rotate {
+                angle_degrees: 90.0,
+                cx: 0.0,
+                cy: 0.0,
+            },
+        }],
+        permissions: Permissions::default(),
+    };
+    let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
+
+    assert_eq!(result.status, TxStatus::Accepted);
+    assert_px_close(anchor_px_attr(&result.source_after, 0, "x"), 0.0);
+    assert_px_close(anchor_px_attr(&result.source_after, 0, "y"), 0.0);
+    assert_px_close(anchor_px_attr(&result.source_after, 0, "out-x"), 0.0);
+    assert_px_close(anchor_px_attr(&result.source_after, 0, "out-y"), 10.0);
+    assert_px_close(anchor_px_attr(&result.source_after, 1, "x"), 0.0);
+    assert_px_close(anchor_px_attr(&result.source_after, 1, "y"), 20.0);
+}
+
+#[test]
+fn transform_path_anchors_reflects_across_line() {
+    let doc = parse(TRANSFORM_PATH_DOC);
+    let tx = Transaction {
+        ops: vec![Op::TransformPathAnchors {
+            node: "path1".to_owned(),
+            transform: OpPathTransform::Reflect {
+                x1: 0.0,
+                y1: 0.0,
+                x2: 0.0,
+                y2: 10.0,
+            },
+        }],
+        permissions: Permissions::default(),
+    };
+    let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
+
+    assert_eq!(result.status, TxStatus::Accepted);
+    assert_px_close(anchor_px_attr(&result.source_after, 0, "x"), 0.0);
+    assert_px_close(anchor_px_attr(&result.source_after, 0, "out-x"), -10.0);
+    assert_px_close(anchor_px_attr(&result.source_after, 1, "x"), -20.0);
+    assert_px_close(anchor_px_attr(&result.source_after, 1, "in-x"), -10.0);
+}
+
+#[test]
+fn transform_path_anchors_unsupported_on_rect() {
+    let doc = parse(RECT_GEOM_DOC);
+    let tx = Transaction {
+        ops: vec![Op::TransformPathAnchors {
+            node: "rect".to_owned(),
+            transform: OpPathTransform::Translate { dx: 1.0, dy: 2.0 },
+        }],
+        permissions: Permissions::default(),
+    };
+    let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
+
+    assert_eq!(result.status, TxStatus::Rejected);
+    assert!(
+        result
+            .diagnostics
+            .iter()
+            .any(|d| d.code == "tx.unsupported_property" && d.message.contains("rect")),
+        "expected tx.unsupported_property mentioning rect; got: {:?}",
+        result.diagnostics
+    );
+    assert_eq!(result.source_after, result.source_before);
+}
+
+#[test]
+fn transform_path_anchors_unknown_node_rejected() {
+    let doc = parse(TRANSFORM_PATH_DOC);
+    let tx = Transaction {
+        ops: vec![Op::TransformPathAnchors {
+            node: "missing".to_owned(),
+            transform: OpPathTransform::Translate { dx: 1.0, dy: 2.0 },
+        }],
+        permissions: Permissions::default(),
+    };
+    let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
+
+    assert_eq!(result.status, TxStatus::Rejected);
+    assert!(
+        result
+            .diagnostics
+            .iter()
+            .any(|d| d.code == "tx.unknown_node"),
+        "expected tx.unknown_node; got: {:?}",
+        result.diagnostics
+    );
+    assert_eq!(result.source_after, result.source_before);
+}
+
+#[test]
+fn transform_path_anchors_locked_path_rejected() {
+    let doc = parse(
+        r##"zenith version=1 {
+  project id="proj" name="Test"
+  tokens format="zenith-token-v1" { }
+  styles { }
+  document id="doc1" title="T" {
+    page id="pg1" w=(px)400 h=(px)300 {
+      path id="path1" locked=#true {
+        anchor x=(px)0 y=(px)0
+        anchor x=(px)20 y=(px)0
+      }
+    }
+  }
+}"##,
+    );
+    let tx = Transaction {
+        ops: vec![Op::TransformPathAnchors {
+            node: "path1".to_owned(),
+            transform: OpPathTransform::Translate { dx: 1.0, dy: 2.0 },
+        }],
+        permissions: Permissions::default(),
+    };
+    let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
+
+    assert_eq!(result.status, TxStatus::Rejected);
+    assert!(
+        result.diagnostics.iter().any(|d| d.code == "node.locked"),
+        "expected node.locked; got: {:?}",
+        result.diagnostics
+    );
+    assert_eq!(result.source_after, result.source_before);
+}
+
+#[test]
+fn transform_path_anchors_degenerate_reflect_line_rejected() {
+    let doc = parse(TRANSFORM_PATH_DOC);
+    let tx = Transaction {
+        ops: vec![Op::TransformPathAnchors {
+            node: "path1".to_owned(),
+            transform: OpPathTransform::Reflect {
+                x1: 1.0,
+                y1: 1.0,
+                x2: 1.0,
+                y2: 1.0,
+            },
+        }],
+        permissions: Permissions::default(),
+    };
+    let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
+
+    assert_eq!(result.status, TxStatus::Rejected);
+    assert!(
+        result.diagnostics.iter().any(|d| {
+            d.code == "tx.invalid_geometry" && d.message.contains("two distinct points")
+        }),
+        "expected tx.invalid_geometry for degenerate reflect line; got: {:?}",
+        result.diagnostics
+    );
+    assert_eq!(result.source_after, result.source_before);
+}
+
+#[test]
+fn transform_path_anchors_non_finite_parameter_rejected() {
+    let doc = parse(TRANSFORM_PATH_DOC);
+    let tx = Transaction {
+        ops: vec![Op::TransformPathAnchors {
+            node: "path1".to_owned(),
+            transform: OpPathTransform::Translate {
+                dx: f64::NAN,
+                dy: 2.0,
+            },
+        }],
+        permissions: Permissions::default(),
+    };
+    let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
+
+    assert_eq!(result.status, TxStatus::Rejected);
+    assert!(
+        result.diagnostics.iter().any(|d| {
+            d.code == "tx.invalid_geometry" && d.message.contains("parameters must be finite")
+        }),
+        "expected tx.invalid_geometry for non-finite parameter; got: {:?}",
+        result.diagnostics
+    );
+    assert_eq!(result.source_after, result.source_before);
+}
+
+#[test]
+fn transform_path_anchors_non_px_anchor_rejected() {
+    let doc = parse(
+        r##"zenith version=1 {
+  project id="proj" name="Test"
+  tokens format="zenith-token-v1" { }
+  styles { }
+  document id="doc1" title="T" {
+    page id="pg1" w=(px)400 h=(px)300 {
+      path id="path1" {
+        anchor x=(pt)0 y=(px)0
+        anchor x=(px)20 y=(px)0
+      }
+    }
+  }
+}"##,
+    );
+    let tx = Transaction {
+        ops: vec![Op::TransformPathAnchors {
+            node: "path1".to_owned(),
+            transform: OpPathTransform::Translate { dx: 1.0, dy: 2.0 },
+        }],
+        permissions: Permissions::default(),
+    };
+    let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
+
+    assert_eq!(result.status, TxStatus::Rejected);
+    assert!(
+        result.diagnostics.iter().any(|d| {
+            d.code == "tx.invalid_path_anchor" && d.message.contains("must be a px value")
+        }),
+        "expected tx.invalid_path_anchor for non-px anchor; got: {:?}",
+        result.diagnostics
+    );
+    assert_eq!(result.source_after, result.source_before);
+}
+
+#[test]
+fn transform_path_anchors_incomplete_handle_rejected() {
+    let doc = parse(
+        r##"zenith version=1 {
+  project id="proj" name="Test"
+  tokens format="zenith-token-v1" { }
+  styles { }
+  document id="doc1" title="T" {
+    page id="pg1" w=(px)400 h=(px)300 {
+      path id="path1" {
+        anchor x=(px)0 y=(px)0 out-x=(px)10
+        anchor x=(px)20 y=(px)0
+      }
+    }
+  }
+}"##,
+    );
+    let tx = Transaction {
+        ops: vec![Op::TransformPathAnchors {
+            node: "path1".to_owned(),
+            transform: OpPathTransform::Translate { dx: 1.0, dy: 2.0 },
+        }],
+        permissions: Permissions::default(),
+    };
+    let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
+
+    assert_eq!(result.status, TxStatus::Rejected);
+    assert!(
+        result
+            .diagnostics
+            .iter()
+            .any(|d| d.code == "tx.invalid_path_anchor"),
+        "expected tx.invalid_path_anchor; got: {:?}",
+        result.diagnostics
+    );
+    assert_eq!(result.source_after, result.source_before);
+}
 
 #[test]
 fn simplify_path_anchors_removes_near_collinear_middle_anchor() {

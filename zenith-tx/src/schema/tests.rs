@@ -1,5 +1,5 @@
 use super::*;
-use crate::op::{AddAssetMetadata, Op, OpPathAnchor};
+use crate::op::{AddAssetMetadata, Op, OpPathAnchor, OpPathTransform};
 use std::collections::BTreeSet;
 
 fn add_asset_sample_op() -> Op {
@@ -45,6 +45,7 @@ fn op_tag(op: &Op) -> &'static str {
         Op::SetPoints { .. } => "set_points",
         Op::SetPathAnchors { .. } => "set_path_anchors",
         Op::SimplifyPathAnchors { .. } => "simplify_path_anchors",
+        Op::TransformPathAnchors { .. } => "transform_path_anchors",
         Op::AddNode { .. } => "add_node",
         Op::RemoveNode { .. } => "remove_node",
         Op::SetOpacity { .. } => "set_opacity",
@@ -95,6 +96,7 @@ fn all_exhaustive_tags() -> BTreeSet<&'static str> {
         "set_points",
         "set_path_anchors",
         "simplify_path_anchors",
+        "transform_path_anchors",
         "add_node",
         "remove_node",
         "set_opacity",
@@ -219,6 +221,10 @@ fn op_tag_strings_match_exhaustive_set() {
         Op::SimplifyPathAnchors {
             node: String::new(),
             tolerance: 1.0,
+        },
+        Op::TransformPathAnchors {
+            node: String::new(),
+            transform: OpPathTransform::Translate { dx: 0.0, dy: 0.0 },
         },
         Op::AddNode {
             parent: String::new(),
@@ -534,6 +540,17 @@ fn op_fields_names_match_serde_keys() {
             Op::SimplifyPathAnchors {
                 node: "n".into(),
                 tolerance: 0.5,
+            },
+        ),
+        (
+            "transform_path_anchors",
+            Op::TransformPathAnchors {
+                node: "n".into(),
+                transform: OpPathTransform::Rotate {
+                    angle_degrees: 90.0,
+                    cx: 10.0,
+                    cy: 20.0,
+                },
             },
         ),
         (

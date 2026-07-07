@@ -51,6 +51,27 @@ pub struct OpPathAnchor {
     pub out_y: Option<f64>,
 }
 
+/// Transform to apply to every editable anchor point in a [`Op::TransformPathAnchors`] op.
+///
+/// JSON shapes:
+/// - `{"mode":"translate","dx":10,"dy":-4}`
+/// - `{"mode":"rotate","angle_degrees":90,"cx":50,"cy":50}`
+/// - `{"mode":"reflect","x1":0,"y1":0,"x2":100,"y2":0}`
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq)]
+#[serde(tag = "mode", rename_all = "snake_case")]
+pub enum OpPathTransform {
+    /// Translate all anchor and complete handle points by `dx`,`dy` pixels.
+    Translate { dx: f64, dy: f64 },
+    /// Rotate all anchor and complete handle points around `cx`,`cy` by degrees.
+    Rotate {
+        angle_degrees: f64,
+        cx: f64,
+        cy: f64,
+    },
+    /// Reflect all anchor and complete handle points across the line from `x1`,`y1` to `x2`,`y2`.
+    Reflect { x1: f64, y1: f64, x2: f64, y2: f64 },
+}
+
 /// A single text span used by [`Op::ReplaceText`].
 ///
 /// JSON shape: `{"text":"Hello","fill":"color.brand","italic":true}`.
@@ -390,6 +411,29 @@ pub enum Op {
         node: String,
         /// Maximum perpendicular deviation in pixels. Must be finite and positive.
         tolerance: f64,
+    },
+    /// Apply an affine transform to every editable anchor and complete handle point of a `path` node.
+    ///
+    /// The path's `closed` flag and all non-anchor properties are preserved. Anchor
+    /// coordinates and complete in/out handle pairs must already be stored as px
+    /// values; missing required coordinates, non-px coordinates, or incomplete
+    /// handle pairs reject the op.
+    ///
+    /// Supported transforms: translate, rotate around a pivot, and reflect across
+    /// a non-degenerate line.
+    ///
+    /// Supported nodes: `path`.
+    /// Unsupported: all other variants — yields `tx.unsupported_property`.
+    ///
+    /// JSON example:
+    /// ```json
+    /// {"op":"transform_path_anchors","node":"path.logo","transform":{"mode":"translate","dx":10,"dy":-4}}
+    /// ```
+    TransformPathAnchors {
+        /// The stable node `id` to target.
+        node: String,
+        /// Transform mode and scalar parameters.
+        transform: OpPathTransform,
     },
     /// Construct a new node from a `.zen` source fragment and insert it into a
     /// container (a page, group, or frame) at a chosen position.

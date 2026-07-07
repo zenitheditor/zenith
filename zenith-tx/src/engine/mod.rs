@@ -26,7 +26,7 @@ use geometry::{
     GeometryDelta, apply_align_nodes, apply_align_to_edge, apply_distribute_nodes,
     apply_set_geometry,
 };
-use path::{apply_set_path_anchors, apply_simplify_path_anchors};
+use path::{apply_set_path_anchors, apply_simplify_path_anchors, apply_transform_path_anchors};
 use pattern::apply_detach_pattern;
 use recipe::{RecipeScalars, apply_create_recipe, apply_delete_recipe, apply_update_recipe};
 use structure::{
@@ -230,6 +230,12 @@ fn apply_op(
             tolerance,
         } => {
             apply_simplify_path_anchors(node_id, *tolerance, doc, diagnostics, affected);
+        }
+        Op::TransformPathAnchors {
+            node: node_id,
+            transform,
+        } => {
+            apply_transform_path_anchors(node_id, transform, doc, diagnostics, affected);
         }
         Op::AddNode {
             parent,
@@ -460,6 +466,7 @@ fn op_lock_targets(op: &Op) -> Vec<&str> {
         | Op::SetPoints { node, .. }
         | Op::SetPathAnchors { node, .. }
         | Op::SimplifyPathAnchors { node, .. }
+        | Op::TransformPathAnchors { node, .. }
         | Op::SetOpacity { node, .. }
         | Op::ReplaceText { node, .. }
         | Op::RemoveNode { node }

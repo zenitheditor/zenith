@@ -25,6 +25,9 @@ pub fn op_summary(name: &str) -> Option<&'static str> {
         "simplify_path_anchors" => {
             Some("Simplify an open path node's anchors using a pixel tolerance.")
         }
+        "transform_path_anchors" => {
+            Some("Apply an affine transform to a path node's anchor and handle points.")
+        }
         "add_node" => Some("Parse a .zen source fragment and insert it into a container."),
         "remove_node" => Some("Remove a node and its subtree from the document."),
         "set_opacity" => Some("Set the opacity of a node (0.0 = fully transparent, 1.0 = opaque)."),

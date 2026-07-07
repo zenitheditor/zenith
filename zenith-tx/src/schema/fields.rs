@@ -198,6 +198,21 @@ pub fn op_fields(name: &str) -> Option<&'static [OpFieldSchema]> {
             ];
             Some(F)
         }
+        "transform_path_anchors" => {
+            static F: &[OpFieldSchema] = &[
+                OpFieldSchema {
+                    name: "node",
+                    ty: "node id",
+                    required: true,
+                },
+                OpFieldSchema {
+                    name: "transform",
+                    ty: r#"{mode:"translate",dx,dy} | {mode:"rotate",angle_degrees,cx,cy} | {mode:"reflect",x1,y1,x2,y2}"#,
+                    required: true,
+                },
+            ];
+            Some(F)
+        }
         "add_node" => {
             static F: &[OpFieldSchema] = &[
                 OpFieldSchema {

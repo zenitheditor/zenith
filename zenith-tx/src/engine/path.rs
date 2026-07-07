@@ -1,9 +1,10 @@
-//! Path op application: `set_path_anchors` and `simplify_path_anchors`.
+//! Path op application: `set_path_anchors`, `simplify_path_anchors`, and
+//! `transform_path_anchors`.
 
 use zenith_core::{Diagnostic, Dimension, Document, Node, PathAnchor, Unit};
-use zenith_geometry::{CubicBezier, GeometryError, Point2, simplify_polyline};
+use zenith_geometry::{AffineTransform, CubicBezier, GeometryError, Point2, simplify_polyline};
 
-use crate::op::OpPathAnchor;
+use crate::op::{OpPathAnchor, OpPathTransform};
 
 use super::{find_node_any_mut, node_kind_str, px, record_affected};
 
@@ -17,14 +18,7 @@ pub(super) fn apply_set_path_anchors(
     affected: &mut Vec<String>,
 ) {
     match find_node_any_mut(doc, node_id) {
-        None => {
-            diagnostics.push(Diagnostic::error(
-                "tx.unknown_node",
-                format!("node {:?} not found in document", node_id),
-                None,
-                Some(node_id.to_owned()),
-            ));
-        }
+        None => diagnostics.push(unknown_node(node_id)),
         Some(node) => {
             let kind = node_kind_str(node);
             match node {
@@ -161,11 +155,149 @@ pub(super) fn apply_simplify_path_anchors(
     }
 }
 
+pub(super) fn apply_transform_path_anchors(
+    node_id: &str,
+    transform: &OpPathTransform,
+    doc: &mut Document,
+    diagnostics: &mut Vec<Diagnostic>,
+    affected: &mut Vec<String>,
+) {
+    match find_node_any_mut(doc, node_id) {
+        None => diagnostics.push(unknown_node(node_id)),
+        Some(node) => {
+            let kind = node_kind_str(node);
+            match node {
+                Node::Path(path) => {
+                    let affine = match path_transform(transform) {
+                        Ok(affine) => affine,
+                        Err(error) => {
+                            diagnostics.push(transform_geometry_diagnostic(node_id, error));
+                            return;
+                        }
+                    };
+                    let resolved = match resolved_anchors(node_id, &path.anchors) {
+                        Ok(resolved) => resolved,
+                        Err(diagnostic) => {
+                            diagnostics.push(diagnostic);
+                            return;
+                        }
+                    };
+                    let transformed = match transformed_path_anchors(node_id, &resolved, affine) {
+                        Ok(transformed) => transformed,
+                        Err(diagnostic) => {
+                            diagnostics.push(diagnostic);
+                            return;
+                        }
+                    };
+
+                    path.anchors = transformed;
+                    record_affected(node_id, affected);
+                }
+                Node::Rect(_)
+                | Node::Ellipse(_)
+                | Node::Line(_)
+                | Node::Text(_)
+                | Node::Code(_)
+                | Node::Frame(_)
+                | Node::Group(_)
+                | Node::Image(_)
+                | Node::Polygon(_)
+                | Node::Polyline(_)
+                | Node::Instance(_)
+                | Node::Field(_)
+                | Node::Footnote(_)
+                | Node::Toc(_)
+                | Node::Table(_)
+                | Node::Shape(_)
+                | Node::Connector(_)
+                | Node::Pattern(_)
+                | Node::Chart(_)
+                | Node::Light(_)
+                | Node::Mesh(_)
+                | Node::Unknown(_) => {
+                    diagnostics.push(Diagnostic::error(
+                        "tx.unsupported_property",
+                        format!("transform_path_anchors is not supported on a {} node", kind),
+                        None,
+                        Some(node_id.to_owned()),
+                    ));
+                }
+            }
+        }
+    }
+}
+
 #[derive(Clone, Copy)]
 struct ResolvedAnchor {
     point: Point2,
     in_handle: Option<Point2>,
     out_handle: Option<Point2>,
+}
+
+impl ResolvedAnchor {
+    fn into_path_anchor(self) -> PathAnchor {
+        PathAnchor {
+            x: Some(px(self.point.x)),
+            y: Some(px(self.point.y)),
+            in_x: self.in_handle.map(|point| px(point.x)),
+            in_y: self.in_handle.map(|point| px(point.y)),
+            out_x: self.out_handle.map(|point| px(point.x)),
+            out_y: self.out_handle.map(|point| px(point.y)),
+        }
+    }
+}
+
+fn path_transform(transform: &OpPathTransform) -> Result<AffineTransform, GeometryError> {
+    match transform {
+        OpPathTransform::Translate { dx, dy } => AffineTransform::translation(*dx, *dy),
+        OpPathTransform::Rotate {
+            angle_degrees,
+            cx,
+            cy,
+        } => {
+            let pivot = Point2::new(*cx, *cy)?;
+            AffineTransform::rotation(*angle_degrees, pivot)
+        }
+        OpPathTransform::Reflect { x1, y1, x2, y2 } => {
+            let start = Point2::new(*x1, *y1)?;
+            let end = Point2::new(*x2, *y2)?;
+            AffineTransform::reflection_across_line(start, end)
+        }
+    }
+}
+
+fn transformed_path_anchors(
+    node_id: &str,
+    anchors: &[ResolvedAnchor],
+    transform: AffineTransform,
+) -> Result<Vec<PathAnchor>, Diagnostic> {
+    anchors
+        .iter()
+        .map(|anchor| {
+            let transformed = ResolvedAnchor {
+                point: transform
+                    .apply_point(anchor.point)
+                    .map_err(|error| transform_geometry_diagnostic(node_id, error))?,
+                in_handle: transformed_optional_point(node_id, transform, anchor.in_handle)?,
+                out_handle: transformed_optional_point(node_id, transform, anchor.out_handle)?,
+            };
+            Ok(transformed.into_path_anchor())
+        })
+        .collect()
+}
+
+fn transformed_optional_point(
+    node_id: &str,
+    transform: AffineTransform,
+    point: Option<Point2>,
+) -> Result<Option<Point2>, Diagnostic> {
+    point
+        .map(|point| {
+            transform
+                .apply_point(point)
+                .map_err(|error| transform_geometry_diagnostic(node_id, error))
+        })
+        .transpose()
 }
 
 fn flattened_path_points(
@@ -357,6 +489,32 @@ fn geometry_diagnostic(node_id: &str, error: GeometryError) -> Diagnostic {
             Some(node_id.to_owned()),
         ),
     }
+}
+
+fn transform_geometry_diagnostic(node_id: &str, error: GeometryError) -> Diagnostic {
+    let message = match error {
+        GeometryError::NonFinitePoint => "transform_path_anchors point coordinates must be finite",
+        GeometryError::NonFiniteParameter => "transform_path_anchors parameters must be finite",
+        GeometryError::DegenerateLine => {
+            "transform_path_anchors reflect line must use two distinct points"
+        }
+        GeometryError::NonFiniteTransform => {
+            "transform_path_anchors produced a non-finite transform"
+        }
+        GeometryError::SingularTransform => "transform_path_anchors transform is singular",
+        GeometryError::ParameterOutOfRange
+        | GeometryError::NonFiniteTolerance
+        | GeometryError::NonPositiveTolerance
+        | GeometryError::NonPositiveCount
+        | GeometryError::CountOutOfRange => "transform_path_anchors geometry is invalid",
+    };
+
+    Diagnostic::error(
+        "tx.invalid_geometry",
+        message,
+        None,
+        Some(node_id.to_owned()),
+    )
 }
 
 fn invalid_anchor(node_id: &str, message: &str) -> Diagnostic {
