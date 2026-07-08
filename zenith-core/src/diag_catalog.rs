@@ -261,7 +261,7 @@ pub const DIAGNOSTIC_CODES: &[DiagnosticCodeInfo] = &[
     info(
         "contrast.low",
         Severity::Warning,
-        "Text/background contrast is below the WCAG 2.2 threshold.",
+        "Text/background APCA Lc contrast is below the WCAG 3 draft threshold.",
     ),
     info(
         "data.missing_field",

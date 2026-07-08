@@ -4,7 +4,9 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::ast::node::{Node, PathAnchor, Point, TextSpan, parse_anchor, parse_anchor_edge};
+use crate::ast::node::{
+    Node, PathAnchor, Point, TextSpan, anchor_xy, parse_anchor, parse_anchor_edge,
+};
 use crate::ast::value::{Dimension, PropertyValue, Unit, dim_to_px};
 use crate::diagnostics::Diagnostic;
 use crate::tokens::ResolvedToken;
@@ -75,10 +77,21 @@ pub(in crate::validate::check) fn node_bbox(
             Some((x, y, w, h))
         }
         Node::Text(n) => {
-            let x = resolve_axis(pv_to_dim(n.x.as_ref())?, page_w)?;
-            let y = resolve_axis(pv_to_dim(n.y.as_ref())?, page_h)?;
             let w = resolve_axis(pv_to_dim(n.w.as_ref())?, page_w)?;
             let h = resolve_axis(pv_to_dim(n.h.as_ref())?, page_h)?;
+            let resolve_text_axis = |value: &PropertyValue, basis: f64| -> Option<f64> {
+                resolve_axis(pv_to_dim(Some(value))?, basis)
+            };
+            let (x, y) = match (n.x.as_ref(), n.y.as_ref()) {
+                (Some(x), Some(y)) => {
+                    (resolve_text_axis(x, page_w)?, resolve_text_axis(y, page_h)?)
+                }
+                (None, None) => {
+                    let anchor = parse_anchor(n.anchor.as_deref()?)?;
+                    anchor_xy(anchor, page_w, page_h, w, h)
+                }
+                (Some(_), None) | (None, Some(_)) => return None,
+            };
             Some((x, y, w, h))
         }
         Node::Code(n) => {

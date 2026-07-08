@@ -25,7 +25,7 @@
 //! Submodules:
 //! - [`visual`] — visual-property token type/existence/raw-literal checks.
 //! - [`nodes`] — the recursive node walk and geometry helpers.
-//! - [`contrast`] — the WCAG 2.2 contrast advisory.
+//! - [`contrast`] — the APCA Lc / WCAG 3 draft contrast advisory.
 //! - [`safezone`] — safe-zone exclusion/required overlap advisories.
 //! - [`fold`] — fold-line content-crossing advisories.
 //! - [`construction`] — non-printing construction guide metadata advisories.

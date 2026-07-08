@@ -136,6 +136,66 @@ fn text_with_fill_and_size(
     }))
 }
 
+/// Build a filled ellipse backdrop large enough for a centered text box.
+fn ellipse_backdrop(id: &str, fill_token: &str) -> Node {
+    Node::Ellipse(EllipseNode {
+        shadow: None,
+        filter: None,
+        mask: None,
+        id: id.to_owned(),
+        name: None,
+        role: None,
+        x: Some(pxv(520.0)),
+        y: Some(pxv(300.0)),
+        w: Some(pxv(240.0)),
+        h: Some(pxv(120.0)),
+        rx: None,
+        ry: None,
+        style: None,
+        fill: Some(PropertyValue::TokenRef(fill_token.to_owned())),
+        stroke: None,
+        stroke_width: None,
+        stroke_dash: None,
+        stroke_gap: None,
+        stroke_linecap: None,
+        opacity: None,
+        visible: None,
+        locked: None,
+        rotate: None,
+        blend_mode: None,
+        blur: None,
+        anchor: None,
+        anchor_zone: None,
+        anchor_sibling: None,
+        anchor_edge: None,
+        anchor_gap: None,
+        anchor_parent: None,
+        source_span: None,
+        unknown_props: BTreeMap::new(),
+    })
+}
+
+/// Build a text node with explicit dimensions and page-relative anchor.
+fn anchored_text_with_fill_and_size(
+    id: &str,
+    fill_token: &str,
+    font_size_token: &str,
+    anchor: &str,
+) -> Node {
+    let Node::Text(mut text) =
+        minimal_text(id, Some(PropertyValue::TokenRef(fill_token.to_owned())))
+    else {
+        unreachable!("minimal_text returns Node::Text");
+    };
+    text.font_size = Some(PropertyValue::TokenRef(font_size_token.to_owned()));
+    text.x = None;
+    text.y = None;
+    text.w = Some(pxv(120.0));
+    text.h = Some(pxv(40.0));
+    text.anchor = Some(anchor.to_owned());
+    Node::Text(text)
+}
+
 /// Light gray (#aaaaaa) text on white page at 16 px → APCA Lc ~46 < 60
 /// → `contrast.low` warning.
 #[test]
@@ -257,6 +317,45 @@ fn bold_large_text_passes_lower_threshold() {
         !has_code(&report, "contrast.low"),
         "18pt bold (large text, Lc ~71) should clear the 45 large-text threshold; codes: {:?}",
         codes(&report)
+    );
+}
+
+/// Center-anchored text with explicit dimensions should derive its page-relative
+/// bbox before contrast backdrop detection, so a preceding filled ellipse wins
+/// over the page background.
+#[test]
+fn centered_anchor_text_uses_preceding_ellipse_backdrop() {
+    let doc = doc_with(
+        vec![
+            color_token_hex("color.page", "#ffffff"),
+            color_token_hex("color.backdrop", "#003087"),
+            color_token_hex("color.text", "#000000"),
+            dim_token_pt("size.small", 9.0),
+        ],
+        vec![page_with_bg(
+            "page.one",
+            "color.page",
+            vec![
+                ellipse_backdrop("backdrop", "color.backdrop"),
+                anchored_text_with_fill_and_size("headline", "color.text", "size.small", "center"),
+            ],
+        )],
+    );
+    let report = validate(&doc);
+    assert!(
+        has_code(&report, "contrast.low"),
+        "black centered anchor text over navy ellipse should warn via backdrop, not pass via page background; codes: {:?}",
+        codes(&report)
+    );
+    let diag = report
+        .diagnostics
+        .iter()
+        .find(|d| d.code == "contrast.low")
+        .expect("must exist");
+    assert!(
+        diag.message.contains("backdrop"),
+        "message must name the ellipse backdrop as the bg source; got: {}",
+        diag.message
     );
 }
 

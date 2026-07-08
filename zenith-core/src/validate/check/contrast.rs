@@ -127,7 +127,7 @@ fn backdrop_rgb(
     None
 }
 
-/// Recursively check text nodes for WCAG AA contrast against their effective
+/// Recursively check text nodes for APCA Lc contrast against their effective
 /// background.
 ///
 /// The effective background is the topmost preceding sibling shape (rect /
