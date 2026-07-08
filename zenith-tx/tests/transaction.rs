@@ -1,7 +1,8 @@
 mod common;
 use common::*;
 use zenith_tx::{
-    Op, OpPoint, OpSpan, Permissions, Position, Transaction, TxStatus, run_transaction,
+    Op, OpPathBooleanOperation, OpPoint, OpSpan, Permissions, Position, Transaction, TxStatus,
+    run_transaction,
 };
 
 // ── 2. from_json round-trip ───────────────────────────────────────────────
@@ -312,6 +313,25 @@ fn from_json_duplicate_node_round_trip() {
             ops: vec![Op::DuplicateNode {
                 node: "orig".to_owned(),
                 new_id: "orig-copy".to_owned(),
+            }],
+            permissions: Permissions::default(),
+        }
+    );
+}
+
+#[test]
+fn from_json_path_boolean_round_trip() {
+    let json = r#"{"ops":[{"op":"path_boolean","node":"a","target":"b","new_id":"out","operation":"intersect","tolerance":0.5}]}"#;
+    let tx = Transaction::from_json(json).expect("parse JSON");
+    assert_eq!(
+        tx,
+        Transaction {
+            ops: vec![Op::PathBoolean {
+                node: "a".to_owned(),
+                target: "b".to_owned(),
+                new_id: "out".to_owned(),
+                operation: OpPathBooleanOperation::Intersect,
+                tolerance: 0.5,
             }],
             permissions: Permissions::default(),
         }

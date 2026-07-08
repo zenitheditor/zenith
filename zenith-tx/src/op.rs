@@ -88,6 +88,20 @@ pub enum OpPathTransform {
     Reflect { x1: f64, y1: f64, x2: f64, y2: f64 },
 }
 
+/// Boolean operation to materialize between two simple closed path contours.
+///
+/// JSON values are `"union"`, `"intersect"`, and `"subtract"`.
+#[derive(serde::Serialize, serde::Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum OpPathBooleanOperation {
+    /// Boundary union of source and target contours.
+    Union,
+    /// Boundary intersection of source and target contours.
+    Intersect,
+    /// Source contour with the target contour subtracted.
+    Subtract,
+}
+
 /// A single text span used by [`Op::ReplaceText`].
 ///
 /// JSON shape: `{"text":"Hello","fill":"color.brand","italic":true}`.
@@ -655,6 +669,36 @@ pub enum Op {
         /// Optional starting angle in degrees for generated transform index 0.
         #[serde(default)]
         start_angle_degrees: f64,
+    },
+    /// Materialize a boolean result between two simple closed `path` nodes as a new sibling path.
+    ///
+    /// This v0 op intentionally supports only the proven simple-contour subset:
+    /// both inputs must be direct, non-compound paths (`subpaths` empty), closed,
+    /// unrotated, and resolvable to finite px anchor/handle geometry. The engine
+    /// flattens each path with `tolerance`, delegates contour reconstruction to
+    /// `zenith-geometry`, and accepts only one non-empty result contour. Empty,
+    /// multi-contour, compound, rotated, or otherwise ambiguous results reject
+    /// with `tx.invalid_geometry`.
+    ///
+    /// The source and target remain unchanged. The new path is inserted
+    /// immediately after `node`, carries straight anchors from the resulting
+    /// contour, and copies render-relevant style from the source path.
+    ///
+    /// JSON example:
+    /// ```json
+    /// {"op":"path_boolean","node":"path.a","target":"path.b","new_id":"path.out","operation":"union","tolerance":0.5}
+    /// ```
+    PathBoolean {
+        /// Stable source path id. The result inherits render-relevant style from this path.
+        node: String,
+        /// Stable target path id.
+        target: String,
+        /// Id assigned to the newly materialized sibling path.
+        new_id: String,
+        /// Boolean operation to apply.
+        operation: OpPathBooleanOperation,
+        /// Flattening and contour classification tolerance in pixels.
+        tolerance: f64,
     },
     /// Construct a new node from a `.zen` source fragment and insert it into a
     /// container (a page, group, or frame) at a chosen position.

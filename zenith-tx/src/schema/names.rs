@@ -29,6 +29,7 @@ pub fn op_names() -> &'static [&'static str] {
         "move_path_handle",
         "move_to_back",
         "move_to_front",
+        "path_boolean",
         "remove_node",
         "reorder_pages",
         "reparent",

@@ -403,6 +403,36 @@ pub fn op_fields(name: &str) -> Option<&'static [OpFieldSchema]> {
             ];
             Some(F)
         }
+        "path_boolean" => {
+            static F: &[OpFieldSchema] = &[
+                OpFieldSchema {
+                    name: "node",
+                    ty: "node id",
+                    required: true,
+                },
+                OpFieldSchema {
+                    name: "target",
+                    ty: "node id",
+                    required: true,
+                },
+                OpFieldSchema {
+                    name: "new_id",
+                    ty: "string",
+                    required: true,
+                },
+                OpFieldSchema {
+                    name: "operation",
+                    ty: r#""union" | "intersect" | "subtract""#,
+                    required: true,
+                },
+                OpFieldSchema {
+                    name: "tolerance",
+                    ty: "px",
+                    required: true,
+                },
+            ];
+            Some(F)
+        }
         "add_node" => {
             static F: &[OpFieldSchema] = &[
                 OpFieldSchema {

@@ -16,6 +16,7 @@ mod flags;
 mod geometry;
 mod path;
 mod path_anchor;
+mod path_boolean;
 mod path_contour;
 mod path_handle;
 mod path_snap;
@@ -39,6 +40,7 @@ use path::{
     apply_set_path_anchors, apply_simplify_path_anchors, apply_transform_path_anchors,
 };
 use path_anchor::{MovePathAnchorArgs, apply_move_path_anchor};
+use path_boolean::{PathBooleanArgs, apply_path_boolean};
 use path_handle::{MovePathHandleArgs, apply_move_path_handle};
 use path_snap::apply_snap_path_anchors;
 use path_symmetry::{MakePathSymmetricArgs, apply_make_path_symmetric};
@@ -392,6 +394,26 @@ fn apply_op(
                 affected,
             );
         }
+        Op::PathBoolean {
+            node: node_id,
+            target,
+            new_id,
+            operation,
+            tolerance,
+        } => {
+            apply_path_boolean(
+                PathBooleanArgs {
+                    node_id,
+                    target_id: target,
+                    new_id,
+                    operation: *operation,
+                    tolerance: *tolerance,
+                },
+                doc,
+                diagnostics,
+                affected,
+            );
+        }
         Op::AddNode {
             parent,
             position,
@@ -655,6 +677,7 @@ fn op_lock_targets(op: &Op) -> Vec<&str> {
         | Op::AddNode { .. }
         | Op::DuplicateNode { .. }
         | Op::MakePathSymmetric { .. }
+        | Op::PathBoolean { .. }
         | Op::DuplicatePage { .. }
         | Op::Group { .. }
         | Op::Ungroup { .. }

@@ -269,7 +269,7 @@ pub fn show(spec: &str, project_dir: Option<&Path>, json: bool) -> Result<String
                 )
             })?;
 
-            let ops: Vec<String> = tx.ops.iter().map(op_name).collect();
+            let ops: Vec<String> = tx.ops.iter().map(|op| op_name(op).to_owned()).collect();
 
             ShowDetail::Action { ops, label }
         }
@@ -381,7 +381,7 @@ fn node_kind_name(node: &zenith_core::Node) -> &'static str {
 }
 
 /// Return the snake_case op name for a [`zenith_tx::Op`] variant.
-fn op_name(op: &zenith_tx::Op) -> String {
+fn op_name(op: &zenith_tx::Op) -> &'static str {
     match op {
         zenith_tx::Op::SetTextAlign { .. } => "set_text_align",
         zenith_tx::Op::MoveForward { .. } => "move_forward",
@@ -407,6 +407,7 @@ fn op_name(op: &zenith_tx::Op) -> String {
         zenith_tx::Op::TransformPathAnchors { .. } => "transform_path_anchors",
         zenith_tx::Op::SnapPathAnchors { .. } => "snap_path_anchors",
         zenith_tx::Op::MakePathSymmetric { .. } => "make_path_symmetric",
+        zenith_tx::Op::PathBoolean { .. } => "path_boolean",
         zenith_tx::Op::ReplaceText { .. } => "replace_text",
         zenith_tx::Op::DuplicateNode { .. } => "duplicate_node",
         zenith_tx::Op::DuplicatePage { .. } => "duplicate_page",
@@ -435,7 +436,6 @@ fn op_name(op: &zenith_tx::Op) -> String {
         zenith_tx::Op::DeleteRecipe { .. } => "delete_recipe",
         zenith_tx::Op::DetachPattern { .. } => "detach_pattern",
     }
-    .to_owned()
 }
 
 #[cfg(test)]

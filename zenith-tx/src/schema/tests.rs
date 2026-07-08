@@ -1,5 +1,7 @@
 use super::*;
-use crate::op::{AddAssetMetadata, Op, OpPathAnchor, OpPathHandle, OpPathTransform};
+use crate::op::{
+    AddAssetMetadata, Op, OpPathAnchor, OpPathBooleanOperation, OpPathHandle, OpPathTransform,
+};
 use std::collections::BTreeSet;
 
 fn add_asset_sample_op() -> Op {
@@ -54,6 +56,7 @@ fn op_tag(op: &Op) -> &'static str {
         Op::TransformPathAnchors { .. } => "transform_path_anchors",
         Op::SnapPathAnchors { .. } => "snap_path_anchors",
         Op::MakePathSymmetric { .. } => "make_path_symmetric",
+        Op::PathBoolean { .. } => "path_boolean",
         Op::AddNode { .. } => "add_node",
         Op::RemoveNode { .. } => "remove_node",
         Op::SetOpacity { .. } => "set_opacity",
@@ -110,6 +113,7 @@ fn all_exhaustive_tags() -> BTreeSet<&'static str> {
         "make_path_symmetric",
         "move_path_anchor",
         "move_path_handle",
+        "path_boolean",
         "simplify_path_anchors",
         "snap_path_anchors",
         "transform_path_anchors",
@@ -293,6 +297,13 @@ fn op_tag_strings_match_exhaustive_set() {
             cx: 0.0,
             cy: 0.0,
             start_angle_degrees: 0.0,
+        },
+        Op::PathBoolean {
+            node: String::new(),
+            target: String::new(),
+            new_id: String::new(),
+            operation: OpPathBooleanOperation::Union,
+            tolerance: 1.0,
         },
         Op::AddNode {
             parent: String::new(),
@@ -696,6 +707,16 @@ fn op_fields_names_match_serde_keys() {
                 cx: 10.0,
                 cy: 20.0,
                 start_angle_degrees: 0.0,
+            },
+        ),
+        (
+            "path_boolean",
+            Op::PathBoolean {
+                node: "a".into(),
+                target: "b".into(),
+                new_id: "out".into(),
+                operation: OpPathBooleanOperation::Union,
+                tolerance: 0.5,
             },
         ),
         (

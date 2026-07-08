@@ -74,6 +74,8 @@ const COMPOUND_PATH_DOC: &str = r##"zenith version=1 {
 mod anchor_kind;
 #[path = "path_ops/anchor_movement.rs"]
 mod anchor_movement;
+#[path = "path_ops/boolean.rs"]
+mod boolean;
 #[path = "path_ops/handle_movement.rs"]
 mod handle_movement;
 #[path = "path_ops/insertion.rs"]

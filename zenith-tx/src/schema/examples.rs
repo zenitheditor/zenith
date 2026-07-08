@@ -53,6 +53,9 @@ pub fn op_example(name: &str) -> Option<&'static str> {
         "make_path_symmetric" => Some(
             r#"{"op":"make_path_symmetric","node":"path.seed","id_prefix":"path.seed.sym.","count":4,"cx":100,"cy":100}"#,
         ),
+        "path_boolean" => Some(
+            r#"{"op":"path_boolean","node":"path.a","target":"path.b","new_id":"path.out","operation":"union","tolerance":0.5}"#,
+        ),
         "add_node" => Some(
             r#"{"op":"add_node","parent":"page.main","source":"rect id=\"box\" x=(px)10 y=(px)10 w=(px)100 h=(px)80 fill=(token)\"color.accent\""}"#,
         ),
