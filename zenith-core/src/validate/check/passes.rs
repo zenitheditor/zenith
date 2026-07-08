@@ -449,9 +449,8 @@ pub(in crate::validate::check) fn validate_style_block(
 fn style_prop_expect(key: &str) -> Option<VisualExpect> {
     match key {
         "fill" | "stroke" => Some(VisualExpect::Color),
-        "stroke-width" | "font-size" | "line-height" | "radius" | "padding" | "gap" => {
-            Some(VisualExpect::Dimension)
-        }
+        "stroke-width" | "font-size" | "letter-spacing" | "line-height" | "radius" | "padding"
+        | "gap" => Some(VisualExpect::Dimension),
         "font-family" => Some(VisualExpect::FontFamily),
         // stroke-alignment: plain enum string, not type-checked.
         // font-weight: fontWeight token type — no VisualExpect variant for it; skip check.

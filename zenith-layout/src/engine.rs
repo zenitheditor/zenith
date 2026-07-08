@@ -74,6 +74,10 @@ pub struct ShapeRequest<'a> {
     pub direction: TextDirection,
     /// OpenType feature overrides. Empty means default shaping behavior.
     pub features: &'a [FontFeature],
+    /// Additional letter spacing inserted between adjacent shaped clusters, in
+    /// pixels.
+    /// `0.0` preserves the raw font advance exactly.
+    pub letter_spacing_px: f32,
 }
 
 /// One positioned glyph, baseline-relative, measured from the run origin in pixels.

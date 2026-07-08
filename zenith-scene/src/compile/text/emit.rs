@@ -214,8 +214,8 @@ pub(in crate::compile) fn emit_lines_profiled<F>(
 
         // Precompute each VISUAL word's left x along the line, left-to-right. A
         // suppressed (glued) boundary adds NO gap, so the glued word sits flush
-        // against its neighbour; every other boundary adds `space_advance + extra`
-        // (`extra` is non-zero only under justify).
+        // against its neighbour; every other boundary adds the next word's
+        // resolved gap plus `extra` (`extra` is non-zero only under justify).
         let mut word_x: Vec<f64> = Vec::with_capacity(word_count);
         {
             let mut x = base_x;
@@ -224,7 +224,7 @@ pub(in crate::compile) fn emit_lines_profiled<F>(
                 x += word.advance;
                 let next = wi + 1;
                 if next < word_count && !gap_suppressed(next) {
-                    x += space_advance + extra;
+                    x += visual.get(next).map_or(space_advance, |w| w.gap_before_px) + extra;
                 }
             }
         }
@@ -439,12 +439,14 @@ mod rtl_tests {
             code: false,
             link: None,
             baseline_dy: 0.0,
+            gap_before_px: 5.0,
             glued: false,
             src: WordSource {
                 text: String::new(),
                 weight: 400,
                 style: FontStyle::Normal,
                 font_size: 16.0,
+                letter_spacing_px: 0.0,
                 features: Vec::new(),
                 paragraph: 0,
                 hyphen_part: None,
@@ -577,12 +579,14 @@ mod line_style_tests {
             code: false,
             link: None,
             baseline_dy: 0.0,
+            gap_before_px: 5.0,
             glued: false,
             src: WordSource {
                 text: String::new(),
                 weight: 400,
                 style: FontStyle::Normal,
                 font_size: 16.0,
+                letter_spacing_px: 0.0,
                 features: Vec::new(),
                 paragraph: 0,
                 hyphen_part: None,

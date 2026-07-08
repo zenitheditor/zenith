@@ -628,6 +628,15 @@ pub(in crate::validate::check) fn check_code(
         c.source_span,
         diagnostics,
     );
+    check_visual_prop(
+        &c.id,
+        "letter-spacing",
+        c.letter_spacing.as_ref(),
+        VisualExpect::Dimension,
+        referenced_token_ids,
+        resolved_tokens,
+        diagnostics,
+    );
 
     // Unknown properties.
     check_unknown_props("code", &c.id, &c.unknown_props, c.source_span, diagnostics);

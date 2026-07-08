@@ -137,10 +137,11 @@ pub fn node_content(kind: &str) -> Option<NodeContentDescriptor> {
         "text" => Some(NodeContentDescriptor {
             description: "One or more `span` children carry the text runs. \
                 Each span takes a string argument and optional inline style props: \
-                fill, font-weight, font-features, italic, underline, strikethrough, highlight, \
+                fill, font-weight, font-features, letter-spacing, italic, underline, strikethrough, highlight, \
                 code, link, vertical-align, footnote-ref. \
                 `font-features` is a comma-separated OpenType feature list such as \
                 `liga=0,kern=1,ss01`; bare tags default to value 1. \
+                `letter-spacing` is an optional dimension inserted between adjacent shaped clusters. \
                 `highlight` is a per-span background color (token ref or raw color string) \
                 rendered behind the glyph run like a marker-pen highlight. \
                 `code=#true` renders the span in the bundled monospace family with a subtle \
@@ -630,6 +631,7 @@ fn attribute_type_generic(name: &str, fallback: &'static str) -> &'static str {
         "font-family" => "token ref: fontFamily",
         "font-weight" => "token ref: fontWeight",
         "font-features" => "OpenType feature list",
+        "letter-spacing" | "tracking" => "token ref: dimension",
 
         // ── Floating-point ratios ─────────────────────────────────────────
         "opacity" | "jitter" | "intensity" => "f64 (0.0–1.0)",

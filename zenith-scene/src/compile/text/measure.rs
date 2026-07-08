@@ -18,7 +18,7 @@ use super::ctx::{NodeShape, ShapeEnv};
 use super::pack::pack_lines;
 use super::shape::{
     ResolvedSpan, resolve_font_family_name, resolve_font_features, resolve_font_weight,
-    resolve_vertical_align, shape_words,
+    resolve_letter_spacing, resolve_vertical_align, shape_words,
 };
 
 /// Resolve a text node's font size in pixels with style cascade (default 16.0).
@@ -105,7 +105,7 @@ fn build_resolved_spans(
     resolved: &BTreeMap<String, ResolvedToken>,
     style_map: &BTreeMap<&str, &Style>,
     diagnostics: &mut Vec<Diagnostic>,
-) -> (Vec<ResolvedSpan>, f32, u16) {
+) -> (Vec<ResolvedSpan>, f32, u16, f32) {
     let font_size = font_size_px(text, resolved, style_map);
 
     // Color/fill resolution is intentionally skipped — the measurer never emits
@@ -122,6 +122,11 @@ fn build_resolved_spans(
         &text.id,
         text.source_span,
     );
+    let node_letter_spacing_prop = text
+        .letter_spacing
+        .as_ref()
+        .or_else(|| style_prop(&text.style, style_map, "letter-spacing"));
+    let node_letter_spacing_px = resolve_letter_spacing(node_letter_spacing_prop, resolved);
 
     let mut spans: Vec<ResolvedSpan> = Vec::with_capacity(text.spans.len());
     for span in &text.spans {
@@ -141,6 +146,10 @@ fn build_resolved_spans(
             Some(raw) => resolve_font_features(Some(raw), diagnostics, &text.id, text.source_span),
             None => node_features.clone(),
         };
+        let span_letter_spacing_px = resolve_letter_spacing(
+            span.letter_spacing.as_ref().or(node_letter_spacing_prop),
+            resolved,
+        );
         spans.push(ResolvedSpan {
             text: span.text.clone(),
             color: Color::srgb(0, 0, 0, 255),
@@ -159,10 +168,11 @@ fn build_resolved_spans(
             style,
             font_size: span_font_size,
             baseline_dy,
+            letter_spacing_px: span_letter_spacing_px,
             features,
         });
     }
-    (spans, font_size, base_weight)
+    (spans, font_size, base_weight, node_letter_spacing_px)
 }
 
 /// Shared shaping environment for the text-measurement helpers, grouped so the
@@ -191,7 +201,7 @@ pub(in crate::compile) fn measure_text_natural(
     env: MeasureEnv,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<f64> {
-    let (spans, font_size, base_weight) =
+    let (spans, font_size, base_weight, letter_spacing_px) =
         build_resolved_spans(text, env.resolved, env.style_map, diagnostics);
     if spans.is_empty() {
         return None;
@@ -206,6 +216,7 @@ pub(in crate::compile) fn measure_text_natural(
         NodeShape {
             font_size,
             base_weight,
+            letter_spacing_px,
             direction: node_direction,
         },
         ShapeEnv {
@@ -248,7 +259,7 @@ pub(in crate::compile) fn measure_text_wrapped_height(
     env: MeasureEnv,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<f64> {
-    let (spans, font_size, base_weight) =
+    let (spans, font_size, base_weight, letter_spacing_px) =
         build_resolved_spans(text, env.resolved, env.style_map, diagnostics);
     if spans.is_empty() {
         return None;
@@ -263,6 +274,7 @@ pub(in crate::compile) fn measure_text_wrapped_height(
         NodeShape {
             font_size,
             base_weight,
+            letter_spacing_px,
             direction: node_direction,
         },
         ShapeEnv {

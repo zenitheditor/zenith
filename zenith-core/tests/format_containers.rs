@@ -704,7 +704,10 @@ fn group_live_symmetry_round_trip() {
     let doc2 = adapter
         .parse(text.as_bytes())
         .expect("re-parse after format must succeed");
-    assert_eq!(strip_spans(doc).body.pages[0].children, strip_spans(doc2).body.pages[0].children);
+    assert_eq!(
+        strip_spans(doc).body.pages[0].children,
+        strip_spans(doc2).body.pages[0].children
+    );
 }
 
 #[test]

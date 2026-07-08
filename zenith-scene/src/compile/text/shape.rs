@@ -12,6 +12,7 @@ use zenith_layout::{FontFeature, ShapeRequest, TextDirection, TextLayoutEngine, 
 
 use crate::ir::{Color, SceneCommand, SceneGlyph};
 
+use super::super::util::resolve_property_dimension_px;
 use super::ctx::{NodeShape, ShapeEnv};
 
 /// The bundled monospace family used for `code` spans and the `code` node.
@@ -50,6 +51,9 @@ pub(in crate::compile) struct WordToken {
     /// Applied per-glyph-run by [`super::emit::emit_lines`] on top of the line
     /// baseline.
     pub(in crate::compile) baseline_dy: f64,
+    /// Inter-word gap before this word when it follows another word on the same
+    /// line. Ignored for line-opening words and glued boundaries.
+    pub(in crate::compile) gap_before_px: f64,
     /// `true` when this word was source-adjacent to the PREVIOUS word with NO
     /// whitespace between them (e.g. a bold span `"24%"` immediately followed by
     /// a plain span `","` in the source). A glued word contributes ONLY its own
@@ -75,6 +79,7 @@ pub(in crate::compile) struct WordSource {
     pub(in crate::compile) weight: u16,
     pub(in crate::compile) style: FontStyle,
     pub(in crate::compile) font_size: f32,
+    pub(in crate::compile) letter_spacing_px: f32,
     pub(in crate::compile) features: Vec<FontFeature>,
     /// 0-based paragraph index (each `\n` in the source starts a new paragraph).
     pub(in crate::compile) paragraph: usize,
@@ -118,6 +123,8 @@ pub(in crate::compile) struct ResolvedSpan {
     pub(in crate::compile) font_size: f32,
     /// Super/subscript baseline shift in pixels (negative = up; 0 = baseline).
     pub(in crate::compile) baseline_dy: f64,
+    /// Additional letter spacing inserted between adjacent shaped glyphs.
+    pub(in crate::compile) letter_spacing_px: f32,
     /// Validated OpenType feature requests for this span. Empty keeps default
     /// shaping behavior.
     pub(in crate::compile) features: Vec<FontFeature>,
@@ -176,6 +183,13 @@ pub(in crate::compile) fn resolve_font_features(
     features
 }
 
+pub(in crate::compile) fn resolve_letter_spacing(
+    prop: Option<&PropertyValue>,
+    resolved: &BTreeMap<String, ResolvedToken>,
+) -> f32 {
+    resolve_property_dimension_px(prop, resolved, 0.0) as f32
+}
+
 /// Emit a `font.glyph_missing` warning for `node_id` when `missing` is
 /// non-empty. Shared by the NOWRAP pass-1 loop and [`shape_words`] so the
 /// format string and `Diagnostic` construction live in exactly one place.
@@ -221,6 +235,7 @@ pub(in crate::compile) fn shape_words(
 ) -> (Vec<WordToken>, WordMetrics) {
     let font_size = shape.font_size;
     let node_base_weight = shape.base_weight;
+    let node_letter_spacing_px = shape.letter_spacing_px;
     let direction = shape.direction;
     let engine = env.engine;
     let fonts = env.fonts;
@@ -285,6 +300,23 @@ pub(in crate::compile) fn shape_words(
         // Split the span text into paragraphs on `\n`; each segment after the
         // first increments the running paragraph index. `split('\n')` always
         // yields ≥1 segment, so a span without a newline keeps `paragraph`.
+        let span_space_advance = {
+            let req = ShapeRequest {
+                text: " ",
+                families: span_families,
+                weight: shaped.weight,
+                style: shaped.style,
+                font_size: word_font_size,
+                direction: TextDirection::Ltr,
+                features: &shaped.features,
+                letter_spacing_px: 0.0,
+            };
+            match engine.shape(&req, fonts) {
+                Ok(run) => run.advance_width as f64,
+                Err(_) => 0.0,
+            }
+        };
+        let span_gap_before_px = span_space_advance + 2.0 * f64::from(shaped.letter_spacing_px);
         for (seg_idx, segment) in shaped.text.split('\n').enumerate() {
             if seg_idx > 0 {
                 paragraph += 1;
@@ -298,6 +330,7 @@ pub(in crate::compile) fn shape_words(
                     font_size: word_font_size,
                     direction,
                     features: &shaped.features,
+                    letter_spacing_px: shaped.letter_spacing_px,
                 };
                 match engine.shape_with_fallback(&req, fonts) {
                     Err(e) => {
@@ -334,6 +367,7 @@ pub(in crate::compile) fn shape_words(
                             code: shaped.code,
                             link: shaped.link.clone(),
                             baseline_dy: shaped.baseline_dy,
+                            gap_before_px: span_gap_before_px,
                             glued,
                             runs: result.runs,
                             src: WordSource {
@@ -341,6 +375,7 @@ pub(in crate::compile) fn shape_words(
                                 weight: shaped.weight,
                                 style: shaped.style,
                                 font_size: word_font_size,
+                                letter_spacing_px: shaped.letter_spacing_px,
                                 features: shaped.features.clone(),
                                 paragraph,
                                 hyphen_part: None,
@@ -369,6 +404,7 @@ pub(in crate::compile) fn shape_words(
             // inter-word gap measurement is identical for LTR and RTL.
             direction: TextDirection::Ltr,
             features: spans.first().map_or(&[], |s| s.features.as_slice()),
+            letter_spacing_px: node_letter_spacing_px,
         };
         match engine.shape(&req, fonts) {
             Ok(run) => run.advance_width as f64,

@@ -483,6 +483,7 @@ mod tests {
                 font_size: 24.0,
                 direction: crate::TextDirection::Ltr,
                 features: &[],
+                letter_spacing_px: 0.0,
             },
             &provider,
         )?;
@@ -533,6 +534,7 @@ mod tests {
                 font_size: 24.0,
                 direction: crate::TextDirection::Ltr,
                 features: &[],
+                letter_spacing_px: 0.0,
             },
             &provider,
         )?;
@@ -758,6 +760,7 @@ mod tests {
                 font_size: 20.0,
                 direction: crate::TextDirection::Ltr,
                 features: &[],
+                letter_spacing_px: 0.0,
             },
             &provider,
         )

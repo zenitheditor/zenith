@@ -29,7 +29,7 @@ use super::measure::{
 };
 use super::shape::{
     CODE_BG, CODE_MONO_FAMILY, LINK_COLOR, ResolvedSpan, emit_glyph_missing, resolve_font_features,
-    resolve_font_weight, resolve_vertical_align, run_to_scene_glyphs,
+    resolve_font_weight, resolve_letter_spacing, resolve_vertical_align, run_to_scene_glyphs,
 };
 use super::tableader::compile_tab_leader;
 use super::wrap::{WrapEnv, WrapGeom, emit_wrap_path};
@@ -355,6 +355,7 @@ pub(in crate::compile) fn compile_text_sized(
                         fill: span.fill.clone(),
                         font_weight: None,
                         font_features: span.font_features.clone(),
+                        letter_spacing: span.letter_spacing.clone(),
                         italic: None,
                         underline: None,
                         strikethrough: None,
@@ -463,6 +464,11 @@ pub(in crate::compile) fn compile_text_sized(
         &text.id,
         text.source_span,
     );
+    let node_letter_spacing_prop = text
+        .letter_spacing
+        .as_ref()
+        .or_else(|| style_prop(&text.style, style_map, "letter-spacing"));
+    let node_letter_spacing_px = resolve_letter_spacing(node_letter_spacing_prop, resolved);
 
     // Glyph stroke (outline). Resolved earlier (before chain early-return) and
     // re-bound here for use in the text emit paths below.
@@ -491,6 +497,7 @@ pub(in crate::compile) fn compile_text_sized(
                 TabLeaderArgs {
                     font_size,
                     features: &node_features,
+                    letter_spacing_px: node_letter_spacing_px,
                     node_fill_prop,
                     node_weight_prop,
                     node_opacity: 1.0,
@@ -514,6 +521,7 @@ pub(in crate::compile) fn compile_text_sized(
             TabLeaderArgs {
                 font_size,
                 features: &node_features,
+                letter_spacing_px: node_letter_spacing_px,
                 node_fill_prop,
                 node_weight_prop,
                 node_opacity,
@@ -570,6 +578,7 @@ pub(in crate::compile) fn compile_text_sized(
         style: FontStyle,
         font_size: f32,
         baseline_dy: f64,
+        letter_spacing_px: f32,
         features: Vec<zenith_layout::FontFeature>,
         vertical_align: bool,
     }
@@ -649,6 +658,10 @@ pub(in crate::compile) fn compile_text_sized(
             Some(raw) => resolve_font_features(Some(raw), diagnostics, &text.id, text.source_span),
             None => node_features.clone(),
         };
+        let span_letter_spacing_px = resolve_letter_spacing(
+            span.letter_spacing.as_ref().or(node_letter_spacing_prop),
+            resolved,
+        );
 
         // `code` spans use the bundled mono family instead of the node family.
         // Allocate the override slice only when needed; non-code spans are
@@ -668,6 +681,7 @@ pub(in crate::compile) fn compile_text_sized(
             font_size: span_font_size,
             direction: node_direction,
             features: &span_features,
+            letter_spacing_px: span_letter_spacing_px,
         };
 
         // Shape with per-glyph font fallback: a span whose characters are all
@@ -722,6 +736,7 @@ pub(in crate::compile) fn compile_text_sized(
                         style,
                         font_size: span_font_size,
                         baseline_dy,
+                        letter_spacing_px: span_letter_spacing_px,
                         features: span_features.clone(),
                         vertical_align: is_vertical_align,
                     });
@@ -995,6 +1010,7 @@ pub(in crate::compile) fn compile_text_sized(
                 style: s.style,
                 font_size: s.font_size,
                 baseline_dy: s.baseline_dy,
+                letter_spacing_px: s.letter_spacing_px,
                 features: s.features.clone(),
             })
             .collect();
@@ -1018,6 +1034,7 @@ pub(in crate::compile) fn compile_text_sized(
                 box_w,
                 box_h_opt,
                 font_size,
+                letter_spacing_px: node_letter_spacing_px,
                 align,
                 deco_thickness,
                 direction: node_direction,

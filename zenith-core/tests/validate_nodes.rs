@@ -68,6 +68,71 @@ fn font_features_validate_tags_and_values() {
     );
 }
 
+#[test]
+fn letter_spacing_validates_dimension_tokens() {
+    let src = r##"zenith version=1 {
+  project id="proj.spacing" name="Spacing"
+  tokens format="zenith-token-v1" {
+    token id="size.track" type="dimension" value=(px)1
+  }
+  styles {}
+  document id="doc.spacing" title="Spacing" {
+    page id="page.one" w=(px)400 h=(px)400 {
+      text id="body" x=(px)10 y=(px)10 w=(px)300 h=(px)100 letter-spacing=(token)"size.track" {
+        span "Text" letter-spacing=(token)"size.track"
+      }
+      code id="code" x=(px)10 y=(px)140 w=(px)300 h=(px)100 letter-spacing=(token)"size.track" {
+        content "let x = 1;"
+      }
+    }
+  }
+}
+"##;
+    let doc = KdlAdapter.parse(src.as_bytes()).expect("parse");
+    let report = validate(&doc);
+    assert!(
+        !report.has_errors(),
+        "expected no errors, got codes: {:?}",
+        codes(&report)
+    );
+}
+
+#[test]
+fn letter_spacing_rejects_wrong_token_type() {
+    let src = r##"zenith version=1 {
+  project id="proj.spacing.bad" name="Spacing Bad"
+  tokens format="zenith-token-v1" {
+    token id="color.ink" type="color" value="#111111"
+  }
+  styles {}
+  document id="doc.spacing.bad" title="Spacing Bad" {
+    page id="page.one" w=(px)400 h=(px)400 {
+      text id="body" x=(px)10 y=(px)10 w=(px)300 h=(px)100 letter-spacing=(token)"color.ink" {
+        span "Text" letter-spacing=(token)"color.ink"
+      }
+      code id="code" x=(px)10 y=(px)140 w=(px)300 h=(px)100 letter-spacing=(token)"color.ink" {
+        content "let x = 1;"
+      }
+    }
+  }
+}
+"##;
+    let doc = KdlAdapter.parse(src.as_bytes()).expect("parse");
+    let report = validate(&doc);
+    let incompatible_count = report
+        .diagnostics
+        .iter()
+        .filter(|d| d.code == "token.incompatible_property")
+        .count();
+    assert_eq!(
+        incompatible_count,
+        3,
+        "expected text/span/code incompatible-property diagnostics, got codes: {:?}",
+        codes(&report)
+    );
+    assert!(report.has_errors());
+}
+
 // ── Test 2: duplicate id across two nodes ─────────────────────────────
 
 #[test]
@@ -264,6 +329,7 @@ fn font_weight_with_missing_token_ref_produces_unknown_reference() {
         font_size_min: None,
         font_weight: Some(token_ref("weight.does.not.exist")),
         font_features: None,
+        letter_spacing: None,
         opacity: None,
         visible: None,
         locked: None,

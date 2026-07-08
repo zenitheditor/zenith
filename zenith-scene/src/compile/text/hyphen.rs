@@ -77,6 +77,7 @@ fn reshape_fragment(
         font_size: donor.src.font_size,
         direction: ctx.direction,
         features: &donor.src.features,
+        letter_spacing_px: donor.src.letter_spacing_px,
     };
     let result = ctx.engine.shape_with_fallback(&req, ctx.fonts).ok()?;
     let advance: f64 = result.runs.iter().map(|r| r.advance_width as f64).sum();
@@ -90,6 +91,7 @@ fn reshape_fragment(
         code: donor.code,
         link: donor.link.clone(),
         baseline_dy: donor.baseline_dy,
+        gap_before_px: donor.gap_before_px,
         // A fragment inherits the original word's glue: the head starts exactly
         // where the donor started (so its glue to the previous word is preserved);
         // the tail begins a fresh line where glue is inert (a first-of-line word
@@ -101,6 +103,7 @@ fn reshape_fragment(
             weight: donor.src.weight,
             style: donor.src.style,
             font_size: donor.src.font_size,
+            letter_spacing_px: donor.src.letter_spacing_px,
             features: donor.src.features.clone(),
             paragraph: donor.src.paragraph,
             hyphen_part,
@@ -295,6 +298,7 @@ mod break_word_tests {
             style: FontStyle::Normal,
             font_size: 16.0,
             baseline_dy: 0.0,
+            letter_spacing_px: 0.0,
             features: Vec::new(),
         }];
         let mut diags = Vec::new();
@@ -304,6 +308,7 @@ mod break_word_tests {
             NodeShape {
                 font_size: 16.0,
                 base_weight: 400,
+                letter_spacing_px: 0.0,
                 direction: TextDirection::Ltr,
             },
             ShapeEnv { engine, fonts },

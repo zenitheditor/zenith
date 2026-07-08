@@ -564,6 +564,56 @@ fn test_font_features_round_trip() {
     assert_eq!(strip_spans(doc), strip_spans(reparsed));
 }
 
+/// **Letter spacing round-trip**: canonical `letter-spacing` parses on text,
+/// code, and span surfaces, while the craft alias `tracking` formats back to
+/// canonical `letter-spacing`.
+#[test]
+fn test_letter_spacing_round_trip_and_tracking_alias() {
+    use zenith_core::Node;
+
+    let src = r##"zenith version=1 {
+  project id="proj.spacing" name="Spacing"
+  tokens format="zenith-token-v1" {
+  }
+  styles {
+  }
+  document id="doc.spacing" title="Spacing" {
+    page id="page.one" w=(px)400 h=(px)400 {
+      text id="body" x=(px)10 y=(px)10 w=(px)300 h=(px)100 tracking=(px)1.5 {
+        span "Serif" letter-spacing=(px)-0.25
+      }
+      code id="code" x=(px)10 y=(px)140 w=(px)300 h=(px)100 letter-spacing=(px)2 {
+        content "let x = 1;"
+      }
+    }
+  }
+}
+"##;
+    let adapter = KdlAdapter;
+    let doc = adapter.parse(src.as_bytes()).expect("parse");
+
+    let page = &doc.body.pages[0];
+    let Node::Text(text_node) = &page.children[0] else {
+        panic!("expected text node");
+    };
+    assert!(text_node.letter_spacing.is_some());
+    assert!(text_node.spans[0].letter_spacing.is_some());
+    let Node::Code(code_node) = &page.children[1] else {
+        panic!("expected code node");
+    };
+    assert!(code_node.letter_spacing.is_some());
+
+    let formatted = format_document(&doc).expect("format");
+    let text = String::from_utf8(formatted).expect("utf8");
+    assert!(text.contains("letter-spacing=(px)1.5"));
+    assert!(text.contains("span \"Serif\" letter-spacing=(px)-0.25"));
+    assert!(text.contains("letter-spacing=(px)2"));
+    assert!(!text.contains("tracking="));
+
+    let reparsed = adapter.parse(text.as_bytes()).expect("reparse");
+    assert_eq!(strip_spans(doc), strip_spans(reparsed));
+}
+
 /// **Span data-ref + format round-trip**: a `span "" data-ref="rev"
 /// format="currency" precision=2` parses to the data fields and formats back
 /// identically; a plain span (no data-ref) stays byte-identical.

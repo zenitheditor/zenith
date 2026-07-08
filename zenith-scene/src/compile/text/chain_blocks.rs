@@ -46,7 +46,8 @@ use super::markdown_block::{
 use super::pack::{LineDecoration, LineStyle};
 use super::shape::{
     LINK_COLOR, ResolvedSpan, WordMetrics, WordToken, resolve_font_family_name,
-    resolve_font_features, resolve_font_weight, resolve_vertical_align, shape_words,
+    resolve_font_features, resolve_font_weight, resolve_letter_spacing, resolve_vertical_align,
+    shape_words,
 };
 
 /// One shaped markdown block ready for per-member packing in the chain flow.
@@ -211,6 +212,7 @@ pub(in crate::compile) fn shape_source_blocks(
             NodeShape {
                 font_size: block_font_size,
                 base_weight: block_weight,
+                letter_spacing_px: 0.0,
                 direction: shape.direction,
             },
             shape_env,
@@ -311,6 +313,7 @@ fn block_spans(
                 style: FontStyle::Normal,
                 font_size: ctx.font_size,
                 baseline_dy: 0.0,
+                letter_spacing_px: 0.0,
                 features: ctx.features.to_vec(),
             }]
         }
@@ -352,6 +355,7 @@ fn text_spans_to_resolved(
             },
             font_size: ctx.font_size,
             baseline_dy: 0.0,
+            letter_spacing_px: 0.0,
             features: ctx.features.to_vec(),
         });
     }
@@ -389,6 +393,7 @@ fn text_spans_to_resolved(
             Some(raw) => resolve_font_features(Some(raw), diagnostics, node_id, None),
             None => ctx.features.to_vec(),
         };
+        let letter_spacing_px = resolve_letter_spacing(span.letter_spacing.as_ref(), resolved);
         out.push(ResolvedSpan {
             text: span.text.clone(),
             color,
@@ -401,6 +406,7 @@ fn text_spans_to_resolved(
             style: font_style,
             font_size: span_font_size,
             baseline_dy,
+            letter_spacing_px,
             features,
         });
     }

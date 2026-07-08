@@ -507,6 +507,114 @@ page id="page.features" w=(px)400 h=(px)200 {
     );
 }
 
+#[test]
+fn text_letter_spacing_reaches_scene_glyph_positions() {
+    fn glyph_dx(src: &str) -> Vec<f32> {
+        let doc = parse(src);
+        let result = compile(&doc, &default_provider());
+        assert!(
+            result
+                .diagnostics
+                .iter()
+                .all(|d| d.code != "scene.text_unshaped"),
+            "text must shape without scene.text_unshaped diagnostics: {:?}",
+            result.diagnostics
+        );
+        result
+            .scene
+            .commands
+            .iter()
+            .find_map(|c| match c {
+                SceneCommand::DrawGlyphRun { glyphs, .. } => {
+                    Some(glyphs.iter().map(|g| g.dx).collect::<Vec<_>>())
+                }
+                _ => None,
+            })
+            .expect("a DrawGlyphRun must exist")
+    }
+
+    let base_src = r##"zenith version=1 {
+  project id="proj.spacing" name="Spacing"
+  tokens format="zenith-token-v1" {}
+  styles {}
+  document id="doc.spacing" title="Spacing" {
+page id="page.spacing" w=(px)400 h=(px)200 {
+  text id="text.base" x=(px)10 y=(px)20 w=(px)380 h=(px)80 { span "ABC" }
+}
+  }
+}
+"##;
+    let spaced_src = r##"zenith version=1 {
+  project id="proj.spacing" name="Spacing"
+  tokens format="zenith-token-v1" {
+    token id="size.track" type="dimension" value=(px)4
+  }
+  styles {}
+  document id="doc.spacing" title="Spacing" {
+page id="page.spacing" w=(px)400 h=(px)200 {
+  text id="text.spaced" x=(px)10 y=(px)20 w=(px)380 h=(px)80 letter-spacing=(token)"size.track" { span "ABC" }
+}
+  }
+}
+"##;
+
+    let base = glyph_dx(base_src);
+    let spaced = glyph_dx(spaced_src);
+    assert!(base.len() >= 3 && spaced.len() >= 3);
+    assert!((spaced[1] - base[1] - 4.0).abs() < 0.001);
+    assert!((spaced[2] - base[2] - 8.0).abs() < 0.001);
+}
+
+#[test]
+fn code_letter_spacing_reaches_scene_glyph_positions() {
+    fn glyph_dx(src: &str) -> Vec<f32> {
+        let doc = parse(src);
+        let result = compile(&doc, &default_provider());
+        result
+            .scene
+            .commands
+            .iter()
+            .find_map(|c| match c {
+                SceneCommand::DrawGlyphRun { glyphs, .. } => {
+                    Some(glyphs.iter().map(|g| g.dx).collect::<Vec<_>>())
+                }
+                _ => None,
+            })
+            .expect("a DrawGlyphRun must exist")
+    }
+
+    let base_src = r##"zenith version=1 {
+  project id="proj.code.spacing" name="Code Spacing"
+  tokens format="zenith-token-v1" {}
+  styles {}
+  document id="doc.code.spacing" title="Code Spacing" {
+page id="page.spacing" w=(px)400 h=(px)200 {
+  code id="code.base" x=(px)10 y=(px)20 w=(px)380 h=(px)80 { content "ABC" }
+}
+  }
+}
+"##;
+    let spaced_src = r##"zenith version=1 {
+  project id="proj.code.spacing" name="Code Spacing"
+  tokens format="zenith-token-v1" {
+    token id="size.track" type="dimension" value=(px)3
+  }
+  styles {}
+  document id="doc.code.spacing" title="Code Spacing" {
+page id="page.spacing" w=(px)400 h=(px)200 {
+  code id="code.spaced" x=(px)10 y=(px)20 w=(px)380 h=(px)80 letter-spacing=(token)"size.track" { content "ABC" }
+}
+  }
+}
+"##;
+
+    let base = glyph_dx(base_src);
+    let spaced = glyph_dx(spaced_src);
+    assert!(base.len() >= 3 && spaced.len() >= 3);
+    assert!((spaced[1] - base[1] - 3.0).abs() < 0.001);
+    assert!((spaced[2] - base[2] - 6.0).abs() < 0.001);
+}
+
 /// Two spans with different fill tokens → two runs, distinct colors, the
 /// second positioned to the right of the first.
 #[test]

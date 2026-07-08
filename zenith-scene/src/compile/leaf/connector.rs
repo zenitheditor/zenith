@@ -412,6 +412,7 @@ fn emit_connector_label(
         font_size_min: None,
         font_weight: None,
         font_features: None,
+        letter_spacing: None,
         shadow: None,
         filter: None,
         mask: None,

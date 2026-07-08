@@ -197,6 +197,15 @@ pub(in crate::validate::check) fn check_text(
     );
     check_visual_prop(
         &t.id,
+        "letter-spacing",
+        t.letter_spacing.as_ref(),
+        VisualExpect::Dimension,
+        referenced_token_ids,
+        resolved_tokens,
+        diagnostics,
+    );
+    check_visual_prop(
+        &t.id,
         "shadow",
         t.shadow.as_ref(),
         VisualExpect::Shadow,

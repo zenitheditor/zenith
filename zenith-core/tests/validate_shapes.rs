@@ -773,6 +773,7 @@ fn minimal_shape(id: &str, kind: Option<&str>, h_align: Option<&str>) -> Node {
             fill: None,
             font_weight: None,
             font_features: None,
+            letter_spacing: None,
             italic: None,
             underline: None,
             strikethrough: None,

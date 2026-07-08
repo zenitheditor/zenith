@@ -314,6 +314,13 @@ fn substitute_text(n: &mut TextNode, ctx: &DataContext, diagnostics: &mut Vec<Di
     substitute_color_prop_opt(&mut n.font_family, ctx, &id, "font-family", diagnostics);
     substitute_dim_prop_opt(&mut n.font_size, ctx, &id, "font-size", diagnostics);
     substitute_dim_prop_opt(&mut n.font_size_min, ctx, &id, "font-size-min", diagnostics);
+    substitute_dim_prop_opt(
+        &mut n.letter_spacing,
+        ctx,
+        &id,
+        "letter-spacing",
+        diagnostics,
+    );
     substitute_dim_prop_opt(&mut n.stroke_width, ctx, &id, "stroke-width", diagnostics);
     substitute_spans(&mut n.spans, ctx, &id, diagnostics);
 }
@@ -323,6 +330,13 @@ fn substitute_code(n: &mut CodeNode, ctx: &DataContext, diagnostics: &mut Vec<Di
     substitute_color_prop_opt(&mut n.fill, ctx, &id, "fill", diagnostics);
     substitute_color_prop_opt(&mut n.font_family, ctx, &id, "font-family", diagnostics);
     substitute_dim_prop_opt(&mut n.font_size, ctx, &id, "font-size", diagnostics);
+    substitute_dim_prop_opt(
+        &mut n.letter_spacing,
+        ctx,
+        &id,
+        "letter-spacing",
+        diagnostics,
+    );
 }
 
 fn substitute_image(n: &mut ImageNode, ctx: &DataContext, diagnostics: &mut Vec<Diagnostic>) {

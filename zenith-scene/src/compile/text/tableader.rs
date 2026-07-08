@@ -32,6 +32,15 @@ struct TabLeaderRow {
     has_tab: bool,
 }
 
+#[derive(Clone, Copy)]
+struct TabLeaderShape<'a> {
+    families: &'a [String],
+    font_size: f32,
+    weight: u16,
+    features: &'a [FontFeature],
+    letter_spacing_px: f32,
+}
+
 /// Shape one TOC row's LEFT and RIGHT segments with the node font/size/weight.
 ///
 /// The row is split on its FIRST `\t`; everything before is the LEFT segment,
@@ -40,10 +49,7 @@ struct TabLeaderRow {
 /// safely. Deterministic: the same engine/fonts always produce the same runs.
 fn shape_tab_leader_row(
     row: &str,
-    families: &[String],
-    font_size: f32,
-    weight: u16,
-    features: &[FontFeature],
+    shape: TabLeaderShape<'_>,
     engine: &RustybuzzEngine,
     fonts: &dyn FontProvider,
 ) -> TabLeaderRow {
@@ -58,13 +64,14 @@ fn shape_tab_leader_row(
         }
         let req = ShapeRequest {
             text: seg,
-            families,
-            weight,
+            families: shape.families,
+            weight: shape.weight,
             style: FontStyle::Normal,
-            font_size,
+            font_size: shape.font_size,
             // Tab-leader (TOC) rows are LTR in v0; RTL TOC is a follow-up.
             direction: TextDirection::Ltr,
-            features,
+            features: shape.features,
+            letter_spacing_px: shape.letter_spacing_px,
         };
         match engine.shape_with_fallback(&req, fonts) {
             Ok(result) => {
@@ -150,6 +157,7 @@ pub(in crate::compile) fn compile_tab_leader(
     let TabLeaderArgs {
         font_size,
         features,
+        letter_spacing_px,
         node_fill_prop,
         node_weight_prop,
         node_opacity,
@@ -203,6 +211,7 @@ pub(in crate::compile) fn compile_tab_leader(
         // Tab-leader (TOC) mode is LTR in v0.
         direction: TextDirection::Ltr,
         features,
+        letter_spacing_px,
     };
     let leader_run = match engine.shape_with_fallback(&leader_req, fonts) {
         Ok(result) => result.runs.into_iter().next(),
@@ -215,9 +224,16 @@ pub(in crate::compile) fn compile_tab_leader(
 
     // Shape every row first so the shared ascent/line-height (from the first
     // non-empty run) define a uniform line grid for the whole block.
+    let row_shape = TabLeaderShape {
+        families,
+        font_size,
+        weight,
+        features,
+        letter_spacing_px,
+    };
     let rows: Vec<TabLeaderRow> = combined
         .split('\n')
-        .map(|row| shape_tab_leader_row(row, families, font_size, weight, features, engine, fonts))
+        .map(|row| shape_tab_leader_row(row, row_shape, engine, fonts))
         .collect();
 
     // Shared metrics from the first available run (left, right, or the leader).

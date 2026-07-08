@@ -342,6 +342,7 @@ mod tests {
                     font_size: 32.0,
                     direction: TextDirection::Ltr,
                     features: &[],
+                    letter_spacing_px: 0.0,
                 },
                 provider,
             )

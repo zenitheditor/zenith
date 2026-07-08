@@ -17,7 +17,7 @@ use super::super::util::{resolve_geometry_px, rotation_degrees, unsupported_unit
 use super::ctx::TextCompileEnv;
 use super::shape::{
     resolve_family_with_fallback, resolve_font_family_name, resolve_font_features,
-    resolve_font_weight, run_to_scene_glyphs,
+    resolve_font_weight, resolve_letter_spacing, run_to_scene_glyphs,
 };
 
 /// Pixels of padding on the left and right sides of the line-number digit area.
@@ -228,6 +228,11 @@ fn compile_code_impl(
         &code.id,
         code.source_span,
     );
+    let letter_spacing_prop = code
+        .letter_spacing
+        .as_ref()
+        .or_else(|| style_prop(&code.style, style_map, "letter-spacing"));
+    let letter_spacing_px = resolve_letter_spacing(letter_spacing_prop, resolved);
 
     // Resolve fill color with style cascade; default to opaque black.
     let fill_prop = code
@@ -341,6 +346,7 @@ fn compile_code_impl(
             font_size,
             direction: TextDirection::Ltr,
             features: &font_features,
+            letter_spacing_px,
         };
         match engine.shape(&digit_req, fonts) {
             Err(_) => {
@@ -405,6 +411,7 @@ fn compile_code_impl(
                 font_size,
                 direction: TextDirection::Ltr,
                 features: &font_features,
+                letter_spacing_px,
             };
             // If shaping fails for a particular label, skip gracefully.
             if let Ok(num_run) = engine.shape(&num_req, fonts) {
@@ -481,6 +488,7 @@ fn compile_code_impl(
                     // Code is shaped LTR (source code is left-to-right).
                     direction: TextDirection::Ltr,
                     features: &font_features,
+                    letter_spacing_px,
                 };
                 match engine.shape(&req, fonts) {
                     Err(e) => {
@@ -538,6 +546,7 @@ fn compile_code_impl(
                 // Code is shaped LTR (source code is left-to-right).
                 direction: TextDirection::Ltr,
                 features: &font_features,
+                letter_spacing_px,
             };
 
             match engine.shape(&req, fonts) {

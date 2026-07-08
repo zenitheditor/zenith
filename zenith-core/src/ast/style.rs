@@ -24,7 +24,8 @@ pub struct Style {
     /// Recognized visual properties, keyed by their canonical hyphenated name.
     ///
     /// Canonical keys: `fill`, `stroke`, `stroke-width`, `stroke-alignment`,
-    /// `font-family`, `font-size`, `font-weight`, `line-height`, `radius`,
+    /// `font-family`, `font-size`, `font-weight`, `letter-spacing`,
+    /// `line-height`, `radius`,
     /// `padding`, `gap`.
     pub properties: BTreeMap<String, PropertyValue>,
     /// Unknown (unrecognized) child node names encountered in the style block.
@@ -57,6 +58,7 @@ pub const STYLE_RECOGNIZED_KEYS: &[&str] = &[
     "font-family",
     "font-size",
     "font-weight",
+    "letter-spacing",
     "line-height",
     "radius",
     "padding",
@@ -76,6 +78,8 @@ pub fn canonicalize_style_key(name: &str) -> Option<&'static str> {
         "font_family" => "font-family",
         "font_size" => "font-size",
         "font_weight" => "font-weight",
+        "letter_spacing" => "letter-spacing",
+        "tracking" => "letter-spacing",
         "line_height" => "line-height",
         other => other,
     };

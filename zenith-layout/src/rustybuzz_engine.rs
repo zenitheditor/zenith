@@ -71,6 +71,7 @@ impl RustybuzzEngine {
         font_size: f32,
         direction: TextDirection,
         features: &[FontFeature],
+        letter_spacing_px: f32,
     ) -> Result<ZenithGlyphRun, LayoutError> {
         // ── Compute pixel scale ───────────────────────────────────────────────
         // `units_per_em` comes from the `ttf_parser::Face` trait exposed by
@@ -139,13 +140,19 @@ impl RustybuzzEngine {
         let mut pen_y: f32 = 0.0;
         let mut prev_cluster: Option<u32> = None;
 
-        for (info, pos) in infos.iter().zip(positions.iter()) {
+        let letter_spacing_px = if letter_spacing_px.is_finite() {
+            letter_spacing_px
+        } else {
+            0.0
+        };
+        let mut letter_spacing_offset: f32 = 0.0;
+        for (glyph_index, (info, pos)) in infos.iter().zip(positions.iter()).enumerate() {
             // glyph_id is u32 in rustybuzz; OTF glyph IDs fit in u16 (max 65535).
             // A value above u16::MAX indicates a malformed font — map it to the
             // .notdef glyph (0) rather than silently truncating.
             let glyph_id = u16::try_from(info.glyph_id).unwrap_or(0);
 
-            let x = pen_x + pos.x_offset as f32 * scale;
+            let x = pen_x + letter_spacing_offset + pos.x_offset as f32 * scale;
             // y_offset is in font units; positive = up in font coords → negative screen y.
             let y = pen_y - pos.y_offset as f32 * scale;
 
@@ -166,9 +173,15 @@ impl RustybuzzEngine {
 
             pen_x += pos.x_advance as f32 * scale;
             pen_y += pos.y_advance as f32 * scale;
+            if infos
+                .get(glyph_index + 1)
+                .is_some_and(|next| next.cluster != info.cluster)
+            {
+                letter_spacing_offset += letter_spacing_px;
+            }
         }
 
-        let advance_width = pen_x;
+        let advance_width = pen_x + letter_spacing_offset;
 
         Ok(ZenithGlyphRun {
             font_id,
@@ -228,6 +241,7 @@ impl TextLayoutEngine for RustybuzzEngine {
             req.font_size,
             req.direction,
             req.features,
+            req.letter_spacing_px,
         )
     }
 
@@ -334,6 +348,7 @@ impl TextLayoutEngine for RustybuzzEngine {
                     req.font_size,
                     req.direction,
                     req.features,
+                    req.letter_spacing_px,
                 )?],
                 missing_chars: missing.into_iter().collect(),
             });
@@ -361,14 +376,25 @@ impl TextLayoutEngine for RustybuzzEngine {
             let sub_text = req.text.get(start..end).ok_or_else(|| {
                 LayoutError::new("internal: sub-run byte range out of bounds".to_owned())
             })?;
-            runs.push(Self::shape_run_with_face(
+            let mut run = Self::shape_run_with_face(
                 face,
                 sub_text,
                 font_id.clone(),
                 req.font_size,
                 req.direction,
                 req.features,
-            )?);
+                req.letter_spacing_px,
+            )?;
+            if req.letter_spacing_px.is_finite() && req.letter_spacing_px != 0.0 {
+                run.advance_width += req.letter_spacing_px;
+            }
+            runs.push(run);
+        }
+        if req.letter_spacing_px.is_finite()
+            && req.letter_spacing_px != 0.0
+            && let Some(last) = runs.last_mut()
+        {
+            last.advance_width -= req.letter_spacing_px;
         }
 
         Ok(FallbackResult {
@@ -398,6 +424,7 @@ mod tests {
             font_size,
             direction: TextDirection::Ltr,
             features: &[],
+            letter_spacing_px: 0.0,
         };
         let provider = default_provider();
         RustybuzzEngine::new().shape(&req, &provider)
@@ -460,6 +487,7 @@ mod tests {
             font_size: 16.0,
             direction: TextDirection::Ltr,
             features: &[],
+            letter_spacing_px: 0.0,
         };
         let provider = default_provider();
         let result = RustybuzzEngine::new().shape(&req, &provider);
@@ -468,6 +496,44 @@ mod tests {
         assert!(
             msg.contains("no font resolved"),
             "error message should mention unresolved font, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn letter_spacing_adds_one_gap_per_cluster_boundary() {
+        let families = vec!["Noto Sans".to_string()];
+        let provider = default_provider();
+        let engine = RustybuzzEngine::new();
+        let base_req = ShapeRequest {
+            text: "ABC",
+            families: &families,
+            weight: 400,
+            style: FontStyle::Normal,
+            font_size: 24.0,
+            direction: TextDirection::Ltr,
+            features: &[],
+            letter_spacing_px: 0.0,
+        };
+        let spaced_req = ShapeRequest {
+            letter_spacing_px: 3.0,
+            ..base_req.clone()
+        };
+
+        let base = engine.shape(&base_req, &provider).expect("base shape");
+        let spaced = engine.shape(&spaced_req, &provider).expect("spaced shape");
+
+        assert_eq!(base.glyphs.len(), spaced.glyphs.len());
+        assert!(
+            (spaced.advance_width - base.advance_width - 6.0).abs() < 0.001,
+            "three clusters should add two letter-spacing gaps"
+        );
+        assert!(
+            (spaced.glyphs[1].x - base.glyphs[1].x - 3.0).abs() < 0.001,
+            "second cluster should shift by one gap"
+        );
+        assert!(
+            (spaced.glyphs[2].x - base.glyphs[2].x - 6.0).abs() < 0.001,
+            "third cluster should shift by two gaps"
         );
     }
 
@@ -484,6 +550,7 @@ mod tests {
             font_size: 24.0,
             direction: TextDirection::Ltr,
             features: &[],
+            letter_spacing_px: 0.0,
         };
         let provider = default_provider();
         let engine = RustybuzzEngine::new();
@@ -521,6 +588,7 @@ mod tests {
             font_size: 16.0,
             direction: TextDirection::Ltr,
             features: &[],
+            letter_spacing_px: 0.0,
         };
         let provider = default_provider();
         let engine = RustybuzzEngine::new();
@@ -549,6 +617,7 @@ mod tests {
             font_size: 16.0,
             direction: TextDirection::Ltr,
             features: &[],
+            letter_spacing_px: 0.0,
         };
         let provider = default_provider();
         let result = RustybuzzEngine::new().shape_with_fallback(&req, &provider);
@@ -566,6 +635,7 @@ mod tests {
             font_size: 18.0,
             direction: TextDirection::Ltr,
             features: &[],
+            letter_spacing_px: 0.0,
         };
         let provider = default_provider();
         let engine = RustybuzzEngine::new();
@@ -597,6 +667,7 @@ mod tests {
                     font_size: 24.0,
                     direction: TextDirection::Ltr,
                     features: &[],
+                    letter_spacing_px: 0.0,
                 },
                 &provider,
             )
@@ -611,6 +682,7 @@ mod tests {
                     font_size: 24.0,
                     direction: TextDirection::Rtl,
                     features: &[],
+                    letter_spacing_px: 0.0,
                 },
                 &provider,
             )
@@ -643,6 +715,7 @@ mod tests {
             font_size: 20.0,
             direction: TextDirection::Rtl,
             features: &[],
+            letter_spacing_px: 0.0,
         };
         let a = engine.shape(&req, &provider).expect("a");
         let b = engine.shape(&req, &provider).expect("b");

@@ -28,11 +28,13 @@ pub(in crate::compile) struct ShapeEnv<'a> {
 }
 
 /// The node-level shaping parameters shared by every word of a node: the base
-/// font size, the node base weight, and the base writing direction.
+/// font size, the node base weight, base letter spacing, and the base writing
+/// direction.
 #[derive(Clone, Copy)]
 pub(in crate::compile) struct NodeShape {
     pub(in crate::compile) font_size: f32,
     pub(in crate::compile) base_weight: u16,
+    pub(in crate::compile) letter_spacing_px: f32,
     pub(in crate::compile) direction: TextDirection,
 }
 
@@ -109,6 +111,7 @@ pub(in crate::compile) struct ChainMemberPlace {
 pub(in crate::compile) struct TabLeaderArgs<'a> {
     pub(in crate::compile) font_size: f32,
     pub(in crate::compile) features: &'a [FontFeature],
+    pub(in crate::compile) letter_spacing_px: f32,
     pub(in crate::compile) node_fill_prop: Option<&'a zenith_core::PropertyValue>,
     pub(in crate::compile) node_weight_prop: Option<&'a zenith_core::PropertyValue>,
     pub(in crate::compile) node_opacity: f64,

@@ -318,11 +318,17 @@ pub(in crate::compile) fn pack_lines_core(
 
         // The inter-word gap BEFORE this word on a non-empty line: zero when the
         // word is GLUED to its predecessor (source-adjacent, no whitespace) so it
-        // sits flush against it; otherwise the normal `space_advance`. A glued
-        // word never opens a line with a gap (the `cur.is_empty()` cases below all
-        // use a zero gap regardless). For non-glued words this is `space_advance`,
-        // byte-identical to before.
-        let lead_gap = if tok.glued { 0.0 } else { space_advance };
+        // sits flush against it; otherwise use the word's own resolved gap. A
+        // glued word never opens a line with a gap (the `cur.is_empty()` cases
+        // below all use a zero gap regardless). For non-glued words without
+        // custom spacing this equals `space_advance`, byte-identical to before.
+        let lead_gap = if tok.glued {
+            0.0
+        } else if tok.gap_before_px.is_finite() {
+            tok.gap_before_px
+        } else {
+            space_advance
+        };
 
         let overflow = !cur.is_empty() && line_w + lead_gap + tok.advance > box_w;
 
@@ -482,12 +488,14 @@ mod packer_tests {
             code: false,
             link: None,
             baseline_dy: 0.0,
+            gap_before_px: 5.0,
             glued: false,
             src: WordSource {
                 text: String::new(),
                 weight: 400,
                 style: FontStyle::Normal,
                 font_size: 16.0,
+                letter_spacing_px: 0.0,
                 features: Vec::new(),
                 paragraph: 0,
                 hyphen_part: None,

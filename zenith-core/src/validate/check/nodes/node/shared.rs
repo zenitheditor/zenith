@@ -847,7 +847,8 @@ pub(super) fn check_dimension_geom(
 
 // ── Style helpers ─────────────────────────────────────────────────────────────
 
-/// Validate the `fill`, `font-weight`, `highlight`, and `font-features`
+/// Validate the `fill`, `font-weight`, `highlight`, `font-features`, and
+/// `letter-spacing`
 /// properties on a slice of [`TextSpan`]s, registering any token references so
 /// they are not falsely flagged as unused.
 ///
@@ -890,6 +891,15 @@ pub(super) fn check_spans(
             diagnostics,
         );
         check_font_features(node_id, span.font_features.as_deref(), None, diagnostics);
+        check_visual_prop(
+            node_id,
+            "letter-spacing",
+            span.letter_spacing.as_ref(),
+            VisualExpect::Dimension,
+            referenced_token_ids,
+            resolved_tokens,
+            diagnostics,
+        );
     }
 }
 

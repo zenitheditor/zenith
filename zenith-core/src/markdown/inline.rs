@@ -82,6 +82,7 @@ impl MarkSet {
                 None
             },
             font_features: None,
+            letter_spacing: None,
             italic: if self.italic { Some(true) } else { None },
             underline: if self.underline { Some(true) } else { None },
             strikethrough: if self.strikethrough { Some(true) } else { None },

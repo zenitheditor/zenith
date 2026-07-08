@@ -580,6 +580,7 @@ fn op_spans_to_text_spans(spans: &[OpSpan]) -> Vec<TextSpan> {
                 .as_ref()
                 .map(|id| PropertyValue::TokenRef(id.clone())),
             font_features: None,
+            letter_spacing: None,
             italic: s.italic,
             underline: s.underline,
             strikethrough: s.strikethrough,

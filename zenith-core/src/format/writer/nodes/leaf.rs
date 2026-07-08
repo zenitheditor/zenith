@@ -264,6 +264,7 @@ pub(super) fn write_text(t: &TextNode, out: &mut String, depth: usize) {
     write_opt_property_value(out, "font-size-min", &t.font_size_min);
     write_opt_property_value(out, "font-weight", &t.font_weight);
     write_opt_str(out, "font-features", &t.font_features);
+    write_opt_property_value(out, "letter-spacing", &t.letter_spacing);
     write_opt_property_value(out, "shadow", &t.shadow);
     write_opt_property_value(out, "filter", &t.filter);
     write_opt_property_value(out, "mask", &t.mask);
@@ -347,6 +348,7 @@ pub(super) fn write_code(c: &CodeNode, out: &mut String, depth: usize) {
     write_opt_property_value(out, "font-size", &c.font_size);
     write_opt_property_value(out, "font-weight", &c.font_weight);
     write_opt_str(out, "font-features", &c.font_features);
+    write_opt_property_value(out, "letter-spacing", &c.letter_spacing);
     if let Some(t) = c.syntax_theme {
         let _ = write!(out, " syntax-theme=\"{}\"", t.as_str());
     }

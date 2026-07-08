@@ -242,6 +242,7 @@ pub(in crate::compile) fn emit_hbar(
             font_size: 9.0,
             direction: TextDirection::Ltr,
             features: &[],
+            letter_spacing_px: 0.0,
         };
 
         if let Ok(result) = cx.engine.shape_with_fallback(&req, cx.fonts) {
@@ -330,6 +331,7 @@ pub(in crate::compile) fn emit_hbar(
             font_size: 9.0,
             direction: TextDirection::Ltr,
             features: &[],
+            letter_spacing_px: 0.0,
         };
 
         match cx.engine.shape_with_fallback(&req, cx.fonts) {
@@ -469,6 +471,7 @@ pub(in crate::compile) fn emit_hbar(
             font_size: 9.0,
             direction: TextDirection::Ltr,
             features: &[],
+            letter_spacing_px: 0.0,
         };
 
         match cx.engine.shape_with_fallback(&req, cx.fonts) {
@@ -593,6 +596,7 @@ fn emit_hbar_value_label(
         font_size: 9.0,
         direction: TextDirection::Ltr,
         features: &[],
+        letter_spacing_px: 0.0,
     };
 
     match cx.engine.shape_with_fallback(&req, cx.fonts) {

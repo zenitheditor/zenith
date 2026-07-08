@@ -537,6 +537,7 @@ fn literal_span(text: String) -> TextSpan {
         fill: None,
         font_weight: None,
         font_features: None,
+        letter_spacing: None,
         italic: None,
         underline: None,
         strikethrough: None,

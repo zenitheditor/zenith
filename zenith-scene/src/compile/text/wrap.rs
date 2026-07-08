@@ -54,6 +54,7 @@ pub(in crate::compile) struct WrapGeom<'a> {
     pub(in crate::compile) box_w: f64,
     pub(in crate::compile) box_h_opt: Option<f64>,
     pub(in crate::compile) font_size: f32,
+    pub(in crate::compile) letter_spacing_px: f32,
     pub(in crate::compile) align: &'a str,
     pub(in crate::compile) deco_thickness: f64,
     pub(in crate::compile) direction: TextDirection,
@@ -87,6 +88,7 @@ pub(in crate::compile) fn emit_wrap_path(
         box_w,
         box_h_opt,
         font_size,
+        letter_spacing_px,
         align,
         deco_thickness,
         direction: node_direction,
@@ -119,6 +121,7 @@ pub(in crate::compile) fn emit_wrap_path(
         NodeShape {
             font_size,
             base_weight,
+            letter_spacing_px,
             direction: node_direction,
         },
         ShapeEnv { engine, fonts },
@@ -253,6 +256,7 @@ pub(in crate::compile) fn emit_wrap_path(
                 color_opacity,
                 base_weight,
                 features: plain_wrap_features,
+                letter_spacing_px,
             },
             commands,
             diagnostics,
@@ -494,6 +498,7 @@ struct PlainWrapStyle<'a> {
     color_opacity: f64,
     base_weight: u16,
     features: Vec<FontFeature>,
+    letter_spacing_px: f32,
 }
 
 /// Emit the plain wrap path (hyphenation/break-word + bullet/hanging-indent),
@@ -527,6 +532,7 @@ fn emit_plain_wrap(
         color_opacity,
         base_weight,
         features,
+        letter_spacing_px,
     } = style;
     let engine = env.engine;
     let fonts = env.fonts;
@@ -606,6 +612,7 @@ fn emit_plain_wrap(
                     // regardless of body direction in v0).
                     direction: TextDirection::Ltr,
                     features: &features,
+                    letter_spacing_px,
                 };
                 match engine.shape_with_fallback(&req, fonts) {
                     Ok(result) => result.runs.into_iter().next().map(|r| (r, marker_color)),
@@ -832,12 +839,14 @@ mod indent_tests {
             code: false,
             link: None,
             baseline_dy: 0.0,
+            gap_before_px: 5.0,
             glued: false,
             src: WordSource {
                 text: String::new(),
                 weight: 400,
                 style: FontStyle::Normal,
                 font_size: 16.0,
+                letter_spacing_px: 0.0,
                 features: Vec::new(),
                 paragraph: 0,
                 hyphen_part: None,

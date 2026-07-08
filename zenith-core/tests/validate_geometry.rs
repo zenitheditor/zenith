@@ -108,6 +108,7 @@ fn text_font_family_with_font_family_token_is_clean() {
                 font_size_min: None,
                 font_weight: None,
                 font_features: None,
+                letter_spacing: None,
                 opacity: None,
                 visible: None,
                 locked: None,
