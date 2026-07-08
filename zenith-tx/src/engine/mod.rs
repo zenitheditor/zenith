@@ -233,9 +233,10 @@ fn apply_op(
         }
         Op::SetPathAnchors {
             node: node_id,
+            subpath_index,
             anchors,
         } => {
-            apply_set_path_anchors(node_id, anchors, doc, diagnostics, affected);
+            apply_set_path_anchors(node_id, *subpath_index, anchors, doc, diagnostics, affected);
         }
         Op::SetPathAnchorKind {
             node: node_id,

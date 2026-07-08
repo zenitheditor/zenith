@@ -230,6 +230,7 @@ fn op_tag_strings_match_exhaustive_set() {
         },
         Op::SetPathAnchors {
             node: String::new(),
+            subpath_index: None,
             anchors: vec![],
         },
         Op::SetPathAnchorKind {
@@ -586,6 +587,7 @@ fn op_fields_names_match_serde_keys() {
             "set_path_anchors",
             Op::SetPathAnchors {
                 node: "n".into(),
+                subpath_index: None,
                 anchors: vec![OpPathAnchor {
                     x: 0.0,
                     y: 0.0,
@@ -929,6 +931,7 @@ fn op_fields_names_match_serde_keys() {
 fn path_anchor_optional_fields_are_omitted_when_absent() {
     let json = serde_json::to_value(Op::SetPathAnchors {
         node: "n".into(),
+        subpath_index: None,
         anchors: vec![OpPathAnchor {
             x: 1.0,
             y: 2.0,

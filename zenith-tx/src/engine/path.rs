@@ -64,6 +64,7 @@ pub(super) fn reject_compound_path(
 
 pub(super) fn apply_set_path_anchors(
     node_id: &str,
+    subpath_index: Option<usize>,
     anchors: &[OpPathAnchor],
     doc: &mut Document,
     diagnostics: &mut Vec<Diagnostic>,
@@ -75,10 +76,16 @@ pub(super) fn apply_set_path_anchors(
             let kind = node_kind_str(node);
             match node {
                 Node::Path(path) => {
-                    if reject_compound_path(node_id, "set_path_anchors", path, diagnostics) {
+                    let Some(contour) = path_contour_mut(
+                        node_id,
+                        "set_path_anchors",
+                        path,
+                        subpath_index,
+                        diagnostics,
+                    ) else {
                         return;
-                    }
-                    path.anchors = anchors
+                    };
+                    *contour.anchors = anchors
                         .iter()
                         .map(|anchor| CorePathAnchor {
                             x: Some(px(anchor.x)),

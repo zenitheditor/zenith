@@ -846,6 +846,7 @@ fn set_path_anchors_replaces_path_with_handles() {
     let tx = Transaction {
         ops: vec![Op::SetPathAnchors {
             node: "path1".to_owned(),
+            subpath_index: None,
             anchors: vec![
                 OpPathAnchor {
                     x: 10.0,
@@ -891,6 +892,81 @@ fn set_path_anchors_replaces_path_with_handles() {
 }
 
 #[test]
+fn set_path_anchors_replaces_compound_subpath() {
+    let doc = parse(
+        r##"zenith version=1 {
+  project id="proj" name="Test"
+  tokens format="zenith-token-v1" { }
+  styles { }
+  document id="doc1" title="T" {
+    page id="pg1" w=(px)400 h=(px)300 {
+      path id="compound" fill-rule="evenodd" {
+        subpath closed=#true {
+          anchor x=(px)0 y=(px)0
+          anchor x=(px)100 y=(px)0
+          anchor x=(px)100 y=(px)100
+        }
+        subpath {
+          anchor x=(px)25 y=(px)25
+          anchor x=(px)75 y=(px)25
+          anchor x=(px)75 y=(px)75
+        }
+      }
+    }
+  }
+}"##,
+    );
+    let tx = Transaction {
+        ops: vec![Op::SetPathAnchors {
+            node: "compound".to_owned(),
+            subpath_index: Some(1),
+            anchors: vec![
+                OpPathAnchor {
+                    x: 20.0,
+                    y: 20.0,
+                    kind: Some("corner".to_owned()),
+                    in_x: None,
+                    in_y: None,
+                    out_x: None,
+                    out_y: None,
+                },
+                OpPathAnchor {
+                    x: 80.0,
+                    y: 20.0,
+                    kind: None,
+                    in_x: None,
+                    in_y: None,
+                    out_x: None,
+                    out_y: None,
+                },
+            ],
+        }],
+        permissions: Permissions::default(),
+    };
+    let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
+
+    assert_eq!(result.status, TxStatus::Accepted);
+    assert_eq!(result.affected_node_ids, vec!["compound".to_owned()]);
+    assert!(
+        result.source_after.contains("anchor x=(px)0 y=(px)0"),
+        "first subpath should be preserved; got:\n{}",
+        result.source_after
+    );
+    assert!(
+        result
+            .source_after
+            .contains("anchor x=(px)20 y=(px)20 kind=\"corner\""),
+        "target subpath should be replaced; got:\n{}",
+        result.source_after
+    );
+    assert!(
+        !result.source_after.contains("anchor x=(px)25 y=(px)25"),
+        "old target subpath anchors should be removed; got:\n{}",
+        result.source_after
+    );
+}
+
+#[test]
 fn set_path_anchors_unsupported_on_rect_and_polygon() {
     for (src, node, kind) in [
         (RECT_GEOM_DOC, "rect", "rect"),
@@ -900,6 +976,7 @@ fn set_path_anchors_unsupported_on_rect_and_polygon() {
         let tx = Transaction {
             ops: vec![Op::SetPathAnchors {
                 node: node.to_owned(),
+                subpath_index: None,
                 anchors: vec![
                     OpPathAnchor {
                         x: 0.0,
@@ -944,6 +1021,7 @@ fn set_path_anchors_too_few_rejected_by_validation() {
     let tx = Transaction {
         ops: vec![Op::SetPathAnchors {
             node: "path1".to_owned(),
+            subpath_index: None,
             anchors: vec![OpPathAnchor {
                 x: 0.0,
                 y: 0.0,
@@ -976,6 +1054,7 @@ fn set_path_anchors_incomplete_handle_pair_rejected_by_validation() {
     let tx = Transaction {
         ops: vec![Op::SetPathAnchors {
             node: "path1".to_owned(),
+            subpath_index: None,
             anchors: vec![
                 OpPathAnchor {
                     x: 0.0,

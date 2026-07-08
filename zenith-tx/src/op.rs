@@ -400,6 +400,9 @@ pub enum Op {
     SetPathAnchors {
         /// The stable node `id` to target.
         node: String,
+        /// Optional zero-based subpath index for compound paths.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        subpath_index: Option<usize>,
         /// Replacement anchor list. Each coordinate is in document pixels.
         anchors: Vec<OpPathAnchor>,
     },
