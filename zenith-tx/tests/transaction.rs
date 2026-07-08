@@ -321,7 +321,7 @@ fn from_json_duplicate_node_round_trip() {
 
 #[test]
 fn from_json_path_boolean_round_trip() {
-    let json = r#"{"ops":[{"op":"path_boolean","node":"a","target":"b","new_id":"out","operation":"intersect","tolerance":0.5}]}"#;
+    let json = r#"{"ops":[{"op":"path_boolean","node":"a","target":"b","new_id":"out","operation":"exclude","tolerance":0.5}]}"#;
     let tx = Transaction::from_json(json).expect("parse JSON");
     assert_eq!(
         tx,
@@ -330,7 +330,7 @@ fn from_json_path_boolean_round_trip() {
                 node: "a".to_owned(),
                 target: "b".to_owned(),
                 new_id: "out".to_owned(),
-                operation: OpPathBooleanOperation::Intersect,
+                operation: OpPathBooleanOperation::Exclude,
                 tolerance: 0.5,
             }],
             permissions: Permissions::default(),

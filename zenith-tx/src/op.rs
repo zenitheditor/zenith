@@ -90,7 +90,7 @@ pub enum OpPathTransform {
 
 /// Boolean operation to materialize between two simple closed path contours.
 ///
-/// JSON values are `"union"`, `"intersect"`, and `"subtract"`.
+/// JSON values are `"union"`, `"intersect"`, `"subtract"`, and `"exclude"`.
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum OpPathBooleanOperation {
@@ -100,6 +100,8 @@ pub enum OpPathBooleanOperation {
     Intersect,
     /// Source contour with the target contour subtracted.
     Subtract,
+    /// Symmetric difference of source and target contours.
+    Exclude,
 }
 
 /// A single text span used by [`Op::ReplaceText`].
@@ -672,17 +674,19 @@ pub enum Op {
     },
     /// Materialize a boolean result between two simple closed `path` nodes as a new sibling path.
     ///
-    /// This v0 op intentionally supports only the proven simple-contour subset:
-    /// both inputs must be direct, non-compound paths (`subpaths` empty), closed,
+    /// This op intentionally supports only the proven simple input subset: both
+    /// inputs must be direct, non-compound paths (`subpaths` empty), closed,
     /// unrotated, and resolvable to finite px anchor/handle geometry. The engine
     /// flattens each path with `tolerance`, delegates contour reconstruction to
-    /// `zenith-geometry`, and accepts only one non-empty result contour. Empty,
-    /// multi-contour, compound, rotated, or otherwise ambiguous results reject
-    /// with `tx.invalid_geometry`.
+    /// `zenith-geometry`, and rejects empty or otherwise ambiguous results with
+    /// `tx.invalid_geometry`.
     ///
     /// The source and target remain unchanged. The new path is inserted
-    /// immediately after `node`, carries straight anchors from the resulting
-    /// contour, and copies render-relevant style from the source path.
+    /// immediately after `node` and copies render-relevant style from the source
+    /// path. A single result contour materializes as a direct path with straight
+    /// anchors. Multiple result contours materialize as one compound path with
+    /// closed subpaths and explicit `fill-rule="evenodd"` so region semantics do
+    /// not depend on contour winding.
     ///
     /// JSON example:
     /// ```json

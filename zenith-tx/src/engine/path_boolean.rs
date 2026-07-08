@@ -1,4 +1,6 @@
-use zenith_core::{Diagnostic, Document, Node, PathAnchor as CorePathAnchor, PathNode};
+use zenith_core::{
+    Diagnostic, Document, Node, PathAnchor as CorePathAnchor, PathNode, PathSubpath,
+};
 use zenith_geometry::{
     ClosedPolyline, ClosedPolylineBooleanOp, GeometryError, Point2,
     reconstruct_contour_boolean_result,
@@ -198,22 +200,26 @@ fn boolean_result_path(
             return None;
         }
     };
-    let [contour] = contours.as_slice() else {
+    if contours.is_empty() || contours.iter().any(|contour| contour.points().is_empty()) {
         diagnostics.push(invalid_geometry(
             args.source_id,
-            "path_boolean result must be exactly one non-empty contour",
-        ));
-        return None;
-    };
-    if contour.points().is_empty() {
-        diagnostics.push(invalid_geometry(
-            args.source_id,
-            "path_boolean result must be exactly one non-empty contour",
+            "path_boolean result must contain at least one non-empty contour",
         ));
         return None;
     }
 
-    Some(materialize_path(args.source, args.new_id, contour.points()))
+    match contours.as_slice() {
+        [contour] => Some(materialize_direct_path(
+            args.source,
+            args.new_id,
+            contour.points(),
+        )),
+        multi_contours => Some(materialize_compound_path(
+            args.source,
+            args.new_id,
+            multi_contours,
+        )),
+    }
 }
 
 fn closed_contour(
@@ -232,19 +238,8 @@ fn closed_contour(
     }
 }
 
-fn materialize_path(source: &PathNode, new_id: &str, points: &[Point2]) -> PathNode {
-    let mut anchors = Vec::with_capacity(points.len());
-    for point in points {
-        anchors.push(CorePathAnchor {
-            x: Some(px(point.x)),
-            y: Some(px(point.y)),
-            kind: None,
-            in_x: None,
-            in_y: None,
-            out_x: None,
-            out_y: None,
-        });
-    }
+fn materialize_direct_path(source: &PathNode, new_id: &str, points: &[Point2]) -> PathNode {
+    let anchors = materialize_anchors(points);
 
     PathNode {
         id: new_id.to_owned(),
@@ -270,11 +265,65 @@ fn materialize_path(source: &PathNode, new_id: &str, points: &[Point2]) -> PathN
     }
 }
 
+fn materialize_compound_path(
+    source: &PathNode,
+    new_id: &str,
+    contours: &[ClosedPolyline],
+) -> PathNode {
+    let mut subpaths = Vec::with_capacity(contours.len());
+    for contour in contours {
+        subpaths.push(PathSubpath {
+            closed: Some(true),
+            anchors: materialize_anchors(contour.points()),
+        });
+    }
+
+    PathNode {
+        id: new_id.to_owned(),
+        name: None,
+        role: None,
+        closed: None,
+        fill: source.fill.clone(),
+        stroke: source.stroke.clone(),
+        stroke_width: source.stroke_width.clone(),
+        stroke_alignment: source.stroke_alignment.clone(),
+        stroke_linejoin: source.stroke_linejoin.clone(),
+        stroke_miter_limit: source.stroke_miter_limit,
+        fill_rule: Some("evenodd".to_owned()),
+        opacity: source.opacity,
+        visible: source.visible,
+        locked: None,
+        rotate: None,
+        style: source.style.clone(),
+        anchors: Vec::new(),
+        subpaths,
+        source_span: None,
+        unknown_props: Default::default(),
+    }
+}
+
+fn materialize_anchors(points: &[Point2]) -> Vec<CorePathAnchor> {
+    let mut anchors = Vec::with_capacity(points.len());
+    for point in points {
+        anchors.push(CorePathAnchor {
+            x: Some(px(point.x)),
+            y: Some(px(point.y)),
+            kind: None,
+            in_x: None,
+            in_y: None,
+            out_x: None,
+            out_y: None,
+        });
+    }
+    anchors
+}
+
 fn boolean_operation(operation: OpPathBooleanOperation) -> ClosedPolylineBooleanOp {
     match operation {
         OpPathBooleanOperation::Union => ClosedPolylineBooleanOp::Union,
         OpPathBooleanOperation::Intersect => ClosedPolylineBooleanOp::Intersect,
         OpPathBooleanOperation::Subtract => ClosedPolylineBooleanOp::Subtract,
+        OpPathBooleanOperation::Exclude => ClosedPolylineBooleanOp::Exclude,
     }
 }
 

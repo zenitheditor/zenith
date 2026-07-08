@@ -422,7 +422,7 @@ pub fn op_fields(name: &str) -> Option<&'static [OpFieldSchema]> {
                 },
                 OpFieldSchema {
                     name: "operation",
-                    ty: r#""union" | "intersect" | "subtract""#,
+                    ty: r#""union" | "intersect" | "subtract" | "exclude""#,
                     required: true,
                 },
                 OpFieldSchema {
