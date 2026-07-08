@@ -484,6 +484,28 @@ mod tests {
     }
 
     #[test]
+    fn show_lucide_icon_component_human_and_json() {
+        let out = show("@zenith/icons-lucide#monitor", None, false).expect("show ok");
+        assert!(
+            out.contains("package : @zenith/icons-lucide"),
+            "pkg: {}",
+            out
+        );
+        assert!(out.contains("item    : monitor"), "item: {}", out);
+        assert!(out.contains("kind    : component"), "kind: {}", out);
+        assert!(out.contains("root    : image"), "root: {}", out);
+        assert!(out.contains("--page <page-id>"), "to_use: {}", out);
+
+        let json = show("@zenith/icons-lucide#monitor", None, true).expect("show json ok");
+        let v: serde_json::Value = serde_json::from_str(&json).expect("valid JSON");
+        assert_eq!(v["schema"], "zenith-library-show-v1");
+        assert_eq!(v["package"], "@zenith/icons-lucide");
+        assert_eq!(v["item"], "monitor");
+        assert_eq!(v["kind"], "component");
+        assert_eq!(v["detail"]["root_node_kind"], "image");
+    }
+
+    #[test]
     fn show_action_human() {
         let out = show("@zenith/brand-kit#apply-2026", None, false).expect("show ok");
         assert!(out.contains("package : @zenith/brand-kit"), "pkg: {}", out);

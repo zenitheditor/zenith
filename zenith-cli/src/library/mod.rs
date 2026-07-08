@@ -36,8 +36,9 @@ mod tests;
 // ── Public API (crate-internal callers in `commands::library` / `lib.rs`) ─────
 
 pub use registry::{
-    EMBEDDED_PACKS, ItemKind, LibraryPack, PackError, PackItem, PackSource, load_embedded_packs,
-    load_project_packs, parse_pack, resolve_packs, resolve_theme_pack,
+    EMBEDDED_PACKS, EMBEDDED_PRESET_ASSETS, EmbeddedPresetAsset, ItemKind, LibraryPack, PackError,
+    PackItem, PackSource, embedded_preset_asset, embedded_preset_assets_for_document,
+    load_embedded_packs, load_project_packs, parse_pack, resolve_packs, resolve_theme_pack,
 };
 
 pub use add::{AddError, AddOutcome, collect_all_ids, load_pack_document, parse_spec};

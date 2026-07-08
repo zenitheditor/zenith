@@ -2,12 +2,13 @@
 
 use super::support::{FILTERS_SRC, hard_errors};
 use crate::library::{
-    EMBEDDED_PACKS, ItemKind, PackItem, PackSource, load_embedded_packs, load_project_packs,
-    parse_pack, resolve_packs,
+    EMBEDDED_PACKS, ItemKind, PackItem, PackSource, embedded_preset_assets_for_document,
+    load_embedded_packs, load_project_packs, parse_pack, resolve_packs,
 };
 use zenith_core::{KdlAdapter, KdlSource};
 
 const FLOWCHART_SRC: &str = include_str!("../../../assets/libraries/zenith-flowchart.zen");
+const LUCIDE_SRC: &str = include_str!("../../../assets/libraries/zenith-icons-lucide.zen");
 
 #[test]
 fn parse_embedded_flowchart_identity_and_items() {
@@ -96,6 +97,54 @@ fn embedded_brand_kit_pack_lists_action_items() {
         "apply-2026 listed as an action item"
     );
     assert!(brand.items.iter().any(|it| it.id == "apply-mono"));
+}
+
+#[test]
+fn embedded_lucide_pack_lists_icon_components_and_assets() {
+    let pack = parse_pack(LUCIDE_SRC, PackSource::Preset).expect("lucide pack parses");
+    assert_eq!(pack.id, "@zenith/icons-lucide");
+    assert_eq!(pack.version.as_deref(), Some("0.1.0"));
+    assert!(
+        pack.items
+            .iter()
+            .any(|it| it.id == "monitor" && it.kind == ItemKind::Component),
+        "monitor component listed"
+    );
+    assert!(
+        pack.items
+            .iter()
+            .any(|it| it.id == "cloud" && it.kind == ItemKind::Component),
+        "cloud component listed"
+    );
+    assert!(
+        pack.items
+            .iter()
+            .any(|it| it.id == "server" && it.kind == ItemKind::Component),
+        "server component listed"
+    );
+
+    let doc = KdlAdapter
+        .parse(LUCIDE_SRC.as_bytes())
+        .expect("lucide pack document parses");
+    let embedded_assets = embedded_preset_assets_for_document(&doc);
+    assert_eq!(
+        embedded_assets.len(),
+        22,
+        "all curated Lucide SVG assets are embedded"
+    );
+    assert!(
+        embedded_assets.iter().any(
+            |asset| asset.src == "assets/zenith/icons/lucide/monitor.svg"
+                && asset.bytes.starts_with(b"<svg")
+        ),
+        "monitor SVG bytes embedded"
+    );
+    let errors = hard_errors(&doc);
+    assert!(
+        errors.is_empty(),
+        "embedded lucide pack must validate with no errors; got: {:?}",
+        errors
+    );
 }
 
 #[test]

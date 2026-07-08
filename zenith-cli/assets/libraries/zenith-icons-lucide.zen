@@ -1,0 +1,102 @@
+zenith version=1 {
+  project id="@zenith/icons-lucide" name="Zenith Lucide Icons"
+  assets {
+    asset id="lucide.monitor" kind="svg" src="assets/zenith/icons/lucide/monitor.svg" sha256="096eb8cce5bf88f415b1430f127651086c8a49a37f1fa2abd25a8019b8c04b83"
+    asset id="lucide.smartphone" kind="svg" src="assets/zenith/icons/lucide/smartphone.svg" sha256="8875d11426ecfe33d2292e9c517b5c065ec958af8df6ed4ea1b166d596a0a045"
+    asset id="lucide.tablet" kind="svg" src="assets/zenith/icons/lucide/tablet.svg" sha256="56111ff54d7ea5465379af3d05f1449282de5f10f85de376ebdf93a06d5d929c"
+    asset id="lucide.server" kind="svg" src="assets/zenith/icons/lucide/server.svg" sha256="c75a8f75b4a82c85ca3f1fe376d35f37f41cb344054f7972583b96282455bc91"
+    asset id="lucide.database" kind="svg" src="assets/zenith/icons/lucide/database.svg" sha256="2bc7bbcd78b95a07674d7db68332b561ddf1c7ce14abf2b43118ce2d04cc65e6"
+    asset id="lucide.cloud" kind="svg" src="assets/zenith/icons/lucide/cloud.svg" sha256="d2adc1ee0bac3bd8884d1e7b192343b1a578a9fc286c38f4790a7032dda0fa55"
+    asset id="lucide.hard-drive" kind="svg" src="assets/zenith/icons/lucide/hard-drive.svg" sha256="1948dd6f858615cd1a14a10f031791c2b997a5b89658c1dc058357c97e6c78d2"
+    asset id="lucide.cpu" kind="svg" src="assets/zenith/icons/lucide/cpu.svg" sha256="7868948b5132a629daee2b160b6543d01b2cc6f3968949a17f7b27544e741254"
+    asset id="lucide.network" kind="svg" src="assets/zenith/icons/lucide/network.svg" sha256="9d7bd755a305ad65d7c5f6e716644b6c96fdb66e6018b245febdcf05b7602d2e"
+    asset id="lucide.wifi" kind="svg" src="assets/zenith/icons/lucide/wifi.svg" sha256="0bb191704a79c6ae6679dd72d76e9eb9b57c91f8f0f9d2c32fb7a54aaca083eb"
+    asset id="lucide.globe" kind="svg" src="assets/zenith/icons/lucide/globe.svg" sha256="71cbc8e9a57568df62448fe3f8881dc4c428027a4bedc8779e6b10bf396b9637"
+    asset id="lucide.box" kind="svg" src="assets/zenith/icons/lucide/box.svg" sha256="cad3aaa5209407e0f2e1da6405401143391746288b652f353ef0147bf0a93f69"
+    asset id="lucide.file" kind="svg" src="assets/zenith/icons/lucide/file.svg" sha256="d4d5bf3a13e970e24517c12451dcb4b3fbf211c1c753761fa2945ee2ddb4b31d"
+    asset id="lucide.folder" kind="svg" src="assets/zenith/icons/lucide/folder.svg" sha256="e002923d2f7dbfe355e736be0a337b7ec3d755100c5645b29a5cd1ec4ead5555"
+    asset id="lucide.lock" kind="svg" src="assets/zenith/icons/lucide/lock.svg" sha256="6b8d8c3aa723e14d6b221f1038a531a8e5bf7d77931de72beb160b8499002961"
+    asset id="lucide.key" kind="svg" src="assets/zenith/icons/lucide/key.svg" sha256="6e2b60ed91b469353a9f411e5e63cc356f8f2f6416051241461a5b12ad6a6133"
+    asset id="lucide.search" kind="svg" src="assets/zenith/icons/lucide/search.svg" sha256="9c24b8aca7afe0824d649726c4d3c8d1ed4c1255d693fcdbe2fb32a840a41d50"
+    asset id="lucide.settings" kind="svg" src="assets/zenith/icons/lucide/settings.svg" sha256="2aa8fd3f6aef2c8fde8cdd31d32bd7e11369824cd3e8a0753a781e3dbc9eb65a"
+    asset id="lucide.arrow-right-left" kind="svg" src="assets/zenith/icons/lucide/arrow-right-left.svg" sha256="dfa14cf95c3abbb7fb94a516e902d3bf1befcb7fffa63ccbb9d33ff2d9e5af35"
+    asset id="lucide.sync" kind="svg" src="assets/zenith/icons/lucide/sync.svg" sha256="1d4ec37bf1e4a7763bd19cc62ff53adc6c271f37d5d15cc91e52b5b886ff8bcd"
+    asset id="lucide.upload-cloud" kind="svg" src="assets/zenith/icons/lucide/upload-cloud.svg" sha256="eeacf77fe518ce3a280df2866c810522af3f461af1141778b231011bc947eed7"
+    asset id="lucide.download-cloud" kind="svg" src="assets/zenith/icons/lucide/download-cloud.svg" sha256="fcc1eb91c5a93b104d00b1dea022d6984aa1b1f024468b8cb1b1d9297e4092a4"
+  }
+  libraries {
+    library id="@zenith/icons-lucide" version="0.1.0"
+  }
+  components {
+    component id="monitor" {
+      image id="icon" asset="lucide.monitor" x=(px)0 y=(px)0 w=(px)24 h=(px)24 fit="contain"
+    }
+    component id="smartphone" {
+      image id="icon" asset="lucide.smartphone" x=(px)0 y=(px)0 w=(px)24 h=(px)24 fit="contain"
+    }
+    component id="tablet" {
+      image id="icon" asset="lucide.tablet" x=(px)0 y=(px)0 w=(px)24 h=(px)24 fit="contain"
+    }
+    component id="server" {
+      image id="icon" asset="lucide.server" x=(px)0 y=(px)0 w=(px)24 h=(px)24 fit="contain"
+    }
+    component id="database" {
+      image id="icon" asset="lucide.database" x=(px)0 y=(px)0 w=(px)24 h=(px)24 fit="contain"
+    }
+    component id="cloud" {
+      image id="icon" asset="lucide.cloud" x=(px)0 y=(px)0 w=(px)24 h=(px)24 fit="contain"
+    }
+    component id="hard-drive" {
+      image id="icon" asset="lucide.hard-drive" x=(px)0 y=(px)0 w=(px)24 h=(px)24 fit="contain"
+    }
+    component id="cpu" {
+      image id="icon" asset="lucide.cpu" x=(px)0 y=(px)0 w=(px)24 h=(px)24 fit="contain"
+    }
+    component id="network" {
+      image id="icon" asset="lucide.network" x=(px)0 y=(px)0 w=(px)24 h=(px)24 fit="contain"
+    }
+    component id="wifi" {
+      image id="icon" asset="lucide.wifi" x=(px)0 y=(px)0 w=(px)24 h=(px)24 fit="contain"
+    }
+    component id="globe" {
+      image id="icon" asset="lucide.globe" x=(px)0 y=(px)0 w=(px)24 h=(px)24 fit="contain"
+    }
+    component id="box" {
+      image id="icon" asset="lucide.box" x=(px)0 y=(px)0 w=(px)24 h=(px)24 fit="contain"
+    }
+    component id="file" {
+      image id="icon" asset="lucide.file" x=(px)0 y=(px)0 w=(px)24 h=(px)24 fit="contain"
+    }
+    component id="folder" {
+      image id="icon" asset="lucide.folder" x=(px)0 y=(px)0 w=(px)24 h=(px)24 fit="contain"
+    }
+    component id="lock" {
+      image id="icon" asset="lucide.lock" x=(px)0 y=(px)0 w=(px)24 h=(px)24 fit="contain"
+    }
+    component id="key" {
+      image id="icon" asset="lucide.key" x=(px)0 y=(px)0 w=(px)24 h=(px)24 fit="contain"
+    }
+    component id="search" {
+      image id="icon" asset="lucide.search" x=(px)0 y=(px)0 w=(px)24 h=(px)24 fit="contain"
+    }
+    component id="settings" {
+      image id="icon" asset="lucide.settings" x=(px)0 y=(px)0 w=(px)24 h=(px)24 fit="contain"
+    }
+    component id="arrow-right-left" {
+      image id="icon" asset="lucide.arrow-right-left" x=(px)0 y=(px)0 w=(px)24 h=(px)24 fit="contain"
+    }
+    component id="sync" {
+      image id="icon" asset="lucide.sync" x=(px)0 y=(px)0 w=(px)24 h=(px)24 fit="contain"
+    }
+    component id="upload-cloud" {
+      image id="icon" asset="lucide.upload-cloud" x=(px)0 y=(px)0 w=(px)24 h=(px)24 fit="contain"
+    }
+    component id="download-cloud" {
+      image id="icon" asset="lucide.download-cloud" x=(px)0 y=(px)0 w=(px)24 h=(px)24 fit="contain"
+    }
+  }
+  document id="pack.preview" title="Lucide icon pack preview" {
+    page id="pack.pg" name="Preview" w=(px)100 h=(px)100 {
+    }
+  }
+}

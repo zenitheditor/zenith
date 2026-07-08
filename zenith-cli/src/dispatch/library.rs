@@ -1,5 +1,6 @@
 //! Dispatch logic for `zenith library`.
 
+use std::path::Path;
 use std::process::ExitCode;
 
 use crate::cli::{self, LibraryArgs};
@@ -76,6 +77,12 @@ pub(super) fn dispatch_library(args: LibraryArgs) -> ExitCode {
                             }
                         }
                     } else {
+                        let asset_root = project_dir.as_deref().unwrap_or_else(|| Path::new("."));
+                        if let Err(msg) = write_embedded_assets(asset_root, &result.embedded_assets)
+                        {
+                            eprintln!("{msg}");
+                            return ExitCode::from(2);
+                        }
                         let recorded =
                             history::record_edit(&result.formatted, &add_args.into, "library.add");
                         if let Some(w) = &recorded.warning {
@@ -95,5 +102,85 @@ pub(super) fn dispatch_library(args: LibraryArgs) -> ExitCode {
                 }
             }
         }
+    }
+}
+
+fn write_embedded_assets(
+    root: &Path,
+    assets: &[library::EmbeddedPresetAsset],
+) -> Result<(), String> {
+    for asset in assets {
+        let path = root.join(asset.src);
+        if path.exists() {
+            let existing = std::fs::read(&path)
+                .map_err(|e| format!("error reading existing asset '{}': {}", path.display(), e))?;
+            if existing != asset.bytes {
+                return Err(format!(
+                    "error: embedded asset target '{}' already exists with different bytes; \
+                     refusing to overwrite",
+                    path.display()
+                ));
+            }
+        }
+    }
+
+    for asset in assets {
+        let path = root.join(asset.src);
+        if path.exists() {
+            continue;
+        }
+        if let Some(parent) = path.parent()
+            && let Err(e) = std::fs::create_dir_all(parent)
+        {
+            return Err(format!(
+                "error creating asset directory '{}': {}",
+                parent.display(),
+                e
+            ));
+        }
+        if let Err(e) = std::fs::write(&path, asset.bytes) {
+            return Err(format!(
+                "error writing embedded asset '{}': {}",
+                path.display(),
+                e
+            ));
+        }
+    }
+
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const ASSET: library::EmbeddedPresetAsset = library::EmbeddedPresetAsset {
+        src: "assets/zenith/icons/lucide/test.svg",
+        bytes: b"<svg/>",
+    };
+
+    #[test]
+    fn write_embedded_assets_creates_missing_files_and_reuses_identical() {
+        let dir = tempfile::tempdir().expect("tempdir");
+
+        write_embedded_assets(dir.path(), &[ASSET]).expect("write asset");
+        let path = dir.path().join(ASSET.src);
+        assert_eq!(std::fs::read(&path).expect("read asset"), ASSET.bytes);
+
+        write_embedded_assets(dir.path(), &[ASSET]).expect("identical asset is ok");
+        assert_eq!(std::fs::read(path).expect("read asset again"), ASSET.bytes);
+    }
+
+    #[test]
+    fn write_embedded_assets_refuses_different_existing_file() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join(ASSET.src);
+        let parent = path.parent().expect("asset path has parent");
+        std::fs::create_dir_all(parent).expect("create parent");
+        std::fs::write(&path, b"different").expect("write different asset");
+
+        let err = write_embedded_assets(dir.path(), &[ASSET]).expect_err("must refuse overwrite");
+        assert!(err.contains("refusing to overwrite"), "err: {}", err);
+        assert_eq!(std::fs::read(path).expect("read unchanged"), b"different");
     }
 }

@@ -3,7 +3,9 @@ use std::path::Path;
 use zenith_core::{KdlAdapter, KdlSource, Severity, validate};
 use zenith_tx::TxStatus;
 
-use crate::library::{ItemKind, parse_spec, resolve_packs};
+use crate::library::{
+    EmbeddedPresetAsset, ItemKind, embedded_preset_assets_for_document, parse_spec, resolve_packs,
+};
 
 /// Error produced by the `library add` command.
 #[derive(Debug)]
@@ -31,6 +33,9 @@ pub struct AddResult {
     pub formatted: Vec<u8>,
     /// A multi-line human-readable summary of what was added.
     pub summary: String,
+    /// Embedded preset asset files the dispatcher should materialize beside the
+    /// target document for non-dry-run adds.
+    pub embedded_assets: Vec<EmbeddedPresetAsset>,
 }
 
 /// Materialize the library item named by `spec` into the document `target_src`,
@@ -125,6 +130,7 @@ pub fn add(
             })?;
 
             let formatted = validate_and_format(&result_doc)?;
+            let embedded_assets = embedded_preset_assets_for_document(&result_doc);
 
             let affected = if outcome.tx_result.affected_node_ids.is_empty() {
                 "none".to_owned()
@@ -142,7 +148,11 @@ pub fn add(
             for w in &outcome.warnings {
                 summary.push_str(&format!("\n  warning: {}", w));
             }
-            return Ok(AddResult { formatted, summary });
+            return Ok(AddResult {
+                formatted,
+                summary,
+                embedded_assets,
+            });
         }
         Some(ItemKind::Token) => {
             // TOKEN item: copy the filter token + color deps; no instance, no page.
@@ -202,7 +212,12 @@ pub fn add(
     };
 
     let formatted = validate_and_format(&target)?;
-    Ok(AddResult { formatted, summary })
+    let embedded_assets = embedded_preset_assets_for_document(&target);
+    Ok(AddResult {
+        formatted,
+        summary,
+        embedded_assets,
+    })
 }
 
 /// Validate the mutated `target` (hard errors abort with no write) then format it
@@ -451,6 +466,66 @@ mod tests {
             serde_json::from_str(&artifact.json).expect("scene json parses");
         let commands = scene["commands"].as_array().expect("commands array");
         assert!(!commands.is_empty(), "applied filter compiles to commands");
+    }
+
+    #[test]
+    fn add_lucide_icon_returns_embedded_assets_and_renders_when_written() {
+        let result = add(
+            TARGET_SRC,
+            "@zenith/icons-lucide#monitor",
+            None,
+            Some("pg"),
+            (100.0, 100.0),
+            None,
+        )
+        .expect("add lucide icon ok");
+
+        let src = String::from_utf8(result.formatted).expect("utf8");
+        let doc = KdlAdapter.parse(src.as_bytes()).expect("reparse");
+        let errors: Vec<_> = validate(&doc)
+            .diagnostics
+            .into_iter()
+            .filter(|d| d.severity == Severity::Error)
+            .collect();
+        assert!(errors.is_empty(), "errors: {:?}", errors);
+        assert!(
+            src.contains("library id=\"@zenith/icons-lucide\""),
+            "source: {}",
+            src
+        );
+        assert!(
+            src.contains("component=\"lib.zenith.icons-lucide.monitor\""),
+            "source: {}",
+            src
+        );
+        assert!(
+            result.embedded_assets.iter().any(|asset| asset.src
+                == "assets/zenith/icons/lucide/monitor.svg"
+                && asset.bytes.starts_with(b"<svg")),
+            "monitor SVG write intent present"
+        );
+
+        let dir = tempfile::tempdir().expect("tempdir");
+        for asset in &result.embedded_assets {
+            let path = dir.path().join(asset.src);
+            let parent = path.parent().expect("asset path has parent");
+            std::fs::create_dir_all(parent).expect("create asset parent");
+            std::fs::write(path, asset.bytes).expect("write embedded asset");
+        }
+
+        let artifact = crate::commands::render::to_png_with_dir(
+            &src,
+            Some(dir.path()),
+            1,
+            true,
+            &crate::config::CliPolicyFlags::default(),
+            None,
+        )
+        .expect("locked render ok with materialized SVG assets");
+        assert!(
+            !artifact.png.is_empty(),
+            "render must produce PNG bytes for Lucide icon"
+        );
     }
 
     #[test]

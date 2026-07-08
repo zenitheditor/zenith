@@ -134,6 +134,39 @@ mod tests {
     }
 
     #[test]
+    fn human_and_json_list_lucide_icon_pack() {
+        let packs = resolve_packs(None);
+
+        let human = list(&packs, false);
+        assert!(human.contains("@zenith/icons-lucide"), "got: {}", human);
+        assert!(human.contains("#monitor (component)"), "got: {}", human);
+        assert!(human.contains("#cloud (component)"), "got: {}", human);
+        assert!(human.contains("#server (component)"), "got: {}", human);
+
+        let json = list(&packs, true);
+        let value: serde_json::Value = serde_json::from_str(&json).expect("valid JSON");
+        let packs_json = value["packs"].as_array().expect("packs array");
+        let lucide = packs_json
+            .iter()
+            .find(|p| p["id"] == "@zenith/icons-lucide")
+            .expect("lucide pack present");
+        assert_eq!(lucide["version"], "0.1.0");
+        let item_ids: Vec<&str> = lucide["items"]
+            .as_array()
+            .expect("items array")
+            .iter()
+            .filter_map(|item| item["id"].as_str())
+            .collect();
+        assert!(item_ids.contains(&"monitor"), "items: {:?}", item_ids);
+        assert!(item_ids.contains(&"database"), "items: {:?}", item_ids);
+        assert!(
+            item_ids.contains(&"download-cloud"),
+            "items: {:?}",
+            item_ids
+        );
+    }
+
+    #[test]
     fn json_is_parseable_and_contains_flowchart() {
         let packs = resolve_packs(None);
         let out = list(&packs, true);
@@ -169,7 +202,7 @@ mod tests {
         let header_line = human
             .lines()
             .find(|line| line.contains("@zenith/theme.cobalt"))
-            .unwrap_or_else(|| panic!("theme.cobalt header line present; got: {}", human));
+            .expect("theme.cobalt header line present");
         assert!(header_line.contains("[preset]"), "got: {}", header_line);
         let next_line = human
             .lines()
@@ -253,7 +286,7 @@ mod tests {
         let header_line = human
             .lines()
             .find(|line| line.contains("@zenith/brand-kit"))
-            .unwrap_or_else(|| panic!("brand-kit header line present; got: {}", human));
+            .expect("brand-kit header line present");
         assert!(
             !header_line.contains("(tokens:"),
             "tokens-free pack must show no token indicator: {}",

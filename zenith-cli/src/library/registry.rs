@@ -7,6 +7,7 @@
 //! ([`parse_pack`]), and resolving project packs against embedded presets
 //! ([`resolve_packs`]).
 
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use zenith_core::{Document, KdlAdapter, KdlSource, TokenType};
@@ -19,6 +20,10 @@ use zenith_core::{Document, KdlAdapter, KdlSource, TokenType};
 /// id and is used only for diagnostics/lookup convenience; the authoritative id
 /// is parsed from the pack's own `library` self-entry.
 pub const EMBEDDED_PACKS: &[(&str, &str)] = &[
+    (
+        "@zenith/icons-lucide",
+        include_str!("../../assets/libraries/zenith-icons-lucide.zen"),
+    ),
     (
         "@zenith/flowchart",
         include_str!("../../assets/libraries/zenith-flowchart.zen"),
@@ -76,6 +81,133 @@ pub const EMBEDDED_PACKS: &[(&str, &str)] = &[
         include_str!("../../assets/skill/themes/volt.zen"),
     ),
 ];
+
+/// A preset asset embedded in the binary and materialized beside target `.zen`
+/// documents when an embedded library item declares it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct EmbeddedPresetAsset {
+    /// Safe document-relative asset path used in a pack's `asset src`.
+    pub src: &'static str,
+    /// Checked-in asset bytes to write at [`Self::src`].
+    pub bytes: &'static [u8],
+}
+
+/// Embedded preset asset files keyed by the safe relative `asset src` paths
+/// declared in embedded packs.
+pub const EMBEDDED_PRESET_ASSETS: &[EmbeddedPresetAsset] = &[
+    EmbeddedPresetAsset {
+        src: "assets/zenith/icons/lucide/arrow-right-left.svg",
+        bytes: include_bytes!("../../assets/libraries/icons/lucide/arrow-right-left.svg"),
+    },
+    EmbeddedPresetAsset {
+        src: "assets/zenith/icons/lucide/box.svg",
+        bytes: include_bytes!("../../assets/libraries/icons/lucide/box.svg"),
+    },
+    EmbeddedPresetAsset {
+        src: "assets/zenith/icons/lucide/cloud.svg",
+        bytes: include_bytes!("../../assets/libraries/icons/lucide/cloud.svg"),
+    },
+    EmbeddedPresetAsset {
+        src: "assets/zenith/icons/lucide/cpu.svg",
+        bytes: include_bytes!("../../assets/libraries/icons/lucide/cpu.svg"),
+    },
+    EmbeddedPresetAsset {
+        src: "assets/zenith/icons/lucide/database.svg",
+        bytes: include_bytes!("../../assets/libraries/icons/lucide/database.svg"),
+    },
+    EmbeddedPresetAsset {
+        src: "assets/zenith/icons/lucide/download-cloud.svg",
+        bytes: include_bytes!("../../assets/libraries/icons/lucide/download-cloud.svg"),
+    },
+    EmbeddedPresetAsset {
+        src: "assets/zenith/icons/lucide/file.svg",
+        bytes: include_bytes!("../../assets/libraries/icons/lucide/file.svg"),
+    },
+    EmbeddedPresetAsset {
+        src: "assets/zenith/icons/lucide/folder.svg",
+        bytes: include_bytes!("../../assets/libraries/icons/lucide/folder.svg"),
+    },
+    EmbeddedPresetAsset {
+        src: "assets/zenith/icons/lucide/globe.svg",
+        bytes: include_bytes!("../../assets/libraries/icons/lucide/globe.svg"),
+    },
+    EmbeddedPresetAsset {
+        src: "assets/zenith/icons/lucide/hard-drive.svg",
+        bytes: include_bytes!("../../assets/libraries/icons/lucide/hard-drive.svg"),
+    },
+    EmbeddedPresetAsset {
+        src: "assets/zenith/icons/lucide/key.svg",
+        bytes: include_bytes!("../../assets/libraries/icons/lucide/key.svg"),
+    },
+    EmbeddedPresetAsset {
+        src: "assets/zenith/icons/lucide/lock.svg",
+        bytes: include_bytes!("../../assets/libraries/icons/lucide/lock.svg"),
+    },
+    EmbeddedPresetAsset {
+        src: "assets/zenith/icons/lucide/monitor.svg",
+        bytes: include_bytes!("../../assets/libraries/icons/lucide/monitor.svg"),
+    },
+    EmbeddedPresetAsset {
+        src: "assets/zenith/icons/lucide/network.svg",
+        bytes: include_bytes!("../../assets/libraries/icons/lucide/network.svg"),
+    },
+    EmbeddedPresetAsset {
+        src: "assets/zenith/icons/lucide/search.svg",
+        bytes: include_bytes!("../../assets/libraries/icons/lucide/search.svg"),
+    },
+    EmbeddedPresetAsset {
+        src: "assets/zenith/icons/lucide/server.svg",
+        bytes: include_bytes!("../../assets/libraries/icons/lucide/server.svg"),
+    },
+    EmbeddedPresetAsset {
+        src: "assets/zenith/icons/lucide/settings.svg",
+        bytes: include_bytes!("../../assets/libraries/icons/lucide/settings.svg"),
+    },
+    EmbeddedPresetAsset {
+        src: "assets/zenith/icons/lucide/smartphone.svg",
+        bytes: include_bytes!("../../assets/libraries/icons/lucide/smartphone.svg"),
+    },
+    EmbeddedPresetAsset {
+        src: "assets/zenith/icons/lucide/sync.svg",
+        bytes: include_bytes!("../../assets/libraries/icons/lucide/sync.svg"),
+    },
+    EmbeddedPresetAsset {
+        src: "assets/zenith/icons/lucide/tablet.svg",
+        bytes: include_bytes!("../../assets/libraries/icons/lucide/tablet.svg"),
+    },
+    EmbeddedPresetAsset {
+        src: "assets/zenith/icons/lucide/upload-cloud.svg",
+        bytes: include_bytes!("../../assets/libraries/icons/lucide/upload-cloud.svg"),
+    },
+    EmbeddedPresetAsset {
+        src: "assets/zenith/icons/lucide/wifi.svg",
+        bytes: include_bytes!("../../assets/libraries/icons/lucide/wifi.svg"),
+    },
+];
+
+/// Find an embedded preset asset by the document-relative `asset src` path.
+pub fn embedded_preset_asset(src: &str) -> Option<EmbeddedPresetAsset> {
+    EMBEDDED_PRESET_ASSETS
+        .iter()
+        .find(|asset| asset.src == src)
+        .copied()
+}
+
+/// Return embedded preset assets declared by `doc`, de-duplicated by `src` and
+/// ordered by document asset declaration order.
+pub fn embedded_preset_assets_for_document(doc: &Document) -> Vec<EmbeddedPresetAsset> {
+    let mut seen = BTreeSet::new();
+    let mut assets = Vec::new();
+    for decl in &doc.assets.assets {
+        if !seen.insert(decl.src.as_str()) {
+            continue;
+        }
+        if let Some(asset) = embedded_preset_asset(&decl.src) {
+            assets.push(asset);
+        }
+    }
+    assets
+}
 
 /// Where a [`LibraryPack`] was loaded from.
 #[derive(Debug, Clone, PartialEq, Eq)]
