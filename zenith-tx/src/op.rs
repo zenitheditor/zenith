@@ -557,6 +557,9 @@ pub enum Op {
     SimplifyPathAnchors {
         /// The stable node `id` to target.
         node: String,
+        /// Optional zero-based subpath index for compound paths.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        subpath_index: Option<usize>,
         /// Maximum perpendicular deviation in pixels. Must be finite and positive.
         tolerance: f64,
     },

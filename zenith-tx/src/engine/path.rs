@@ -162,6 +162,7 @@ pub(super) fn apply_set_path_anchor_kind(
 
 pub(super) fn apply_simplify_path_anchors(
     node_id: &str,
+    subpath_index: Option<usize>,
     tolerance: f64,
     doc: &mut Document,
     diagnostics: &mut Vec<Diagnostic>,
@@ -173,10 +174,16 @@ pub(super) fn apply_simplify_path_anchors(
             let kind = node_kind_str(node);
             match node {
                 Node::Path(path) => {
-                    if reject_compound_path(node_id, "simplify_path_anchors", path, diagnostics) {
+                    let Some(contour) = path_contour_mut(
+                        node_id,
+                        "simplify_path_anchors",
+                        path,
+                        subpath_index,
+                        diagnostics,
+                    ) else {
                         return;
-                    }
-                    if path.closed == Some(true) {
+                    };
+                    if contour.closed {
                         diagnostics.push(Diagnostic::error(
                             "tx.unsupported_closed_path",
                             "simplify_path_anchors only supports open paths",
@@ -188,7 +195,7 @@ pub(super) fn apply_simplify_path_anchors(
 
                     let tolerance_budget = tolerance / 2.0;
                     let points =
-                        match flattened_path_points(node_id, &path.anchors, tolerance_budget) {
+                        match flattened_path_points(node_id, contour.anchors, tolerance_budget) {
                             Ok(points) => points,
                             Err(diagnostic) => {
                                 diagnostics.push(diagnostic);
@@ -198,7 +205,7 @@ pub(super) fn apply_simplify_path_anchors(
 
                     match simplify_polyline(&points, tolerance_budget) {
                         Ok(simplified) => {
-                            path.anchors = if path_has_handles(&path.anchors) {
+                            *contour.anchors = if path_has_handles(contour.anchors) {
                                 match fit_cubic_path_anchors_to_points(
                                     &simplified,
                                     tolerance_budget,

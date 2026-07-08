@@ -267,6 +267,7 @@ fn op_tag_strings_match_exhaustive_set() {
         },
         Op::SimplifyPathAnchors {
             node: String::new(),
+            subpath_index: None,
             tolerance: 1.0,
         },
         Op::TransformPathAnchors {
@@ -648,6 +649,7 @@ fn op_fields_names_match_serde_keys() {
             "simplify_path_anchors",
             Op::SimplifyPathAnchors {
                 node: "n".into(),
+                subpath_index: None,
                 tolerance: 0.5,
             },
         ),

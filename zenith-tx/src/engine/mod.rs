@@ -329,9 +329,17 @@ fn apply_op(
         }
         Op::SimplifyPathAnchors {
             node: node_id,
+            subpath_index,
             tolerance,
         } => {
-            apply_simplify_path_anchors(node_id, *tolerance, doc, diagnostics, affected);
+            apply_simplify_path_anchors(
+                node_id,
+                *subpath_index,
+                *tolerance,
+                doc,
+                diagnostics,
+                affected,
+            );
         }
         Op::TransformPathAnchors {
             node: node_id,

@@ -423,6 +423,7 @@ fn simplify_path_anchors_removes_near_collinear_middle_anchor() {
     let tx = Transaction {
         ops: vec![Op::SimplifyPathAnchors {
             node: "path1".to_owned(),
+            subpath_index: None,
             tolerance: 0.5,
         }],
         permissions: Permissions::default(),
@@ -441,6 +442,100 @@ fn simplify_path_anchors_removes_near_collinear_middle_anchor() {
     assert!(
         !result.source_after.contains("kind="),
         "simplified handle-free anchors should not preserve smooth/symmetric intent; got:\n{}",
+        result.source_after
+    );
+}
+
+#[test]
+fn simplify_path_anchors_requires_subpath_index_for_compound_path() {
+    let doc = parse(
+        r##"zenith version=1 {
+  project id="proj" name="Test"
+  tokens format="zenith-token-v1" { }
+  styles { }
+  document id="doc1" title="T" {
+    page id="pg1" w=(px)400 h=(px)300 {
+      path id="compound" {
+        subpath {
+          anchor x=(px)0 y=(px)0
+          anchor x=(px)10 y=(px)0
+        }
+        subpath {
+          anchor x=(px)20 y=(px)0
+          anchor x=(px)30 y=(px)0.1
+          anchor x=(px)40 y=(px)0
+        }
+      }
+    }
+  }
+}"##,
+    );
+    let tx = Transaction {
+        ops: vec![Op::SimplifyPathAnchors {
+            node: "compound".to_owned(),
+            subpath_index: None,
+            tolerance: 0.5,
+        }],
+        permissions: Permissions::default(),
+    };
+    let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
+
+    assert_eq!(result.status, TxStatus::Rejected);
+    assert!(
+        result.diagnostics.iter().any(|diagnostic| {
+            diagnostic.code == "tx.unsupported_property"
+                && diagnostic.message.contains("subpath_index")
+        }),
+        "expected compound subpath_index diagnostic; got {:?}",
+        result.diagnostics
+    );
+    assert_eq!(result.source_after, result.source_before);
+}
+
+#[test]
+fn simplify_path_anchors_targets_compound_subpath() {
+    let doc = parse(
+        r##"zenith version=1 {
+  project id="proj" name="Test"
+  tokens format="zenith-token-v1" { }
+  styles { }
+  document id="doc1" title="T" {
+    page id="pg1" w=(px)400 h=(px)300 {
+      path id="compound" {
+        subpath {
+          anchor x=(px)0 y=(px)0
+          anchor x=(px)10 y=(px)0
+        }
+        subpath {
+          anchor x=(px)20 y=(px)0
+          anchor x=(px)30 y=(px)0.1 kind="smooth"
+          anchor x=(px)40 y=(px)0
+        }
+      }
+    }
+  }
+}"##,
+    );
+    let tx = Transaction {
+        ops: vec![Op::SimplifyPathAnchors {
+            node: "compound".to_owned(),
+            subpath_index: Some(1),
+            tolerance: 0.5,
+        }],
+        permissions: Permissions::default(),
+    };
+    let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
+
+    assert_eq!(result.status, TxStatus::Accepted);
+    assert_eq!(result.affected_node_ids, vec!["compound".to_owned()]);
+    assert_eq!(formatted_anchor_count(&result.source_after), 4);
+    assert_px_close(anchor_px_attr(&result.source_after, 0, "x"), 0.0);
+    assert_px_close(anchor_px_attr(&result.source_after, 1, "x"), 10.0);
+    assert_px_close(anchor_px_attr(&result.source_after, 2, "x"), 20.0);
+    assert_px_close(anchor_px_attr(&result.source_after, 3, "x"), 40.0);
+    assert!(
+        !result.source_after.contains("anchor x=(px)30 y=(px)0.1"),
+        "target subpath middle anchor should be removed; got:\n{}",
         result.source_after
     );
 }
@@ -466,6 +561,7 @@ fn simplify_path_anchors_preserves_far_bend() {
     let tx = Transaction {
         ops: vec![Op::SimplifyPathAnchors {
             node: "path1".to_owned(),
+            subpath_index: None,
             tolerance: 0.5,
         }],
         permissions: Permissions::default(),
@@ -504,6 +600,7 @@ fn simplify_path_anchors_accepts_open_cubic_paths() {
     let tx = Transaction {
         ops: vec![Op::SimplifyPathAnchors {
             node: "path1".to_owned(),
+            subpath_index: None,
             tolerance: 0.5,
         }],
         permissions: Permissions::default(),
@@ -548,6 +645,7 @@ fn simplify_path_anchors_accepts_mixed_line_cubic_line_paths() {
     let tx = Transaction {
         ops: vec![Op::SimplifyPathAnchors {
             node: "path1".to_owned(),
+            subpath_index: None,
             tolerance: 0.5,
         }],
         permissions: Permissions::default(),
@@ -593,6 +691,7 @@ fn simplify_path_anchors_rejects_closed_paths() {
     let tx = Transaction {
         ops: vec![Op::SimplifyPathAnchors {
             node: "path1".to_owned(),
+            subpath_index: None,
             tolerance: 0.5,
         }],
         permissions: Permissions::default(),
@@ -617,6 +716,7 @@ fn simplify_path_anchors_unsupported_on_rect() {
     let tx = Transaction {
         ops: vec![Op::SimplifyPathAnchors {
             node: "rect".to_owned(),
+            subpath_index: None,
             tolerance: 0.5,
         }],
         permissions: Permissions::default(),
@@ -641,6 +741,7 @@ fn simplify_path_anchors_invalid_tolerance_rejected() {
     let tx = Transaction {
         ops: vec![Op::SimplifyPathAnchors {
             node: "path1".to_owned(),
+            subpath_index: None,
             tolerance: 0.0,
         }],
         permissions: Permissions::default(),
@@ -680,6 +781,7 @@ fn simplify_path_anchors_locked_path_rejected() {
     let tx = Transaction {
         ops: vec![Op::SimplifyPathAnchors {
             node: "path1".to_owned(),
+            subpath_index: None,
             tolerance: 0.5,
         }],
         permissions: Permissions::default(),
@@ -716,6 +818,7 @@ fn simplify_path_anchors_preserves_open_path_minimum() {
     let tx = Transaction {
         ops: vec![Op::SimplifyPathAnchors {
             node: "path1".to_owned(),
+            subpath_index: None,
             tolerance: 1.0,
         }],
         permissions: Permissions::default(),
@@ -739,6 +842,7 @@ fn simplify_path_anchors_unknown_node_rejected() {
     let tx = Transaction {
         ops: vec![Op::SimplifyPathAnchors {
             node: "missing".to_owned(),
+            subpath_index: None,
             tolerance: 0.5,
         }],
         permissions: Permissions::default(),
