@@ -441,3 +441,98 @@ fn test_absent_assets_block_is_empty() {
         "absent assets block must yield an empty AssetBlock"
     );
 }
+
+#[test]
+fn test_text_and_code_kern_pair_round_trip() {
+    let src = r##"zenith version=1 {
+  project id="proj.kern" name="Kern"
+  tokens format="zenith-token-v1" {
+    token id="size.kern.tight" type="dimension" value=(px)-3
+  }
+  styles {
+  }
+  document id="doc.kern" title="Kern" {
+    page id="page.one" w=(px)640 h=(px)360 {
+      text id="headline" x=(px)10 y=(px)10 w=(px)300 h=(px)80 {
+        kern-pair "A" "V" by=(px)-4
+        kern-pair "T" "o" by=(token)"size.kern.tight"
+        span "AV To"
+      }
+      code id="snippet" x=(px)10 y=(px)120 w=(px)300 h=(px)80 {
+        kern-pair "=" ">" by=(px)-2
+        content "a => b"
+      }
+    }
+  }
+}
+"##;
+    let adapter = KdlAdapter;
+    let doc = adapter.parse(src.as_bytes()).expect("parse");
+    let formatted = format_document(&doc).expect("format");
+    let formatted_str = String::from_utf8(formatted.clone()).expect("utf8");
+
+    assert!(
+        formatted_str.contains("kern-pair \"A\" \"V\" by=(px)-4"),
+        "text literal kern-pair must format canonically; got:\n{formatted_str}"
+    );
+    assert!(
+        formatted_str.contains("kern-pair \"T\" \"o\" by=(token)\"size.kern.tight\""),
+        "text token kern-pair must format canonically; got:\n{formatted_str}"
+    );
+    assert!(
+        formatted_str.contains("kern-pair \"=\" \">\" by=(px)-2"),
+        "code kern-pair must format before content; got:\n{formatted_str}"
+    );
+
+    let reparsed = adapter.parse(&formatted).expect("re-parse");
+    assert_eq!(
+        strip_spans(doc),
+        strip_spans(reparsed),
+        "kern-pair AST must survive parse -> format -> parse"
+    );
+}
+
+#[test]
+fn test_kern_pair_validation_reports_empty_duplicate_and_bad_by() {
+    let src = r##"zenith version=1 {
+  project id="proj.kern.bad" name="Kern Bad"
+  tokens format="zenith-token-v1" {
+    token id="color.bad" type="color" value="#ff0000"
+  }
+  styles {
+  }
+  document id="doc.kern.bad" title="Kern Bad" {
+    page id="page.one" w=(px)640 h=(px)360 {
+      text id="bad" x=(px)10 y=(px)10 w=(px)300 h=(px)80 {
+        kern-pair "" "V" by="tight"
+        kern-pair "A" "V" by=(token)"color.bad"
+        kern-pair "T" "o" by=(pct)10
+        kern-pair "A" "V" by=(px)-2
+        span "AV"
+      }
+    }
+  }
+}
+"##;
+    let adapter = KdlAdapter;
+    let doc = adapter.parse(src.as_bytes()).expect("parse");
+    let report = validate(&doc);
+    let codes: Vec<_> = report.diagnostics.iter().map(|d| d.code.as_str()).collect();
+
+    assert!(codes.contains(&"kerning.empty_pair"), "got {codes:?}");
+    assert!(codes.contains(&"kerning.duplicate_pair"), "got {codes:?}");
+    assert!(codes.contains(&"token.raw_visual_literal"), "got {codes:?}");
+    assert!(
+        codes.contains(&"token.incompatible_property"),
+        "got {codes:?}"
+    );
+    assert!(
+        report
+            .diagnostics
+            .iter()
+            .any(|d| d.code == "token.incompatible_property"
+                && d.message.contains("pixel-convertible")),
+        "expected non-pixel kerning dimension diagnostic; got {:?}",
+        report.diagnostics
+    );
+}

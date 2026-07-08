@@ -317,6 +317,7 @@ fn minimal_code(id: &str, fill: Option<PropertyValue>) -> Node {
         font_weight: None,
         font_features: None,
         letter_spacing: None,
+        kerning_pairs: Vec::new(),
         syntax_theme: None,
         opacity: None,
         visible: None,

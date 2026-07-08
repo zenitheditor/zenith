@@ -236,6 +236,7 @@ pub(in crate::compile) fn shape_words(
     let font_size = shape.font_size;
     let node_base_weight = shape.base_weight;
     let node_letter_spacing_px = shape.letter_spacing_px;
+    let kerning_pairs = shape.kerning_pairs;
     let direction = shape.direction;
     let engine = env.engine;
     let fonts = env.fonts;
@@ -331,7 +332,7 @@ pub(in crate::compile) fn shape_words(
                     font_size: word_font_size,
                     direction,
                     features: &shaped.features,
-                    kerning_pairs: &[],
+                    kerning_pairs,
                     letter_spacing_px: shaped.letter_spacing_px,
                 };
                 match engine.shape_with_fallback(&req, fonts) {

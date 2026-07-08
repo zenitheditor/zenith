@@ -196,6 +196,7 @@ pub(in crate::compile) fn resolve_field_to_text(
         font_weight: None,
         font_features: None,
         letter_spacing: None,
+        kerning_pairs: Vec::new(),
         shadow: None,
         filter: None,
         mask: None,

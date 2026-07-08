@@ -330,6 +330,7 @@ fn font_weight_with_missing_token_ref_produces_unknown_reference() {
         font_weight: Some(token_ref("weight.does.not.exist")),
         font_features: None,
         letter_spacing: None,
+        kerning_pairs: Vec::new(),
         opacity: None,
         visible: None,
         locked: None,

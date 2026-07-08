@@ -9,7 +9,7 @@
 use std::collections::BTreeMap;
 
 use zenith_core::{BlockStyle, FontProvider, ResolvedToken, Style};
-use zenith_layout::{FontFeature, RustybuzzEngine, TextDirection};
+use zenith_layout::{FontFeature, KerningPairAdjustment, RustybuzzEngine, TextDirection};
 
 use crate::ir::Color;
 
@@ -31,10 +31,11 @@ pub(in crate::compile) struct ShapeEnv<'a> {
 /// font size, the node base weight, base letter spacing, and the base writing
 /// direction.
 #[derive(Clone, Copy)]
-pub(in crate::compile) struct NodeShape {
+pub(in crate::compile) struct NodeShape<'a> {
     pub(in crate::compile) font_size: f32,
     pub(in crate::compile) base_weight: u16,
     pub(in crate::compile) letter_spacing_px: f32,
+    pub(in crate::compile) kerning_pairs: &'a [KerningPairAdjustment],
     pub(in crate::compile) direction: TextDirection,
 }
 
@@ -111,6 +112,7 @@ pub(in crate::compile) struct ChainMemberPlace {
 pub(in crate::compile) struct TabLeaderArgs<'a> {
     pub(in crate::compile) font_size: f32,
     pub(in crate::compile) features: &'a [FontFeature],
+    pub(in crate::compile) kerning_pairs: &'a [KerningPairAdjustment],
     pub(in crate::compile) letter_spacing_px: f32,
     pub(in crate::compile) node_fill_prop: Option<&'a zenith_core::PropertyValue>,
     pub(in crate::compile) node_weight_prop: Option<&'a zenith_core::PropertyValue>,

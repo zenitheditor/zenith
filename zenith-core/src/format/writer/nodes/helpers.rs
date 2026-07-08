@@ -3,7 +3,7 @@
 //! (polygon/polyline vertices), the `anchor` line (path anchors), and the
 //! `block` role-style declaration.
 
-use crate::ast::{BlockStyle, PathAnchor, PathSubpath, Point, TextSpan};
+use crate::ast::{BlockStyle, KerningPair, PathAnchor, PathSubpath, Point, TextSpan};
 use crate::data::DataFormat;
 
 use crate::format::writer::{
@@ -29,6 +29,19 @@ pub(super) fn write_block_style(bs: &BlockStyle, out: &mut String, depth: usize)
     write_opt_dimension(out, "space-before", &bs.space_before);
     write_opt_dimension(out, "space-after", &bs.space_after);
     out.push('\n');
+}
+
+pub(super) fn write_kerning_pairs(pairs: &[KerningPair], out: &mut String, depth: usize) {
+    for pair in pairs {
+        indent(out, depth);
+        out.push_str("kern-pair \"");
+        out.push_str(&escape_kdl_string(&pair.left));
+        out.push_str("\" \"");
+        out.push_str(&escape_kdl_string(&pair.right));
+        out.push('"');
+        write_opt_property_value(out, "by", &Some(pair.by.clone()));
+        out.push('\n');
+    }
 }
 
 pub(super) fn write_span(span: &TextSpan, out: &mut String, depth: usize) {

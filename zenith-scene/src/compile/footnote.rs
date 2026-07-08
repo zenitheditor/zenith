@@ -131,6 +131,7 @@ fn synth_footnote_text(fnote: &FootnoteNode, marker: &str, x: f64, y: f64, w: f6
         font_weight: None,
         font_features: None,
         letter_spacing: None,
+        kerning_pairs: Vec::new(),
         shadow: None,
         filter: None,
         mask: None,

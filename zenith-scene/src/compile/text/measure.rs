@@ -15,6 +15,7 @@ use crate::ir::Color;
 use super::super::style_prop;
 use super::super::util::resolve_property_dimension_px;
 use super::ctx::{NodeShape, ShapeEnv};
+use super::kerning::resolve_kerning_pairs;
 use super::pack::pack_lines;
 use super::shape::{
     ResolvedSpan, resolve_font_family_name, resolve_font_features, resolve_font_weight,
@@ -210,6 +211,7 @@ pub(in crate::compile) fn measure_text_natural(
         Some("rtl") => TextDirection::Rtl,
         _ => TextDirection::Ltr,
     };
+    let kerning_pairs = resolve_kerning_pairs(&text.kerning_pairs, env.resolved);
     let (tokens, metrics) = shape_words(
         &spans,
         families,
@@ -217,6 +219,7 @@ pub(in crate::compile) fn measure_text_natural(
             font_size,
             base_weight,
             letter_spacing_px,
+            kerning_pairs: &kerning_pairs,
             direction: node_direction,
         },
         ShapeEnv {
@@ -268,6 +271,7 @@ pub(in crate::compile) fn measure_text_wrapped_height(
         Some("rtl") => TextDirection::Rtl,
         _ => TextDirection::Ltr,
     };
+    let kerning_pairs = resolve_kerning_pairs(&text.kerning_pairs, env.resolved);
     let (tokens, metrics) = shape_words(
         &spans,
         families,
@@ -275,6 +279,7 @@ pub(in crate::compile) fn measure_text_wrapped_height(
             font_size,
             base_weight,
             letter_spacing_px,
+            kerning_pairs: &kerning_pairs,
             direction: node_direction,
         },
         ShapeEnv {

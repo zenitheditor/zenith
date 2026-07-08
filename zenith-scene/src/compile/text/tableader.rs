@@ -4,7 +4,8 @@
 
 use zenith_core::{Diagnostic, FontProvider, FontStyle, TextNode};
 use zenith_layout::{
-    FontFeature, RustybuzzEngine, ShapeRequest, TextDirection, TextLayoutEngine, ZenithGlyphRun,
+    FontFeature, KerningPairAdjustment, RustybuzzEngine, ShapeRequest, TextDirection,
+    TextLayoutEngine, ZenithGlyphRun,
 };
 
 use crate::ir::{Color, SceneCommand};
@@ -38,6 +39,7 @@ struct TabLeaderShape<'a> {
     font_size: f32,
     weight: u16,
     features: &'a [FontFeature],
+    kerning_pairs: &'a [KerningPairAdjustment],
     letter_spacing_px: f32,
 }
 
@@ -71,7 +73,7 @@ fn shape_tab_leader_row(
             // Tab-leader (TOC) rows are LTR in v0; RTL TOC is a follow-up.
             direction: TextDirection::Ltr,
             features: shape.features,
-            kerning_pairs: &[],
+            kerning_pairs: shape.kerning_pairs,
             letter_spacing_px: shape.letter_spacing_px,
         };
         match engine.shape_with_fallback(&req, fonts) {
@@ -158,6 +160,7 @@ pub(in crate::compile) fn compile_tab_leader(
     let TabLeaderArgs {
         font_size,
         features,
+        kerning_pairs,
         letter_spacing_px,
         node_fill_prop,
         node_weight_prop,
@@ -212,7 +215,7 @@ pub(in crate::compile) fn compile_tab_leader(
         // Tab-leader (TOC) mode is LTR in v0.
         direction: TextDirection::Ltr,
         features,
-        kerning_pairs: &[],
+        kerning_pairs,
         letter_spacing_px,
     };
     let leader_run = match engine.shape_with_fallback(&leader_req, fonts) {
@@ -231,6 +234,7 @@ pub(in crate::compile) fn compile_tab_leader(
         font_size,
         weight,
         features,
+        kerning_pairs,
         letter_spacing_px,
     };
     let rows: Vec<TabLeaderRow> = combined

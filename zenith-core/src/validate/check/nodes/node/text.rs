@@ -6,6 +6,7 @@ use crate::ast::node::{ImageNode, TextNode};
 use crate::ast::value::dim_to_px;
 use crate::diagnostics::Diagnostic;
 
+use super::kerning::check_kerning_pairs;
 use super::shared::{
     AnchorParentCtx, AnchorProps, TokenEnv, check_anchor, check_dimension_geom,
     check_font_features, check_optional_dim, check_spans, check_style_ref, is_valid_blend_mode,
@@ -200,6 +201,15 @@ pub(in crate::validate::check) fn check_text(
         "letter-spacing",
         t.letter_spacing.as_ref(),
         VisualExpect::Dimension,
+        referenced_token_ids,
+        resolved_tokens,
+        diagnostics,
+    );
+    check_kerning_pairs(
+        "text",
+        &t.id,
+        &t.kerning_pairs,
+        t.source_span,
         referenced_token_ids,
         resolved_tokens,
         diagnostics,

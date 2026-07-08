@@ -142,6 +142,8 @@ pub fn node_content(kind: &str) -> Option<NodeContentDescriptor> {
                 `font-features` is a comma-separated OpenType feature list such as \
                 `liga=0,kern=1,ss01`; bare tags default to value 1. \
                 `letter-spacing` is an optional dimension inserted between adjacent shaped clusters. \
+                Node-level `kern-pair \"A\" \"V\" by=(px)-2` children add manual spacing adjustments \
+                for matching adjacent shaped clusters; `by` accepts a dimension literal or dimension token. \
                 `highlight` is a per-span background color (token ref or raw color string) \
                 rendered behind the glyph run like a marker-pen highlight. \
                 `code=#true` renders the span in the bundled monospace family with a subtle \
@@ -198,6 +200,7 @@ pub fn node_content(kind: &str) -> Option<NodeContentDescriptor> {
                 and have no effect on plain-text nodes (see `zenith schema block`).",
             example: concat!(
                 "block role=\"h1\" font-size=(token)\"size.h1\" font-weight=(token)\"weight.bold\"\n",
+                "kern-pair \"A\" \"V\" by=(px)-2\n",
                 "span \"Hello \"\n",
                 "span \"world\" font-weight=(token)\"weight.bold\" italic=#true",
             ),
@@ -344,8 +347,10 @@ pub fn node_content(kind: &str) -> Option<NodeContentDescriptor> {
         "code" => Some(NodeContentDescriptor {
             description: "A single `content` child carries the verbatim source string as its \
                 first positional argument. Newlines and tabs are expressed as \\n and \\t \
-                escape sequences in the string literal.",
-            example: "content \"fn main() {\\n    println!(\\\"hello\\\");\\n}\"",
+                escape sequences in the string literal. Optional node-level `kern-pair` children \
+                before `content` add manual spacing adjustments; `by` accepts a dimension literal \
+                or dimension token.",
+            example: "kern-pair \"=\" \">\" by=(token)\"size.kern.tight\"\ncontent \"fn main() {\\n    println!(\\\"hello\\\");\\n}\"",
         }),
 
         // ── Connector label ───────────────────────────────────────────────────

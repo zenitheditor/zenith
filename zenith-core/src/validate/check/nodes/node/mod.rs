@@ -12,6 +12,7 @@ pub(super) mod suggest;
 mod chart;
 mod container;
 mod effect;
+mod kerning;
 mod leaf;
 mod pattern;
 mod shape;

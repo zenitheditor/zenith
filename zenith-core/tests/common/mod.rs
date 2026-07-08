@@ -168,6 +168,7 @@ pub fn minimal_text(id: &str, fill: Option<PropertyValue>) -> Node {
         font_weight: None,
         font_features: None,
         letter_spacing: None,
+        kerning_pairs: Vec::new(),
         opacity: None,
         visible: None,
         locked: None,

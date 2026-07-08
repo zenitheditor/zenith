@@ -60,8 +60,8 @@ use super::text::{
     BlockStyleEnv, ChainSourceShape, HyphenationContext, LINK_COLOR, Line, LineDecoration,
     LineStyle, NodeShape, ResolvedSpan, ShapeEnv, WordMetrics, WordToken, en_us_hyphenator,
     flatten_lines_to_tokens, pack_lines, resolve_family_with_fallback, resolve_font_family_name,
-    resolve_font_features, resolve_font_weight, resolve_letter_spacing, resolve_vertical_align,
-    shape_source_blocks, shape_words,
+    resolve_font_features, resolve_font_weight, resolve_kerning_pairs, resolve_letter_spacing,
+    resolve_vertical_align, shape_source_blocks, shape_words,
 };
 use super::util::{resolve_geometry_px, resolve_property_dimension_px};
 
@@ -488,6 +488,7 @@ fn distribute_chains(
         // Shape the source spans ONCE into word tokens with the shared style.
         let (families, font_size, base_weight, letter_spacing_px, spans) =
             resolve_chain_style(src, resolved, style_map, fonts, diagnostics);
+        let kerning_pairs = resolve_kerning_pairs(&src.kerning_pairs, resolved);
         let (tokens, metrics) = shape_words(
             &spans,
             &families,
@@ -495,6 +496,7 @@ fn distribute_chains(
                 font_size,
                 base_weight,
                 letter_spacing_px,
+                kerning_pairs: &kerning_pairs,
                 direction,
             },
             ShapeEnv { engine, fonts },
@@ -655,6 +657,7 @@ fn distribute_block_chain(
         fonts,
         diagnostics,
     );
+    let kerning_pairs = resolve_kerning_pairs(&src.kerning_pairs, doc_styles.resolved);
 
     let descriptors = shape_source_blocks(
         src,
@@ -663,6 +666,7 @@ fn distribute_block_chain(
             families: &families,
             node_font_size: font_size,
             base_weight,
+            kerning_pairs: &kerning_pairs,
             direction,
         },
         BlockStyleEnv {

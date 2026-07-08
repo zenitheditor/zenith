@@ -109,6 +109,7 @@ fn text_font_family_with_font_family_token_is_clean() {
                 font_weight: None,
                 font_features: None,
                 letter_spacing: None,
+                kerning_pairs: Vec::new(),
                 opacity: None,
                 visible: None,
                 locked: None,

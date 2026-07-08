@@ -8,6 +8,7 @@ use crate::ast::node::{CodeNode, EllipseNode, LineNode, RectNode};
 use crate::ast::value::PropertyValue;
 use crate::diagnostics::Diagnostic;
 
+use super::kerning::check_kerning_pairs;
 use super::shared::{
     AnchorParentCtx, AnchorProps, TokenEnv, VisualProps, check_anchor, check_dimension_geom,
     check_font_features, check_optional_dim, check_style_ref, check_visual_props,
@@ -633,6 +634,15 @@ pub(in crate::validate::check) fn check_code(
         "letter-spacing",
         c.letter_spacing.as_ref(),
         VisualExpect::Dimension,
+        referenced_token_ids,
+        resolved_tokens,
+        diagnostics,
+    );
+    check_kerning_pairs(
+        "code",
+        &c.id,
+        &c.kerning_pairs,
+        c.source_span,
         referenced_token_ids,
         resolved_tokens,
         diagnostics,

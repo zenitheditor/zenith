@@ -15,6 +15,7 @@ use super::super::paint::resolve_property_color;
 use super::super::style_prop;
 use super::super::util::{resolve_geometry_px, rotation_degrees, unsupported_unit_diag};
 use super::ctx::TextCompileEnv;
+use super::resolve_kerning_pairs;
 use super::shape::{
     resolve_family_with_fallback, resolve_font_family_name, resolve_font_features,
     resolve_font_weight, resolve_letter_spacing, run_to_scene_glyphs,
@@ -233,6 +234,7 @@ fn compile_code_impl(
         .as_ref()
         .or_else(|| style_prop(&code.style, style_map, "letter-spacing"));
     let letter_spacing_px = resolve_letter_spacing(letter_spacing_prop, resolved);
+    let kerning_pairs = resolve_kerning_pairs(&code.kerning_pairs, resolved);
 
     // Resolve fill color with style cascade; default to opaque black.
     let fill_prop = code
@@ -412,7 +414,7 @@ fn compile_code_impl(
                 font_size,
                 direction: TextDirection::Ltr,
                 features: &font_features,
-                kerning_pairs: &[],
+                kerning_pairs: &kerning_pairs,
                 letter_spacing_px,
             };
             // If shaping fails for a particular label, skip gracefully.
@@ -490,7 +492,7 @@ fn compile_code_impl(
                     // Code is shaped LTR (source code is left-to-right).
                     direction: TextDirection::Ltr,
                     features: &font_features,
-                    kerning_pairs: &[],
+                    kerning_pairs: &kerning_pairs,
                     letter_spacing_px,
                 };
                 match engine.shape(&req, fonts) {
@@ -549,7 +551,7 @@ fn compile_code_impl(
                 // Code is shaped LTR (source code is left-to-right).
                 direction: TextDirection::Ltr,
                 features: &font_features,
-                kerning_pairs: &[],
+                kerning_pairs: &kerning_pairs,
                 letter_spacing_px,
             };
 

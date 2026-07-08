@@ -21,6 +21,7 @@ use super::helpers::{
     optional_property_value, optional_property_value_aliased, optional_string_prop,
     optional_string_prop_aliased, optional_u32_prop, required_string_prop,
 };
+use super::kerning::transform_kerning_pair;
 
 pub(crate) const RECT_KNOWN_PROPS: &[&str] = &[
     "id",
@@ -594,10 +595,12 @@ pub(super) fn transform_text(node: &KdlNode) -> Result<TextNode, ParseError> {
 
     let mut spans: Vec<TextSpan> = Vec::new();
     let mut block_styles: Vec<BlockStyle> = Vec::new();
+    let mut kerning_pairs = Vec::new();
     if let Some(children) = node.children() {
         for child in children.nodes() {
             match child.name().value() {
                 "block" => block_styles.push(transform_block_style(child)?),
+                "kern-pair" => kerning_pairs.push(transform_kerning_pair(child)?),
                 "span" => spans.push(transform_span(child)?),
                 _ => {}
             }
@@ -632,6 +635,7 @@ pub(super) fn transform_text(node: &KdlNode) -> Result<TextNode, ParseError> {
         font_weight,
         font_features,
         letter_spacing,
+        kerning_pairs,
         shadow: optional_property_value(node, "shadow"),
         filter: optional_property_value(node, "filter"),
         mask: optional_property_value(node, "mask"),
@@ -741,19 +745,28 @@ pub(super) fn transform_code(node: &KdlNode) -> Result<CodeNode, ParseError> {
         .or_else(|| optional_string_prop(node, "syntax_theme"))
         .and_then(SyntaxTheme::from_name);
 
+    let mut kerning_pairs = Vec::new();
+
     // The verbatim source is carried by a `content` child node whose first
     // positional argument is the DECODED string. KDL v2 multi-line string
     // dedent rules make a bare `r#"..."#` form lossy, so the carrier uses a
     // single-line escaped string which round-trips `\n \t \" \\` exactly.
     // Stored decoded here; `write_code` re-encodes the escapes.
     let mut content = String::new();
+    let mut content_seen = false;
     if let Some(children) = node.children() {
         for child in children.nodes() {
-            if child.name().value() == "content" {
-                if let Some(KdlValue::String(s)) = child.get(0) {
-                    content = s.clone();
+            match child.name().value() {
+                "content" => {
+                    if !content_seen && let Some(KdlValue::String(s)) = child.get(0) {
+                        content = s.clone();
+                        content_seen = true;
+                    }
                 }
-                break;
+                "kern-pair" => {
+                    kerning_pairs.push(transform_kerning_pair(child)?);
+                }
+                _ => {}
             }
         }
     }
@@ -779,6 +792,7 @@ pub(super) fn transform_code(node: &KdlNode) -> Result<CodeNode, ParseError> {
         font_weight,
         font_features,
         letter_spacing,
+        kerning_pairs,
         syntax_theme,
         opacity: optional_f64_prop(node, "opacity"),
         visible: optional_bool_prop(node, "visible"),

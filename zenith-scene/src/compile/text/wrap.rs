@@ -6,7 +6,10 @@
 use std::collections::BTreeMap;
 
 use zenith_core::{Diagnostic, PropertyValue, ResolvedToken, TextNode, dim_to_px};
-use zenith_layout::{FontFeature, ShapeRequest, TextDirection, TextLayoutEngine, ZenithGlyphRun};
+use zenith_layout::{
+    FontFeature, KerningPairAdjustment, ShapeRequest, TextDirection, TextLayoutEngine,
+    ZenithGlyphRun,
+};
 
 use crate::ir::{Color, SceneCommand};
 
@@ -55,6 +58,7 @@ pub(in crate::compile) struct WrapGeom<'a> {
     pub(in crate::compile) box_h_opt: Option<f64>,
     pub(in crate::compile) font_size: f32,
     pub(in crate::compile) letter_spacing_px: f32,
+    pub(in crate::compile) kerning_pairs: &'a [KerningPairAdjustment],
     pub(in crate::compile) align: &'a str,
     pub(in crate::compile) deco_thickness: f64,
     pub(in crate::compile) direction: TextDirection,
@@ -89,6 +93,7 @@ pub(in crate::compile) fn emit_wrap_path(
         box_h_opt,
         font_size,
         letter_spacing_px,
+        kerning_pairs,
         align,
         deco_thickness,
         direction: node_direction,
@@ -122,6 +127,7 @@ pub(in crate::compile) fn emit_wrap_path(
             font_size,
             base_weight,
             letter_spacing_px,
+            kerning_pairs,
             direction: node_direction,
         },
         ShapeEnv { engine, fonts },

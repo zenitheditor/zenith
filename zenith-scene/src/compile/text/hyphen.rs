@@ -310,6 +310,7 @@ mod break_word_tests {
                 font_size: 16.0,
                 base_weight: 400,
                 letter_spacing_px: 0.0,
+                kerning_pairs: &[],
                 direction: TextDirection::Ltr,
             },
             ShapeEnv { engine, fonts },

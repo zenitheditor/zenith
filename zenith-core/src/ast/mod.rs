@@ -6,6 +6,7 @@ pub mod block_style;
 pub mod brand;
 pub mod construction;
 pub mod document;
+pub mod kerning;
 pub mod library;
 pub mod node;
 pub mod policy;
@@ -27,6 +28,7 @@ pub use document::{
     ComponentDef, Document, DocumentBody, Fold, MasterDef, Page, Project, SafeZone, SafeZoneType,
     SectionDef,
 };
+pub use kerning::KerningPair;
 pub use library::LibraryDef;
 pub use node::{
     Anchor, AnchorEdge, AnchorKind, ChartNode, ChartSeries, CodeNode, ConnectorNode, EllipseNode,

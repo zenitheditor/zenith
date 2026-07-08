@@ -364,6 +364,16 @@ pub const DIAGNOSTIC_CODES: &[DiagnosticCodeInfo] = &[
         "Image is being scaled up beyond its native resolution.",
     ),
     info(
+        "kerning.duplicate_pair",
+        Severity::Warning,
+        "A text-bearing node declares the same `kern-pair` more than once.",
+    ),
+    info(
+        "kerning.empty_pair",
+        Severity::Error,
+        "`kern-pair` left and right strings must be non-empty.",
+    ),
+    info(
         "layout.off_canvas",
         Severity::Advisory,
         "A node extends outside the page bounds.",

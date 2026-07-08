@@ -4,9 +4,9 @@
 
 use std::collections::BTreeMap;
 
-use crate::ast::Span;
 use crate::ast::block_style::BlockStyle;
 use crate::ast::value::{Dimension, PropertyValue};
+use crate::ast::{KerningPair, Span};
 use crate::tokens::SyntaxTheme;
 
 use super::common::{Node, ObjectPosition, Point, TextSpan, UnknownProperty};
@@ -366,6 +366,9 @@ pub struct TextNode {
     /// dimension, resolved to pixels by scene compilation. `None` keeps natural
     /// font spacing.
     pub letter_spacing: Option<PropertyValue>,
+    /// Node-scoped manual kerning pair adjustments, applied during shaping.
+    /// Empty when no `kern-pair` children are declared.
+    pub kerning_pairs: Vec<KerningPair>,
     /// Drop shadow / outer glow, as a `(token)` ref to a `shadow` token.
     pub shadow: Option<PropertyValue>,
     /// Color/image filter ops, as a `(token)` ref to a `filter` token.
@@ -582,6 +585,9 @@ pub struct CodeNode {
     /// dimension, resolved to pixels by scene compilation. `None` keeps natural
     /// monospace spacing.
     pub letter_spacing: Option<PropertyValue>,
+    /// Node-scoped manual kerning pair adjustments, applied during shaping.
+    /// Empty when no `kern-pair` children are declared.
+    pub kerning_pairs: Vec<KerningPair>,
     /// Optional built-in syntax-highlight color theme; `None` = use default (`Dark`).
     pub syntax_theme: Option<SyntaxTheme>,
     pub opacity: Option<f64>,

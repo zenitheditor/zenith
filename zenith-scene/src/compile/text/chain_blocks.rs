@@ -33,7 +33,7 @@ use std::collections::BTreeMap;
 use zenith_core::{
     BlockStyle, Diagnostic, FontStyle, ListKind, MdBlock, ResolvedToken, TextNode, TextSpan,
 };
-use zenith_layout::{FontFeature, TextDirection};
+use zenith_layout::{FontFeature, KerningPairAdjustment, TextDirection};
 
 use crate::ir::Color;
 
@@ -97,6 +97,7 @@ pub(in crate::compile) struct ChainSourceShape<'a> {
     /// The source node's resolved base font size (px), the cascade fallback.
     pub(in crate::compile) node_font_size: f32,
     pub(in crate::compile) base_weight: u16,
+    pub(in crate::compile) kerning_pairs: &'a [KerningPairAdjustment],
     pub(in crate::compile) direction: TextDirection,
 }
 
@@ -213,6 +214,7 @@ pub(in crate::compile) fn shape_source_blocks(
                 font_size: block_font_size,
                 base_weight: block_weight,
                 letter_spacing_px: 0.0,
+                kerning_pairs: shape.kerning_pairs,
                 direction: shape.direction,
             },
             shape_env,

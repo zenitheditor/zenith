@@ -20,6 +20,7 @@ mod container;
 mod document;
 mod effect;
 mod helpers;
+mod kerning;
 mod leaf;
 mod node;
 mod page;

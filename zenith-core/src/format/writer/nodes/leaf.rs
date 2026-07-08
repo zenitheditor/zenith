@@ -15,7 +15,8 @@ use crate::format::writer::{
 };
 
 use super::helpers::{
-    write_block_style, write_path_anchors, write_path_subpaths, write_points, write_span,
+    write_block_style, write_kerning_pairs, write_path_anchors, write_path_subpaths, write_points,
+    write_span,
 };
 use super::write_node;
 
@@ -307,6 +308,7 @@ pub(super) fn write_text(t: &TextNode, out: &mut String, depth: usize) {
     for bs in &t.block_styles {
         write_block_style(bs, out, depth + 1);
     }
+    write_kerning_pairs(&t.kerning_pairs, out, depth + 1);
     for span in &t.spans {
         write_span(span, out, depth + 1);
     }
@@ -370,6 +372,7 @@ pub(super) fn write_code(c: &CodeNode, out: &mut String, depth: usize) {
     // It is NEVER re-indented/trimmed: the content is one escaped single-line
     // KDL string (KDL v2 multi-line dedent rules would otherwise mutate it).
     out.push_str(" {\n");
+    write_kerning_pairs(&c.kerning_pairs, out, depth + 1);
     indent(out, depth + 1);
     out.push_str("content \"");
     out.push_str(&escape_kdl_string(&c.content));

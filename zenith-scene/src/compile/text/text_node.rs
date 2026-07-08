@@ -27,6 +27,7 @@ use super::ctx::{ChainMemberPlace, ShapeEnv, TabLeaderArgs, TextCompileEnv};
 use super::measure::{
     MeasureEnv, font_size_px, measure_text_wrapped_height, resolve_text_families,
 };
+use super::resolve_kerning_pairs;
 use super::shape::{
     CODE_BG, CODE_MONO_FAMILY, LINK_COLOR, ResolvedSpan, emit_glyph_missing, resolve_font_features,
     resolve_font_weight, resolve_letter_spacing, resolve_vertical_align, run_to_scene_glyphs,
@@ -469,6 +470,7 @@ pub(in crate::compile) fn compile_text_sized(
         .as_ref()
         .or_else(|| style_prop(&text.style, style_map, "letter-spacing"));
     let node_letter_spacing_px = resolve_letter_spacing(node_letter_spacing_prop, resolved);
+    let node_kerning_pairs = resolve_kerning_pairs(&text.kerning_pairs, resolved);
 
     // Glyph stroke (outline). Resolved earlier (before chain early-return) and
     // re-bound here for use in the text emit paths below.
@@ -497,6 +499,7 @@ pub(in crate::compile) fn compile_text_sized(
                 TabLeaderArgs {
                     font_size,
                     features: &node_features,
+                    kerning_pairs: &node_kerning_pairs,
                     letter_spacing_px: node_letter_spacing_px,
                     node_fill_prop,
                     node_weight_prop,
@@ -521,6 +524,7 @@ pub(in crate::compile) fn compile_text_sized(
             TabLeaderArgs {
                 font_size,
                 features: &node_features,
+                kerning_pairs: &node_kerning_pairs,
                 letter_spacing_px: node_letter_spacing_px,
                 node_fill_prop,
                 node_weight_prop,
@@ -681,7 +685,7 @@ pub(in crate::compile) fn compile_text_sized(
             font_size: span_font_size,
             direction: node_direction,
             features: &span_features,
-            kerning_pairs: &[],
+            kerning_pairs: &node_kerning_pairs,
             letter_spacing_px: span_letter_spacing_px,
         };
 
@@ -1036,6 +1040,7 @@ pub(in crate::compile) fn compile_text_sized(
                 box_h_opt,
                 font_size,
                 letter_spacing_px: node_letter_spacing_px,
+                kerning_pairs: &node_kerning_pairs,
                 align,
                 deco_thickness,
                 direction: node_direction,

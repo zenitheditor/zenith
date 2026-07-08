@@ -462,3 +462,58 @@ fn default_ignorable_not_reported_as_missing() {
         missing
     );
 }
+
+#[test]
+fn authored_kern_pair_shifts_second_glyph() {
+    let base = text_kern_x_positions("");
+    let adjusted = text_kern_x_positions(r#"kern-pair "A" "V" by=(px)-4"#);
+
+    assert_eq!(base.len(), adjusted.len(), "same glyph count expected");
+    assert!(
+        base.len() >= 2,
+        "AV should shape to at least two glyphs; got {base:?}"
+    );
+    assert!(
+        adjusted[1] < base[1] - 3.5,
+        "manual kern pair should shift V left by roughly 4px; base={base:?}, adjusted={adjusted:?}"
+    );
+}
+
+fn text_kern_x_positions(kern_child: &str) -> Vec<f32> {
+    let src = format!(
+        r##"zenith version=1 {{
+  project id="proj.kern.scene" name="Kern Scene"
+  tokens format="zenith-token-v1" {{}}
+  styles {{}}
+  document id="doc.kern.scene" title="Kern Scene" {{
+    page id="page.kern.scene" w=(px)300 h=(px)160 {{
+      text id="kern.scene" x=(px)10 y=(px)20 w=(px)260 h=(px)80 font-size=(px)48 {{
+        {kern_child}
+        span "AV"
+      }}
+    }}
+  }}
+}}"##
+    );
+    let doc = parse(&src);
+    let result = compile(&doc, &default_provider());
+    assert!(
+        result
+            .diagnostics
+            .iter()
+            .all(|d| d.code != "scene.text_unshaped"),
+        "text must shape successfully; got {:?}",
+        result.diagnostics
+    );
+    result
+        .scene
+        .commands
+        .iter()
+        .find_map(|cmd| match cmd {
+            SceneCommand::DrawGlyphRun { glyphs, .. } => {
+                Some(glyphs.iter().map(|glyph| glyph.dx).collect())
+            }
+            _ => None,
+        })
+        .expect("expected a glyph run")
+}
