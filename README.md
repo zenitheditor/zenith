@@ -339,7 +339,8 @@ Every row renders independently and deterministically. `--name-by` names files b
 
 A `connector` is a semantic arrow between two nodes. It has **no authored geometry** — you give it a `from` and a `to` node id, and the engine derives both endpoints from those targets' resolved boxes at compile time. Move either box and the connector reroutes automatically; the same source always produces the same path. It is a stroke-only leaf (no fill, no children); a `stroke` color is required for it to render.
 
-- **Endpoint anchoring** — `from-anchor` / `to-anchor` pick where each end attaches on a **nine-point grid**: a horizontal band (`left` / `center` / `right`) optionally combined with a vertical band (`top` / `center` / `bottom`) via a hyphen, e.g. `top-left`, `bottom-center`, `center-right`. A bare token names that edge mid-point (`top` = `top-center`); `mid` / `middle` are synonyms for `center`. The default, `auto`, picks the edge facing the other box.
+- **Endpoint anchoring** — `from-anchor` / `to-anchor` pick where each end attaches. Use named grid anchors (`top-left`, `bottom`, `center-right`) for simple flowcharts, or divided outline anchors like `35/60` for polished diagrams that need several distinct links around one shape. Divided anchors start at top center and proceed clockwise; ellipses use their perimeter and rectangles walk their outline by edge length. The default, `auto`, picks the edge facing the other box.
+- **Ports** — a page can declare semantic attachment points with `ports { port node="agent" id="memory.vector" anchor="38/60" }`; connectors can then use `from="agent#memory.vector"` or `to="store#in"`. Component ports project through instances, so `connector from="agent.instance#out"` stays tied to the component's internal geometry without copying coordinates.
 - **Route modes** (`route=`) — `straight` (default) draws a direct line; `orthogonal` draws a right-angle elbow; `avoid` runs an obstacle-avoiding orthogonal router that bends the path around the other node boxes (falling back to a plain elbow when no clear path exists).
 - **Self-loops** — when `from` and `to` name the **same** node, the connector becomes a small loop off one edge (the side taken from the anchor, default `top`).
 - **Arrowheads** — `marker-start` / `marker-end` = `arrow` add a filled arrowhead in the stroke color (default `none`); heads orient along the actual routed segment, so they land axis-aligned.
@@ -348,12 +349,16 @@ A `connector` is a semantic arrow between two nodes. It has **no authored geomet
 
 ```kdl
 page id="pg" w=(px)640 h=(px)360 line-jumps="arc" {
+  ports {
+    port node="n.start" id="out" anchor="1/4"
+    port node="n.end" id="in" anchor="3/4"
+  }
   shape id="n.start"  kind="process" x=(px)40  y=(px)150 w=(px)130 h=(px)60 fill=(token)"c.node" stroke=(token)"c.line" { span "Start" }
   shape id="n.end"    kind="process" x=(px)470 y=(px)150 w=(px)130 h=(px)60 fill=(token)"c.node" stroke=(token)"c.line" { span "Finish" }
   shape id="n.block"  kind="process" x=(px)290 y=(px)130 w=(px)70  h=(px)100 fill=(token)"c.block" stroke=(token)"c.blockline" { span "Block" }
 
   // Auto-routed flow bends around the Block instead of crossing it…
-  connector id="e.flow"  from="n.start" to="n.end"    route="avoid" marker-end="arrow" stroke=(token)"c.flow"  stroke-width=(token)"cw"
+  connector id="e.flow"  from="n.start#out" to="n.end#in" route="avoid" marker-end="arrow" stroke=(token)"c.flow"  stroke-width=(token)"cw"
   // …and where a second connector crosses it, the page's line-jumps hops it.
   connector id="e.cross" from="n.top"   to="n.bottom" marker-end="arrow"               stroke=(token)"c.cross" stroke-width=(token)"cw"
 }

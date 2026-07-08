@@ -118,8 +118,11 @@ These make designs editable, on-brand, and reproducible — and keep the agentic
   pill, `process` a rounded box (run `zenith schema node shape`). Connectors anchor cleanly to a
   `shape`'s real outline. If you DO overlay a standalone `text` on a box, set `v-align="middle"`
   (and `align="center"`) on the text so the label is actually centered — a bare `text` sits at the
-  TOP of its box. For flowcharts, connect nodes with `connector` (`from`/`to` + `marker-end`),
-  never hand-drawn lines.
+  TOP of its box. For flowcharts and architecture diagrams, connect nodes with `connector`
+  (`from`/`to` + `marker-end`), never hand-drawn lines. Use divided anchors like
+  `from-anchor="35/60"` when several links leave the same outline, and use page/component
+  `ports { port node="..." id="..." anchor="..." }` plus `from="node#port"` for reusable
+  semantic attachment points.
 - **For quantitative/data content** (comparisons, trends, proportions) use the `chart` node
   (bar/line/area/pie/donut/sparkline) — run `zenith schema node chart` for the series/categories
   child syntax; bind a series to a `--data` JSON array or CSV column with `data-ref`.

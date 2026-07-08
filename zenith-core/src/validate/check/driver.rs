@@ -10,8 +10,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::ast::brand::BrandContract;
-use crate::ast::document::{Document, PortDef};
-use crate::ast::node::{ConnectorAnchorParseError, parse_connector_anchor};
+use crate::ast::document::{ComponentDef, Document, PortDef};
+use crate::ast::node::{ConnectorAnchorParseError, Node, parse_connector_anchor};
 use crate::ast::policy::DiagnosticPolicy;
 use crate::ast::style::Style;
 use crate::ast::value::{PropertyValue, Unit, dim_to_px};
@@ -102,6 +102,73 @@ fn build_ports_by_node(
         }
     }
     ports_by_node
+}
+
+fn add_component_instance_ports(
+    children: &[Node],
+    components: &BTreeMap<&str, &ComponentDef>,
+    prefix: &str,
+    ports_by_node: &mut BTreeMap<String, BTreeSet<String>>,
+) {
+    for child in children {
+        match child {
+            Node::Instance(instance) => {
+                let instance_id = format!("{prefix}{}", instance.id);
+                if let Some(component_id) = instance.component.as_deref()
+                    && let Some(component) = components.get(component_id)
+                {
+                    let ports = ports_by_node.entry(instance_id.clone()).or_default();
+                    for port in &component.ports {
+                        ports.insert(port.id.clone());
+                    }
+                    let child_prefix = format!("{instance_id}/");
+                    add_component_instance_ports(
+                        &component.children,
+                        components,
+                        &child_prefix,
+                        ports_by_node,
+                    );
+                }
+            }
+            Node::Frame(frame) => {
+                add_component_instance_ports(&frame.children, components, prefix, ports_by_node);
+            }
+            Node::Group(group) => {
+                add_component_instance_ports(&group.children, components, prefix, ports_by_node);
+            }
+            Node::Table(table) => {
+                for row in &table.rows {
+                    for cell in &row.cells {
+                        add_component_instance_ports(
+                            &cell.children,
+                            components,
+                            prefix,
+                            ports_by_node,
+                        );
+                    }
+                }
+            }
+            Node::Rect(_)
+            | Node::Ellipse(_)
+            | Node::Line(_)
+            | Node::Text(_)
+            | Node::Code(_)
+            | Node::Image(_)
+            | Node::Polygon(_)
+            | Node::Polyline(_)
+            | Node::Path(_)
+            | Node::Field(_)
+            | Node::Footnote(_)
+            | Node::Toc(_)
+            | Node::Shape(_)
+            | Node::Connector(_)
+            | Node::Pattern(_)
+            | Node::Chart(_)
+            | Node::Light(_)
+            | Node::Mesh(_)
+            | Node::Unknown(_) => {}
+        }
+    }
 }
 
 /// Run the full document validation pass against the document's own in-file
@@ -268,6 +335,11 @@ pub fn validate_with_policy(
         collect_local_ids(&comp.children, &mut local);
         component_local_ids.entry(comp.id.clone()).or_insert(local);
     }
+    let component_map: BTreeMap<&str, &ComponentDef> = doc
+        .components
+        .iter()
+        .map(|component| (component.id.as_str(), component))
+        .collect();
 
     // Declared master ids, collected once so the page walk can validate that
     // every `page master="..."` references a declared master.
@@ -802,7 +874,8 @@ pub fn validate_with_policy(
             .get(page.id.as_str())
             .cloned()
             .unwrap_or_default();
-        let ports_by_node = build_ports_by_node(&page.ports, &local_node_ids, &mut diagnostics);
+        let mut ports_by_node = build_ports_by_node(&page.ports, &local_node_ids, &mut diagnostics);
+        add_component_instance_ports(&page.children, &component_map, "", &mut ports_by_node);
 
         let ctx = WalkCtx {
             resolved_tokens,

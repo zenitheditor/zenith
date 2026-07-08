@@ -1,0 +1,39 @@
+zenith version=1 {
+  project id="proj.connector-ports" name="Connector Ports"
+  tokens format="zenith-token-v1" {
+    token id="color.bg" type="color" value="#ffffff"
+    token id="color.node" type="color" value="#dbeafe"
+    token id="color.agent" type="color" value="#ccfbf1"
+    token id="color.line" type="color" value="#1e3a8a"
+    token id="size.stroke" type="dimension" value=(px)2
+  }
+  styles {}
+  components {
+    component id="agent.node" {
+      ports {
+        port node="body" id="vector" anchor="8/16"
+        port node="body" id="graph" anchor="5/16"
+      }
+      shape id="body" kind="ellipse" x=(px)0 y=(px)0 w=(px)128 h=(px)128 fill=(token)"color.agent" stroke=(token)"color.line" stroke-width=(token)"size.stroke" {
+        span "agent"
+      }
+    }
+  }
+  document id="doc.connector-ports" title="Connector Ports" {
+    page id="page.connector-ports" w=(px)640 h=(px)360 background=(token)"color.bg" {
+      ports {
+        port node="store.vector" id="in" anchor="12/16"
+        port node="store.graph" id="in" anchor="10/16"
+      }
+      instance id="agent" component="agent.node" x=(px)120 y=(px)96
+      shape id="store.vector" kind="process" x=(px)380 y=(px)78 w=(px)150 h=(px)72 fill=(token)"color.node" stroke=(token)"color.line" stroke-width=(token)"size.stroke" {
+        span "vector"
+      }
+      shape id="store.graph" kind="process" x=(px)390 y=(px)210 w=(px)150 h=(px)72 fill=(token)"color.node" stroke=(token)"color.line" stroke-width=(token)"size.stroke" {
+        span "graph"
+      }
+      connector id="c.vector" from="agent#vector" to="store.vector#in" route="straight" marker-end="arrow" stroke=(token)"color.line" stroke-width=(token)"size.stroke"
+      connector id="c.graph" from="agent#graph" to="store.graph#in" route="straight" marker-end="arrow" stroke=(token)"color.line" stroke-width=(token)"size.stroke"
+    }
+  }
+}

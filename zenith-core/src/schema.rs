@@ -360,8 +360,11 @@ pub fn node_content(kind: &str) -> Option<NodeContentDescriptor> {
             description: "Optional `span` children form a text label rendered at the \
                 connector's geometric midpoint (the mid-point of the routed polyline). \
                 Use `text-style` on the connector node to apply a style ref to the label. \
-                Omit the block entirely (or author no `span` children) for an unlabelled \
-                connector — the render output is byte-identical when no spans are present.",
+                Connectors can target semantic ports with `from=\"node#port\"`; declare \
+                page/component ports in a sibling `ports { port node=\"...\" id=\"...\" \
+                anchor=\"...\" }` metadata block. Omit the block entirely (or author no \
+                `span` children) for an unlabelled connector — the render output is \
+                byte-identical when no spans are present.",
             example: "span \"Yes\"",
         }),
 
@@ -685,7 +688,7 @@ fn attribute_type_generic(name: &str, fallback: &'static str) -> &'static str {
         "v-align" => "enum: top|middle|bottom",
 
         // ── Connector-specific ────────────────────────────────────────────
-        "from" | "to" => "node id",
+        "from" | "to" => "node id or node#port",
         "from-anchor" | "to-anchor" => {
             "enum/string: auto|grid anchor|divided anchor i/N (0 <= i < N)"
         }

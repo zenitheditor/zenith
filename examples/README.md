@@ -68,5 +68,6 @@ zenith validate examples/<name>.zen --json
 | ----------------------------------------------- | ------------------------------------------------ | ------------------------------------------- |
 | Flowchart (shapes + connectors)                 | [`flowchart.zen`](flowchart.zen)                 | ![flowchart](flowchart.png)                 |
 | Connector auto-routing (orthogonal, line-jumps) | [`connector-routing.zen`](connector-routing.zen) | ![connector-routing](connector-routing.png) |
+| Connector ports (semantic attachment points)    | [`connector-ports.zen`](connector-ports.zen)     |                                             |
 | Table                                           | [`table.zen`](table.zen)                         | ![table](table.png)                         |
 | Charts (bar + donut + sparkline)                | [`chart.zen`](chart.zen)                         | ![chart](chart.png)                         |

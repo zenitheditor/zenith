@@ -103,6 +103,7 @@ pub fn materialize(
     if !target.components.iter().any(|c| c.id == comp_id) {
         target.components.push(ComponentDef {
             id: comp_id.clone(),
+            ports: comp.ports.clone(),
             children: comp.children.clone(),
             source_span: None,
         });
