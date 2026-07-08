@@ -2,7 +2,7 @@ mod common;
 use common::*;
 use zenith_core::default_provider;
 use zenith_scene::compile;
-use zenith_scene::ir::{Paint, SceneCommand, StrokeAlign};
+use zenith_scene::ir::{FillRule, Paint, SceneCommand, StrokeAlign};
 
 // ── polygon: fill + stroke emits FillPolygon then StrokePolyline(closed) ─
 
@@ -44,14 +44,18 @@ page id="page.p1" w=(px)320 h=(px)200 {
         SceneCommand::FillPolygon {
             points,
             paint: Paint::Solid { color },
-            even_odd,
+            fill_rule,
         } => {
             // 3 points × 2 = 6 coordinates
             assert_eq!(points.len(), 6, "must have 6 flat coords");
             assert_eq!(points[0], 160.0, "x0 must be 160");
             assert_eq!(points[1], 40.0, "y0 must be 40");
             assert_eq!(color.r, 255, "fill color must be red");
-            assert!(!even_odd, "even_odd must be false by default");
+            assert_eq!(
+                *fill_rule,
+                FillRule::NonZero,
+                "fill rule defaults to nonzero"
+            );
         }
         other => panic!("cmd[1] must be FillPolygon, got {other:?}"),
     }
@@ -63,7 +67,7 @@ page id="page.p1" w=(px)320 h=(px)200 {
             color,
             stroke_width,
             align,
-            fill_even_odd,
+            clip_fill_rule,
         } => {
             assert_eq!(points.len(), 6);
             assert!(closed, "polygon stroke must be closed");
@@ -74,7 +78,11 @@ page id="page.p1" w=(px)320 h=(px)200 {
                 StrokeAlign::Center,
                 "absent stroke-alignment must default to Center"
             );
-            assert!(!fill_even_odd, "default fill rule is nonzero");
+            assert_eq!(
+                *clip_fill_rule,
+                FillRule::NonZero,
+                "default fill rule is nonzero"
+            );
         }
         other => panic!("cmd[2] must be StrokePolyline, got {other:?}"),
     }
@@ -107,20 +115,20 @@ page id="page.sa1" w=(px)200 h=(px)200 {
     let sp = result.scene.commands.iter().find_map(|c| match c {
         SceneCommand::StrokePolyline {
             align,
-            fill_even_odd,
+            clip_fill_rule,
             closed,
             ..
-        } => Some((*align, *fill_even_odd, *closed)),
+        } => Some((*align, *clip_fill_rule, *closed)),
         _ => None,
     });
     assert_eq!(
         sp,
-        Some((StrokeAlign::Inside, false, true)),
-        "stroke-alignment=inside must set align=Inside, closed=true, fill_even_odd matches nonzero default"
+        Some((StrokeAlign::Inside, FillRule::NonZero, true)),
+        "stroke-alignment=inside must set align=Inside, closed=true, clip fill rule matches nonzero default"
     );
 }
 
-// ── polygon: stroke-alignment="outside" + evenodd → align=Outside, fill_even_odd=true ─
+// ── polygon: stroke-alignment="outside" + evenodd → align=Outside, clip fill rule=EvenOdd ─
 
 #[test]
 fn polygon_stroke_alignment_outside_evenodd() {
@@ -149,19 +157,19 @@ page id="page.sa2" w=(px)200 h=(px)200 {
     let sp = result.scene.commands.iter().find_map(|c| match c {
         SceneCommand::StrokePolyline {
             align,
-            fill_even_odd,
+            clip_fill_rule,
             ..
-        } => Some((*align, *fill_even_odd)),
+        } => Some((*align, *clip_fill_rule)),
         _ => None,
     });
     assert_eq!(
         sp,
-        Some((StrokeAlign::Outside, true)),
-        "stroke-alignment=outside + fill-rule=evenodd must set align=Outside, fill_even_odd=true"
+        Some((StrokeAlign::Outside, FillRule::EvenOdd)),
+        "stroke-alignment=outside + fill-rule=evenodd must set align=Outside, clip fill rule=EvenOdd"
     );
 }
 
-// ── polygon: fill-rule="evenodd" → FillPolygon.even_odd == true ───────
+// ── polygon: fill-rule="evenodd" → FillPolygon.fill_rule == EvenOdd ───────
 
 #[test]
 fn polygon_evenodd_fill_rule() {
@@ -188,10 +196,48 @@ page id="page.p2" w=(px)200 h=(px)200 {
     let result = compile(&doc, &default_provider());
 
     let fp = result.scene.commands.iter().find_map(|c| match c {
-        SceneCommand::FillPolygon { even_odd, .. } => Some(*even_odd),
+        SceneCommand::FillPolygon { fill_rule, .. } => Some(*fill_rule),
         _ => None,
     });
-    assert_eq!(fp, Some(true), "fill-rule=evenodd must set even_odd=true");
+    assert_eq!(
+        fp,
+        Some(FillRule::EvenOdd),
+        "fill-rule=evenodd must set EvenOdd"
+    );
+}
+
+#[test]
+fn fill_rule_serializes_legacy_boolean_fields() {
+    let fill = SceneCommand::FillPolygon {
+        points: vec![0.0, 0.0, 10.0, 0.0, 0.0, 10.0],
+        paint: Paint::solid(zenith_scene::ir::Color::srgb(1, 2, 3, 255)),
+        fill_rule: FillRule::NonZero,
+    };
+    let fill_json = serde_json::to_value(&fill).expect("serialize fill command");
+    assert_eq!(fill_json["even_odd"], false);
+
+    let stroke = SceneCommand::StrokePolyline {
+        points: vec![0.0, 0.0, 10.0, 0.0],
+        color: zenith_scene::ir::Color::srgb(1, 2, 3, 255),
+        stroke_width: 1.0,
+        closed: false,
+        align: StrokeAlign::Center,
+        clip_fill_rule: FillRule::NonZero,
+    };
+    let stroke_json = serde_json::to_value(&stroke).expect("serialize stroke command");
+    assert!(stroke_json.get("fill_even_odd").is_none());
+
+    let even_odd_stroke = SceneCommand::StrokePolyline {
+        points: vec![0.0, 0.0, 10.0, 0.0],
+        color: zenith_scene::ir::Color::srgb(1, 2, 3, 255),
+        stroke_width: 1.0,
+        closed: false,
+        align: StrokeAlign::Center,
+        clip_fill_rule: FillRule::EvenOdd,
+    };
+    let even_odd_json =
+        serde_json::to_value(&even_odd_stroke).expect("serialize even-odd stroke command");
+    assert_eq!(even_odd_json["fill_even_odd"], true);
 }
 
 // ── polyline: stroke-only → one StrokePolyline(closed:false), no FillPolygon ─

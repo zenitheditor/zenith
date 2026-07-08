@@ -10,7 +10,7 @@ use std::f64::consts::PI;
 use zenith_core::{ChartNode, Diagnostic, FontStyle, ResolvedToken};
 use zenith_layout::{ShapeRequest, TextDirection, TextLayoutEngine};
 
-use crate::ir::{Color, Paint, SceneCommand};
+use crate::ir::{Color, FillRule, Paint, SceneCommand};
 
 use super::super::NodeCtx;
 use super::super::paint::resolve_property_color;
@@ -337,7 +337,7 @@ pub(super) fn emit_pie(
         commands.push(SceneCommand::FillPolygon {
             points: poly,
             paint: Paint::solid(fill),
-            even_odd: false,
+            fill_rule: FillRule::NonZero,
         });
 
         if !suppress_labels && sweep >= 0.15 {

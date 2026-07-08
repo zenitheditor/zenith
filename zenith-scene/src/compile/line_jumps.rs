@@ -532,7 +532,7 @@ fn apply_gap(
                     stroke_width,
                     closed,
                     align,
-                    fill_even_odd,
+                    clip_fill_rule,
                     ..
                 } = cmd
                 {
@@ -544,7 +544,7 @@ fn apply_gap(
                             stroke_width: *stroke_width,
                             closed: *closed,
                             align: *align,
-                            fill_even_odd: *fill_even_odd,
+                            clip_fill_rule: *clip_fill_rule,
                         });
                     }
                 } else {
@@ -612,7 +612,7 @@ fn split_polyline(base_pts: &[f64], ordered_hops: &[Hop]) -> Vec<Vec<f64>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ir::{Color, StrokeAlign};
+    use crate::ir::{Color, FillRule, StrokeAlign};
 
     fn stroke(points: Vec<f64>) -> SceneCommand {
         SceneCommand::StrokePolyline {
@@ -621,7 +621,7 @@ mod tests {
             stroke_width: 2.0,
             closed: false,
             align: StrokeAlign::Center,
-            fill_even_odd: false,
+            clip_fill_rule: FillRule::NonZero,
         }
     }
 

@@ -8,7 +8,7 @@ use zenith_core::{
 };
 use zenith_layout::RustybuzzEngine;
 
-use crate::ir::{Paint, SceneCommand, StrokeAlign};
+use crate::ir::{FillRule, Paint, SceneCommand, StrokeAlign};
 
 use super::super::RenderCtx;
 use super::super::anchor::AnchorMap;
@@ -628,7 +628,7 @@ fn emit_shape_decision(
         commands.push(SceneCommand::FillPolygon {
             points: flat_points.clone(),
             paint: Paint::solid(color),
-            even_odd: false,
+            fill_rule: FillRule::NonZero,
         });
     }
 
@@ -643,7 +643,7 @@ fn emit_shape_decision(
             stroke_width,
             closed: true,
             align: StrokeAlign::Center,
-            fill_even_odd: false,
+            clip_fill_rule: FillRule::NonZero,
         });
     }
 }

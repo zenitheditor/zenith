@@ -42,9 +42,9 @@ pub mod text_outline;
 pub use compile::{CompileResult, compile, compile_page};
 pub use construction_overlay::append_construction_overlay;
 pub use ir::{
-    BlendMode, Color, FilterSpec, FitMode, GradientPaint, GradientStop, ImageClip, LineCap,
-    LineJoin, MaskShape, MaskSpec, Paint, Rect, Scene, SceneCommand, SceneGlyph, ShadowSpec,
-    SrcRect, StrokeAlign,
+    BlendMode, Color, FillRule, FilterSpec, FitMode, GradientPaint, GradientStop, ImageClip,
+    LineCap, LineJoin, MaskShape, MaskSpec, Paint, Rect, Scene, SceneCommand, SceneGlyph,
+    ShadowSpec, SrcRect, StrokeAlign,
 };
 pub use text_outline::{
     outline_glyph_run_command, outline_glyph_run_commands, outline_source_glyph_run_commands,

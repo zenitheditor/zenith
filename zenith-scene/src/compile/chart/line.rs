@@ -5,7 +5,7 @@
 //! and are directly unit-testable. Emit helpers push `SceneCommand`s into an
 //! existing command list — no allocations beyond the points vec.
 
-use crate::ir::{Color, Paint, SceneCommand, StrokeAlign};
+use crate::ir::{Color, FillRule, Paint, SceneCommand, StrokeAlign};
 
 use super::frame::PlotArea;
 use super::scale::LinearScale;
@@ -82,7 +82,7 @@ pub(super) fn emit_line_series(
         stroke_width,
         closed: false,
         align: StrokeAlign::Center,
-        fill_even_odd: false,
+        clip_fill_rule: FillRule::NonZero,
     });
 }
 
@@ -129,7 +129,7 @@ pub(super) fn emit_area_fill(
     commands.push(SceneCommand::FillPolygon {
         points: flat,
         paint: Paint::solid(area_color),
-        even_odd: false,
+        fill_rule: FillRule::NonZero,
     });
 }
 

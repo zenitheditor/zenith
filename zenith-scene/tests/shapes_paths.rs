@@ -2,7 +2,7 @@ mod common;
 use common::*;
 use zenith_core::default_provider;
 use zenith_scene::compile;
-use zenith_scene::ir::{LineJoin, Paint, PathSegment, SceneCommand, StrokeAlign};
+use zenith_scene::ir::{FillRule, LineJoin, Paint, PathSegment, SceneCommand, StrokeAlign};
 
 #[test]
 fn path_emits_cubic_fill_and_stroke_metadata() {
@@ -44,10 +44,10 @@ page id="page.path" w=(px)320 h=(px)220 {
         SceneCommand::FillPath {
             segments,
             paint: Paint::Solid { color },
-            even_odd,
+            fill_rule,
         } => {
             assert_eq!(color.g, 255);
-            assert!(*even_odd);
+            assert_eq!(*fill_rule, FillRule::EvenOdd);
             assert!(
                 segments
                     .iter()
@@ -69,7 +69,7 @@ page id="page.path" w=(px)320 h=(px)220 {
             stroke_width,
             closed,
             align,
-            fill_even_odd,
+            clip_fill_rule,
             stroke_linejoin,
             stroke_miter_limit,
         } => {
@@ -77,7 +77,7 @@ page id="page.path" w=(px)320 h=(px)220 {
             assert!((*stroke_width - 3.0).abs() < 1e-9);
             assert!(*closed);
             assert_eq!(*align, StrokeAlign::Inside);
-            assert!(*fill_even_odd);
+            assert_eq!(*clip_fill_rule, FillRule::EvenOdd);
             assert_eq!(*stroke_linejoin, Some(LineJoin::Bevel));
             assert_eq!(*stroke_miter_limit, Some(6.0));
             assert!(
@@ -151,6 +151,40 @@ page id="page.path" w=(px)320 h=(px)220 {
             .count(),
         2
     );
+}
+
+#[test]
+fn path_fill_rule_serializes_legacy_boolean_fields() {
+    let fill = SceneCommand::FillPath {
+        segments: vec![
+            PathSegment::MoveTo { x: 0.0, y: 0.0 },
+            PathSegment::LineTo { x: 10.0, y: 0.0 },
+            PathSegment::LineTo { x: 0.0, y: 10.0 },
+            PathSegment::Close,
+        ],
+        paint: Paint::solid(zenith_scene::ir::Color::srgb(1, 2, 3, 255)),
+        fill_rule: FillRule::NonZero,
+    };
+    let fill_json = serde_json::to_value(&fill).expect("serialize fill path");
+    assert_eq!(fill_json["even_odd"], false);
+
+    let stroke = SceneCommand::StrokePath {
+        segments: vec![
+            PathSegment::MoveTo { x: 0.0, y: 0.0 },
+            PathSegment::LineTo { x: 10.0, y: 0.0 },
+            PathSegment::LineTo { x: 0.0, y: 10.0 },
+            PathSegment::Close,
+        ],
+        color: zenith_scene::ir::Color::srgb(1, 2, 3, 255),
+        stroke_width: 1.0,
+        closed: true,
+        align: StrokeAlign::Center,
+        clip_fill_rule: FillRule::EvenOdd,
+        stroke_linejoin: None,
+        stroke_miter_limit: None,
+    };
+    let stroke_json = serde_json::to_value(&stroke).expect("serialize stroke path");
+    assert_eq!(stroke_json["fill_even_odd"], true);
 }
 
 #[test]

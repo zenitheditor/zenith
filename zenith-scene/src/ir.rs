@@ -61,6 +61,26 @@ pub enum StrokeAlign {
     Outside,
 }
 
+// ── FillRule ─────────────────────────────────────────────────────────────────
+
+/// Fill rule for closed scene geometry.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum FillRule {
+    #[default]
+    NonZero,
+    EvenOdd,
+}
+
+impl FillRule {
+    pub(crate) fn from_author_value(value: Option<&str>) -> Self {
+        match value {
+            Some("evenodd") => Self::EvenOdd,
+            Some(_) | None => Self::NonZero,
+        }
+    }
+}
+
 /// Structured scene path segment, preserving cubic Bezier geometry for native
 /// raster and PDF backends.
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -351,8 +371,15 @@ fn is_center(a: &StrokeAlign) -> bool {
     matches!(a, StrokeAlign::Center)
 }
 
-fn is_false(b: &bool) -> bool {
-    !*b
+fn is_nonzero(rule: &FillRule) -> bool {
+    matches!(rule, FillRule::NonZero)
+}
+
+fn serialize_fill_rule_as_bool<S>(rule: &FillRule, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    serializer.serialize_bool(matches!(rule, FillRule::EvenOdd))
 }
 
 // ── Scene commands ────────────────────────────────────────────────────────────
@@ -490,9 +517,13 @@ pub enum SceneCommand {
         /// Flat list of `[x0, y0, x1, y1, …]` vertex coordinates.
         points: Vec<f64>,
         paint: Paint,
-        /// When `true`, use the even-odd fill rule; otherwise nonzero (winding).
-        #[serde(default)]
-        even_odd: bool,
+        /// Fill rule serialized through the legacy `even_odd` boolean field.
+        #[serde(
+            default,
+            rename = "even_odd",
+            serialize_with = "serialize_fill_rule_as_bool"
+        )]
+        fill_rule: FillRule,
     },
     /// Stroke a polyline (open or closed depending on `closed`).
     StrokePolyline {
@@ -509,18 +540,27 @@ pub enum SceneCommand {
         #[serde(default, skip_serializing_if = "is_center")]
         align: StrokeAlign,
         /// Fill rule of the clip region used for `Inside`/`Outside` alignment.
-        /// `true` = even-odd, `false` = nonzero. Only meaningful when
-        /// `align != Center` and `closed` is `true`.
-        #[serde(default, skip_serializing_if = "is_false")]
-        fill_even_odd: bool,
+        /// Serialized through the legacy `fill_even_odd` boolean field. Only
+        /// meaningful when `align != Center` and `closed` is `true`.
+        #[serde(
+            default,
+            rename = "fill_even_odd",
+            serialize_with = "serialize_fill_rule_as_bool",
+            skip_serializing_if = "is_nonzero"
+        )]
+        clip_fill_rule: FillRule,
     },
     /// Fill a structured path with line and cubic Bezier segments.
     FillPath {
         segments: Vec<PathSegment>,
         paint: Paint,
-        /// When `true`, use the even-odd fill rule; otherwise nonzero (winding).
-        #[serde(default)]
-        even_odd: bool,
+        /// Fill rule serialized through the legacy `even_odd` boolean field.
+        #[serde(
+            default,
+            rename = "even_odd",
+            serialize_with = "serialize_fill_rule_as_bool"
+        )]
+        fill_rule: FillRule,
     },
     /// Stroke a structured path with line and cubic Bezier segments.
     StrokePath {
@@ -534,8 +574,13 @@ pub enum SceneCommand {
         #[serde(default, skip_serializing_if = "is_center")]
         align: StrokeAlign,
         /// Fill rule of the clip region used for `Inside`/`Outside` alignment.
-        #[serde(default, skip_serializing_if = "is_false")]
-        fill_even_odd: bool,
+        #[serde(
+            default,
+            rename = "fill_even_odd",
+            serialize_with = "serialize_fill_rule_as_bool",
+            skip_serializing_if = "is_nonzero"
+        )]
+        clip_fill_rule: FillRule,
         /// Stroke corner join style. `None` = Miter (renderer default).
         #[serde(default, skip_serializing_if = "Option::is_none")]
         stroke_linejoin: Option<LineJoin>,

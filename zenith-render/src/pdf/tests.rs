@@ -2,8 +2,8 @@
 
 use zenith_core::{AssetKind, AssetProvider, BytesAssetProvider, FontProvider, default_provider};
 use zenith_scene::{
-    Color, FilterSpec, FitMode, GradientPaint, GradientStop, Paint, Rect, Scene, SceneCommand,
-    SceneGlyph, ir::PathSegment,
+    Color, FillRule, FilterSpec, FitMode, GradientPaint, GradientStop, Paint, Rect, Scene,
+    SceneCommand, SceneGlyph, ir::PathSegment,
 };
 
 use super::render_pdf;
@@ -154,7 +154,7 @@ fn cubic_path_emits_native_pdf_curve_operator() {
             PathSegment::Close,
         ],
         paint: Paint::solid(Color::srgb(0, 120, 200, 255)),
-        even_odd: false,
+        fill_rule: FillRule::NonZero,
     });
 
     let bytes = render(&scene);

@@ -12,7 +12,7 @@ use zenith_geometry::{
     PathSegment as GeometryPathSegment, Point2,
 };
 
-use crate::ir::{Paint, PathSegment, SceneCommand, StrokeAlign};
+use crate::ir::{FillRule, Paint, PathSegment, SceneCommand, StrokeAlign};
 
 use super::super::RenderCtx;
 use super::super::paint::{
@@ -533,7 +533,7 @@ pub(in crate::compile) fn compile_polygon(
     }
 
     let node_opacity = poly.opacity.unwrap_or(1.0).clamp(0.0, 1.0);
-    let even_odd = poly.fill_rule.as_deref() == Some("evenodd");
+    let fill_rule = FillRule::from_author_value(poly.fill_rule.as_deref());
 
     // Rotation bracket: compute centroid-bbox center from the flat point vec.
     // PushTransform only when rotate is non-zero; unrotated polys are unchanged.
@@ -561,7 +561,7 @@ pub(in crate::compile) fn compile_polygon(
             commands.push(SceneCommand::FillPolygon {
                 points: flat_points.clone(),
                 paint: Paint::Gradient(gradient),
-                even_odd,
+                fill_rule,
             });
         } else if let Some(mut color) =
             resolve_property_color(fill_prop, resolved, diagnostics, &poly.id)
@@ -570,7 +570,7 @@ pub(in crate::compile) fn compile_polygon(
             commands.push(SceneCommand::FillPolygon {
                 points: flat_points.clone(),
                 paint: Paint::solid(color),
-                even_odd,
+                fill_rule,
             });
         }
     }
@@ -604,7 +604,7 @@ pub(in crate::compile) fn compile_polygon(
             stroke_width,
             closed: true,
             align,
-            fill_even_odd: even_odd,
+            clip_fill_rule: fill_rule,
         });
     }
 
@@ -650,7 +650,7 @@ pub(in crate::compile) fn compile_polyline(
     }
 
     let node_opacity = poly.opacity.unwrap_or(1.0).clamp(0.0, 1.0);
-    let even_odd = poly.fill_rule.as_deref() == Some("evenodd");
+    let fill_rule = FillRule::from_author_value(poly.fill_rule.as_deref());
 
     // Rotation bracket: compute centroid-bbox center from the flat point vec.
     // PushTransform only when rotate is non-zero; unrotated polylines are unchanged.
@@ -676,7 +676,7 @@ pub(in crate::compile) fn compile_polyline(
             commands.push(SceneCommand::FillPolygon {
                 points: flat_points.clone(),
                 paint: Paint::Gradient(gradient),
-                even_odd,
+                fill_rule,
             });
         } else if let Some(mut color) =
             resolve_property_color(fill_prop, resolved, diagnostics, &poly.id)
@@ -685,7 +685,7 @@ pub(in crate::compile) fn compile_polyline(
             commands.push(SceneCommand::FillPolygon {
                 points: flat_points.clone(),
                 paint: Paint::solid(color),
-                even_odd,
+                fill_rule,
             });
         }
     }
@@ -712,7 +712,7 @@ pub(in crate::compile) fn compile_polyline(
             closed: false,
             // polyline is an open path: alignment never applies.
             align: StrokeAlign::Center,
-            fill_even_odd: false,
+            clip_fill_rule: FillRule::NonZero,
         });
     }
 
@@ -747,7 +747,7 @@ pub(in crate::compile) fn compile_path(
     }
 
     let node_opacity = path.opacity.unwrap_or(1.0).clamp(0.0, 1.0);
-    let even_odd = path.fill_rule.as_deref() == Some("evenodd");
+    let fill_rule = FillRule::from_author_value(path.fill_rule.as_deref());
 
     let rot = rotation_degrees(path.rotate.as_ref());
     if let Some(angle) = rot {
@@ -772,7 +772,7 @@ pub(in crate::compile) fn compile_path(
             commands.push(SceneCommand::FillPath {
                 segments: segments.clone(),
                 paint: Paint::Gradient(gradient),
-                even_odd,
+                fill_rule,
             });
         } else if let Some(mut color) =
             resolve_property_color(fill_prop, resolved, diagnostics, &path.id)
@@ -781,7 +781,7 @@ pub(in crate::compile) fn compile_path(
             commands.push(SceneCommand::FillPath {
                 segments: segments.clone(),
                 paint: Paint::solid(color),
-                even_odd,
+                fill_rule,
             });
         }
     }
@@ -813,7 +813,7 @@ pub(in crate::compile) fn compile_path(
             stroke_width,
             closed,
             align,
-            fill_even_odd: even_odd,
+            clip_fill_rule: fill_rule,
             stroke_linejoin,
             stroke_miter_limit,
         });

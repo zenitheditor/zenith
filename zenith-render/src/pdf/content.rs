@@ -22,7 +22,8 @@ use std::collections::BTreeSet;
 use pdf_writer::{Content, types::LineJoinStyle};
 use zenith_core::{AssetProvider, FontProvider};
 use zenith_scene::{
-    Color, FitMode, ImageClip, LineJoin, Paint as ScenePaint, Scene, SceneCommand, StrokeAlign,
+    Color, FillRule, FitMode, ImageClip, LineJoin, Paint as ScenePaint, Scene, SceneCommand,
+    StrokeAlign,
     ir::{path_segments_bbox, path_segments_finite},
 };
 
@@ -245,7 +246,7 @@ pub(super) fn apply_alpha(content: &mut Content, res: &mut PageResources, color:
 /// Fill a region with a scene [`ScenePaint`] (solid or gradient), where
 /// `build_path` emits the path operators for the geometry and returns whether a
 /// path was produced. `bbox` is the geometry's bounding box, used to resolve a
-/// gradient's axial line. `even_odd` selects the fill / clip rule.
+/// gradient's axial line.
 ///
 /// - **Solid** → set the fill color and fill the path.
 /// - **Linear gradient** → clip to the path and paint an axial shading.
@@ -257,16 +258,21 @@ fn fill_region<F: Fn(&mut Content) -> bool>(
     res: &mut PageResources,
     paint: &ScenePaint,
     bbox: (f64, f64, f64, f64),
-    even_odd: bool,
+    fill_rule: FillRule,
     build_path: F,
 ) {
     let fill = |content: &mut Content, produced: bool| {
         if produced {
-            if even_odd {
-                content.fill_even_odd();
-            } else {
-                content.fill_nonzero();
-            }
+            apply_fill_rule(
+                content,
+                fill_rule,
+                |content| {
+                    content.fill_nonzero();
+                },
+                |content| {
+                    content.fill_even_odd();
+                },
+            );
         } else {
             content.end_path();
         }
@@ -298,11 +304,16 @@ fn fill_region<F: Fn(&mut Content) -> bool>(
                 let id = push_gradient(res, g);
                 content.save_state();
                 if build_path(content) {
-                    if even_odd {
-                        content.clip_even_odd();
-                    } else {
-                        content.clip_nonzero();
-                    }
+                    apply_fill_rule(
+                        content,
+                        fill_rule,
+                        |content| {
+                            content.clip_nonzero();
+                        },
+                        |content| {
+                            content.clip_even_odd();
+                        },
+                    );
                     content.end_path();
                     content.shading(name(SHADING_PREFIX, id).as_name());
                 } else {
@@ -329,10 +340,17 @@ pub(super) fn emit_command(
             if !rect_ok(*x, *y, *w, *h) {
                 return;
             }
-            fill_region(content, res, paint, (*x, *y, *w, *h), false, |c| {
-                c.rect(*x as f32, *y as f32, *w as f32, *h as f32);
-                true
-            });
+            fill_region(
+                content,
+                res,
+                paint,
+                (*x, *y, *w, *h),
+                FillRule::NonZero,
+                |c| {
+                    c.rect(*x as f32, *y as f32, *w as f32, *h as f32);
+                    true
+                },
+            );
         }
 
         SceneCommand::StrokeRect {
@@ -370,10 +388,17 @@ pub(super) fn emit_command(
                 return;
             }
             let corner_radii = radii.unwrap_or([*radius; 4]);
-            fill_region(content, res, paint, (*x, *y, *w, *h), false, |c| {
-                rounded_rect_path(c, *x, *y, *w, *h, corner_radii);
-                true
-            });
+            fill_region(
+                content,
+                res,
+                paint,
+                (*x, *y, *w, *h),
+                FillRule::NonZero,
+                |c| {
+                    rounded_rect_path(c, *x, *y, *w, *h, corner_radii);
+                    true
+                },
+            );
         }
 
         SceneCommand::StrokeRoundedRect {
@@ -413,10 +438,17 @@ pub(super) fn emit_command(
             if !rect_ok(*x, *y, *w, *h) {
                 return;
             }
-            fill_region(content, res, paint, (*x, *y, *w, *h), false, |c| {
-                ellipse_path(c, *x, *y, *w, *h, *rx, *ry);
-                true
-            });
+            fill_region(
+                content,
+                res,
+                paint,
+                (*x, *y, *w, *h),
+                FillRule::NonZero,
+                |c| {
+                    ellipse_path(c, *x, *y, *w, *h, *rx, *ry);
+                    true
+                },
+            );
         }
 
         SceneCommand::StrokeEllipse {
@@ -474,13 +506,13 @@ pub(super) fn emit_command(
         SceneCommand::FillPolygon {
             points,
             paint,
-            even_odd,
+            fill_rule,
         } => {
             if points.len() < 6 || points.iter().any(|v| !v.is_finite()) {
                 return;
             }
             let bbox = poly_bbox(points);
-            fill_region(content, res, paint, bbox, *even_odd, |c| {
+            fill_region(content, res, paint, bbox, *fill_rule, |c| {
                 poly_path(c, points, true)
             });
         }
@@ -491,7 +523,7 @@ pub(super) fn emit_command(
             stroke_width,
             closed,
             align,
-            fill_even_odd,
+            clip_fill_rule,
         } => {
             if points.len() < 4 || points.iter().any(|v| !v.is_finite()) || !finite(*stroke_width) {
                 return;
@@ -517,11 +549,16 @@ pub(super) fn emit_command(
                             content.restore_state();
                             return;
                         }
-                        if *fill_even_odd {
-                            content.clip_even_odd();
-                        } else {
-                            content.clip_nonzero();
-                        }
+                        apply_fill_rule(
+                            content,
+                            *clip_fill_rule,
+                            |content| {
+                                content.clip_nonzero();
+                            },
+                            |content| {
+                                content.clip_even_odd();
+                            },
+                        );
                         content.end_path();
                     }
                     StrokeAlign::Outside => {
@@ -568,7 +605,7 @@ pub(super) fn emit_command(
         SceneCommand::FillPath {
             segments,
             paint,
-            even_odd,
+            fill_rule,
         } => {
             if segments.len() < 3 || !path_segments_finite(segments) {
                 return;
@@ -576,7 +613,7 @@ pub(super) fn emit_command(
             let Some(bbox) = path_segments_bbox(segments) else {
                 return;
             };
-            fill_region(content, res, paint, bbox, *even_odd, |c| {
+            fill_region(content, res, paint, bbox, *fill_rule, |c| {
                 scene_path(c, segments)
             });
         }
@@ -587,7 +624,7 @@ pub(super) fn emit_command(
             stroke_width,
             closed,
             align,
-            fill_even_odd,
+            clip_fill_rule,
             stroke_linejoin,
             stroke_miter_limit,
         } => {
@@ -609,11 +646,16 @@ pub(super) fn emit_command(
                             content.restore_state();
                             return;
                         }
-                        if *fill_even_odd {
-                            content.clip_even_odd();
-                        } else {
-                            content.clip_nonzero();
-                        }
+                        apply_fill_rule(
+                            content,
+                            *clip_fill_rule,
+                            |content| {
+                                content.clip_nonzero();
+                            },
+                            |content| {
+                                content.clip_even_odd();
+                            },
+                        );
                         content.end_path();
                     }
                     StrokeAlign::Outside => {
@@ -990,6 +1032,17 @@ fn emit_image(
 #[inline]
 fn finite(v: f64) -> bool {
     v.is_finite()
+}
+
+fn apply_fill_rule<F, G>(content: &mut Content, fill_rule: FillRule, nonzero: F, even_odd: G)
+where
+    F: FnOnce(&mut Content),
+    G: FnOnce(&mut Content),
+{
+    match fill_rule {
+        FillRule::NonZero => nonzero(content),
+        FillRule::EvenOdd => even_odd(content),
+    }
 }
 
 fn set_line_join(content: &mut Content, line_join: Option<LineJoin>) {

@@ -3,7 +3,14 @@
 //! outline pen.
 
 use tiny_skia::{FillRule, Mask, Path, PathBuilder, Rect, Transform};
-use zenith_scene::{StrokeAlign, ir::PathSegment};
+use zenith_scene::{FillRule as SceneFillRule, StrokeAlign, ir::PathSegment};
+
+pub(super) fn tiny_skia_fill_rule(rule: SceneFillRule) -> FillRule {
+    match rule {
+        SceneFillRule::NonZero => FillRule::Winding,
+        SceneFillRule::EvenOdd => FillRule::EvenOdd,
+    }
+}
 
 /// Build a clip `Mask` from the current effective clip rectangle.
 ///
@@ -38,7 +45,7 @@ pub(super) fn clip_mask(
 /// The stroke is drawn at 2× width centered on the path; this mask keeps only
 /// the half that lies inside (`Inside`) or outside (`Outside`) the polygon's
 /// fill region, yielding a full-width stroke flush against the boundary. The
-/// fill region is rasterized using the polygon's fill rule (`fill_even_odd`),
+/// fill region is rasterized using the polygon's fill rule (`clip_fill_rule`),
 /// anti-aliased, under `device_ts` so it lands in the same device space as the
 /// stroke (rotation handled). For `Outside`, the mask is inverted.
 ///
@@ -51,7 +58,7 @@ pub(super) fn clip_mask(
 pub(super) fn build_align_mask(
     points: &[f64],
     align: StrokeAlign,
-    fill_even_odd: bool,
+    clip_fill_rule: SceneFillRule,
     effective_clip: (f64, f64, f64, f64),
     width: u32,
     height: u32,
@@ -68,7 +75,7 @@ pub(super) fn build_align_mask(
     build_align_mask_for_path(
         &fill_path,
         invert,
-        fill_even_odd,
+        clip_fill_rule,
         effective_clip,
         width,
         height,
@@ -79,7 +86,7 @@ pub(super) fn build_align_mask(
 pub(super) fn build_path_align_mask(
     path: &Path,
     align: StrokeAlign,
-    fill_even_odd: bool,
+    clip_fill_rule: SceneFillRule,
     effective_clip: (f64, f64, f64, f64),
     width: u32,
     height: u32,
@@ -93,7 +100,7 @@ pub(super) fn build_path_align_mask(
     build_align_mask_for_path(
         path,
         invert,
-        fill_even_odd,
+        clip_fill_rule,
         effective_clip,
         width,
         height,
@@ -104,18 +111,14 @@ pub(super) fn build_path_align_mask(
 fn build_align_mask_for_path(
     fill_path: &Path,
     invert: bool,
-    fill_even_odd: bool,
+    clip_fill_rule: SceneFillRule,
     effective_clip: (f64, f64, f64, f64),
     width: u32,
     height: u32,
     device_ts: Transform,
 ) -> Option<Mask> {
     let mut mask = Mask::new(width, height)?;
-    let fill_rule = if fill_even_odd {
-        FillRule::EvenOdd
-    } else {
-        FillRule::Winding
-    };
+    let fill_rule = tiny_skia_fill_rule(clip_fill_rule);
     mask.fill_path(fill_path, fill_rule, true, device_ts);
     if invert {
         mask.invert();

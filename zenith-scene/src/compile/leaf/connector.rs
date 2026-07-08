@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 use zenith_core::{ConnectorNode, Diagnostic, FontProvider, ResolvedToken, Style, TextNode};
 use zenith_layout::RustybuzzEngine;
 
-use crate::ir::{Paint, SceneCommand, StrokeAlign};
+use crate::ir::{FillRule, Paint, SceneCommand, StrokeAlign};
 
 use super::super::RenderCtx;
 use super::super::anchor::AnchorMap;
@@ -647,7 +647,7 @@ pub(in crate::compile) fn compile_connector(
         stroke_width,
         closed: false,
         align: StrokeAlign::Center,
-        fill_even_odd: false,
+        clip_fill_rule: FillRule::NonZero,
     });
 
     // ARROWHEAD MARKERS (Unit 2/3) — filled triangles in the SAME stroke color,
@@ -660,7 +660,7 @@ pub(in crate::compile) fn compile_connector(
                 commands.push(SceneCommand::FillPolygon {
                     points,
                     paint: Paint::solid(color),
-                    even_odd: false,
+                    fill_rule: FillRule::NonZero,
                 });
             }
         };

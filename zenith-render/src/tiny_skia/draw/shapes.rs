@@ -13,7 +13,7 @@ use super::super::commands::{DrawCtx, build_stroke_dash, map_line_cap, map_line_
 use super::super::gradient::gradient_shader;
 use super::super::paths::{
     build_align_mask, build_path_align_mask, build_poly_path, build_rounded_rect_path,
-    build_scene_path, clip_mask, intersect_rects,
+    build_scene_path, clip_mask, intersect_rects, tiny_skia_fill_rule,
 };
 
 /// Build a tiny-skia fill paint from a scene [`ScenePaint`] over the bounding
@@ -404,7 +404,7 @@ pub(in crate::tiny_skia) fn fill_polygon(target: &mut Pixmap, ctx: DrawCtx, cmd:
     let SceneCommand::FillPolygon {
         points,
         paint,
-        even_odd,
+        fill_rule,
     } = cmd
     else {
         return;
@@ -429,12 +429,6 @@ pub(in crate::tiny_skia) fn fill_polygon(target: &mut Pixmap, ctx: DrawCtx, cmd:
         Some(m) => m,
     };
 
-    let fill_rule = if *even_odd {
-        FillRule::EvenOdd
-    } else {
-        FillRule::Winding
-    };
-
     // A gradient fill resolves its line over the polygon's bounding box.
     let Some((bx, by, bw, bh)) = flat_points_bbox(points) else {
         return;
@@ -443,7 +437,13 @@ pub(in crate::tiny_skia) fn fill_polygon(target: &mut Pixmap, ctx: DrawCtx, cmd:
         return;
     };
 
-    target.fill_path(&path, &paint_ts, fill_rule, ctx.current_ts, mask.as_ref());
+    target.fill_path(
+        &path,
+        &paint_ts,
+        tiny_skia_fill_rule(*fill_rule),
+        ctx.current_ts,
+        mask.as_ref(),
+    );
 }
 
 pub(in crate::tiny_skia) fn stroke_polyline(target: &mut Pixmap, ctx: DrawCtx, cmd: &SceneCommand) {
@@ -453,7 +453,7 @@ pub(in crate::tiny_skia) fn stroke_polyline(target: &mut Pixmap, ctx: DrawCtx, c
         stroke_width,
         closed,
         align,
-        fill_even_odd,
+        clip_fill_rule,
     } = cmd
     else {
         return;
@@ -495,7 +495,7 @@ pub(in crate::tiny_skia) fn stroke_polyline(target: &mut Pixmap, ctx: DrawCtx, c
         StrokeAlign::Inside | StrokeAlign::Outside if *closed => build_align_mask(
             points,
             *align,
-            *fill_even_odd,
+            *clip_fill_rule,
             effective_clip,
             ctx.width,
             ctx.height,
@@ -528,7 +528,7 @@ pub(in crate::tiny_skia) fn fill_path(target: &mut Pixmap, ctx: DrawCtx, cmd: &S
     let SceneCommand::FillPath {
         segments,
         paint,
-        even_odd,
+        fill_rule,
     } = cmd
     else {
         return;
@@ -545,18 +545,19 @@ pub(in crate::tiny_skia) fn fill_path(target: &mut Pixmap, ctx: DrawCtx, cmd: &S
         None => return,
         Some(m) => m,
     };
-    let fill_rule = if *even_odd {
-        FillRule::EvenOdd
-    } else {
-        FillRule::Winding
-    };
     let Some((bx, by, bw, bh)) = path_segments_bbox(segments) else {
         return;
     };
     let Some(paint_ts) = ts_fill_paint(paint, bx, by, bw, bh) else {
         return;
     };
-    target.fill_path(&path, &paint_ts, fill_rule, ctx.current_ts, mask.as_ref());
+    target.fill_path(
+        &path,
+        &paint_ts,
+        tiny_skia_fill_rule(*fill_rule),
+        ctx.current_ts,
+        mask.as_ref(),
+    );
 }
 
 pub(in crate::tiny_skia) fn stroke_path(target: &mut Pixmap, ctx: DrawCtx, cmd: &SceneCommand) {
@@ -566,7 +567,7 @@ pub(in crate::tiny_skia) fn stroke_path(target: &mut Pixmap, ctx: DrawCtx, cmd: 
         stroke_width,
         closed,
         align,
-        fill_even_odd,
+        clip_fill_rule,
         stroke_linejoin,
         stroke_miter_limit,
     } = cmd
@@ -597,7 +598,7 @@ pub(in crate::tiny_skia) fn stroke_path(target: &mut Pixmap, ctx: DrawCtx, cmd: 
         StrokeAlign::Inside | StrokeAlign::Outside if *closed => build_path_align_mask(
             &path,
             *align,
-            *fill_even_odd,
+            *clip_fill_rule,
             effective_clip,
             ctx.width,
             ctx.height,

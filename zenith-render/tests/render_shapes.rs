@@ -4,7 +4,7 @@
 
 mod common;
 use common::*;
-use zenith_scene::ir::PathSegment;
+use zenith_scene::ir::{FillRule, PathSegment};
 
 // ── pixel correctness ─────────────────────────────────────────────────
 
@@ -69,7 +69,7 @@ fn cubic_path_renders_ink_deterministically() {
             PathSegment::Close,
         ],
         paint: Paint::solid(Color::srgb(0, 180, 80, 255)),
-        even_odd: false,
+        fill_rule: FillRule::NonZero,
     });
     scene.commands.push(SceneCommand::PopClip);
 
@@ -202,7 +202,7 @@ fn fill_polygon_renders() {
         // Triangle: top-center, bottom-right, bottom-left
         points: vec![50.0, 10.0, 90.0, 90.0, 10.0, 90.0],
         paint: Paint::solid(color),
-        even_odd: false,
+        fill_rule: FillRule::NonZero,
     });
     scene.commands.push(SceneCommand::PopClip);
 
@@ -252,7 +252,7 @@ fn stroke_polyline_renders() {
         stroke_width: 4.0,
         closed: false,
         align: StrokeAlign::Center,
-        fill_even_odd: false,
+        clip_fill_rule: FillRule::NonZero,
     });
     scene.commands.push(SceneCommand::PopClip);
 
