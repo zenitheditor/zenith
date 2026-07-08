@@ -9,6 +9,7 @@ mod backend;
 mod error;
 mod pdf;
 mod render;
+mod svg_style;
 mod tiny_skia;
 
 pub use backend::{RasterBackend, RasterImage};

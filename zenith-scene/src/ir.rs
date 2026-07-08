@@ -344,6 +344,23 @@ pub struct SrcRect {
     pub h: f64,
 }
 
+/// Optional SVG-only styling applied at render time before SVG parsing.
+///
+/// These fields never mutate source asset bytes; they parameterize rendering of
+/// `currentColor` / root stroke-fill attributes after locked asset verification.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+pub struct SvgStyle {
+    /// Override for SVG stroke/currentColor.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stroke: Option<Color>,
+    /// Override for SVG fill/currentColor.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fill: Option<Color>,
+    /// Override for SVG stroke-width.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stroke_width: Option<f64>,
+}
+
 // ── Image clip shape ──────────────────────────────────────────────────────────
 
 /// A non-rectangular clip shape applied to a [`SceneCommand::DrawImage`].
@@ -619,6 +636,9 @@ pub enum SceneCommand {
         /// Applies to raster assets only; ignored for SVG.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         src_rect: Option<SrcRect>,
+        /// SVG-only style overrides. Ignored for raster assets.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        svg_style: Option<SvgStyle>,
     },
     /// Draw a pre-resolved SVG asset.
     DrawSvgAsset {

@@ -762,6 +762,7 @@ pub(super) fn emit_command(
             opacity,
             clip_shape,
             src_rect: _,
+            svg_style,
         } => {
             emit_image(
                 content,
@@ -779,6 +780,7 @@ pub(super) fn emit_command(
                     pos_y: *pos_y,
                     opacity: *opacity,
                     clip_shape,
+                    svg_style: *svg_style,
                 },
             );
         }
@@ -885,6 +887,8 @@ struct ImageDraw<'a> {
     opacity: f64,
     /// Optional non-rectangular clip shape inscribed in the box.
     clip_shape: &'a Option<ImageClip>,
+    /// SVG-only style overrides.
+    svg_style: Option<zenith_scene::SvgStyle>,
 }
 
 fn emit_image(
@@ -905,6 +909,7 @@ fn emit_image(
         pos_y,
         opacity,
         clip_shape,
+        svg_style,
     } = draw;
     if !rect_ok(x, y, w, h) {
         return;
@@ -934,6 +939,7 @@ fn emit_image(
                     pos_y,
                     opacity,
                     clip_shape,
+                    svg_style,
                 },
             );
             return;

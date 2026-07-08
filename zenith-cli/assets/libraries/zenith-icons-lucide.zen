@@ -27,72 +27,76 @@ zenith version=1 {
   libraries {
     library id="@zenith/icons-lucide" version="0.1.0"
   }
+  tokens format="zenith-token-v1" {
+    token id="lib.icons.stroke" type="color" value="#111827"
+    token id="lib.icons.stroke_width" type="dimension" value=(px)2
+  }
   components {
     component id="monitor" {
-      image id="icon" asset="lucide.monitor" x=(px)0 y=(px)0 w=(px)24 h=(px)24 fit="contain"
+      image id="icon" asset="lucide.monitor" x=(px)0 y=(px)0 w=(px)24 h=(px)24 fit="contain" svg-stroke=(token)"lib.icons.stroke" svg-stroke-width=(token)"lib.icons.stroke_width"
     }
     component id="smartphone" {
-      image id="icon" asset="lucide.smartphone" x=(px)0 y=(px)0 w=(px)24 h=(px)24 fit="contain"
+      image id="icon" asset="lucide.smartphone" x=(px)0 y=(px)0 w=(px)24 h=(px)24 fit="contain" svg-stroke=(token)"lib.icons.stroke" svg-stroke-width=(token)"lib.icons.stroke_width"
     }
     component id="tablet" {
-      image id="icon" asset="lucide.tablet" x=(px)0 y=(px)0 w=(px)24 h=(px)24 fit="contain"
+      image id="icon" asset="lucide.tablet" x=(px)0 y=(px)0 w=(px)24 h=(px)24 fit="contain" svg-stroke=(token)"lib.icons.stroke" svg-stroke-width=(token)"lib.icons.stroke_width"
     }
     component id="server" {
-      image id="icon" asset="lucide.server" x=(px)0 y=(px)0 w=(px)24 h=(px)24 fit="contain"
+      image id="icon" asset="lucide.server" x=(px)0 y=(px)0 w=(px)24 h=(px)24 fit="contain" svg-stroke=(token)"lib.icons.stroke" svg-stroke-width=(token)"lib.icons.stroke_width"
     }
     component id="database" {
-      image id="icon" asset="lucide.database" x=(px)0 y=(px)0 w=(px)24 h=(px)24 fit="contain"
+      image id="icon" asset="lucide.database" x=(px)0 y=(px)0 w=(px)24 h=(px)24 fit="contain" svg-stroke=(token)"lib.icons.stroke" svg-stroke-width=(token)"lib.icons.stroke_width"
     }
     component id="cloud" {
-      image id="icon" asset="lucide.cloud" x=(px)0 y=(px)0 w=(px)24 h=(px)24 fit="contain"
+      image id="icon" asset="lucide.cloud" x=(px)0 y=(px)0 w=(px)24 h=(px)24 fit="contain" svg-stroke=(token)"lib.icons.stroke" svg-stroke-width=(token)"lib.icons.stroke_width"
     }
     component id="hard-drive" {
-      image id="icon" asset="lucide.hard-drive" x=(px)0 y=(px)0 w=(px)24 h=(px)24 fit="contain"
+      image id="icon" asset="lucide.hard-drive" x=(px)0 y=(px)0 w=(px)24 h=(px)24 fit="contain" svg-stroke=(token)"lib.icons.stroke" svg-stroke-width=(token)"lib.icons.stroke_width"
     }
     component id="cpu" {
-      image id="icon" asset="lucide.cpu" x=(px)0 y=(px)0 w=(px)24 h=(px)24 fit="contain"
+      image id="icon" asset="lucide.cpu" x=(px)0 y=(px)0 w=(px)24 h=(px)24 fit="contain" svg-stroke=(token)"lib.icons.stroke" svg-stroke-width=(token)"lib.icons.stroke_width"
     }
     component id="network" {
-      image id="icon" asset="lucide.network" x=(px)0 y=(px)0 w=(px)24 h=(px)24 fit="contain"
+      image id="icon" asset="lucide.network" x=(px)0 y=(px)0 w=(px)24 h=(px)24 fit="contain" svg-stroke=(token)"lib.icons.stroke" svg-stroke-width=(token)"lib.icons.stroke_width"
     }
     component id="wifi" {
-      image id="icon" asset="lucide.wifi" x=(px)0 y=(px)0 w=(px)24 h=(px)24 fit="contain"
+      image id="icon" asset="lucide.wifi" x=(px)0 y=(px)0 w=(px)24 h=(px)24 fit="contain" svg-stroke=(token)"lib.icons.stroke" svg-stroke-width=(token)"lib.icons.stroke_width"
     }
     component id="globe" {
-      image id="icon" asset="lucide.globe" x=(px)0 y=(px)0 w=(px)24 h=(px)24 fit="contain"
+      image id="icon" asset="lucide.globe" x=(px)0 y=(px)0 w=(px)24 h=(px)24 fit="contain" svg-stroke=(token)"lib.icons.stroke" svg-stroke-width=(token)"lib.icons.stroke_width"
     }
     component id="box" {
-      image id="icon" asset="lucide.box" x=(px)0 y=(px)0 w=(px)24 h=(px)24 fit="contain"
+      image id="icon" asset="lucide.box" x=(px)0 y=(px)0 w=(px)24 h=(px)24 fit="contain" svg-stroke=(token)"lib.icons.stroke" svg-stroke-width=(token)"lib.icons.stroke_width"
     }
     component id="file" {
-      image id="icon" asset="lucide.file" x=(px)0 y=(px)0 w=(px)24 h=(px)24 fit="contain"
+      image id="icon" asset="lucide.file" x=(px)0 y=(px)0 w=(px)24 h=(px)24 fit="contain" svg-stroke=(token)"lib.icons.stroke" svg-stroke-width=(token)"lib.icons.stroke_width"
     }
     component id="folder" {
-      image id="icon" asset="lucide.folder" x=(px)0 y=(px)0 w=(px)24 h=(px)24 fit="contain"
+      image id="icon" asset="lucide.folder" x=(px)0 y=(px)0 w=(px)24 h=(px)24 fit="contain" svg-stroke=(token)"lib.icons.stroke" svg-stroke-width=(token)"lib.icons.stroke_width"
     }
     component id="lock" {
-      image id="icon" asset="lucide.lock" x=(px)0 y=(px)0 w=(px)24 h=(px)24 fit="contain"
+      image id="icon" asset="lucide.lock" x=(px)0 y=(px)0 w=(px)24 h=(px)24 fit="contain" svg-stroke=(token)"lib.icons.stroke" svg-stroke-width=(token)"lib.icons.stroke_width"
     }
     component id="key" {
-      image id="icon" asset="lucide.key" x=(px)0 y=(px)0 w=(px)24 h=(px)24 fit="contain"
+      image id="icon" asset="lucide.key" x=(px)0 y=(px)0 w=(px)24 h=(px)24 fit="contain" svg-stroke=(token)"lib.icons.stroke" svg-stroke-width=(token)"lib.icons.stroke_width"
     }
     component id="search" {
-      image id="icon" asset="lucide.search" x=(px)0 y=(px)0 w=(px)24 h=(px)24 fit="contain"
+      image id="icon" asset="lucide.search" x=(px)0 y=(px)0 w=(px)24 h=(px)24 fit="contain" svg-stroke=(token)"lib.icons.stroke" svg-stroke-width=(token)"lib.icons.stroke_width"
     }
     component id="settings" {
-      image id="icon" asset="lucide.settings" x=(px)0 y=(px)0 w=(px)24 h=(px)24 fit="contain"
+      image id="icon" asset="lucide.settings" x=(px)0 y=(px)0 w=(px)24 h=(px)24 fit="contain" svg-stroke=(token)"lib.icons.stroke" svg-stroke-width=(token)"lib.icons.stroke_width"
     }
     component id="arrow-right-left" {
-      image id="icon" asset="lucide.arrow-right-left" x=(px)0 y=(px)0 w=(px)24 h=(px)24 fit="contain"
+      image id="icon" asset="lucide.arrow-right-left" x=(px)0 y=(px)0 w=(px)24 h=(px)24 fit="contain" svg-stroke=(token)"lib.icons.stroke" svg-stroke-width=(token)"lib.icons.stroke_width"
     }
     component id="sync" {
-      image id="icon" asset="lucide.sync" x=(px)0 y=(px)0 w=(px)24 h=(px)24 fit="contain"
+      image id="icon" asset="lucide.sync" x=(px)0 y=(px)0 w=(px)24 h=(px)24 fit="contain" svg-stroke=(token)"lib.icons.stroke" svg-stroke-width=(token)"lib.icons.stroke_width"
     }
     component id="upload-cloud" {
-      image id="icon" asset="lucide.upload-cloud" x=(px)0 y=(px)0 w=(px)24 h=(px)24 fit="contain"
+      image id="icon" asset="lucide.upload-cloud" x=(px)0 y=(px)0 w=(px)24 h=(px)24 fit="contain" svg-stroke=(token)"lib.icons.stroke" svg-stroke-width=(token)"lib.icons.stroke_width"
     }
     component id="download-cloud" {
-      image id="icon" asset="lucide.download-cloud" x=(px)0 y=(px)0 w=(px)24 h=(px)24 fit="contain"
+      image id="icon" asset="lucide.download-cloud" x=(px)0 y=(px)0 w=(px)24 h=(px)24 fit="contain" svg-stroke=(token)"lib.icons.stroke" svg-stroke-width=(token)"lib.icons.stroke_width"
     }
   }
   document id="pack.preview" title="Lucide icon pack preview" {

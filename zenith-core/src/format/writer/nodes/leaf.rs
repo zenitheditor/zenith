@@ -87,7 +87,8 @@ pub(super) fn write_image(i: &ImageNode, out: &mut String, depth: usize) {
     out.push_str("image");
 
     // Canonical property order: id, name, role, anchor, anchor-zone, asset, x, y, w, h,
-    // src-x, src-y, src-w, src-h, fit, clip, clip-radius,
+    // src-x, src-y, src-w, src-h, fit, svg-stroke, svg-fill, svg-stroke-width,
+    // clip, clip-radius,
     // object-position-x, object-position-y, shadow, opacity, visible, locked,
     // rotate, style, then unknown props (sorted).
     out.push_str(" id=\"");
@@ -113,6 +114,9 @@ pub(super) fn write_image(i: &ImageNode, out: &mut String, depth: usize) {
     write_opt_dimension(out, "src-w", &i.src_w);
     write_opt_dimension(out, "src-h", &i.src_h);
     write_opt_str(out, "fit", &i.fit);
+    write_opt_property_value(out, "svg-stroke", &i.svg_stroke);
+    write_opt_property_value(out, "svg-fill", &i.svg_fill);
+    write_opt_property_value(out, "svg-stroke-width", &i.svg_stroke_width);
     write_opt_str(out, "clip", &i.clip);
     write_opt_property_value(out, "clip-radius", &i.clip_radius);
     write_opt_object_position(out, "object-position-x", &i.object_position_x);

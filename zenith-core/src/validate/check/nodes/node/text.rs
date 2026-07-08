@@ -551,6 +551,33 @@ pub(in crate::validate::check) fn check_image(
     // meaningful for clip="rounded" but type-checked whenever present.
     check_visual_prop(
         &img.id,
+        "svg-stroke",
+        img.svg_stroke.as_ref(),
+        VisualExpect::Color,
+        referenced_token_ids,
+        resolved_tokens,
+        diagnostics,
+    );
+    check_visual_prop(
+        &img.id,
+        "svg-fill",
+        img.svg_fill.as_ref(),
+        VisualExpect::Color,
+        referenced_token_ids,
+        resolved_tokens,
+        diagnostics,
+    );
+    check_visual_prop(
+        &img.id,
+        "svg-stroke-width",
+        img.svg_stroke_width.as_ref(),
+        VisualExpect::Dimension,
+        referenced_token_ids,
+        resolved_tokens,
+        diagnostics,
+    );
+    check_visual_prop(
+        &img.id,
         "clip-radius",
         img.clip_radius.as_ref(),
         VisualExpect::Dimension,

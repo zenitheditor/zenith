@@ -3,7 +3,7 @@
 use zenith_core::{AssetKind, AssetProvider, BytesAssetProvider, FontProvider, default_provider};
 use zenith_scene::{
     Color, FillRule, FilterSpec, FitMode, GradientPaint, GradientStop, Paint, Rect, Scene,
-    SceneCommand, SceneGlyph, ir::PathSegment,
+    SceneCommand, SceneGlyph, SvgStyle, ir::PathSegment,
 };
 
 use super::render_pdf;
@@ -286,6 +286,7 @@ fn svg_asset_emits_vector_paths_and_shading_not_raster() {
         opacity: 1.0,
         clip_shape: None,
         src_rect: None,
+        svg_style: None,
     });
 
     let bytes = render_pdf(&scene, &fonts, &assets);
@@ -301,6 +302,52 @@ fn svg_asset_emits_vector_paths_and_shading_not_raster() {
     assert!(
         !text.contains("/Subtype /Image"),
         "SVG must be vector, not a rasterized image XObject"
+    );
+}
+
+#[test]
+fn svg_asset_style_override_emits_vector_stroke_color() {
+    const STROKE_SVG: &[u8] = b"<svg xmlns='http://www.w3.org/2000/svg' \
+        viewBox='0 0 10 10' fill='none' stroke='currentColor' stroke-width='2'>\
+        <path d='M1 5 L9 5'/></svg>";
+
+    let fonts = default_provider();
+    let mut assets = BytesAssetProvider::new();
+    assets.register(
+        "asset.stroke",
+        AssetKind::Svg,
+        std::sync::Arc::from(STROKE_SVG),
+    );
+
+    let mut scene = Scene::new(20.0, 20.0);
+    scene.commands.push(SceneCommand::DrawImage {
+        x: 2.0,
+        y: 2.0,
+        w: 16.0,
+        h: 16.0,
+        asset_id: "asset.stroke".to_string(),
+        fit: FitMode::Contain,
+        pos_x: 50.0,
+        pos_y: 50.0,
+        opacity: 1.0,
+        clip_shape: None,
+        src_rect: None,
+        svg_style: Some(SvgStyle {
+            stroke: Some(Color::srgb(255, 0, 0, 255)),
+            fill: None,
+            stroke_width: None,
+        }),
+    });
+
+    let bytes = render_pdf(&scene, &fonts, &assets);
+    let text = String::from_utf8_lossy(&bytes);
+    assert!(
+        text.contains("1 0 0 RG"),
+        "styled SVG stroke should emit red DeviceRGB stroke; got: {text}"
+    );
+    assert!(
+        !text.contains("/Subtype /Image"),
+        "styled SVG must stay vector, not raster XObject"
     );
 }
 

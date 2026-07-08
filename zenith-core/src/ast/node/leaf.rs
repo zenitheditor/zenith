@@ -41,6 +41,14 @@ pub struct ImageNode {
     /// Fit mode string (`contain`/`cover`/`stretch`/`none`); validated, not
     /// enum-typed in the AST so unknown values survive for forward-compat.
     pub fit: Option<String>,
+    /// SVG-only stroke color override. When the referenced asset is SVG, the
+    /// renderer applies this to `currentColor`/root stroke data without
+    /// mutating the source asset bytes. Raster assets ignore it.
+    pub svg_stroke: Option<PropertyValue>,
+    /// SVG-only fill color override. Raster assets ignore it.
+    pub svg_fill: Option<PropertyValue>,
+    /// SVG-only stroke-width override. Raster assets ignore it.
+    pub svg_stroke_width: Option<PropertyValue>,
     /// Clip-to-shape mode (`"ellipse"`/`"rounded"`/`"rect"`); absent or an
     /// unrecognized value means the default rectangular box-clip. Validated as a
     /// plain string so unknown values survive for forward-compat.

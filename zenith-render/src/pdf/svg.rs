@@ -28,7 +28,7 @@ use pdf_writer::Content;
 use resvg::usvg::tiny_skia_path::{PathSegment, Point};
 use resvg::usvg::{self, NodeKind, Paint, TreeParsing, TreeTextToPath, Units, Visibility};
 use zenith_core::FontProvider;
-use zenith_scene::{Color, FitMode, ImageClip};
+use zenith_scene::{Color, FitMode, ImageClip, SvgStyle};
 
 use super::color;
 use super::content::{ALPHA_PREFIX, PageResources, SHADING_PREFIX, name, push_gradient};
@@ -49,6 +49,7 @@ pub(super) struct SvgPlacement<'a> {
     pub(super) pos_y: f64,
     pub(super) opacity: f64,
     pub(super) clip_shape: &'a Option<ImageClip>,
+    pub(super) svg_style: Option<SvgStyle>,
 }
 
 /// A 2-D affine map `(x, y) → (a·x + c·y + e, b·x + d·y + f)`, in scene units.
@@ -136,6 +137,7 @@ pub(super) fn emit_svg(
         pos_y,
         opacity,
         clip_shape,
+        svg_style,
     } = place;
     if !(w > 0.0 && h > 0.0 && x.is_finite() && y.is_finite()) {
         return;
@@ -155,7 +157,8 @@ pub(super) fn emit_svg(
         font_family: "Noto Sans".to_owned(),
         ..Default::default()
     };
-    let Ok(mut tree) = usvg::Tree::from_data(bytes, &opts) else {
+    let svg_bytes = crate::svg_style::styled_svg_bytes(bytes, svg_style);
+    let Ok(mut tree) = usvg::Tree::from_data(&svg_bytes, &opts) else {
         return; // malformed SVG: draw nothing (no fallback raster)
     };
     tree.convert_text(&fontdb);

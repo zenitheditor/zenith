@@ -132,7 +132,10 @@ These make designs editable, on-brand, and reproducible — and keep the agentic
   The Lucide pack includes `monitor`, `smartphone`, `tablet`, `server`, `database`, `cloud`,
   `hard-drive`, `cpu`, `network`, `wifi`, `globe`, `box`, `file`, `folder`, `lock`, `key`,
   `search`, `settings`, `arrow-right-left`, `sync`, `upload-cloud`, and `download-cloud`.
-  Add labels beside or below icon instances when text is needed; do not redraw the icon by hand.
+  Restyle materialized icon instances with `override ref="icon" svg-stroke=(token)"..."` and
+  `svg-stroke-width=(token)"..."`; use `svg-fill` only for icons that intentionally fill from
+  `currentColor`. Add labels beside or below icon instances when text is needed; do not redraw the
+  icon by hand.
 - **For quantitative/data content** (comparisons, trends, proportions) use the `chart` node
   (bar/line/area/pie/donut/sparkline) — run `zenith schema node chart` for the series/categories
   child syntax; bind a series to a `--data` JSON array or CSV column with `data-ref`.

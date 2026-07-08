@@ -6,6 +6,7 @@ use std::sync::Arc;
 mod common;
 use common::*;
 use zenith_raster::{LinearRgba, blend_pixel, decode_srgb_u8, encode_linear_to_srgb_u8};
+use zenith_scene::SvgStyle;
 
 // ── image: stretch renders + determinism ──────────────────────────────
 
@@ -105,6 +106,7 @@ fn draw_image_missing_asset_is_skipped() {
         opacity: 1.0,
         clip_shape: None,
         src_rect: None,
+        svg_style: None,
     });
     scene.commands.push(SceneCommand::PopClip);
 
@@ -173,6 +175,7 @@ fn draw_image_inside_multiply_layer_uses_raster_blend_math() {
         opacity: 1.0,
         clip_shape: None,
         src_rect: None,
+        svg_style: None,
     });
     scene.commands.push(SceneCommand::PopLayer);
     scene.commands.push(SceneCommand::PopClip);
@@ -237,6 +240,7 @@ fn draw_image_multiply_layer_preserves_transparent_layer_area() {
         opacity: 1.0,
         clip_shape: None,
         src_rect: None,
+        svg_style: None,
     });
     blended_scene.commands.push(SceneCommand::PopLayer);
 
@@ -328,6 +332,7 @@ fn image_over_backdrop_scene(layer: Option<Option<BlendMode>>) -> Scene {
         opacity: 1.0,
         clip_shape: None,
         src_rect: None,
+        svg_style: None,
     });
     if layer.is_some() {
         scene.commands.push(SceneCommand::PopLayer);
@@ -423,6 +428,7 @@ fn draw_image_svg_asset_renders_red_pixels() {
         opacity: 1.0,
         clip_shape: None,
         src_rect: None,
+        svg_style: None,
     });
     scene.commands.push(SceneCommand::PopClip);
 
@@ -439,6 +445,64 @@ fn draw_image_svg_asset_renders_red_pixels() {
         r > g && r > b,
         "center pixel must be red-dominant; got r={r} g={g} b={b}"
     );
+}
+
+#[test]
+fn draw_image_svg_style_recolors_current_color_stroke() {
+    const STROKE_SVG: &[u8] = b"<svg xmlns='http://www.w3.org/2000/svg' \
+        width='10' height='10' viewBox='0 0 10 10' fill='none' \
+        stroke='currentColor' stroke-width='10'>\
+        <path d='M5 0 L5 10'/>\
+        </svg>";
+
+    let mut assets = BytesAssetProvider::new();
+    assets.register("asset.stroke", AssetKind::Svg, Arc::from(STROKE_SVG));
+
+    let render_with = |stroke: Color| {
+        let mut scene = Scene::new(10.0, 10.0);
+        scene.commands.push(SceneCommand::PushClip {
+            x: 0.0,
+            y: 0.0,
+            w: 10.0,
+            h: 10.0,
+        });
+        scene.commands.push(SceneCommand::DrawImage {
+            x: 0.0,
+            y: 0.0,
+            w: 10.0,
+            h: 10.0,
+            asset_id: "asset.stroke".to_string(),
+            fit: FitMode::Stretch,
+            pos_x: 50.0,
+            pos_y: 50.0,
+            opacity: 1.0,
+            clip_shape: None,
+            src_rect: None,
+            svg_style: Some(SvgStyle {
+                stroke: Some(stroke),
+                fill: None,
+                stroke_width: None,
+            }),
+        });
+        scene.commands.push(SceneCommand::PopClip);
+        TinySkiaBackend
+            .rasterize(&scene, &default_provider(), &assets)
+            .expect("styled SVG rasterize")
+    };
+
+    let red = render_with(Color::srgb(255, 0, 0, 255));
+    let blue = render_with(Color::srgb(0, 0, 255, 255));
+    let (rr, rg, rb, ra) = pixel(&red.rgba, red.width, 5, 5);
+    let (br, bg, bb, ba) = pixel(&blue.rgba, blue.width, 5, 5);
+    assert!(
+        ra > 0 && rr > rg && rr > rb,
+        "red pixel: {rr},{rg},{rb},{ra}"
+    );
+    assert!(
+        ba > 0 && bb > br && bb > bg,
+        "blue pixel: {br},{bg},{bb},{ba}"
+    );
+    assert_ne!(red.rgba, blue.rgba, "style color must change raster output");
 }
 
 // ── SVG <text>: text element converts to paths and rasterizes ─────────
@@ -476,6 +540,7 @@ fn draw_image_svg_text_renders_red_pixels() {
         opacity: 1.0,
         clip_shape: None,
         src_rect: None,
+        svg_style: None,
     });
     scene.commands.push(SceneCommand::PopClip);
 
@@ -541,6 +606,7 @@ fn draw_image_src_rect_crops_to_blue_column() {
             w: 1.0,
             h: 3.0,
         }),
+        svg_style: None,
     });
     scene.commands.push(SceneCommand::PopClip);
     scene.commands.push(SceneCommand::PopClip);

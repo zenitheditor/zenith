@@ -37,6 +37,7 @@ pub(in crate::tiny_skia) fn draw_image(
         opacity,
         clip_shape,
         src_rect,
+        svg_style,
     } = cmd
     else {
         return;
@@ -103,7 +104,8 @@ pub(in crate::tiny_skia) fn draw_image(
                 font_family: "Noto Sans".to_owned(),
                 ..Default::default()
             };
-            let Ok(mut usvg_tree) = usvg::Tree::from_data(&asset.bytes, &opts) else {
+            let svg_bytes = crate::svg_style::styled_svg_bytes(&asset.bytes, *svg_style);
+            let Ok(mut usvg_tree) = usvg::Tree::from_data(&svg_bytes, &opts) else {
                 return; // malformed SVG: skip
             };
             usvg_tree.convert_text(fontdb);

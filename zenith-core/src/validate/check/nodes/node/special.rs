@@ -601,6 +601,33 @@ pub(in crate::validate::check) fn check_instance(
             resolved_tokens,
             diagnostics,
         );
+        check_visual_prop(
+            &inst.id,
+            "svg-stroke",
+            ov.svg_stroke.as_ref(),
+            VisualExpect::Color,
+            referenced_token_ids,
+            resolved_tokens,
+            diagnostics,
+        );
+        check_visual_prop(
+            &inst.id,
+            "svg-fill",
+            ov.svg_fill.as_ref(),
+            VisualExpect::Color,
+            referenced_token_ids,
+            resolved_tokens,
+            diagnostics,
+        );
+        check_visual_prop(
+            &inst.id,
+            "svg-stroke-width",
+            ov.svg_stroke_width.as_ref(),
+            VisualExpect::Dimension,
+            referenced_token_ids,
+            resolved_tokens,
+            diagnostics,
+        );
         if let Some(spans) = &ov.spans {
             for span in spans {
                 check_visual_prop(

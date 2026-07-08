@@ -518,6 +518,7 @@ fn attribute_type_for_kind_inner(kind: &str, name: &str, fallback: &'static str)
         //   text.rs:122, shape.rs:117, shape.rs:248 (connector).
         // There is no node kind where stroke accepts a gradient.
         (_, "stroke") => "token ref: color",
+        ("image", "svg-stroke" | "svg-fill") => "token ref: color",
         // shadow / filter / mask: dedicated token types; NOT color/gradient.
         // Verified at shared.rs:960 (Shadow), 969 (Filter), 978 (Mask).
         // These are only present on kinds that go through check_visual_props
@@ -626,9 +627,8 @@ fn attribute_type_generic(name: &str, fallback: &'static str) -> &'static str {
 
         // ── Visual — token refs: dimension ────────────────────────────────
         "radius" | "radius-tl" | "radius-tr" | "radius-br" | "radius-bl" => "token ref: dimension",
-        "stroke-width" | "stroke-dash" | "stroke-gap" | "stroke-outer-width" => {
-            "token ref: dimension"
-        }
+        "stroke-width" | "stroke-dash" | "stroke-gap" | "stroke-outer-width"
+        | "svg-stroke-width" => "token ref: dimension",
         "border-width" => "token ref: dimension",
         "font-size" | "font-size-min" => "token ref: dimension",
         "baseline-grid" => "token ref: dimension",

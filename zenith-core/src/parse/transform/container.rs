@@ -514,7 +514,7 @@ pub(super) fn transform_instance(node: &KdlNode) -> Result<InstanceNode, ParseEr
 /// Transform an `override ref="..." { … }` instance child into an [`Override`].
 ///
 /// `ref` (required) names a component-LOCAL descendant id. Supported v0 override
-/// payload: `span` children (→ `spans`), a `fill` prop, and a `visible` prop.
+/// payload: `span` children (→ `spans`), `fill`, `svg-*`, and `visible` props.
 fn transform_override(node: &KdlNode) -> Result<Override, ParseError> {
     let ref_id = required_string_prop(node, "ref")?.to_owned();
 
@@ -538,6 +538,13 @@ fn transform_override(node: &KdlNode) -> Result<Override, ParseError> {
         ref_id,
         spans,
         fill: optional_property_value(node, "fill"),
+        svg_stroke: optional_property_value_aliased(node, "svg-stroke", "svg_stroke"),
+        svg_fill: optional_property_value_aliased(node, "svg-fill", "svg_fill"),
+        svg_stroke_width: optional_property_value_aliased(
+            node,
+            "svg-stroke-width",
+            "svg_stroke_width",
+        ),
         visible: optional_bool_prop(node, "visible"),
         source_span: node_span(node),
     })

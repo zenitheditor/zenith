@@ -48,6 +48,7 @@ page id="page.i1" w=(px)320 h=(px)200 {
             opacity,
             clip_shape,
             src_rect,
+            svg_style,
         } => {
             assert_eq!(*x, 40.0);
             assert_eq!(*y, 40.0);
@@ -60,10 +61,99 @@ page id="page.i1" w=(px)320 h=(px)200 {
             assert_eq!(*opacity, 1.0);
             assert_eq!(*clip_shape, None, "default image has no clip shape");
             assert_eq!(*src_rect, None, "default image has no src_rect");
+            assert_eq!(*svg_style, None, "default image has no SVG style");
         }
         other => panic!("expected DrawImage, got {other:?}"),
     }
     assert!(matches!(cmds[3], SceneCommand::PopClip));
+}
+
+#[test]
+fn image_svg_style_attrs_compile_to_draw_image_style() {
+    let src = r##"zenith version=1 {
+  project id="proj.svg-style" name="Svg Style"
+  assets {
+    asset id="asset.icon" kind="svg" src="assets/icon.svg"
+  }
+  tokens format="zenith-token-v1" {
+    token id="color.icon" type="color" value="#123456"
+    token id="size.icon.stroke" type="dimension" value=(px)3
+  }
+  styles {}
+  document id="doc.svg-style" title="Svg Style" {
+    page id="page.svg-style" w=(px)80 h=(px)80 {
+      image id="img.icon" asset="asset.icon" x=(px)10 y=(px)10 w=(px)24 h=(px)24 fit="contain" svg-stroke=(token)"color.icon" svg-stroke-width=(token)"size.icon.stroke"
+    }
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+    let style = result
+        .scene
+        .commands
+        .iter()
+        .find_map(|cmd| match cmd {
+            SceneCommand::DrawImage { svg_style, .. } => *svg_style,
+            _ => None,
+        })
+        .expect("draw image carries SVG style");
+    assert_eq!(style.stroke.expect("stroke").r, 0x12);
+    assert_eq!(style.stroke.expect("stroke").g, 0x34);
+    assert_eq!(style.stroke.expect("stroke").b, 0x56);
+    assert_eq!(style.stroke_width, Some(3.0));
+    assert_eq!(style.fill, None);
+}
+
+#[test]
+fn instance_override_can_style_svg_image_component() {
+    let src = r##"zenith version=1 {
+  project id="proj.svg-override" name="Svg Override"
+  assets {
+    asset id="asset.icon" kind="svg" src="assets/icon.svg"
+  }
+  tokens format="zenith-token-v1" {
+    token id="color.icon" type="color" value="#0055aa"
+    token id="size.icon.stroke" type="dimension" value=(px)4
+  }
+  styles {}
+  components {
+    component id="icon.monitor" {
+      image id="icon" asset="asset.icon" x=(px)0 y=(px)0 w=(px)24 h=(px)24 fit="contain"
+    }
+  }
+  document id="doc.svg-override" title="Svg Override" {
+    page id="page.svg-override" w=(px)80 h=(px)80 {
+      instance id="monitor" component="icon.monitor" x=(px)10 y=(px)10 {
+        override ref="icon" svg-stroke=(token)"color.icon" svg-stroke-width=(token)"size.icon.stroke"
+      }
+    }
+  }
+}
+"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+    assert!(
+        result.diagnostics.is_empty(),
+        "unexpected diagnostics: {:?}",
+        result.diagnostics
+    );
+    let style = result
+        .scene
+        .commands
+        .iter()
+        .find_map(|cmd| match cmd {
+            SceneCommand::DrawImage { svg_style, .. } => *svg_style,
+            _ => None,
+        })
+        .expect("component image carries override SVG style");
+    assert_eq!(style.stroke.expect("stroke").b, 0xaa);
+    assert_eq!(style.stroke_width, Some(4.0));
 }
 
 #[test]

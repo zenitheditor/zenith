@@ -266,13 +266,19 @@ fn prefix_imported_asset_refs(nodes: &mut [Node], import_id: &str) {
 
 fn remap_import_override(ov: &Override, cx: NodeCtx) -> Override {
     let mut remapped = ov.clone();
-    if let Some(PropertyValue::TokenRef(token_id)) = &ov.fill
+    remap_color_override(&mut remapped.fill, cx);
+    remap_color_override(&mut remapped.svg_stroke, cx);
+    remap_color_override(&mut remapped.svg_fill, cx);
+    remapped
+}
+
+fn remap_color_override(prop: &mut Option<PropertyValue>, cx: NodeCtx) {
+    if let Some(PropertyValue::TokenRef(token_id)) = prop
         && let Some(token) = cx.resolved.get(token_id)
         && let Some(hex) = token.value.as_color_hex()
     {
-        remapped.fill = Some(PropertyValue::Literal(hex.to_owned()));
+        *prop = Some(PropertyValue::Literal(hex.to_owned()));
     }
-    remapped
 }
 
 fn synthetic_group(instance: &InstanceNode, children: Vec<Node>) -> GroupNode {
@@ -319,7 +325,8 @@ fn synthetic_group(instance: &InstanceNode, children: Vec<Node>) -> GroupNode {
 /// into `group`/`frame`/`instance` containers) whose LOCAL id equals
 /// `ov.ref_id`. Mutates a CLONE — callers pass the cloned component subtree.
 ///
-/// Supported v0 payload: replace `spans` (text targets), `fill`, and `visible`.
+/// Supported payload: replace `spans` (text targets), `fill`, image `svg-*`,
+/// and `visible`.
 /// An override targeting a kind without the relevant field is a no-op for that
 /// field (e.g. `spans` on a rect). An unmatched ref is silently ignored here;
 /// the validator already warns via `component.unknown_override_target`.
@@ -375,9 +382,27 @@ fn apply_override_to_node(node: &mut Node, ov: &Override) {
     if let Some(fill) = &ov.fill {
         set_node_fill(node, fill.clone());
     }
+    if ov.svg_stroke.is_some() || ov.svg_fill.is_some() || ov.svg_stroke_width.is_some() {
+        set_node_svg_style(node, ov);
+    }
     // visible → every id-bearing renderable kind carries a visible flag.
     if let Some(v) = ov.visible {
         set_node_visible(node, v);
+    }
+}
+
+fn set_node_svg_style(node: &mut Node, ov: &Override) {
+    let Node::Image(image) = node else {
+        return;
+    };
+    if let Some(stroke) = &ov.svg_stroke {
+        image.svg_stroke = Some(stroke.clone());
+    }
+    if let Some(fill) = &ov.svg_fill {
+        image.svg_fill = Some(fill.clone());
+    }
+    if let Some(stroke_width) = &ov.svg_stroke_width {
+        image.svg_stroke_width = Some(stroke_width.clone());
     }
 }
 

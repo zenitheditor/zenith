@@ -4,13 +4,13 @@ use std::collections::BTreeMap;
 
 use zenith_core::{Diagnostic, ImageNode, ObjectPosition, ResolvedToken, dim_to_px};
 
-use crate::ir::{FitMode, ImageClip, SceneCommand, SrcRect};
+use crate::ir::{FitMode, ImageClip, SceneCommand, SrcRect, SvgStyle};
 
 use super::RenderCtx;
 use super::anchor::AnchorMap;
 use super::paint::{
-    NodeEffect, emit_node_with_effects, resolve_property_filter, resolve_property_mask,
-    resolve_property_shadow,
+    NodeEffect, emit_node_with_effects, resolve_property_color, resolve_property_filter,
+    resolve_property_mask, resolve_property_shadow,
 };
 use super::util::{
     blend_mode_ir, resolve_geometry_px, resolve_property_dimension_px, rotation_degrees,
@@ -259,6 +259,8 @@ pub(super) fn compile_image(
         _ => None,
     };
 
+    let svg_style = resolve_svg_style(image, resolved, diagnostics);
+
     // Box-clip: push the box, draw the image, pop. The image is always
     // clipped to its declared box ∩ enclosing clips. Collected into a local
     // buffer so the shared helper can bracket it with the effect and/or mask.
@@ -276,6 +278,7 @@ pub(super) fn compile_image(
             opacity,
             clip_shape,
             src_rect,
+            svg_style,
         },
         SceneCommand::PopClip,
     ];
@@ -290,6 +293,36 @@ pub(super) fn compile_image(
 
     if rot.is_some() {
         commands.push(SceneCommand::PopTransform);
+    }
+}
+
+fn resolve_svg_style(
+    image: &ImageNode,
+    resolved: &BTreeMap<String, ResolvedToken>,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<SvgStyle> {
+    let stroke = image
+        .svg_stroke
+        .as_ref()
+        .and_then(|p| resolve_property_color(p, resolved, diagnostics, &image.id));
+    let fill = image
+        .svg_fill
+        .as_ref()
+        .and_then(|p| resolve_property_color(p, resolved, diagnostics, &image.id));
+    let stroke_width = image
+        .svg_stroke_width
+        .as_ref()
+        .map(|p| resolve_property_dimension_px(Some(p), resolved, -1.0))
+        .filter(|v| *v >= 0.0);
+
+    if stroke.is_none() && fill.is_none() && stroke_width.is_none() {
+        None
+    } else {
+        Some(SvgStyle {
+            stroke,
+            fill,
+            stroke_width,
+        })
     }
 }
 

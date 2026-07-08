@@ -95,6 +95,7 @@ pub fn swatch_scene() -> Scene {
         opacity: 1.0,
         clip_shape: None,
         src_rect: None,
+        svg_style: None,
     });
     scene.commands.push(SceneCommand::PopClip);
     scene.commands.push(SceneCommand::PopClip);
@@ -130,6 +131,7 @@ pub fn swatch_ellipse_scene() -> Scene {
         opacity: 1.0,
         clip_shape: Some(ImageClip::Ellipse),
         src_rect: None,
+        svg_style: None,
     });
     scene.commands.push(SceneCommand::PopClip);
     scene.commands.push(SceneCommand::PopClip);
