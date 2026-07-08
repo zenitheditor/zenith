@@ -568,6 +568,7 @@ pub(super) fn emit_title(
         font_size: 13.0,
         direction: TextDirection::Ltr,
         features: &[],
+        kerning_pairs: &[],
         letter_spacing_px: 0.0,
     };
 

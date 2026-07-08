@@ -25,6 +25,7 @@ fn glyph_run_draws_pixels() {
         font_size,
         direction: TextDirection::Ltr,
         features: &[],
+        kerning_pairs: &[],
         letter_spacing_px: 0.0,
     };
     let run = RustybuzzEngine::new()
@@ -100,6 +101,7 @@ fn glyph_run_deterministic_png() {
         font_size,
         direction: TextDirection::Ltr,
         features: &[],
+        kerning_pairs: &[],
         letter_spacing_px: 0.0,
     };
     let run = RustybuzzEngine::new()
@@ -206,6 +208,7 @@ fn glyph_run_clipped_to_subpage_clip() {
         font_size,
         direction: TextDirection::Ltr,
         features: &[],
+        kerning_pairs: &[],
         letter_spacing_px: 0.0,
     };
     let run = RustybuzzEngine::new()
@@ -284,6 +287,7 @@ fn glyph_run_with_stroke_renders_without_panic() {
         font_size,
         direction: TextDirection::Ltr,
         features: &[],
+        kerning_pairs: &[],
         letter_spacing_px: 0.0,
     };
     let run = RustybuzzEngine::new()
@@ -364,6 +368,7 @@ fn glyph_run_without_stroke_is_byte_identical() {
         font_size,
         direction: TextDirection::Ltr,
         features: &[],
+        kerning_pairs: &[],
         letter_spacing_px: 0.0,
     };
     let run = RustybuzzEngine::new()

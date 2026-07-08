@@ -77,6 +77,7 @@ fn reshape_fragment(
         font_size: donor.src.font_size,
         direction: ctx.direction,
         features: &donor.src.features,
+        kerning_pairs: &[],
         letter_spacing_px: donor.src.letter_spacing_px,
     };
     let result = ctx.engine.shape_with_fallback(&req, ctx.fonts).ok()?;

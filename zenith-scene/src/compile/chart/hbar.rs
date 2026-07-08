@@ -242,6 +242,7 @@ pub(in crate::compile) fn emit_hbar(
             font_size: 9.0,
             direction: TextDirection::Ltr,
             features: &[],
+            kerning_pairs: &[],
             letter_spacing_px: 0.0,
         };
 
@@ -331,6 +332,7 @@ pub(in crate::compile) fn emit_hbar(
             font_size: 9.0,
             direction: TextDirection::Ltr,
             features: &[],
+            kerning_pairs: &[],
             letter_spacing_px: 0.0,
         };
 
@@ -471,6 +473,7 @@ pub(in crate::compile) fn emit_hbar(
             font_size: 9.0,
             direction: TextDirection::Ltr,
             features: &[],
+            kerning_pairs: &[],
             letter_spacing_px: 0.0,
         };
 
@@ -596,6 +599,7 @@ fn emit_hbar_value_label(
         font_size: 9.0,
         direction: TextDirection::Ltr,
         features: &[],
+        kerning_pairs: &[],
         letter_spacing_px: 0.0,
     };
 

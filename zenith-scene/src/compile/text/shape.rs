@@ -309,6 +309,7 @@ pub(in crate::compile) fn shape_words(
                 font_size: word_font_size,
                 direction: TextDirection::Ltr,
                 features: &shaped.features,
+                kerning_pairs: &[],
                 letter_spacing_px: 0.0,
             };
             match engine.shape(&req, fonts) {
@@ -330,6 +331,7 @@ pub(in crate::compile) fn shape_words(
                     font_size: word_font_size,
                     direction,
                     features: &shaped.features,
+                    kerning_pairs: &[],
                     letter_spacing_px: shaped.letter_spacing_px,
                 };
                 match engine.shape_with_fallback(&req, fonts) {
@@ -404,6 +406,7 @@ pub(in crate::compile) fn shape_words(
             // inter-word gap measurement is identical for LTR and RTL.
             direction: TextDirection::Ltr,
             features: spans.first().map_or(&[], |s| s.features.as_slice()),
+            kerning_pairs: &[],
             letter_spacing_px: node_letter_spacing_px,
         };
         match engine.shape(&req, fonts) {

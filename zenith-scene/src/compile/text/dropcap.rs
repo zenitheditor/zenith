@@ -99,6 +99,7 @@ pub(in crate::compile) fn shape_drop_cap(
         // follow-up, so the cap always shapes LTR.
         direction: TextDirection::Ltr,
         features: &initial.features,
+        kerning_pairs: &[],
         letter_spacing_px: 0.0,
     };
     let run = engine

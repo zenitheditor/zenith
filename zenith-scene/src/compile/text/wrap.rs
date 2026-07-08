@@ -612,6 +612,7 @@ fn emit_plain_wrap(
                     // regardless of body direction in v0).
                     direction: TextDirection::Ltr,
                     features: &features,
+                    kerning_pairs: &[],
                     letter_spacing_px,
                 };
                 match engine.shape_with_fallback(&req, fonts) {

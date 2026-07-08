@@ -681,6 +681,7 @@ pub(in crate::compile) fn compile_text_sized(
             font_size: span_font_size,
             direction: node_direction,
             features: &span_features,
+            kerning_pairs: &[],
             letter_spacing_px: span_letter_spacing_px,
         };
 

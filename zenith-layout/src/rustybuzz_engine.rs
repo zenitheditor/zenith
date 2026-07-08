@@ -8,8 +8,8 @@ use std::collections::BTreeSet;
 use zenith_core::FontProvider;
 
 use crate::engine::{
-    FallbackResult, FontFeature, PositionedGlyph, ShapeRequest, TextDirection, TextLayoutEngine,
-    ZenithGlyphRun,
+    FallbackResult, FontFeature, KerningPairAdjustment, PositionedGlyph, ShapeRequest,
+    TextDirection, TextLayoutEngine, ZenithGlyphRun,
 };
 use crate::error::LayoutError;
 
@@ -38,6 +38,17 @@ fn is_ignorable_for_coverage(ch: char) -> bool {
 #[derive(Debug, Clone)]
 pub struct RustybuzzEngine;
 
+struct FaceShapeRequest<'a> {
+    face: &'a rustybuzz::Face<'a>,
+    text: &'a str,
+    font_id: String,
+    font_size: f32,
+    direction: TextDirection,
+    features: &'a [FontFeature],
+    kerning_pairs: &'a [KerningPairAdjustment],
+    letter_spacing_px: f32,
+}
+
 impl RustybuzzEngine {
     /// Create a new `RustybuzzEngine`.
     #[must_use]
@@ -64,49 +75,42 @@ impl RustybuzzEngine {
     /// # Errors
     ///
     /// Returns `LayoutError` if the face reports `units_per_em <= 0`.
-    fn shape_run_with_face(
-        face: &rustybuzz::Face<'_>,
-        text: &str,
-        font_id: String,
-        font_size: f32,
-        direction: TextDirection,
-        features: &[FontFeature],
-        letter_spacing_px: f32,
-    ) -> Result<ZenithGlyphRun, LayoutError> {
+    fn shape_run_with_face(req: FaceShapeRequest<'_>) -> Result<ZenithGlyphRun, LayoutError> {
         // ── Compute pixel scale ───────────────────────────────────────────────
         // `units_per_em` comes from the `ttf_parser::Face` trait exposed by
         // `rustybuzz::Face` via Deref.
-        let units_per_em = face.units_per_em();
+        let units_per_em = req.face.units_per_em();
         if units_per_em <= 0 {
             return Err(LayoutError::new(format!(
-                "font '{font_id}' reports units_per_em = {units_per_em}"
+                "font '{}' reports units_per_em = {units_per_em}",
+                req.font_id
             )));
         }
         // `units_per_em` is a positive `i32` (guarded above); the OTF spec
         // range (16–16384) is exactly representable as `f32`.
-        let scale = font_size / units_per_em as f32;
+        let scale = req.font_size / units_per_em as f32;
 
         // ── Derive line metrics ───────────────────────────────────────────────
         // `ascender` and `descender` are in font units; descender is negative.
-        let ascent = f32::from(face.ascender()) * scale;
-        let descent = -(f32::from(face.descender()) * scale); // store positive magnitude
-        let line_gap = f32::from(face.line_gap()) * scale;
+        let ascent = f32::from(req.face.ascender()) * scale;
+        let descent = -(f32::from(req.face.descender()) * scale); // store positive magnitude
+        let line_gap = f32::from(req.face.line_gap()) * scale;
         let line_height = ascent + descent + line_gap;
 
         // ── Shape the text ────────────────────────────────────────────────────
         let mut buffer = rustybuzz::UnicodeBuffer::new();
-        buffer.push_str(text);
+        buffer.push_str(req.text);
         // RTL sets the buffer direction so rustybuzz reorders glyphs to visual
         // order and applies RTL-correct joining (Arabic, Hebrew). The run's
         // advance + glyph pen positions stay left-to-right, so a word emitted
         // at its left x renders correctly; LTR is the default (unchanged).
-        buffer.set_direction(match direction {
+        buffer.set_direction(match req.direction {
             TextDirection::Ltr => rustybuzz::Direction::LeftToRight,
             TextDirection::Rtl => rustybuzz::Direction::RightToLeft,
         });
 
-        let features = rustybuzz_features(features);
-        let glyph_buffer = rustybuzz::shape(face, &features, buffer);
+        let features = rustybuzz_features(req.features);
+        let glyph_buffer = rustybuzz::shape(req.face, &features, buffer);
 
         let infos = glyph_buffer.glyph_infos();
         let positions = glyph_buffer.glyph_positions();
@@ -123,15 +127,17 @@ impl RustybuzzEngine {
         let mut boundaries: Vec<u32> = infos.iter().map(|i| i.cluster).collect();
         boundaries.sort_unstable();
         boundaries.dedup();
-        let cluster_text = |cluster: u32| -> String {
+        let cluster_text = |cluster: u32| -> &str {
             let start = cluster as usize;
             let end = match boundaries.binary_search(&cluster) {
-                Ok(i) => boundaries.get(i + 1).map_or(text.len(), |&b| b as usize),
+                Ok(i) => boundaries
+                    .get(i + 1)
+                    .map_or(req.text.len(), |&b| b as usize),
                 // A cluster value not in the set cannot happen (it was collected
                 // from the same infos); fall back to a single source char span.
-                Err(_) => text.len(),
+                Err(_) => req.text.len(),
             };
-            text.get(start..end).unwrap_or("").to_string()
+            req.text.get(start..end).unwrap_or("")
         };
 
         // ── Build glyph list ──────────────────────────────────────────────────
@@ -140,19 +146,23 @@ impl RustybuzzEngine {
         let mut pen_y: f32 = 0.0;
         let mut prev_cluster: Option<u32> = None;
 
-        let letter_spacing_px = if letter_spacing_px.is_finite() {
-            letter_spacing_px
+        let letter_spacing_px = if req.letter_spacing_px.is_finite() {
+            req.letter_spacing_px
         } else {
             0.0
         };
         let mut letter_spacing_offset: f32 = 0.0;
+        let mut kerning_offset: f32 = 0.0;
         for (glyph_index, (info, pos)) in infos.iter().zip(positions.iter()).enumerate() {
             // glyph_id is u32 in rustybuzz; OTF glyph IDs fit in u16 (max 65535).
             // A value above u16::MAX indicates a malformed font — map it to the
             // .notdef glyph (0) rather than silently truncating.
             let glyph_id = u16::try_from(info.glyph_id).unwrap_or(0);
 
-            let x = pen_x + letter_spacing_offset + pos.x_offset as f32 * scale;
+            let mut x = pen_x + letter_spacing_offset + pos.x_offset as f32 * scale;
+            if kerning_offset != 0.0 {
+                x += kerning_offset;
+            }
             // y_offset is in font units; positive = up in font coords → negative screen y.
             let y = pen_y - pos.y_offset as f32 * scale;
 
@@ -160,7 +170,7 @@ impl RustybuzzEngine {
             let glyph_text = if prev_cluster == Some(info.cluster) {
                 String::new()
             } else {
-                cluster_text(info.cluster)
+                cluster_text(info.cluster).to_string()
             };
             prev_cluster = Some(info.cluster);
 
@@ -173,19 +183,26 @@ impl RustybuzzEngine {
 
             pen_x += pos.x_advance as f32 * scale;
             pen_y += pos.y_advance as f32 * scale;
-            if infos
-                .get(glyph_index + 1)
-                .is_some_and(|next| next.cluster != info.cluster)
+            if let Some(next) = infos.get(glyph_index + 1)
+                && next.cluster != info.cluster
             {
+                if !req.kerning_pairs.is_empty() {
+                    let left = cluster_text(info.cluster);
+                    let right = cluster_text(next.cluster);
+                    kerning_offset += kerning_pair_adjustment(left, right, req.kerning_pairs);
+                }
                 letter_spacing_offset += letter_spacing_px;
             }
         }
 
-        let advance_width = pen_x + letter_spacing_offset;
+        let mut advance_width = pen_x + letter_spacing_offset;
+        if kerning_offset != 0.0 {
+            advance_width += kerning_offset;
+        }
 
         Ok(ZenithGlyphRun {
-            font_id,
-            font_size,
+            font_id: req.font_id,
+            font_size: req.font_size,
             ascent,
             descent,
             line_height,
@@ -193,6 +210,18 @@ impl RustybuzzEngine {
             glyphs,
         })
     }
+}
+
+fn kerning_pair_adjustment(
+    left: &str,
+    right: &str,
+    kerning_pairs: &[KerningPairAdjustment],
+) -> f32 {
+    kerning_pairs
+        .iter()
+        .filter(|pair| pair.adjustment_px.is_finite() && pair.left == left && pair.right == right)
+        .map(|pair| pair.adjustment_px)
+        .sum()
 }
 
 fn rustybuzz_features(features: &[FontFeature]) -> Vec<rustybuzz::Feature> {
@@ -234,15 +263,16 @@ impl TextLayoutEngine for RustybuzzEngine {
             })?;
 
         // ── 3. Shape via the shared single-face helper ────────────────────────
-        Self::shape_run_with_face(
-            &face,
-            req.text,
-            font_data.id,
-            req.font_size,
-            req.direction,
-            req.features,
-            req.letter_spacing_px,
-        )
+        Self::shape_run_with_face(FaceShapeRequest {
+            face: &face,
+            text: req.text,
+            font_id: font_data.id,
+            font_size: req.font_size,
+            direction: req.direction,
+            features: req.features,
+            kerning_pairs: req.kerning_pairs,
+            letter_spacing_px: req.letter_spacing_px,
+        })
     }
 
     fn shape_with_fallback(
@@ -293,6 +323,11 @@ impl TextLayoutEngine for RustybuzzEngine {
                 .get(idx)
                 .is_some_and(|(_, f)| f.glyph_index(ch).is_some())
         };
+        let letter_spacing_px = if req.letter_spacing_px.is_finite() {
+            req.letter_spacing_px
+        } else {
+            0.0
+        };
 
         // ── 3. Itemize text into contiguous sub-runs by chosen face index ─────
         // For each char: prefer the primary (index 0) when it covers the char;
@@ -341,15 +376,16 @@ impl TextLayoutEngine for RustybuzzEngine {
                 LayoutError::new("internal: primary face missing from cache".to_owned())
             })?;
             return Ok(FallbackResult {
-                runs: vec![Self::shape_run_with_face(
+                runs: vec![Self::shape_run_with_face(FaceShapeRequest {
                     face,
-                    req.text,
-                    font_id.clone(),
-                    req.font_size,
-                    req.direction,
-                    req.features,
-                    req.letter_spacing_px,
-                )?],
+                    text: req.text,
+                    font_id: font_id.clone(),
+                    font_size: req.font_size,
+                    direction: req.direction,
+                    features: req.features,
+                    kerning_pairs: req.kerning_pairs,
+                    letter_spacing_px: req.letter_spacing_px,
+                })?],
                 missing_chars: missing.into_iter().collect(),
             });
         }
@@ -376,25 +412,25 @@ impl TextLayoutEngine for RustybuzzEngine {
             let sub_text = req.text.get(start..end).ok_or_else(|| {
                 LayoutError::new("internal: sub-run byte range out of bounds".to_owned())
             })?;
-            let mut run = Self::shape_run_with_face(
+            let mut run = Self::shape_run_with_face(FaceShapeRequest {
                 face,
-                sub_text,
-                font_id.clone(),
-                req.font_size,
-                req.direction,
-                req.features,
-                req.letter_spacing_px,
-            )?;
-            if req.letter_spacing_px.is_finite() && req.letter_spacing_px != 0.0 {
-                run.advance_width += req.letter_spacing_px;
+                text: sub_text,
+                font_id: font_id.clone(),
+                font_size: req.font_size,
+                direction: req.direction,
+                features: req.features,
+                kerning_pairs: req.kerning_pairs,
+                letter_spacing_px: req.letter_spacing_px,
+            })?;
+            if letter_spacing_px != 0.0 {
+                run.advance_width += letter_spacing_px;
             }
             runs.push(run);
         }
-        if req.letter_spacing_px.is_finite()
-            && req.letter_spacing_px != 0.0
+        if letter_spacing_px != 0.0
             && let Some(last) = runs.last_mut()
         {
-            last.advance_width -= req.letter_spacing_px;
+            last.advance_width -= letter_spacing_px;
         }
 
         Ok(FallbackResult {
@@ -424,6 +460,7 @@ mod tests {
             font_size,
             direction: TextDirection::Ltr,
             features: &[],
+            kerning_pairs: &[],
             letter_spacing_px: 0.0,
         };
         let provider = default_provider();
@@ -487,6 +524,7 @@ mod tests {
             font_size: 16.0,
             direction: TextDirection::Ltr,
             features: &[],
+            kerning_pairs: &[],
             letter_spacing_px: 0.0,
         };
         let provider = default_provider();
@@ -512,6 +550,7 @@ mod tests {
             font_size: 24.0,
             direction: TextDirection::Ltr,
             features: &[],
+            kerning_pairs: &[],
             letter_spacing_px: 0.0,
         };
         let spaced_req = ShapeRequest {
@@ -538,6 +577,148 @@ mod tests {
     }
 
     #[test]
+    fn kerning_pair_adjustment_shifts_next_cluster_and_advance() {
+        let families = vec!["Noto Sans".to_string()];
+        let provider = default_provider();
+        let engine = RustybuzzEngine::new();
+        let base_req = ShapeRequest {
+            text: "AV",
+            families: &families,
+            weight: 400,
+            style: FontStyle::Normal,
+            font_size: 24.0,
+            direction: TextDirection::Ltr,
+            features: &[],
+            kerning_pairs: &[],
+            letter_spacing_px: 0.0,
+        };
+        let tight_pair = [KerningPairAdjustment {
+            left: "A".to_string(),
+            right: "V".to_string(),
+            adjustment_px: -4.0,
+        }];
+        let loose_pair = [KerningPairAdjustment {
+            left: "A".to_string(),
+            right: "V".to_string(),
+            adjustment_px: 5.0,
+        }];
+        let tight_req = ShapeRequest {
+            kerning_pairs: &tight_pair,
+            ..base_req.clone()
+        };
+        let loose_req = ShapeRequest {
+            kerning_pairs: &loose_pair,
+            ..base_req.clone()
+        };
+
+        let base = engine.shape(&base_req, &provider).expect("base shape");
+        let tight = engine.shape(&tight_req, &provider).expect("tight shape");
+        let loose = engine.shape(&loose_req, &provider).expect("loose shape");
+
+        assert_eq!(base.glyphs.len(), tight.glyphs.len());
+        assert_eq!(base.glyphs.len(), loose.glyphs.len());
+        assert!(
+            (tight.glyphs[1].x - base.glyphs[1].x + 4.0).abs() < 0.001,
+            "negative adjustment should shift the second cluster left"
+        );
+        assert!(
+            (tight.advance_width - base.advance_width + 4.0).abs() < 0.001,
+            "negative adjustment should reduce advance"
+        );
+        assert!(
+            (loose.glyphs[1].x - base.glyphs[1].x - 5.0).abs() < 0.001,
+            "positive adjustment should shift the second cluster right"
+        );
+        assert!(
+            (loose.advance_width - base.advance_width - 5.0).abs() < 0.001,
+            "positive adjustment should increase advance"
+        );
+    }
+
+    #[test]
+    fn kerning_pair_adjustment_combines_with_letter_spacing() {
+        let families = vec!["Noto Sans".to_string()];
+        let provider = default_provider();
+        let engine = RustybuzzEngine::new();
+        let pair = [KerningPairAdjustment {
+            left: "A".to_string(),
+            right: "V".to_string(),
+            adjustment_px: -1.25,
+        }];
+        let base_req = ShapeRequest {
+            text: "AV",
+            families: &families,
+            weight: 400,
+            style: FontStyle::Normal,
+            font_size: 24.0,
+            direction: TextDirection::Ltr,
+            features: &[],
+            kerning_pairs: &[],
+            letter_spacing_px: 0.0,
+        };
+        let adjusted_req = ShapeRequest {
+            kerning_pairs: &pair,
+            letter_spacing_px: 3.0,
+            ..base_req.clone()
+        };
+
+        let base = engine.shape(&base_req, &provider).expect("base shape");
+        let adjusted = engine
+            .shape(&adjusted_req, &provider)
+            .expect("adjusted shape");
+
+        assert!(
+            (adjusted.glyphs[1].x - base.glyphs[1].x - 1.75).abs() < 0.001,
+            "manual pair and letter spacing should add at the cluster boundary"
+        );
+        assert!(
+            (adjusted.advance_width - base.advance_width - 1.75).abs() < 0.001,
+            "advance should include both deltas"
+        );
+    }
+
+    #[test]
+    fn absent_kerning_pairs_preserve_output() {
+        let families = vec!["Noto Sans".to_string()];
+        let provider = default_provider();
+        let engine = RustybuzzEngine::new();
+        let ignored_pairs = [
+            KerningPairAdjustment {
+                left: "A".to_string(),
+                right: "V".to_string(),
+                adjustment_px: f32::NAN,
+            },
+            KerningPairAdjustment {
+                left: "V".to_string(),
+                right: "A".to_string(),
+                adjustment_px: -8.0,
+            },
+        ];
+        let base_req = ShapeRequest {
+            text: "AV",
+            families: &families,
+            weight: 400,
+            style: FontStyle::Normal,
+            font_size: 24.0,
+            direction: TextDirection::Ltr,
+            features: &[],
+            kerning_pairs: &[],
+            letter_spacing_px: 0.0,
+        };
+        let ignored_req = ShapeRequest {
+            kerning_pairs: &ignored_pairs,
+            ..base_req.clone()
+        };
+
+        let base = engine.shape(&base_req, &provider).expect("base shape");
+        let ignored = engine
+            .shape(&ignored_req, &provider)
+            .expect("ignored pair shape");
+
+        assert_eq!(ignored, base);
+    }
+
+    #[test]
     fn fallback_all_primary_matches_single_shape() {
         // CRITICAL byte-identity guarantee: text fully covered by the primary
         // face must yield exactly ONE run identical to `shape()`.
@@ -550,6 +731,7 @@ mod tests {
             font_size: 24.0,
             direction: TextDirection::Ltr,
             features: &[],
+            kerning_pairs: &[],
             letter_spacing_px: 0.0,
         };
         let provider = default_provider();
@@ -588,6 +770,7 @@ mod tests {
             font_size: 16.0,
             direction: TextDirection::Ltr,
             features: &[],
+            kerning_pairs: &[],
             letter_spacing_px: 0.0,
         };
         let provider = default_provider();
@@ -617,6 +800,7 @@ mod tests {
             font_size: 16.0,
             direction: TextDirection::Ltr,
             features: &[],
+            kerning_pairs: &[],
             letter_spacing_px: 0.0,
         };
         let provider = default_provider();
@@ -635,6 +819,7 @@ mod tests {
             font_size: 18.0,
             direction: TextDirection::Ltr,
             features: &[],
+            kerning_pairs: &[],
             letter_spacing_px: 0.0,
         };
         let provider = default_provider();
@@ -667,6 +852,7 @@ mod tests {
                     font_size: 24.0,
                     direction: TextDirection::Ltr,
                     features: &[],
+                    kerning_pairs: &[],
                     letter_spacing_px: 0.0,
                 },
                 &provider,
@@ -682,6 +868,7 @@ mod tests {
                     font_size: 24.0,
                     direction: TextDirection::Rtl,
                     features: &[],
+                    kerning_pairs: &[],
                     letter_spacing_px: 0.0,
                 },
                 &provider,
@@ -715,6 +902,7 @@ mod tests {
             font_size: 20.0,
             direction: TextDirection::Rtl,
             features: &[],
+            kerning_pairs: &[],
             letter_spacing_px: 0.0,
         };
         let a = engine.shape(&req, &provider).expect("a");

@@ -71,6 +71,7 @@ fn shape_tab_leader_row(
             // Tab-leader (TOC) rows are LTR in v0; RTL TOC is a follow-up.
             direction: TextDirection::Ltr,
             features: shape.features,
+            kerning_pairs: &[],
             letter_spacing_px: shape.letter_spacing_px,
         };
         match engine.shape_with_fallback(&req, fonts) {
@@ -211,6 +212,7 @@ pub(in crate::compile) fn compile_tab_leader(
         // Tab-leader (TOC) mode is LTR in v0.
         direction: TextDirection::Ltr,
         features,
+        kerning_pairs: &[],
         letter_spacing_px,
     };
     let leader_run = match engine.shape_with_fallback(&leader_req, fonts) {

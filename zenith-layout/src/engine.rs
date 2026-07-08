@@ -57,6 +57,18 @@ impl FontFeature {
     }
 }
 
+/// One manual horizontal adjustment between adjacent shaped source clusters.
+#[derive(Debug, Clone, PartialEq)]
+pub struct KerningPairAdjustment {
+    /// Source text carried by the cluster on the left side of the pair.
+    pub left: String,
+    /// Source text carried by the cluster on the right side of the pair.
+    pub right: String,
+    /// Horizontal adjustment in pixels. Negative values tighten; positive
+    /// values loosen.
+    pub adjustment_px: f32,
+}
+
 /// A request to shape a run of text into positioned glyphs.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ShapeRequest<'a> {
@@ -74,6 +86,8 @@ pub struct ShapeRequest<'a> {
     pub direction: TextDirection,
     /// OpenType feature overrides. Empty means default shaping behavior.
     pub features: &'a [FontFeature],
+    /// Manual pair adjustments between adjacent shaped source clusters.
+    pub kerning_pairs: &'a [KerningPairAdjustment],
     /// Additional letter spacing inserted between adjacent shaped clusters, in
     /// pixels.
     /// `0.0` preserves the raw font advance exactly.

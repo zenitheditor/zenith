@@ -346,6 +346,7 @@ fn compile_code_impl(
             font_size,
             direction: TextDirection::Ltr,
             features: &font_features,
+            kerning_pairs: &[],
             letter_spacing_px,
         };
         match engine.shape(&digit_req, fonts) {
@@ -411,6 +412,7 @@ fn compile_code_impl(
                 font_size,
                 direction: TextDirection::Ltr,
                 features: &font_features,
+                kerning_pairs: &[],
                 letter_spacing_px,
             };
             // If shaping fails for a particular label, skip gracefully.
@@ -488,6 +490,7 @@ fn compile_code_impl(
                     // Code is shaped LTR (source code is left-to-right).
                     direction: TextDirection::Ltr,
                     features: &font_features,
+                    kerning_pairs: &[],
                     letter_spacing_px,
                 };
                 match engine.shape(&req, fonts) {
@@ -546,6 +549,7 @@ fn compile_code_impl(
                 // Code is shaped LTR (source code is left-to-right).
                 direction: TextDirection::Ltr,
                 features: &font_features,
+                kerning_pairs: &[],
                 letter_spacing_px,
             };
 
