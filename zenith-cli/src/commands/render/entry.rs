@@ -10,7 +10,9 @@ use zenith_scene::{ImportGraph, Scene, append_construction_overlay, compile_page
 
 use crate::config::CliPolicyFlags;
 
-use super::assets::{build_asset_provider_with_imports, build_font_provider, disk_diagnostics};
+use super::assets::{
+    build_asset_provider_with_imports, build_font_provider_with_imports, disk_diagnostics,
+};
 use super::pipeline::{govern_compile_diagnostics, parse_validate, resolve_page_index};
 use super::text_source::resolve_text_sources;
 
@@ -173,7 +175,7 @@ pub fn to_scene_json_with_options(
     let scene_imports = imports.to_scene_graph();
     let mut text_src_diagnostics: Vec<Diagnostic> = Vec::new();
     resolve_text_sources(&mut doc, project_dir, &mut text_src_diagnostics);
-    let fonts = build_font_provider(&doc, project_dir, false)?;
+    let fonts = build_font_provider_with_imports(&doc, project_dir, &imports, false)?;
     let page_index = resolve_page_index(&doc, page)?;
     let compile_result = compile_page_for_render(&doc, &fonts, page_index, opts, &scene_imports);
     let json = compile_result
@@ -261,7 +263,7 @@ pub fn to_png_with_dir_options(
     let scene_imports = imports.to_scene_graph();
     let mut text_src_diagnostics: Vec<Diagnostic> = Vec::new();
     resolve_text_sources(&mut doc, project_dir, &mut text_src_diagnostics);
-    let fonts = build_font_provider(&doc, project_dir, opts.locked)?;
+    let fonts = build_font_provider_with_imports(&doc, project_dir, &imports, opts.locked)?;
     let page_index = resolve_page_index(&doc, page)?;
     let assets = match project_dir {
         Some(dir) => build_asset_provider_with_imports(&doc, dir, &imports, opts.locked)?,
@@ -322,7 +324,7 @@ pub fn to_pdf_with_dir_options(
     let scene_imports = imports.to_scene_graph();
     let mut text_src_diagnostics: Vec<Diagnostic> = Vec::new();
     resolve_text_sources(&mut doc, project_dir, &mut text_src_diagnostics);
-    let fonts = build_font_provider(&doc, project_dir, opts.locked)?;
+    let fonts = build_font_provider_with_imports(&doc, project_dir, &imports, opts.locked)?;
     let page_index = resolve_page_index(&doc, page)?;
     let assets = match project_dir {
         Some(dir) => build_asset_provider_with_imports(&doc, dir, &imports, opts.locked)?,
@@ -393,7 +395,7 @@ pub fn to_pdf_all_pages_with_dir_options(
     let mut diagnostics: Vec<Diagnostic> = Vec::new();
     resolve_text_sources(&mut doc, project_dir, &mut diagnostics);
     diagnostics.extend(import_diagnostics);
-    let fonts = build_font_provider(&doc, project_dir, opts.locked)?;
+    let fonts = build_font_provider_with_imports(&doc, project_dir, &imports, opts.locked)?;
     let page_count = doc.body.pages.len();
     if page_count == 0 {
         return Err(RenderCmdErr::new("document has no pages to render", 2));
@@ -464,7 +466,7 @@ pub fn to_png_all_pages_options(
     let scene_imports = imports.to_scene_graph();
     let mut text_src_diagnostics: Vec<Diagnostic> = Vec::new();
     resolve_text_sources(&mut doc, project_dir, &mut text_src_diagnostics);
-    let fonts = build_font_provider(&doc, project_dir, opts.locked)?;
+    let fonts = build_font_provider_with_imports(&doc, project_dir, &imports, opts.locked)?;
     let page_count = doc.body.pages.len();
     if page_count == 0 {
         return Err(RenderCmdErr::new("document has no pages to render", 2));
@@ -553,7 +555,7 @@ pub fn to_png_spread(
     let scene_imports = imports.to_scene_graph();
     let mut text_src_diagnostics: Vec<Diagnostic> = Vec::new();
     resolve_text_sources(&mut doc, project_dir, &mut text_src_diagnostics);
-    let fonts = build_font_provider(&doc, project_dir, locked)?;
+    let fonts = build_font_provider_with_imports(&doc, project_dir, &imports, locked)?;
     let index_a = resolve_page_index(&doc, page_a)?;
     let index_b = resolve_page_index(&doc, page_b)?;
     let assets = match project_dir {

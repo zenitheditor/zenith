@@ -49,6 +49,23 @@ pub(crate) fn build_font_provider(
     Ok(provider)
 }
 
+pub(crate) fn build_font_provider_with_imports(
+    doc: &Document,
+    project_dir: Option<&Path>,
+    imports: &LoadedImportGraph,
+    locked: bool,
+) -> Result<BytesFontProvider, RenderCmdErr> {
+    let mut provider = default_provider();
+    if let Some(dir) = project_dir {
+        register_project_fonts(&mut provider, doc, dir, locked)?;
+        for (_, imported, import_dir) in imports.documents_with_dirs() {
+            register_project_fonts(&mut provider, imported, import_dir, locked)?;
+        }
+    }
+    register_local_fonts(&mut provider, doc);
+    Ok(provider)
+}
+
 /// Register every `font`-kind project asset declared in `doc` into `provider`
 /// with [`FontSource::Project`]. Extracted from [`build_font_provider`] so the
 /// project pass and the local-system pass are clearly separated.
@@ -487,7 +504,7 @@ fn check_image(img: &ImageNode, doc: &Document, project_dir: &Path, out: &mut Ve
 
 #[cfg(test)]
 mod tests {
-    use zenith_core::{AssetProvider, KdlAdapter, KdlSource};
+    use zenith_core::{AssetProvider, FontProvider, FontSource, KdlAdapter, KdlSource};
 
     use crate::commands::composition_imports::load_import_graph;
 
@@ -540,5 +557,54 @@ mod tests {
             .by_id("brand/logo")
             .expect("imported asset must be registered under import namespace");
         assert_eq!(&asset.bytes[..], b"imported-logo");
+    }
+
+    #[test]
+    fn build_font_provider_registers_imported_font_assets_from_import_directory() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        std::fs::create_dir(dir.path().join("brand")).expect("create brand dir");
+        let font_src = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../zenith-core/assets/fonts/NotoSans-Regular.ttf");
+        std::fs::copy(&font_src, dir.path().join("brand/brand.ttf"))
+            .expect("copy imported font asset");
+        std::fs::write(
+            dir.path().join("brand/brand.zen"),
+            r#"zenith version=1 {
+  project id="proj.brand" name="Brand"
+  assets {
+    asset id="font.brand" kind="font" src="brand.ttf"
+  }
+  tokens format="zenith-token-v1" {
+    token id="font.brand" type="fontFamily" value="Noto Sans"
+  }
+  document id="doc.brand" title="Brand" {
+    page id="page.brand" w=(px)10 h=(px)10
+  }
+}
+"#,
+        )
+        .expect("write imported document");
+        let root = parse(
+            r#"zenith version=1 {
+  project id="proj.host" name="Host"
+  imports {
+    import id="brand" kind="zen" src="brand/brand.zen"
+  }
+  document id="doc.host" title="Host" {
+    page id="page.host" w=(px)10 h=(px)10
+  }
+}
+"#,
+        );
+        let imports = load_import_graph(&root, Some(dir.path()));
+
+        let provider = build_font_provider_with_imports(&root, Some(dir.path()), &imports, false)
+            .expect("provider");
+        let family = "Noto Sans".to_owned();
+        let resolved = provider
+            .resolve(&[family], 400, zenith_core::FontStyle::Normal)
+            .expect("imported font asset must resolve");
+
+        assert_eq!(resolved.source, FontSource::Project);
     }
 }
