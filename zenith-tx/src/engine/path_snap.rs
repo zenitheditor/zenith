@@ -1,12 +1,12 @@
 //! Path snapping op application.
 
 use zenith_core::{Diagnostic, Document, Node};
-use zenith_geometry::{AffineTransform, GeometryError, PathGeometry, nearest_path_geometry_points};
+use zenith_geometry::{
+    AffineTransform, CompoundPathGeometry, GeometryError, nearest_compound_path_geometry_points,
+};
 
 use super::{find_node_any_mut, node_kind_str, record_affected};
-use crate::engine::path::{
-    geometry_anchor_to_core, reject_compound_path, resolved_path_geometry, unknown_node,
-};
+use crate::engine::path::{geometry_anchor_to_core, resolved_path_geometry, unknown_node};
 
 pub(super) fn apply_snap_path_anchors(
     node_id: &str,
@@ -16,14 +16,14 @@ pub(super) fn apply_snap_path_anchors(
     diagnostics: &mut Vec<Diagnostic>,
     affected: &mut Vec<String>,
 ) {
-    let source_geometry = match path_geometry_from_doc(doc, node_id) {
+    let source_geometry = match compound_path_geometry_from_doc(doc, node_id) {
         Ok(geometry) => geometry,
         Err(diagnostic) => {
             diagnostics.push(diagnostic);
             return;
         }
     };
-    let target_geometry = match path_geometry_from_doc(doc, target_id) {
+    let target_geometry = match compound_path_geometry_from_doc(doc, target_id) {
         Ok(geometry) => geometry,
         Err(diagnostic) => {
             diagnostics.push(diagnostic);
@@ -31,8 +31,11 @@ pub(super) fn apply_snap_path_anchors(
         }
     };
 
-    let nearest = match nearest_path_geometry_points(&source_geometry, &target_geometry, tolerance)
-    {
+    let nearest = match nearest_compound_path_geometry_points(
+        &source_geometry,
+        &target_geometry,
+        tolerance,
+    ) {
         Ok(Some(nearest)) => nearest,
         Ok(None) => {
             diagnostics.push(Diagnostic::error(
@@ -56,7 +59,7 @@ pub(super) fn apply_snap_path_anchors(
         ));
         return;
     }
-    if nearest.distance_squared > tolerance_squared {
+    if nearest.nearest.distance_squared > tolerance_squared {
         diagnostics.push(Diagnostic::error(
             "tx.invalid_geometry",
             "snap_path_anchors found no target path boundary within tolerance",
@@ -66,8 +69,8 @@ pub(super) fn apply_snap_path_anchors(
         return;
     }
 
-    let dx = nearest.second_point.x - nearest.first_point.x;
-    let dy = nearest.second_point.y - nearest.first_point.y;
+    let dx = nearest.nearest.second_point.x - nearest.nearest.first_point.x;
+    let dy = nearest.nearest.second_point.y - nearest.nearest.first_point.y;
     let affine = match AffineTransform::translation(dx, dy) {
         Ok(affine) => affine,
         Err(error) => {
@@ -89,17 +92,45 @@ pub(super) fn apply_snap_path_anchors(
             let kind = node_kind_str(node);
             match node {
                 Node::Path(path) => {
-                    if reject_compound_path(node_id, "snap_path_anchors", path, diagnostics) {
-                        return;
+                    if path.subpaths.is_empty() {
+                        let Some(contour) = snapped.contours().first() else {
+                            diagnostics.push(Diagnostic::error(
+                                "tx.invalid_geometry",
+                                "snap_path_anchors requires source path geometry",
+                                None,
+                                Some(node_id.to_owned()),
+                            ));
+                            return;
+                        };
+                        path.anchors = contour
+                            .anchors()
+                            .iter()
+                            .zip(path.anchors.iter())
+                            .map(|(anchor, original)| {
+                                geometry_anchor_to_core(*anchor, original.kind.clone())
+                            })
+                            .collect();
+                    } else {
+                        if path.subpaths.len() != snapped.contour_count() {
+                            diagnostics.push(Diagnostic::error(
+                                "tx.invalid_geometry",
+                                "snap_path_anchors source contour count changed unexpectedly",
+                                None,
+                                Some(node_id.to_owned()),
+                            ));
+                            return;
+                        }
+                        for (subpath, contour) in path.subpaths.iter_mut().zip(snapped.contours()) {
+                            subpath.anchors = contour
+                                .anchors()
+                                .iter()
+                                .zip(subpath.anchors.iter())
+                                .map(|(anchor, original)| {
+                                    geometry_anchor_to_core(*anchor, original.kind.clone())
+                                })
+                                .collect();
+                        }
                     }
-                    path.anchors = snapped
-                        .anchors()
-                        .iter()
-                        .zip(path.anchors.iter())
-                        .map(|(anchor, original)| {
-                            geometry_anchor_to_core(*anchor, original.kind.clone())
-                        })
-                        .collect();
                     record_affected(node_id, affected);
                 }
                 Node::Rect(_)
@@ -134,19 +165,26 @@ pub(super) fn apply_snap_path_anchors(
     }
 }
 
-fn path_geometry_from_doc(doc: &Document, node_id: &str) -> Result<PathGeometry, Diagnostic> {
+fn compound_path_geometry_from_doc(
+    doc: &Document,
+    node_id: &str,
+) -> Result<CompoundPathGeometry, Diagnostic> {
     match find_node_any(doc, node_id) {
         None => Err(unknown_node(node_id)),
         Some(Node::Path(path)) => {
-            if !path.subpaths.is_empty() {
-                return Err(Diagnostic::error(
-                    "tx.unsupported_property",
-                    format!("snap_path_anchors is not supported on compound path '{node_id}'"),
-                    None,
-                    Some(node_id.to_owned()),
-                ));
+            if path.subpaths.is_empty() {
+                return resolved_path_geometry(node_id, &path.anchors, path.closed == Some(true))
+                    .map(|geometry| CompoundPathGeometry::new(vec![geometry]));
             }
-            resolved_path_geometry(node_id, &path.anchors, path.closed == Some(true))
+            let mut contours = Vec::with_capacity(path.subpaths.len());
+            for subpath in &path.subpaths {
+                contours.push(resolved_path_geometry(
+                    node_id,
+                    &subpath.anchors,
+                    subpath.closed == Some(true),
+                )?);
+            }
+            Ok(CompoundPathGeometry::new(contours))
         }
         Some(node) => Err(Diagnostic::error(
             "tx.unsupported_property",

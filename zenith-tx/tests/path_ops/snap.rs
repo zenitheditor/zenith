@@ -48,6 +48,55 @@ fn snap_path_anchors_translates_source_to_nearest_target_boundary() {
 }
 
 #[test]
+fn snap_path_anchors_translates_compound_source() {
+    let doc = parse(
+        r##"zenith version=1 {
+  project id="proj" name="Test"
+  tokens format="zenith-token-v1" { }
+  styles { }
+  document id="doc1" title="T" {
+    page id="pg1" w=(px)400 h=(px)300 {
+      path id="source" fill-rule="evenodd" {
+        subpath closed=#true {
+          anchor x=(px)0 y=(px)0
+          anchor x=(px)100 y=(px)0
+          anchor x=(px)100 y=(px)100
+        }
+        subpath closed=#true {
+          anchor x=(px)25 y=(px)25
+          anchor x=(px)75 y=(px)25
+          anchor x=(px)75 y=(px)75
+        }
+      }
+      path id="target" locked=#true {
+        anchor x=(px)103 y=(px)2
+        anchor x=(px)103 y=(px)12
+      }
+    }
+  }
+}"##,
+    );
+    let tx = Transaction {
+        ops: vec![Op::SnapPathAnchors {
+            node: "source".to_owned(),
+            target: "target".to_owned(),
+            tolerance: 4.0,
+        }],
+        permissions: Permissions::default(),
+    };
+    let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
+
+    assert_eq!(result.status, TxStatus::Accepted);
+    assert_eq!(result.affected_node_ids, vec!["source".to_owned()]);
+    assert_px_close(anchor_px_attr(&result.source_after, 0, "x"), 3.0);
+    assert_px_close(anchor_px_attr(&result.source_after, 0, "y"), 0.0);
+    assert_px_close(anchor_px_attr(&result.source_after, 3, "x"), 28.0);
+    assert_px_close(anchor_px_attr(&result.source_after, 3, "y"), 25.0);
+    assert_px_close(anchor_px_attr(&result.source_after, 6, "x"), 103.0);
+    assert_px_close(anchor_px_attr(&result.source_after, 6, "y"), 2.0);
+}
+
+#[test]
 fn snap_path_anchors_rejects_when_gap_exceeds_tolerance() {
     let doc = parse(
         r##"zenith version=1 {
