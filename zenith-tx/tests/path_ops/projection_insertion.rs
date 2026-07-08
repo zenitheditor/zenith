@@ -106,6 +106,23 @@ fn insert_path_anchor_at_point_closed_path_closing_edge_appends_anchor() {
 }
 
 #[test]
+fn insert_path_anchor_at_point_targets_nearest_compound_subpath() {
+    let doc = parse(COMPOUND_PATH_DOC);
+    let tx = Transaction {
+        ops: vec![insert_at_point("compound", 50.0, 27.0, 3.0)],
+        permissions: Permissions::default(),
+    };
+    let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
+
+    assert_eq!(result.status, TxStatus::Accepted);
+    assert_eq!(result.affected_node_ids, vec!["compound".to_owned()]);
+    assert_eq!(formatted_anchor_count(&result.source_after), 7);
+    assert_px_close(anchor_px_attr(&result.source_after, 0, "x"), 0.0);
+    assert_px_close(anchor_px_attr(&result.source_after, 4, "x"), 50.0);
+    assert_px_close(anchor_px_attr(&result.source_after, 4, "y"), 25.0);
+}
+
+#[test]
 fn insert_path_anchor_at_point_outside_tolerance_rejects_without_source_change() {
     let doc = parse(PATH_DOC);
     let tx = Transaction {

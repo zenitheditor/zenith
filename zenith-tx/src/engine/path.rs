@@ -6,8 +6,8 @@ use zenith_core::{
     AnchorKind, Diagnostic, Dimension, Document, Node, PathAnchor as CorePathAnchor, Unit,
 };
 use zenith_geometry::{
-    AffineTransform, GeometryError, PathAnchor, PathGeometry, PathSegment, Point2,
-    fit_cubic_path_anchors_to_points, simplify_polyline,
+    AffineTransform, CompoundPathGeometry, GeometryError, PathAnchor, PathGeometry, PathSegment,
+    Point2, fit_cubic_path_anchors_to_points, simplify_polyline,
 };
 
 use crate::op::{OpPathAnchor, OpPathTransform};
@@ -309,14 +309,6 @@ pub(super) fn apply_insert_path_anchor_at_point(
             let kind = node_kind_str(node);
             match node {
                 Node::Path(path) => {
-                    if reject_compound_path(
-                        node_id,
-                        "insert_path_anchor_at_point",
-                        path,
-                        diagnostics,
-                    ) {
-                        return;
-                    }
                     let point = match Point2::new(x, y) {
                         Ok(point) => point,
                         Err(error) => {
@@ -324,6 +316,90 @@ pub(super) fn apply_insert_path_anchor_at_point(
                             return;
                         }
                     };
+                    if !path.subpaths.is_empty() {
+                        let mut geometries = Vec::with_capacity(path.subpaths.len());
+                        for subpath in &path.subpaths {
+                            let geometry = match resolved_path_geometry(
+                                node_id,
+                                &subpath.anchors,
+                                subpath.closed == Some(true),
+                            ) {
+                                Ok(geometry) => geometry,
+                                Err(diagnostic) => {
+                                    diagnostics.push(diagnostic);
+                                    return;
+                                }
+                            };
+                            geometries.push(geometry);
+                        }
+                        let compound = CompoundPathGeometry::new(geometries);
+                        let projection = match compound.project(point, tolerance) {
+                            Ok(Some(projection)) => projection,
+                            Ok(None) => {
+                                diagnostics.push(Diagnostic::error(
+                                    "tx.invalid_geometry",
+                                    "insert_path_anchor_at_point requires a path segment to project onto",
+                                    None,
+                                    Some(node_id.to_owned()),
+                                ));
+                                return;
+                            }
+                            Err(error) => {
+                                diagnostics
+                                    .push(insert_at_point_geometry_diagnostic(node_id, error));
+                                return;
+                            }
+                        };
+                        if projection.projection.distance_squared > tolerance * tolerance {
+                            diagnostics.push(Diagnostic::error(
+                                "tx.invalid_geometry",
+                                "insert_path_anchor_at_point found no path projection within tolerance",
+                                None,
+                                Some(node_id.to_owned()),
+                            ));
+                            return;
+                        }
+                        let Some(geometry) = compound.contours().get(projection.contour_index)
+                        else {
+                            diagnostics.push(Diagnostic::error(
+                                "tx.out_of_range",
+                                format!(
+                                    "subpath_index {} is out of range for path '{node_id}'",
+                                    projection.contour_index
+                                ),
+                                None,
+                                Some(node_id.to_owned()),
+                            ));
+                            return;
+                        };
+                        let Some(subpath) = path.subpaths.get_mut(projection.contour_index) else {
+                            diagnostics.push(Diagnostic::error(
+                                "tx.out_of_range",
+                                format!(
+                                    "subpath_index {} is out of range for path '{node_id}'",
+                                    projection.contour_index
+                                ),
+                                None,
+                                Some(node_id.to_owned()),
+                            ));
+                            return;
+                        };
+                        subpath.anchors = match split_geometry_anchors(
+                            node_id,
+                            geometry,
+                            &subpath.anchors,
+                            projection.projection.segment_index,
+                            projection.projection.segment_t,
+                        ) {
+                            Ok(anchors) => anchors,
+                            Err(diagnostic) => {
+                                diagnostics.push(diagnostic);
+                                return;
+                            }
+                        };
+                        record_affected(node_id, affected);
+                        return;
+                    }
                     let geometry = match resolved_path_geometry(
                         node_id,
                         &path.anchors,
