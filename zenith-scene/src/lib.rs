@@ -12,6 +12,7 @@
 //! - `ir`      — scene IR types (`Scene`, `SceneCommand`, `Color`, `SceneGlyph`).
 //! - `color`   — sRGB hex parsing → `Color`.
 //! - `compile` — `compile(&Document, &dyn FontProvider) -> CompileResult`.
+//! - `text_outline` — compiled glyph-run commands → editable compound paths.
 //!
 //! # Quick start
 //!
@@ -33,6 +34,7 @@
 pub mod color;
 pub mod compile;
 pub mod ir;
+pub mod text_outline;
 
 // Curated flat re-exports.
 pub use compile::{CompileResult, compile, compile_page};
@@ -41,3 +43,4 @@ pub use ir::{
     LineJoin, MaskShape, MaskSpec, Paint, Rect, Scene, SceneCommand, SceneGlyph, ShadowSpec,
     SrcRect, StrokeAlign,
 };
+pub use text_outline::{outline_glyph_run_command, outline_glyph_run_commands};
