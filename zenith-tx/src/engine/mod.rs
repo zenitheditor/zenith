@@ -23,6 +23,7 @@ mod pattern;
 mod recipe;
 pub(crate) mod structure;
 mod style;
+mod text_outline;
 mod token;
 
 use asset::{AddAssetSpec, apply_add_asset, apply_set_asset};
@@ -53,6 +54,8 @@ use style::{
 };
 use token::{apply_create_token, apply_update_token_value};
 
+pub use text_outline::{TextOutlineRequest, materialize_text_outlines};
+
 // ── Public entry point ────────────────────────────────────────────────────────
 
 /// Apply `tx` to `doc` and return a structured [`TxResult`].
@@ -61,15 +64,8 @@ use token::{apply_create_token, apply_update_token_value};
 /// candidate), and no I/O is performed. Both dry-run and apply callers receive
 /// the same result shape; the caller decides whether to persist `source_after`.
 pub fn run_transaction(doc: &Document, tx: &Transaction) -> Result<TxResult, TxError> {
-    let adapter = KdlAdapter;
-
     // 1. Format the original document → source_before.
-    let source_before_bytes = adapter.format(doc).map_err(|e| TxError {
-        message: format!("failed to format source document: {e}"),
-    })?;
-    let source_before = String::from_utf8(source_before_bytes).map_err(|e| TxError {
-        message: format!("source_before is not valid UTF-8: {e}"),
-    })?;
+    let source_before = format_source(doc, "source_before")?;
 
     // 2. Clone the document into a mutable candidate.
     let mut candidate = doc.clone();
@@ -111,24 +107,35 @@ pub fn run_transaction(doc: &Document, tx: &Transaction) -> Result<TxResult, TxE
         apply_op(op, &mut candidate, &mut diagnostics, &mut affected);
     }
 
-    // 4. Post-apply validation.
+    // 4. Post-apply validation and result finalization.
+    finish_candidate(source_before, candidate, diagnostics, affected)
+}
+
+pub(super) fn format_source(doc: &Document, label: &str) -> Result<String, TxError> {
+    let bytes = KdlAdapter.format(doc).map_err(|e| TxError {
+        message: format!("failed to format {label} document: {e}"),
+    })?;
+    String::from_utf8(bytes).map_err(|e| TxError {
+        message: format!("{label} is not valid UTF-8: {e}"),
+    })
+}
+
+pub(super) fn finish_candidate(
+    source_before: String,
+    candidate: Document,
+    mut diagnostics: Vec<Diagnostic>,
+    affected: Vec<String>,
+) -> Result<TxResult, TxError> {
     let report = validate(&candidate);
     diagnostics.extend(report.diagnostics);
 
-    // 5. Determine status and source_after.
     let has_errors = diagnostics.iter().any(|d| d.severity == Severity::Error);
     let has_warnings = diagnostics.iter().any(|d| d.severity == Severity::Warning);
 
     let (status, source_after) = if has_errors {
-        // Rejected — discard candidate, source_after == source_before.
         (TxStatus::Rejected, source_before.clone())
     } else {
-        let after_bytes = adapter.format(&candidate).map_err(|e| TxError {
-            message: format!("failed to format candidate document: {e}"),
-        })?;
-        let after = String::from_utf8(after_bytes).map_err(|e| TxError {
-            message: format!("source_after is not valid UTF-8: {e}"),
-        })?;
+        let after = format_source(&candidate, "source_after")?;
         let status = if has_warnings {
             TxStatus::AcceptedWithWarnings
         } else {
