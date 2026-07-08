@@ -33,6 +33,16 @@ pub(super) fn dispatch_library(args: LibraryArgs) -> ExitCode {
             }
         }
 
+        cli::LibrarySub::Search(search_args) => {
+            let project_dir = resolve_project_dir(search_args.path.as_deref());
+            let packs = library::resolve_packs(project_dir.as_deref());
+            println!(
+                "{}",
+                commands::library::search(&packs, &search_args.query, search_args.json)
+            );
+            ExitCode::SUCCESS
+        }
+
         cli::LibrarySub::Add(add_args) => {
             // Parse the optional `--at "X,Y"` origin up front.
             let at = match parse_at_spec(add_args.at.as_deref()) {

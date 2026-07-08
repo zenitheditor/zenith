@@ -23,7 +23,9 @@ mod schema;
 mod workspace;
 
 pub use asset::{AssetArgs, AssetImportArgs, AssetSub, AssetZpxBakeArgs};
-pub use library::{LibraryAddArgs, LibraryArgs, LibraryListArgs, LibraryShowArgs, LibrarySub};
+pub use library::{
+    LibraryAddArgs, LibraryArgs, LibraryListArgs, LibrarySearchArgs, LibraryShowArgs, LibrarySub,
+};
 pub use perceive::{PerceiveArgs, PerceiveSub};
 pub use plugin::{
     AgentFlags, PluginArgs, PluginInstallArgs, PluginSub, PluginUninstallArgs, ScopeArg,

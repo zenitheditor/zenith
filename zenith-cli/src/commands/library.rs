@@ -13,8 +13,10 @@
 
 mod add;
 mod list;
+mod search;
 mod show;
 
 pub use add::{AddCmdErr, AddResult, add};
 pub use list::list;
+pub use search::search;
 pub use show::{ShowCmdErr, show};

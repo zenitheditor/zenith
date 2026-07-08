@@ -27,6 +27,7 @@ use std::path::PathBuf;
 ///
 /// WORKFLOW:
 ///   zenith library list                          # discover packs + items
+///   zenith library search device                 # find items by name/tag/alias
 ///   zenith library show @zenith/filters#sepia    # inspect one item
 ///   zenith library add @zenith/filters#sepia --into poster.zen
 #[derive(Debug, Args)]
@@ -40,6 +41,7 @@ action    — canned tx op sequence; runs a transaction against the target docum
 Embedded @zenith/* packs are built in; project packs live in libraries/*.zen and shadow them.\n\n\
 WORKFLOW:\n  \
 zenith library list                          # discover packs and items\n  \
+zenith library search device                 # search names, tags, and aliases\n  \
 zenith library show @zenith/filters#sepia    # inspect item content before adding\n  \
 zenith library add @zenith/filters#sepia --into poster.zen"
 )]
@@ -66,6 +68,13 @@ pub enum LibrarySub {
     /// types and ops, component node structure, or action op sequence.  Prints
     /// the exact `zenith library add` invocation to materialize the item.
     Show(LibraryShowArgs),
+
+    /// Search library items by package, item id, kind, license, and known aliases/tags.
+    ///
+    /// Searches resolved project and embedded packs. Embedded icon packs expose
+    /// curated aliases so agent terms such as "device" can find concrete icon
+    /// items like `@zenith/icons-lucide#monitor`.
+    Search(LibrarySearchArgs),
 
     /// Materialize a library item into a target `.zen` document.
     ///
@@ -129,6 +138,26 @@ zenith library show @zenith/brand-kit#apply-2026 --json")]
 pub struct LibraryShowArgs {
     /// The item to inspect, as `<package>#<item>`, e.g. `@zenith/filters#sepia`.
     pub spec: String,
+
+    /// Project directory, or a `.zen` file whose parent is the project directory.
+    /// Project `libraries/*.zen` packs are resolved alongside embedded presets.
+    /// Defaults to the current working directory.
+    pub path: Option<PathBuf>,
+
+    /// Emit machine-readable JSON instead of a human-readable summary.
+    #[arg(long)]
+    pub json: bool,
+}
+
+/// Arguments for `zenith library search`.
+#[derive(Debug, Args)]
+#[command(after_help = "EXAMPLES:\n  \
+zenith library search device       # find device-like icon components\n  \
+zenith library search cloud --json # machine-readable results with tags\n  \
+zenith library search noir")]
+pub struct LibrarySearchArgs {
+    /// Query text to match against package id, item id, kind, and known aliases/tags.
+    pub query: String,
 
     /// Project directory, or a `.zen` file whose parent is the project directory.
     /// Project `libraries/*.zen` packs are resolved alongside embedded presets.

@@ -126,7 +126,7 @@ These make designs editable, on-brand, and reproducible — and keep the agentic
 - **Use native icon components for real-world diagram objects.** Do not represent devices,
   clouds, servers, databases, files, folders, locks, networks, or search/settings affordances as
   generic labeled boxes when an icon is the visual object. Discover the embedded pack with
-  `zenith library list`; inspect an icon with
+  `zenith library search device` or `zenith library list`; search uses names, tags, and aliases; inspect an icon with
   `zenith library show @zenith/icons-lucide#monitor`; materialize with
   `zenith library add @zenith/icons-lucide#monitor --into <file> --page <page-id> --at X,Y`.
   The Lucide pack includes `monitor`, `smartphone`, `tablet`, `server`, `database`, `cloud`,
