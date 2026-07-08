@@ -50,11 +50,13 @@ pub(in crate::format::writer) fn write_document_body(
 fn write_page(page: &Page, out: &mut String, depth: usize) {
     indent(out, depth);
     out.push_str("page");
-    // Canonical order: id, name, w, h, background
+    // Canonical order: id, name, source, fit, w, h, background
     out.push_str(" id=\"");
     out.push_str(&page.id);
     out.push('"');
     write_opt_str(out, "name", &page.name);
+    write_opt_str(out, "source", &page.source);
+    write_opt_str(out, "fit", &page.fit);
     out.push_str(" w=");
     out.push_str(&fmt_dimension(&page.width));
     out.push_str(" h=");

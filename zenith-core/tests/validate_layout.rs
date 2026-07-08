@@ -476,6 +476,8 @@ fn page_with_folds(id: &str, w: f64, h: f64, folds: Vec<Fold>, children: Vec<Nod
     Page {
         id: id.to_owned(),
         name: None,
+        source: None,
+        fit: None,
         width: px(w),
         height: px(h),
         background: None,
@@ -659,6 +661,8 @@ fn page_with_zones(
     Page {
         id: id.to_owned(),
         name: None,
+        source: None,
+        fit: None,
         width: px(w),
         height: px(h),
         background: None,

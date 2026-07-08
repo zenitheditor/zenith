@@ -1,5 +1,7 @@
 //! Top-level document AST types.
 
+use std::collections::BTreeMap;
+
 use super::Span;
 use super::action::ActionDef;
 use super::asset::AssetBlock;
@@ -7,7 +9,7 @@ use super::block_style::BlockStyle;
 use super::brand::BrandContract;
 use super::construction::ConstructionBlock;
 use super::library::LibraryDef;
-use super::node::Node;
+use super::node::{Node, UnknownProperty};
 use super::policy::DiagnosticPolicy;
 use super::provenance::ProvenanceDef;
 use super::recipe::RecipeDef;
@@ -30,6 +32,11 @@ pub struct Project {
 pub struct Page {
     pub id: String,
     pub name: Option<String>,
+    /// Optional external composition source for this page. Phase 1 preserves
+    /// the reference without loading or expanding it.
+    pub source: Option<String>,
+    /// Optional fitting mode for an externally sourced page.
+    pub fit: Option<String>,
     /// Page width — required.
     pub width: Dimension,
     /// Page height — required.
@@ -241,6 +248,32 @@ pub struct SectionDef {
     pub source_span: Option<Span>,
 }
 
+/// A root-level composition import declaration.
+///
+/// Declared under `imports { import id="..." kind="zen" src="..." ... }`.
+/// Phase 1 is shape-only: the parser/formatter/validator preserve declarations
+/// and validate `kind`, but never load files, verify hashes, resolve external
+/// targets, or expand imported content.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ImportDecl {
+    pub id: String,
+    pub kind: String,
+    pub src: String,
+    pub sha256: Option<String>,
+    pub token_maps: Vec<TokenMapDecl>,
+    pub source_span: Option<Span>,
+    pub unknown_props: BTreeMap<String, UnknownProperty>,
+}
+
+/// A token namespace mapping inside an [`ImportDecl`].
+#[derive(Debug, Clone, PartialEq)]
+pub struct TokenMapDecl {
+    pub from: String,
+    pub to: String,
+    pub source_span: Option<Span>,
+    pub unknown_props: BTreeMap<String, UnknownProperty>,
+}
+
 /// The root `zenith` node — the complete parsed `.zen` document.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Document {
@@ -310,6 +343,9 @@ pub struct Document {
     /// entry declares an external library dependency (id/version/hash). The engine
     /// preserves and validates these but does not fetch package content.
     pub libraries: Vec<LibraryDef>,
+    /// Composition imports; empty when the `imports` block is absent. Phase 1
+    /// preserves these declarations and validates their shape only.
+    pub imports: Vec<ImportDecl>,
     /// Action declarations; empty when the `actions` block is absent. Each entry
     /// declares a named transaction script (id/label/version/tx_json). The engine
     /// round-trips the `tx` payload verbatim without parsing it.
@@ -451,6 +487,8 @@ mod parity_tests {
         Page {
             id: id.to_owned(),
             name: None,
+            source: None,
+            fit: None,
             width: px(100.0),
             height: px(100.0),
             background: None,
@@ -489,6 +527,7 @@ mod parity_tests {
             project: None,
             assets: AssetBlock::default(),
             libraries: Vec::new(),
+            imports: Vec::new(),
             actions: Vec::new(),
             tokens: TokenBlock::default(),
             styles: StyleBlock::default(),

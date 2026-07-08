@@ -23,7 +23,7 @@ use super::construction::check_construction;
 use super::contrast::check_text_contrast;
 use super::nodes::{WalkCtx, WalkPos, check_sibling_anchors, walk_node};
 use super::passes::{
-    check_footnote_refs, collect_local_ids, register_id, validate_asset_decl,
+    check_footnote_refs, collect_local_ids, register_id, validate_asset_decl, validate_import_decl,
     validate_library_decl, validate_provenance_def, validate_style_block,
 };
 use super::policy::{apply_policy, check_policy_entries};
@@ -276,6 +276,15 @@ pub fn validate_with_policy(
     for decl in &doc.libraries {
         register_id(&decl.id, &mut seen_ids, &mut diagnostics);
         validate_library_decl(decl, &mut diagnostics);
+    }
+
+    // ── Composition import IDs and shape checks ──────────────────────────
+    // Import ids share the global id namespace. Phase 1 validates only the
+    // declaration shape (`kind="zen"`); no filesystem loading or target
+    // resolution happens here.
+    for decl in &doc.imports {
+        register_id(&decl.id, &mut seen_ids, &mut diagnostics);
+        validate_import_decl(decl, &mut diagnostics);
     }
 
     // ── Component definitions ─────────────────────────────────────────────

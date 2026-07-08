@@ -65,7 +65,7 @@ fn test_component_instance_override_round_trip() {
     match &doc_orig.body.pages[0].children[0] {
         Node::Instance(i) => {
             assert_eq!(i.id, "inst.1");
-            assert_eq!(i.component, "panel.master");
+            assert_eq!(i.component.as_deref(), Some("panel.master"));
             assert_eq!(i.overrides.len(), 1);
             let ov = &i.overrides[0];
             assert_eq!(ov.ref_id, "label");
@@ -95,6 +95,123 @@ fn test_component_instance_override_round_trip() {
         String::from_utf8(s2).unwrap(),
         "component formatting must be idempotent"
     );
+}
+
+#[test]
+fn test_imports_token_map_round_trip() {
+    let src = r##"zenith version=1 {
+  project id="proj.import" name="Import"
+  imports {
+    import id="brand" kind="zen" src="brand.zen" sha256="abc123" {
+      token-map from="color.primary" to="brand.color.primary"
+    }
+  }
+  tokens format="zenith-token-v1" {
+  }
+  styles {
+  }
+  document id="doc.import" title="Import" {
+    page id="page.one" w=(px)640 h=(px)360 {
+    }
+  }
+}
+"##;
+    let adapter = KdlAdapter;
+    let doc = adapter.parse(src.as_bytes()).expect("parse");
+    assert_eq!(doc.imports.len(), 1);
+    assert_eq!(doc.imports[0].id, "brand");
+    assert_eq!(doc.imports[0].kind, "zen");
+    assert_eq!(doc.imports[0].src, "brand.zen");
+    assert_eq!(doc.imports[0].sha256.as_deref(), Some("abc123"));
+    assert_eq!(doc.imports[0].token_maps.len(), 1);
+    assert_eq!(doc.imports[0].token_maps[0].from, "color.primary");
+    assert_eq!(doc.imports[0].token_maps[0].to, "brand.color.primary");
+
+    let formatted = format_document(&doc).expect("format");
+    let formatted_str = String::from_utf8(formatted).expect("utf8");
+    assert!(
+        formatted_str.contains("imports {\n    import id=\"brand\" kind=\"zen\" src=\"brand.zen\" sha256=\"abc123\" {\n      token-map from=\"color.primary\" to=\"brand.color.primary\"\n    }\n  }\n"),
+        "imports block must format canonically; got:\n{formatted_str}"
+    );
+
+    let reparsed = adapter.parse(formatted_str.as_bytes()).expect("reparse");
+    assert_eq!(strip_spans(doc), strip_spans(reparsed));
+}
+
+#[test]
+fn test_external_instance_source_round_trip() {
+    let src = r##"zenith version=1 {
+  project id="proj.external" name="External"
+  imports {
+    import id="brand" kind="zen" src="brand.zen"
+  }
+  tokens format="zenith-token-v1" {
+  }
+  styles {
+  }
+  document id="doc.external" title="External" {
+    page id="page.one" w=(px)640 h=(px)360 {
+      instance id="logo" source="brand#component.logo" x=(px)10 y=(px)20 w=(px)120 h=(px)60 fit="contain" {
+      }
+    }
+  }
+}
+"##;
+    let adapter = KdlAdapter;
+    let doc = adapter.parse(src.as_bytes()).expect("parse");
+    let inst = match &doc.body.pages[0].children[0] {
+        Node::Instance(i) => i,
+        other => panic!("expected Instance node, got {other:?}"),
+    };
+    assert_eq!(inst.component, None);
+    assert_eq!(inst.source.as_deref(), Some("brand#component.logo"));
+    assert_eq!(inst.fit.as_deref(), Some("contain"));
+    assert!(inst.w.is_some());
+    assert!(inst.h.is_some());
+
+    let formatted = format_document(&doc).expect("format");
+    let formatted_str = String::from_utf8(formatted).expect("utf8");
+    assert!(
+        formatted_str.contains("instance id=\"logo\" source=\"brand#component.logo\" x=(px)10 y=(px)20 w=(px)120 h=(px)60 fit=\"contain\""),
+        "external instance must format in canonical property order; got:\n{formatted_str}"
+    );
+    let reparsed = adapter.parse(formatted_str.as_bytes()).expect("reparse");
+    assert_eq!(strip_spans(doc), strip_spans(reparsed));
+}
+
+#[test]
+fn test_page_source_fit_round_trip() {
+    let src = r##"zenith version=1 {
+  project id="proj.page-source" name="Page Source"
+  imports {
+    import id="deck" kind="zen" src="deck.zen"
+  }
+  tokens format="zenith-token-v1" {
+  }
+  styles {
+  }
+  document id="doc.page-source" title="Page Source" {
+    page id="page.one" source="deck#page.cover" fit="cover" w=(px)640 h=(px)360 {
+    }
+  }
+}
+"##;
+    let adapter = KdlAdapter;
+    let doc = adapter.parse(src.as_bytes()).expect("parse");
+    let page = &doc.body.pages[0];
+    assert_eq!(page.source.as_deref(), Some("deck#page.cover"));
+    assert_eq!(page.fit.as_deref(), Some("cover"));
+
+    let formatted = format_document(&doc).expect("format");
+    let formatted_str = String::from_utf8(formatted).expect("utf8");
+    assert!(
+        formatted_str.contains(
+            "page id=\"page.one\" source=\"deck#page.cover\" fit=\"cover\" w=(px)640 h=(px)360"
+        ),
+        "page source/fit must format near identity and geometry; got:\n{formatted_str}"
+    );
+    let reparsed = adapter.parse(formatted_str.as_bytes()).expect("reparse");
+    assert_eq!(strip_spans(doc), strip_spans(reparsed));
 }
 
 /// **Page bleed round-trip**: a `bleed` attribute parses, formats back into the

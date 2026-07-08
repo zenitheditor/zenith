@@ -29,6 +29,7 @@ fn doc_with_styles(tokens: Vec<Token>, styles: Vec<Style>, pages: Vec<Page>) -> 
         project: None,
         assets: AssetBlock::default(),
         libraries: Vec::new(),
+        imports: Vec::new(),
         actions: Vec::new(),
         tokens: TokenBlock {
             format: "zenith-token-v1".to_owned(),

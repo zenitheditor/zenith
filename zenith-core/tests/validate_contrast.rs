@@ -44,6 +44,8 @@ fn page_with_bg(id: &str, bg_token_id: &str, children: Vec<Node>) -> Page {
     Page {
         id: id.to_owned(),
         name: None,
+        source: None,
+        fit: None,
         width: px(1280.0),
         height: px(720.0),
         background: Some(PropertyValue::TokenRef(bg_token_id.to_owned())),

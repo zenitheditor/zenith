@@ -537,14 +537,44 @@ pub(in crate::validate::check) fn check_instance(
     } = ctx;
     register_id(&inst.id, seen_ids, diagnostics);
 
-    let component_known = declared_component_ids.contains(&inst.component);
-    if !component_known {
+    let has_component = inst.component.is_some();
+    let has_source = inst.source.is_some();
+    if !has_component && !has_source {
+        diagnostics.push(Diagnostic::error(
+            "instance.missing_reference",
+            format!(
+                "instance '{}': exactly one of component or source is required",
+                inst.id
+            ),
+            inst.source_span,
+            Some(inst.id.clone()),
+        ));
+    }
+    if has_component && has_source {
+        diagnostics.push(Diagnostic::error(
+            "instance.multiple_references",
+            format!(
+                "instance '{}': component and source are mutually exclusive",
+                inst.id
+            ),
+            inst.source_span,
+            Some(inst.id.clone()),
+        ));
+    }
+
+    let component_known = match &inst.component {
+        Some(component) => declared_component_ids.contains(component),
+        None => false,
+    };
+    if let Some(component) = &inst.component
+        && !component_known
+    {
         diagnostics.push(Diagnostic::error(
             "component.unknown_reference",
             format!(
                 "instance '{}': references component '{}' which is not declared in the \
                  components block",
-                inst.id, inst.component
+                inst.id, component
             ),
             inst.source_span,
             Some(inst.id.clone()),
@@ -554,7 +584,10 @@ pub(in crate::validate::check) fn check_instance(
     // Override targets are only checkable when the component is known. Look up the
     // referenced component's local-id set; an override `ref` that matches no local
     // descendant id → warning.
-    let local_ids = component_local_ids.get(&inst.component);
+    let local_ids = inst
+        .component
+        .as_ref()
+        .and_then(|component| component_local_ids.get(component));
     for ov in &inst.overrides {
         // Validate (and register as referenced) any token refs the override
         // carries, so an override-only token is not falsely flagged unused and
@@ -585,12 +618,15 @@ pub(in crate::validate::check) fn check_instance(
         let target_known = local_ids
             .map(|ids| ids.contains(&ov.ref_id))
             .unwrap_or(false);
-        if component_known && !target_known {
+        if component_known
+            && !target_known
+            && let Some(component) = &inst.component
+        {
             diagnostics.push(Diagnostic::warning(
                 "component.unknown_override_target",
                 format!(
                     "instance '{}': override ref '{}' matches no descendant id in component '{}'",
-                    inst.id, ov.ref_id, inst.component
+                    inst.id, ov.ref_id, component
                 ),
                 ov.source_span.or(inst.source_span),
                 Some(inst.id.clone()),

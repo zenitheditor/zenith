@@ -65,7 +65,10 @@ fn materialize_adds_component_tokens_style_instance_provenance() {
         })
         .expect("instance inserted");
     assert_eq!(inst.id, "decision");
-    assert_eq!(inst.component, "lib.zenith.flowchart.decision");
+    assert_eq!(
+        inst.component.as_deref(),
+        Some("lib.zenith.flowchart.decision")
+    );
     assert_eq!(inst.x, Some(px(10.0)));
     assert_eq!(inst.y, Some(px(20.0)));
 

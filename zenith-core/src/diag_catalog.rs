@@ -189,6 +189,21 @@ pub const DIAGNOSTIC_CODES: &[DiagnosticCodeInfo] = &[
         "Connector is missing a `from` or `to` target.",
     ),
     info(
+        "import.invalid_kind",
+        Severity::Error,
+        "Import declaration uses an unsupported kind.",
+    ),
+    info(
+        "instance.missing_reference",
+        Severity::Error,
+        "Instance is missing both component and source references.",
+    ),
+    info(
+        "instance.multiple_references",
+        Severity::Error,
+        "Instance declares both component and source references.",
+    ),
+    info(
         "connector.unknown_target",
         Severity::Warning,
         "Connector `from`/`to` references an unknown node.",
@@ -592,6 +607,11 @@ pub const DIAGNOSTIC_CODES: &[DiagnosticCodeInfo] = &[
         "scene.unresolved_token",
         Severity::Advisory,
         "A paint references a token that could not be resolved at compile time.",
+    ),
+    info(
+        "scene.unsupported_import_source",
+        Severity::Advisory,
+        "An imported composition source is not yet supported by scene compilation.",
     ),
     info(
         "scene.unsupported_node",
@@ -1044,6 +1064,7 @@ mod tests {
             ("scene.text_unshaped", Severity::Advisory),
             ("scene.unknown_component", Severity::Advisory),
             ("scene.unresolved_token", Severity::Advisory),
+            ("scene.unsupported_import_source", Severity::Advisory),
             ("scene.unsupported_node", Severity::Advisory),
             ("scene.unsupported_unit", Severity::Advisory),
             ("scene.wrong_token_type", Severity::Advisory),

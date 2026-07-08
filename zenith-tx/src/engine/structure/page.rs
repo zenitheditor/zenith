@@ -126,6 +126,8 @@ pub(in crate::engine) fn apply_add_page(
         margin_bottom: None,
         baseline_grid: None,
         line_jumps: None,
+        source: None,
+        fit: None,
         parity: None,
         master: None,
         safe_zones: Vec::new(),

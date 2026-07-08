@@ -460,8 +460,12 @@ pub(crate) const INSTANCE_KNOWN_PROPS: &[&str] = &[
     "name",
     "role",
     "component",
+    "source",
     "x",
     "y",
+    "w",
+    "h",
+    "fit",
     "opacity",
     "visible",
     "locked",
@@ -469,12 +473,12 @@ pub(crate) const INSTANCE_KNOWN_PROPS: &[&str] = &[
 
 /// Transform an `instance` node into an [`InstanceNode`].
 ///
-/// Reads required `id` and `component`; optional `x`/`y` origin dimensions,
-/// `opacity`/`visible`/`locked`; and collects `override` child nodes into
-/// [`Override`]s. Non-`override` children are ignored (forward-compat).
+/// Reads required `id`; optional local `component` or external `source`;
+/// optional `x`/`y` origin dimensions, external `w`/`h`/`fit`, `opacity`/
+/// `visible`/`locked`; and collects `override` child nodes into [`Override`]s.
+/// Non-`override` children are ignored (forward-compat).
 pub(super) fn transform_instance(node: &KdlNode) -> Result<InstanceNode, ParseError> {
     let id = required_string_prop(node, "id")?.to_owned();
-    let component = required_string_prop(node, "component")?.to_owned();
 
     let mut overrides: Vec<Override> = Vec::new();
     if let Some(children) = node.children() {
@@ -491,9 +495,13 @@ pub(super) fn transform_instance(node: &KdlNode) -> Result<InstanceNode, ParseEr
         id,
         name: optional_string_prop(node, "name").map(str::to_owned),
         role: optional_string_prop(node, "role").map(str::to_owned),
-        component,
+        component: optional_string_prop(node, "component").map(str::to_owned),
+        source: optional_string_prop(node, "source").map(str::to_owned),
         x: optional_dimension_prop(node, "x"),
         y: optional_dimension_prop(node, "y"),
+        w: optional_dimension_prop(node, "w"),
+        h: optional_dimension_prop(node, "h"),
+        fit: optional_string_prop(node, "fit").map(str::to_owned),
         opacity: optional_f64_prop(node, "opacity"),
         visible: optional_bool_prop(node, "visible"),
         locked: optional_bool_prop(node, "locked"),

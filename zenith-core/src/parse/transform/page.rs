@@ -19,6 +19,8 @@ use crate::ast::block_style::BlockStyle;
 pub(crate) const PAGE_KNOWN_PROPS: &[&str] = &[
     "id",
     "name",
+    "source",
+    "fit",
     "w",
     "h",
     "background",
@@ -54,6 +56,8 @@ use super::node::transform_node;
 pub(super) fn transform_page(node: &KdlNode) -> Result<Page, ParseError> {
     let id = required_string_prop(node, "id")?.to_owned();
     let name = optional_string_prop(node, "name").map(str::to_owned);
+    let source = optional_string_prop(node, "source").map(str::to_owned);
+    let fit = optional_string_prop(node, "fit").map(str::to_owned);
 
     let width = node
         .entry("w")
@@ -150,6 +154,8 @@ pub(super) fn transform_page(node: &KdlNode) -> Result<Page, ParseError> {
     Ok(Page {
         id,
         name,
+        source,
+        fit,
         width,
         height,
         background,

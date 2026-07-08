@@ -9,6 +9,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::ast::asset::{AssetDecl, AssetKind};
+use crate::ast::document::ImportDecl;
 use crate::ast::library::LibraryDef;
 use crate::ast::provenance::ProvenanceDef;
 use crate::ast::style::StyleBlock;
@@ -326,6 +327,28 @@ pub(in crate::validate::check) fn validate_library_decl(
                 "library '{}': unknown property '{}' (version-relative; \
                  may be valid in a later schema version)",
                 decl.id, prop_name
+            ),
+            decl.source_span,
+            Some(decl.id.clone()),
+        ));
+    }
+}
+
+/// Validate a single composition import declaration.
+///
+/// Phase 1 is shape-only: only the import kind is validated. The engine does
+/// not load files, verify hashes, resolve targets, detect cycles, or validate
+/// imported token references.
+pub(in crate::validate::check) fn validate_import_decl(
+    decl: &ImportDecl,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    if decl.kind != "zen" {
+        diagnostics.push(Diagnostic::error(
+            "import.invalid_kind",
+            format!(
+                "import '{}': unknown kind '{}'; recognized kind is: zen",
+                decl.id, decl.kind
             ),
             decl.source_span,
             Some(decl.id.clone()),

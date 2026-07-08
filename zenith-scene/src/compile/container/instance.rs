@@ -39,13 +39,30 @@ pub(in crate::compile) fn compile_instance(
         return;
     }
 
-    let Some(component) = cx.components.get(instance.component.as_str()) else {
+    if let Some(source) = &instance.source {
+        diagnostics.push(Diagnostic::advisory(
+            "scene.unsupported_import_source",
+            format!(
+                "instance '{}' references imported source '{}' which is not yet expanded by scene compile; the instance is skipped",
+                instance.id, source
+            ),
+            instance.source_span,
+            Some(instance.id.clone()),
+        ));
+        return;
+    }
+
+    let Some(component_id) = instance.component.as_deref() else {
+        return;
+    };
+
+    let Some(component) = cx.components.get(component_id) else {
         diagnostics.push(Diagnostic::advisory(
             "scene.unknown_component",
             format!(
                 "instance '{}' references component '{}' which is not declared; \
                  the instance is skipped",
-                instance.id, instance.component
+                instance.id, component_id
             ),
             instance.source_span,
             Some(instance.id.clone()),

@@ -206,6 +206,8 @@ pub fn minimal_page(id: &str, children: Vec<Node>) -> Page {
     Page {
         id: id.to_owned(),
         name: None,
+        source: None,
+        fit: None,
         width: px(1280.0),
         height: px(720.0),
         background: None,
@@ -244,6 +246,7 @@ pub fn doc_with(tokens: Vec<Token>, pages: Vec<Page>) -> Document {
         project: None,
         assets: AssetBlock::default(),
         libraries: Vec::new(),
+        imports: Vec::new(),
         actions: Vec::new(),
         tokens: TokenBlock {
             format: "zenith-token-v1".to_owned(),
@@ -291,6 +294,8 @@ pub fn bounded_page(id: &str, w: f64, h: f64, children: Vec<Node>) -> Page {
     Page {
         id: id.to_owned(),
         name: None,
+        source: None,
+        fit: None,
         width: px(w),
         height: px(h),
         background: None,
@@ -414,6 +419,13 @@ pub fn strip_spans(mut doc: Document) -> Document {
     // Libraries
     for library in &mut doc.libraries {
         library.source_span = None;
+    }
+    // Imports
+    for import in &mut doc.imports {
+        import.source_span = None;
+        for token_map in &mut import.token_maps {
+            token_map.source_span = None;
+        }
     }
     // Actions
     for action in &mut doc.actions {

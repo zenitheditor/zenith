@@ -706,6 +706,8 @@ fn page_unknown_unit_produces_invalid_geometry() {
         vec![Page {
             id: "page.bad".to_owned(),
             name: None,
+            source: None,
+            fit: None,
             width: Dimension {
                 value: 1280.0,
                 unit: Unit::Unknown("em".to_owned()),

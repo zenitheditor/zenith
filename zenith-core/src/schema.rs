@@ -560,6 +560,8 @@ fn attribute_type_for_kind_inner(kind: &str, name: &str, fallback: &'static str)
         ("mesh", "stroke-linecap") => "enum: butt|round|square",
         ("path", "stroke-linejoin") => "enum: miter|round|bevel",
         ("path", "stroke-miter-limit") => "f64 (>0)",
+        ("import", "kind") => "enum: zen",
+        ("token-map", "from") | ("token-map", "to") => "string",
         // chart axis/legend/caption/bar-mode/orientation/legend-position/legend-layout/legend-align: chart-only attributes (validate/check/nodes/node/chart.rs).
         ("chart", "legend") => "bool",
         ("chart", "caption") => "string",
@@ -601,6 +603,7 @@ fn attribute_type_generic(name: &str, fallback: &'static str) -> &'static str {
         "name" => "string",
         "role" => "string",
         "style" => "string",
+        "source" => "string",
 
         // ── Geometry (px literals) ────────────────────────────────────────
         "x" | "y" | "w" | "h" => "px literal or token ref: dimension",

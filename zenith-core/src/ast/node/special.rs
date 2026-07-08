@@ -208,12 +208,20 @@ pub struct InstanceNode {
     pub id: String,
     pub name: Option<String>,
     pub role: Option<String>,
-    /// The referenced [`ComponentDef`](crate::ast::ComponentDef) id.
-    pub component: String,
+    /// The referenced local [`ComponentDef`](crate::ast::ComponentDef) id.
+    pub component: Option<String>,
+    /// The referenced external import target (`import-id#component.id`).
+    pub source: Option<String>,
     /// Instance origin x-translation applied to the expanded subtree (default 0).
     pub x: Option<Dimension>,
     /// Instance origin y-translation applied to the expanded subtree (default 0).
     pub y: Option<Dimension>,
+    /// Optional external instance width.
+    pub w: Option<Dimension>,
+    /// Optional external instance height.
+    pub h: Option<Dimension>,
+    /// Optional external instance fitting mode.
+    pub fit: Option<String>,
     /// Opacity that cascades (multiplies) into all expanded descendant alphas.
     pub opacity: Option<f64>,
     /// When `Some(false)` the entire expanded subtree is excluded from the render.

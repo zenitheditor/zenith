@@ -251,18 +251,21 @@ pub(super) fn write_instance(i: &InstanceNode, out: &mut String, depth: usize) {
     indent(out, depth);
     out.push_str("instance");
 
-    // Canonical property order: id, name, role, component, x, y, opacity,
-    // visible, locked, then unknown props (sorted), then the override children.
+    // Canonical property order: id, name, role, component, source, x, y, w, h,
+    // fit, opacity, visible, locked, then unknown props (sorted), then the
+    // override children.
     out.push_str(" id=\"");
     out.push_str(&i.id);
     out.push('"');
     write_opt_str(out, "name", &i.name);
     write_opt_str(out, "role", &i.role);
-    out.push_str(" component=\"");
-    out.push_str(&i.component);
-    out.push('"');
+    write_opt_str(out, "component", &i.component);
+    write_opt_str(out, "source", &i.source);
     write_opt_dimension(out, "x", &i.x);
     write_opt_dimension(out, "y", &i.y);
+    write_opt_dimension(out, "w", &i.w);
+    write_opt_dimension(out, "h", &i.h);
+    write_opt_str(out, "fit", &i.fit);
     write_opt_f64(out, "opacity", &i.opacity);
     write_opt_bool(out, "visible", &i.visible);
     write_opt_bool(out, "locked", &i.locked);

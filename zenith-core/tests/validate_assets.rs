@@ -35,6 +35,7 @@ fn doc_with_assets(assets: Vec<AssetDecl>) -> Document {
             source_span: None,
         },
         libraries: Vec::new(),
+        imports: Vec::new(),
         actions: Vec::new(),
         tokens: TokenBlock {
             format: "zenith-token-v1".to_owned(),

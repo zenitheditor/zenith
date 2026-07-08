@@ -6,7 +6,7 @@
 //! Rules:
 //! - Two-space indentation per nesting level.
 //! - Root `zenith` node at column 0.
-//! - Child order under `zenith`: project, assets, libraries, tokens, styles, components, masters, sections, provenance, variants, recipes, actions, document.
+//! - Child order under `zenith`: diagnostics, brand, project, assets, libraries, imports, tokens, styles, components, masters, sections, provenance, variants, recipes, actions, document.
 //! - Structural containers (`tokens`, `styles`, `document`, `page`) always emit
 //!   a brace block, even when empty.
 //! - Leaf nodes (`project`, a `rect` with no children) emit a single line.
@@ -21,7 +21,7 @@
 //!
 //! The implementation is split across focused submodules:
 //! - this module root holds the public entry point, the `zenith`/`project`/
-//!   `assets`/`libraries`/`components`/`masters`/`sections`/`provenance`/
+//!   `assets`/`libraries`/`imports`/`components`/`masters`/`sections`/`provenance`/
 //!   `variants`/`recipes`/`actions` orchestration, and the shared low-level
 //!   primitives;
 //! - [`tokens`] writes the `tokens` block;
@@ -32,8 +32,9 @@ use std::fmt::Write as _;
 
 use crate::ast::{
     ActionDef, AssetBlock, AssetDecl, BrandContract, ComponentDef, DiagnosticPolicy, Dimension,
-    Document, LibraryDef, MasterDef, ObjectPosition, PolicyVerb, Project, PropertyValue,
-    ProvenanceDef, RecipeDef, RecipeParam, SectionDef, UnknownProperty, UnknownValue, VariantDef,
+    Document, ImportDecl, LibraryDef, MasterDef, ObjectPosition, PolicyVerb, Project,
+    PropertyValue, ProvenanceDef, RecipeDef, RecipeParam, SectionDef, UnknownProperty,
+    UnknownValue, VariantDef,
 };
 use crate::error::FormatError;
 
@@ -283,7 +284,7 @@ fn write_document(doc: &Document, out: &mut String) {
     write_opt_str(out, "page-parity-start", &doc.page_parity_start);
     out.push_str(" {\n");
 
-    // Child order: diagnostics, brand, project, assets, libraries, tokens, styles, components, masters, sections, provenance, variants, recipes, actions, document.
+    // Child order: diagnostics, brand, project, assets, libraries, imports, tokens, styles, components, masters, sections, provenance, variants, recipes, actions, document.
     // `diagnostics` is emitted first — right after the document-level attributes
     // and before `tokens` — so the lint policy reads at the top of the file. It
     // is omitted entirely when the policy is empty, so a document with no
@@ -298,6 +299,7 @@ fn write_document(doc: &Document, out: &mut String) {
     }
     write_asset_block(&doc.assets, out, 1);
     write_library_block(&doc.libraries, out, 1);
+    write_import_block(&doc.imports, out, 1);
     write_token_block(&doc.tokens, out, 1);
     write_style_block(&doc.styles, out, 1);
     write_component_block(&doc.components, out, 1);
@@ -652,6 +654,65 @@ fn write_library_block(libraries: &[LibraryDef], out: &mut String, depth: usize)
             out.push_str(&fmt_unknown_property(prop));
         }
         out.push('\n');
+    }
+    indent(out, depth);
+    out.push_str("}\n");
+}
+
+// ---------------------------------------------------------------------------
+// Imports
+// ---------------------------------------------------------------------------
+
+/// Emit the `imports { … }` block.
+///
+/// Stable position: after `libraries`, before `tokens`. Emitted ONLY when at
+/// least one composition import is declared. Each import emits known properties
+/// in canonical order (`id`, `kind`, `src`, `sha256`), then unknown properties in
+/// BTreeMap key order, then nested `token-map` children in source order.
+fn write_import_block(imports: &[ImportDecl], out: &mut String, depth: usize) {
+    if imports.is_empty() {
+        return;
+    }
+    indent(out, depth);
+    out.push_str("imports {\n");
+    for def in imports {
+        indent(out, depth + 1);
+        out.push_str("import id=\"");
+        out.push_str(&escape_kdl_string(&def.id));
+        out.push_str("\" kind=\"");
+        out.push_str(&escape_kdl_string(&def.kind));
+        out.push_str("\" src=\"");
+        out.push_str(&escape_kdl_string(&def.src));
+        out.push('"');
+        write_opt_str_escaped(out, "sha256", &def.sha256);
+        for (key, prop) in &def.unknown_props {
+            out.push(' ');
+            out.push_str(key);
+            out.push('=');
+            out.push_str(&fmt_unknown_property(prop));
+        }
+        if def.token_maps.is_empty() {
+            out.push('\n');
+        } else {
+            out.push_str(" {\n");
+            for map in &def.token_maps {
+                indent(out, depth + 2);
+                out.push_str("token-map from=\"");
+                out.push_str(&escape_kdl_string(&map.from));
+                out.push_str("\" to=\"");
+                out.push_str(&escape_kdl_string(&map.to));
+                out.push('"');
+                for (key, prop) in &map.unknown_props {
+                    out.push(' ');
+                    out.push_str(key);
+                    out.push('=');
+                    out.push_str(&fmt_unknown_property(prop));
+                }
+                out.push('\n');
+            }
+            indent(out, depth + 1);
+            out.push_str("}\n");
+        }
     }
     indent(out, depth);
     out.push_str("}\n");

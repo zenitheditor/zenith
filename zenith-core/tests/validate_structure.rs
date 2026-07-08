@@ -752,6 +752,92 @@ mod component_validation {
     }
 
     #[test]
+    fn external_instance_source_skips_local_component_validation() {
+        let src = format!(
+            r##"zenith version=1 {{
+  project id="p" name="P"
+  imports {{
+    import id="brand" kind="zen" src="brand.zen"
+  }}
+{BASE_TOKENS}
+  document id="d" {{
+    page id="pg" w=(px)100 h=(px)100 {{
+      instance id="inst.1" source="brand#component.logo" x=(px)0 y=(px)0 w=(px)10 h=(px)10 fit="contain" {{}}
+    }}
+  }}
+}}
+"##
+        );
+        let report = validate(&parse_doc(&src));
+        assert!(
+            !has_code(&report, "component.unknown_reference"),
+            "external source instances must not run local component validation: {:?}",
+            report.diagnostics
+        );
+        assert!(
+            !has_code(&report, "instance.missing_reference"),
+            "source-only instance must satisfy reference shape: {:?}",
+            report.diagnostics
+        );
+        assert!(
+            !has_code(&report, "instance.multiple_references"),
+            "source-only instance must not be ambiguous: {:?}",
+            report.diagnostics
+        );
+    }
+
+    #[test]
+    fn missing_instance_component_and_source_is_error() {
+        let src = format!(
+            r##"zenith version=1 {{
+  project id="p" name="P"
+{BASE_TOKENS}
+  document id="d" {{
+    page id="pg" w=(px)100 h=(px)100 {{
+      instance id="inst.1" x=(px)0 y=(px)0 {{}}
+    }}
+  }}
+}}
+"##
+        );
+        let report = validate(&parse_doc(&src));
+        assert!(
+            has_code(&report, "instance.missing_reference"),
+            "instance with neither component nor source must error: {:?}",
+            report.diagnostics
+        );
+        assert!(report.has_errors());
+    }
+
+    #[test]
+    fn instance_component_and_source_together_is_error() {
+        let src = format!(
+            r##"zenith version=1 {{
+  project id="p" name="P"
+{BASE_TOKENS}
+  components {{
+    component id="c.one" {{
+      rect id="bg" x=(px)0 y=(px)0 w=(px)10 h=(px)10 fill=(token)"color.bg"
+    }}
+  }}
+  document id="d" {{
+    page id="pg" w=(px)100 h=(px)100 {{
+      instance id="inst.1" component="c.one" source="brand#component.logo" x=(px)0 y=(px)0 {{}}
+    }}
+  }}
+}}
+"##
+        );
+        let report = validate(&parse_doc(&src));
+        assert!(
+            has_code(&report, "instance.multiple_references"),
+            "instance with both component and source must error: {:?}",
+            report.diagnostics
+        );
+        assert!(report.has_errors());
+    }
+
+    #[test]
     fn duplicate_component_id_is_error() {
         let src = format!(
             r##"zenith version=1 {{
@@ -836,6 +922,44 @@ mod component_validation {
         assert!(
             has_code(&report, "id.duplicate"),
             "instance id must participate in global uniqueness: {:?}",
+            report.diagnostics
+        );
+    }
+}
+
+mod import_validation {
+    use zenith_core::validate;
+    use zenith_core::{KdlAdapter, KdlSource};
+
+    fn parse_doc(src: &str) -> zenith_core::Document {
+        KdlAdapter.parse(src.as_bytes()).expect("must parse")
+    }
+
+    #[test]
+    fn invalid_import_kind_is_error() {
+        let src = r##"zenith version=1 {
+  project id="p" name="P"
+  imports {
+    import id="brand" kind="figma" src="brand.zen"
+  }
+  tokens format="zenith-token-v1" {
+  }
+  styles {
+  }
+  document id="d" {
+    page id="pg" w=(px)100 h=(px)100 {
+    }
+  }
+}
+"##;
+        let report = validate(&parse_doc(src));
+        assert!(
+            report
+                .diagnostics
+                .iter()
+                .any(|d| d.code == "import.invalid_kind"
+                    && d.severity == zenith_core::Severity::Error),
+            "invalid import kind must be an Error; got {:?}",
             report.diagnostics
         );
     }

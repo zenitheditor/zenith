@@ -9,7 +9,10 @@ use crate::ast::{
     asset::{AssetBlock, AssetDecl, AssetKind},
     block_style::BlockStyle,
     brand::BrandContract,
-    document::{ComponentDef, Document, DocumentBody, MasterDef, Page, Project, SectionDef},
+    document::{
+        ComponentDef, Document, DocumentBody, ImportDecl, MasterDef, Page, Project, SectionDef,
+        TokenMapDecl,
+    },
     library::LibraryDef,
     node::Node,
     policy::{DiagnosticPolicy, PolicyEntry, PolicyVerb},
@@ -71,6 +74,9 @@ pub(crate) const DOCUMENT_KNOWN_PROPS: &[&str] = &[
     "id",
     "title",
 ];
+
+const IMPORT_KNOWN_PROPS: &[&str] = &["id", "kind", "src", "sha256"];
+const TOKEN_MAP_KNOWN_PROPS: &[&str] = &["from", "to"];
 
 /// Transform a parsed `KdlDocument` into a Zenith `Document` AST.
 pub fn transform(doc: &KdlDocument) -> Result<Document, ParseError> {
@@ -156,6 +162,7 @@ pub fn transform(doc: &KdlDocument) -> Result<Document, ParseError> {
     let mut project: Option<Project> = None;
     let mut assets = AssetBlock::default();
     let mut libraries: Vec<LibraryDef> = Vec::new();
+    let mut imports: Vec<ImportDecl> = Vec::new();
     let mut actions: Vec<ActionDef> = Vec::new();
     let mut tokens = TokenBlock::default();
     let mut styles = StyleBlock::default();
@@ -179,6 +186,9 @@ pub fn transform(doc: &KdlDocument) -> Result<Document, ParseError> {
             }
             "libraries" => {
                 libraries = transform_libraries(child)?;
+            }
+            "imports" => {
+                imports = transform_imports(child)?;
             }
             "actions" => {
                 actions = transform_actions(child)?;
@@ -245,6 +255,7 @@ pub fn transform(doc: &KdlDocument) -> Result<Document, ParseError> {
         project,
         assets,
         libraries,
+        imports,
         actions,
         tokens,
         styles,
@@ -257,6 +268,48 @@ pub fn transform(doc: &KdlDocument) -> Result<Document, ParseError> {
         diagnostic_policy,
         brand_contract,
         body,
+    })
+}
+
+fn transform_imports(node: &KdlNode) -> Result<Vec<ImportDecl>, ParseError> {
+    let mut imports = Vec::new();
+    if let Some(children) = node.children() {
+        for child in children.nodes() {
+            if child.name().value() == "import" {
+                imports.push(transform_import(child)?);
+            }
+        }
+    }
+    Ok(imports)
+}
+
+fn transform_import(node: &KdlNode) -> Result<ImportDecl, ParseError> {
+    let mut token_maps = Vec::new();
+    if let Some(children) = node.children() {
+        for child in children.nodes() {
+            if child.name().value() == "token-map" {
+                token_maps.push(transform_token_map(child)?);
+            }
+        }
+    }
+
+    Ok(ImportDecl {
+        id: required_string_prop(node, "id")?.to_owned(),
+        kind: required_string_prop(node, "kind")?.to_owned(),
+        src: required_string_prop(node, "src")?.to_owned(),
+        sha256: optional_string_prop(node, "sha256").map(str::to_owned),
+        token_maps,
+        source_span: node_span(node),
+        unknown_props: collect_unknown_props(node, IMPORT_KNOWN_PROPS),
+    })
+}
+
+fn transform_token_map(node: &KdlNode) -> Result<TokenMapDecl, ParseError> {
+    Ok(TokenMapDecl {
+        from: required_string_prop(node, "from")?.to_owned(),
+        to: required_string_prop(node, "to")?.to_owned(),
+        source_span: node_span(node),
+        unknown_props: collect_unknown_props(node, TOKEN_MAP_KNOWN_PROPS),
     })
 }
 
