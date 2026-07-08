@@ -30,7 +30,9 @@ pub use grid_conformance::{
 pub use histogram::{Histogram, histogram};
 pub use optical_balance::{OpticalBalanceInput, OpticalBalanceReport, optical_balance};
 pub use path_collision::{
-    PathCollisionInput, PathCollisionNearestPoints, PathCollisionReport, path_collision,
+    CompoundPathCollisionInput, CompoundPathCollisionNearestPoints, CompoundPathCollisionReport,
+    PathCollisionInput, PathCollisionNearestPoints, PathCollisionReport, compound_path_collision,
+    path_collision,
 };
 pub use path_outline::{
     CompoundPathOutlinePerceptionInput, CompoundPathOutlinePerceptionReport, PathOutlineKind,
