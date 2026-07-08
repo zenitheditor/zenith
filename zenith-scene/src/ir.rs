@@ -15,7 +15,7 @@ pub use zenith_core::{BlendMode, Color, GradientPaint, GradientStop};
 
 // ── LineCap ───────────────────────────────────────────────────────────────────
 
-/// Dash end-cap style for dashed strokes.
+/// Stroke end-cap style.
 ///
 /// Maps directly to the `tiny_skia::LineCap` values; serialized in lowercase
 /// JSON so the scene JSON is human-readable and matches the KDL attribute values.
@@ -601,6 +601,9 @@ pub enum SceneCommand {
         /// Stroke corner join style. `None` = Miter (renderer default).
         #[serde(default, skip_serializing_if = "Option::is_none")]
         stroke_linejoin: Option<LineJoin>,
+        /// Stroke end-cap style. `None` = Butt (renderer default).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        stroke_linecap: Option<LineCap>,
         /// Stroke miter limit. `None` = renderer default.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         stroke_miter_limit: Option<f64>,

@@ -19,11 +19,11 @@
 
 use std::collections::BTreeSet;
 
-use pdf_writer::{Content, types::LineJoinStyle};
+use pdf_writer::{Content, types::LineCapStyle, types::LineJoinStyle};
 use zenith_core::{AssetProvider, FontProvider};
 use zenith_scene::{
-    Color, FillRule, FitMode, ImageClip, LineJoin, Paint as ScenePaint, Scene, SceneCommand,
-    StrokeAlign,
+    Color, FillRule, FitMode, ImageClip, LineCap, LineJoin, Paint as ScenePaint, Scene,
+    SceneCommand, StrokeAlign,
     ir::{path_segments_bbox, path_segments_finite},
 };
 
@@ -627,6 +627,7 @@ pub(super) fn emit_command(
             align,
             clip_fill_rule,
             stroke_linejoin,
+            stroke_linecap,
             stroke_miter_limit,
         } => {
             if segments.len() < 2 || !path_segments_finite(segments) || !finite(*stroke_width) {
@@ -688,6 +689,7 @@ pub(super) fn emit_command(
                 }
                 content.set_line_width(stroke_width as f32);
                 set_line_join(content, *stroke_linejoin);
+                set_line_cap(content, *stroke_linecap);
                 if !set_miter_limit(content, *stroke_miter_limit) {
                     content.restore_state();
                     return;
@@ -704,6 +706,7 @@ pub(super) fn emit_command(
                 }
                 content.set_line_width(*stroke_width as f32);
                 set_line_join(content, *stroke_linejoin);
+                set_line_cap(content, *stroke_linecap);
                 if !set_miter_limit(content, *stroke_miter_limit) {
                     content.restore_state();
                     return;
@@ -1063,6 +1066,15 @@ fn set_line_join(content: &mut Content, line_join: Option<LineJoin>) {
         Some(LineJoin::Miter) | None => LineJoinStyle::MiterJoin,
     };
     content.set_line_join(style);
+}
+
+fn set_line_cap(content: &mut Content, line_cap: Option<LineCap>) {
+    let style = match line_cap {
+        Some(LineCap::Round) => LineCapStyle::RoundCap,
+        Some(LineCap::Square) => LineCapStyle::ProjectingSquareCap,
+        Some(LineCap::Butt) | None => LineCapStyle::ButtCap,
+    };
+    content.set_line_cap(style);
 }
 
 fn set_miter_limit(content: &mut Content, miter_limit: Option<f64>) -> bool {

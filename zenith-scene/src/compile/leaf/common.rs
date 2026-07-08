@@ -28,14 +28,21 @@ pub(in crate::compile) fn resolve_dash_params(
     } else {
         (None, None)
     };
-    let stroke_linecap = linecap_str.map(|s| match s {
-        "round" => LineCap::Round,
-        "square" => LineCap::Square,
-        _ => LineCap::Butt,
-    });
+    let stroke_linecap = resolve_linecap_param(linecap_str);
     // Only emit linecap when dash is active (solid strokes ignore it).
     let stroke_linecap = stroke_dash.and(stroke_linecap);
     (stroke_dash, stroke_gap, stroke_linecap)
+}
+
+/// Resolve a stroke end-cap independent of dash state.
+///
+/// Unknown values fall back to `Butt`; validation owns author-facing warnings.
+pub(in crate::compile) fn resolve_linecap_param(linecap_str: Option<&str>) -> Option<LineCap> {
+    linecap_str.map(|s| match s {
+        "round" => LineCap::Round,
+        "square" => LineCap::Square,
+        _ => LineCap::Butt,
+    })
 }
 
 /// Resolve stroke corner state from raw node fields.

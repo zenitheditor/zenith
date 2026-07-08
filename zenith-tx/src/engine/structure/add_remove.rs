@@ -74,6 +74,7 @@ fn empty_path_node(id: &str) -> PathNode {
         stroke_width: None,
         stroke_alignment: None,
         stroke_linejoin: None,
+        stroke_linecap: None,
         stroke_miter_limit: None,
         fill_rule: None,
         opacity: None,

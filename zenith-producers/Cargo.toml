@@ -16,6 +16,7 @@ description = "Zenith deterministic write-side asset producers."
 zenith-core = { workspace = true }
 zenith-session = { workspace = true }
 zenith-zpx = { workspace = true }
+usvg = "0.36"
 
 [lints]
 workspace = true

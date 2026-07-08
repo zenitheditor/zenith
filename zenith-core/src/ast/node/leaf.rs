@@ -796,6 +796,8 @@ pub struct PathNode {
     pub stroke_alignment: Option<String>,
     /// Stroke corner join style: `"miter"` (default), `"round"`, or `"bevel"`.
     pub stroke_linejoin: Option<String>,
+    /// Stroke end-cap style: `"butt"` (default), `"round"`, or `"square"`.
+    pub stroke_linecap: Option<String>,
     /// Positive finite miter limit for miter joins.
     pub stroke_miter_limit: Option<f64>,
     /// `"nonzero"` (default) or `"evenodd"`.

@@ -51,6 +51,24 @@ fn valid_path_with_handles_has_no_validation_errors() {
 }
 
 #[test]
+fn path_invalid_stroke_linecap_warns() {
+    let doc = parse_doc(
+        r##"path id="line.curve" stroke-linecap="triangle" {
+        anchor x=(px)0 y=(px)0
+        anchor x=(px)10 y=(px)10
+      }"##,
+    );
+
+    let report = validate(&doc);
+
+    assert!(
+        has_code(&report, "node.unknown_property"),
+        "expected invalid linecap warning; got {:?}",
+        report.diagnostics
+    );
+}
+
+#[test]
 fn open_path_requires_two_anchors() {
     let doc = parse_doc(
         r##"path id="line.curve" {

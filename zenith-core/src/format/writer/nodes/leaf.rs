@@ -481,6 +481,7 @@ pub(super) fn write_path(p: &PathNode, out: &mut String, depth: usize) {
     write_opt_property_value(out, "stroke-width", &p.stroke_width);
     write_opt_str(out, "stroke-alignment", &p.stroke_alignment);
     write_opt_str(out, "stroke-linejoin", &p.stroke_linejoin);
+    write_opt_str(out, "stroke-linecap", &p.stroke_linecap);
     write_opt_f64(out, "stroke-miter-limit", &p.stroke_miter_limit);
     write_opt_str(out, "fill-rule", &p.fill_rule);
     write_opt_f64(out, "opacity", &p.opacity);

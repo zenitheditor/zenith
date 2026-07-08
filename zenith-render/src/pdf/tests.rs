@@ -3,7 +3,7 @@
 use zenith_core::{AssetKind, AssetProvider, BytesAssetProvider, FontProvider, default_provider};
 use zenith_scene::{
     Color, FillRule, FilterSpec, FitMode, GradientPaint, GradientStop, Paint, Rect, Scene,
-    SceneCommand, SceneGlyph, SvgStyle, ir::PathSegment,
+    SceneCommand, SceneGlyph, StrokeAlign, SvgStyle, ir::PathSegment,
 };
 
 use super::render_pdf;
@@ -162,6 +162,32 @@ fn cubic_path_emits_native_pdf_curve_operator() {
     assert!(
         text.contains(" c\n") || text.contains(" c "),
         "cubic path must emit PDF `c` operator"
+    );
+}
+
+#[test]
+fn stroke_path_round_linecap_emits_pdf_cap_operator() {
+    let mut scene = Scene::new(80.0, 40.0);
+    scene.commands.push(SceneCommand::StrokePath {
+        segments: vec![
+            PathSegment::MoveTo { x: 10.0, y: 20.0 },
+            PathSegment::LineTo { x: 70.0, y: 20.0 },
+        ],
+        color: Color::srgb(0, 0, 0, 255),
+        stroke_width: 6.0,
+        closed: false,
+        align: StrokeAlign::Center,
+        clip_fill_rule: FillRule::NonZero,
+        stroke_linejoin: None,
+        stroke_linecap: Some(zenith_scene::ir::LineCap::Round),
+        stroke_miter_limit: None,
+    });
+
+    let bytes = render(&scene);
+    let text = String::from_utf8_lossy(&bytes);
+    assert!(
+        text.contains("1 J"),
+        "round linecap must emit PDF `1 J`; got: {text}"
     );
 }
 

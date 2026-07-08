@@ -1444,6 +1444,7 @@ dependencies = [
 name = "zenith-producers"
 version = "0.0.8"
 dependencies = [
+ "usvg",
  "zenith-core",
  "zenith-session",
  "zenith-zpx",

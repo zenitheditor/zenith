@@ -8,6 +8,7 @@ pub enum ProduceError {
         request: &'static str,
     },
     ZpxBake(String),
+    SvgNative(String),
 }
 
 impl ProduceError {
@@ -23,6 +24,7 @@ impl fmt::Display for ProduceError {
                 write!(f, "{producer} cannot produce from {request}")
             }
             Self::ZpxBake(message) => write!(f, "ZPX bake failed: {message}"),
+            Self::SvgNative(message) => write!(f, "SVG native conversion failed: {message}"),
         }
     }
 }

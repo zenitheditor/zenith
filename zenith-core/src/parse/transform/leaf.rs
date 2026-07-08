@@ -893,6 +893,8 @@ pub(crate) const PATH_KNOWN_PROPS: &[&str] = &[
     "stroke_alignment",
     "stroke-linejoin",
     "stroke_linejoin",
+    "stroke-linecap",
+    "stroke_linecap",
     "stroke-miter-limit",
     "stroke_miter_limit",
     "fill-rule",
@@ -1037,6 +1039,8 @@ pub(super) fn transform_path(node: &KdlNode) -> Result<PathNode, ParseError> {
             .map(str::to_owned);
     let stroke_linejoin =
         optional_string_prop_aliased(node, "stroke-linejoin", "stroke_linejoin").map(str::to_owned);
+    let stroke_linecap =
+        optional_string_prop_aliased(node, "stroke-linecap", "stroke_linecap").map(str::to_owned);
     let stroke_miter_limit = optional_f64_prop(node, "stroke-miter-limit")
         .or_else(|| optional_f64_prop(node, "stroke_miter_limit"));
     let fill_rule = optional_string_prop_aliased(node, "fill-rule", "fill_rule").map(str::to_owned);
@@ -1065,6 +1069,7 @@ pub(super) fn transform_path(node: &KdlNode) -> Result<PathNode, ParseError> {
         stroke_width,
         stroke_alignment,
         stroke_linejoin,
+        stroke_linecap,
         stroke_miter_limit,
         fill_rule,
         opacity: optional_f64_prop(node, "opacity"),

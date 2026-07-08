@@ -1128,12 +1128,7 @@ pub(super) fn check_visual_props(
     if let Some(lc) = props.stroke_linecap
         && !matches!(lc, "butt" | "round" | "square")
     {
-        diagnostics.push(Diagnostic::warning(
-            "node.unknown_property",
-            format!("{kind} '{id}': stroke-linecap '{lc}' is not one of butt/round/square"),
-            source_span,
-            Some(id.to_owned()),
-        ));
+        check_stroke_linecap_prop(kind, id, Some(lc), source_span, diagnostics);
     }
     // Per-side border colors (token-required color props).
     for (prop_name, prop_val) in [
@@ -1282,6 +1277,25 @@ pub(super) fn check_stroke_join_props(
         diagnostics.push(Diagnostic::error(
             "node.invalid_geometry",
             format!("{kind} '{id}': stroke-miter-limit must be a positive finite number"),
+            source_span,
+            Some(id.to_owned()),
+        ));
+    }
+}
+
+pub(super) fn check_stroke_linecap_prop(
+    kind: &str,
+    id: &str,
+    stroke_linecap: Option<&str>,
+    source_span: Option<crate::ast::Span>,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    if let Some(lc) = stroke_linecap
+        && !matches!(lc, "butt" | "round" | "square")
+    {
+        diagnostics.push(Diagnostic::warning(
+            "node.unknown_property",
+            format!("{kind} '{id}': stroke-linecap '{lc}' is not one of butt/round/square"),
             source_span,
             Some(id.to_owned()),
         ));

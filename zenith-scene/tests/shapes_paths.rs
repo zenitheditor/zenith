@@ -2,7 +2,9 @@ mod common;
 use common::*;
 use zenith_core::default_provider;
 use zenith_scene::compile;
-use zenith_scene::ir::{FillRule, LineJoin, Paint, PathSegment, SceneCommand, StrokeAlign};
+use zenith_scene::ir::{
+    FillRule, LineCap, LineJoin, Paint, PathSegment, SceneCommand, StrokeAlign,
+};
 
 #[test]
 fn path_emits_cubic_fill_and_stroke_metadata() {
@@ -15,7 +17,7 @@ token id="color.stroke" type="color" value="#0000ff"
   styles {}
   document id="doc.path" title="Path" {
 page id="page.path" w=(px)320 h=(px)220 {
-  path id="path.curve" closed=#true fill=(token)"color.fill" stroke=(token)"color.stroke" stroke-width=(px)3 stroke-alignment="inside" stroke-linejoin="bevel" stroke-miter-limit=6 fill-rule="evenodd" {
+  path id="path.curve" closed=#true fill=(token)"color.fill" stroke=(token)"color.stroke" stroke-width=(px)3 stroke-alignment="inside" stroke-linejoin="bevel" stroke-linecap="round" stroke-miter-limit=6 fill-rule="evenodd" {
     anchor x=(px)50 y=(px)150 out-x=(px)80 out-y=(px)30
     anchor x=(px)160 y=(px)50 in-x=(px)120 in-y=(px)20 out-x=(px)210 out-y=(px)80
     anchor x=(px)260 y=(px)150 in-x=(px)230 in-y=(px)30
@@ -71,6 +73,7 @@ page id="page.path" w=(px)320 h=(px)220 {
             align,
             clip_fill_rule,
             stroke_linejoin,
+            stroke_linecap,
             stroke_miter_limit,
         } => {
             assert_eq!(color.b, 255);
@@ -79,6 +82,7 @@ page id="page.path" w=(px)320 h=(px)220 {
             assert_eq!(*align, StrokeAlign::Inside);
             assert_eq!(*clip_fill_rule, FillRule::EvenOdd);
             assert_eq!(*stroke_linejoin, Some(LineJoin::Bevel));
+            assert_eq!(*stroke_linecap, Some(LineCap::Round));
             assert_eq!(*stroke_miter_limit, Some(6.0));
             assert!(
                 segments
@@ -181,6 +185,7 @@ fn path_fill_rule_serializes_legacy_boolean_fields() {
         align: StrokeAlign::Center,
         clip_fill_rule: FillRule::EvenOdd,
         stroke_linejoin: None,
+        stroke_linecap: None,
         stroke_miter_limit: None,
     };
     let stroke_json = serde_json::to_value(&stroke).expect("serialize stroke path");

@@ -676,3 +676,38 @@ fn dashed_stroke_rect_renders_without_panic() {
         "dashed and solid strokes must produce different pixel output"
     );
 }
+
+#[test]
+fn stroke_path_round_linecap_extends_open_path_endpoint() {
+    let mut scene = Scene::new(40.0, 20.0);
+    scene.commands.push(SceneCommand::PushClip {
+        x: 0.0,
+        y: 0.0,
+        w: 40.0,
+        h: 20.0,
+    });
+    scene.commands.push(SceneCommand::StrokePath {
+        segments: vec![
+            PathSegment::MoveTo { x: 10.0, y: 10.0 },
+            PathSegment::LineTo { x: 30.0, y: 10.0 },
+        ],
+        color: Color::srgb(255, 0, 0, 255),
+        stroke_width: 10.0,
+        closed: false,
+        align: StrokeAlign::Center,
+        clip_fill_rule: FillRule::NonZero,
+        stroke_linejoin: None,
+        stroke_linecap: Some(zenith_scene::ir::LineCap::Round),
+        stroke_miter_limit: None,
+    });
+    scene.commands.push(SceneCommand::PopClip);
+
+    let img = TinySkiaBackend
+        .rasterize(&scene, &default_provider(), &no_assets())
+        .expect("round-cap path rasterizes");
+    let (_, _, _, alpha) = pixel(&img.rgba, img.width, 6, 10);
+    assert!(
+        alpha > 0,
+        "round cap should ink before the start endpoint, alpha={alpha}"
+    );
+}

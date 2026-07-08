@@ -569,6 +569,7 @@ pub(in crate::tiny_skia) fn stroke_path(target: &mut Pixmap, ctx: DrawCtx, cmd: 
         align,
         clip_fill_rule,
         stroke_linejoin,
+        stroke_linecap,
         stroke_miter_limit,
     } = cmd
     else {
@@ -624,6 +625,7 @@ pub(in crate::tiny_skia) fn stroke_path(target: &mut Pixmap, ctx: DrawCtx, cmd: 
     let stroke = Stroke {
         width: stroke_width_px as f32,
         line_join: map_line_join(*stroke_linejoin),
+        line_cap: map_line_cap(*stroke_linecap),
         miter_limit,
         ..Default::default()
     };
