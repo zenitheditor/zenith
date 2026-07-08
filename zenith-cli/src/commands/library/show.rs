@@ -391,6 +391,7 @@ fn op_name(op: &zenith_tx::Op) -> String {
         zenith_tx::Op::SetVisible { .. } => "set_visible",
         zenith_tx::Op::SetLocked { .. } => "set_locked",
         zenith_tx::Op::SetFill { .. } => "set_fill",
+        zenith_tx::Op::SetFillRule { .. } => "set_fill_rule",
         zenith_tx::Op::SetStroke { .. } => "set_stroke",
         zenith_tx::Op::SetStrokeWidth { .. } => "set_stroke_width",
         zenith_tx::Op::SetOpacity { .. } => "set_opacity",

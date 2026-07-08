@@ -11,6 +11,7 @@ use crate::op::{Op, Transaction};
 use crate::result::{TxError, TxResult, TxStatus};
 
 mod asset;
+mod fill_rule;
 mod flags;
 mod geometry;
 mod path;
@@ -27,6 +28,7 @@ mod text_outline;
 mod token;
 
 use asset::{AddAssetSpec, apply_add_asset, apply_set_asset};
+use fill_rule::apply_set_fill_rule;
 use flags::{apply_set_locked, apply_set_points, apply_set_visible};
 use geometry::{
     GeometryDelta, apply_align_nodes, apply_align_to_edge, apply_distribute_nodes,
@@ -185,6 +187,12 @@ fn apply_op(
             fill,
         } => {
             apply_set_fill(node_id, fill, doc, diagnostics, affected);
+        }
+        Op::SetFillRule {
+            node: node_id,
+            fill_rule,
+        } => {
+            apply_set_fill_rule(node_id, fill_rule, doc, diagnostics, affected);
         }
         Op::SetStroke {
             node: node_id,
@@ -607,6 +615,7 @@ fn op_lock_targets(op: &Op) -> Vec<&str> {
     match op {
         Op::SetTextAlign { node, .. }
         | Op::SetFill { node, .. }
+        | Op::SetFillRule { node, .. }
         | Op::SetStroke { node, .. }
         | Op::SetStrokeWidth { node, .. }
         | Op::SetGeometry { node, .. }

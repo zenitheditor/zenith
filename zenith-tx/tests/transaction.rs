@@ -85,6 +85,7 @@ fn from_json_new_ops_round_trip() {
             {"op":"set_fill","node":"r","fill":"c"},
             {"op":"set_visible","node":"r","visible":false},
             {"op":"set_locked","node":"r","locked":true},
+            {"op":"set_fill_rule","node":"path.logo","fill_rule":"evenodd"},
             {"op":"set_stroke","node":"r","stroke":"s"},
             {"op":"set_stroke_width","node":"r","stroke_width":"sw"},
             {"op":"add_node","parent":"pg1","position":{"at":"after","id":"r"},"source":"rect id=\"r2\""},
@@ -106,6 +107,10 @@ fn from_json_new_ops_round_trip() {
                 Op::SetLocked {
                     node: "r".to_owned(),
                     locked: true,
+                },
+                Op::SetFillRule {
+                    node: "path.logo".to_owned(),
+                    fill_rule: "evenodd".to_owned(),
                 },
                 Op::SetStroke {
                     node: "r".to_owned(),

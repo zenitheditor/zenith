@@ -13,6 +13,7 @@ pub fn op_summary(name: &str) -> Option<&'static str> {
             Some("Move a node to the bottommost (first-child) position in its parent.")
         }
         "set_fill" => Some("Set the fill color of a node to a token reference."),
+        "set_fill_rule" => Some("Set the authored fill-rule of a polygon, polyline, or path."),
         "set_stroke" => Some("Set the stroke (outline) color of a node to a token reference."),
         "set_stroke_width" => {
             Some("Set the stroke width of a node to a dimension token reference.")

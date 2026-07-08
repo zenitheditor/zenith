@@ -58,6 +58,21 @@ pub fn op_fields(name: &str) -> Option<&'static [OpFieldSchema]> {
             ];
             Some(F)
         }
+        "set_fill_rule" => {
+            static F: &[OpFieldSchema] = &[
+                OpFieldSchema {
+                    name: "node",
+                    ty: "node id",
+                    required: true,
+                },
+                OpFieldSchema {
+                    name: "fill_rule",
+                    ty: "enum: nonzero|evenodd",
+                    required: true,
+                },
+            ];
+            Some(F)
+        }
         "set_stroke" => {
             static F: &[OpFieldSchema] = &[
                 OpFieldSchema {

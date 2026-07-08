@@ -35,6 +35,7 @@ pub fn op_names() -> &'static [&'static str] {
         "replace_text",
         "set_asset",
         "set_fill",
+        "set_fill_rule",
         "set_geometry",
         "set_locked",
         "set_opacity",

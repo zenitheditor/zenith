@@ -5,6 +5,7 @@
 //! {"ops":[
 //!   {"op":"set_text_align","node":"label","align":"center"},
 //!   {"op":"set_fill","node":"box","fill":"color.accent"},
+//!   {"op":"set_fill_rule","node":"path.logo","fill_rule":"evenodd"},
 //!   {"op":"set_stroke","node":"box","stroke":"color.rule"},
 //!   {"op":"set_stroke_width","node":"box","stroke_width":"size.stroke"},
 //!   {"op":"set_visible","node":"box","visible":false},
@@ -275,6 +276,18 @@ pub enum Op {
         node: String,
         /// Token id to set as the fill (e.g. `"color.brand"`).
         fill: String,
+    },
+    /// Set the authored `fill-rule` property on a vector node that supports it.
+    ///
+    /// Valid values: `nonzero`, `evenodd`.
+    ///
+    /// Supported nodes: `polygon`, `polyline`, `path`.
+    /// Unsupported: all other variants — yields `tx.unsupported_property`.
+    SetFillRule {
+        /// The stable node `id` to target.
+        node: String,
+        /// Fill winding rule to store in the authored `fill-rule` field.
+        fill_rule: String,
     },
     /// Set the `stroke` (outline color) property on a node that supports stroke.
     ///

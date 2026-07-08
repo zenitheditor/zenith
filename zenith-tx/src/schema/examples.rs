@@ -10,6 +10,9 @@ pub fn op_example(name: &str) -> Option<&'static str> {
         "move_to_front" => Some(r#"{"op":"move_to_front","node":"hero"}"#),
         "move_to_back" => Some(r#"{"op":"move_to_back","node":"hero"}"#),
         "set_fill" => Some(r#"{"op":"set_fill","node":"hero","fill":"color.brand"}"#),
+        "set_fill_rule" => {
+            Some(r#"{"op":"set_fill_rule","node":"path.logo","fill_rule":"evenodd"}"#)
+        }
         "set_stroke" => Some(r#"{"op":"set_stroke","node":"box","stroke":"color.rule"}"#),
         "set_stroke_width" => {
             Some(r#"{"op":"set_stroke_width","node":"box","stroke_width":"size.stroke"}"#)

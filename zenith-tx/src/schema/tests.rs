@@ -37,6 +37,7 @@ fn op_tag(op: &Op) -> &'static str {
         Op::MoveToFront { .. } => "move_to_front",
         Op::MoveToBack { .. } => "move_to_back",
         Op::SetFill { .. } => "set_fill",
+        Op::SetFillRule { .. } => "set_fill_rule",
         Op::SetStroke { .. } => "set_stroke",
         Op::SetStrokeWidth { .. } => "set_stroke_width",
         Op::SetVisible { .. } => "set_visible",
@@ -95,6 +96,7 @@ fn all_exhaustive_tags() -> BTreeSet<&'static str> {
         "move_to_front",
         "move_to_back",
         "set_fill",
+        "set_fill_rule",
         "set_stroke",
         "set_stroke_width",
         "set_visible",
@@ -199,6 +201,10 @@ fn op_tag_strings_match_exhaustive_set() {
         Op::SetFill {
             node: String::new(),
             fill: String::new(),
+        },
+        Op::SetFillRule {
+            node: String::new(),
+            fill_rule: String::new(),
         },
         Op::SetStroke {
             node: String::new(),
@@ -535,6 +541,13 @@ fn op_fields_names_match_serde_keys() {
             Op::SetFill {
                 node: "n".into(),
                 fill: "color.brand".into(),
+            },
+        ),
+        (
+            "set_fill_rule",
+            Op::SetFillRule {
+                node: "n".into(),
+                fill_rule: "evenodd".into(),
             },
         ),
         (
