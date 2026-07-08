@@ -10,8 +10,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::ast::brand::BrandContract;
-use crate::ast::document::{ComponentDef, Document, PortDef};
-use crate::ast::node::{ConnectorAnchorParseError, Node, parse_connector_anchor};
+use crate::ast::document::{ComponentDef, Document};
 use crate::ast::policy::DiagnosticPolicy;
 use crate::ast::style::Style;
 use crate::ast::value::{PropertyValue, Unit, dim_to_px};
@@ -34,142 +33,11 @@ use super::variants::check_variants;
 use super::visual::{VisualExpect, check_block_styles, check_visual_prop};
 use super::{fold, margin, safezone};
 
-fn build_ports_by_node(
-    ports: &[PortDef],
-    local_node_ids: &BTreeSet<String>,
-    diagnostics: &mut Vec<Diagnostic>,
-) -> BTreeMap<String, BTreeSet<String>> {
-    let mut ports_by_node: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
-    for port in ports {
-        if !local_node_ids.contains(&port.node) {
-            diagnostics.push(Diagnostic::warning(
-                "connector.port_invalid_target",
-                format!(
-                    "port '{}#{}' targets unknown node '{}'",
-                    port.node, port.id, port.node
-                ),
-                port.source_span,
-                Some(port.node.clone()),
-            ));
-        }
-        let ids = ports_by_node.entry(port.node.clone()).or_default();
-        if !ids.insert(port.id.clone()) {
-            diagnostics.push(Diagnostic::warning(
-                "connector.port_duplicate",
-                format!(
-                    "port '{}#{}' is declared more than once for node '{}'",
-                    port.node, port.id, port.node
-                ),
-                port.source_span,
-                Some(port.node.clone()),
-            ));
-        }
-        match parse_connector_anchor(&port.anchor) {
-            Ok(_) => {}
-            Err(ConnectorAnchorParseError::ZeroCount) => {
-                diagnostics.push(Diagnostic::warning(
-                    "connector.invalid_anchor",
-                    format!(
-                        "port '{}#{}': anchor '{}' has a divided anchor count of 0",
-                        port.node, port.id, port.anchor
-                    ),
-                    port.source_span,
-                    Some(port.node.clone()),
-                ));
-            }
-            Err(ConnectorAnchorParseError::IndexOutOfRange { index, count }) => {
-                diagnostics.push(Diagnostic::warning(
-                    "connector.invalid_anchor",
-                    format!(
-                        "port '{}#{}': anchor '{}' has index {index} outside divided anchor count {count}",
-                        port.node, port.id, port.anchor
-                    ),
-                    port.source_span,
-                    Some(port.node.clone()),
-                ));
-            }
-            Err(ConnectorAnchorParseError::InvalidSyntax) => {
-                diagnostics.push(Diagnostic::warning(
-                    "connector.invalid_anchor",
-                    format!(
-                        "port '{}#{}': anchor '{}' is not 'auto', a divided anchor like '4/16', or a nine-point anchor (top/center/bottom × left/center/right, e.g. bottom-right)",
-                        port.node, port.id, port.anchor
-                    ),
-                    port.source_span,
-                    Some(port.node.clone()),
-                ));
-            }
-        }
-    }
-    ports_by_node
-}
+mod ports;
+mod unused;
 
-fn add_component_instance_ports(
-    children: &[Node],
-    components: &BTreeMap<&str, &ComponentDef>,
-    prefix: &str,
-    ports_by_node: &mut BTreeMap<String, BTreeSet<String>>,
-) {
-    for child in children {
-        match child {
-            Node::Instance(instance) => {
-                let instance_id = format!("{prefix}{}", instance.id);
-                if let Some(component_id) = instance.component.as_deref()
-                    && let Some(component) = components.get(component_id)
-                {
-                    let ports = ports_by_node.entry(instance_id.clone()).or_default();
-                    for port in &component.ports {
-                        ports.insert(port.id.clone());
-                    }
-                    let child_prefix = format!("{instance_id}/");
-                    add_component_instance_ports(
-                        &component.children,
-                        components,
-                        &child_prefix,
-                        ports_by_node,
-                    );
-                }
-            }
-            Node::Frame(frame) => {
-                add_component_instance_ports(&frame.children, components, prefix, ports_by_node);
-            }
-            Node::Group(group) => {
-                add_component_instance_ports(&group.children, components, prefix, ports_by_node);
-            }
-            Node::Table(table) => {
-                for row in &table.rows {
-                    for cell in &row.cells {
-                        add_component_instance_ports(
-                            &cell.children,
-                            components,
-                            prefix,
-                            ports_by_node,
-                        );
-                    }
-                }
-            }
-            Node::Rect(_)
-            | Node::Ellipse(_)
-            | Node::Line(_)
-            | Node::Text(_)
-            | Node::Code(_)
-            | Node::Image(_)
-            | Node::Polygon(_)
-            | Node::Polyline(_)
-            | Node::Path(_)
-            | Node::Field(_)
-            | Node::Footnote(_)
-            | Node::Toc(_)
-            | Node::Shape(_)
-            | Node::Connector(_)
-            | Node::Pattern(_)
-            | Node::Chart(_)
-            | Node::Light(_)
-            | Node::Mesh(_)
-            | Node::Unknown(_) => {}
-        }
-    }
-}
+use ports::{add_component_instance_ports, build_ports_by_node};
+use unused::check_unused_tokens;
 
 /// Run the full document validation pass against the document's own in-file
 /// diagnostic policy and in-file brand contract.
@@ -980,78 +848,4 @@ pub fn validate_with_policy(
     check_policy_entries(policy, &mut diagnostics);
 
     ValidationReport { diagnostics }
-}
-
-/// Report unused tokens, grouped by their optional provenance `set` id.
-///
-/// Tokens are grouped by `set` (a `BTreeMap` for deterministic, lexicographic
-/// emission). The `None` bucket (tokens with no `set`) is reported exactly as
-/// before: one `token.unused` advisory per unreferenced token — this keeps a
-/// document that never uses `set` byte-identical to prior output. A
-/// `Some(set_id)` bucket with only one member also behaves like today (plain
-/// per-token `token.unused`). A multi-token `Some(set_id)` bucket instead
-/// collapses into a single `token.set_partially_used` advisory when some (but
-/// not all) of its tokens are referenced, and emits nothing when every token
-/// in the set is used; per-token `token.unused` is fully suppressed for those
-/// members.
-fn check_unused_tokens(
-    doc: &Document,
-    referenced_token_ids: &BTreeSet<String>,
-    diagnostics: &mut Vec<Diagnostic>,
-) {
-    let mut tokens_by_set: BTreeMap<Option<&str>, Vec<&crate::ast::Token>> = BTreeMap::new();
-    for token in &doc.tokens.tokens {
-        tokens_by_set
-            .entry(token.set.as_deref())
-            .or_default()
-            .push(token);
-    }
-
-    for (set_id, tokens) in &tokens_by_set {
-        let Some(set_id) = set_id.filter(|_| tokens.len() > 1) else {
-            // No `set` (the default case) or a `set` with exactly one member:
-            // report per-token `token.unused`, byte-identical to the
-            // pre-`set` behavior.
-            for token in tokens {
-                if !referenced_token_ids.contains(&token.id) {
-                    diagnostics.push(Diagnostic::advisory(
-                        "token.unused",
-                        format!(
-                            "token '{}' is defined but never referenced by any node \
-                             visual property or style in this document",
-                            token.id
-                        ),
-                        token.source_span,
-                        Some(token.id.clone()),
-                    ));
-                }
-            }
-            continue;
-        };
-
-        // A multi-token `set`: collapse into at most one advisory for the
-        // whole set instead of one per unreferenced member.
-        let total = tokens.len();
-        let used = tokens
-            .iter()
-            .filter(|t| referenced_token_ids.contains(&t.id))
-            .count();
-        if used < total {
-            let message = if used == 0 {
-                format!("token set '{set_id}' has none of {total} tokens referenced")
-            } else {
-                format!("token set '{set_id}' has {used} of {total} tokens referenced")
-            };
-            // Anchor at the first token's span in this set (deterministic:
-            // tokens are collected in document order) as a stand-in for "the
-            // tokens block" — there is no dedicated `TokenBlock` span.
-            let anchor_span = tokens.first().and_then(|t| t.source_span);
-            diagnostics.push(Diagnostic::advisory(
-                "token.set_partially_used",
-                message,
-                anchor_span,
-                Some(set_id.to_owned()),
-            ));
-        }
-    }
 }
