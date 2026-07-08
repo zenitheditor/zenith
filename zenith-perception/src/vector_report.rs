@@ -4,7 +4,7 @@ use crate::{
     path_geometry::{complete_handle_count, geometry_path},
     path_tangent_quality,
 };
-use zenith_core::PathAnchor;
+use zenith_core::{PathAnchor, PathNode};
 use zenith_geometry::{CompoundPathGeometry, PathGeometry, PathTopology, RectBounds};
 
 /// Input for path-level vector perception.
@@ -23,6 +23,17 @@ pub struct VectorPathPerceptionInput<'a> {
 pub struct VectorPathContourInput<'a> {
     pub anchors: &'a [PathAnchor],
     pub closed: bool,
+}
+
+impl<'a> VectorPathContourInput<'a> {
+    pub fn from_path_node(path: &'a PathNode) -> Vec<Self> {
+        path.effective_subpaths()
+            .map(|subpath| Self {
+                anchors: subpath.anchors,
+                closed: subpath.closed == Some(true),
+            })
+            .collect()
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -241,7 +252,7 @@ fn invalid_geometry_diagnostic() -> PerceptionDiagnostic {
 mod tests {
     use super::*;
     use crate::PerceptionSeverity;
-    use zenith_core::{Dimension, Unit};
+    use zenith_core::{Dimension, PathSubpath, Unit};
 
     #[test]
     fn open_path_derives_anchor_economy_counts() {
@@ -519,6 +530,51 @@ mod tests {
         );
     }
 
+    #[test]
+    fn contour_input_adapts_legacy_path_node() {
+        let anchors = [line_anchor(0.0, 0.0), line_anchor(10.0, 0.0)];
+        let path = path_node("legacy", Some(true), anchors.to_vec(), Vec::new());
+
+        let contours = VectorPathContourInput::from_path_node(&path);
+
+        assert_eq!(contours.len(), 1);
+        assert_eq!(contours[0].anchors, &anchors);
+        assert!(contours[0].closed);
+    }
+
+    #[test]
+    fn contour_input_adapts_compound_path_node() {
+        let first = [line_anchor(0.0, 0.0), line_anchor(10.0, 0.0)];
+        let second = [
+            line_anchor(20.0, 0.0),
+            line_anchor(30.0, 0.0),
+            line_anchor(30.0, 10.0),
+        ];
+        let path = path_node(
+            "compound",
+            None,
+            Vec::new(),
+            vec![
+                PathSubpath {
+                    closed: None,
+                    anchors: first.to_vec(),
+                },
+                PathSubpath {
+                    closed: Some(true),
+                    anchors: second.to_vec(),
+                },
+            ],
+        );
+
+        let contours = VectorPathContourInput::from_path_node(&path);
+
+        assert_eq!(contours.len(), 2);
+        assert_eq!(contours[0].anchors, &first);
+        assert!(!contours[0].closed);
+        assert_eq!(contours[1].anchors, &second);
+        assert!(contours[1].closed);
+    }
+
     fn anchor(x: f64, y: f64, in_x: f64, in_y: f64, out_x: f64, out_y: f64) -> PathAnchor {
         PathAnchor {
             x: Some(px(x)),
@@ -540,6 +596,36 @@ mod tests {
             in_y: None,
             out_x: None,
             out_y: None,
+        }
+    }
+
+    fn path_node(
+        id: &str,
+        closed: Option<bool>,
+        anchors: Vec<PathAnchor>,
+        subpaths: Vec<PathSubpath>,
+    ) -> PathNode {
+        PathNode {
+            id: id.to_owned(),
+            name: None,
+            role: None,
+            closed,
+            fill: None,
+            stroke: None,
+            stroke_width: None,
+            stroke_alignment: None,
+            stroke_linejoin: None,
+            stroke_miter_limit: None,
+            fill_rule: None,
+            opacity: None,
+            visible: None,
+            locked: None,
+            rotate: None,
+            style: None,
+            anchors,
+            subpaths,
+            source_span: None,
+            unknown_props: Default::default(),
         }
     }
 
