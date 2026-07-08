@@ -13,6 +13,7 @@ pub mod inspect;
 pub mod library;
 pub mod merge;
 pub mod new;
+pub mod perceive;
 pub mod plugin;
 pub mod render;
 pub mod schema;

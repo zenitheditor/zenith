@@ -32,6 +32,7 @@ zenith-tx = { workspace = true }
 zenith-scene = { workspace = true }
 zenith-render = { workspace = true }
 zenith-session = { workspace = true }
+zenith-perception = { workspace = true }
 zenith-producers = { workspace = true }
 zenith-zpx = { workspace = true }
 clap = { version = "4", features = ["derive"] }

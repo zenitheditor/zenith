@@ -149,6 +149,28 @@ pub fn run() -> ExitCode {
             }
         }
 
+        Command::Perceive(args) => match args.command {
+            cli::PerceiveSub::Vector { path } => {
+                let src = match read_file(&path) {
+                    Ok(s) => s,
+                    Err(msg) => {
+                        eprintln!("{}", msg);
+                        return ExitCode::from(2);
+                    }
+                };
+                match commands::perceive::vector(&src, args.json) {
+                    Ok(outcome) => {
+                        println!("{}", outcome.stdout);
+                        ExitCode::from(outcome.exit_code)
+                    }
+                    Err(err) => {
+                        eprintln!("{}", err.message);
+                        ExitCode::from(err.exit_code)
+                    }
+                }
+            }
+        },
+
         Command::Merge(args) => {
             // Read the template document.
             let doc_src = match read_file(&args.doc) {

@@ -16,6 +16,7 @@
 
 mod asset;
 mod library;
+mod perceive;
 mod plugin;
 mod render;
 mod schema;
@@ -23,6 +24,7 @@ mod workspace;
 
 pub use asset::{AssetArgs, AssetImportArgs, AssetSub, AssetZpxBakeArgs};
 pub use library::{LibraryAddArgs, LibraryArgs, LibraryListArgs, LibraryShowArgs, LibrarySub};
+pub use perceive::{PerceiveArgs, PerceiveSub};
 pub use plugin::{
     AgentFlags, PluginArgs, PluginInstallArgs, PluginSub, PluginUninstallArgs, ScopeArg,
 };
@@ -120,6 +122,13 @@ pub enum Command {
     /// document-level blocks such as the `recipes` provenance block. Use it to discover node ids before
     /// writing a `tx` edit, to see which recipes a document declares, or to confirm what it contains.
     Inspect(InspectArgs),
+
+    /// Run read-only perception metrics over a `.zen` document.
+    ///
+    /// Perception reports deterministic, substrate-level signals such as anchor economy,
+    /// tangent quality, and small-size vector legibility. It does not make aesthetic or semantic
+    /// judgments.
+    Perceive(PerceiveArgs),
 
     /// Mail-merge a `.zen` template with a CSV data file, writing one PNG per row.
     ///

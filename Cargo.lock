@@ -1513,6 +1513,7 @@ dependencies = [
  "tiny_http",
  "zenith-core",
  "zenith-layout",
+ "zenith-perception",
  "zenith-producers",
  "zenith-render",
  "zenith-scene",
