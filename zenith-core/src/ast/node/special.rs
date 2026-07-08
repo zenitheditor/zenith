@@ -174,6 +174,7 @@ pub struct UnknownNode {
 /// - `spans` — replaces the target text node's `spans` wholesale (the override's
 ///   `span` children become the target's new spans).
 /// - `fill` — replaces the target node's `fill` visual property.
+/// - `stroke` / `stroke-width` — replace native stroke-bearing target properties.
 /// - `svg-stroke`/`svg-fill`/`svg-stroke-width` — replace SVG-only image styling.
 /// - `visible` — replaces the target node's `visible` flag.
 ///
@@ -187,6 +188,10 @@ pub struct Override {
     pub spans: Option<Vec<TextSpan>>,
     /// Replacement fill (color token ref or literal — validated like any fill).
     pub fill: Option<PropertyValue>,
+    /// Replacement stroke (color token ref or literal) for stroke-bearing targets.
+    pub stroke: Option<PropertyValue>,
+    /// Replacement stroke width (dimension token ref or literal dimension).
+    pub stroke_width: Option<PropertyValue>,
     /// Replacement SVG stroke color for image targets.
     pub svg_stroke: Option<PropertyValue>,
     /// Replacement SVG fill color for image targets.

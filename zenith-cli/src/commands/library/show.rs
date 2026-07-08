@@ -493,7 +493,8 @@ mod tests {
         );
         assert!(out.contains("item    : monitor"), "item: {}", out);
         assert!(out.contains("kind    : component"), "kind: {}", out);
-        assert!(out.contains("root    : image"), "root: {}", out);
+        assert!(out.contains("root    : path"), "root: {}", out);
+        assert!(out.contains("nodes   : path(3)"), "nodes: {}", out);
         assert!(out.contains("--page <page-id>"), "to_use: {}", out);
 
         let json = show("@zenith/icons-lucide#monitor", None, true).expect("show json ok");
@@ -502,7 +503,7 @@ mod tests {
         assert_eq!(v["package"], "@zenith/icons-lucide");
         assert_eq!(v["item"], "monitor");
         assert_eq!(v["kind"], "component");
-        assert_eq!(v["detail"]["root_node_kind"], "image");
+        assert_eq!(v["detail"]["root_node_kind"], "path");
     }
 
     #[test]

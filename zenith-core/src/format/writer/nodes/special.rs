@@ -294,6 +294,8 @@ fn write_override(ov: &Override, out: &mut String, depth: usize) {
     out.push_str(&ov.ref_id);
     out.push('"');
     write_opt_property_value(out, "fill", &ov.fill);
+    write_opt_property_value(out, "stroke", &ov.stroke);
+    write_opt_property_value(out, "stroke-width", &ov.stroke_width);
     write_opt_property_value(out, "svg-stroke", &ov.svg_stroke);
     write_opt_property_value(out, "svg-fill", &ov.svg_fill);
     write_opt_property_value(out, "svg-stroke-width", &ov.svg_stroke_width);

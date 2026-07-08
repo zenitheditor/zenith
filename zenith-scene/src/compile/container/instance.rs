@@ -267,6 +267,7 @@ fn prefix_imported_asset_refs(nodes: &mut [Node], import_id: &str) {
 fn remap_import_override(ov: &Override, cx: NodeCtx) -> Override {
     let mut remapped = ov.clone();
     remap_color_override(&mut remapped.fill, cx);
+    remap_color_override(&mut remapped.stroke, cx);
     remap_color_override(&mut remapped.svg_stroke, cx);
     remap_color_override(&mut remapped.svg_fill, cx);
     remapped
@@ -325,8 +326,8 @@ fn synthetic_group(instance: &InstanceNode, children: Vec<Node>) -> GroupNode {
 /// into `group`/`frame`/`instance` containers) whose LOCAL id equals
 /// `ov.ref_id`. Mutates a CLONE — callers pass the cloned component subtree.
 ///
-/// Supported payload: replace `spans` (text targets), `fill`, image `svg-*`,
-/// and `visible`.
+/// Supported payload: replace `spans` (text targets), `fill`, native stroke
+/// style, image `svg-*`, and `visible`.
 /// An override targeting a kind without the relevant field is a no-op for that
 /// field (e.g. `spans` on a rect). An unmatched ref is silently ignored here;
 /// the validator already warns via `component.unknown_override_target`.
@@ -382,6 +383,12 @@ fn apply_override_to_node(node: &mut Node, ov: &Override) {
     if let Some(fill) = &ov.fill {
         set_node_fill(node, fill.clone());
     }
+    if let Some(stroke) = &ov.stroke {
+        set_node_stroke(node, stroke.clone());
+    }
+    if let Some(stroke_width) = &ov.stroke_width {
+        set_node_stroke_width(node, stroke_width.clone());
+    }
     if ov.svg_stroke.is_some() || ov.svg_fill.is_some() || ov.svg_stroke_width.is_some() {
         set_node_svg_style(node, ov);
     }
@@ -403,6 +410,66 @@ fn set_node_svg_style(node: &mut Node, ov: &Override) {
     }
     if let Some(stroke_width) = &ov.svg_stroke_width {
         image.svg_stroke_width = Some(stroke_width.clone());
+    }
+}
+
+/// Set the `stroke` of a node kind that carries one; a no-op for kinds without
+/// a stroke property.
+fn set_node_stroke(node: &mut Node, stroke: PropertyValue) {
+    match node {
+        Node::Rect(n) => n.stroke = Some(stroke),
+        Node::Ellipse(n) => n.stroke = Some(stroke),
+        Node::Line(n) => n.stroke = Some(stroke),
+        Node::Polygon(n) => n.stroke = Some(stroke),
+        Node::Polyline(n) => n.stroke = Some(stroke),
+        Node::Path(n) => n.stroke = Some(stroke),
+        Node::Connector(n) => n.stroke = Some(stroke),
+        Node::Shape(n) => n.stroke = Some(stroke),
+        Node::Mesh(n) => n.stroke = Some(stroke),
+        Node::Text(_)
+        | Node::Code(_)
+        | Node::Frame(_)
+        | Node::Group(_)
+        | Node::Image(_)
+        | Node::Instance(_)
+        | Node::Field(_)
+        | Node::Toc(_)
+        | Node::Footnote(_)
+        | Node::Table(_)
+        | Node::Pattern(_)
+        | Node::Chart(_)
+        | Node::Light(_)
+        | Node::Unknown(_) => {}
+    }
+}
+
+/// Set the `stroke-width` of a node kind that carries one; a no-op for kinds
+/// without a stroke-width property.
+fn set_node_stroke_width(node: &mut Node, stroke_width: PropertyValue) {
+    match node {
+        Node::Rect(n) => n.stroke_width = Some(stroke_width),
+        Node::Ellipse(n) => n.stroke_width = Some(stroke_width),
+        Node::Line(n) => n.stroke_width = Some(stroke_width),
+        Node::Polygon(n) => n.stroke_width = Some(stroke_width),
+        Node::Polyline(n) => n.stroke_width = Some(stroke_width),
+        Node::Path(n) => n.stroke_width = Some(stroke_width),
+        Node::Connector(n) => n.stroke_width = Some(stroke_width),
+        Node::Shape(n) => n.stroke_width = Some(stroke_width),
+        Node::Mesh(_)
+        | Node::Text(_)
+        | Node::Code(_)
+        | Node::Frame(_)
+        | Node::Group(_)
+        | Node::Image(_)
+        | Node::Instance(_)
+        | Node::Field(_)
+        | Node::Toc(_)
+        | Node::Footnote(_)
+        | Node::Table(_)
+        | Node::Pattern(_)
+        | Node::Chart(_)
+        | Node::Light(_)
+        | Node::Unknown(_) => {}
     }
 }
 

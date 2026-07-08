@@ -336,10 +336,10 @@ pub fn node_content(kind: &str) -> Option<NodeContentDescriptor> {
         "instance" => Some(NodeContentDescriptor {
             description: "Zero or more `override` children apply per-node property overrides \
                 to descendants of the referenced component. Each override targets a node by \
-                `ref=\"id\"` and accepts fill, visible, and optional `span` children to \
-                replace text content.",
+                `ref=\"id\"` and accepts fill, stroke, stroke-width, SVG image style fields, \
+                visible, and optional `span` children to replace text content.",
             example: concat!(
-                "override ref=\"headline\" fill=(token)\"color.alt\" {\n",
+                "override ref=\"headline\" fill=(token)\"color.alt\" stroke=(token)\"color.line\" {\n",
                 "    span \"New headline text\"\n",
                 "}",
             ),

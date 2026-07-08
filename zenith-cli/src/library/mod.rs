@@ -27,6 +27,8 @@
 mod action;
 mod add;
 mod component;
+#[cfg(test)]
+mod lucide_native;
 mod registry;
 mod token;
 

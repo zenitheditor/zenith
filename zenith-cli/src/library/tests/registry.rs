@@ -5,7 +5,7 @@ use crate::library::{
     EMBEDDED_PACKS, ItemKind, PackItem, PackSource, embedded_preset_assets_for_document,
     load_embedded_packs, load_project_packs, parse_pack, resolve_packs,
 };
-use zenith_core::{KdlAdapter, KdlSource};
+use zenith_core::{KdlAdapter, KdlSource, Node};
 
 const FLOWCHART_SRC: &str = include_str!("../../../assets/libraries/zenith-flowchart.zen");
 const LUCIDE_SRC: &str = include_str!("../../../assets/libraries/zenith-icons-lucide.zen");
@@ -100,7 +100,7 @@ fn embedded_brand_kit_pack_lists_action_items() {
 }
 
 #[test]
-fn embedded_lucide_pack_lists_icon_components_and_assets() {
+fn embedded_lucide_pack_lists_native_icon_components() {
     let pack = parse_pack(LUCIDE_SRC, PackSource::Preset).expect("lucide pack parses");
     assert_eq!(pack.id, "@zenith/icons-lucide");
     assert_eq!(pack.version.as_deref(), Some("0.1.0"));
@@ -127,18 +127,23 @@ fn embedded_lucide_pack_lists_icon_components_and_assets() {
         .parse(LUCIDE_SRC.as_bytes())
         .expect("lucide pack document parses");
     let embedded_assets = embedded_preset_assets_for_document(&doc);
-    assert_eq!(
-        embedded_assets.len(),
-        22,
-        "all curated Lucide SVG assets are embedded"
-    );
     assert!(
-        embedded_assets.iter().any(
-            |asset| asset.src == "assets/zenith/icons/lucide/monitor.svg"
-                && asset.bytes.starts_with(b"<svg")
-        ),
-        "monitor SVG bytes embedded"
+        embedded_assets.is_empty(),
+        "native Lucide pack should not require SVG asset write intents"
     );
+    let monitor = doc
+        .components
+        .iter()
+        .find(|component| component.id == "monitor")
+        .expect("monitor component exists");
+    assert!(
+        monitor
+            .children
+            .iter()
+            .all(|node| matches!(node, Node::Path(_))),
+        "native Lucide component should contain editable paths"
+    );
+    assert!(monitor.children.len() >= 2);
     let errors = hard_errors(&doc);
     assert!(
         errors.is_empty(),

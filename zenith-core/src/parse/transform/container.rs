@@ -538,6 +538,8 @@ fn transform_override(node: &KdlNode) -> Result<Override, ParseError> {
         ref_id,
         spans,
         fill: optional_property_value(node, "fill"),
+        stroke: optional_property_value(node, "stroke"),
+        stroke_width: optional_property_value_aliased(node, "stroke-width", "stroke_width"),
         svg_stroke: optional_property_value_aliased(node, "svg-stroke", "svg_stroke"),
         svg_fill: optional_property_value_aliased(node, "svg-fill", "svg_fill"),
         svg_stroke_width: optional_property_value_aliased(

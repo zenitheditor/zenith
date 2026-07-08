@@ -190,8 +190,8 @@ pub enum Command {
     ///
     /// Expands the `variants` block: one canonical page becomes N named target sizes (square,
     /// story, banner), each written as a native `.zen` page plus a rendered PNG. Per-variant
-    /// `override`s can hide/show nodes, swap text, or change a fill; source token edits propagate
-    /// to every variant. This varies DIMENSIONS — distinct from `merge`, which varies CONTENT
+    /// `override`s can hide/show nodes, swap text, or change visual properties; source token edits
+    /// propagate to every variant. This varies DIMENSIONS — distinct from `merge`, which varies CONTENT
     /// across CSV rows. Deterministic: same source → byte-identical outputs.
     Variant(VariantArgs),
 

@@ -610,6 +610,24 @@ pub(in crate::validate::check) fn check_instance(
         );
         check_visual_prop(
             &inst.id,
+            "stroke",
+            ov.stroke.as_ref(),
+            VisualExpect::Color,
+            referenced_token_ids,
+            resolved_tokens,
+            diagnostics,
+        );
+        check_visual_prop(
+            &inst.id,
+            "stroke-width",
+            ov.stroke_width.as_ref(),
+            VisualExpect::Dimension,
+            referenced_token_ids,
+            resolved_tokens,
+            diagnostics,
+        );
+        check_visual_prop(
+            &inst.id,
             "svg-stroke",
             ov.svg_stroke.as_ref(),
             VisualExpect::Color,

@@ -469,7 +469,7 @@ mod tests {
     }
 
     #[test]
-    fn add_lucide_icon_returns_embedded_assets_and_renders_when_written() {
+    fn add_lucide_icon_materializes_native_paths_and_renders_locked() {
         let result = add(
             TARGET_SRC,
             "@zenith/icons-lucide#monitor",
@@ -499,19 +499,16 @@ mod tests {
             src
         );
         assert!(
-            result.embedded_assets.iter().any(|asset| asset.src
-                == "assets/zenith/icons/lucide/monitor.svg"
-                && asset.bytes.starts_with(b"<svg")),
-            "monitor SVG write intent present"
+            result.embedded_assets.is_empty(),
+            "native Lucide icon should not require SVG asset write intents"
+        );
+        assert!(src.contains("path id=\""), "source: {src}");
+        assert!(
+            !src.contains("image id=\"icon\""),
+            "native Lucide icon should not materialize an SVG image wrapper: {src}"
         );
 
         let dir = tempfile::tempdir().expect("tempdir");
-        for asset in &result.embedded_assets {
-            let path = dir.path().join(asset.src);
-            let parent = path.parent().expect("asset path has parent");
-            std::fs::create_dir_all(parent).expect("create asset parent");
-            std::fs::write(path, asset.bytes).expect("write embedded asset");
-        }
 
         let artifact = crate::commands::render::to_png_with_dir(
             &src,
@@ -521,7 +518,7 @@ mod tests {
             &crate::config::CliPolicyFlags::default(),
             None,
         )
-        .expect("locked render ok with materialized SVG assets");
+        .expect("locked render ok with native Lucide icon");
         assert!(
             !artifact.png.is_empty(),
             "render must produce PNG bytes for Lucide icon"

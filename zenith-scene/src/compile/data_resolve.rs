@@ -159,6 +159,8 @@ fn node_has_data_ref(node: &Node) -> bool {
 fn instance_has_data_ref(n: &InstanceNode) -> bool {
     n.overrides.iter().any(|o| {
         matches!(o.fill, Some(PropertyValue::DataRef(_)))
+            || matches!(o.stroke, Some(PropertyValue::DataRef(_)))
+            || matches!(o.stroke_width, Some(PropertyValue::DataRef(_)))
             || o.spans.as_ref().is_some_and(|s| any_span(s))
     })
 }
@@ -494,6 +496,14 @@ fn substitute_instance(n: &mut InstanceNode, ctx: &DataContext, diagnostics: &mu
     let id = n.id.clone();
     for ov in &mut n.overrides {
         substitute_color_prop_opt(&mut ov.fill, ctx, &id, "override.fill", diagnostics);
+        substitute_color_prop_opt(&mut ov.stroke, ctx, &id, "override.stroke", diagnostics);
+        substitute_dim_prop_opt(
+            &mut ov.stroke_width,
+            ctx,
+            &id,
+            "override.stroke-width",
+            diagnostics,
+        );
         if let Some(spans) = ov.spans.as_mut() {
             substitute_spans(spans, ctx, &id, diagnostics);
         }

@@ -10,16 +10,19 @@
 mod common;
 
 use common::*;
+use zenith_core::PropertyValue;
 use zenith_core::format::format_document;
 
-/// A `.zen` document exercising the `components` block, an `instance` node, and
-/// an `override` with a `span` replacement, a `fill`, and a `visible` flag.
+/// A `.zen` document exercising the `components` block, `instance` nodes, and
+/// `override`s with span replacements plus fill/stroke styling.
 const COMPONENT_DOC: &str = r##"zenith version=1 {
   project id="proj.comp" name="Component Project"
   tokens format="zenith-token-v1" {
     token id="color.bg" type="color" value="#101010"
     token id="color.fg" type="color" value="#fafafa"
     token id="color.alt" type="color" value="#ff0000"
+    token id="size.stroke" type="dimension" value=(px)3
+    token id="size.stroke.data" type="dimension" value=(px)5
     token id="size.body" type="dimension" value=(pt)18
   }
   styles {
@@ -35,7 +38,7 @@ const COMPONENT_DOC: &str = r##"zenith version=1 {
   document id="doc.comp" title="Comp Doc" {
     page id="page.one" w=(px)640 h=(px)360 background=(token)"color.bg" {
       instance id="inst.1" component="panel.master" x=(px)0 y=(px)0 {
-        override ref="label" fill=(token)"color.alt" visible=#true {
+        override ref="label" fill=(token)"color.alt" stroke=(token)"color.fg" stroke-width=(token)"size.stroke" visible=#true {
           span "Back"
         }
       }
@@ -43,6 +46,9 @@ const COMPONENT_DOC: &str = r##"zenith version=1 {
         override ref="label" {
           span "Center"
         }
+      }
+      instance id="inst.3" component="panel.master" x=(px)440 y=(px)0 {
+        override ref="bg" stroke=(data)"color.stroke" stroke-width=(data)"size.stroke.data"
       }
     }
   }
@@ -71,6 +77,8 @@ fn test_component_instance_override_round_trip() {
             assert_eq!(ov.ref_id, "label");
             assert_eq!(ov.visible, Some(true));
             assert!(ov.fill.is_some());
+            assert!(ov.stroke.is_some());
+            assert!(ov.stroke_width.is_some());
             let spans = ov.spans.as_ref().expect("override spans");
             assert_eq!(spans.len(), 1);
             assert_eq!(spans[0].text, "Back");
@@ -80,6 +88,23 @@ fn test_component_instance_override_round_trip() {
 
     let formatted = format_document(&doc_orig).expect("format");
     let doc_reparsed = adapter.parse(&formatted).expect("re-parse");
+
+    match &doc_orig.body.pages[0].children[2] {
+        Node::Instance(i) => {
+            assert_eq!(i.id, "inst.3");
+            let ov = &i.overrides[0];
+            assert_eq!(ov.ref_id, "bg");
+            assert!(matches!(
+                ov.stroke,
+                Some(PropertyValue::DataRef(ref path)) if path == "color.stroke"
+            ));
+            assert!(matches!(
+                ov.stroke_width,
+                Some(PropertyValue::DataRef(ref path)) if path == "size.stroke.data"
+            ));
+        }
+        other => panic!("expected third child Instance node, got {other:?}"),
+    }
 
     assert_eq!(
         strip_spans(doc_orig),
