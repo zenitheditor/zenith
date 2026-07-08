@@ -2,11 +2,15 @@ use crate::{
     PerceptionDiagnostic, PerceptionSeverity, VectorPathContourInput,
     path_geometry::compound_geometry,
 };
-use zenith_geometry::{FlattenedPathContour, Point2, RectBounds};
+use zenith_geometry::{
+    CompoundFillRule, CompoundFillTopology, FilledContourBoundaryRole, FlattenedPathContour,
+    Point2, RectBounds, classify_compound_path_fill_topology,
+};
 
 #[derive(Debug, Clone, Copy)]
 pub struct SmallLegibilityInput<'a> {
     pub contours: &'a [VectorPathContourInput<'a>],
+    pub fill_rule: Option<CompoundFillRule>,
     pub target_size_px: f64,
     pub minimum_feature_px: f64,
     pub minimum_gap_px: f64,
@@ -23,8 +27,19 @@ pub struct SmallLegibilityReport {
     pub detail_density: Option<f64>,
     pub minimum_scaled_contour_dimension: Option<f64>,
     pub minimum_scaled_contour_gap: Option<f64>,
+    pub fill_topology: Option<SmallLegibilityFillTopologyReport>,
     pub score: f32,
     pub diagnostics: Vec<PerceptionDiagnostic>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SmallLegibilityFillTopologyReport {
+    pub rule: CompoundFillRule,
+    pub contour_count: usize,
+    pub paint_contour_count: usize,
+    pub hole_contour_count: usize,
+    pub no_fill_change_contour_count: usize,
+    pub topology: CompoundFillTopology,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -101,7 +116,9 @@ pub fn small_legibility(input: SmallLegibilityInput<'_>) -> SmallLegibilityRepor
     };
     let thumbnail_scale =
         original_bounds.and_then(|bounds| thumbnail_scale(bounds, target_size_px));
-    let flattened = match flatten_tolerance_source_units(flatten_tolerance_px, thumbnail_scale) {
+    let flatten_tolerance_source_units =
+        flatten_tolerance_source_units(flatten_tolerance_px, thumbnail_scale);
+    let flattened = match flatten_tolerance_source_units {
         Some(flatten_tolerance) => match geometry.flatten_contours(flatten_tolerance) {
             Ok(flattened) => flattened,
             Err(_) => {
@@ -120,6 +137,14 @@ pub fn small_legibility(input: SmallLegibilityInput<'_>) -> SmallLegibilityRepor
     let minimum_scaled_contour_dimension =
         minimum_scaled_contour_dimension(&flattened, thumbnail_scale);
     let minimum_scaled_contour_gap = minimum_scaled_contour_gap(&flattened, thumbnail_scale);
+    let fill_topology = fill_topology_report(
+        input.fill_rule,
+        input.contours,
+        &geometry,
+        flatten_tolerance_source_units,
+        flatten_tolerance_px,
+        &mut diagnostics,
+    );
 
     if measured_contour_count == 0
         && !diagnostics
@@ -158,6 +183,7 @@ pub fn small_legibility(input: SmallLegibilityInput<'_>) -> SmallLegibilityRepor
         detail_density,
         minimum_scaled_contour_dimension,
         minimum_scaled_contour_gap,
+        fill_topology,
         score: legibility_score(LegibilityScoreInput {
             minimum_scaled_contour_dimension,
             minimum_feature_px,
@@ -176,15 +202,75 @@ pub fn small_legibility(input: SmallLegibilityInput<'_>) -> SmallLegibilityRepor
 
 pub(crate) fn small_legibility_with_defaults(
     contours: &[VectorPathContourInput<'_>],
+    fill_rule: Option<CompoundFillRule>,
     defaults: SmallLegibilityDefaults,
 ) -> SmallLegibilityReport {
     small_legibility(SmallLegibilityInput {
         contours,
+        fill_rule,
         target_size_px: defaults.target_size_px,
         minimum_feature_px: defaults.minimum_feature_px,
         minimum_gap_px: defaults.minimum_gap_px,
         flatten_tolerance_px: defaults.flatten_tolerance_px,
         maximum_detail_density: defaults.maximum_detail_density,
+    })
+}
+
+fn fill_topology_report(
+    fill_rule: Option<CompoundFillRule>,
+    contours: &[VectorPathContourInput<'_>],
+    geometry: &zenith_geometry::CompoundPathGeometry,
+    flatten_tolerance_source_units: Option<f64>,
+    flatten_tolerance_px: f64,
+    diagnostics: &mut Vec<PerceptionDiagnostic>,
+) -> Option<SmallLegibilityFillTopologyReport> {
+    let rule = fill_rule?;
+    if contours.iter().any(|contour| !contour.closed) {
+        diagnostics.push(PerceptionDiagnostic::new(
+            "small_legibility.fill_topology_open_contour",
+            PerceptionSeverity::Info,
+            "compound fill topology requires closed contours",
+        ));
+        return None;
+    }
+
+    let flatten_tolerance = flatten_tolerance_source_units.unwrap_or(flatten_tolerance_px);
+    let topology = match classify_compound_path_fill_topology(geometry, rule, flatten_tolerance) {
+        Ok(topology) => topology,
+        Err(_) => {
+            diagnostics.push(PerceptionDiagnostic::new(
+                "small_legibility.fill_topology_unavailable",
+                PerceptionSeverity::Info,
+                "compound fill topology is unavailable for this contour arrangement",
+            ));
+            return None;
+        }
+    };
+
+    let mut paint_contour_count = 0usize;
+    let mut hole_contour_count = 0usize;
+    let mut no_fill_change_contour_count = 0usize;
+    for contour in &topology.contours {
+        match contour.role {
+            FilledContourBoundaryRole::Paint => {
+                paint_contour_count = paint_contour_count.saturating_add(1);
+            }
+            FilledContourBoundaryRole::Hole => {
+                hole_contour_count = hole_contour_count.saturating_add(1);
+            }
+            FilledContourBoundaryRole::NoFillChange => {
+                no_fill_change_contour_count = no_fill_change_contour_count.saturating_add(1);
+            }
+        }
+    }
+
+    Some(SmallLegibilityFillTopologyReport {
+        rule,
+        contour_count: topology.contours.len(),
+        paint_contour_count,
+        hole_contour_count,
+        no_fill_change_contour_count,
+        topology,
     })
 }
 
@@ -408,6 +494,7 @@ fn empty_report(diagnostics: Vec<PerceptionDiagnostic>) -> SmallLegibilityReport
         detail_density: None,
         minimum_scaled_contour_dimension: None,
         minimum_scaled_contour_gap: None,
+        fill_topology: None,
         score: 0.0,
         diagnostics,
     }

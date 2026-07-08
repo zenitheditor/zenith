@@ -77,6 +77,7 @@ fn path_reports(
         let report = analyze_vector_path(VectorPathPerceptionInput {
             anchors: path.anchors,
             closed: path.closed,
+            fill_rule: None,
         });
         diagnostics.extend(report.diagnostics.iter().cloned());
         reports.push(report);
@@ -137,14 +138,14 @@ fn collision_score_mean(reports: &[VectorMarkCollisionReport]) -> Option<f32> {
 }
 
 fn mark_small_legibility(paths: &[VectorMarkPathInput<'_>]) -> SmallLegibilityReport {
-    let contours: Vec<_> = paths
-        .iter()
-        .map(|path| VectorPathContourInput {
+    let mut contours = Vec::with_capacity(paths.len());
+    for path in paths {
+        contours.push(VectorPathContourInput {
             anchors: path.anchors,
             closed: path.closed,
-        })
-        .collect();
-    small_legibility_with_defaults(&contours, SmallLegibilityDefaults::conservative())
+        });
+    }
+    small_legibility_with_defaults(&contours, None, SmallLegibilityDefaults::conservative())
 }
 
 #[cfg(test)]
@@ -183,6 +184,7 @@ mod tests {
         assert_eq!(report.minimum_clearance, Some(0.0));
         assert_eq!(report.collision_score_mean, Some(0.0));
         assert_eq!(report.small_legibility.measured_contour_count, 2);
+        assert_eq!(report.small_legibility.fill_topology, None);
         assert_eq!(
             report.small_legibility.minimum_scaled_contour_gap,
             Some(0.0)

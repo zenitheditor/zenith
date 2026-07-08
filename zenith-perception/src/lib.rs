@@ -43,7 +43,10 @@ pub use path_tangent_quality::{
     PathTangentQualityInput, PathTangentQualityReport, path_tangent_quality,
 };
 pub use report::{PerceptionReport, analyze};
-pub use small_legibility::{SmallLegibilityInput, SmallLegibilityReport, small_legibility};
+pub use small_legibility::{
+    SmallLegibilityFillTopologyReport, SmallLegibilityInput, SmallLegibilityReport,
+    small_legibility,
+};
 pub use value_zones::{ValueZone, ZoneMetrics, ZoneReport, value_zones};
 pub use vector_mark::{
     VectorMarkCollisionReport, VectorMarkPathInput, VectorMarkPerceptionInput,
@@ -54,3 +57,4 @@ pub use vector_report::{
     VectorPathPerceptionInput, VectorPathPerceptionReport, analyze_compound_vector_path,
     analyze_vector_path,
 };
+pub use zenith_geometry::{CompoundFillRule, CompoundFillTopology, FilledContourBoundaryRole};

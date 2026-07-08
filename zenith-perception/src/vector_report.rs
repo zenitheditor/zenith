@@ -6,7 +6,7 @@ use crate::{
     small_legibility::{SmallLegibilityDefaults, small_legibility_with_defaults},
 };
 use zenith_core::{PathAnchor, PathNode};
-use zenith_geometry::{PathGeometry, PathTopology, RectBounds};
+use zenith_geometry::{CompoundFillRule, PathGeometry, PathTopology, RectBounds};
 
 /// Input for path-level vector perception.
 ///
@@ -18,6 +18,7 @@ use zenith_geometry::{PathGeometry, PathTopology, RectBounds};
 pub struct VectorPathPerceptionInput<'a> {
     pub anchors: &'a [PathAnchor],
     pub closed: bool,
+    pub fill_rule: Option<CompoundFillRule>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -40,6 +41,7 @@ impl<'a> VectorPathContourInput<'a> {
 #[derive(Debug, Clone, Copy)]
 pub struct CompoundVectorPathPerceptionInput<'a> {
     pub contours: &'a [VectorPathContourInput<'a>],
+    pub fill_rule: Option<CompoundFillRule>,
 }
 
 /// Aggregated deterministic perception metrics for one editable path.
@@ -88,8 +90,11 @@ pub fn analyze_vector_path(input: VectorPathPerceptionInput<'_>) -> VectorPathPe
         anchors: input.anchors,
         closed: input.closed,
     }];
-    let small_legibility =
-        small_legibility_with_defaults(&contours, SmallLegibilityDefaults::conservative());
+    let small_legibility = small_legibility_with_defaults(
+        &contours,
+        input.fill_rule,
+        SmallLegibilityDefaults::conservative(),
+    );
 
     let mut diagnostics = anchor_economy.diagnostics.clone();
     diagnostics.extend(tangent_quality.diagnostics.iter().cloned());
@@ -123,8 +128,11 @@ pub fn analyze_compound_vector_path(
     });
     let tangent_quality_reports = compound_tangent_quality(input.contours);
     let (bounds, bounds_diagnostic) = compound_path_bounds(input.contours);
-    let small_legibility =
-        small_legibility_with_defaults(input.contours, SmallLegibilityDefaults::conservative());
+    let small_legibility = small_legibility_with_defaults(
+        input.contours,
+        input.fill_rule,
+        SmallLegibilityDefaults::conservative(),
+    );
 
     let mut diagnostics = anchor_economy.diagnostics.clone();
     for report in &tangent_quality_reports {
@@ -285,6 +293,7 @@ mod tests {
         let report = analyze_vector_path(VectorPathPerceptionInput {
             anchors: &anchors,
             closed: false,
+            fill_rule: None,
         });
 
         assert_eq!(report.anchor_economy.anchor_count, 3);
@@ -298,6 +307,7 @@ mod tests {
         assert_eq!(report.anchor_economy.minimum_anchor_count, 3);
         assert_eq!(report.small_legibility.measured_contour_count, 1);
         assert!(report.small_legibility.thumbnail_scale.is_some());
+        assert_eq!(report.small_legibility.fill_topology, None);
         assert!(report.anchor_economy.diagnostics.is_empty());
     }
 
@@ -327,6 +337,7 @@ mod tests {
         let report = analyze_vector_path(VectorPathPerceptionInput {
             anchors: &anchors,
             closed: false,
+            fill_rule: None,
         });
 
         assert_eq!(
@@ -351,6 +362,7 @@ mod tests {
         let report = analyze_vector_path(VectorPathPerceptionInput {
             anchors: &anchors,
             closed: true,
+            fill_rule: None,
         });
 
         assert_eq!(report.anchor_economy.anchor_count, 3);
@@ -375,6 +387,7 @@ mod tests {
         let report = analyze_vector_path(VectorPathPerceptionInput {
             anchors: &anchors,
             closed: true,
+            fill_rule: None,
         });
 
         assert_eq!(report.anchor_count, 2);
@@ -419,6 +432,7 @@ mod tests {
         let report = analyze_vector_path(VectorPathPerceptionInput {
             anchors: &anchors,
             closed: true,
+            fill_rule: None,
         });
 
         assert_eq!(report.tangent_quality.evaluated_join_count, 1);
@@ -451,6 +465,7 @@ mod tests {
         let report = analyze_vector_path(VectorPathPerceptionInput {
             anchors: &anchors,
             closed: false,
+            fill_rule: None,
         });
 
         assert_eq!(report.bounds, None);
@@ -485,6 +500,7 @@ mod tests {
 
         let report = analyze_compound_vector_path(CompoundVectorPathPerceptionInput {
             contours: &contours,
+            fill_rule: None,
         });
 
         assert_eq!(report.contour_count, 2);
@@ -505,6 +521,56 @@ mod tests {
                 max_y: 30.0,
             })
         );
+    }
+
+    #[test]
+    fn compound_vector_path_passes_explicit_fill_rule_to_small_legibility() {
+        let outer = [
+            line_anchor(0.0, 0.0),
+            line_anchor(30.0, 0.0),
+            line_anchor(30.0, 30.0),
+            line_anchor(0.0, 30.0),
+        ];
+        let inner = [
+            line_anchor(5.0, 5.0),
+            line_anchor(5.0, 25.0),
+            line_anchor(25.0, 25.0),
+            line_anchor(25.0, 5.0),
+        ];
+        let core = [
+            line_anchor(10.0, 10.0),
+            line_anchor(20.0, 10.0),
+            line_anchor(20.0, 20.0),
+            line_anchor(10.0, 20.0),
+        ];
+        let contours = [
+            VectorPathContourInput {
+                anchors: &outer,
+                closed: true,
+            },
+            VectorPathContourInput {
+                anchors: &inner,
+                closed: true,
+            },
+            VectorPathContourInput {
+                anchors: &core,
+                closed: true,
+            },
+        ];
+
+        let report = analyze_compound_vector_path(CompoundVectorPathPerceptionInput {
+            contours: &contours,
+            fill_rule: Some(CompoundFillRule::EvenOdd),
+        });
+        let fill_topology = report
+            .small_legibility
+            .fill_topology
+            .expect("fill topology");
+
+        assert_eq!(fill_topology.rule, CompoundFillRule::EvenOdd);
+        assert_eq!(fill_topology.contour_count, 3);
+        assert_eq!(fill_topology.paint_contour_count, 2);
+        assert_eq!(fill_topology.hole_contour_count, 1);
     }
 
     #[test]
@@ -532,6 +598,7 @@ mod tests {
 
         let report = analyze_compound_vector_path(CompoundVectorPathPerceptionInput {
             contours: &contours,
+            fill_rule: None,
         });
 
         assert_eq!(report.bounds, None);
