@@ -6,7 +6,7 @@ use zenith_core::{BytesAssetProvider, DataContext, Diagnostic, dim_to_px};
 use zenith_render::{
     PdfOptions, render_pdf_multi_with, render_pdf_with, render_png, render_spread_png,
 };
-use zenith_scene::{Scene, append_construction_overlay, compile_page};
+use zenith_scene::{ImportGraph, Scene, append_construction_overlay, compile_page_with_imports};
 
 use crate::config::CliPolicyFlags;
 
@@ -168,12 +168,14 @@ pub fn to_scene_json_with_options(
     page: usize,
     opts: RenderEntryOptions<'_>,
 ) -> Result<SceneArtifact, RenderCmdErr> {
-    let (mut doc, policy, import_diagnostics) = parse_validate(src, project_dir, opts.flags)?;
+    let (mut doc, policy, imports) = parse_validate(src, project_dir, opts.flags)?;
+    let import_diagnostics = imports.diagnostics().to_vec();
+    let scene_imports = imports.to_scene_graph();
     let mut text_src_diagnostics: Vec<Diagnostic> = Vec::new();
     resolve_text_sources(&mut doc, project_dir, &mut text_src_diagnostics);
     let fonts = build_font_provider(&doc, project_dir, false)?;
     let page_index = resolve_page_index(&doc, page)?;
-    let compile_result = compile_page_for_render(&doc, &fonts, page_index, opts);
+    let compile_result = compile_page_for_render(&doc, &fonts, page_index, opts, &scene_imports);
     let json = compile_result
         .scene
         .to_json()
@@ -254,7 +256,9 @@ pub fn to_png_with_dir_options(
     page: usize,
     opts: RenderEntryOptions<'_>,
 ) -> Result<PngArtifact, RenderCmdErr> {
-    let (mut doc, policy, import_diagnostics) = parse_validate(src, project_dir, opts.flags)?;
+    let (mut doc, policy, imports) = parse_validate(src, project_dir, opts.flags)?;
+    let import_diagnostics = imports.diagnostics().to_vec();
+    let scene_imports = imports.to_scene_graph();
     let mut text_src_diagnostics: Vec<Diagnostic> = Vec::new();
     resolve_text_sources(&mut doc, project_dir, &mut text_src_diagnostics);
     let fonts = build_font_provider(&doc, project_dir, opts.locked)?;
@@ -263,7 +267,7 @@ pub fn to_png_with_dir_options(
         Some(dir) => build_asset_provider(&doc, dir, opts.locked)?,
         None => BytesAssetProvider::new(),
     };
-    let compile_result = compile_page_for_render(&doc, &fonts, page_index, opts);
+    let compile_result = compile_page_for_render(&doc, &fonts, page_index, opts, &scene_imports);
     let png = render_png(&compile_result.scene, &fonts, &assets)
         .map_err(|e| RenderCmdErr::new(format!("render error: {e}"), 2))?;
     let mut diagnostics = text_src_diagnostics;
@@ -313,7 +317,9 @@ pub fn to_pdf_with_dir_options(
     page: usize,
     opts: RenderEntryOptions<'_>,
 ) -> Result<PdfArtifact, RenderCmdErr> {
-    let (mut doc, policy, import_diagnostics) = parse_validate(src, project_dir, opts.flags)?;
+    let (mut doc, policy, imports) = parse_validate(src, project_dir, opts.flags)?;
+    let import_diagnostics = imports.diagnostics().to_vec();
+    let scene_imports = imports.to_scene_graph();
     let mut text_src_diagnostics: Vec<Diagnostic> = Vec::new();
     resolve_text_sources(&mut doc, project_dir, &mut text_src_diagnostics);
     let fonts = build_font_provider(&doc, project_dir, opts.locked)?;
@@ -322,7 +328,7 @@ pub fn to_pdf_with_dir_options(
         Some(dir) => build_asset_provider(&doc, dir, opts.locked)?,
         None => BytesAssetProvider::new(),
     };
-    let compile_result = compile_page_for_render(&doc, &fonts, page_index, opts);
+    let compile_result = compile_page_for_render(&doc, &fonts, page_index, opts, &scene_imports);
     let pdf = render_pdf_with(
         &compile_result.scene,
         &fonts,
@@ -381,7 +387,9 @@ pub fn to_pdf_all_pages_with_dir_options(
     project_dir: Option<&Path>,
     opts: RenderEntryOptions<'_>,
 ) -> Result<PdfArtifact, RenderCmdErr> {
-    let (mut doc, policy, import_diagnostics) = parse_validate(src, project_dir, opts.flags)?;
+    let (mut doc, policy, imports) = parse_validate(src, project_dir, opts.flags)?;
+    let import_diagnostics = imports.diagnostics().to_vec();
+    let scene_imports = imports.to_scene_graph();
     let mut diagnostics: Vec<Diagnostic> = Vec::new();
     resolve_text_sources(&mut doc, project_dir, &mut diagnostics);
     diagnostics.extend(import_diagnostics);
@@ -397,7 +405,8 @@ pub fn to_pdf_all_pages_with_dir_options(
     let mut scenes: Vec<Scene> = Vec::with_capacity(page_count);
     diagnostics.extend(disk_diagnostics(&doc, project_dir));
     for page_index in 0..page_count {
-        let compile_result = compile_page_for_render(&doc, &fonts, page_index, opts);
+        let compile_result =
+            compile_page_for_render(&doc, &fonts, page_index, opts, &scene_imports);
         scenes.push(compile_result.scene);
         diagnostics.extend(govern_compile_diagnostics(
             compile_result.diagnostics,
@@ -450,7 +459,9 @@ pub fn to_png_all_pages_options(
     project_dir: Option<&Path>,
     opts: RenderEntryOptions<'_>,
 ) -> Result<Vec<PngArtifact>, RenderCmdErr> {
-    let (mut doc, policy, import_diagnostics) = parse_validate(src, project_dir, opts.flags)?;
+    let (mut doc, policy, imports) = parse_validate(src, project_dir, opts.flags)?;
+    let import_diagnostics = imports.diagnostics().to_vec();
+    let scene_imports = imports.to_scene_graph();
     let mut text_src_diagnostics: Vec<Diagnostic> = Vec::new();
     resolve_text_sources(&mut doc, project_dir, &mut text_src_diagnostics);
     let fonts = build_font_provider(&doc, project_dir, opts.locked)?;
@@ -469,7 +480,8 @@ pub fn to_png_all_pages_options(
         .collect();
     let mut artifacts = Vec::with_capacity(page_count);
     for page_index in 0..page_count {
-        let compile_result = compile_page_for_render(&doc, &fonts, page_index, opts);
+        let compile_result =
+            compile_page_for_render(&doc, &fonts, page_index, opts, &scene_imports);
         let png = render_png(&compile_result.scene, &fonts, &assets)
             .map_err(|e| RenderCmdErr::new(format!("render error on page {page_index}: {e}"), 2))?;
         let mut diagnostics = base_diagnostics.clone();
@@ -536,7 +548,9 @@ pub fn to_png_spread(
         data,
         construction_overlay,
     } = opts;
-    let (mut doc, policy, import_diagnostics) = parse_validate(src, project_dir, flags)?;
+    let (mut doc, policy, imports) = parse_validate(src, project_dir, flags)?;
+    let import_diagnostics = imports.diagnostics().to_vec();
+    let scene_imports = imports.to_scene_graph();
     let mut text_src_diagnostics: Vec<Diagnostic> = Vec::new();
     resolve_text_sources(&mut doc, project_dir, &mut text_src_diagnostics);
     let fonts = build_font_provider(&doc, project_dir, locked)?;
@@ -556,8 +570,8 @@ pub fn to_png_spread(
     });
     let render_opts = RenderEntryOptions::png(flags, locked, data)
         .with_construction_overlay(construction_overlay);
-    let compile_a = compile_page_for_render(&doc, &fonts, index_a, render_opts);
-    let compile_b = compile_page_for_render(&doc, &fonts, index_b, render_opts);
+    let compile_a = compile_page_for_render(&doc, &fonts, index_a, render_opts, &scene_imports);
+    let compile_b = compile_page_for_render(&doc, &fonts, index_b, render_opts, &scene_imports);
     let png = render_spread_png(
         &compile_a.scene,
         &compile_b.scene,
@@ -580,8 +594,9 @@ fn compile_page_for_render(
     fonts: &dyn zenith_core::FontProvider,
     page_index: usize,
     opts: RenderEntryOptions<'_>,
+    imports: &ImportGraph<'_>,
 ) -> zenith_scene::CompileResult {
-    let mut compile_result = compile_page(doc, fonts, page_index, opts.data);
+    let mut compile_result = compile_page_with_imports(doc, fonts, page_index, opts.data, imports);
     if opts.construction_overlay
         && let Some(page) = doc.body.pages.get(page_index)
     {

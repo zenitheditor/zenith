@@ -4,22 +4,38 @@
 //! resolving import paths relative to the importing document, parsing imported
 //! documents, checking declared source hashes, and detecting graph cycles.
 
-use std::collections::BTreeSet;
+use std::collections::BTreeMap;
 use std::path::{Component, Path, PathBuf};
 
 use sha2::{Digest, Sha256};
 use zenith_core::{Diagnostic, Document, ImportDecl, KdlAdapter, KdlSource};
+use zenith_scene::ImportGraph as SceneImportGraph;
 
 /// Parsed import graph plus diagnostics collected while traversing it.
 #[derive(Debug)]
-pub(crate) struct ImportGraph {
+pub(crate) struct LoadedImportGraph {
     diagnostics: Vec<Diagnostic>,
+    documents: BTreeMap<String, Document>,
 }
 
-impl ImportGraph {
+impl LoadedImportGraph {
     /// Consume the graph and return diagnostics in deterministic traversal order.
     pub(crate) fn into_diagnostics(self) -> Vec<Diagnostic> {
         self.diagnostics
+    }
+
+    /// Diagnostics collected while loading imports.
+    pub(crate) fn diagnostics(&self) -> &[Diagnostic] {
+        &self.diagnostics
+    }
+
+    /// Build a borrowed scene import graph for compile-time expansion.
+    pub(crate) fn to_scene_graph(&self) -> SceneImportGraph<'_> {
+        let mut graph = SceneImportGraph::new();
+        for (id, doc) in &self.documents {
+            graph.insert(id.clone(), doc);
+        }
+        graph
     }
 }
 
@@ -28,10 +44,11 @@ impl ImportGraph {
 /// `root_dir` is the parent directory of the root `.zen` source. When absent,
 /// imports cannot be resolved and each declaration yields `import.missing`.
 /// Declared `sha256` values are always verified when present.
-pub(crate) fn load_import_graph(root: &Document, root_dir: Option<&Path>) -> ImportGraph {
+pub(crate) fn load_import_graph(root: &Document, root_dir: Option<&Path>) -> LoadedImportGraph {
     let mut loader = ImportGraphLoader {
         diagnostics: Vec::new(),
-        loaded_paths: BTreeSet::new(),
+        documents: BTreeMap::new(),
+        documents_by_path: BTreeMap::new(),
         stack: Vec::new(),
     };
     match root_dir {
@@ -43,14 +60,22 @@ pub(crate) fn load_import_graph(root: &Document, root_dir: Option<&Path>) -> Imp
 
 struct ImportGraphLoader {
     diagnostics: Vec<Diagnostic>,
-    loaded_paths: BTreeSet<PathBuf>,
+    documents: BTreeMap<String, Document>,
+    documents_by_path: BTreeMap<PathBuf, CachedImportDocument>,
     stack: Vec<PathBuf>,
 }
 
+#[derive(Debug)]
+struct CachedImportDocument {
+    document: Document,
+    sha256: String,
+}
+
 impl ImportGraphLoader {
-    fn finish(self) -> ImportGraph {
-        ImportGraph {
+    fn finish(self) -> LoadedImportGraph {
+        LoadedImportGraph {
             diagnostics: self.diagnostics,
+            documents: self.documents,
         }
     }
 
@@ -84,7 +109,11 @@ impl ImportGraphLoader {
             self.push_cycle(import, &path);
             return;
         }
-        if self.loaded_paths.contains(&path) {
+        if let Some(cached) = self.documents_by_path.get(&path) {
+            let cached_sha256 = cached.sha256.clone();
+            let cached_document = cached.document.clone();
+            self.verify_hash(import, &cached_sha256);
+            self.documents.insert(import.id.clone(), cached_document);
             return;
         }
 
@@ -104,7 +133,8 @@ impl ImportGraphLoader {
             }
         };
 
-        self.verify_hash(import, &bytes);
+        let actual_sha256 = format!("{:x}", Sha256::digest(&bytes));
+        self.verify_hash(import, &actual_sha256);
 
         let doc = match KdlAdapter.parse(bytes.as_slice()) {
             Ok(doc) => doc,
@@ -124,20 +154,26 @@ impl ImportGraphLoader {
             }
         };
 
-        self.loaded_paths.insert(path.clone());
         self.stack.push(path.clone());
         if let Some(next_base) = path.parent() {
             self.load_document_imports(&doc, next_base);
         }
         self.stack.pop();
+        self.documents_by_path.insert(
+            path,
+            CachedImportDocument {
+                document: doc.clone(),
+                sha256: actual_sha256,
+            },
+        );
+        self.documents.insert(import.id.clone(), doc);
     }
 
-    fn verify_hash(&mut self, import: &ImportDecl, bytes: &[u8]) {
+    fn verify_hash(&mut self, import: &ImportDecl, actual: &str) {
         let Some(declared) = import.sha256.as_deref() else {
             return;
         };
-        let actual = format!("{:x}", Sha256::digest(bytes));
-        if !declared.trim().eq_ignore_ascii_case(&actual) {
+        if !declared.trim().eq_ignore_ascii_case(actual) {
             self.diagnostics.push(Diagnostic::error(
                 "import.hash_mismatch",
                 format!(
@@ -252,6 +288,21 @@ mod tests {
         ))
     }
 
+    fn root_with_imports(imports: &str) -> Document {
+        parse(&format!(
+            r#"zenith version=1 {{
+  project id="proj.root" name="Root"
+  imports {{
+{imports}
+  }}
+  document id="doc.root" title="Root" {{
+    page id="page.root" w=(px)100 h=(px)100
+  }}
+}}
+"#
+        ))
+    }
+
     #[test]
     fn load_import_graph_resolves_relative_imports() {
         let dir = tempfile::tempdir().expect("tempdir");
@@ -277,6 +328,22 @@ mod tests {
     }
 
     #[test]
+    fn load_import_graph_keeps_same_file_import_aliases() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        fs::write(dir.path().join("shared.zen"), EMPTY_DOC).expect("write shared");
+        let root = root_with_imports(
+            r#"    import id="first" kind="zen" src="shared.zen"
+    import id="second" kind="zen" src="./shared.zen""#,
+        );
+
+        let graph = load_import_graph(&root, Some(dir.path()));
+
+        assert!(graph.diagnostics.is_empty(), "{:?}", graph.diagnostics);
+        assert!(graph.documents.contains_key("first"));
+        assert!(graph.documents.contains_key("second"));
+    }
+
+    #[test]
     fn load_import_graph_reports_parse_error() {
         let dir = tempfile::tempdir().expect("tempdir");
         fs::write(dir.path().join("bad.zen"), "not zenith").expect("write bad child");
@@ -298,6 +365,22 @@ mod tests {
 
         assert_eq!(diagnostics.len(), 1);
         assert_eq!(diagnostics[0].code, "import.hash_mismatch");
+    }
+
+    #[test]
+    fn load_import_graph_reports_hash_mismatch_for_cached_alias() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        fs::write(dir.path().join("shared.zen"), EMPTY_DOC).expect("write shared");
+        let root = root_with_imports(
+            r#"    import id="first" kind="zen" src="shared.zen"
+    import id="second" kind="zen" src="./shared.zen" sha256="0000""#,
+        );
+
+        let diagnostics = load_import_graph(&root, Some(dir.path())).into_diagnostics();
+
+        assert_eq!(diagnostics.len(), 1);
+        assert_eq!(diagnostics[0].code, "import.hash_mismatch");
+        assert_eq!(diagnostics[0].subject_id.as_deref(), Some("second"));
     }
 
     #[test]

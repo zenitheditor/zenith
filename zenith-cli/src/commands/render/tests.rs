@@ -150,6 +150,64 @@ fn to_png_with_dir_surfaces_import_diagnostics() {
 }
 
 #[test]
+fn to_scene_json_expands_loaded_composition_import() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    std::fs::write(
+        dir.path().join("brand.zen"),
+        r##"zenith version=1 {
+  project id="proj.brand" name="Brand"
+  tokens format="zenith-token-v1" {
+    token id="color.logo" type="color" value="#0000ff"
+  }
+  styles {}
+  components {
+    component id="component.logo" {
+      rect id="mark" x=(px)0 y=(px)0 w=(px)30 h=(px)20 fill=(token)"color.logo"
+    }
+  }
+  document id="doc.brand" title="Brand" {
+    page id="page.brand" w=(px)30 h=(px)20
+  }
+}
+"##,
+    )
+    .expect("write imported document");
+    let src = r#"zenith version=1 {
+  project id="proj.host" name="Host"
+  imports {
+    import id="brand" kind="zen" src="brand.zen"
+  }
+  tokens format="zenith-token-v1" {}
+  styles {}
+  document id="doc.host" title="Host" {
+    page id="page.host" w=(px)100 h=(px)80 {
+      instance id="logo" source="brand#component.component.logo" x=(px)5 y=(px)7
+    }
+  }
+}
+"#;
+
+    let artifact = to_scene_json(src, Some(dir.path()), 1, &CliPolicyFlags::default(), None)
+        .expect("scene JSON render must succeed");
+
+    assert!(
+        artifact.diagnostics.is_empty(),
+        "imported component render must be clean; got {:?}",
+        artifact.diagnostics
+    );
+    assert!(
+        artifact.json.contains(r#""op": "FillRect""#),
+        "scene JSON must include the imported rect; got {}",
+        artifact.json
+    );
+    assert!(
+        artifact.json.contains(r#""x": 5.0"#) && artifact.json.contains(r#""y": 7.0"#),
+        "imported rect must be translated by the host instance; got {}",
+        artifact.json
+    );
+}
+
+#[test]
 fn construction_guides_do_not_affect_default_scene_json() {
     let artifact = to_scene_json(CONSTRUCTION_DOC, None, 1, &CliPolicyFlags::default(), None)
         .expect("scene render must succeed");
