@@ -166,6 +166,55 @@ impl AffineTransform {
         )
     }
 
+    /// The six affine coefficients in `(a, b, c, d, e, f)` order, matching the
+    /// `apply_point` mapping `x' = a·x + c·y + e`, `y' = b·x + d·y + f`. This is
+    /// exactly the row order consumed by tiny-skia `Transform::from_row` and the
+    /// PDF `cm` operator, so a caller can push this transform onto either backend
+    /// without re-deriving the matrix.
+    #[must_use]
+    pub const fn coefficients(self) -> (f64, f64, f64, f64, f64, f64) {
+        (self.a, self.b, self.c, self.d, self.e, self.f)
+    }
+
+    /// Generate the dihedral (mirror) symmetry set for `count` axes about
+    /// `center`, with the primary mirror axis at `axis_angle_degrees`.
+    ///
+    /// Returns `2 · count` transforms: for each rotational step `k` the plain
+    /// rotation `r^k` and the reflected-then-rotated copy `s∘r^k`. `count == 1`
+    /// yields `[identity, reflection]` (simple bilateral mirror); larger counts
+    /// tile the plane into `2 · count` mirrored sectors (the MirrorMe / dihedral
+    /// kaleidoscope). The order is fixed, so compositing is deterministic.
+    pub fn dihedral_symmetry(
+        count: usize,
+        center: Point2,
+        axis_angle_degrees: f64,
+    ) -> Result<Vec<Self>, GeometryError> {
+        if count == 0 {
+            return Err(GeometryError::NonPositiveCount);
+        }
+        if count > MAX_RADIAL_SYMMETRY_COUNT {
+            return Err(GeometryError::CountOutOfRange);
+        }
+        if !axis_angle_degrees.is_finite() {
+            return Err(GeometryError::NonFiniteParameter);
+        }
+        center.validate()?;
+
+        let axis_radians = axis_angle_degrees.to_radians();
+        let axis_end = Point2::new(center.x + axis_radians.cos(), center.y + axis_radians.sin())?;
+        let reflection = Self::reflection_across_line(center, axis_end)?;
+
+        let step_degrees = 360.0 / count as f64;
+        let mut transforms = Vec::with_capacity(count * 2);
+        for index in 0..count {
+            let rotation = Self::rotation(step_degrees * index as f64, center)?;
+            transforms.push(rotation);
+            transforms.push(reflection.compose(rotation)?);
+        }
+
+        Ok(transforms)
+    }
+
     fn new(a: f64, b: f64, c: f64, d: f64, e: f64, f: f64) -> Result<Self, GeometryError> {
         let transform = Self { a, b, c, d, e, f };
         transform.validate()?;
@@ -334,6 +383,65 @@ mod tests {
         assert_point_close(
             transforms[1].apply_point(source).expect("valid output"),
             point(-2.0_f64.sqrt() / 2.0, 2.0_f64.sqrt() / 2.0),
+        );
+    }
+
+    #[test]
+    fn dihedral_symmetry_single_axis_is_identity_plus_reflection() {
+        let transforms =
+            AffineTransform::dihedral_symmetry(1, point(0.0, 0.0), 90.0).expect("valid transforms");
+        assert_eq!(transforms.len(), 2);
+        let source = point(3.0, 5.0);
+        // r^0 = identity.
+        assert_point_close(
+            transforms[0].apply_point(source).expect("valid output"),
+            source,
+        );
+        // Reflection across the vertical axis (angle 90°) flips x.
+        assert_point_close(
+            transforms[1].apply_point(source).expect("valid output"),
+            point(-3.0, 5.0),
+        );
+    }
+
+    #[test]
+    fn dihedral_symmetry_yields_two_copies_per_axis_and_is_deterministic() {
+        let center = point(0.0, 0.0);
+        let a = AffineTransform::dihedral_symmetry(3, center, 0.0).expect("valid transforms");
+        let b = AffineTransform::dihedral_symmetry(3, center, 0.0).expect("valid transforms");
+        assert_eq!(a.len(), 6);
+        assert_eq!(
+            a, b,
+            "same inputs must produce byte-identical transform order"
+        );
+        // Reflected copies have negative determinant; plain rotations positive.
+        for (index, transform) in a.iter().enumerate() {
+            let (ca, cb, cc, cd, _, _) = transform.coefficients();
+            let determinant = ca * cd - cb * cc;
+            if index % 2 == 0 {
+                assert!(determinant > 0.0, "even index {index} should be a rotation");
+            } else {
+                assert!(
+                    determinant < 0.0,
+                    "odd index {index} should be a reflection"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn dihedral_symmetry_rejects_bad_count_and_angle() {
+        assert_eq!(
+            AffineTransform::dihedral_symmetry(0, point(0.0, 0.0), 0.0),
+            Err(GeometryError::NonPositiveCount)
+        );
+        assert_eq!(
+            AffineTransform::dihedral_symmetry(MAX_RADIAL_SYMMETRY_COUNT + 1, point(0.0, 0.0), 0.0),
+            Err(GeometryError::CountOutOfRange)
+        );
+        assert_eq!(
+            AffineTransform::dihedral_symmetry(2, point(0.0, 0.0), f64::NAN),
+            Err(GeometryError::NonFiniteParameter)
         );
     }
 
