@@ -1,11 +1,12 @@
 use crate::{
     AnchorEconomyInput, AnchorEconomyReport, PathTangentQualityInput, PathTangentQualityReport,
-    PerceptionDiagnostic, PerceptionSeverity, anchor_economy,
-    path_geometry::{complete_handle_count, geometry_path},
+    PerceptionDiagnostic, PerceptionSeverity, SmallLegibilityReport, anchor_economy,
+    path_geometry::{complete_handle_count, compound_geometry, geometry_path},
     path_tangent_quality,
+    small_legibility::{SmallLegibilityDefaults, small_legibility_with_defaults},
 };
 use zenith_core::{PathAnchor, PathNode};
-use zenith_geometry::{CompoundPathGeometry, PathGeometry, PathTopology, RectBounds};
+use zenith_geometry::{PathGeometry, PathTopology, RectBounds};
 
 /// Input for path-level vector perception.
 ///
@@ -50,6 +51,7 @@ pub struct VectorPathPerceptionReport {
     pub bounds: Option<RectBounds>,
     pub anchor_economy: AnchorEconomyReport,
     pub tangent_quality: PathTangentQualityReport,
+    pub small_legibility: SmallLegibilityReport,
     pub diagnostics: Vec<PerceptionDiagnostic>,
 }
 
@@ -64,6 +66,7 @@ pub struct CompoundVectorPathPerceptionReport {
     pub anchor_economy: AnchorEconomyReport,
     pub tangent_quality_reports: Vec<PathTangentQualityReport>,
     pub tangent_quality_score_mean: Option<f32>,
+    pub small_legibility: SmallLegibilityReport,
     pub diagnostics: Vec<PerceptionDiagnostic>,
 }
 
@@ -81,9 +84,16 @@ pub fn analyze_vector_path(input: VectorPathPerceptionInput<'_>) -> VectorPathPe
         closed: input.closed,
     });
     let (bounds, bounds_diagnostic) = path_bounds(input);
+    let contours = [VectorPathContourInput {
+        anchors: input.anchors,
+        closed: input.closed,
+    }];
+    let small_legibility =
+        small_legibility_with_defaults(&contours, SmallLegibilityDefaults::conservative());
 
     let mut diagnostics = anchor_economy.diagnostics.clone();
     diagnostics.extend(tangent_quality.diagnostics.iter().cloned());
+    diagnostics.extend(small_legibility.diagnostics.iter().cloned());
     if let Some(diagnostic) = bounds_diagnostic {
         diagnostics.push(diagnostic);
     }
@@ -95,6 +105,7 @@ pub fn analyze_vector_path(input: VectorPathPerceptionInput<'_>) -> VectorPathPe
         bounds,
         anchor_economy,
         tangent_quality,
+        small_legibility,
         diagnostics,
     }
 }
@@ -112,11 +123,14 @@ pub fn analyze_compound_vector_path(
     });
     let tangent_quality_reports = compound_tangent_quality(input.contours);
     let (bounds, bounds_diagnostic) = compound_path_bounds(input.contours);
+    let small_legibility =
+        small_legibility_with_defaults(input.contours, SmallLegibilityDefaults::conservative());
 
     let mut diagnostics = anchor_economy.diagnostics.clone();
     for report in &tangent_quality_reports {
         diagnostics.extend(report.diagnostics.iter().cloned());
     }
+    diagnostics.extend(small_legibility.diagnostics.iter().cloned());
     if let Some(diagnostic) = bounds_diagnostic {
         diagnostics.push(diagnostic);
     }
@@ -131,6 +145,7 @@ pub fn analyze_compound_vector_path(
         anchor_economy,
         tangent_quality_score_mean: tangent_quality_score_mean(&tangent_quality_reports),
         tangent_quality_reports,
+        small_legibility,
         diagnostics,
     }
 }
@@ -214,15 +229,12 @@ fn compound_tangent_quality(
 fn compound_path_bounds(
     contours: &[VectorPathContourInput<'_>],
 ) -> (Option<RectBounds>, Option<PerceptionDiagnostic>) {
-    let mut geometry_contours = Vec::with_capacity(contours.len());
-    for contour in contours {
-        match geometry_path(contour.anchors, contour.closed) {
-            Ok(geometry) => geometry_contours.push(geometry),
-            Err(()) => return (None, Some(invalid_geometry_diagnostic())),
-        }
-    }
+    let geometry = match compound_geometry(contours) {
+        Ok(geometry) => geometry,
+        Err(()) => return (None, Some(invalid_geometry_diagnostic())),
+    };
 
-    match CompoundPathGeometry::new(geometry_contours).bounds() {
+    match geometry.bounds() {
         Ok(bounds) => (bounds, None),
         Err(_) => (None, Some(invalid_geometry_diagnostic())),
     }
@@ -284,6 +296,8 @@ mod tests {
         assert_eq!(report.anchor_economy.open_subpath_count, 1);
         assert_eq!(report.anchor_economy.closed_subpath_count, 0);
         assert_eq!(report.anchor_economy.minimum_anchor_count, 3);
+        assert_eq!(report.small_legibility.measured_contour_count, 1);
+        assert!(report.small_legibility.thumbnail_scale.is_some());
         assert!(report.anchor_economy.diagnostics.is_empty());
     }
 
@@ -410,13 +424,15 @@ mod tests {
         assert_eq!(report.tangent_quality.evaluated_join_count, 1);
         assert_eq!(report.tangent_quality.sharp_turn_count, 1);
         assert_eq!(report.tangent_quality.smooth_join_count, 0);
-        assert_eq!(
-            report.diagnostics,
-            vec![PerceptionDiagnostic::new(
-                "path_tangent_quality.low_tangent_alignment",
-                PerceptionSeverity::Info,
-                "mean tangent alignment is low across evaluated path joins",
-            )]
+        assert!(
+            report.diagnostics.iter().any(|diagnostic| diagnostic
+                == &PerceptionDiagnostic::new(
+                    "path_tangent_quality.low_tangent_alignment",
+                    PerceptionSeverity::Info,
+                    "mean tangent alignment is low across evaluated path joins",
+                )),
+            "expected tangent quality diagnostic; got {:?}",
+            report.diagnostics
         );
     }
 
@@ -479,6 +495,7 @@ mod tests {
         assert_eq!(report.anchor_economy.handle_count, 0);
         assert_eq!(report.tangent_quality_reports.len(), 2);
         assert!(report.tangent_quality_score_mean.is_some());
+        assert_eq!(report.small_legibility.measured_contour_count, 2);
         assert_eq!(
             report.bounds,
             Some(RectBounds {

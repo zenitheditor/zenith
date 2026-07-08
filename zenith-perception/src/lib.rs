@@ -14,6 +14,7 @@ pub mod path_outline;
 pub mod path_tangent_quality;
 pub mod report;
 pub mod scalar;
+pub mod small_legibility;
 pub mod value_zones;
 pub mod vector_mark;
 pub mod vector_report;
@@ -42,6 +43,7 @@ pub use path_tangent_quality::{
     PathTangentQualityInput, PathTangentQualityReport, path_tangent_quality,
 };
 pub use report::{PerceptionReport, analyze};
+pub use small_legibility::{SmallLegibilityInput, SmallLegibilityReport, small_legibility};
 pub use value_zones::{ValueZone, ZoneMetrics, ZoneReport, value_zones};
 pub use vector_mark::{
     VectorMarkCollisionReport, VectorMarkPathInput, VectorMarkPerceptionInput,

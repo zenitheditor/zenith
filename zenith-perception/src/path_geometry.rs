@@ -1,5 +1,9 @@
 use zenith_core::{Dimension, PathAnchor, Unit};
-use zenith_geometry::{PathAnchor as GeometryPathAnchor, PathGeometry, Point2};
+use zenith_geometry::{
+    CompoundPathGeometry, PathAnchor as GeometryPathAnchor, PathGeometry, Point2,
+};
+
+use crate::VectorPathContourInput;
 
 pub(crate) fn complete_handle_count(anchor: &PathAnchor) -> usize {
     usize::from(anchor.in_x.is_some() && anchor.in_y.is_some())
@@ -16,12 +20,24 @@ pub(crate) fn geometry_anchor(anchor: &PathAnchor) -> Option<GeometryPathAnchor>
 }
 
 pub(crate) fn geometry_path(anchors: &[PathAnchor], closed: bool) -> Result<PathGeometry, ()> {
-    let mut geometry_anchors = Vec::with_capacity(anchors.len());
-    for anchor in anchors {
-        geometry_anchors.push(geometry_anchor(anchor).ok_or(())?);
-    }
+    let geometry_anchors = anchors
+        .iter()
+        .map(geometry_anchor)
+        .collect::<Option<Vec<_>>>()
+        .ok_or(())?;
 
     PathGeometry::new(geometry_anchors, closed).map_err(|_| ())
+}
+
+pub(crate) fn compound_geometry(
+    contours: &[VectorPathContourInput<'_>],
+) -> Result<CompoundPathGeometry, ()> {
+    let geometry_contours = contours
+        .iter()
+        .map(|contour| geometry_path(contour.anchors, contour.closed))
+        .collect::<Result<Vec<_>, _>>()?;
+
+    Ok(CompoundPathGeometry::new(geometry_contours))
 }
 
 fn optional_point_from_px_pair(

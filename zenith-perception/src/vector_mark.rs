@@ -1,6 +1,8 @@
 use crate::{
-    PathCollisionInput, PathCollisionReport, PerceptionDiagnostic, VectorPathPerceptionInput,
-    VectorPathPerceptionReport, analyze_vector_path, path_collision,
+    PathCollisionInput, PathCollisionReport, PerceptionDiagnostic, SmallLegibilityReport,
+    VectorPathContourInput, VectorPathPerceptionInput, VectorPathPerceptionReport,
+    analyze_vector_path, path_collision,
+    small_legibility::{SmallLegibilityDefaults, small_legibility_with_defaults},
 };
 use zenith_core::PathAnchor;
 
@@ -27,6 +29,7 @@ pub struct VectorMarkPerceptionReport {
     pub total_intersection_count: usize,
     pub minimum_clearance: Option<f64>,
     pub collision_score_mean: Option<f32>,
+    pub small_legibility: SmallLegibilityReport,
     pub diagnostics: Vec<PerceptionDiagnostic>,
 }
 
@@ -49,6 +52,8 @@ pub fn analyze_vector_mark(input: VectorMarkPerceptionInput<'_>) -> VectorMarkPe
         .sum();
     let minimum_clearance = minimum_clearance(&collision_reports);
     let collision_score_mean = collision_score_mean(&collision_reports);
+    let small_legibility = mark_small_legibility(input.paths);
+    diagnostics.extend(small_legibility.diagnostics.iter().cloned());
 
     VectorMarkPerceptionReport {
         path_count: input.paths.len(),
@@ -58,6 +63,7 @@ pub fn analyze_vector_mark(input: VectorMarkPerceptionInput<'_>) -> VectorMarkPe
         total_intersection_count,
         minimum_clearance,
         collision_score_mean,
+        small_legibility,
         diagnostics,
     }
 }
@@ -89,14 +95,8 @@ fn collision_reports(
         / 2;
     let mut reports = Vec::with_capacity(pair_count);
 
-    for first_index in 0..input.paths.len() {
-        for second_index in first_index + 1..input.paths.len() {
-            let Some(first) = input.paths.get(first_index) else {
-                continue;
-            };
-            let Some(second) = input.paths.get(second_index) else {
-                continue;
-            };
+    for (first_index, first) in input.paths.iter().enumerate() {
+        for (second_index, second) in input.paths.iter().enumerate().skip(first_index + 1) {
             let collision = path_collision(PathCollisionInput {
                 first_anchors: first.anchors,
                 first_closed: first.closed,
@@ -122,12 +122,8 @@ fn collision_reports(
 fn minimum_clearance(reports: &[VectorMarkCollisionReport]) -> Option<f64> {
     reports
         .iter()
-        .filter_map(|report| {
-            report
-                .collision
-                .nearest
-                .map(|_| report.collision.minimum_distance)
-        })
+        .filter(|report| report.collision.nearest.is_some())
+        .map(|report| report.collision.minimum_distance)
         .min_by(|left, right| left.total_cmp(right))
 }
 
@@ -138,6 +134,17 @@ fn collision_score_mean(reports: &[VectorMarkCollisionReport]) -> Option<f32> {
 
     let total: f32 = reports.iter().map(|report| report.collision.score).sum();
     Some(total / reports.len() as f32)
+}
+
+fn mark_small_legibility(paths: &[VectorMarkPathInput<'_>]) -> SmallLegibilityReport {
+    let contours: Vec<_> = paths
+        .iter()
+        .map(|path| VectorPathContourInput {
+            anchors: path.anchors,
+            closed: path.closed,
+        })
+        .collect();
+    small_legibility_with_defaults(&contours, SmallLegibilityDefaults::conservative())
 }
 
 #[cfg(test)]
@@ -175,6 +182,11 @@ mod tests {
         assert_eq!(report.total_intersection_count, 1);
         assert_eq!(report.minimum_clearance, Some(0.0));
         assert_eq!(report.collision_score_mean, Some(0.0));
+        assert_eq!(report.small_legibility.measured_contour_count, 2);
+        assert_eq!(
+            report.small_legibility.minimum_scaled_contour_gap,
+            Some(0.0)
+        );
         assert_eq!(report.collision_reports[0].first_path_id, "horizontal");
         assert_eq!(report.collision_reports[0].second_path_id, "vertical");
         assert!(
