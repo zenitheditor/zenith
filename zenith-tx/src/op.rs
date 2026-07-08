@@ -460,6 +460,29 @@ pub enum Op {
         #[serde(default)]
         kind: Option<String>,
     },
+    /// Remove one anchor from a `path` node by index.
+    ///
+    /// This operation preserves the path's `closed` flag and all non-anchor
+    /// properties. Post-validation rejects automatically if the resulting
+    /// contour falls below the minimum anchor count for its open/closed
+    /// topology.
+    ///
+    /// Supported nodes: `path`.
+    /// Unsupported: all other variants — yields `tx.unsupported_property`.
+    ///
+    /// JSON example:
+    /// ```json
+    /// {"op":"remove_path_anchor","node":"path.logo","anchor_index":1}
+    /// ```
+    RemovePathAnchor {
+        /// The stable node `id` to target.
+        node: String,
+        /// Optional zero-based subpath index for compound paths.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        subpath_index: Option<usize>,
+        /// Zero-based anchor index to remove.
+        anchor_index: usize,
+    },
     /// Move one `path` anchor and its complete handles by a pixel delta.
     ///
     /// This is an authoring edit: only the targeted anchor's required `x`/`y`

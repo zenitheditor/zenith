@@ -54,6 +54,132 @@ fn anchor_indexed_path_ops_require_subpath_index_for_compound_paths() {
 }
 
 #[test]
+fn remove_path_anchor_removes_direct_anchor() {
+    let doc = parse(
+        r##"zenith version=1 {
+  project id="proj" name="Test"
+  tokens format="zenith-token-v1" { }
+  styles { }
+  document id="doc1" title="T" {
+    page id="pg1" w=(px)400 h=(px)300 {
+      path id="path1" {
+        anchor x=(px)0 y=(px)0
+        anchor x=(px)50 y=(px)0
+        anchor x=(px)100 y=(px)0
+      }
+    }
+  }
+}"##,
+    );
+    let tx = Transaction {
+        ops: vec![Op::RemovePathAnchor {
+            node: "path1".to_owned(),
+            subpath_index: None,
+            anchor_index: 1,
+        }],
+        permissions: Permissions::default(),
+    };
+    let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
+
+    assert_eq!(result.status, TxStatus::Accepted);
+    assert_eq!(result.affected_node_ids, vec!["path1".to_owned()]);
+    assert_eq!(formatted_anchor_count(&result.source_after), 2);
+    assert_px_close(anchor_px_attr(&result.source_after, 0, "x"), 0.0);
+    assert_px_close(anchor_px_attr(&result.source_after, 1, "x"), 100.0);
+}
+
+#[test]
+fn remove_path_anchor_targets_compound_subpath() {
+    let doc = parse(
+        r##"zenith version=1 {
+  project id="proj" name="Test"
+  tokens format="zenith-token-v1" { }
+  styles { }
+  document id="doc1" title="T" {
+    page id="pg1" w=(px)400 h=(px)300 {
+      path id="compound" fill-rule="evenodd" {
+        subpath closed=#true {
+          anchor x=(px)0 y=(px)0
+          anchor x=(px)100 y=(px)0
+          anchor x=(px)100 y=(px)100
+        }
+        subpath closed=#true {
+          anchor x=(px)25 y=(px)25
+          anchor x=(px)75 y=(px)25
+          anchor x=(px)75 y=(px)75
+          anchor x=(px)25 y=(px)75
+        }
+      }
+    }
+  }
+}"##,
+    );
+    let tx = Transaction {
+        ops: vec![Op::RemovePathAnchor {
+            node: "compound".to_owned(),
+            subpath_index: Some(1),
+            anchor_index: 1,
+        }],
+        permissions: Permissions::default(),
+    };
+    let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
+
+    assert_eq!(result.status, TxStatus::Accepted);
+    assert_eq!(result.affected_node_ids, vec!["compound".to_owned()]);
+    assert_eq!(formatted_anchor_count(&result.source_after), 6);
+    assert!(!result.source_after.contains("x=(px)75 y=(px)25"));
+    assert!(result.source_after.contains("x=(px)75 y=(px)75"));
+}
+
+#[test]
+fn remove_path_anchor_requires_subpath_index_for_compound_paths() {
+    let doc = parse(COMPOUND_PATH_DOC);
+    let tx = Transaction {
+        ops: vec![Op::RemovePathAnchor {
+            node: "compound".to_owned(),
+            subpath_index: None,
+            anchor_index: 0,
+        }],
+        permissions: Permissions::default(),
+    };
+    let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
+
+    assert_eq!(result.status, TxStatus::Rejected);
+    assert!(
+        result.diagnostics.iter().any(|diagnostic| {
+            diagnostic.code == "tx.unsupported_property"
+                && diagnostic.message.contains("subpath_index")
+        }),
+        "expected compound path rejection diagnostic; got {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
+fn remove_path_anchor_rejects_out_of_range_index() {
+    let doc = parse(PATH_DOC);
+    let tx = Transaction {
+        ops: vec![Op::RemovePathAnchor {
+            node: "path1".to_owned(),
+            subpath_index: None,
+            anchor_index: 2,
+        }],
+        permissions: Permissions::default(),
+    };
+    let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
+
+    assert_eq!(result.status, TxStatus::Rejected);
+    assert!(
+        result
+            .diagnostics
+            .iter()
+            .any(|d| d.code == "tx.out_of_range" && d.message.contains("anchor_index")),
+        "expected tx.out_of_range mentioning anchor_index; got: {:?}",
+        result.diagnostics
+    );
+}
+
+#[test]
 fn insert_path_anchor_targets_compound_subpath() {
     let doc = parse(COMPOUND_PATH_DOC);
     let tx = Transaction {

@@ -24,6 +24,7 @@ pub fn op_summary(name: &str) -> Option<&'static str> {
         "set_points" => Some("Replace the full vertex list of a polygon or polyline node."),
         "set_path_anchors" => Some("Replace the full anchor list of a path node."),
         "set_path_anchor_kind" => Some("Set or clear one path anchor's authoring intent metadata."),
+        "remove_path_anchor" => Some("Remove one path anchor by index."),
         "insert_path_anchor" => Some("Insert a path anchor by splitting an existing segment."),
         "insert_path_anchor_at_point" => {
             Some("Insert a path anchor at the nearest path projection within a tolerance.")

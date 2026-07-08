@@ -167,6 +167,60 @@ pub(super) fn apply_set_path_anchor_kind(
     }
 }
 
+pub(super) fn apply_remove_path_anchor(
+    node_id: &str,
+    subpath_index: Option<usize>,
+    anchor_index: usize,
+    doc: &mut Document,
+    diagnostics: &mut Vec<Diagnostic>,
+    affected: &mut Vec<String>,
+) {
+    match find_node_any_mut(doc, node_id) {
+        None => diagnostics.push(unknown_node(node_id)),
+        Some(node) => {
+            let node_kind = node_kind_str(node);
+            match node {
+                Node::Path(path) => {
+                    let Some(contour) = path_contour_mut(
+                        node_id,
+                        "remove_path_anchor",
+                        path,
+                        subpath_index,
+                        diagnostics,
+                    ) else {
+                        return;
+                    };
+                    if anchor_index >= contour.anchors.len() {
+                        diagnostics.push(Diagnostic::error(
+                            "tx.out_of_range",
+                            format!(
+                                "anchor_index {anchor_index} is out of range for path '{node_id}'"
+                            ),
+                            None,
+                            Some(node_id.to_owned()),
+                        ));
+                        return;
+                    }
+
+                    contour.anchors.remove(anchor_index);
+                    record_affected(node_id, affected);
+                }
+                non_path_nodes!() => {
+                    diagnostics.push(Diagnostic::error(
+                        "tx.unsupported_property",
+                        format!(
+                            "remove_path_anchor is not supported on a {} node",
+                            node_kind
+                        ),
+                        None,
+                        Some(node_id.to_owned()),
+                    ));
+                }
+            }
+        }
+    }
+}
+
 pub(super) fn apply_simplify_path_anchors(
     node_id: &str,
     subpath_index: Option<usize>,

@@ -36,8 +36,9 @@ use geometry::{
     apply_set_geometry,
 };
 use path::{
-    apply_insert_path_anchor, apply_insert_path_anchor_at_point, apply_set_path_anchor_kind,
-    apply_set_path_anchors, apply_simplify_path_anchors, apply_transform_path_anchors,
+    apply_insert_path_anchor, apply_insert_path_anchor_at_point, apply_remove_path_anchor,
+    apply_set_path_anchor_kind, apply_set_path_anchors, apply_simplify_path_anchors,
+    apply_transform_path_anchors,
 };
 use path_anchor::{MovePathAnchorArgs, apply_move_path_anchor};
 use path_boolean::{PathBooleanArgs, apply_path_boolean};
@@ -266,6 +267,20 @@ fn apply_op(
                 *subpath_index,
                 *anchor_index,
                 kind.as_deref(),
+                doc,
+                diagnostics,
+                affected,
+            );
+        }
+        Op::RemovePathAnchor {
+            node: node_id,
+            subpath_index,
+            anchor_index,
+        } => {
+            apply_remove_path_anchor(
+                node_id,
+                *subpath_index,
+                *anchor_index,
                 doc,
                 diagnostics,
                 affected,
@@ -644,6 +659,7 @@ fn op_lock_targets(op: &Op) -> Vec<&str> {
         | Op::SetPoints { node, .. }
         | Op::SetPathAnchors { node, .. }
         | Op::SetPathAnchorKind { node, .. }
+        | Op::RemovePathAnchor { node, .. }
         | Op::InsertPathAnchor { node, .. }
         | Op::InsertPathAnchorAtPoint { node, .. }
         | Op::MovePathAnchor { node, .. }

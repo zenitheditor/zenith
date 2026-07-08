@@ -399,6 +399,7 @@ fn op_name(op: &zenith_tx::Op) -> &'static str {
         zenith_tx::Op::SetPoints { .. } => "set_points",
         zenith_tx::Op::SetPathAnchors { .. } => "set_path_anchors",
         zenith_tx::Op::SetPathAnchorKind { .. } => "set_path_anchor_kind",
+        zenith_tx::Op::RemovePathAnchor { .. } => "remove_path_anchor",
         zenith_tx::Op::InsertPathAnchor { .. } => "insert_path_anchor",
         zenith_tx::Op::InsertPathAnchorAtPoint { .. } => "insert_path_anchor_at_point",
         zenith_tx::Op::MovePathAnchor { .. } => "move_path_anchor",

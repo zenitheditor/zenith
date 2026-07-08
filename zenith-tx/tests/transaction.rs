@@ -338,6 +338,23 @@ fn from_json_path_boolean_round_trip() {
     );
 }
 
+#[test]
+fn from_json_remove_path_anchor_round_trip() {
+    let json = r#"{"ops":[{"op":"remove_path_anchor","node":"path.logo","subpath_index":1,"anchor_index":2}]}"#;
+    let tx = Transaction::from_json(json).expect("parse JSON");
+    assert_eq!(
+        tx,
+        Transaction {
+            ops: vec![Op::RemovePathAnchor {
+                node: "path.logo".to_owned(),
+                subpath_index: Some(1),
+                anchor_index: 2,
+            }],
+            permissions: Permissions::default(),
+        }
+    );
+}
+
 /// Serde round-trip for the duplicate_page op.
 #[test]
 fn from_json_duplicate_page_round_trip() {
