@@ -270,6 +270,7 @@ pub fn doc_with(tokens: Vec<Token>, pages: Vec<Page>) -> Document {
             block_styles: Vec::new(),
             pages,
         },
+        unsupported_children: Vec::new(),
     }
 }
 

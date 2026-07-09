@@ -3,6 +3,7 @@
 
 use kdl::KdlNode;
 
+use crate::ast::UnsupportedChild;
 use crate::ast::node::{Node, UnknownNode};
 use crate::error::ParseError;
 
@@ -19,16 +20,24 @@ use super::pattern::transform_pattern;
 use super::special::{
     transform_connector, transform_field, transform_footnote, transform_shape, transform_toc,
 };
+use super::unsupported::collect_unsupported_children;
 
-pub(super) fn transform_node(node: &KdlNode) -> Result<Node, ParseError> {
+pub(super) fn transform_node(
+    node: &KdlNode,
+    sink: &mut Vec<UnsupportedChild>,
+) -> Result<Node, ParseError> {
+    // Capture any children this node's kind does not consume BEFORE dispatch, so
+    // the silent data loss is recorded even though the transform drops them.
+    collect_unsupported_children(node, sink);
+
     match node.name().value() {
         "rect" => transform_rect(node).map(|r| Node::Rect(Box::new(r))),
         "ellipse" => transform_ellipse(node).map(Node::Ellipse),
         "line" => transform_line(node).map(Node::Line),
         "text" => transform_text(node).map(|t| Node::Text(Box::new(t))),
         "code" => transform_code(node).map(Node::Code),
-        "frame" => transform_frame(node).map(Node::Frame),
-        "group" => transform_group(node).map(Node::Group),
+        "frame" => transform_frame(node, sink).map(Node::Frame),
+        "group" => transform_group(node, sink).map(Node::Group),
         "image" => transform_image(node).map(Node::Image),
         "polygon" => transform_polygon(node).map(Node::Polygon),
         "polyline" => transform_polyline(node).map(Node::Polyline),
@@ -37,10 +46,10 @@ pub(super) fn transform_node(node: &KdlNode) -> Result<Node, ParseError> {
         "field" => transform_field(node).map(Node::Field),
         "toc" => transform_toc(node).map(Node::Toc),
         "footnote" => transform_footnote(node).map(Node::Footnote),
-        "table" => transform_table(node).map(|t| Node::Table(Box::new(t))),
+        "table" => transform_table(node, sink).map(|t| Node::Table(Box::new(t))),
         "shape" => transform_shape(node).map(|s| Node::Shape(Box::new(s))),
         "connector" => transform_connector(node).map(|c| Node::Connector(Box::new(c))),
-        "pattern" => transform_pattern(node).map(|p| Node::Pattern(Box::new(p))),
+        "pattern" => transform_pattern(node, sink).map(|p| Node::Pattern(Box::new(p))),
         "chart" => transform_chart(node).map(|c| Node::Chart(Box::new(c))),
         "light" => transform_light(node).map(|l| Node::Light(Box::new(l))),
         "mesh" => transform_mesh(node).map(|m| Node::Mesh(Box::new(m))),
@@ -48,7 +57,7 @@ pub(super) fn transform_node(node: &KdlNode) -> Result<Node, ParseError> {
             kind: node.name().value().to_owned(),
             id: optional_string_prop(node, "id").map(str::to_owned),
             unknown_props: collect_unknown_props(node, &["id"]),
-            children: transform_children(node)?,
+            children: transform_children(node, sink)?,
             source_span: node_span(node),
         }))),
     }

@@ -3,6 +3,7 @@
 
 use kdl::KdlNode;
 
+use crate::ast::UnsupportedChild;
 use crate::ast::block_style::BlockStyle;
 use crate::ast::document::{DocumentBody, Page};
 use crate::ast::node::Node;
@@ -12,7 +13,10 @@ use crate::parse::transform::helpers::{optional_string_prop, required_string_pro
 use crate::parse::transform::node::transform_node;
 use crate::parse::transform::page::transform_page;
 
-pub(super) fn transform_document_body(node: &KdlNode) -> Result<DocumentBody, ParseError> {
+pub(super) fn transform_document_body(
+    node: &KdlNode,
+    sink: &mut Vec<UnsupportedChild>,
+) -> Result<DocumentBody, ParseError> {
     let id = required_string_prop(node, "id")?.to_owned();
     let title = optional_string_prop(node, "title").map(str::to_owned);
 
@@ -22,7 +26,7 @@ pub(super) fn transform_document_body(node: &KdlNode) -> Result<DocumentBody, Pa
         for child in children.nodes() {
             match child.name().value() {
                 "block" => block_styles.push(transform_block_style(child)?),
-                "page" => pages.push(transform_page(child)?),
+                "page" => pages.push(transform_page(child, sink)?),
                 _ => {}
             }
         }
@@ -48,11 +52,12 @@ pub(super) fn transform_document_body(node: &KdlNode) -> Result<DocumentBody, Pa
 /// limitation; stack overflow is only possible with pathologically deep trees.
 pub(in crate::parse::transform) fn transform_children(
     node: &KdlNode,
+    sink: &mut Vec<UnsupportedChild>,
 ) -> Result<Vec<Node>, ParseError> {
     let mut children: Vec<Node> = Vec::new();
     if let Some(doc) = node.children() {
         for child in doc.nodes() {
-            children.push(transform_node(child)?);
+            children.push(transform_node(child, sink)?);
         }
     }
     Ok(children)

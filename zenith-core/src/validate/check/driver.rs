@@ -29,6 +29,7 @@ use super::passes::{
 use super::policy::{apply_policy, check_policy_entries};
 use super::recipes::check_recipes;
 use super::report::ValidationReport;
+use super::unsupported::check_unsupported_children;
 use super::variants::check_variants;
 use super::visual::{VisualExpect, check_block_styles, check_visual_prop};
 use super::{fold, margin, safezone};
@@ -80,6 +81,12 @@ pub fn validate_with_policy(
     // merge of global/local config + in-file), not doc.brand_contract directly.
     // An empty contract is an identity pass (no diagnostics, byte-identical).
     check_brand_contract(brand, resolved_tokens, &mut diagnostics);
+
+    // ── Parse-time discarded children ─────────────────────────────────────
+    // Child nodes authored under a kind that does not consume them are dropped
+    // at parse time; report each so the silent data loss is visible. An empty
+    // side table is an identity pass.
+    check_unsupported_children(doc, &mut diagnostics);
 
     // ── Document color space ──────────────────────────────────────────────
     // `colorspace` is informational export metadata; it does not affect PNG

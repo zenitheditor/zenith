@@ -27,6 +27,7 @@ mod page;
 mod pattern;
 mod special;
 mod tokens;
+mod unsupported;
 
 pub use document::transform;
 pub(crate) use document::{

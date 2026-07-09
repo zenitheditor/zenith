@@ -3,6 +3,7 @@
 
 use kdl::KdlNode;
 
+use crate::ast::UnsupportedChild;
 use crate::ast::node::{
     FrameNode, GroupNode, InstanceNode, Override, ProtectedRegion, TableCell, TableColumn,
     TableNode, TableRow, TextSpan,
@@ -54,7 +55,10 @@ pub(crate) const FRAME_KNOWN_PROPS: &[&str] = &[
     "anchor_parent",
 ];
 
-pub(super) fn transform_frame(node: &KdlNode) -> Result<FrameNode, ParseError> {
+pub(super) fn transform_frame(
+    node: &KdlNode,
+    sink: &mut Vec<UnsupportedChild>,
+) -> Result<FrameNode, ParseError> {
     let id = required_string_prop(node, "id")?.to_owned();
     let unknown_props = collect_unknown_props(node, FRAME_KNOWN_PROPS);
 
@@ -80,7 +84,7 @@ pub(super) fn transform_frame(node: &KdlNode) -> Result<FrameNode, ParseError> {
         mask: optional_property_value(node, "mask"),
         blur: optional_dimension_prop(node, "blur"),
         style: optional_string_prop(node, "style").map(str::to_owned),
-        children: transform_children(node)?,
+        children: transform_children(node, sink)?,
         anchor: optional_string_prop(node, "anchor").map(str::to_owned),
         anchor_zone: optional_string_prop(node, "anchor-zone")
             .or_else(|| optional_string_prop(node, "anchor_zone"))
@@ -147,7 +151,10 @@ pub(crate) const GROUP_KNOWN_PROPS: &[&str] = &[
     "anchor_parent",
 ];
 
-pub(super) fn transform_group(node: &KdlNode) -> Result<GroupNode, ParseError> {
+pub(super) fn transform_group(
+    node: &KdlNode,
+    sink: &mut Vec<UnsupportedChild>,
+) -> Result<GroupNode, ParseError> {
     let id = required_string_prop(node, "id")?.to_owned();
 
     let unknown_props = collect_unknown_props(node, GROUP_KNOWN_PROPS);
@@ -168,7 +175,7 @@ pub(super) fn transform_group(node: &KdlNode) -> Result<GroupNode, ParseError> {
                     let param_id = required_string_prop(child, "id")?.to_owned();
                     editable_param_ids.push(param_id);
                 }
-                _ => children.push(transform_node(child)?),
+                _ => children.push(transform_node(child, sink)?),
             }
         }
     }
@@ -354,12 +361,15 @@ pub(crate) const TABLE_KNOWN_PROPS: &[&str] = &[
 ///
 /// `colspan`/`rowspan` default to 1; arbitrary child nodes parse via the same
 /// [`transform_children`] used for frame/group children.
-fn transform_cell(node: &KdlNode) -> Result<TableCell, ParseError> {
+fn transform_cell(
+    node: &KdlNode,
+    sink: &mut Vec<UnsupportedChild>,
+) -> Result<TableCell, ParseError> {
     let unknown_props = collect_unknown_props(node, CELL_KNOWN_PROPS);
     Ok(TableCell {
         colspan: optional_u32_prop(node, "colspan").unwrap_or(1),
         rowspan: optional_u32_prop(node, "rowspan").unwrap_or(1),
-        children: transform_children(node)?,
+        children: transform_children(node, sink)?,
         fill: optional_property_value(node, "fill"),
         border: optional_property_value(node, "border"),
         border_width: optional_property_value_aliased(node, "border-width", "border_width"),
@@ -372,12 +382,12 @@ fn transform_cell(node: &KdlNode) -> Result<TableCell, ParseError> {
 
 /// Transform a `row` child node into a [`TableRow`] by collecting its `cell`
 /// children in source order.
-fn transform_row(node: &KdlNode) -> Result<TableRow, ParseError> {
+fn transform_row(node: &KdlNode, sink: &mut Vec<UnsupportedChild>) -> Result<TableRow, ParseError> {
     let mut cells: Vec<TableCell> = Vec::new();
     if let Some(children) = node.children() {
         for child in children.nodes() {
             if child.name().value() == "cell" {
-                cells.push(transform_cell(child)?);
+                cells.push(transform_cell(child, sink)?);
             }
         }
     }
@@ -389,7 +399,10 @@ fn transform_row(node: &KdlNode) -> Result<TableRow, ParseError> {
     })
 }
 
-pub(super) fn transform_table(node: &KdlNode) -> Result<TableNode, ParseError> {
+pub(super) fn transform_table(
+    node: &KdlNode,
+    sink: &mut Vec<UnsupportedChild>,
+) -> Result<TableNode, ParseError> {
     let id = required_string_prop(node, "id")?.to_owned();
 
     // Collect `column` and `row` children in source order.
@@ -403,7 +416,7 @@ pub(super) fn transform_table(node: &KdlNode) -> Result<TableNode, ParseError> {
                     source_span: node_span(child),
                     unknown_props: collect_unknown_props(child, COLUMN_KNOWN_PROPS),
                 }),
-                "row" => rows.push(transform_row(child)?),
+                "row" => rows.push(transform_row(child, sink)?),
                 _ => {}
             }
         }

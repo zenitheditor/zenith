@@ -2,6 +2,7 @@
 
 use kdl::{KdlNode, KdlValue};
 
+use crate::ast::UnsupportedChild;
 use crate::ast::document::{ComponentDef, Project};
 use crate::error::ParseError;
 use crate::parse::transform::helpers::{node_span, required_string_prop};
@@ -17,19 +18,25 @@ use crate::parse::transform::page::transform_ports;
 /// definition whose children are parsed exactly like page/group children (via
 /// [`crate::parse::transform::node::transform_node`]). Non-`component` children
 /// inside the block are silently ignored (forward-compat).
-pub(super) fn transform_components(node: &KdlNode) -> Result<Vec<ComponentDef>, ParseError> {
+pub(super) fn transform_components(
+    node: &KdlNode,
+    sink: &mut Vec<UnsupportedChild>,
+) -> Result<Vec<ComponentDef>, ParseError> {
     let mut defs: Vec<ComponentDef> = Vec::new();
     if let Some(children) = node.children() {
         for child in children.nodes() {
             if child.name().value() == "component" {
-                defs.push(transform_component_def(child)?);
+                defs.push(transform_component_def(child, sink)?);
             }
         }
     }
     Ok(defs)
 }
 
-fn transform_component_def(node: &KdlNode) -> Result<ComponentDef, ParseError> {
+fn transform_component_def(
+    node: &KdlNode,
+    sink: &mut Vec<UnsupportedChild>,
+) -> Result<ComponentDef, ParseError> {
     let id = required_string_prop(node, "id")?.to_owned();
     let mut ports = Vec::new();
     let mut children = Vec::new();
@@ -37,7 +44,7 @@ fn transform_component_def(node: &KdlNode) -> Result<ComponentDef, ParseError> {
         for child in doc.nodes() {
             match child.name().value() {
                 "ports" => ports.extend(transform_ports(child)?),
-                _ => children.push(transform_node(child)?),
+                _ => children.push(transform_node(child, sink)?),
             }
         }
     }

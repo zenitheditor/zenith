@@ -15,6 +15,7 @@ use super::provenance::ProvenanceDef;
 use super::recipe::RecipeDef;
 use super::style::StyleBlock;
 use super::token::TokenBlock;
+use super::unsupported::UnsupportedChild;
 use super::value::Dimension;
 use super::value::PropertyValue;
 use super::variant::VariantDef;
@@ -424,6 +425,13 @@ pub struct Document {
     /// validates and round-trips byte-identically to before this field existed.
     pub brand_contract: BrandContract,
     pub body: DocumentBody,
+    /// Child KDL nodes that were authored under a node kind that does not
+    /// consume them and were therefore silently dropped at parse time. Empty
+    /// for a document that has no such authoring mistakes, so a well-formed
+    /// document is byte-identical to before this field existed. Validation
+    /// reads this table and emits one `node.unsupported_child` Warning per
+    /// entry (see [`crate::validate()`]).
+    pub unsupported_children: Vec<UnsupportedChild>,
 }
 
 impl Document {
@@ -567,6 +575,7 @@ mod parity_tests {
                 block_styles: Vec::new(),
                 pages: Vec::new(),
             },
+            unsupported_children: Vec::new(),
         }
     }
 

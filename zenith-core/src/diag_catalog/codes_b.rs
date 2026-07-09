@@ -258,6 +258,11 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
         "A node carries a property this engine does not recognize.",
     ),
     info(
+        "node.unsupported_child",
+        Severity::Warning,
+        "A child node was authored under a kind that does not accept it and was discarded.",
+    ),
+    info(
         "page.invalid_bleed",
         Severity::Warning,
         "Page `bleed` value is invalid.",

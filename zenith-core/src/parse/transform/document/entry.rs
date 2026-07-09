@@ -2,6 +2,7 @@
 
 use kdl::KdlDocument;
 
+use crate::ast::UnsupportedChild;
 use crate::ast::action::ActionDef;
 use crate::ast::asset::AssetBlock;
 use crate::ast::brand::BrandContract;
@@ -171,6 +172,10 @@ pub fn transform(doc: &KdlDocument) -> Result<Document, ParseError> {
     let mut brand_contract = BrandContract::default();
     let mut body: Option<DocumentBody> = None;
 
+    // Side table of child nodes dropped because their parent kind does not
+    // consume them; threaded through every node-producing transform below.
+    let mut unsupported_children: Vec<UnsupportedChild> = Vec::new();
+
     for child in children_doc.nodes() {
         match child.name().value() {
             "project" => {
@@ -195,10 +200,10 @@ pub fn transform(doc: &KdlDocument) -> Result<Document, ParseError> {
                 styles = transform_styles(child)?;
             }
             "components" => {
-                components = transform_components(child)?;
+                components = transform_components(child, &mut unsupported_children)?;
             }
             "masters" => {
-                masters = transform_masters(child)?;
+                masters = transform_masters(child, &mut unsupported_children)?;
             }
             "sections" => {
                 sections = transform_sections(child)?;
@@ -219,7 +224,7 @@ pub fn transform(doc: &KdlDocument) -> Result<Document, ParseError> {
                 brand_contract = transform_brand_contract(child)?;
             }
             "document" => {
-                body = Some(transform_document_body(child)?);
+                body = Some(transform_document_body(child, &mut unsupported_children)?);
             }
             // Any other unknown top-level children are accepted without error
             // (forward-compat); they simply are not represented in the v0 AST.
@@ -263,5 +268,6 @@ pub fn transform(doc: &KdlDocument) -> Result<Document, ParseError> {
         diagnostic_policy,
         brand_contract,
         body,
+        unsupported_children,
     })
 }

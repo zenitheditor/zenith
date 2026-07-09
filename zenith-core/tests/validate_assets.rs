@@ -58,6 +58,7 @@ fn doc_with_assets(assets: Vec<AssetDecl>) -> Document {
             // page content, so use a single minimal page.
             pages: vec![minimal_page("page.one", vec![])],
         },
+        unsupported_children: Vec::new(),
     }
 }
 

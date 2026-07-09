@@ -3,6 +3,7 @@
 
 use kdl::{KdlNode, KdlValue};
 
+use crate::ast::UnsupportedChild;
 use crate::ast::action::ActionDef;
 use crate::ast::document::{MasterDef, SectionDef};
 use crate::ast::library::LibraryDef;
@@ -26,21 +27,27 @@ use super::body::transform_children;
 /// [`crate::parse::transform::node::transform_node`]). Non-`master` children
 /// inside the block are silently ignored (forward-compat). Mirrors
 /// [`transform_components`](super::components::transform_components).
-pub(super) fn transform_masters(node: &KdlNode) -> Result<Vec<MasterDef>, ParseError> {
+pub(super) fn transform_masters(
+    node: &KdlNode,
+    sink: &mut Vec<UnsupportedChild>,
+) -> Result<Vec<MasterDef>, ParseError> {
     let mut defs: Vec<MasterDef> = Vec::new();
     if let Some(children) = node.children() {
         for child in children.nodes() {
             if child.name().value() == "master" {
-                defs.push(transform_master_def(child)?);
+                defs.push(transform_master_def(child, sink)?);
             }
         }
     }
     Ok(defs)
 }
 
-fn transform_master_def(node: &KdlNode) -> Result<MasterDef, ParseError> {
+fn transform_master_def(
+    node: &KdlNode,
+    sink: &mut Vec<UnsupportedChild>,
+) -> Result<MasterDef, ParseError> {
     let id = required_string_prop(node, "id")?.to_owned();
-    let children = transform_children(node)?;
+    let children = transform_children(node, sink)?;
     Ok(MasterDef {
         id,
         children,

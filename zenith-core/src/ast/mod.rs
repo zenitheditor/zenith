@@ -15,6 +15,7 @@ pub mod recipe;
 pub mod span;
 pub mod style;
 pub mod token;
+pub mod unsupported;
 pub mod value;
 pub mod variant;
 
@@ -51,5 +52,6 @@ pub use token::{
     MaskLiteral, MaskShape, ShadowLayerRef, ShadowLiteral, Token, TokenBlock, TokenLiteral,
     TokenType, TokenValue,
 };
+pub use unsupported::UnsupportedChild;
 pub use value::{Dimension, PropertyValue, Unit, dim_to_px};
 pub use variant::{VariantDef, VariantOverride};

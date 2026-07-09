@@ -53,6 +53,7 @@ fn doc_with_styles(tokens: Vec<Token>, styles: Vec<Style>, pages: Vec<Page>) -> 
             block_styles: Vec::new(),
             pages,
         },
+        unsupported_children: Vec::new(),
     }
 }
 

@@ -41,6 +41,7 @@ pub(crate) const PAGE_KNOWN_PROPS: &[&str] = &[
     "master",
 ];
 
+use crate::ast::UnsupportedChild;
 use crate::ast::construction::{ConstructionBlock, ConstructionGuideDef};
 use crate::ast::document::{Fold, Page, PortDef, SafeZone, SafeZoneType};
 use crate::ast::node::Node;
@@ -53,7 +54,10 @@ use super::helpers::{
 };
 use super::node::transform_node;
 
-pub(super) fn transform_page(node: &KdlNode) -> Result<Page, ParseError> {
+pub(super) fn transform_page(
+    node: &KdlNode,
+    sink: &mut Vec<UnsupportedChild>,
+) -> Result<Page, ParseError> {
     let id = required_string_prop(node, "id")?.to_owned();
     let name = optional_string_prop(node, "name").map(str::to_owned);
     let source = optional_string_prop(node, "source").map(str::to_owned);
@@ -148,7 +152,7 @@ pub(super) fn transform_page(node: &KdlNode) -> Result<Page, ParseError> {
                 "construction" => construction = transform_construction(child)?,
                 "ports" => ports.extend(transform_ports(child)?),
                 "block" => block_styles.push(transform_block_style(child)?),
-                _ => children.push(transform_node(child)?),
+                _ => children.push(transform_node(child, sink)?),
             }
         }
     }

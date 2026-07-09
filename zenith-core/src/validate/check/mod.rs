@@ -51,6 +51,7 @@ mod policy;
 mod recipes;
 mod report;
 mod safezone;
+mod unsupported;
 mod variants;
 mod visual;
 

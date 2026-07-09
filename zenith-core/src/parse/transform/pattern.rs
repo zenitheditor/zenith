@@ -5,6 +5,7 @@
 
 use kdl::KdlNode;
 
+use crate::ast::UnsupportedChild;
 use crate::ast::node::PatternNode;
 use crate::error::{ParseError, ParseErrorCode};
 
@@ -87,7 +88,10 @@ pub(crate) const PATTERN_KNOWN_PROPS: &[&str] = &[
     "jitter",
 ];
 
-pub(super) fn transform_pattern(node: &KdlNode) -> Result<PatternNode, ParseError> {
+pub(super) fn transform_pattern(
+    node: &KdlNode,
+    sink: &mut Vec<UnsupportedChild>,
+) -> Result<PatternNode, ParseError> {
     let id = required_string_prop(node, "id")?.to_owned();
     let kind = required_string_prop(node, "kind")?.to_owned();
 
@@ -128,7 +132,7 @@ pub(super) fn transform_pattern(node: &KdlNode) -> Result<PatternNode, ParseErro
                 format!("pattern `{id}` is missing its required child motif node"),
             )
         })?;
-    let motif = Box::new(transform_node(motif)?);
+    let motif = Box::new(transform_node(motif, sink)?);
 
     let unknown_props = collect_unknown_props(node, PATTERN_KNOWN_PROPS);
 
