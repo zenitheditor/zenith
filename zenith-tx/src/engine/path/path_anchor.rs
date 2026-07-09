@@ -3,19 +3,19 @@
 use zenith_core::{Diagnostic, Document, Node};
 use zenith_geometry::{GeometryError, Point2};
 
-use super::path::{anchor_coordinate, invalid_anchor, optional_handle, unknown_node};
+use super::super::{find_node_any_mut, px, record_affected};
 use super::path_contour::path_contour_mut;
-use super::{find_node_any_mut, node_kind_str, px, record_affected};
+use super::{anchor_coordinate, invalid_anchor, optional_handle, unknown_node};
 
-pub(super) struct MovePathAnchorArgs<'a> {
-    pub(super) node_id: &'a str,
-    pub(super) subpath_index: Option<usize>,
-    pub(super) anchor_index: usize,
-    pub(super) dx: f64,
-    pub(super) dy: f64,
+pub(crate) struct MovePathAnchorArgs<'a> {
+    pub(crate) node_id: &'a str,
+    pub(crate) subpath_index: Option<usize>,
+    pub(crate) anchor_index: usize,
+    pub(crate) dx: f64,
+    pub(crate) dy: f64,
 }
 
-pub(super) fn apply_move_path_anchor(
+pub(crate) fn apply_move_path_anchor(
     args: MovePathAnchorArgs<'_>,
     doc: &mut Document,
     diagnostics: &mut Vec<Diagnostic>,
@@ -32,7 +32,7 @@ pub(super) fn apply_move_path_anchor(
     match find_node_any_mut(doc, node_id) {
         None => diagnostics.push(unknown_node(node_id)),
         Some(node) => {
-            let kind = node_kind_str(node);
+            let kind = node.kind_str();
             match node {
                 Node::Path(path) => {
                     let Some(contour) = path_contour_mut(

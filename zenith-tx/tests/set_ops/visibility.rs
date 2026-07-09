@@ -71,11 +71,8 @@ fn set_locked_sets_lock() {
 
 // ── Unknown node targeting ────────────────────────────────────────────────
 
-// `UnknownNode` has no `id` field, so `node_id_of` returns `None` for it.
-// `subtree_contains` will never match an unknown node by id, and
-// `find_node_any_mut` returns `None` → tx.unknown_node.
-// We verify this by targeting a non-existent id that would match an unknown
-// node if it had an id; since it doesn't, we just get tx.unknown_node.
+// Unknown nodes without an authored `id` are not addressable via `Node::id()`
+// (`None`). Targeting a non-existent id therefore yields `tx.unknown_node`.
 #[test]
 fn set_visible_on_nonexistent_id_is_unknown_node() {
     // Using TEXT_DOC — there is no node with id "does_not_exist".

@@ -7,7 +7,7 @@ use zenith_core::{Diagnostic, Document, GroupNode, Node};
 
 use crate::op::Position;
 
-use super::super::{find_node_shared, node_id_of, record_affected, subtree_contains};
+use super::super::{find_node_shared, record_affected, subtree_contains};
 use super::finders::{find_container_children_mut, remove_node_by_id, resolve_position};
 
 /// Find which page directly contains (at the top level of `page.children`) ALL
@@ -32,11 +32,10 @@ fn find_common_parent_children_mut<'doc>(
     let hit: Option<Hit> = 'outer: {
         for (pi, page) in doc.body.pages.iter().enumerate() {
             // Check if all are direct children of this page.
-            if node_ids.iter().all(|id| {
-                page.children
-                    .iter()
-                    .any(|n| node_id_of(n) == Some(id.as_str()))
-            }) {
+            if node_ids
+                .iter()
+                .all(|id| page.children.iter().any(|n| n.id() == Some(id.as_str())))
+            {
                 break 'outer Some(Hit {
                     page_index: pi,
                     container_id: None,
@@ -95,11 +94,10 @@ fn find_container_with_all_children(children: &[Node], node_ids: &[String]) -> O
             | Node::Mesh(_)
             | Node::Unknown(_) => continue,
         };
-        if node_ids.iter().all(|id| {
-            grandchildren
-                .iter()
-                .any(|n| node_id_of(n) == Some(id.as_str()))
-        }) {
+        if node_ids
+            .iter()
+            .all(|id| grandchildren.iter().any(|n| n.id() == Some(id.as_str())))
+        {
             return Some(container_id.to_owned());
         }
         if let Some(found) = find_container_with_all_children(grandchildren, node_ids) {
@@ -146,11 +144,7 @@ pub(in crate::engine) fn apply_group(
     // in ascending order so we can determine insert position and remove cleanly.
     let mut indices: Vec<usize> = node_ids
         .iter()
-        .filter_map(|id| {
-            children
-                .iter()
-                .position(|n| node_id_of(n) == Some(id.as_str()))
-        })
+        .filter_map(|id| children.iter().position(|n| n.id() == Some(id.as_str())))
         .collect();
 
     // All ids must resolve (filter_map would silently drop missing ones).
@@ -362,10 +356,7 @@ pub(in crate::engine) fn apply_ungroup(
 /// spliced, `false` otherwise (to continue recursion).
 fn splice_ungroup(children: &mut Vec<Node>, group_id: &str) -> bool {
     // Check direct children first.
-    if let Some(i) = children
-        .iter()
-        .position(|n| node_id_of(n) == Some(group_id))
-    {
+    if let Some(i) = children.iter().position(|n| n.id() == Some(group_id)) {
         // We confirmed it's a group in the shared-scan phase; use .get() for
         // checked access — the match arm handles the unreachable-but-safe case.
         let group_children = match children.get(i) {

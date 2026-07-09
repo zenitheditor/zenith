@@ -1,12 +1,10 @@
 use zenith_core::{Diagnostic, Document, Node, PathNode};
 use zenith_geometry::{AffineTransform, GeometryError, Point2};
 
-use super::{find_node_shared, node_id_of, node_kind_str, record_affected, subtree_contains};
-use crate::engine::path::{
-    geometry_anchor_to_core, reject_compound_path, resolved_path_geometry, unknown_node,
-};
+use super::super::{find_node_shared, record_affected, subtree_contains};
+use super::{geometry_anchor_to_core, reject_compound_path, resolved_path_geometry, unknown_node};
 
-pub(super) struct MakePathSymmetricArgs<'a> {
+pub(crate) struct MakePathSymmetricArgs<'a> {
     pub node_id: &'a str,
     pub id_prefix: &'a str,
     pub count: usize,
@@ -16,7 +14,7 @@ pub(super) struct MakePathSymmetricArgs<'a> {
     pub mirror: bool,
 }
 
-pub(super) fn apply_make_path_symmetric(
+pub(crate) fn apply_make_path_symmetric(
     args: MakePathSymmetricArgs<'_>,
     doc: &mut Document,
     diagnostics: &mut Vec<Diagnostic>,
@@ -38,7 +36,7 @@ pub(super) fn apply_make_path_symmetric(
     for page in &mut doc.body.pages {
         if subtree_contains_path(&page.children, args.node_id) {
             for copy in &copies {
-                if let Some(id) = node_id_of(copy) {
+                if let Some(id) = copy.id() {
                     record_affected(id, affected);
                 }
             }
@@ -89,7 +87,7 @@ fn source_path(
                         "tx.unsupported_property",
                         format!(
                             "make_path_symmetric is not supported on a {} node",
-                            node_kind_str(node)
+                            node.kind_str()
                         ),
                         None,
                         Some(node_id.to_owned()),
@@ -175,10 +173,7 @@ fn symmetry_copies(
 }
 
 fn insert_after_source(children: &mut Vec<Node>, node_id: &str, copies: &[Node]) -> bool {
-    if let Some(index) = children
-        .iter()
-        .position(|node| node_id_of(node) == Some(node_id))
-    {
+    if let Some(index) = children.iter().position(|node| node.id() == Some(node_id)) {
         children.splice(index + 1..index + 1, copies.iter().cloned());
         return true;
     }

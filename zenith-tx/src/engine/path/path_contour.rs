@@ -2,12 +2,12 @@
 
 use zenith_core::{Diagnostic, PathAnchor as CorePathAnchor, PathNode};
 
-pub(super) struct PathContourMut<'a> {
-    pub(super) anchors: &'a mut Vec<CorePathAnchor>,
-    pub(super) closed: bool,
+pub(crate) struct PathContourMut<'a> {
+    pub(crate) anchors: &'a mut Vec<CorePathAnchor>,
+    pub(crate) closed: bool,
 }
 
-pub(super) fn path_contour_mut<'a>(
+pub(crate) fn path_contour_mut<'a>(
     node_id: &str,
     op_name: &str,
     path: &'a mut PathNode,

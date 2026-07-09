@@ -8,7 +8,7 @@ use zenith_core::{
 
 use crate::op::OpSpan;
 
-use super::{find_node_any_mut, node_kind_str, record_affected};
+use super::{find_node_any_mut, record_affected};
 
 // ── Valid align values ────────────────────────────────────────────────────────
 
@@ -216,7 +216,7 @@ pub(super) fn apply_set_text_align(
             record_affected(node_id, affected);
         }
         Some(other) => {
-            let kind = node_kind_str(other);
+            let kind = other.kind_str();
             diagnostics.push(Diagnostic::error(
                 "tx.wrong_node_type",
                 format!(
@@ -264,9 +264,9 @@ pub(super) fn apply_set_text_overflow(
             ));
         }
         Some(node) => {
-            // node_kind_str returns &'static str, so there is no live borrow of
+            // Node::kind_str() returns &'static str, so there is no live borrow of
             // `node` after this binding — the mutable borrow below is fine.
-            let kind = node_kind_str(node);
+            let kind = node.kind_str();
             match node_overflow_mut(node) {
                 Some(slot) => {
                     *slot = Some(overflow.to_owned());
@@ -314,9 +314,9 @@ fn apply_set_property_token(
             ));
         }
         Some(node) => {
-            // node_kind_str returns &'static str, so there is no live borrow
+            // Node::kind_str() returns &'static str, so there is no live borrow
             // of `node` after this let binding — the mutable borrow below is fine.
-            let kind = node_kind_str(node);
+            let kind = node.kind_str();
             match accessor(node) {
                 Some(slot) => {
                     *slot = Some(PropertyValue::TokenRef(token.to_owned()));
@@ -408,7 +408,7 @@ pub(super) fn apply_set_opacity(
             ));
         }
         Some(node) => {
-            let kind = node_kind_str(node);
+            let kind = node.kind_str();
             match node_opacity_mut(node) {
                 Some(slot) => {
                     *slot = Some(opacity.clamp(0.0, 1.0));
@@ -595,7 +595,7 @@ pub(super) fn apply_set_text_direction(
             record_affected(node_id, affected);
         }
         Some(other) => {
-            let kind = node_kind_str(other);
+            let kind = other.kind_str();
             diagnostics.push(Diagnostic::error(
                 "tx.wrong_node_type",
                 format!(
@@ -779,7 +779,7 @@ pub(super) fn apply_find_replace_text(
                 }
             }
             Some(other) => {
-                let kind = node_kind_str(other);
+                let kind = other.kind_str();
                 diagnostics.push(Diagnostic::error(
                     "tx.wrong_node_type",
                     format!(
@@ -907,7 +907,7 @@ pub(super) fn apply_replace_text(
             record_affected(node_id, affected);
         }
         Some(other) => {
-            let kind = node_kind_str(other);
+            let kind = other.kind_str();
             diagnostics.push(Diagnostic::error(
                 "tx.unsupported_property",
                 format!("replace_text is not supported on a {} node", kind),

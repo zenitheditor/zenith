@@ -16,8 +16,8 @@ use super::geometry::{
     resolved_path_geometry, simplified_points_to_core_anchors, split_geometry_anchors,
     transform_core_anchors,
 };
-use crate::engine::path_contour::path_contour_mut;
-use crate::engine::{find_node_any_mut, node_kind_str, px, record_affected};
+use super::path_contour::path_contour_mut;
+use crate::engine::{find_node_any_mut, px, record_affected};
 use crate::op::{OpPathAnchor, OpPathTransform};
 
 macro_rules! non_path_nodes {
@@ -58,7 +58,7 @@ pub(crate) fn apply_set_path_anchors(
     match find_node_any_mut(doc, node_id) {
         None => diagnostics.push(unknown_node(node_id)),
         Some(node) => {
-            let kind = node_kind_str(node);
+            let kind = node.kind_str();
             match node {
                 Node::Path(path) => {
                     let Some(contour) = path_contour_mut(
@@ -109,7 +109,7 @@ pub(crate) fn apply_set_path_anchor_kind(
     match find_node_any_mut(doc, node_id) {
         None => diagnostics.push(unknown_node(node_id)),
         Some(node) => {
-            let node_kind = node_kind_str(node);
+            let node_kind = node.kind_str();
             match node {
                 Node::Path(path) => {
                     let Some(contour) = path_contour_mut(
@@ -163,7 +163,7 @@ pub(crate) fn apply_remove_path_anchor(
     match find_node_any_mut(doc, node_id) {
         None => diagnostics.push(unknown_node(node_id)),
         Some(node) => {
-            let node_kind = node_kind_str(node);
+            let node_kind = node.kind_str();
             match node {
                 Node::Path(path) => {
                     let Some(contour) = path_contour_mut(
@@ -217,7 +217,7 @@ pub(crate) fn apply_simplify_path_anchors(
     match find_node_any_mut(doc, node_id) {
         None => diagnostics.push(unknown_node(node_id)),
         Some(node) => {
-            let kind = node_kind_str(node);
+            let kind = node.kind_str();
             match node {
                 Node::Path(path) => {
                     let Some(contour) = path_contour_mut(
@@ -299,7 +299,7 @@ pub(crate) fn apply_insert_path_anchor(
     match find_node_any_mut(doc, node_id) {
         None => diagnostics.push(unknown_node(node_id)),
         Some(node) => {
-            let kind = node_kind_str(node);
+            let kind = node.kind_str();
             match node {
                 Node::Path(path) => {
                     let Some(contour) = path_contour_mut(
@@ -359,7 +359,7 @@ pub(crate) fn apply_insert_path_anchor_at_point(
     match find_node_any_mut(doc, node_id) {
         None => diagnostics.push(unknown_node(node_id)),
         Some(node) => {
-            let kind = node_kind_str(node);
+            let kind = node.kind_str();
             match node {
                 Node::Path(path) => {
                     let point = match Point2::new(x, y) {
@@ -531,7 +531,7 @@ pub(crate) fn apply_transform_path_anchors(
     match find_node_any_mut(doc, node_id) {
         None => diagnostics.push(unknown_node(node_id)),
         Some(node) => {
-            let kind = node_kind_str(node);
+            let kind = node.kind_str();
             match node {
                 Node::Path(path) => {
                     let affine = match path_transform(transform) {

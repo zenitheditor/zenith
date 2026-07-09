@@ -8,7 +8,7 @@ use zenith_core::{
 
 use crate::op::{OpPathAnchor, OpPathSubpath, Position};
 
-use super::super::{node_id_of, px, record_affected};
+use super::super::{px, record_affected};
 use super::finders::{find_container_children_mut, remove_node_by_id, resolve_position};
 
 /// Construct a single [`Node`] from a `.zen` node fragment by wrapping it in a
@@ -147,10 +147,10 @@ fn insert_node(
         None => return,
     };
 
-    let new_id = node_id_of(&node).map(|s| s.to_owned());
+    let new_id = &node.id().map(|s| s.to_owned());
     children.insert(idx, node);
     if let Some(id) = new_id {
-        record_affected(&id, affected);
+        record_affected(id, affected);
     }
 }
 

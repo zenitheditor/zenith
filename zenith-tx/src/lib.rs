@@ -13,7 +13,10 @@ pub mod result;
 pub mod schema;
 
 // Curated flat re-exports.
-pub use engine::{TextOutlineRequest, materialize_text_outlines, run_transaction};
+pub use engine::{
+    SCENE_TEXT_OUTLINE_FAILED, TextOutlineRequest, apply_text_outline_paths,
+    check_text_outline_source, reject_text_outline, run_transaction,
+};
 pub use merge::{merge_candidate_page, reconcile_candidate_tokens};
 pub use op::{
     AddAssetMetadata, FilterOpInput, GradientStopInput, Op, OpPathBooleanOperation, OpPathHandle,

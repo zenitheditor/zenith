@@ -3,7 +3,7 @@
 
 use zenith_core::{Diagnostic, Document, Node};
 
-use super::super::{node_id_of, record_affected};
+use super::super::record_affected;
 
 /// Which z-order reorder to perform.
 #[derive(Copy, Clone)]
@@ -80,7 +80,7 @@ pub(in crate::engine) fn apply_reorder(
 /// it, according to `kind`. Recurses into `Group`, `Frame`, `Table`, and
 /// `Unknown` containers.
 fn reorder_in(children: &mut [Node], id: &str, kind: ReorderKind) -> MoveOutcome {
-    if let Some(i) = children.iter().position(|n| node_id_of(n) == Some(id)) {
+    if let Some(i) = children.iter().position(|n| n.id() == Some(id)) {
         let len = children.len();
         match kind {
             ReorderKind::Forward => {

@@ -5,7 +5,7 @@ use zenith_core::{Diagnostic, Document, Node, Point};
 
 use crate::op::OpPoint;
 
-use super::{find_node_any_mut, node_kind_str, px, record_affected};
+use super::{find_node_any_mut, px, record_affected};
 
 // ── Field accessor helpers ────────────────────────────────────────────────────
 
@@ -126,8 +126,8 @@ fn apply_set_bool_field(
             ));
         }
         Some(node) => {
-            // node_kind_str returns &'static str — no live borrow of `node` after this.
-            let kind = node_kind_str(node);
+            // Node::kind_str() returns &'static str — no live borrow of `node` after this.
+            let kind = node.kind_str();
             match accessor(node) {
                 Some(slot) => {
                     *slot = Some(value);
@@ -201,7 +201,7 @@ pub(super) fn apply_set_points(
             ));
         }
         Some(node) => {
-            let kind = node_kind_str(node);
+            let kind = node.kind_str();
             match node_points_mut(node) {
                 None => {
                     diagnostics.push(Diagnostic::error(

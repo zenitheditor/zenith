@@ -4,9 +4,7 @@
 use zenith_core::{Diagnostic, Dimension, Document, Node, PropertyValue, Unit, dim_to_px};
 
 use super::structure::parse_dimension_str;
-use super::{
-    find_node_any_mut, find_node_any_shared, node_kind_str, px, record_affected, subtree_contains,
-};
+use super::{find_node_any_mut, find_node_any_shared, px, record_affected, subtree_contains};
 
 /// Valid alignment directions for `Op::AlignNodes`.
 const VALID_ALIGN_DIRS: &[&str] = &["left", "hcenter", "right", "top", "vcenter", "bottom"];
@@ -202,7 +200,7 @@ pub(super) fn apply_set_geometry(
             ));
         }
         Some(node) => {
-            let kind = node_kind_str(node);
+            let kind = node.kind_str();
 
             // Apply x/y/w/h only when the node supports bbox geometry.
             // When x/y/w/h are all None but rotate is Some, we still proceed

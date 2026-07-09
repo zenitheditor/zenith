@@ -2,7 +2,30 @@ mod common;
 
 use common::parse;
 use zenith_core::default_provider;
-use zenith_tx::{TextOutlineRequest, TxStatus, materialize_text_outlines};
+use zenith_scene::collect_text_outline_paths;
+use zenith_tx::{
+    TextOutlineRequest, TxStatus, apply_text_outline_paths, check_text_outline_source,
+    reject_text_outline,
+};
+
+fn materialize(doc: &zenith_core::Document, node: &str, id_prefix: &str) -> zenith_tx::TxResult {
+    // Validate before compile — wrong-kind / missing id must not pay compile cost
+    // and must not stack conversion diagnostics.
+    if let Err(diags) = check_text_outline_source(doc, node) {
+        return reject_text_outline(doc, diags).expect("reject should return a tx result");
+    }
+    let fonts = default_provider();
+    let (paths, diags) = collect_text_outline_paths(doc, &fonts, node, id_prefix);
+    apply_text_outline_paths(
+        doc,
+        &TextOutlineRequest {
+            node: node.to_owned(),
+        },
+        paths,
+        diags,
+    )
+    .expect("materialization should return a tx result")
+}
 
 fn assert_before(haystack: &str, first: &str, second: &str) {
     let first_index = haystack.find(first).expect("first substring should exist");
@@ -59,16 +82,7 @@ const SPACE_TEXT_DOC: &str = r##"zenith version=1 {
 #[test]
 fn materializes_text_glyph_runs_as_path_siblings() {
     let doc = parse(TEXT_DOC);
-    let fonts = default_provider();
-    let result = materialize_text_outlines(
-        &doc,
-        &fonts,
-        &TextOutlineRequest {
-            node: "label".to_owned(),
-            id_prefix: "label.outline".to_owned(),
-        },
-    )
-    .expect("materialization should return a tx result");
+    let result = materialize(&doc, "label", "label.outline");
 
     assert_eq!(
         result.status,
@@ -95,16 +109,7 @@ fn materializes_text_glyph_runs_as_path_siblings() {
 #[test]
 fn materialization_rejects_non_text_source_nodes() {
     let doc = parse(RECT_DOC);
-    let fonts = default_provider();
-    let result = materialize_text_outlines(
-        &doc,
-        &fonts,
-        &TextOutlineRequest {
-            node: "box".to_owned(),
-            id_prefix: "box.outline.".to_owned(),
-        },
-    )
-    .expect("materialization should return a tx result");
+    let result = materialize(&doc, "box", "box.outline.");
 
     assert_eq!(result.status, TxStatus::Rejected);
     assert_eq!(result.source_after, result.source_before);
@@ -115,21 +120,19 @@ fn materialization_rejects_non_text_source_nodes() {
             .iter()
             .any(|diagnostic| diagnostic.code == "tx.unsupported_property")
     );
+    // Must not stack empty-outline or conversion failures after a kind reject.
+    assert!(
+        !result
+            .diagnostics
+            .iter()
+            .any(|d| d.code == "tx.no_text_outlines" || d.code == "scene.text_outline_failed")
+    );
 }
 
 #[test]
 fn materialization_rejects_when_text_has_no_outlined_glyphs() {
     let doc = parse(SPACE_TEXT_DOC);
-    let fonts = default_provider();
-    let result = materialize_text_outlines(
-        &doc,
-        &fonts,
-        &TextOutlineRequest {
-            node: "blank".to_owned(),
-            id_prefix: "blank.outline.".to_owned(),
-        },
-    )
-    .expect("materialization should return a tx result");
+    let result = materialize(&doc, "blank", "blank.outline.");
 
     assert_eq!(result.status, TxStatus::Rejected);
     assert_eq!(result.source_after, result.source_before);

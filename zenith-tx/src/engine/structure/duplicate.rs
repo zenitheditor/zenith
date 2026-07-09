@@ -4,9 +4,7 @@
 use zenith_core::ast::document::{Fold, SafeZone};
 use zenith_core::{Diagnostic, Document, Node};
 
-use super::super::{
-    find_node_shared, node_id_of, node_kind_str, record_affected, subtree_contains,
-};
+use super::super::{find_node_shared, record_affected, subtree_contains};
 
 /// Return `true` if `node` is a container variant (`Frame` or `Group`).
 ///
@@ -29,7 +27,7 @@ fn node_is_container(node: &Node) -> bool {
 
 /// Set the `id` field on a leaf [`Node`] variant to `new_id`.
 ///
-/// Mirrors [`node_id_of`] (the shared-borrow id reader). Only leaf variants
+/// Mirrors [`Node::id`](zenith_core::Node::id) (the shared-borrow id reader). Only leaf variants
 /// are covered; `Frame` and `Group` are deliberately excluded because
 /// [`apply_duplicate_node`] rejects containers before calling this helper.
 /// Returns `false` for containers and for an `Unknown` node (whose id lives in
@@ -129,7 +127,7 @@ fn node_set_id(node: &mut Node, new_id: String) -> bool {
 /// this function (see [`apply_duplicate_node`]).
 fn duplicate_in_children(children: &mut Vec<Node>, id: &str, new_id: &str) -> bool {
     // Phase 1 (shared scan): find the index of the source node in this slice.
-    let direct = children.iter().position(|n| node_id_of(n) == Some(id));
+    let direct = children.iter().position(|n| n.id() == Some(id));
 
     if let Some(i) = direct {
         // Source is a direct child — clone it here, assign the new id, insert.
@@ -255,7 +253,7 @@ pub(in crate::engine) fn apply_duplicate_node(
         if let Some(src) = src
             && node_is_container(src)
         {
-            let kind = node_kind_str(src);
+            let kind = src.kind_str();
             diagnostics.push(Diagnostic::error(
                 "tx.unsupported_property",
                 format!(
@@ -298,13 +296,13 @@ pub(in crate::engine) fn apply_duplicate_node(
 ///
 /// Mirrors the ordered recursion of [`duplicate_in_children`]: a plain in-order
 /// walk over the slice with no HashMap, so the result is deterministic. Ids are
-/// read/written through the shared [`node_id_of`] reader and the
+/// read/written through the shared [`Node::id`](zenith_core::Node::id) reader and the
 /// [`node_set_id_any`] setter; leaf and container nodes alike get suffixed, and
 /// containers also recurse into their own children.
 pub(crate) fn suffix_ids_in_children(children: &mut [Node], id_suffix: &str) {
     for child in children.iter_mut() {
         // Suffix this node's own id (if it has one), then recurse.
-        if let Some(old_id) = node_id_of(child) {
+        if let Some(old_id) = child.id() {
             let new_id = format!("{old_id}{id_suffix}");
             node_set_id_any(child, new_id);
         }
@@ -365,9 +363,9 @@ pub(crate) fn suffix_zone_and_fold_ids(
 ///
 /// [`node_set_id`] deliberately excludes `Frame`/`Group` because the leaf-only
 /// `duplicate_node` path never re-ids a container. `duplicate_page` does need to
-/// re-id containers, so this sibling covers every variant that [`node_id_of`]
+/// re-id containers, so this sibling covers every variant that [`Node::id`](zenith_core::Node::id)
 /// can read an id from. `Unknown` nodes that carry an `id` attribute are re-id'd
-/// here; those without one are a no-op (the caller skips them: `node_id_of`
+/// here; those without one are a no-op (the caller skips them: `Node::id()`
 /// returns `None`, so no suffix is computed and this function is not called).
 pub(in crate::engine) fn node_set_id_any(node: &mut Node, new_id: String) {
     match node {
@@ -402,7 +400,7 @@ pub(in crate::engine) fn node_set_id_any(node: &mut Node, new_id: String) {
         }
         // An unknown node is id-bearing when authored with an `id` attribute;
         // re-id it on page-duplicate so cloned subtrees stay unique. When it has
-        // no id this is a no-op (the caller also skips it: `node_id_of` returns
+        // no id this is a no-op (the caller also skips it: `Node::id()` returns
         // `None`, so no suffix is computed).
         Node::Unknown(u) => {
             if u.id.is_some() {

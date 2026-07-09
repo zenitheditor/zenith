@@ -10,12 +10,6 @@ mod flags;
 mod geometry;
 mod lock;
 mod path;
-mod path_anchor;
-mod path_boolean;
-mod path_contour;
-mod path_handle;
-mod path_snap;
-mod path_symmetry;
 mod pattern;
 mod recipe;
 mod run;
@@ -26,12 +20,15 @@ mod token;
 mod tree;
 
 pub use run::run_transaction;
-pub use text_outline::{TextOutlineRequest, materialize_text_outlines};
+pub use text_outline::{
+    SCENE_TEXT_OUTLINE_FAILED, TextOutlineRequest, apply_text_outline_paths,
+    check_text_outline_source, reject_text_outline,
+};
 
 // Internal re-exports so sibling submodules can reach shared helpers via
 // `super::`, exactly as before the split.
 use run::{finish_candidate, format_source};
 use tree::{
-    find_node_any_mut, find_node_any_shared, find_node_shared, node_id_of, node_kind_str, px,
-    record_affected, subtree_contains,
+    find_node_any_mut, find_node_any_shared, find_node_shared, px, record_affected,
+    subtree_contains,
 };

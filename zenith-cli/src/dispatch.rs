@@ -13,6 +13,17 @@ mod library;
 mod render;
 mod workspace;
 
+/// Print `msg` to stderr and return the given exit code.
+fn fail(msg: impl std::fmt::Display, code: u8) -> ExitCode {
+    eprintln!("{msg}");
+    ExitCode::from(code)
+}
+
+/// Print a warning line to stderr (non-fatal).
+fn warn(msg: impl std::fmt::Display) {
+    eprintln!("warning: {msg}");
+}
+
 /// Main entry point: parse CLI arguments, dispatch to the appropriate command,
 /// handle all file I/O, and return the appropriate exit code.
 ///
@@ -30,10 +41,7 @@ pub fn run() -> ExitCode {
                 args.pages,
             ) {
                 Ok(p) => p,
-                Err(msg) => {
-                    eprintln!("{msg}");
-                    return ExitCode::from(2);
-                }
+                Err(msg) => return fail(msg, 2),
             };
             match commands::new::run(
                 &args.path,
@@ -43,7 +51,7 @@ pub fn run() -> ExitCode {
             ) {
                 Ok(result) => {
                     if let Some(w) = &result.warning {
-                        eprintln!("warning: {w}");
+                        warn(w);
                     }
                     println!(
                         "created '{}' (doc-id: {})",
@@ -67,10 +75,7 @@ pub fn run() -> ExitCode {
         Command::Validate(args) => {
             let src = match read_file(&args.path) {
                 Ok(s) => s,
-                Err(msg) => {
-                    eprintln!("{}", msg);
-                    return ExitCode::from(2);
-                }
+                Err(msg) => return fail(msg, 2),
             };
             let flags = crate::config::CliPolicyFlags {
                 allow: args.allow,
@@ -85,10 +90,7 @@ pub fn run() -> ExitCode {
         Command::Fmt(args) => {
             let src = match read_file(&args.path) {
                 Ok(s) => s,
-                Err(msg) => {
-                    eprintln!("{}", msg);
-                    return ExitCode::from(2);
-                }
+                Err(msg) => return fail(msg, 2),
             };
             match commands::fmt::run(&src) {
                 Ok(result) => {
@@ -110,10 +112,7 @@ pub fn run() -> ExitCode {
         Command::Tokens(args) => {
             let src = match read_file(&args.path) {
                 Ok(s) => s,
-                Err(msg) => {
-                    eprintln!("{}", msg);
-                    return ExitCode::from(2);
-                }
+                Err(msg) => return fail(msg, 2),
             };
             match commands::tokens::list(&src, args.json) {
                 Ok(out) => {
@@ -132,10 +131,7 @@ pub fn run() -> ExitCode {
         Command::Inspect(args) => {
             let src = match read_file(&args.path) {
                 Ok(s) => s,
-                Err(msg) => {
-                    eprintln!("{}", msg);
-                    return ExitCode::from(2);
-                }
+                Err(msg) => return fail(msg, 2),
             };
             match commands::inspect::run(&src, args.node.as_deref(), args.json) {
                 Ok(out) => {
@@ -153,10 +149,7 @@ pub fn run() -> ExitCode {
             cli::PerceiveSub::Vector { path, nodes } => {
                 let src = match read_file(&path) {
                     Ok(s) => s,
-                    Err(msg) => {
-                        eprintln!("{}", msg);
-                        return ExitCode::from(2);
-                    }
+                    Err(msg) => return fail(msg, 2),
                 };
                 match commands::perceive::vector(&src, args.json, &nodes) {
                     Ok(outcome) => {
@@ -175,19 +168,13 @@ pub fn run() -> ExitCode {
             // Read the template document.
             let doc_src = match read_file(&args.doc) {
                 Ok(s) => s,
-                Err(msg) => {
-                    eprintln!("{}", msg);
-                    return ExitCode::from(2);
-                }
+                Err(msg) => return fail(msg, 2),
             };
 
             // Read the CSV file.
             let csv_src = match read_file(&args.data) {
                 Ok(s) => s,
-                Err(msg) => {
-                    eprintln!("{}", msg);
-                    return ExitCode::from(2);
-                }
+                Err(msg) => return fail(msg, 2),
             };
 
             let project_dir = args.doc.parent();
@@ -364,7 +351,7 @@ pub fn run() -> ExitCode {
         Command::Restore(args) => match history::restore(&args.path, &args.rev) {
             Ok(outcome) => {
                 if let Some(w) = &outcome.warning {
-                    eprintln!("warning: {w}");
+                    warn(w);
                 }
                 println!(
                     "restored '{}' to {}",
@@ -398,28 +385,19 @@ pub fn run() -> ExitCode {
             // Read document source.
             let doc_src = match read_file(&args.path) {
                 Ok(s) => s,
-                Err(msg) => {
-                    eprintln!("{}", msg);
-                    return ExitCode::from(2);
-                }
+                Err(msg) => return fail(msg, 2),
             };
 
             // Read transaction JSON.
             let tx_json = match read_file(&args.tx_file) {
                 Ok(s) => s,
-                Err(msg) => {
-                    eprintln!("{}", msg);
-                    return ExitCode::from(2);
-                }
+                Err(msg) => return fail(msg, 2),
             };
 
             // Run the pure transaction logic.
             let outcome = match commands::tx::run(&doc_src, &tx_json) {
                 Ok(o) => o,
-                Err(e) => {
-                    eprintln!("{}", e.message);
-                    return ExitCode::from(e.exit_code);
-                }
+                Err(e) => return fail(e.message, e.exit_code),
             };
 
             // Print output.
@@ -437,7 +415,7 @@ pub fn run() -> ExitCode {
                     "tx.apply",
                 );
                 if let Some(w) = &recorded.warning {
-                    eprintln!("warning: {w}");
+                    warn(w);
                 }
                 if let Err(e) = std::fs::write(&args.path, &recorded.bytes) {
                     eprintln!("error writing '{}': {}", args.path.display(), e);
@@ -451,10 +429,7 @@ pub fn run() -> ExitCode {
         Command::OutlineText(args) => {
             let doc_src = match read_file(&args.path) {
                 Ok(s) => s,
-                Err(msg) => {
-                    eprintln!("{}", msg);
-                    return ExitCode::from(2);
-                }
+                Err(msg) => return fail(msg, 2),
             };
 
             let outcome = match commands::tx::run_outline_text(
@@ -465,10 +440,7 @@ pub fn run() -> ExitCode {
                 args.locked,
             ) {
                 Ok(o) => o,
-                Err(e) => {
-                    eprintln!("{}", e.message);
-                    return ExitCode::from(e.exit_code);
-                }
+                Err(e) => return fail(e.message, e.exit_code),
             };
 
             if args.json {
@@ -484,7 +456,7 @@ pub fn run() -> ExitCode {
                     "text_outline.apply",
                 );
                 if let Some(w) = &recorded.warning {
-                    eprintln!("warning: {w}");
+                    warn(w);
                 }
                 if let Err(e) = std::fs::write(&args.path, &recorded.bytes) {
                     eprintln!("error writing '{}': {}", args.path.display(), e);
@@ -498,10 +470,7 @@ pub fn run() -> ExitCode {
         Command::Variant(args) => {
             let doc_src = match read_file(&args.doc) {
                 Ok(s) => s,
-                Err(msg) => {
-                    eprintln!("{}", msg);
-                    return ExitCode::from(2);
-                }
+                Err(msg) => return fail(msg, 2),
             };
 
             // Derive the stem from the input filename (no extension).
@@ -627,18 +596,12 @@ pub fn run() -> ExitCode {
             cli::ThemeSub::Apply(a) => {
                 let doc_src = match read_file(&a.doc) {
                     Ok(s) => s,
-                    Err(msg) => {
-                        eprintln!("{}", msg);
-                        return ExitCode::from(2);
-                    }
+                    Err(msg) => return fail(msg, 2),
                 };
 
                 let outcome = match commands::theme::apply_run(a.doc.parent(), &a.pack, &doc_src) {
                     Ok(o) => o,
-                    Err(e) => {
-                        eprintln!("{}", e.message);
-                        return ExitCode::from(e.exit_code);
-                    }
+                    Err(e) => return fail(e.message, e.exit_code),
                 };
 
                 // Print output.
@@ -656,7 +619,7 @@ pub fn run() -> ExitCode {
                         "theme.apply",
                     );
                     if let Some(w) = &recorded.warning {
-                        eprintln!("warning: {w}");
+                        warn(w);
                     }
                     if let Err(e) = std::fs::write(&a.doc, &recorded.bytes) {
                         eprintln!("error writing '{}': {}", a.doc.display(), e);
@@ -738,10 +701,7 @@ pub fn run() -> ExitCode {
 fn dispatch_asset_import(a: cli::AssetImportArgs) -> ExitCode {
     let doc_src = match read_file(&a.into) {
         Ok(s) => s,
-        Err(msg) => {
-            eprintln!("{}", msg);
-            return ExitCode::from(2);
-        }
+        Err(msg) => return fail(msg, 2),
     };
     let input_bytes = match std::fs::read(&a.input) {
         Ok(bytes) => bytes,
@@ -762,10 +722,7 @@ fn dispatch_asset_import(a: cli::AssetImportArgs) -> ExitCode {
         },
     ) {
         Ok(o) => o,
-        Err(e) => {
-            eprintln!("{}", e.message);
-            return ExitCode::from(e.exit_code);
-        }
+        Err(e) => return fail(e.message, e.exit_code),
     };
 
     if a.apply && outcome.exit_code != 1 {
@@ -785,17 +742,11 @@ fn dispatch_asset_import(a: cli::AssetImportArgs) -> ExitCode {
 fn dispatch_asset_zpx_bake(a: cli::AssetZpxBakeArgs) -> ExitCode {
     let doc_src = match read_file(&a.into) {
         Ok(s) => s,
-        Err(msg) => {
-            eprintln!("{}", msg);
-            return ExitCode::from(2);
-        }
+        Err(msg) => return fail(msg, 2),
     };
     let manifest_src = match read_file(&a.manifest) {
         Ok(s) => s,
-        Err(msg) => {
-            eprintln!("{}", msg);
-            return ExitCode::from(2);
-        }
+        Err(msg) => return fail(msg, 2),
     };
     let source_label = a.manifest.display().to_string();
     let outcome = match commands::asset::zpx_bake_run(
@@ -809,10 +760,7 @@ fn dispatch_asset_zpx_bake(a: cli::AssetZpxBakeArgs) -> ExitCode {
         },
     ) {
         Ok(o) => o,
-        Err(e) => {
-            eprintln!("{}", e.message);
-            return ExitCode::from(e.exit_code);
-        }
+        Err(e) => return fail(e.message, e.exit_code),
     };
 
     if a.apply && outcome.exit_code != 1 {
@@ -877,7 +825,7 @@ fn apply_asset_outcome(
         history_label,
     );
     if let Some(w) = &recorded.warning {
-        eprintln!("warning: {w}");
+        warn(w);
     }
     if let Err(e) = std::fs::write(doc_path, &recorded.bytes) {
         eprintln!("error writing '{}': {}", doc_path.display(), e);

@@ -6,8 +6,6 @@ use zenith_core::{Diagnostic, Document, Node};
 
 use crate::op::Position;
 
-use super::super::node_id_of;
-
 /// Return a mutable reference to the children vec of the container identified by
 /// `parent_id` — a page, a master, or a nested `group`/`frame` (matched by node
 /// `id`). Returns `None` if no such container exists (including when the id
@@ -239,7 +237,7 @@ fn find_container_in_children_mut<'a>(
 /// (`group`, `frame`, `table` cell, or `unknown`) within it, returning the
 /// removed node, or `None` if absent.
 pub(super) fn remove_node_by_id(children: &mut Vec<Node>, id: &str) -> Option<Node> {
-    if let Some(i) = children.iter().position(|n| node_id_of(n) == Some(id)) {
+    if let Some(i) = children.iter().position(|n| n.id() == Some(id)) {
         return Some(children.remove(i));
     }
     for child in children.iter_mut() {
@@ -302,10 +300,7 @@ pub(super) fn resolve_position(
         Position::First => Some(0),
         Position::Index { index } => Some((*index).min(children.len())),
         Position::Before { id } => {
-            match children
-                .iter()
-                .position(|n| node_id_of(n) == Some(id.as_str()))
-            {
+            match children.iter().position(|n| n.id() == Some(id.as_str())) {
                 Some(i) => Some(i),
                 None => {
                     diagnostics.push(Diagnostic::error(
@@ -318,22 +313,17 @@ pub(super) fn resolve_position(
                 }
             }
         }
-        Position::After { id } => {
-            match children
-                .iter()
-                .position(|n| node_id_of(n) == Some(id.as_str()))
-            {
-                Some(i) => Some(i + 1),
-                None => {
-                    diagnostics.push(Diagnostic::error(
-                        "tx.unknown_node",
-                        format!("sibling {:?} not found in parent {:?}", id, parent_id),
-                        None,
-                        Some(id.to_owned()),
-                    ));
-                    None
-                }
+        Position::After { id } => match children.iter().position(|n| n.id() == Some(id.as_str())) {
+            Some(i) => Some(i + 1),
+            None => {
+                diagnostics.push(Diagnostic::error(
+                    "tx.unknown_node",
+                    format!("sibling {:?} not found in parent {:?}", id, parent_id),
+                    None,
+                    Some(id.to_owned()),
+                ));
+                None
             }
-        }
+        },
     }
 }

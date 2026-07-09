@@ -10,7 +10,7 @@ use zenith_core::{Dimension, Node, Unit};
 
 /// Returns true if `node` is, or transitively contains, a node with `id`.
 pub(super) fn subtree_contains(node: &Node, id: &str) -> bool {
-    if node_id_of(node) == Some(id) {
+    if node.id() == Some(id) {
         return true;
     }
     match node {
@@ -112,7 +112,7 @@ fn find_in_children_any_mut<'a>(children: &'a mut [Node], id: &str) -> Option<&'
     }
 
     let hit = children.iter().enumerate().find_map(|(i, node)| {
-        if node_id_of(node) == Some(id) {
+        if node.id() == Some(id) {
             return Some(Hit::Direct(i));
         }
         match node {
@@ -224,7 +224,7 @@ pub(super) fn find_node_any_shared<'doc>(
 /// Shared-borrow tree walk: find a node with `id` anywhere in `children`.
 pub(super) fn find_node_shared<'a>(children: &'a [Node], id: &str) -> Option<&'a Node> {
     for node in children {
-        if node_id_of(node) == Some(id) {
+        if node.id() == Some(id) {
             return Some(node);
         }
         match node {
@@ -274,66 +274,6 @@ pub(super) fn find_node_shared<'a>(children: &'a [Node], id: &str) -> Option<&'a
         }
     }
     None
-}
-
-/// Extract the stable id string from any [`Node`] variant, if it has one.
-pub(super) fn node_id_of(node: &Node) -> Option<&str> {
-    match node {
-        Node::Rect(r) => Some(&r.id),
-        Node::Ellipse(e) => Some(&e.id),
-        Node::Line(l) => Some(&l.id),
-        Node::Text(t) => Some(&t.id),
-        Node::Code(c) => Some(&c.id),
-        Node::Frame(f) => Some(&f.id),
-        Node::Group(g) => Some(&g.id),
-        Node::Image(i) => Some(&i.id),
-        Node::Polygon(p) => Some(&p.id),
-        Node::Polyline(p) => Some(&p.id),
-        Node::Path(p) => Some(&p.id),
-        Node::Instance(i) => Some(&i.id),
-        Node::Field(f) => Some(&f.id),
-        Node::Toc(t) => Some(&t.id),
-        Node::Footnote(f) => Some(&f.id),
-        Node::Table(t) => Some(&t.id),
-        Node::Shape(s) => Some(&s.id),
-        Node::Connector(c) => Some(&c.id),
-        Node::Pattern(p) => Some(&p.id),
-        Node::Chart(c) => Some(&c.id),
-        Node::Light(l) => Some(&l.id),
-        Node::Mesh(m) => Some(&m.id),
-        Node::Unknown(u) => u.id.as_deref(),
-    }
-}
-
-// ── Node-kind string ──────────────────────────────────────────────────────────
-
-/// Return a static string naming the variant kind of a [`Node`].
-pub(super) fn node_kind_str(node: &Node) -> &'static str {
-    match node {
-        Node::Rect(_) => "rect",
-        Node::Ellipse(_) => "ellipse",
-        Node::Line(_) => "line",
-        Node::Text(_) => "text",
-        Node::Code(_) => "code",
-        Node::Frame(_) => "frame",
-        Node::Group(_) => "group",
-        Node::Image(_) => "image",
-        Node::Polygon(_) => "polygon",
-        Node::Polyline(_) => "polyline",
-        Node::Path(_) => "path",
-        Node::Instance(_) => "instance",
-        Node::Field(_) => "field",
-        Node::Toc(_) => "toc",
-        Node::Footnote(_) => "footnote",
-        Node::Table(_) => "table",
-        Node::Shape(_) => "shape",
-        Node::Connector(_) => "connector",
-        Node::Pattern(_) => "pattern",
-        Node::Chart(_) => "chart",
-        Node::Light(_) => "light",
-        Node::Mesh(_) => "mesh",
-        Node::Unknown(_) => "unknown",
-    }
 }
 
 /// Construct a [`Dimension`] with the `(px)` unit from a raw `f64` value.

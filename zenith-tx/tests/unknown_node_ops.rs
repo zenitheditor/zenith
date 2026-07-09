@@ -101,7 +101,7 @@ fn remove_node_inside_unknown() {
 // ── Remove the unknown node itself by id ──────────────────────────────────────
 
 /// `remove_node` targeting the UNKNOWN node's own id removes the whole unknown
-/// subtree — proving id-targeting via `node_id_of` returning the unknown id.
+/// subtree — proving id-targeting via `Node::id()` returning the unknown id.
 #[test]
 fn remove_unknown_node_by_id() {
     let doc = parse(UNKNOWN_WITH_INNER_DOC);

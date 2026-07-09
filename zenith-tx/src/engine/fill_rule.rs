@@ -2,7 +2,7 @@
 
 use zenith_core::{Diagnostic, Document, Node};
 
-use super::{find_node_any_mut, node_kind_str, record_affected};
+use super::{find_node_any_mut, record_affected};
 
 const VALID_FILL_RULES_LABEL: &str = "nonzero|evenodd";
 
@@ -68,7 +68,7 @@ pub(super) fn apply_set_fill_rule(
             ));
         }
         Some(node) => {
-            let kind = node_kind_str(node);
+            let kind = node.kind_str();
             match node_fill_rule_mut(node) {
                 Some(slot) => {
                     *slot = Some(fill_rule.to_owned());

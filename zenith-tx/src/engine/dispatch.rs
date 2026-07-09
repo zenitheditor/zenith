@@ -10,15 +10,12 @@ use super::geometry::{
     apply_set_geometry,
 };
 use super::path::{
-    apply_insert_path_anchor, apply_insert_path_anchor_at_point, apply_remove_path_anchor,
+    MakePathSymmetricArgs, MovePathAnchorArgs, MovePathHandleArgs, PathBooleanArgs,
+    apply_insert_path_anchor, apply_insert_path_anchor_at_point, apply_make_path_symmetric,
+    apply_move_path_anchor, apply_move_path_handle, apply_path_boolean, apply_remove_path_anchor,
     apply_set_path_anchor_kind, apply_set_path_anchors, apply_simplify_path_anchors,
-    apply_transform_path_anchors,
+    apply_snap_path_anchors, apply_transform_path_anchors,
 };
-use super::path_anchor::{MovePathAnchorArgs, apply_move_path_anchor};
-use super::path_boolean::{PathBooleanArgs, apply_path_boolean};
-use super::path_handle::{MovePathHandleArgs, apply_move_path_handle};
-use super::path_snap::apply_snap_path_anchors;
-use super::path_symmetry::{MakePathSymmetricArgs, apply_make_path_symmetric};
 use super::pattern::apply_detach_pattern;
 use super::recipe::{RecipeScalars, apply_create_recipe, apply_delete_recipe, apply_update_recipe};
 use super::structure;

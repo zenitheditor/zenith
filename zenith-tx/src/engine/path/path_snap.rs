@@ -5,10 +5,10 @@ use zenith_geometry::{
     AffineTransform, CompoundPathGeometry, GeometryError, nearest_compound_path_geometry_points,
 };
 
-use super::{find_node_any_mut, node_kind_str, record_affected};
-use crate::engine::path::{geometry_anchor_to_core, resolved_path_geometry, unknown_node};
+use super::super::{find_node_any_mut, record_affected};
+use super::{geometry_anchor_to_core, resolved_path_geometry, unknown_node};
 
-pub(super) fn apply_snap_path_anchors(
+pub(crate) fn apply_snap_path_anchors(
     node_id: &str,
     target_id: &str,
     tolerance: f64,
@@ -89,7 +89,7 @@ pub(super) fn apply_snap_path_anchors(
     match find_node_any_mut(doc, node_id) {
         None => diagnostics.push(unknown_node(node_id)),
         Some(node) => {
-            let kind = node_kind_str(node);
+            let kind = node.kind_str();
             match node {
                 Node::Path(path) => {
                     if path.subpaths.is_empty() {
@@ -190,7 +190,7 @@ fn compound_path_geometry_from_doc(
             "tx.unsupported_property",
             format!(
                 "snap_path_anchors requires a path node, got {}",
-                node_kind_str(node)
+                node.kind_str()
             ),
             None,
             Some(node_id.to_owned()),
@@ -207,7 +207,7 @@ fn find_node_any<'doc>(doc: &'doc Document, id: &str) -> Option<&'doc Node> {
 
 fn find_in_children_any<'a>(children: &'a [Node], id: &str) -> Option<&'a Node> {
     for node in children {
-        if super::node_id_of(node) == Some(id) {
+        if node.id() == Some(id) {
             return Some(node);
         }
         match node {

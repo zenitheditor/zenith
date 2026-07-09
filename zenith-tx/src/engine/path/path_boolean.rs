@@ -6,16 +6,16 @@ use zenith_geometry::{
     reconstruct_contour_boolean_result,
 };
 
-use super::{find_node_shared, node_id_of, node_kind_str, px, record_affected, subtree_contains};
-use crate::engine::path::{resolved_path_geometry, unknown_node};
+use super::super::{find_node_shared, px, record_affected, subtree_contains};
+use super::{resolved_path_geometry, unknown_node};
 use crate::op::OpPathBooleanOperation;
 
-pub(super) struct PathBooleanArgs<'a> {
-    pub(super) node_id: &'a str,
-    pub(super) target_id: &'a str,
-    pub(super) new_id: &'a str,
-    pub(super) operation: OpPathBooleanOperation,
-    pub(super) tolerance: f64,
+pub(crate) struct PathBooleanArgs<'a> {
+    pub(crate) node_id: &'a str,
+    pub(crate) target_id: &'a str,
+    pub(crate) new_id: &'a str,
+    pub(crate) operation: OpPathBooleanOperation,
+    pub(crate) tolerance: f64,
 }
 
 struct BooleanResultArgs<'a> {
@@ -28,7 +28,7 @@ struct BooleanResultArgs<'a> {
     new_id: &'a str,
 }
 
-pub(super) fn apply_path_boolean(
+pub(crate) fn apply_path_boolean(
     args: PathBooleanArgs<'_>,
     doc: &mut Document,
     diagnostics: &mut Vec<Diagnostic>,
@@ -119,7 +119,7 @@ fn input_path(
                         "tx.unsupported_property",
                         format!(
                             "path_boolean is not supported on a {} node",
-                            node_kind_str(node)
+                            node.kind_str()
                         ),
                         None,
                         Some(node_id.to_owned()),
@@ -330,10 +330,7 @@ fn boolean_operation(operation: OpPathBooleanOperation) -> ClosedPolylineBoolean
 }
 
 fn insert_after_source(children: &mut Vec<Node>, node_id: &str, node_to_insert: &Node) -> bool {
-    if let Some(index) = children
-        .iter()
-        .position(|node| node_id_of(node) == Some(node_id))
-    {
+    if let Some(index) = children.iter().position(|node| node.id() == Some(node_id)) {
         children.insert(index + 1, node_to_insert.clone());
         return true;
     }

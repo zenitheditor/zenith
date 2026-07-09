@@ -7,8 +7,10 @@
 use std::path::Path;
 use zenith_core::{KdlAdapter, KdlSource};
 
+use zenith_scene::collect_text_outline_paths;
 use zenith_tx::{
-    TextOutlineRequest, Transaction, TxResult, TxStatus, materialize_text_outlines, run_transaction,
+    TextOutlineRequest, Transaction, TxResult, TxStatus, apply_text_outline_paths,
+    check_text_outline_source, reject_text_outline, run_transaction,
 };
 
 use crate::commands::serialize_pretty;
@@ -104,14 +106,21 @@ pub fn run_outline_text(
             exit_code: e.exit_code,
         })?;
 
-    let result = materialize_text_outlines(
-        &doc,
-        &fonts,
-        &TextOutlineRequest {
-            node: node.to_owned(),
-            id_prefix: id_prefix.to_owned(),
-        },
-    )
+    // Validate source before multi-page compile (parity with pre-split short-circuit).
+    let result = match check_text_outline_source(&doc, node) {
+        Err(diags) => reject_text_outline(&doc, diags),
+        Ok(()) => {
+            let (paths, outline_diags) = collect_text_outline_paths(&doc, &fonts, node, id_prefix);
+            apply_text_outline_paths(
+                &doc,
+                &TextOutlineRequest {
+                    node: node.to_owned(),
+                },
+                paths,
+                outline_diags,
+            )
+        }
+    }
     .map_err(|e| TxCmdErr {
         message: format!("error[tx.engine]: {}", e.message),
         exit_code: 2,

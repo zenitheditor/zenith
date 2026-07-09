@@ -2,7 +2,7 @@
 
 use zenith_core::{AssetDecl, AssetKind, Diagnostic, Document, Node};
 
-use super::{find_node_any_mut, node_kind_str, record_affected};
+use super::{find_node_any_mut, record_affected};
 
 // ── AddAsset ──────────────────────────────────────────────────────────────────
 
@@ -128,7 +128,7 @@ pub(super) fn apply_set_asset(
             record_affected(node_id, affected);
         }
         Some(other) => {
-            let kind = node_kind_str(other);
+            let kind = other.kind_str();
             diagnostics.push(Diagnostic::error(
                 "tx.wrong_node_type",
                 format!(
