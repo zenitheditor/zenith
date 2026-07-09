@@ -36,14 +36,11 @@ pub struct FontFeature {
 impl FontFeature {
     pub fn new(tag: &str, value: u32) -> Option<Self> {
         let bytes = tag.as_bytes();
-        if bytes.len() != 4 || !bytes.iter().all(u8::is_ascii) {
+        if !bytes.iter().all(u8::is_ascii) {
             return None;
         }
-
-        Some(Self {
-            tag: [bytes[0], bytes[1], bytes[2], bytes[3]],
-            value,
-        })
+        let tag = <[u8; 4]>::try_from(bytes).ok()?;
+        Some(Self { tag, value })
     }
 
     #[must_use]
