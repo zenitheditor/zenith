@@ -55,6 +55,10 @@ http = ["dep:tiny_http"]
 [dev-dependencies]
 tempfile = "3"
 tiny-skia = "0.11"
+# Used only by the icon render-equivalence test to rasterize the SOURCE SVG the
+# same way the render backend does (resvg re-exports usvg). Already in the lock
+# via zenith-render; pure-Rust, so the C-free invariant holds.
+resvg = "0.36"
 
 [lints]
 workspace = true

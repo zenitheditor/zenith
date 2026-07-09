@@ -7,6 +7,16 @@ License: ISC License
 
 The SVG files in this directory are a checked-in subset adapted from Lucide icons for the embedded @zenith/icons-lucide library pack.
 
+The SVG files are whitespace-normalized copies of the upstream Lucide SVGs (each collapsed to a single line); the vector geometry is unmodified. The exact upstream revision (tag/commit) they were vendored from was not recorded at vendoring time.
+
+Three local file names are legacy/renamed aliases that differ from the current upstream icon names:
+
+  sync           = upstream refresh-cw
+  upload-cloud   = upstream cloud-upload
+  download-cloud = upstream cloud-download
+
+A machine-readable manifest of these mappings, together with the SHA-256 of every vendored SVG, is recorded alongside this file in provenance.json.
+
 ISC License
 
 Copyright (c) for portions of Lucide are held by Cole Bemis 2013-2022 as part of Feather and by Lucide Contributors 2022.

@@ -305,6 +305,154 @@ mod tests {
     const COMMITTED_PACK_SOURCE: &str =
         include_str!("../../assets/libraries/zenith-icons-lucide.zen");
 
+    const PROVENANCE_JSON: &str =
+        include_str!("../../assets/libraries/icons/lucide/provenance.json");
+
+    use serde::Deserialize;
+    use sha2::{Digest, Sha256};
+    use std::collections::BTreeSet;
+
+    #[derive(Deserialize)]
+    struct Provenance {
+        source_project: String,
+        license: String,
+        license_file: String,
+        icons: Vec<ProvenanceIcon>,
+    }
+
+    #[derive(Deserialize)]
+    struct ProvenanceIcon {
+        name: String,
+        upstream_name: String,
+        sha256: String,
+    }
+
+    fn parse_provenance() -> Provenance {
+        serde_json::from_str(PROVENANCE_JSON).expect("provenance.json parses")
+    }
+
+    #[test]
+    fn provenance_records_expected_metadata() {
+        let provenance = parse_provenance();
+        assert_eq!(provenance.source_project, "Lucide");
+        assert_eq!(provenance.license, "ISC");
+        assert_eq!(provenance.license_file, "NOTICE");
+    }
+
+    #[test]
+    fn provenance_covers_every_vendored_svg() {
+        let provenance = parse_provenance();
+
+        let embedded: BTreeSet<&str> = LUCIDE_ICONS.iter().map(|icon| icon.id).collect();
+        let recorded: BTreeSet<&str> = provenance
+            .icons
+            .iter()
+            .map(|icon| icon.name.as_str())
+            .collect();
+        assert_eq!(
+            recorded, embedded,
+            "provenance icon names must match the embedded Lucide SVG set exactly"
+        );
+
+        // Guard against files added to / removed from the directory on disk without
+        // a matching provenance entry (drift the embedded set alone cannot catch).
+        let dir =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("assets/libraries/icons/lucide");
+        let mut on_disk = BTreeSet::new();
+        for entry in std::fs::read_dir(&dir).expect("read lucide icon dir") {
+            let path = entry.expect("dir entry").path();
+            if path.extension().and_then(|ext| ext.to_str()) == Some("svg") {
+                let stem = path
+                    .file_stem()
+                    .and_then(|stem| stem.to_str())
+                    .expect("svg file stem")
+                    .to_owned();
+                on_disk.insert(stem);
+            }
+        }
+        let recorded_owned: BTreeSet<String> = provenance
+            .icons
+            .iter()
+            .map(|icon| icon.name.clone())
+            .collect();
+        assert_eq!(
+            recorded_owned, on_disk,
+            "provenance entries must match the .svg files on disk one-to-one"
+        );
+    }
+
+    #[test]
+    fn provenance_sha256_matches_svg_bytes() {
+        let provenance = parse_provenance();
+        for icon in &provenance.icons {
+            let embedded = LUCIDE_ICONS
+                .iter()
+                .find(|candidate| candidate.id == icon.name)
+                .unwrap_or_else(|| panic!("embedded bytes for '{}'", icon.name));
+            let actual = format!("{:x}", Sha256::digest(embedded.bytes));
+            assert_eq!(
+                actual, icon.sha256,
+                "sha256 drift for Lucide icon '{}'",
+                icon.name
+            );
+        }
+    }
+
+    #[test]
+    fn provenance_alias_mappings_are_recorded() {
+        let provenance = parse_provenance();
+        let upstream_of = |name: &str| {
+            provenance
+                .icons
+                .iter()
+                .find(|icon| icon.name == name)
+                .map(|icon| icon.upstream_name.as_str())
+                .unwrap_or_else(|| panic!("provenance entry for '{name}'"))
+        };
+        assert_eq!(upstream_of("sync"), "refresh-cw");
+        assert_eq!(upstream_of("upload-cloud"), "cloud-upload");
+        assert_eq!(upstream_of("download-cloud"), "cloud-download");
+
+        // Every non-alias icon maps to its own upstream name.
+        for icon in &provenance.icons {
+            let is_alias = matches!(
+                icon.name.as_str(),
+                "sync" | "upload-cloud" | "download-cloud"
+            );
+            if !is_alias {
+                assert_eq!(
+                    icon.name, icon.upstream_name,
+                    "non-alias icon '{}' must map to itself upstream",
+                    icon.name
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn provenance_matches_generated_pack_components() {
+        let provenance = parse_provenance();
+        let generated = generate_pack_source().expect("generate native Lucide pack");
+        let doc = KdlAdapter
+            .parse(generated.as_bytes())
+            .expect("generated pack parses");
+
+        let components: BTreeSet<&str> = doc
+            .components
+            .iter()
+            .map(|component| component.id.as_str())
+            .collect();
+        let recorded: BTreeSet<&str> = provenance
+            .icons
+            .iter()
+            .map(|icon| icon.name.as_str())
+            .collect();
+        assert_eq!(
+            recorded, components,
+            "provenance must cover exactly the components shipped in the pack"
+        );
+    }
+
     #[test]
     fn generated_lucide_pack_matches_committed_source() {
         let generated = generate_pack_source().expect("generate native Lucide pack");

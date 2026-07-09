@@ -1506,6 +1506,7 @@ dependencies = [
  "clap",
  "csv",
  "imagesize",
+ "resvg",
  "serde",
  "serde_json",
  "sha2",
