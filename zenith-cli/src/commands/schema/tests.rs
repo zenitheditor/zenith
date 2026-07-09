@@ -546,6 +546,68 @@ fn variant_json_override_props_have_geometry() {
 }
 
 #[test]
+fn ports_human_contains_key_sections() {
+    let (text, code) = ports(false);
+    assert_eq!(code, 0);
+    assert!(text.contains("ports"), "must name the surface");
+    assert!(
+        text.contains("Placement:"),
+        "must describe where a ports block may appear"
+    );
+    assert!(
+        text.contains("Port properties:"),
+        "must list the port properties"
+    );
+    // The three required attributes.
+    assert!(
+        text.contains("node") && text.contains("id") && text.contains("anchor"),
+        "port properties must include node/id/anchor; got:\n{text}"
+    );
+    // Placement covers both page and component scope.
+    assert!(
+        text.to_lowercase().contains("page") && text.to_lowercase().contains("component"),
+        "placement must mention page and component scope; got:\n{text}"
+    );
+    assert!(
+        text.contains("Example:") && text.contains("connector"),
+        "must include a worked example wiring a connector to a port; got:\n{text}"
+    );
+}
+
+#[test]
+fn ports_json_has_expected_fields() {
+    let (text, code) = ports(true);
+    assert_eq!(code, 0);
+    assert!(
+        text.contains("zenith-schema-v1"),
+        "JSON must carry schema field"
+    );
+    for key in &[
+        "\"summary\"",
+        "\"placement\"",
+        "\"block_structure\"",
+        "\"port_props\"",
+        "\"example\"",
+    ] {
+        assert!(
+            text.contains(key),
+            "ports JSON must carry {key}; got:\n{text}"
+        );
+    }
+    // All three required attributes present and marked required.
+    for key in &["\"node\"", "\"id\"", "\"anchor\""] {
+        assert!(
+            text.contains(key),
+            "ports JSON port_props must include {key}; got:\n{text}"
+        );
+    }
+    assert!(
+        text.contains("\"required\": true"),
+        "ports JSON port_props must mark required attributes; got:\n{text}"
+    );
+}
+
+#[test]
 fn op_detail_add_node_position_describes_id_field() {
     // Regression: before/after variants use `id` (sibling id), not `sibling`.
     let (text, code) = op_detail("add_node", false);
@@ -889,7 +951,11 @@ fn overview_mentions_brand_surface() {
         "overview must mention 'zenith schema block'; got:\n{text}"
     );
     assert!(
-        text.contains("7 non-node surfaces"),
-        "overview must count 5 non-node surfaces after adding block; got:\n{text}"
+        text.contains("8 non-node surfaces"),
+        "overview must count 8 non-node surfaces after adding ports; got:\n{text}"
+    );
+    assert!(
+        text.contains("zenith schema ports"),
+        "overview must mention 'zenith schema ports'; got:\n{text}"
     );
 }

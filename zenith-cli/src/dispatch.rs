@@ -720,6 +720,7 @@ pub fn run() -> ExitCode {
                 Some(cli::SchemaSub::Page) => commands::schema::page(json),
                 Some(cli::SchemaSub::Asset) => commands::schema::asset(json),
                 Some(cli::SchemaSub::Document) => commands::schema::document(json),
+                Some(cli::SchemaSub::Ports) => commands::schema::ports(json),
                 Some(cli::SchemaSub::Variant) => commands::schema::variant(json),
                 Some(cli::SchemaSub::Diagnostics) => commands::schema::diagnostics(json),
                 Some(cli::SchemaSub::Brand) => commands::schema::brand(json),

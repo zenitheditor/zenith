@@ -384,6 +384,25 @@ pub struct SchemaVariantOutput {
     pub example: String,
 }
 
+/// One `port` property entry in the `schema ports` JSON output.
+#[derive(Debug, Serialize)]
+pub struct SchemaPortPropEntry {
+    pub name: String,
+    pub ty: String,
+    pub required: bool,
+}
+
+/// Top-level JSON envelope for `schema ports`.
+#[derive(Debug, Serialize)]
+pub struct SchemaPortsOutput {
+    pub schema: &'static str,
+    pub summary: String,
+    pub placement: String,
+    pub block_structure: String,
+    pub port_props: Vec<SchemaPortPropEntry>,
+    pub example: String,
+}
+
 /// Top-level JSON envelope for `schema brand`.
 #[derive(Debug, Serialize)]
 pub struct SchemaBrandOutput {

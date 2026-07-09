@@ -15,6 +15,7 @@ zenith schema token gradient        # value form + children + example for one to
 zenith schema page                  # attributes for a page declaration\n  \
 zenith schema asset                 # attributes for an asset declaration\n  \
 zenith schema document              # attributes for the document root\n  \
+zenith schema ports                 # ports block and port entry structure\n  \
 zenith schema variant               # variants block and override entry structure\n  \
 zenith schema diagnostics           # diagnostic-policy verbs + governable codes\n  \
 zenith schema brand                 # brand-contract block (allowed colors/fonts/weights)\n  \
@@ -91,6 +92,16 @@ pub enum SchemaSub {
         #[arg(value_name = "TYPE")]
         ty: String,
     },
+
+    /// Show the structure of the `ports` block and the `port` entry.
+    ///
+    /// Documents the `ports { port node="…" id="…" anchor="…" }` block that
+    /// declares named connector attachment points on a node. Covers the three
+    /// required attributes (`node`, `id`, `anchor`), where the block may appear
+    /// (page and component scope), how a connector references a port as
+    /// `node#port`, and the diagnostics emitted for duplicate/invalid/unknown
+    /// ports. Includes a concrete worked example.
+    Ports,
 
     /// Show the structure of the `variants` block and the `override` entry.
     ///

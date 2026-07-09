@@ -5,7 +5,7 @@ use zenith_core::schema as core_schema;
 use crate::commands::serialize_pretty;
 use crate::json_types::{
     SchemaAttr, SchemaDiagnosticCode, SchemaDiagnosticsOutput, SchemaOverridePropEntry,
-    SchemaSurfaceOutput, SchemaVariantOutput,
+    SchemaPortPropEntry, SchemaPortsOutput, SchemaSurfaceOutput, SchemaVariantOutput,
 };
 
 use super::common::format_attr_table;
@@ -142,6 +142,64 @@ pub fn variant(json: bool) -> (String, u8) {
             .max()
             .unwrap_or(0);
         for &(name, ty, required) in desc.override_props {
+            let req = if required { ", required" } else { "" };
+            text.push_str(&format!(
+                "  {:<col_width$}  —  ({ty}{req})\n",
+                name,
+                col_width = col_width,
+            ));
+        }
+
+        text.push_str(&format!(
+            "\nExample:\n  {}",
+            desc.example.replace('\n', "\n  ")
+        ));
+        (text, 0)
+    }
+}
+
+/// `zenith schema ports`: descriptor for the `ports` block and `port` entry.
+///
+/// Returns `(stdout, exit_code)`.
+pub fn ports(json: bool) -> (String, u8) {
+    let desc = core_schema::ports_descriptor();
+
+    if json {
+        let props: Vec<SchemaPortPropEntry> = desc
+            .port_props
+            .iter()
+            .map(|&(name, ty, required)| SchemaPortPropEntry {
+                name: name.to_owned(),
+                ty: ty.to_owned(),
+                required,
+            })
+            .collect();
+        let out = SchemaPortsOutput {
+            schema: "zenith-schema-v1",
+            summary: desc.summary.to_owned(),
+            placement: desc.placement.to_owned(),
+            block_structure: desc.block_structure.to_owned(),
+            port_props: props,
+            example: desc.example.to_owned(),
+        };
+        (serialize_pretty(&out), 0)
+    } else {
+        let mut text = format!("ports: {}\n", desc.summary);
+
+        text.push_str(&format!("\nPlacement:\n  {}\n", desc.placement));
+        text.push_str(&format!(
+            "\nBlock structure:\n  {}\n",
+            desc.block_structure.replace('\n', "\n  ")
+        ));
+
+        text.push_str("\nPort properties:\n");
+        let col_width = desc
+            .port_props
+            .iter()
+            .map(|(n, _, _)| n.len())
+            .max()
+            .unwrap_or(0);
+        for &(name, ty, required) in desc.port_props {
             let req = if required { ", required" } else { "" };
             text.push_str(&format!(
                 "  {:<col_width$}  —  ({ty}{req})\n",

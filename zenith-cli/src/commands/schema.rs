@@ -20,4 +20,4 @@ mod tests;
 
 pub use brand::{block, brand};
 pub use listings::{node_detail, nodes, op_detail, ops, overview, token_detail, tokens};
-pub use surfaces::{asset, diagnostics, document, page, variant};
+pub use surfaces::{asset, diagnostics, document, page, ports, variant};
