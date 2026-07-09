@@ -72,6 +72,30 @@ machines. For reproducible output:
 For CI, add `deny "font.local"` to `.zenith.kdl` (or pass `--deny font.local` to `render`)
 so a local-font slip becomes a hard error at render time.
 
+## Text legibility (contrast)
+
+Zenith judges a text node against the colour actually painted **behind the glyphs** — the
+topmost covering fill resolved by geometry and paint order, not the page background. The metric
+is APCA `Lc` (WCAG 3 draft). Three governable codes, all reported by `zenith validate`:
+
+- `contrast.invisible` (warning) — `|Lc| < 15`: the text is effectively the same colour as its
+  backdrop. This is a real defect (dark monogram on a navy disc). **Do not ignore it**, and note
+  it is a *warning*, so a clean `--json` `"valid": true` does not mean the text is legible.
+- `contrast.low` (advisory) — sub-threshold but legible (`Lc` under 60, or 45 for large/bold
+  text). Often intentional brand contrast; suppress with `allow "contrast.low"` when deliberate.
+- `contrast.indeterminate_backdrop` (advisory) — the backdrop cannot be sampled at validate time
+  (an `image`, a `path` fill, or a rotated / masked / blurred / non-normal-blended fill), or an
+  anchored text node has no resolvable extent. The validator refuses to guess.
+
+Resolve an indeterminate backdrop by telling the validator what the viewer sees:
+
+```kdl
+text id="badge.label" contrast-bg=(token)"color.brand.navy" fill=(token)"color.ink" { span "FS" }
+```
+
+`contrast-bg` takes precedence over the detected backdrop (`zenith schema node text`). For CI,
+`deny "contrast.invisible"` turns invisible text into a hard failure.
+
 ## Policy only changes reporting
 
 Adding `allow` or `deny` does not change the rendered output in any way. The engine compiles

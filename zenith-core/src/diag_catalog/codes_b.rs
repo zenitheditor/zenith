@@ -18,7 +18,7 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
     ),
     info(
         "contrast.low",
-        Severity::Warning,
+        Severity::Advisory,
         "Text/background APCA Lc contrast is below the WCAG 3 draft threshold.",
     ),
     info(

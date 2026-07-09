@@ -64,10 +64,38 @@ impl RectPx {
 #[derive(Clone, Debug)]
 pub(super) enum CoverageShape {
     Rect,
+    /// A rounded rectangle: the axis-aligned box minus the four corner
+    /// quarter-discs (per-corner radii, top-left/top-right/bottom-right/bottom-left).
+    RoundedRect {
+        tl: f64,
+        tr: f64,
+        br: f64,
+        bl: f64,
+    },
     Ellipse,
     Diamond,
     Capsule,
     Polygon(Vec<(f64, f64)>),
+}
+
+/// A rigid rotation of a candidate about a fixed center, in degrees. The
+/// renderer rotates a leaf about its own box center; containment is tested by
+/// inverse-rotating the sample point and testing the unrotated shape.
+#[derive(Clone, Copy, Debug)]
+pub(super) struct Rotation {
+    pub(super) angle_deg: f64,
+    pub(super) cx: f64,
+    pub(super) cy: f64,
+}
+
+impl Rotation {
+    /// Inverse-rotate a sample point back into the candidate's unrotated frame.
+    pub(super) fn inverse_map(self, x: f64, y: f64) -> (f64, f64) {
+        let (sin, cos) = (-self.angle_deg).to_radians().sin_cos();
+        let dx = x - self.cx;
+        let dy = y - self.cy;
+        (self.cx + dx * cos - dy * sin, self.cy + dx * sin + dy * cos)
+    }
 }
 
 impl CoverageShape {
@@ -77,12 +105,52 @@ impl CoverageShape {
         }
         match self {
             CoverageShape::Rect => true,
+            CoverageShape::RoundedRect { tl, tr, br, bl } => {
+                point_in_rounded_rect(bounds, *tl, *tr, *br, *bl, x, y)
+            }
             CoverageShape::Ellipse => point_in_ellipse(bounds, x, y),
             CoverageShape::Diamond => point_in_diamond(bounds, x, y),
             CoverageShape::Capsule => point_in_capsule(bounds, x, y),
             CoverageShape::Polygon(points) => point_in_polygon(points, x, y),
         }
     }
+}
+
+/// Exact rounded-rectangle containment. Assumes the point is already inside
+/// `bounds`; excludes the point only when it falls in a corner square outside
+/// that corner's quarter-disc. Radii are expected pre-clamped to the box half
+/// extents by the caller.
+fn point_in_rounded_rect(
+    bounds: RectPx,
+    tl: f64,
+    tr: f64,
+    br: f64,
+    bl: f64,
+    x: f64,
+    y: f64,
+) -> bool {
+    let left = bounds.x;
+    let top = bounds.y;
+    let right = bounds.x + bounds.w;
+    let bottom = bounds.y + bounds.h;
+    // (corner-arc center x, center y, radius, in-corner-square predicate)
+    let corners = [
+        (left + tl, top + tl, tl, x < left + tl && y < top + tl),
+        (right - tr, top + tr, tr, x > right - tr && y < top + tr),
+        (
+            right - br,
+            bottom - br,
+            br,
+            x > right - br && y > bottom - br,
+        ),
+        (left + bl, bottom - bl, bl, x < left + bl && y > bottom - bl),
+    ];
+    for (cx, cy, r, in_corner) in corners {
+        if r > 0.0 && in_corner && distance_sq(x, y, cx, cy) > r * r {
+            return false;
+        }
+    }
+    true
 }
 
 pub(super) fn resolve_axis_px(
@@ -206,6 +274,35 @@ pub(super) fn polygon_region(
     }
     let bounds = polygon_bounds(&resolved)?;
     Some((bounds, CoverageShape::Polygon(resolved)))
+}
+
+/// Axis-aligned bounding box of a `path` node's anchor points, in absolute page
+/// pixels. Anchor coordinates are resolved against the page size (percent-aware)
+/// and shifted by the ancestor translation `(dx, dy)`. Bezier handles are
+/// ignored — the box may under-cover a curve that bows outside its anchors, but
+/// path fills are treated as an indeterminate backdrop anyway.
+pub(super) fn path_bounds(
+    anchors: &[(Option<Dimension>, Option<Dimension>)],
+    dx: f64,
+    dy: f64,
+    page_size: (f64, f64),
+) -> Option<RectPx> {
+    let mut resolved = Vec::with_capacity(anchors.len());
+    for (ax, ay) in anchors {
+        let x = ax
+            .as_ref()
+            .and_then(|dim| resolve_dim_axis(dim, page_size.0))?
+            + dx;
+        let y = ay
+            .as_ref()
+            .and_then(|dim| resolve_dim_axis(dim, page_size.1))?
+            + dy;
+        resolved.push((x, y));
+    }
+    if resolved.is_empty() {
+        return None;
+    }
+    polygon_bounds(&resolved)
 }
 
 fn resolve_dim_axis(dim: &Dimension, basis: f64) -> Option<f64> {

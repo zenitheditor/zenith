@@ -6,19 +6,27 @@
 //! lightness contrast (`Lc`) with the current WCAG 3 draft thresholds.
 
 mod geometry;
+mod props;
 
 use std::collections::BTreeMap;
 
 use crate::ast::node::{
-    ImageNode, Node, PolygonNode, PolylineNode, ShapeNode, TableNode, TextNode,
+    ImageNode, Node, PathNode, PolygonNode, PolylineNode, ShapeNode, TableNode, TextNode,
 };
 use crate::ast::style::Style;
-use crate::ast::value::{PropertyValue, dim_to_px};
+use crate::ast::value::{Dimension, PropertyValue};
 use crate::color::{apca_lc, parse_rgb};
 use crate::diagnostics::Diagnostic;
 use crate::tokens::{ResolvedToken, ResolvedValue};
 
-use geometry::{CoverageShape, RectPx, group_offset, local_box, polygon_region, text_box};
+use geometry::{
+    CoverageShape, RectPx, Rotation, group_offset, local_box, path_bounds, polygon_region, text_box,
+};
+use props::{
+    candidate_has_effect, clip_bounds, container_is_unmodeled, leaf_rotation, node_opacity,
+    node_rotate_deg, node_visible, rect_coverage_shape, resolve_color_property, resolve_font_size,
+    resolve_font_weight, style_property,
+};
 
 /// Below this APCA magnitude the text is effectively painted into its backdrop,
 /// which is a stronger signal than ordinary sub-threshold contrast.
@@ -39,6 +47,7 @@ pub(super) fn check_page_text_contrast(
         dy: 0.0,
         clip: None,
         opacity: 1.0,
+        unmodeled: false,
         page_bg_rgb,
         page_size,
     };
@@ -55,6 +64,11 @@ struct PaintCtx {
     dy: f64,
     clip: Option<RectPx>,
     opacity: f64,
+    /// True when an ancestor `group`/`frame` carries a transform the validator
+    /// cannot model geometrically (rotation) or a paint-altering effect
+    /// (mask/filter/blur/non-normal blend). Every candidate under it is forced
+    /// to an [`BackdropPaint::Indeterminate`] paint.
+    unmodeled: bool,
     page_bg_rgb: Option<(u8, u8, u8)>,
     page_size: (f64, f64),
 }
@@ -63,6 +77,18 @@ struct BackdropCandidate {
     paint: BackdropPaint,
     bounds: RectPx,
     shape: CoverageShape,
+    /// Rigid rotation applied to this candidate about its box center, if any.
+    rotation: Option<Rotation>,
+}
+
+impl BackdropCandidate {
+    fn covers(&self, x: f64, y: f64) -> bool {
+        let (x, y) = match self.rotation {
+            Some(rot) => rot.inverse_map(x, y),
+            None => (x, y),
+        };
+        self.shape.contains_point(self.bounds, x, y)
+    }
 }
 
 #[derive(Debug)]
@@ -112,7 +138,7 @@ fn walk_paint(
                 node,
                 &r.fill,
                 &r.style,
-                CoverageShape::Rect,
+                rect_coverage_shape(r, ctx.page_size, env.resolved_tokens),
                 ctx,
                 candidates,
                 env,
@@ -146,6 +172,7 @@ fn walk_paint(
                 let child_ctx = PaintCtx {
                     clip: frame_clip,
                     opacity: cascaded_opacity(ctx.opacity, f.opacity),
+                    unmodeled: ctx.unmodeled || container_is_unmodeled(node),
                     ..ctx
                 };
                 walk_paint(&f.children, child_ctx, candidates, env, diagnostics);
@@ -161,6 +188,7 @@ fn walk_paint(
                     dx: ctx.dx + gx,
                     dy: ctx.dy + gy,
                     opacity: cascaded_opacity(ctx.opacity, g.opacity),
+                    unmodeled: ctx.unmodeled || container_is_unmodeled(node),
                     ..ctx
                 };
                 walk_paint(&g.children, child_ctx, candidates, env, diagnostics);
@@ -169,9 +197,9 @@ fn walk_paint(
             Node::Table(t) => {
                 check_table_text_contrast(t, ctx.page_bg_rgb, ctx.page_size, env, diagnostics)
             }
+            Node::Path(p) => push_path_backdrop(node, p, ctx, candidates, env),
             Node::Line(_)
             | Node::Code(_)
-            | Node::Path(_)
             | Node::Instance(_)
             | Node::Field(_)
             | Node::Footnote(_)
@@ -269,11 +297,61 @@ fn push_point_backdrop(
     let Some((bounds, shape)) = polygon_region(points, ctx.dx, ctx.dy, ctx.page_size) else {
         return;
     };
+    // A rotated polygon/polyline pivots on its centroid box (not its bounding-box
+    // center), which the validator does not replicate — so any rotation makes the
+    // backdrop indeterminate rather than silently mis-testing containment.
+    let paint = if ctx.unmodeled || node_rotate_deg(node).is_some() {
+        BackdropPaint::Indeterminate
+    } else {
+        paint
+    };
     if let Some(bounds) = clip_bounds(ctx.clip, bounds) {
         candidates.push(BackdropCandidate {
             paint,
             bounds,
             shape,
+            rotation: None,
+        });
+    }
+}
+
+fn push_path_backdrop(
+    node: &Node,
+    path: &PathNode,
+    ctx: PaintCtx,
+    candidates: &mut Vec<BackdropCandidate>,
+    env: ContrastEnv<'_>,
+) {
+    // A `path` fill is only ever a conservative INDETERMINATE backdrop: its exact
+    // Bezier coverage is not modeled, so we advertise its bounding box as an
+    // unsampled region rather than approximating it as a solid fill (which would
+    // over-cover) or ignoring it (which would silently pass invisible text).
+    let opacity = ctx.opacity * node_opacity(node).unwrap_or(1.0);
+    if resolve_fill_paint(
+        &path.fill,
+        path.style.as_deref(),
+        env.style_map,
+        env.resolved_tokens,
+        opacity,
+    )
+    .is_none()
+    {
+        return;
+    }
+    let anchors: Vec<(Option<Dimension>, Option<Dimension>)> = path
+        .effective_subpaths()
+        .flat_map(|sub| sub.anchors.iter())
+        .map(|a| (a.x.clone(), a.y.clone()))
+        .collect();
+    let Some(bounds) = path_bounds(&anchors, ctx.dx, ctx.dy, ctx.page_size) else {
+        return;
+    };
+    if let Some(bounds) = clip_bounds(ctx.clip, bounds) {
+        candidates.push(BackdropCandidate {
+            paint: BackdropPaint::Indeterminate,
+            bounds,
+            shape: CoverageShape::Rect,
+            rotation: None,
         });
     }
 }
@@ -300,11 +378,23 @@ fn push_backdrop(
     let Some(bounds) = absolute_box(node, ctx, env.resolved_tokens) else {
         return;
     };
-    if let Some(bounds) = clip_bounds(ctx.clip, bounds) {
+    // A paint-altering effect on the leaf itself (mask/filter/blur/non-normal
+    // blend), or an unmodeled ancestor transform, makes the composited colour
+    // un-sampleable — downgrade to indeterminate rather than trust the raw fill.
+    let paint = if ctx.unmodeled || candidate_has_effect(node) {
+        BackdropPaint::Indeterminate
+    } else {
+        paint
+    };
+    // A rotation on the leaf is modeled EXACTLY: the renderer rotates it about
+    // its own box center, so containment is tested by inverse-rotating samples.
+    let rotation = leaf_rotation(node, bounds);
+    if let Some(clipped) = clip_bounds(ctx.clip, bounds) {
         candidates.push(BackdropCandidate {
             paint,
-            bounds,
+            bounds: clipped,
             shape,
+            rotation,
         });
     }
 }
@@ -322,11 +412,13 @@ fn push_image_backdrop(
     let Some(bounds) = absolute_box(node, ctx, env.resolved_tokens) else {
         return;
     };
-    if let Some(bounds) = clip_bounds(ctx.clip, bounds) {
+    let rotation = leaf_rotation(node, bounds);
+    if let Some(clipped) = clip_bounds(ctx.clip, bounds) {
         candidates.push(BackdropCandidate {
             paint: BackdropPaint::Indeterminate,
-            bounds,
+            bounds: clipped,
             shape: CoverageShape::Rect,
+            rotation,
         });
     }
 }
@@ -361,57 +453,96 @@ fn check_text_node(
     let threshold = if is_large { 45.0_f64 } else { 60.0_f64 };
 
     let hint_rgb = resolve_color_property(text.contrast_bg.as_ref(), env.resolved_tokens);
-    let (backdrop_samples, indeterminate_backdrop) = if hint_rgb.is_some() {
-        (Vec::new(), false)
-    } else {
-        text_box(text, ctx.page_size, env.resolved_tokens)
-            .map(|bbox| collect_backdrop_samples(bbox, ctx.clip, candidates, ctx.page_bg_rgb))
-            .unwrap_or_default()
-    };
-    let best = select_contrast_sample(fg_rgb, hint_rgb, &backdrop_samples, ctx.page_bg_rgb);
-
-    if hint_rgb.is_none() && indeterminate_backdrop {
-        diagnostics.push(Diagnostic::advisory(
-            "contrast.indeterminate_backdrop",
-            format!(
-                "text '{}': backdrop includes an image and cannot be sampled during validation; add a contrast-bg hint",
-                text.id
-            ),
-            text.source_span,
-            Some(text.id.clone()),
-        ));
+    let mut backdrop_samples = Vec::new();
+    if hint_rgb.is_none() {
+        // The text sample box must live in ABSOLUTE page space, translated by the
+        // accumulated ancestor offset, so it lands on the same coordinates as the
+        // (already-absolute) backdrop candidates and frame clip.
+        let Some(text_bbox) = text_box(text, ctx.page_size, env.resolved_tokens)
+            .map(|b| b.translated(ctx.dx, ctx.dy))
+        else {
+            // No resolvable box (e.g. anchored text with no authored w/h). We
+            // cannot compute its extent without font metrics, so rather than
+            // silently judging it against the page background we flag it honestly.
+            if text_has_position(text) {
+                push_indeterminate_extent(text, diagnostics);
+            }
+            return;
+        };
+        let (samples, indeterminate_backdrop) =
+            collect_backdrop_samples(text_bbox, ctx.clip, candidates, ctx.page_bg_rgb);
+        backdrop_samples = samples;
+        if indeterminate_backdrop {
+            diagnostics.push(Diagnostic::advisory(
+                "contrast.indeterminate_backdrop",
+                format!(
+                    "text '{}': its backdrop includes an unsampled paint (image, path, or a rotated/masked/blurred/blended fill) and cannot be sampled during validation; add a contrast-bg hint",
+                    text.id
+                ),
+                text.source_span,
+                Some(text.id.clone()),
+            ));
+        }
     }
 
+    let best = select_contrast_sample(fg_rgb, hint_rgb, &backdrop_samples, ctx.page_bg_rgb);
     if let Some(sample) = best
         && sample.lc < threshold
     {
-        let (code, detail) = if sample.lc < INVISIBLE_LC_FLOOR {
-            (
-                "contrast.invisible",
-                format!(
-                    "is effectively invisible against {} (Lc below {:.0})",
-                    sample.source, INVISIBLE_LC_FLOOR
-                ),
-            )
-        } else {
-            (
-                "contrast.low",
-                format!(
-                    "against {} is below the WCAG 3 draft threshold (Lc {:.0})",
-                    sample.source, threshold
-                ),
-            )
-        };
+        emit_contrast_diagnostic(text, sample, threshold, diagnostics);
+    }
+}
+
+/// Emit the appropriate sub-threshold contrast diagnostic. `contrast.invisible`
+/// (a strong Warning signal) fires when the text is effectively painted into its
+/// backdrop; the softer, suppressible `contrast.low` is an Advisory.
+fn emit_contrast_diagnostic(
+    text: &TextNode,
+    sample: ContrastSample,
+    threshold: f64,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    if sample.lc < INVISIBLE_LC_FLOOR {
         diagnostics.push(Diagnostic::warning(
-            code,
+            "contrast.invisible",
             format!(
-                "text '{}': APCA contrast Lc {:.1} {}",
-                text.id, sample.lc, detail
+                "text '{}': APCA contrast Lc {:.1} is effectively invisible against {} (Lc below {:.0})",
+                text.id, sample.lc, sample.source, INVISIBLE_LC_FLOOR
+            ),
+            text.source_span,
+            Some(text.id.clone()),
+        ));
+    } else {
+        diagnostics.push(Diagnostic::advisory(
+            "contrast.low",
+            format!(
+                "text '{}': APCA contrast Lc {:.1} against {} is below the WCAG 3 draft threshold (Lc {:.0})",
+                text.id, sample.lc, sample.source, threshold
             ),
             text.source_span,
             Some(text.id.clone()),
         ));
     }
+}
+
+/// Advisory for a text node with a resolvable position and fill but no
+/// computable box (its extent needs font metrics unavailable at validation).
+fn push_indeterminate_extent(text: &TextNode, diagnostics: &mut Vec<Diagnostic>) {
+    diagnostics.push(Diagnostic::advisory(
+        "contrast.indeterminate_backdrop",
+        format!(
+            "text '{}': its extent (width/height) is unknown during validation, so the backdrop it sits on cannot be sampled; add a contrast-bg hint",
+            text.id
+        ),
+        text.source_span,
+        Some(text.id.clone()),
+    ));
+}
+
+/// Whether a text node carries enough placement to be positioned on the page
+/// (an explicit x/y or a page anchor), even when its extent is unknown.
+fn text_has_position(text: &TextNode) -> bool {
+    text.x.is_some() || text.y.is_some() || text.anchor.is_some()
 }
 
 fn collect_backdrop_samples(
@@ -437,7 +568,7 @@ fn collect_backdrop_samples(
             })
             .collect();
         for candidate in candidates {
-            if candidate.shape.contains_point(candidate.bounds, x, y) {
+            if candidate.covers(x, y) {
                 match &candidate.paint {
                     BackdropPaint::Solid(color) => {
                         samples = composite_solid_samples(&samples, *color);
@@ -589,6 +720,7 @@ fn check_table_text_contrast(
                 dy: 0.0,
                 clip: None,
                 opacity: 1.0,
+                unmodeled: false,
                 page_bg_rgb: cell_bg,
                 page_size,
             };
@@ -687,121 +819,4 @@ fn parse_paint_color(hex: &str, opacity: f64) -> Option<PaintColor> {
 
 fn cascaded_opacity(parent: f64, opacity: Option<f64>) -> f64 {
     parent * opacity.unwrap_or(1.0).clamp(0.0, 1.0)
-}
-
-macro_rules! node_option_field {
-    ($node:expr, $field:ident) => {
-        match $node {
-            Node::Rect(n) => n.$field,
-            Node::Ellipse(n) => n.$field,
-            Node::Image(n) => n.$field,
-            Node::Shape(n) => n.$field,
-            Node::Frame(n) => n.$field,
-            Node::Group(n) => n.$field,
-            Node::Text(n) => n.$field,
-            Node::Line(n) => n.$field,
-            Node::Code(n) => n.$field,
-            Node::Polygon(n) => n.$field,
-            Node::Polyline(n) => n.$field,
-            Node::Path(n) => n.$field,
-            Node::Instance(n) => n.$field,
-            Node::Field(n) => n.$field,
-            Node::Footnote(_) => None,
-            Node::Toc(n) => n.$field,
-            Node::Connector(n) => n.$field,
-            Node::Pattern(n) => n.$field,
-            Node::Chart(n) => n.$field,
-            Node::Light(n) => n.$field,
-            Node::Mesh(n) => n.$field,
-            Node::Table(n) => n.$field,
-            Node::Unknown(_) => None,
-        }
-    };
-}
-
-fn node_opacity(node: &Node) -> Option<f64> {
-    node_option_field!(node, opacity)
-}
-
-fn node_visible(node: &Node) -> bool {
-    node_option_field!(node, visible).unwrap_or(true)
-}
-
-fn clip_bounds(clip: Option<RectPx>, bounds: RectPx) -> Option<RectPx> {
-    match clip {
-        Some(clip) => clip.intersect(bounds),
-        None => Some(bounds),
-    }
-}
-
-fn resolve_color_property(
-    value: Option<&PropertyValue>,
-    resolved_tokens: &BTreeMap<String, ResolvedToken>,
-) -> Option<(u8, u8, u8)> {
-    let Some(PropertyValue::TokenRef(id)) = value else {
-        return None;
-    };
-    resolved_tokens.get(id.as_str()).and_then(|rt| {
-        if let ResolvedValue::Color(hex) = &rt.value {
-            parse_rgb(hex)
-        } else {
-            None
-        }
-    })
-}
-
-fn style_property<'a>(
-    style: Option<&str>,
-    key: &str,
-    style_map: &'a BTreeMap<&str, &Style>,
-) -> Option<&'a PropertyValue> {
-    style_map.get(style?).and_then(|s| s.properties.get(key))
-}
-
-fn resolve_font_size(
-    text: &TextNode,
-    style_map: &BTreeMap<&str, &Style>,
-    resolved_tokens: &BTreeMap<String, ResolvedToken>,
-) -> f64 {
-    text.font_size
-        .as_ref()
-        .or_else(|| style_property(text.style.as_deref(), "font-size", style_map))
-        .and_then(|pv| {
-            if let PropertyValue::TokenRef(id) = pv {
-                resolved_tokens.get(id.as_str()).and_then(|rt| {
-                    if let ResolvedValue::Dimension(dim) = &rt.value {
-                        dim_to_px(dim.value, &dim.unit)
-                    } else {
-                        None
-                    }
-                })
-            } else {
-                None
-            }
-        })
-        .unwrap_or(16.0)
-}
-
-fn resolve_font_weight(
-    text: &TextNode,
-    style_map: &BTreeMap<&str, &Style>,
-    resolved_tokens: &BTreeMap<String, ResolvedToken>,
-) -> u32 {
-    text.font_weight
-        .as_ref()
-        .or_else(|| style_property(text.style.as_deref(), "font-weight", style_map))
-        .and_then(|pv| {
-            if let PropertyValue::TokenRef(id) = pv {
-                resolved_tokens.get(id.as_str()).and_then(|rt| {
-                    if let ResolvedValue::FontWeight(w) = &rt.value {
-                        Some(*w)
-                    } else {
-                        None
-                    }
-                })
-            } else {
-                None
-            }
-        })
-        .unwrap_or(400)
 }

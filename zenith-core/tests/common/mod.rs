@@ -14,6 +14,8 @@
 
 use std::collections::BTreeMap;
 
+pub mod contrast;
+
 pub use zenith_core::ast::block_style::BlockStyle;
 pub use zenith_core::ast::document::Fold;
 pub use zenith_core::{
