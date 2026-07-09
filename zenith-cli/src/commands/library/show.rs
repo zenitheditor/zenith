@@ -15,8 +15,32 @@ struct LibraryShowOutput {
     package: String,
     item: String,
     kind: &'static str,
+    /// How the pack stores its content: `"zen"` or `"svg"`.
+    format: &'static str,
+    /// SPDX-style license expression the pack declares, when it declares one.
+    license: Option<String>,
     detail: ShowDetail,
+    /// Alternate names the item is also findable under.
+    aliases: Vec<String>,
+    /// Free-text search terms attached to the item.
+    tags: Vec<String>,
+    /// Categories the item can be filtered by.
+    categories: Vec<String>,
     to_use: String,
+}
+
+/// The pack/item facts that are not kind-specific: where the item came from,
+/// what it is licensed under, and how it is found.
+///
+/// `library show` is where a user learns that `sync` is an ALIAS of
+/// `refresh-cw`, and under what license the icon ships — neither of which the
+/// item's geometry can tell them.
+struct ItemMeta {
+    format: &'static str,
+    license: Option<String>,
+    aliases: Vec<String>,
+    tags: Vec<String>,
+    categories: Vec<String>,
 }
 
 /// Kind-specific content for `library show`.
@@ -105,6 +129,13 @@ pub fn show(spec: &str, project_dir: Option<&Path>, json: bool) -> Result<String
         .ok_or_else(|| ShowCmdErr::new(unknown_item_message(&pkg_id, &item_id, pack), 2))?;
 
     let kind = pack_item.kind;
+    let meta = ItemMeta {
+        format: pack.format.label(),
+        license: pack.license.clone(),
+        aliases: pack_item.aliases.clone(),
+        tags: pack_item.tags.clone(),
+        categories: pack_item.categories.clone(),
+    };
 
     // Derive content detail from the pack document, converting only this item.
     let pack_doc = load_pack_document(pack, ItemScope::Only(&item_id))
@@ -279,12 +310,19 @@ pub fn show(spec: &str, project_dir: Option<&Path>, json: bool) -> Result<String
             package: pkg_id,
             item: item_id,
             kind: kind.label(),
+            format: meta.format,
+            license: meta.license,
             detail,
+            aliases: meta.aliases,
+            tags: meta.tags,
+            categories: meta.categories,
             to_use,
         };
         Ok(serialize_pretty(&out))
     } else {
-        Ok(format_show_human(&pkg_id, &item_id, kind, &detail, &to_use))
+        Ok(format_show_human(
+            &pkg_id, &item_id, kind, &meta, &detail, &to_use,
+        ))
     }
 }
 
@@ -293,6 +331,7 @@ fn format_show_human(
     pkg_id: &str,
     item_id: &str,
     kind: ItemKind,
+    meta: &ItemMeta,
     detail: &ShowDetail,
     to_use: &str,
 ) -> String {
@@ -300,6 +339,10 @@ fn format_show_human(
     lines.push(format!("package : {}", pkg_id));
     lines.push(format!("item    : {}", item_id));
     lines.push(format!("kind    : {}", kind.label()));
+    lines.push(format!("format  : {}", meta.format));
+    if let Some(license) = &meta.license {
+        lines.push(format!("license : {}", license));
+    }
     lines.push(String::new());
 
     match detail {
@@ -332,6 +375,17 @@ fn format_show_human(
                 }
             ));
         }
+    }
+
+    // How the item is FOUND — the other half of `library search`.
+    if !meta.aliases.is_empty() {
+        lines.push(format!("aliases : {}", meta.aliases.join(", ")));
+    }
+    if !meta.tags.is_empty() {
+        lines.push(format!("tags    : {}", meta.tags.join(", ")));
+    }
+    if !meta.categories.is_empty() {
+        lines.push(format!("category: {}", meta.categories.join(", ")));
     }
 
     lines.push(String::new());
@@ -519,6 +573,47 @@ mod tests {
         assert!(out.contains("root    : shape"), "root: {}", out);
         // to_use for a component must include --page
         assert!(out.contains("--page <page-id>"), "to_use: {}", out);
+    }
+
+    /// `library show` is where a user learns WHY search found an item, and what
+    /// license it ships under. Neither is derivable from its geometry.
+    #[test]
+    fn show_surfaces_format_license_and_search_metadata() {
+        let out = show("@zenith/icons-lucide#refresh-cw", None, false).expect("show ok");
+        assert!(out.contains("format  : svg"), "format: {out}");
+        assert!(out.contains("license : ISC AND MIT"), "license: {out}");
+        // `sync` is an alias, not an id — this line is the only place that says so.
+        assert!(out.contains("aliases : sync"), "aliases: {out}");
+        assert!(out.contains("tags    : rotate"), "tags: {out}");
+        assert!(out.contains("category: arrows"), "categories: {out}");
+
+        let json = show("@zenith/icons-lucide#refresh-cw", None, true).expect("show ok");
+        let value: serde_json::Value = serde_json::from_str(&json).expect("valid JSON");
+        assert_eq!(value["format"], "svg");
+        assert_eq!(value["license"], "ISC AND MIT");
+        assert_eq!(value["aliases"][0], "sync");
+        assert!(
+            value["categories"]
+                .as_array()
+                .is_some_and(|c| !c.is_empty())
+        );
+    }
+
+    /// A `.zen` pack declares no license and carries no search metadata; those
+    /// lines are omitted rather than printed empty.
+    #[test]
+    fn show_omits_absent_metadata_for_zen_packs() {
+        let out = show("@zenith/flowchart#decision", None, false).expect("show ok");
+        assert!(out.contains("format  : zen"), "format: {out}");
+        assert!(!out.contains("license :"), "no license line: {out}");
+        assert!(!out.contains("aliases :"), "no aliases line: {out}");
+        assert!(!out.contains("tags    :"), "no tags line: {out}");
+
+        let json = show("@zenith/flowchart#decision", None, true).expect("show ok");
+        let value: serde_json::Value = serde_json::from_str(&json).expect("valid JSON");
+        assert_eq!(value["format"], "zen");
+        assert!(value["license"].is_null());
+        assert!(value["aliases"].as_array().is_some_and(|a| a.is_empty()));
     }
 
     #[test]

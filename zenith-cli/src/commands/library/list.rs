@@ -35,7 +35,7 @@ struct PackItemJson<'a> {
 /// item order is preserved from the pack's component order.
 ///
 /// - Human (default): one header line per pack
-///   (`<id>  <version>  [preset|project]`, with a trailing `(tokens: N)` when
+///   (`<id>  <version>  [preset|project zen|svg]`, with a trailing `(tokens: N)` when
 ///   the pack's token block is non-empty) followed by indented `#<item>` lines,
 ///   truncated at `MAX_LISTED_ITEMS` — an icon library exports ~1745 items,
 ///   and dumping them all is not a listing.
@@ -93,10 +93,11 @@ fn format_human(packs: &[LibraryPack]) -> String {
             String::new()
         };
         lines.push(format!(
-            "{}  {}  [{}]{}",
+            "{}  {}  [{} {}]{}",
             pack.id,
             version,
             pack.source.label(),
+            pack.format.label(),
             tokens_suffix
         ));
         for item in pack.items.iter().take(MAX_LISTED_ITEMS) {
@@ -142,7 +143,7 @@ mod tests {
         let packs = resolve_packs(None);
         let out = list(&packs, false);
         assert!(out.contains("@zenith/flowchart"), "got: {}", out);
-        assert!(out.contains("[preset]"), "got: {}", out);
+        assert!(out.contains("[preset zen]"), "got: {}", out);
         assert!(out.contains("#process (component)"), "got: {}", out);
         assert!(out.contains("#decision (component)"), "got: {}", out);
         assert!(out.contains("#terminator (component)"), "got: {}", out);
@@ -241,7 +242,7 @@ mod tests {
             .lines()
             .find(|line| line.contains("@zenith/theme.cobalt"))
             .expect("theme.cobalt header line present");
-        assert!(header_line.contains("[preset]"), "got: {}", header_line);
+        assert!(header_line.contains("[preset"), "got: {}", header_line);
         let next_line = human
             .lines()
             .skip_while(|line| !line.contains("@zenith/theme.cobalt"))
@@ -353,6 +354,6 @@ mod tests {
             token_count: 0,
         };
         let out = list(std::slice::from_ref(&pack), false);
-        assert!(out.contains("@x/y  -  [preset]"), "got: {}", out);
+        assert!(out.contains("@x/y  -  [preset zen]"), "got: {}", out);
     }
 }

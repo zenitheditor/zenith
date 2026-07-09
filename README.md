@@ -368,6 +368,44 @@ See [`examples/connector-routing.zen`](./examples/connector-routing.zen) for a c
 
 </details>
 
+## Icons & libraries
+
+<details><summary>Reusable packs in two formats: a <code>.zen</code> file, or a plain directory of <code>*.svg</code>. The full Lucide icon set (1745 icons) ships embedded.</summary>
+
+A **pack** exports named **items** addressed `<package>#<item>`, materialized into a document with `zenith library add`. Items come in three kinds: `component` (a node group, placed as an `instance`), `token` (a filter/mask token), and `action` (a canned transaction).
+
+A pack is stored in one of two formats:
+
+- **A `.zen` file** — the feature-rich format: tokens, components, and actions, authored directly. It declares its own identity with a `library` self-entry.
+- **A directory of `*.svg`** — the plug-and-install format, for icon sets. Each `*.svg` is one icon; its id is the file stem. There is nothing to author: drop a folder into `<project>/libraries/` and it is a pack, addressed `@local/<dirname>#<stem>`.
+
+SVG icons are converted to **native, editable `path` nodes** at add-time — not embedded as an opaque raster or an `<image>` reference. Restyle them with instance overrides (`override ref="icon.0" stroke=(token)"brand" …`) like any other geometry. Conversion is deterministic and scoped: adding one icon converts one icon.
+
+The embedded `@zenith/icons-lucide` pack carries the complete [Lucide](https://lucide.dev/) set (1745 icons, ISC AND MIT). Because that is far too many to enumerate, discovery is search-first:
+
+```bash
+zenith library search sync                       # → refresh-cw (matched on its alias)
+zenith library search arrow --category navigation
+zenith library search cloud --kind component --limit 5
+zenith library show  @zenith/icons-lucide#house  # format, license, aliases, tags, geometry
+zenith library add   @zenith/icons-lucide#house --into poster.zen --page pg --at 40,40
+```
+
+Search is ranked, not a substring scan: an item **named** for your query beats one **aliased** to it, which beats one merely **tagged** with it — so `home` returns `house`, not `lamp`. Every query term must match, and `categories` filter rather than rank.
+
+An optional `library.kdl` beside the icons supplies identity and that search metadata; without one, icons are still findable by their filename:
+
+```kdl
+library id="@acme/icons" version="1.0.0" {
+  license "CC0-1.0"
+  icon "rocket-launch" aliases="liftoff" tags="spaceship booster" categories="space"
+}
+```
+
+A project pack shadows an embedded pack of the same id, in either format.
+
+</details>
+
 ## Command surface
 
 <details><summary>Author · render · edit · variants · library · theme · history · agent — every command takes <code>--json</code>.</summary>
@@ -380,7 +418,7 @@ Run `zenith <command> --help` for flags (each prints a description and an exampl
 | **Render**    | `render` (`--pdf` · `--scene` · `--all-pages` · `--spread` · `--page`)                                    |
 | **Edit**      | `tx` (typed transactions, dry-run by default)                                                             |
 | **Variants**  | `variant` (one design → many sizes/formats) · `merge` (CSV data mail-merge)                               |
-| **Library**   | `library list` · `library add`                                                                            |
+| **Library**   | `library list` · `library search` · `library show` · `library add`                                        |
 | **Theme**     | `theme new` (synthesize a token pack from brand colours)                                                  |
 | **History**   | `history` · `undo` · `redo` · `version` · `restore` · `sync`                                              |
 | **Workspace** | `scratch new/list/show` · `candidate <status>` · `promote --into <page>` · `finalize` · `bundle/unbundle` |
