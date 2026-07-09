@@ -11,6 +11,7 @@ use zenith_core::{
 
 use crate::ir::SceneCommand;
 
+use super::super::font_ns::NamespacedFontProvider;
 use super::super::imports::{ImportSource, parse_import_source};
 use super::super::util::resolve_geometry_px;
 use super::super::{NodeCtx, RenderCtx};
@@ -190,12 +191,17 @@ fn compile_imported_instance(
     let prefix = format!("{}/", instance.id);
     prefix_ids_in_children(&mut children, &prefix);
 
+    // Route the imported subtree's font resolution through a namespaced wrapper:
+    // its text requests plain family names, which resolve to the import's own
+    // faces (registered under `"{import_id}/{family}"`) first, then fall back to
+    // bundled/host-registered families. Host compilation keeps `cx.fonts`.
+    let imported_fonts = NamespacedFontProvider::new(cx.fonts, import_id);
     let imported_cx = NodeCtx {
         resolved: &imported.resolved,
         style_map: &imported.style_map,
         components: &imported.components,
         imports: cx.imports,
-        fonts: cx.fonts,
+        fonts: &imported_fonts,
         engine: cx.engine,
         chains: cx.chains,
         flows: cx.flows,

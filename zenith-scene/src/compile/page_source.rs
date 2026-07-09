@@ -4,6 +4,7 @@ use zenith_core::{DataContext, Diagnostic, FontProvider, Page, dim_to_px};
 
 use crate::ir::SceneCommand;
 
+use super::font_ns::NamespacedFontProvider;
 use super::imports::{ImportGraph, ImportScopes, ImportSource, parse_import_source};
 use super::{RenderCtx, compile_page_inner};
 
@@ -137,9 +138,13 @@ pub(in crate::compile) fn compile_page_source(
         return;
     };
 
+    // The imported page's text requests plain family names; route them through a
+    // namespaced wrapper so the import's own faces (registered under
+    // `"{import_id}/{family}"`) win, then fall back to bundled/host families.
+    let imported_fonts = NamespacedFontProvider::new(env.fonts, import_id);
     let mut imported_result = compile_page_inner(
         scope.document,
-        env.fonts,
+        &imported_fonts,
         imported_index,
         env.data,
         Some(graph),

@@ -25,6 +25,7 @@ mod data_resolve;
 mod effect;
 mod entry;
 mod field;
+mod font_ns;
 mod footnote;
 mod image;
 mod imports;

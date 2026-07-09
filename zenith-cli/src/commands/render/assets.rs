@@ -43,7 +43,7 @@ pub(crate) fn build_font_provider(
 ) -> Result<BytesFontProvider, RenderCmdErr> {
     let mut provider = default_provider();
     if let Some(dir) = project_dir {
-        register_project_fonts(&mut provider, doc, dir, locked)?;
+        register_project_fonts(&mut provider, doc, dir, None, locked)?;
     }
     register_local_fonts(&mut provider, doc);
     Ok(provider)
@@ -57,9 +57,9 @@ pub(crate) fn build_font_provider_with_imports(
 ) -> Result<BytesFontProvider, RenderCmdErr> {
     let mut provider = default_provider();
     if let Some(dir) = project_dir {
-        register_project_fonts(&mut provider, doc, dir, locked)?;
-        for (_, imported, import_dir) in imports.documents_with_dirs() {
-            register_project_fonts(&mut provider, imported, import_dir, locked)?;
+        register_project_fonts(&mut provider, doc, dir, None, locked)?;
+        for (import_id, imported, import_dir) in imports.documents_with_dirs() {
+            register_project_fonts(&mut provider, imported, import_dir, Some(import_id), locked)?;
         }
     }
     register_local_fonts(&mut provider, doc);
@@ -69,10 +69,19 @@ pub(crate) fn build_font_provider_with_imports(
 /// Register every `font`-kind project asset declared in `doc` into `provider`
 /// with [`FontSource::Project`]. Extracted from [`build_font_provider`] so the
 /// project pass and the local-system pass are clearly separated.
+///
+/// When `family_prefix` is `Some(import_id)` the face is registered under the
+/// namespaced family `"{import_id}/{family}"` instead of its real family name.
+/// This keeps an imported document's fonts in their own family namespace so a
+/// host font and an imported font that share a real family name do not shadow or
+/// merge each other (the imported subtree is compiled through a
+/// `NamespacedFontProvider` that prepends the same prefix). The host document
+/// passes `None`, so host registration and the no-imports path are unchanged.
 fn register_project_fonts(
     provider: &mut BytesFontProvider,
     doc: &Document,
     dir: &Path,
+    family_prefix: Option<&str>,
     locked: bool,
 ) -> Result<(), RenderCmdErr> {
     for decl in &doc.assets.assets {
@@ -107,7 +116,11 @@ fn register_project_fonts(
         let arc: Arc<[u8]> = Arc::from(bytes.as_slice());
         match zenith_layout::face_metadata(&arc, 0) {
             Ok(m) => {
-                provider.register(&m.family, m.weight, m.style, arc, 0, FontSource::Project);
+                let family = match family_prefix {
+                    Some(prefix) => format!("{prefix}/{}", m.family),
+                    None => m.family.clone(),
+                };
+                provider.register(&family, m.weight, m.style, arc, 0, FontSource::Project);
             }
             Err(e) => {
                 if locked {
@@ -650,7 +663,12 @@ mod tests {
     }
 
     #[test]
-    fn build_font_provider_registers_imported_font_assets_from_import_directory() {
+    fn build_font_provider_registers_imported_font_under_import_namespace() {
+        // An imported font whose real family is "Noto Sans" is registered under
+        // the namespaced family "brand/Noto Sans" — NOT the plain "Noto Sans".
+        // The plain family therefore still resolves to the bundled face (the
+        // import does not shadow the host/bundled namespace), while the
+        // namespaced family resolves to the imported Project face.
         let dir = tempfile::tempdir().expect("tempdir");
         std::fs::create_dir(dir.path().join("brand")).expect("create brand dir");
         let font_src = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -690,11 +708,109 @@ mod tests {
 
         let provider = build_font_provider_with_imports(&root, Some(dir.path()), &imports, false)
             .expect("provider");
-        let family = "Noto Sans".to_owned();
-        let resolved = provider
-            .resolve(&[family], 400, zenith_core::FontStyle::Normal)
-            .expect("imported font asset must resolve");
 
-        assert_eq!(resolved.source, FontSource::Project);
+        // Plain "Noto Sans" is untouched by the import: still the bundled face.
+        let plain = provider
+            .resolve(
+                &["Noto Sans".to_owned()],
+                400,
+                zenith_core::FontStyle::Normal,
+            )
+            .expect("plain family resolves to bundled");
+        assert_eq!(plain.source, FontSource::Bundled);
+
+        // The imported face lives under the import namespace as a Project face.
+        let namespaced = provider
+            .resolve(
+                &["brand/Noto Sans".to_owned()],
+                400,
+                zenith_core::FontStyle::Normal,
+            )
+            .expect("namespaced imported font asset must resolve");
+        assert_eq!(namespaced.source, FontSource::Project);
+        assert!(
+            namespaced.id.starts_with("brand/"),
+            "imported face id must be namespaced, got {}",
+            namespaced.id
+        );
+    }
+
+    #[test]
+    fn host_and_imported_same_family_do_not_shadow_each_other() {
+        // Host and imported documents each declare their OWN font asset that
+        // reports the SAME real family name ("Noto Sans"). Both must register as
+        // DISTINCT faces: the host under the plain family, the import under the
+        // namespaced family. Neither shadows or merges the other.
+        let dir = tempfile::tempdir().expect("tempdir");
+        std::fs::create_dir(dir.path().join("brand")).expect("create brand dir");
+        let font_src = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../zenith-core/assets/fonts/NotoSans-Regular.ttf");
+        std::fs::copy(&font_src, dir.path().join("host.ttf")).expect("copy host font");
+        std::fs::copy(&font_src, dir.path().join("brand/brand.ttf")).expect("copy imported font");
+        std::fs::write(
+            dir.path().join("brand/brand.zen"),
+            r#"zenith version=1 {
+  project id="proj.brand" name="Brand"
+  assets {
+    asset id="font.brand" kind="font" src="brand.ttf"
+  }
+  document id="doc.brand" title="Brand" {
+    page id="page.brand" w=(px)10 h=(px)10
+  }
+}
+"#,
+        )
+        .expect("write imported document");
+        let root = parse(
+            r#"zenith version=1 {
+  project id="proj.host" name="Host"
+  imports {
+    import id="brand" kind="zen" src="brand/brand.zen"
+  }
+  assets {
+    asset id="font.host" kind="font" src="host.ttf"
+  }
+  document id="doc.host" title="Host" {
+    page id="page.host" w=(px)10 h=(px)10
+  }
+}
+"#,
+        );
+        let imports = load_import_graph(&root, Some(dir.path()));
+
+        let provider = build_font_provider_with_imports(&root, Some(dir.path()), &imports, false)
+            .expect("provider");
+
+        // Host text resolves the host face under the plain family (Project, since
+        // the host declares its own "Noto Sans", overriding the bundled face).
+        let host = provider
+            .resolve(
+                &["Noto Sans".to_owned()],
+                400,
+                zenith_core::FontStyle::Normal,
+            )
+            .expect("host family resolves");
+        assert_eq!(host.source, FontSource::Project);
+        assert_eq!(host.id, "noto-sans-400-normal");
+
+        // Imported text (routed through the namespaced family) resolves the
+        // imported face — a DISTINCT face id, not the host's.
+        let imported = provider
+            .resolve(
+                &["brand/Noto Sans".to_owned()],
+                400,
+                zenith_core::FontStyle::Normal,
+            )
+            .expect("imported namespaced family resolves");
+        assert_eq!(imported.source, FontSource::Project);
+        assert_ne!(
+            imported.id, host.id,
+            "host and imported faces must have distinct ids (no shadowing)"
+        );
+        assert!(
+            imported.id.starts_with("brand/"),
+            "imported face id must be namespaced, got {}",
+            imported.id
+        );
     }
 }
