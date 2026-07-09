@@ -59,7 +59,7 @@ pub(in crate::compile) use ctx::NodeCtx;
 use data_resolve::{scan_for_data_refs, substitute_data_refs};
 use effect::{compile_light, compile_mesh};
 use field::{
-    FieldCtx, build_connector_target_kinds, build_node_boxes, build_page_index_map, build_port_map,
+    FieldCtx, build_connector_targets, build_node_boxes, build_page_index_map, build_port_map,
     build_section_assignments, compute_live_area, resolve_field_to_text,
 };
 use image::compile_image;
@@ -471,8 +471,8 @@ pub(in crate::compile) fn compile_page_inner(
     // no node carries a complete rect (byte-identical to before for any text node
     // without `text-exclusion`).
     let node_boxes = build_node_boxes(page, resolved, &component_map, &import_scopes);
-    let connector_target_kinds =
-        build_connector_target_kinds(page, &node_boxes, &component_map, &import_scopes);
+    let connector_targets =
+        build_connector_targets(page, &node_boxes, resolved, &component_map, &import_scopes);
     let port_map = build_port_map(page, &component_map, &import_scopes);
 
     // ── Step 7d: compute section assignments (document-wide, one-shot) ───
@@ -490,7 +490,8 @@ pub(in crate::compile) fn compile_page_inner(
         page_index_by_node_id: &page_index_by_node_id,
         footnote_markers: &footnote_markers,
         node_boxes: &node_boxes,
-        connector_target_kinds: &connector_target_kinds,
+        connector_target_kinds: &connector_targets.kinds,
+        connector_outline_boxes: &connector_targets.outline_boxes,
         port_map: &port_map,
         total_pages: doc.body.pages.len(),
         pages: &doc.body.pages,
@@ -957,6 +958,7 @@ pub(in crate::compile) fn compile_node(
                     chains,
                     footnote_markers: field_ctx.footnote_markers,
                     node_boxes: field_ctx.node_boxes,
+                    connector_outline_boxes: field_ctx.connector_outline_boxes,
                     connector_target_kinds: field_ctx.connector_target_kinds,
                     port_map: field_ctx.port_map,
                     anchors,

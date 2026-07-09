@@ -16,6 +16,7 @@ mod shape;
 
 pub(in crate::compile) use common::resolve_dash_params;
 pub(super) use connector::{ConnectorEnv, compile_connector};
+pub(in crate::compile) use poly::path_outline_bounds;
 pub(super) use poly::{compile_line, compile_path, compile_polygon, compile_polyline};
 pub(super) use rect_ellipse::{RectEllipseEnv, compile_ellipse, compile_rect};
 pub(super) use shape::{ShapeCompileEnv, compile_shape};

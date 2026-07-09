@@ -9,7 +9,7 @@ use zenith_core::{
 };
 use zenith_geometry::{
     GeometryError, PathAnchor as GeometryPathAnchor, PathGeometry,
-    PathSegment as GeometryPathSegment, Point2,
+    PathSegment as GeometryPathSegment, Point2, RectBounds,
 };
 
 use crate::ir::{FillRule, Paint, PathSegment, SceneCommand, StrokeAlign};
@@ -392,6 +392,72 @@ fn resolve_geometry_path_anchor(
             None
         }
     }
+}
+
+/// Resolve `Option<Dimension>` coordinate to pixels (no group offset, no
+/// diagnostics). Absent or unsupported-unit → `None`.
+fn outline_dim_px(dim: &Option<Dimension>) -> Option<f64> {
+    let d = dim.as_ref()?;
+    dim_to_px(d.value, &d.unit)
+}
+
+/// Resolve an optional Bezier handle for the outline-bounds path: both absent →
+/// no handle; both present → that point; a mixed pair → the anchor point as a
+/// degenerate fallback (matching [`resolve_path_handle_point`]). `None` only on
+/// an unsupported unit.
+fn outline_handle_point(
+    x: &Option<Dimension>,
+    y: &Option<Dimension>,
+    anchor_point: Point2,
+) -> Option<Option<Point2>> {
+    if x.is_none() && y.is_none() {
+        return Some(None);
+    }
+    let (Some(xd), Some(yd)) = (x, y) else {
+        return Some(Some(anchor_point));
+    };
+    let px = dim_to_px(xd.value, &xd.unit)?;
+    let py = dim_to_px(yd.value, &yd.unit)?;
+    Some(Some(Point2::new(px, py).ok()?))
+}
+
+/// Convert a core [`PathAnchor`] to a geometry anchor in LOCAL coordinates for
+/// bounds computation. `None` on any unresolvable coordinate/handle — the caller
+/// then treats the whole path as having no outline.
+fn outline_geometry_anchor(anchor: &PathAnchor) -> Option<GeometryPathAnchor> {
+    let point = Point2::new(outline_dim_px(&anchor.x)?, outline_dim_px(&anchor.y)?).ok()?;
+    let in_handle = outline_handle_point(&anchor.in_x, &anchor.in_y, point)?;
+    let out_handle = outline_handle_point(&anchor.out_x, &anchor.out_y, point)?;
+    GeometryPathAnchor::new(point, in_handle, out_handle).ok()
+}
+
+/// The EXTREMA-AWARE local bounding box `(x, y, w, h)` of a structured `path`,
+/// unioning every compound subpath. Reuses the same core→geometry conversion as
+/// [`resolve_path_segments`] (via [`PathGeometry`]) so the bounds honor true
+/// cubic-curve extrema, not the anchor hull. Returns `None` when the path has no
+/// resolvable anchor or any coordinate/handle/topology fails — the connector
+/// then reports the target unresolved rather than attaching to a bogus box.
+///
+/// Coordinates are LOCAL (no group/instance offset); the connector-target walk
+/// adds the accumulated translation, exactly as it does for polygon points.
+pub(in crate::compile) fn path_outline_bounds(path: &PathNode) -> Option<(f64, f64, f64, f64)> {
+    let mut union: Option<RectBounds> = None;
+    for subpath in path.effective_subpaths() {
+        let subpath_closed = subpath.closed == Some(true);
+        let mut anchors = Vec::with_capacity(subpath.anchors.len());
+        for anchor in subpath.anchors {
+            anchors.push(outline_geometry_anchor(anchor)?);
+        }
+        let geometry = PathGeometry::new(anchors, subpath_closed).ok()?;
+        if let Some(bounds) = geometry.bounds().ok()? {
+            union = Some(match union {
+                Some(current) => current.include_bounds(bounds),
+                None => bounds,
+            });
+        }
+    }
+    let bounds = union?;
+    Some((bounds.min_x, bounds.min_y, bounds.width(), bounds.height()))
 }
 
 fn map_geometry_path_segment(segment: GeometryPathSegment) -> PathSegment {

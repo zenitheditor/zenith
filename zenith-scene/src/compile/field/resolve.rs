@@ -53,6 +53,12 @@ pub(crate) struct FieldCtx<'a> {
     /// `node_boxes`; connectors use this only for divided anchor perimeter
     /// resolution.
     pub(in crate::compile) connector_target_kinds: &'a BTreeMap<String, ConnectorTargetKind>,
+    /// This page's CONNECTOR-SCOPED outline-box map: node id → ABSOLUTE bounds
+    /// rect `(x, y, w, h)` in pixels, for targets whose exact geometry is not a
+    /// rectangular `node_boxes` box (polygon/polyline/path). Kept separate from
+    /// `node_boxes` so text runaround never gains these entries. Connectors
+    /// consult `node_boxes` first, then this map.
+    pub(in crate::compile) connector_outline_boxes: &'a BTreeMap<String, (f64, f64, f64, f64)>,
     /// This page's node id -> port id -> connector anchor string map. Ports are
     /// page/component metadata used only by connectors that reference `node#port`.
     pub(in crate::compile) port_map: &'a BTreeMap<String, BTreeMap<String, PortTarget>>,
@@ -305,6 +311,7 @@ mod tests {
         let markers: BTreeMap<String, String> = BTreeMap::new();
         let boxes: BTreeMap<String, (f64, f64, f64, f64)> = BTreeMap::new();
         let connector_target_kinds: BTreeMap<String, ConnectorTargetKind> = BTreeMap::new();
+        let connector_outline_boxes: BTreeMap<String, (f64, f64, f64, f64)> = BTreeMap::new();
         let port_map: BTreeMap<String, BTreeMap<String, PortTarget>> = BTreeMap::new();
         let ctx = FieldCtx {
             page_index_1based: 2,
@@ -315,6 +322,7 @@ mod tests {
             footnote_markers: &markers,
             node_boxes: &boxes,
             connector_target_kinds: &connector_target_kinds,
+            connector_outline_boxes: &connector_outline_boxes,
             port_map: &port_map,
             total_pages: 5,
             section_page_index: None,
@@ -355,6 +363,11 @@ mod tests {
         EMPTY.get_or_init(BTreeMap::new)
     }
 
+    fn empty_outline_boxes() -> &'static BTreeMap<String, (f64, f64, f64, f64)> {
+        static EMPTY: OnceLock<BTreeMap<String, (f64, f64, f64, f64)>> = OnceLock::new();
+        EMPTY.get_or_init(BTreeMap::new)
+    }
+
     /// The five section-relative fields, grouped to keep `ctx_with_section`
     /// under the argument-count lint.
     #[derive(Default)]
@@ -382,6 +395,7 @@ mod tests {
             footnote_markers: markers,
             node_boxes: boxes,
             connector_target_kinds: empty_connector_target_kinds(),
+            connector_outline_boxes: empty_outline_boxes(),
             port_map: empty_port_map(),
             total_pages: total,
             section_page_index: None,
@@ -588,6 +602,7 @@ mod tests {
             footnote_markers: markers,
             node_boxes: boxes,
             connector_target_kinds: empty_connector_target_kinds(),
+            connector_outline_boxes: empty_outline_boxes(),
             port_map: empty_port_map(),
             total_pages: total,
             section_page_index: sec.page_index,

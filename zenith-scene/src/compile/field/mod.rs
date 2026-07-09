@@ -19,7 +19,7 @@ mod section;
 
 pub(in crate::compile) use folio::format_folio;
 pub(in crate::compile) use projection::{
-    ConnectorTargetKind, PortTarget, build_connector_target_kinds, build_node_boxes,
+    ConnectorTargetKind, PortTarget, build_connector_targets, build_node_boxes,
     build_page_index_map, build_port_map, compute_live_area,
 };
 pub(in crate::compile) use resolve::{FieldCtx, resolve_field_to_text};
