@@ -18,5 +18,7 @@ mod show;
 
 pub use add::{AddCmdErr, AddResult, add};
 pub use list::list;
-pub use search::search;
+pub use search::{
+    DEFAULT_LIMIT as DEFAULT_SEARCH_LIMIT, Filter as SearchFilter, SearchOptions, search,
+};
 pub use show::{ShowCmdErr, show};

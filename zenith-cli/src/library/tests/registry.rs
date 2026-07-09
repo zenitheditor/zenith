@@ -2,13 +2,24 @@
 
 use super::support::{FILTERS_SRC, hard_errors};
 use crate::library::{
-    EMBEDDED_PACKS, ItemKind, PackItem, PackSource, embedded_preset_assets_for_document,
-    load_embedded_packs, load_project_packs, parse_pack, resolve_packs,
+    EMBEDDED_PACKS, ItemKind, ItemScope, PackFormat, PackItem, PackSource, embedded_preset_asset,
+    embedded_preset_assets_for_document, load_embedded_packs, load_project_packs, pack_document,
+    parse_pack, resolve_packs,
 };
 use zenith_core::{KdlAdapter, KdlSource, Node};
 
+/// A `PackItem` with no search metadata — the shape every `.zen` pack item takes.
+fn item(id: &str, kind: ItemKind) -> PackItem {
+    PackItem {
+        id: id.to_owned(),
+        kind,
+        aliases: Vec::new(),
+        tags: Vec::new(),
+        categories: Vec::new(),
+    }
+}
+
 const FLOWCHART_SRC: &str = include_str!("../../../assets/libraries/zenith-flowchart.zen");
-const LUCIDE_SRC: &str = include_str!("../../../assets/libraries/zenith-icons-lucide.zen");
 
 #[test]
 fn parse_embedded_flowchart_identity_and_items() {
@@ -19,18 +30,9 @@ fn parse_embedded_flowchart_identity_and_items() {
     assert_eq!(
         pack.items,
         vec![
-            PackItem {
-                id: "process".to_owned(),
-                kind: ItemKind::Component
-            },
-            PackItem {
-                id: "decision".to_owned(),
-                kind: ItemKind::Component
-            },
-            PackItem {
-                id: "terminator".to_owned(),
-                kind: ItemKind::Component
-            },
+            item("process", ItemKind::Component),
+            item("decision", ItemKind::Component),
+            item("terminator", ItemKind::Component),
         ]
     );
 }
@@ -54,10 +56,8 @@ fn parse_pack_with_actions_lists_action_items() {
     let pack = parse_pack(ACTION_PACK_SRC, PackSource::Preset).expect("action pack parses");
     assert_eq!(pack.id, "@test/actions");
     assert!(
-        pack.items.contains(&PackItem {
-            id: "apply-brand-kit".to_owned(),
-            kind: ItemKind::Action,
-        }),
+        pack.items
+            .contains(&item("apply-brand-kit", ItemKind::Action)),
         "action item must be present; items: {:?}",
         pack.items
     );
@@ -100,37 +100,50 @@ fn embedded_brand_kit_pack_lists_action_items() {
 }
 
 #[test]
-fn embedded_lucide_pack_lists_native_icon_components() {
-    let pack = parse_pack(LUCIDE_SRC, PackSource::Preset).expect("lucide pack parses");
-    assert_eq!(pack.id, "@zenith/icons-lucide");
-    assert_eq!(pack.version.as_deref(), Some("0.1.0"));
-    assert!(
-        pack.items
-            .iter()
-            .any(|it| it.id == "monitor" && it.kind == ItemKind::Component),
-        "monitor component listed"
-    );
-    assert!(
-        pack.items
-            .iter()
-            .any(|it| it.id == "cloud" && it.kind == ItemKind::Component),
-        "cloud component listed"
-    );
-    assert!(
-        pack.items
-            .iter()
-            .any(|it| it.id == "server" && it.kind == ItemKind::Component),
-        "server component listed"
-    );
+fn bundled_lucide_is_an_svg_library_of_native_icon_components() {
+    let packs = load_embedded_packs();
+    let pack = packs
+        .iter()
+        .find(|p| p.id == "@zenith/icons-lucide")
+        .expect("lucide is bundled");
 
-    let doc = KdlAdapter
-        .parse(LUCIDE_SRC.as_bytes())
-        .expect("lucide pack document parses");
-    let embedded_assets = embedded_preset_assets_for_document(&doc);
-    assert!(
-        embedded_assets.is_empty(),
-        "native Lucide pack should not require SVG asset write intents"
-    );
+    assert_eq!(pack.format, PackFormat::SvgDir);
+    assert_eq!(pack.source, PackSource::Preset);
+    assert_eq!(pack.version.as_deref(), Some("1.23.0"));
+    // The whole upstream set, not a hand-picked subset.
+    assert!(pack.items.len() > 1700, "got {} items", pack.items.len());
+
+    for id in ["monitor", "cloud", "server", "house", "refresh-cw"] {
+        assert!(
+            pack.items
+                .iter()
+                .any(|it| it.id == id && it.kind == ItemKind::Component),
+            "{id} component listed"
+        );
+    }
+
+    // Search metadata rides on the item, sourced from `library.kdl`.
+    let refresh = pack
+        .items
+        .iter()
+        .find(|it| it.id == "refresh-cw")
+        .expect("refresh-cw");
+    assert!(refresh.aliases.contains(&"sync".to_owned()));
+    assert!(refresh.categories.contains(&"arrows".to_owned()));
+}
+
+#[test]
+fn bundled_lucide_synthesizes_only_the_requested_icon() {
+    let packs = load_embedded_packs();
+    let pack = packs
+        .iter()
+        .find(|p| p.id == "@zenith/icons-lucide")
+        .expect("lucide is bundled");
+
+    let doc = pack_document(pack, ItemScope::Only("monitor")).expect("monitor synthesizes");
+
+    // Scoped conversion: one component, not 1745.
+    assert_eq!(doc.components.len(), 1);
     let monitor = doc
         .components
         .iter()
@@ -141,15 +154,35 @@ fn embedded_lucide_pack_lists_native_icon_components() {
             .children
             .iter()
             .all(|node| matches!(node, Node::Path(_))),
-        "native Lucide component should contain editable paths"
+        "an SVG icon component should contain editable paths"
     );
     assert!(monitor.children.len() >= 2);
+
+    // A synthesized icon pack declares no SVG assets: geometry is native.
+    assert!(
+        embedded_preset_assets_for_document(&doc).is_empty(),
+        "native icon components should not require SVG asset write intents"
+    );
+
     let errors = hard_errors(&doc);
     assert!(
         errors.is_empty(),
-        "embedded lucide pack must validate with no errors; got: {:?}",
+        "synthesized lucide pack must validate with no errors; got: {:?}",
         errors
     );
+}
+
+#[test]
+fn every_bundled_icon_is_addressable_as_an_embedded_asset() {
+    let asset = embedded_preset_asset("assets/zenith/icons/lucide/house.svg")
+        .expect("bundled icons are addressable as assets");
+    assert!(asset.bytes.starts_with(b"<svg"));
+
+    // Paths that name no bundled icon, or escape the icon root, do not resolve.
+    assert!(embedded_preset_asset("assets/zenith/icons/lucide/no-such-icon.svg").is_none());
+    assert!(embedded_preset_asset("assets/zenith/icons/lucide/../../etc/passwd.svg").is_none());
+    assert!(embedded_preset_asset("assets/zenith/icons/nope/house.svg").is_none());
+    assert!(embedded_preset_asset("elsewhere/house.svg").is_none());
 }
 
 #[test]
@@ -159,14 +192,8 @@ fn parse_embedded_filters_lists_filter_token_items() {
     assert_eq!(pack.version.as_deref(), Some("1.0.0"));
 
     // Filter tokens are items; color dep tokens are NOT.
-    assert!(pack.items.contains(&PackItem {
-        id: "noir".to_owned(),
-        kind: ItemKind::Token
-    }));
-    assert!(pack.items.contains(&PackItem {
-        id: "duotone-gold".to_owned(),
-        kind: ItemKind::Token
-    }));
+    assert!(pack.items.contains(&item("noir", ItemKind::Token)));
+    assert!(pack.items.contains(&item("duotone-gold", ItemKind::Token)));
     // Color dep tokens are dependencies, not exported items.
     assert!(
         !pack

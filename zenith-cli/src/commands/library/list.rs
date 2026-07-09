@@ -14,7 +14,11 @@ struct PackJson<'a> {
     id: &'a str,
     version: Option<&'a str>,
     source: &'static str,
+    format: &'static str,
+    license: Option<&'a str>,
     token_count: usize,
+    /// Every item the pack exports. Unlike the human listing, JSON is never
+    /// truncated: machine consumers want the whole set.
     items: Vec<PackItemJson<'a>>,
 }
 
@@ -32,9 +36,12 @@ struct PackItemJson<'a> {
 ///
 /// - Human (default): one header line per pack
 ///   (`<id>  <version>  [preset|project]`, with a trailing `(tokens: N)` when
-///   the pack's token block is non-empty) followed by indented `#<item>` lines.
+///   the pack's token block is non-empty) followed by indented `#<item>` lines,
+///   truncated at `MAX_LISTED_ITEMS` — an icon library exports ~1745 items,
+///   and dumping them all is not a listing.
 /// - `--json`: a `{"schema":"zenith-library-v1","packs":[…]}` document; each
-///   pack entry carries `token_count` alongside its exported `items`.
+///   pack entry carries `token_count` alongside its exported `items`, never
+///   truncated.
 pub fn list(packs: &[LibraryPack], json: bool) -> String {
     if json {
         let out = LibraryListOutput {
@@ -45,6 +52,8 @@ pub fn list(packs: &[LibraryPack], json: bool) -> String {
                     id: &p.id,
                     version: p.version.as_deref(),
                     source: p.source.label(),
+                    format: p.format.label(),
+                    license: p.license.as_deref(),
                     token_count: p.token_count,
                     items: p
                         .items
@@ -62,6 +71,13 @@ pub fn list(packs: &[LibraryPack], json: bool) -> String {
         format_human(packs)
     }
 }
+
+/// How many items a pack may list before the human output truncates them.
+///
+/// A bundled SVG icon library exports ~1745 items; printing them turns
+/// `library list` into 1783 lines of scroll. Discovery at that scale is
+/// `library search`'s job, so the listing points there instead.
+pub const MAX_LISTED_ITEMS: usize = 10;
 
 /// Human-readable listing.
 fn format_human(packs: &[LibraryPack]) -> String {
@@ -83,8 +99,15 @@ fn format_human(packs: &[LibraryPack]) -> String {
             pack.source.label(),
             tokens_suffix
         ));
-        for item in &pack.items {
+        for item in pack.items.iter().take(MAX_LISTED_ITEMS) {
             lines.push(format!("  #{} ({})", item.id, item.kind.label()));
+        }
+        let hidden = pack.items.len().saturating_sub(MAX_LISTED_ITEMS);
+        if hidden > 0 {
+            lines.push(format!(
+                "  … {hidden} more; search them with `zenith library search <query> --pack {}`",
+                pack.id
+            ));
         }
     }
     lines.push(String::new());
@@ -97,7 +120,7 @@ fn format_human(packs: &[LibraryPack]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::library::{PackSource, resolve_packs};
+    use crate::library::{PackFormat, PackSource, resolve_packs};
 
     // ── `library list` hint ────────────────────────────────────────────────────
 
@@ -137,12 +160,24 @@ mod tests {
     fn human_and_json_list_lucide_icon_pack() {
         let packs = resolve_packs(None);
 
+        // Human output truncates: the pack exports ~1745 items, and the listing
+        // points at `library search` rather than printing them all.
         let human = list(&packs, false);
         assert!(human.contains("@zenith/icons-lucide"), "got: {}", human);
-        assert!(human.contains("#monitor (component)"), "got: {}", human);
-        assert!(human.contains("#cloud (component)"), "got: {}", human);
-        assert!(human.contains("#server (component)"), "got: {}", human);
+        let listed = human
+            .lines()
+            .skip_while(|l| !l.starts_with("@zenith/icons-lucide"))
+            .skip(1)
+            .take_while(|l| l.starts_with("  #"))
+            .count();
+        assert_eq!(listed, MAX_LISTED_ITEMS);
+        assert!(
+            human.contains("more; search them with `zenith library search"),
+            "got: {}",
+            human
+        );
 
+        // JSON is never truncated: machine consumers want the whole set.
         let json = list(&packs, true);
         let value: serde_json::Value = serde_json::from_str(&json).expect("valid JSON");
         let packs_json = value["packs"].as_array().expect("packs array");
@@ -150,20 +185,23 @@ mod tests {
             .iter()
             .find(|p| p["id"] == "@zenith/icons-lucide")
             .expect("lucide pack present");
-        assert_eq!(lucide["version"], "0.1.0");
+        assert_eq!(lucide["version"], "1.23.0");
+        assert_eq!(lucide["format"], "svg");
+        assert_eq!(lucide["license"], "ISC AND MIT");
         let item_ids: Vec<&str> = lucide["items"]
             .as_array()
             .expect("items array")
             .iter()
             .filter_map(|item| item["id"].as_str())
             .collect();
-        assert!(item_ids.contains(&"monitor"), "items: {:?}", item_ids);
-        assert!(item_ids.contains(&"database"), "items: {:?}", item_ids);
-        assert!(
-            item_ids.contains(&"download-cloud"),
-            "items: {:?}",
-            item_ids
-        );
+        assert!(item_ids.len() > 1700, "got {} items", item_ids.len());
+        for id in ["monitor", "database", "house", "cloud-download"] {
+            assert!(item_ids.contains(&id), "missing {id}");
+        }
+        // Renamed away upstream; these are aliases now, not ids.
+        for id in ["sync", "download-cloud", "upload-cloud"] {
+            assert!(!item_ids.contains(&id), "{id} must not be an id");
+        }
     }
 
     #[test]
@@ -309,6 +347,8 @@ mod tests {
             id: "@x/y".to_owned(),
             version: None,
             source: PackSource::Preset,
+            format: PackFormat::Zen,
+            license: None,
             items: vec![],
             token_count: 0,
         };

@@ -1,26 +1,70 @@
-Lucide icon subset for Zenith native icon presets.
+Lucide icons for the embedded @zenith/icons-lucide library.
 
 Source project: Lucide
-Homepage: https://lucide.dev/
-Repository: https://github.com/lucide-icons/lucide
-License: ISC License
+Homepage:       https://lucide.dev/
+Repository:     https://github.com/lucide-icons/lucide
+Tag:            1.23.0
+Commit:         c67c9bdbfb43b0ecd69b52d37aeb4ab2d5386271
+License:        ISC AND MIT
+                (ISC for Lucide; MIT for the Feather-derived icons that the
+                 upstream LICENSE enumerates. Both texts are reproduced below.)
 
-The SVG files in this directory are a checked-in subset adapted from Lucide icons for the embedded @zenith/icons-lucide library pack.
+The SVG files in this directory are the complete, byte-for-byte upstream icon set
+at the revision above. Nothing is reformatted, minified, or redrawn. Re-vendoring
+is therefore a plain copy of `icons/*.svg` from that tree.
 
-The SVG files are whitespace-normalized copies of the upstream Lucide SVGs (each collapsed to a single line); the vector geometry is unmodified. The exact upstream revision (tag/commit) they were vendored from was not recorded at vendoring time.
+Icon ids are the file stems. Search metadata (tags, categories) lives in
+library.kdl, derived from the upstream `icons/<name>.json` sidecars.
 
-Three local file names are legacy/renamed aliases that differ from the current upstream icon names:
+Three names this project previously shipped are not upstream icon names at this
+revision. They survive as search tags on their upstream equivalents, not as ids:
 
-  sync           = upstream refresh-cw
-  upload-cloud   = upstream cloud-upload
-  download-cloud = upstream cloud-download
+  sync           -> refresh-cw      (a Zenith-local rename; never an upstream name)
+  upload-cloud   -> cloud-upload    (recorded upstream alias)
+  download-cloud -> cloud-download  (recorded upstream alias)
 
-A machine-readable manifest of these mappings, together with the SHA-256 of every vendored SVG, is recorded alongside this file in provenance.json.
+--- Upstream LICENSE, verbatim ---
 
 ISC License
 
-Copyright (c) for portions of Lucide are held by Cole Bemis 2013-2022 as part of Feather and by Lucide Contributors 2022.
+Copyright (c) 2026 Lucide Icons and Contributors
 
-Permission to use, copy, modify, and/or distribute this software for any purpose with or without fee is hereby granted, provided that the above copyright notice and this permission notice appear in all copies.
+Permission to use, copy, modify, and/or distribute this software for any
+purpose with or without fee is hereby granted, provided that the above
+copyright notice and this permission notice appear in all copies.
 
-THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
+---
+
+The following Lucide icons are derived from the Feather project:
+
+airplay, alert-circle, alert-octagon, alert-triangle, aperture, arrow-down-circle, arrow-down-left, arrow-down-right, arrow-down, arrow-left-circle, arrow-left, arrow-right-circle, arrow-right, arrow-up-circle, arrow-up-left, arrow-up-right, arrow-up, at-sign, calendar, cast, check, chevron-down, chevron-left, chevron-right, chevron-up, chevrons-down, chevrons-left, chevrons-right, chevrons-up, circle, clipboard, clock, code, columns, command, compass, corner-down-left, corner-down-right, corner-left-down, corner-left-up, corner-right-down, corner-right-up, corner-up-left, corner-up-right, crosshair, database, divide-circle, divide-square, dollar-sign, download, external-link, feather, frown, hash, headphones, help-circle, info, italic, key, layout, life-buoy, link-2, link, loader, lock, log-in, log-out, maximize, meh, minimize, minimize-2, minus-circle, minus-square, minus, monitor, moon, more-horizontal, more-vertical, move, music, navigation-2, navigation, octagon, pause-circle, percent, plus-circle, plus-square, plus, power, radio, rss, search, server, share, shopping-bag, sidebar, smartphone, smile, square, table-2, tablet, target, terminal, trash-2, trash, triangle, tv, type, upload, x-circle, x-octagon, x-square, x, zoom-in, zoom-out
+
+The MIT License (MIT) (for the icons listed above)
+
+Copyright (c) 2013-present Cole Bemis
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

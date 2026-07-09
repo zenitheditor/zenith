@@ -1,29 +1,41 @@
-//! Pack format, embedded preset table, and the project/preset resolver.
+//! Pack formats, embedded preset table, and the project/preset resolver.
 //!
-//! A library "pack" is a `.zen` file whose IDENTITY is declared by a single
-//! `library` SELF-entry in its own `libraries` block. This module owns the pack
-//! METADATA model ([`LibraryPack`], [`PackItem`], [`PackSource`], [`ItemKind`]),
-//! the [`EMBEDDED_PACKS`] preset table, parsing a pack's identity/items
-//! ([`parse_pack`]), and resolving project packs against embedded presets
-//! ([`resolve_packs`]).
+//! A library "pack" comes in one of two [`PackFormat`]s:
+//!
+//! - [`PackFormat::Zen`] — a `.zen` file whose IDENTITY is declared by a single
+//!   `library` SELF-entry in its own `libraries` block. The feature-rich format:
+//!   components, tokens, actions.
+//! - [`PackFormat::SvgDir`] — a DIRECTORY of `*.svg` files, one icon per file.
+//!   The plug-and-install format: nothing to author, and an icon set is extended
+//!   by dropping in a file. See [`super::svg_lib`].
+//!
+//! This module owns the pack METADATA model ([`LibraryPack`], [`PackItem`],
+//! [`PackSource`], [`ItemKind`]), the [`EMBEDDED_PACKS`] preset table, parsing a
+//! pack's identity/items ([`parse_pack`]), and resolving project packs against
+//! embedded presets ([`resolve_packs`]). Both formats produce the same
+//! [`LibraryPack`], so callers never branch on format.
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use zenith_core::{Document, KdlAdapter, KdlSource, TokenType};
 
-/// Embedded preset packs, as `(pack_id, pack_source)` pairs.
+use super::svg_lib::{
+    ItemScope, SVG_PACK_TOKEN_COUNT, SvgLibrary, embedded_svg_libraries, is_svg_dir, load_svg_dir,
+    raw_embedded_icon, synthesize_pack_source,
+};
+
+/// Embedded preset `.zen` packs, as `(pack_id, pack_source)` pairs.
 ///
 /// Each `pack_source` is the verbatim `.zen` text of a shipped preset library,
 /// bundled into the binary via [`include_str!`] (mirroring how the default
 /// fonts are bundled in `zenith-core`). The `pack_id` is the expected package
 /// id and is used only for diagnostics/lookup convenience; the authoritative id
 /// is parsed from the pack's own `library` self-entry.
+///
+/// Bundled ICON packs are not listed here: they are SVG directories under
+/// `assets/libraries/icons/`, surfaced by [`embedded_svg_libraries`].
 pub const EMBEDDED_PACKS: &[(&str, &str)] = &[
-    (
-        "@zenith/icons-lucide",
-        include_str!("../../assets/libraries/zenith-icons-lucide.zen"),
-    ),
     (
         "@zenith/flowchart",
         include_str!("../../assets/libraries/zenith-flowchart.zen"),
@@ -82,115 +94,41 @@ pub const EMBEDDED_PACKS: &[(&str, &str)] = &[
     ),
 ];
 
+/// The document-relative directory under which every bundled SVG icon is
+/// addressable as an asset: `assets/zenith/icons/<library>/<icon>.svg`.
+const EMBEDDED_ICON_ASSET_ROOT: &str = "assets/zenith/icons/";
+
 /// A preset asset embedded in the binary and materialized beside target `.zen`
-/// documents when an embedded library item declares it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// documents when a document declares it.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EmbeddedPresetAsset {
-    /// Safe document-relative asset path used in a pack's `asset src`.
-    pub src: &'static str,
-    /// Checked-in asset bytes to write at [`Self::src`].
+    /// Safe document-relative asset path used in a document's `asset src`.
+    pub src: String,
+    /// Bundled asset bytes to write at [`Self::src`].
     pub bytes: &'static [u8],
 }
 
-/// Embedded preset asset files keyed by the safe relative `asset src` paths
-/// declared in embedded packs.
-pub const EMBEDDED_PRESET_ASSETS: &[EmbeddedPresetAsset] = &[
-    EmbeddedPresetAsset {
-        src: "assets/zenith/icons/lucide/arrow-right-left.svg",
-        bytes: include_bytes!("../../assets/libraries/icons/lucide/arrow-right-left.svg"),
-    },
-    EmbeddedPresetAsset {
-        src: "assets/zenith/icons/lucide/box.svg",
-        bytes: include_bytes!("../../assets/libraries/icons/lucide/box.svg"),
-    },
-    EmbeddedPresetAsset {
-        src: "assets/zenith/icons/lucide/cloud.svg",
-        bytes: include_bytes!("../../assets/libraries/icons/lucide/cloud.svg"),
-    },
-    EmbeddedPresetAsset {
-        src: "assets/zenith/icons/lucide/cpu.svg",
-        bytes: include_bytes!("../../assets/libraries/icons/lucide/cpu.svg"),
-    },
-    EmbeddedPresetAsset {
-        src: "assets/zenith/icons/lucide/database.svg",
-        bytes: include_bytes!("../../assets/libraries/icons/lucide/database.svg"),
-    },
-    EmbeddedPresetAsset {
-        src: "assets/zenith/icons/lucide/download-cloud.svg",
-        bytes: include_bytes!("../../assets/libraries/icons/lucide/download-cloud.svg"),
-    },
-    EmbeddedPresetAsset {
-        src: "assets/zenith/icons/lucide/file.svg",
-        bytes: include_bytes!("../../assets/libraries/icons/lucide/file.svg"),
-    },
-    EmbeddedPresetAsset {
-        src: "assets/zenith/icons/lucide/folder.svg",
-        bytes: include_bytes!("../../assets/libraries/icons/lucide/folder.svg"),
-    },
-    EmbeddedPresetAsset {
-        src: "assets/zenith/icons/lucide/globe.svg",
-        bytes: include_bytes!("../../assets/libraries/icons/lucide/globe.svg"),
-    },
-    EmbeddedPresetAsset {
-        src: "assets/zenith/icons/lucide/hard-drive.svg",
-        bytes: include_bytes!("../../assets/libraries/icons/lucide/hard-drive.svg"),
-    },
-    EmbeddedPresetAsset {
-        src: "assets/zenith/icons/lucide/key.svg",
-        bytes: include_bytes!("../../assets/libraries/icons/lucide/key.svg"),
-    },
-    EmbeddedPresetAsset {
-        src: "assets/zenith/icons/lucide/lock.svg",
-        bytes: include_bytes!("../../assets/libraries/icons/lucide/lock.svg"),
-    },
-    EmbeddedPresetAsset {
-        src: "assets/zenith/icons/lucide/monitor.svg",
-        bytes: include_bytes!("../../assets/libraries/icons/lucide/monitor.svg"),
-    },
-    EmbeddedPresetAsset {
-        src: "assets/zenith/icons/lucide/network.svg",
-        bytes: include_bytes!("../../assets/libraries/icons/lucide/network.svg"),
-    },
-    EmbeddedPresetAsset {
-        src: "assets/zenith/icons/lucide/search.svg",
-        bytes: include_bytes!("../../assets/libraries/icons/lucide/search.svg"),
-    },
-    EmbeddedPresetAsset {
-        src: "assets/zenith/icons/lucide/server.svg",
-        bytes: include_bytes!("../../assets/libraries/icons/lucide/server.svg"),
-    },
-    EmbeddedPresetAsset {
-        src: "assets/zenith/icons/lucide/settings.svg",
-        bytes: include_bytes!("../../assets/libraries/icons/lucide/settings.svg"),
-    },
-    EmbeddedPresetAsset {
-        src: "assets/zenith/icons/lucide/smartphone.svg",
-        bytes: include_bytes!("../../assets/libraries/icons/lucide/smartphone.svg"),
-    },
-    EmbeddedPresetAsset {
-        src: "assets/zenith/icons/lucide/sync.svg",
-        bytes: include_bytes!("../../assets/libraries/icons/lucide/sync.svg"),
-    },
-    EmbeddedPresetAsset {
-        src: "assets/zenith/icons/lucide/tablet.svg",
-        bytes: include_bytes!("../../assets/libraries/icons/lucide/tablet.svg"),
-    },
-    EmbeddedPresetAsset {
-        src: "assets/zenith/icons/lucide/upload-cloud.svg",
-        bytes: include_bytes!("../../assets/libraries/icons/lucide/upload-cloud.svg"),
-    },
-    EmbeddedPresetAsset {
-        src: "assets/zenith/icons/lucide/wifi.svg",
-        bytes: include_bytes!("../../assets/libraries/icons/lucide/wifi.svg"),
-    },
-];
-
 /// Find an embedded preset asset by the document-relative `asset src` path.
+///
+/// Every icon of every bundled SVG library is addressable this way, so
+/// `asset src="assets/zenith/icons/lucide/house.svg"` resolves without the icon
+/// having to be enumerated anywhere. Paths that escape the icon root, name no
+/// bundled library, or name no icon in it, resolve to `None`.
 pub fn embedded_preset_asset(src: &str) -> Option<EmbeddedPresetAsset> {
-    EMBEDDED_PRESET_ASSETS
-        .iter()
-        .find(|asset| asset.src == src)
-        .copied()
+    let rest = src.strip_prefix(EMBEDDED_ICON_ASSET_ROOT)?;
+    if rest.contains("..") {
+        return None;
+    }
+    let (dir, file) = rest.split_once('/')?;
+    let name = file.strip_suffix(".svg")?;
+    if dir.is_empty() || name.is_empty() || name.contains('/') {
+        return None;
+    }
+    let svg = raw_embedded_icon(dir, name)?;
+    Some(EmbeddedPresetAsset {
+        src: src.to_owned(),
+        bytes: svg.as_bytes(),
+    })
 }
 
 /// Return embedded preset assets declared by `doc`, de-duplicated by `src` and
@@ -214,7 +152,8 @@ pub fn embedded_preset_assets_for_document(doc: &Document) -> Vec<EmbeddedPreset
 pub enum PackSource {
     /// A preset pack embedded in the binary.
     Preset,
-    /// A project pack read from the given `.zen` file path.
+    /// A project pack read from the given path: a `.zen` file for
+    /// [`PackFormat::Zen`], a directory for [`PackFormat::SvgDir`].
     Project(PathBuf),
 }
 
@@ -224,6 +163,29 @@ impl PackSource {
         match self {
             PackSource::Preset => "preset",
             PackSource::Project(_) => "project",
+        }
+    }
+}
+
+/// How a [`LibraryPack`]'s content is stored.
+///
+/// The format decides only how the pack's [`Document`] is OBTAINED — parsed, or
+/// synthesized from SVG. Everything downstream of that is identical.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PackFormat {
+    /// A `.zen` pack: components, tokens, and actions, authored directly.
+    Zen,
+    /// A directory of `*.svg` files: one icon component per file, converted to
+    /// native paths on demand.
+    SvgDir,
+}
+
+impl PackFormat {
+    /// A short, stable label for human/JSON output: `"zen"` or `"svg"`.
+    pub fn label(&self) -> &'static str {
+        match self {
+            PackFormat::Zen => "zen",
+            PackFormat::SvgDir => "svg",
         }
     }
 }
@@ -255,13 +217,36 @@ impl ItemKind {
     }
 }
 
-/// A single exported item of a [`LibraryPack`]: its id plus its kind.
+/// A single exported item of a [`LibraryPack`]: its id, its kind, and the
+/// metadata `library search` ranks and filters on.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PackItem {
     /// The item id (a component id, a filter-token id, or an action id).
     pub id: String,
     /// Whether the item is a component, a filter token, or an action.
     pub kind: ItemKind,
+    /// Alternate NAMES for the item, ranked with near-id authority. Supplied by
+    /// an SVG library's `library.kdl`; empty for `.zen` packs.
+    pub aliases: Vec<String>,
+    /// Related words, ranked below names. Supplied by an SVG library's
+    /// `library.kdl`; empty for `.zen` packs, whose items are searched by id.
+    pub tags: Vec<String>,
+    /// Closed-vocabulary categories used to FILTER (`--category`), never to
+    /// rank: a category applies to hundreds of items and would swamp scoring.
+    pub categories: Vec<String>,
+}
+
+impl PackItem {
+    /// A pack item with no search metadata — the shape every `.zen` pack item takes.
+    fn bare(id: String, kind: ItemKind) -> Self {
+        Self {
+            id,
+            kind,
+            aliases: Vec::new(),
+            tags: Vec::new(),
+            categories: Vec::new(),
+        }
+    }
 }
 
 /// A loaded library pack: its identity plus the items it provides.
@@ -273,6 +258,12 @@ pub struct LibraryPack {
     pub version: Option<String>,
     /// Where the pack came from.
     pub source: PackSource,
+    /// How the pack's content is stored, and therefore how its [`Document`] is
+    /// obtained.
+    pub format: PackFormat,
+    /// SPDX-style license expression the pack declares, when it declares one.
+    /// SVG libraries carry it in `library.kdl`; `.zen` packs do not declare one.
+    pub license: Option<String>,
     /// The items the pack provides: component ids first (in source order),
     /// then exportable token ids (in source order), then action ids (in source
     /// order).
@@ -367,51 +358,91 @@ pub fn parse_pack(source: &str, source_kind: PackSource) -> Result<LibraryPack, 
     let mut items: Vec<PackItem> = doc
         .components
         .iter()
-        .map(|c| PackItem {
-            id: c.id.clone(),
-            kind: ItemKind::Component,
-        })
+        .map(|c| PackItem::bare(c.id.clone(), ItemKind::Component))
         .collect();
     items.extend(
         doc.tokens
             .tokens
             .iter()
             .filter(|t| is_exportable_token(&t.token_type))
-            .map(|t| PackItem {
-                id: t.id.clone(),
-                kind: ItemKind::Token,
-            }),
+            .map(|t| PackItem::bare(t.id.clone(), ItemKind::Token)),
     );
-    items.extend(doc.actions.iter().map(|a| PackItem {
-        id: a.id.clone(),
-        kind: ItemKind::Action,
-    }));
+    items.extend(
+        doc.actions
+            .iter()
+            .map(|a| PackItem::bare(a.id.clone(), ItemKind::Action)),
+    );
 
     Ok(LibraryPack {
         id: self_entry.id.clone(),
         version: self_entry.version.clone(),
         source: source_kind,
+        format: PackFormat::Zen,
+        license: None,
         token_count: doc.tokens.tokens.len(),
         items,
     })
 }
 
-/// Parse every entry in [`EMBEDDED_PACKS`] into a [`LibraryPack`].
+/// Build the [`LibraryPack`] metadata for an SVG icon library.
 ///
-/// An embedded pack that fails to parse is skipped (embedded content is shipped
-/// and tested, so this should not happen in practice); the returned vector
-/// contains only the packs that parsed successfully.
-pub fn load_embedded_packs() -> Vec<LibraryPack> {
-    EMBEDDED_PACKS
-        .iter()
-        .filter_map(|(_, src)| parse_pack(src, PackSource::Preset).ok())
-        .collect()
+/// Metadata comes straight off the filenames and the manifest — no SVG is
+/// parsed and no geometry is converted, so listing or searching a 1745-icon
+/// library is as cheap as listing a two-component `.zen` pack. Conversion
+/// happens only when an item is materialized.
+///
+/// Every icon is a component item. The pack's two stroke tokens are dependencies
+/// rather than exported items (they are neither filter nor mask tokens), so they
+/// contribute to [`LibraryPack::token_count`] but not to `items`.
+pub fn svg_library_pack(lib: &SvgLibrary, source_kind: PackSource) -> LibraryPack {
+    LibraryPack {
+        id: lib.id.clone(),
+        version: lib.version.clone(),
+        source: source_kind,
+        format: PackFormat::SvgDir,
+        license: lib.license.clone(),
+        token_count: SVG_PACK_TOKEN_COUNT,
+        items: lib
+            .icons
+            .iter()
+            .map(|icon| PackItem {
+                id: icon.name.clone(),
+                kind: ItemKind::Component,
+                aliases: icon.aliases.clone(),
+                tags: icon.tags.clone(),
+                categories: icon.categories.clone(),
+            })
+            .collect(),
+    }
 }
 
-/// Scan `project_dir/libraries/*.zen` and parse each file into a [`LibraryPack`].
+/// Load every bundled pack: the [`EMBEDDED_PACKS`] `.zen` presets, then the
+/// bundled SVG icon libraries.
+///
+/// An embedded `.zen` pack that fails to parse is skipped (embedded content is
+/// shipped and tested, so this should not happen in practice); the returned
+/// vector contains only the packs that loaded successfully.
+pub fn load_embedded_packs() -> Vec<LibraryPack> {
+    let mut packs: Vec<LibraryPack> = EMBEDDED_PACKS
+        .iter()
+        .filter_map(|(_, src)| parse_pack(src, PackSource::Preset).ok())
+        .collect();
+    packs.extend(
+        embedded_svg_libraries()
+            .iter()
+            .map(|lib| svg_library_pack(lib, PackSource::Preset)),
+    );
+    packs
+}
+
+/// Scan `project_dir/libraries/` for packs of either format.
+///
+/// A `*.zen` FILE is a `.zen` pack. A SUBDIRECTORY holding at least one `*.svg`
+/// is an SVG icon library — that is the whole opt-in: drop a folder of icons
+/// there and it is a pack.
 ///
 /// A missing `libraries/` directory (or a `project_dir` without one) yields an
-/// empty vector. Files that fail to read or parse are skipped — a note is
+/// empty vector. Entries that fail to read or parse are skipped — a note is
 /// written to stderr — so one bad pack never aborts the whole listing.
 pub fn load_project_packs(project_dir: &Path) -> Vec<LibraryPack> {
     let libraries_dir = project_dir.join("libraries");
@@ -424,6 +455,18 @@ pub fn load_project_packs(project_dir: &Path) -> Vec<LibraryPack> {
     let mut packs = Vec::new();
     for entry in entries.flatten() {
         let path = entry.path();
+
+        if path.is_dir() {
+            if !is_svg_dir(&path) {
+                continue;
+            }
+            match load_svg_dir(&path) {
+                Ok(lib) => packs.push(svg_library_pack(&lib, PackSource::Project(path.clone()))),
+                Err(e) => eprintln!("note: skipping '{}': {}", path.display(), e),
+            }
+            continue;
+        }
+
         if path.extension().and_then(|e| e.to_str()) != Some("zen") {
             continue;
         }
@@ -473,6 +516,56 @@ fn source_rank(source: &PackSource) -> u8 {
     }
 }
 
+/// Read the `.zen` source text behind a [`PackFormat::Zen`] pack.
+fn zen_pack_source(pack: &LibraryPack) -> Result<String, String> {
+    match &pack.source {
+        PackSource::Preset => EMBEDDED_PACKS
+            .iter()
+            .find(|(id, _)| *id == pack.id)
+            .map(|(_, src)| (*src).to_owned())
+            .ok_or_else(|| format!("embedded pack '{}' source not found", pack.id)),
+        PackSource::Project(path) => std::fs::read_to_string(path)
+            .map_err(|e| format!("cannot read pack '{}': {e}", path.display())),
+    }
+}
+
+/// Load the [`SvgLibrary`] behind a [`PackFormat::SvgDir`] pack.
+fn svg_pack_library(pack: &LibraryPack) -> Result<SvgLibrary, String> {
+    match &pack.source {
+        PackSource::Preset => embedded_svg_libraries()
+            .into_iter()
+            .find(|lib| lib.id == pack.id)
+            .ok_or_else(|| format!("bundled SVG library '{}' not found", pack.id)),
+        PackSource::Project(path) => load_svg_dir(path),
+    }
+}
+
+/// Obtain the pack's [`Document`] — the single funnel both formats meet at.
+///
+/// [`resolve_packs`] yields only pack METADATA; materialization needs the pack's
+/// component/token/style/asset subtrees. A `.zen` pack is re-read and parsed; an
+/// SVG library is SYNTHESIZED, converting exactly the icons `scope` admits.
+///
+/// Pass [`ItemScope::Only`] whenever the caller knows which item it wants: for a
+/// 1745-icon library, [`ItemScope::All`] converts every icon.
+///
+/// # Errors
+///
+/// Returns a message when the pack's source cannot be located, read, converted,
+/// or parsed.
+pub fn pack_document(pack: &LibraryPack, scope: ItemScope<'_>) -> Result<Document, String> {
+    let source = match pack.format {
+        PackFormat::Zen => zen_pack_source(pack)?,
+        PackFormat::SvgDir => {
+            let lib = svg_pack_library(pack)?;
+            synthesize_pack_source(&lib, scope)?
+        }
+    };
+    KdlAdapter
+        .parse(source.as_bytes())
+        .map_err(|e| format!("pack '{}' failed to parse: {}", pack.id, e.message))
+}
+
 /// Resolve a theme reference — a bare theme name (`sunset`) or a full pack id
 /// (`@zenith/theme.sunset`) — to its parsed [`Document`], for splicing its
 /// token block into another document (`zenith new --theme`, `zenith theme
@@ -500,38 +593,29 @@ pub fn resolve_theme_pack(
     };
 
     let packs = resolve_packs(project_dir);
-    let pack = packs.iter().find(|p| p.id == target_id);
-
-    let source: String = match pack {
-        Some(p) => match &p.source {
-            PackSource::Preset => EMBEDDED_PACKS
-                .iter()
-                .find(|(id, _)| *id == target_id)
-                .map(|(_, src)| (*src).to_owned())
-                .ok_or_else(|| {
-                    format!(
-                        "internal: embedded pack '{}' is missing its source",
-                        target_id
-                    )
-                })?,
-            PackSource::Project(path) => std::fs::read_to_string(path)
-                .map_err(|e| format!("cannot read pack '{}': {}", path.display(), e))?,
-        },
-        None => {
-            let mut available: Vec<&str> = EMBEDDED_PACKS
-                .iter()
-                .filter_map(|(id, _)| id.strip_prefix("@zenith/theme."))
-                .collect();
-            available.sort_unstable();
-            return Err(format!(
-                "unknown theme '{}' (available: {})",
-                name_or_id,
-                available.join(", ")
-            ));
-        }
+    let Some(pack) = packs.iter().find(|p| p.id == target_id) else {
+        let mut available: Vec<&str> = EMBEDDED_PACKS
+            .iter()
+            .filter_map(|(id, _)| id.strip_prefix("@zenith/theme."))
+            .collect();
+        available.sort_unstable();
+        return Err(format!(
+            "unknown theme '{}' (available: {})",
+            name_or_id,
+            available.join(", ")
+        ));
     };
 
-    KdlAdapter
-        .parse(source.as_bytes())
-        .map_err(|e| format!("pack '{}' failed to parse: {}", target_id, e.message))
+    // A theme is a token block; an SVG icon library has no theme to give.
+    match pack.format {
+        PackFormat::Zen => {}
+        PackFormat::SvgDir => {
+            return Err(format!(
+                "'{}' is an SVG icon library, not a theme",
+                target_id
+            ));
+        }
+    }
+
+    pack_document(pack, ItemScope::All)
 }

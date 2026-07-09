@@ -1,11 +1,27 @@
+//! `zenith library search` — ranked lookup across every resolved pack.
+//!
+//! Matching and ordering live in the `rank` submodule; this module owns the
+//! command surface:
+//! options, the result cap, and human/JSON formatting.
+
+mod rank;
+
+pub use rank::Filter;
+
 use crate::commands::serialize_pretty;
 use crate::library::{ItemKind, LibraryPack};
+
+/// Default number of results shown. A bundled icon library holds ~1745 items, so
+/// an uncapped ranked list is as unreadable as an unranked one.
+pub const DEFAULT_LIMIT: usize = 25;
 
 /// JSON shape for `library search --json`.
 #[derive(Debug, serde::Serialize)]
 struct LibrarySearchOutput<'a> {
     schema: &'static str,
     query: &'a str,
+    /// Results that matched, before [`SearchOptions::limit`] was applied.
+    total_matches: usize,
     results: Vec<SearchResultJson<'a>>,
 }
 
@@ -16,95 +32,75 @@ struct SearchResultJson<'a> {
     item: &'a str,
     kind: &'static str,
     source: &'static str,
-    license: Option<&'static str>,
-    tags: &'static [&'static str],
+    format: &'static str,
+    license: Option<&'a str>,
+    tags: &'a [String],
+    categories: &'a [String],
     to_use: String,
 }
 
-#[derive(Debug)]
-struct SearchResult<'a> {
-    pack: &'a LibraryPack,
-    item: &'a crate::library::PackItem,
-    license: Option<&'static str>,
-    tags: &'static [&'static str],
+/// Options for [`search`].
+#[derive(Debug, Clone, Copy)]
+pub struct SearchOptions<'a> {
+    /// Narrowing filters applied before ranking.
+    pub filter: Filter<'a>,
+    /// Maximum results to return. `0` means no cap.
+    pub limit: usize,
+    /// Emit JSON instead of human-readable text.
+    pub json: bool,
+}
+
+impl Default for SearchOptions<'_> {
+    fn default() -> Self {
+        Self {
+            filter: Filter::default(),
+            limit: DEFAULT_LIMIT,
+            json: false,
+        }
+    }
 }
 
 /// Search resolved `packs` for library items matching `query`.
 ///
-/// Matching is deterministic and intentionally simple: package id, item id,
-/// item kind, license, and known tag/alias text are lowercased and matched by
-/// substring. Curated aliases are currently embedded only for the bundled
-/// Lucide icon pack; project packs remain discoverable by package/item/kind.
-pub fn search(packs: &[LibraryPack], query: &str, json: bool) -> String {
-    let normalized_query = normalize_query(query);
-    let results = search_results(packs, &normalized_query);
+/// Results are ranked by BM25 over item id, tags, pack id, kind, and license
+/// (see the `rank` submodule), then truncated to `options.limit`. Ordering is fully
+/// deterministic, so the same query always prints the same bytes.
+pub fn search(packs: &[LibraryPack], query: &str, options: SearchOptions<'_>) -> String {
+    let ranked = rank::rank(packs, query, &options.filter);
+    let total = ranked.len();
+    let shown: &[rank::Scored<'_>] = if options.limit == 0 {
+        &ranked
+    } else {
+        &ranked[..ranked.len().min(options.limit)]
+    };
 
-    if json {
+    if options.json {
         let out = LibrarySearchOutput {
             schema: "zenith-library-search-v1",
             query,
-            results: results
+            total_matches: total,
+            results: shown
                 .iter()
                 .map(|result| SearchResultJson {
                     package: result.pack.id.as_str(),
                     item: result.item.id.as_str(),
                     kind: result.item.kind.label(),
                     source: result.pack.source.label(),
-                    license: result.license,
-                    tags: result.tags,
+                    format: result.pack.format.label(),
+                    license: result.pack.license.as_deref(),
+                    tags: &result.item.tags,
+                    categories: &result.item.categories,
                     to_use: add_command(&result.pack.id, &result.item.id, result.item.kind),
                 })
                 .collect(),
         };
         serialize_pretty(&out)
     } else {
-        format_human(query, &results)
+        format_human(query, shown, total)
     }
 }
 
-fn search_results<'a>(packs: &'a [LibraryPack], normalized_query: &str) -> Vec<SearchResult<'a>> {
-    if normalized_query.is_empty() {
-        return Vec::new();
-    }
-
-    let mut results = Vec::new();
-    for pack in packs {
-        for item in &pack.items {
-            let license = item_license(&pack.id);
-            let tags = item_tags(&pack.id, &item.id);
-            if matches_item(pack, item, license, tags, normalized_query) {
-                results.push(SearchResult {
-                    pack,
-                    item,
-                    license,
-                    tags,
-                });
-            }
-        }
-    }
-    results
-}
-
-fn matches_item(
-    pack: &LibraryPack,
-    item: &crate::library::PackItem,
-    license: Option<&str>,
-    tags: &[&str],
-    normalized_query: &str,
-) -> bool {
-    let kind = normalized_text(item.kind.label());
-    normalized_text(&pack.id).contains(normalized_query)
-        || normalized_text(&item.id).contains(normalized_query)
-        || kind.contains(normalized_query)
-        || license
-            .map(normalized_text)
-            .is_some_and(|text| text.contains(normalized_query))
-        || tags
-            .iter()
-            .any(|tag| normalized_text(tag).contains(normalized_query))
-}
-
-fn format_human(query: &str, results: &[SearchResult<'_>]) -> String {
+fn format_human(query: &str, results: &[rank::Scored<'_>], total: usize) -> String {
     if results.is_empty() {
         return format!("no library items matched \"{query}\"");
     }
@@ -112,13 +108,15 @@ fn format_human(query: &str, results: &[SearchResult<'_>]) -> String {
     let mut lines = vec![format!("library search \"{query}\"")];
     for result in results {
         let license = result
+            .pack
             .license
+            .as_deref()
             .map(|value| format!(" license={value}"))
             .unwrap_or_default();
-        let tags = if result.tags.is_empty() {
+        let tags = if result.item.tags.is_empty() {
             String::new()
         } else {
-            format!(" tags={}", result.tags.join(","))
+            format!(" tags={}", result.item.tags.join(","))
         };
         lines.push(format!(
             "{}#{} ({}) [{}]{}{}",
@@ -132,6 +130,13 @@ fn format_human(query: &str, results: &[SearchResult<'_>]) -> String {
         lines.push(format!(
             "  add: {}",
             add_command(&result.pack.id, &result.item.id, result.item.kind)
+        ));
+    }
+
+    let hidden = total.saturating_sub(results.len());
+    if hidden > 0 {
+        lines.push(format!(
+            "… {hidden} more match; narrow the query, or raise --limit"
         ));
     }
     lines.join("\n")
@@ -149,79 +154,25 @@ fn add_command(package: &str, item: &str, kind: ItemKind) -> String {
     }
 }
 
-fn normalize_query(query: &str) -> String {
-    normalized_text(query).trim().to_owned()
-}
-
-fn normalized_text(text: &str) -> String {
-    text.chars()
-        .map(|c| {
-            if c.is_ascii_alphanumeric() {
-                c.to_ascii_lowercase()
-            } else {
-                ' '
-            }
-        })
-        .collect::<String>()
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ")
-}
-
-fn item_license(package: &str) -> Option<&'static str> {
-    match package {
-        "@zenith/icons-lucide" => Some("ISC"),
-        _ => None,
-    }
-}
-
-fn item_tags(package: &str, item: &str) -> &'static [&'static str] {
-    match (package, item) {
-        ("@zenith/icons-lucide", "monitor") => &[
-            "device", "desktop", "display", "screen", "computer", "client",
-        ],
-        ("@zenith/icons-lucide", "smartphone") => &["device", "phone", "mobile", "client"],
-        ("@zenith/icons-lucide", "tablet") => &["device", "mobile", "screen", "client"],
-        ("@zenith/icons-lucide", "server") => &["server", "compute", "backend", "rack"],
-        ("@zenith/icons-lucide", "database") => &["database", "data", "storage", "db"],
-        ("@zenith/icons-lucide", "cloud") => &["cloud", "internet", "network", "service"],
-        ("@zenith/icons-lucide", "hard-drive") => &["disk", "drive", "storage", "server"],
-        ("@zenith/icons-lucide", "cpu") => &["chip", "processor", "compute", "hardware"],
-        ("@zenith/icons-lucide", "network") => &["network", "nodes", "topology", "graph"],
-        ("@zenith/icons-lucide", "wifi") => &["wifi", "wireless", "network", "signal"],
-        ("@zenith/icons-lucide", "globe") => &["web", "internet", "world", "global"],
-        ("@zenith/icons-lucide", "box") => &["package", "container", "artifact", "module"],
-        ("@zenith/icons-lucide", "file") => &["file", "document", "page"],
-        ("@zenith/icons-lucide", "folder") => &["folder", "directory", "files"],
-        ("@zenith/icons-lucide", "lock") => &["lock", "secure", "security", "private"],
-        ("@zenith/icons-lucide", "key") => &["key", "credential", "secret", "auth"],
-        ("@zenith/icons-lucide", "search") => &["search", "find", "inspect", "query"],
-        ("@zenith/icons-lucide", "settings") => &["settings", "config", "preferences", "gear"],
-        ("@zenith/icons-lucide", "arrow-right-left") => {
-            &["sync", "transfer", "exchange", "bidirectional", "arrows"]
-        }
-        ("@zenith/icons-lucide", "sync") => &["sync", "refresh", "reload", "loop"],
-        ("@zenith/icons-lucide", "upload-cloud") => &["upload", "cloud", "import", "send"],
-        ("@zenith/icons-lucide", "download-cloud") => &["download", "cloud", "export", "receive"],
-        _ => &[],
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::library::resolve_packs;
 
+    fn human(packs: &[LibraryPack], query: &str) -> String {
+        search(packs, query, SearchOptions::default())
+    }
+
     #[test]
     fn search_device_finds_lucide_device_icons() {
         let packs = resolve_packs(None);
-        let out = search(&packs, "device", false);
+        let out = human(&packs, "device");
         assert!(out.contains("@zenith/icons-lucide#monitor"), "got: {out}");
         assert!(
             out.contains("@zenith/icons-lucide#smartphone"),
             "got: {out}"
         );
-        assert!(out.contains("license=ISC"), "got: {out}");
+        assert!(out.contains("license=ISC AND MIT"), "got: {out}");
         assert!(
             out.contains("--page <page-id> --at X,Y"),
             "component add command: {out}"
@@ -231,7 +182,14 @@ mod tests {
     #[test]
     fn search_cloud_json_includes_tags_license_and_to_use() {
         let packs = resolve_packs(None);
-        let out = search(&packs, "cloud", true);
+        let out = search(
+            &packs,
+            "cloud",
+            SearchOptions {
+                json: true,
+                ..SearchOptions::default()
+            },
+        );
         let value: serde_json::Value = serde_json::from_str(&out).expect("valid JSON");
         assert_eq!(value["schema"], "zenith-library-search-v1");
         let results = value["results"].as_array().expect("results array");
@@ -241,16 +199,8 @@ mod tests {
             .expect("cloud result");
         assert_eq!(cloud["package"], "@zenith/icons-lucide");
         assert_eq!(cloud["kind"], "component");
-        assert_eq!(cloud["license"], "ISC");
-        assert!(
-            cloud["tags"]
-                .as_array()
-                .expect("tags")
-                .iter()
-                .any(|tag| tag == "internet"),
-            "tags: {}",
-            cloud["tags"]
-        );
+        assert_eq!(cloud["format"], "svg");
+        assert_eq!(cloud["license"], "ISC AND MIT");
         assert!(
             cloud["to_use"]
                 .as_str()
@@ -264,7 +214,7 @@ mod tests {
     #[test]
     fn search_still_matches_non_icon_item_ids() {
         let packs = resolve_packs(None);
-        let out = search(&packs, "noir", false);
+        let out = human(&packs, "noir");
         assert!(out.contains("@zenith/filters#noir (token)"), "got: {out}");
         assert!(
             out.contains("zenith library add @zenith/filters#noir --into <doc.zen>"),
@@ -275,10 +225,59 @@ mod tests {
     #[test]
     fn search_empty_or_unmatched_query_reports_no_results() {
         let packs = resolve_packs(None);
-        assert_eq!(search(&packs, "", false), "no library items matched \"\"");
+        assert_eq!(human(&packs, ""), "no library items matched \"\"");
         assert_eq!(
-            search(&packs, "zzzz-not-an-icon", false),
+            human(&packs, "zzzz-not-an-icon"),
             "no library items matched \"zzzz-not-an-icon\""
+        );
+    }
+
+    #[test]
+    fn results_are_capped_and_the_remainder_is_reported() {
+        let packs = resolve_packs(None);
+        // `arrow` matches far more than the default cap.
+        let out = human(&packs, "arrow");
+        let shown = out.matches("  add: ").count();
+        assert_eq!(shown, DEFAULT_LIMIT);
+        assert!(out.contains("more match; narrow the query"), "got: {out}");
+    }
+
+    #[test]
+    fn limit_zero_shows_everything_and_reports_no_remainder() {
+        let packs = resolve_packs(None);
+        let out = search(
+            &packs,
+            "arrow",
+            SearchOptions {
+                limit: 0,
+                ..SearchOptions::default()
+            },
+        );
+        assert!(
+            !out.contains("more match"),
+            "got tail: {}",
+            &out[out.len() - 80..]
+        );
+    }
+
+    #[test]
+    fn json_reports_total_matches_before_the_cap() {
+        let packs = resolve_packs(None);
+        let out = search(
+            &packs,
+            "arrow",
+            SearchOptions {
+                json: true,
+                ..SearchOptions::default()
+            },
+        );
+        let value: serde_json::Value = serde_json::from_str(&out).expect("valid JSON");
+        let total = value["total_matches"].as_u64().expect("total_matches");
+        let shown = value["results"].as_array().expect("results").len();
+        assert_eq!(shown, DEFAULT_LIMIT);
+        assert!(
+            total > shown as u64,
+            "total {total} should exceed shown {shown}"
         );
     }
 }

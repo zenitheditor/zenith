@@ -36,6 +36,9 @@ zenith-perception = { workspace = true }
 zenith-producers = { workspace = true }
 zenith-zpx = { workspace = true }
 clap = { version = "4", features = ["derive"] }
+# `library.kdl` manifests of SVG icon libraries. Same version zenith-core parses
+# `.zen` with, so no second KDL implementation enters the graph.
+kdl = "6.7.1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.10"

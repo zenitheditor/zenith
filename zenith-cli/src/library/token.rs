@@ -8,6 +8,7 @@ use super::add::{
     AddError, collect_all_ids, copy_tokens, load_pack_document, unique_id, unknown_package_error,
 };
 use super::registry::{LibraryPack, is_exportable_token};
+use super::svg_lib::ItemScope;
 
 /// The outcome of a successful [`materialize_token`] call.
 ///
@@ -115,7 +116,7 @@ pub fn materialize_token(
         .find(|p| p.id == pkg_id)
         .ok_or_else(|| unknown_package_error(pkg_id, packs))?;
 
-    let pack_doc = load_pack_document(pack)?;
+    let pack_doc = load_pack_document(pack, ItemScope::Only(item))?;
 
     // 2. Find the FILTER token named `item`. ───────────────────────────────────
     let item_token = pack_doc

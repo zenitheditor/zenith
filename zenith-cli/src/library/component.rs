@@ -9,6 +9,7 @@ use super::add::{
     load_pack_document, px, target_component_id, unique_id, unknown_package_error,
 };
 use super::registry::LibraryPack;
+use super::svg_lib::ItemScope;
 
 /// Materialize the pack item `pkg_id#item` into `target` at `(at_x, at_y)` on the
 /// page `page_id`, returning the [`AddOutcome`] describing what was added.
@@ -50,7 +51,7 @@ pub fn materialize(
         .find(|p| p.id == pkg_id)
         .ok_or_else(|| unknown_package_error(pkg_id, packs))?;
 
-    let pack_doc = load_pack_document(pack)?;
+    let pack_doc = load_pack_document(pack, ItemScope::Only(item))?;
 
     let comp = pack_doc
         .components

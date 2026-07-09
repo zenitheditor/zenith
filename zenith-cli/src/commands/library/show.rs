@@ -4,7 +4,9 @@ use zenith_core::{TokenLiteral, TokenType, TokenValue};
 use zenith_tx::Transaction;
 
 use crate::commands::serialize_pretty;
-use crate::library::{ItemKind, load_pack_document, parse_spec, resolve_packs};
+use crate::library::{
+    ItemKind, ItemScope, LibraryPack, load_pack_document, parse_spec, resolve_packs,
+};
 
 /// JSON shape for `library show --json`.
 #[derive(Debug, serde::Serialize)]
@@ -100,27 +102,13 @@ pub fn show(spec: &str, project_dir: Option<&Path>, json: bool) -> Result<String
         .items
         .iter()
         .find(|it| it.id == item_id)
-        .ok_or_else(|| {
-            let available: Vec<&str> = pack.items.iter().map(|it| it.id.as_str()).collect();
-            ShowCmdErr::new(
-                format!(
-                    "unknown item '{}' in package '{}' (available: {})",
-                    item_id,
-                    pkg_id,
-                    if available.is_empty() {
-                        "none".to_owned()
-                    } else {
-                        available.join(", ")
-                    }
-                ),
-                2,
-            )
-        })?;
+        .ok_or_else(|| ShowCmdErr::new(unknown_item_message(&pkg_id, &item_id, pack), 2))?;
 
     let kind = pack_item.kind;
 
-    // Load the pack's full document to derive content detail.
-    let pack_doc = load_pack_document(pack).map_err(|e| ShowCmdErr::new(e.message, 2))?;
+    // Derive content detail from the pack document, converting only this item.
+    let pack_doc = load_pack_document(pack, ItemScope::Only(&item_id))
+        .map_err(|e| ShowCmdErr::new(e.message, 2))?;
 
     let detail = match kind {
         ItemKind::Token => {
@@ -438,6 +426,56 @@ fn op_name(op: &zenith_tx::Op) -> &'static str {
         zenith_tx::Op::DeleteRecipe { .. } => "delete_recipe",
         zenith_tx::Op::DetachPattern { .. } => "detach_pattern",
     }
+}
+
+/// How many item ids an "unknown item" error may name before it stops helping.
+const MAX_SUGGESTED_ITEMS: usize = 20;
+
+/// Build the "unknown item" message, naming at most [`MAX_SUGGESTED_ITEMS`] ids.
+///
+/// A bundled icon library holds ~1745 items; spilling all of them into an error
+/// buries the message. Prefer ids that share a `-`-separated token with what the
+/// user typed, so a near miss (`house-plug` for `house-plu`) surfaces first.
+fn unknown_item_message(pkg_id: &str, item_id: &str, pack: &LibraryPack) -> String {
+    if pack.items.is_empty() {
+        return format!("unknown item '{item_id}' in package '{pkg_id}' (it exports none)");
+    }
+
+    let wanted: Vec<&str> = item_id.split('-').collect();
+    let mut near: Vec<&str> = pack
+        .items
+        .iter()
+        .map(|it| it.id.as_str())
+        .filter(|id| {
+            id.split('-').any(|tok| {
+                wanted
+                    .iter()
+                    .any(|w| tok.starts_with(w) || w.starts_with(tok))
+            })
+        })
+        .collect();
+    let exhaustive = near.is_empty();
+    if exhaustive {
+        near = pack.items.iter().map(|it| it.id.as_str()).collect();
+    }
+
+    let total = near.len();
+    let shown: Vec<&str> = near.into_iter().take(MAX_SUGGESTED_ITEMS).collect();
+    let label = if exhaustive {
+        "available"
+    } else {
+        "did you mean"
+    };
+    let more = total.saturating_sub(shown.len());
+    let suffix = if more > 0 {
+        format!(", … {more} more — try `zenith library search`")
+    } else {
+        String::new()
+    };
+    format!(
+        "unknown item '{item_id}' in package '{pkg_id}' ({label}: {}{suffix})",
+        shown.join(", ")
+    )
 }
 
 #[cfg(test)]

@@ -10,6 +10,7 @@ use super::add::{
     unknown_package_error,
 };
 use super::registry::LibraryPack;
+use super::svg_lib::ItemScope;
 
 /// The outcome of a successful [`materialize_action`] call.
 ///
@@ -78,7 +79,7 @@ pub fn materialize_action(
         .find(|p| p.id == pkg_id)
         .ok_or_else(|| unknown_package_error(pkg_id, packs))?;
 
-    let pack_doc = load_pack_document(pack)?;
+    let pack_doc = load_pack_document(pack, ItemScope::Only(action_id))?;
 
     let pack_action = pack_doc
         .actions

@@ -8,11 +8,10 @@
 
 use std::collections::BTreeSet;
 
-use zenith_core::{
-    AssetDecl, Dimension, Document, KdlAdapter, KdlSource, Node, Style, Token, Unit,
-};
+use zenith_core::{AssetDecl, Dimension, Document, Node, Style, Token, Unit};
 
-use super::registry::{EMBEDDED_PACKS, LibraryPack, PackSource};
+use super::registry::{LibraryPack, pack_document};
+use super::svg_lib::ItemScope;
 
 /// An error produced while materializing a library item into a target document.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -83,33 +82,21 @@ pub fn parse_spec(spec: &str) -> Result<(String, String), AddError> {
     Ok((pkg.to_owned(), item.to_owned()))
 }
 
-/// Load the FULL [`Document`] of a resolved pack.
+/// Load the [`Document`] of a resolved pack, converting only the items `scope`
+/// admits.
 ///
 /// [`super::resolve_packs`] only yields pack METADATA; materialization needs the
-/// pack's component/token/style/asset subtrees, so this re-reads and parses the
-/// pack's source: embedded presets from [`EMBEDDED_PACKS`], project packs from
-/// disk.
+/// pack's component/token/style/asset subtrees. A `.zen` pack is re-read and
+/// parsed; an SVG icon library is synthesized from its SVGs. Callers that know
+/// the item they want must pass [`ItemScope::Only`] — a bundled icon library
+/// holds 1745 icons, and [`ItemScope::All`] converts every one of them.
 ///
 /// # Errors
 ///
-/// Returns [`AddError`] when the embedded source for `pack.id` cannot be located,
-/// or when a project pack file cannot be read or parsed.
-pub fn load_pack_document(pack: &LibraryPack) -> Result<Document, AddError> {
-    let source = match &pack.source {
-        PackSource::Preset => EMBEDDED_PACKS
-            .iter()
-            .find(|(id, _)| *id == pack.id)
-            .map(|(_, src)| (*src).to_owned())
-            .ok_or_else(|| {
-                AddError::new(format!("embedded pack '{}' source not found", pack.id))
-            })?,
-        PackSource::Project(path) => std::fs::read_to_string(path).map_err(|e| {
-            AddError::new(format!("error reading pack '{}': {}", path.display(), e))
-        })?,
-    };
-    KdlAdapter
-        .parse(source.as_bytes())
-        .map_err(|e| AddError::new(format!("error parsing pack '{}': {}", pack.id, e)))
+/// Returns [`AddError`] when the pack's source cannot be located, read,
+/// converted, or parsed.
+pub fn load_pack_document(pack: &LibraryPack, scope: ItemScope<'_>) -> Result<Document, AddError> {
+    pack_document(pack, scope).map_err(AddError::new)
 }
 
 /// Build the "unknown library package" [`AddError`], listing the available pack

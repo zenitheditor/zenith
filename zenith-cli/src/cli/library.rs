@@ -22,12 +22,26 @@ use std::path::PathBuf;
 ///   `@zenith/brand-kit#apply-2026`) that mutates the target document's tokens
 ///   or layout.  No page required.
 ///
-/// Embedded `@zenith/*` packs are bundled in the binary; project-local packs
-/// live in `<project-dir>/libraries/*.zen` and shadow the embedded ones.
+/// A pack comes in one of two FORMATS:
+///
+/// * **`.zen` file** — the feature-rich format: tokens, components, and actions,
+///   authored directly. Identified by a `library` self-entry in its own
+///   `libraries` block.
+/// * **directory of `*.svg`** — the plug-and-install format: an icon set with
+///   nothing to author. Each `*.svg` is one icon component, its id is the file
+///   stem, and its geometry is converted to native `path` nodes on demand. An
+///   optional `library.kdl` beside the icons declares `id`, `version`,
+///   `license`, and per-icon `aliases`, `tags`, and `categories`; without one,
+///   the pack id defaults to `@local/<dirname>`.
+///
+/// Embedded `@zenith/*` packs are bundled in the binary — including
+/// `@zenith/icons-lucide`, the full Lucide icon set. Project-local packs live in
+/// `<project-dir>/libraries/` (a `*.zen` file, or a subdirectory of `*.svg`) and
+/// shadow embedded packs of the same id.
 ///
 /// WORKFLOW:
 ///   zenith library list                          # discover packs + items
-///   zenith library search device                 # find items by name/tag/alias
+///   zenith library search device                 # ranked search over names/aliases/tags
 ///   zenith library show @zenith/filters#sepia    # inspect one item
 ///   zenith library add @zenith/filters#sepia --into poster.zen
 #[derive(Debug, Args)]
@@ -38,10 +52,16 @@ Item kinds:\n  \
 token     — filter or mask token; copy into tokens block, apply with filter=(token)\"id\"\n  \
 component — reusable node group; materialized as an instance on a page (requires --page)\n  \
 action    — canned tx op sequence; runs a transaction against the target document\n\n\
-Embedded @zenith/* packs are built in; project packs live in libraries/*.zen and shadow them.\n\n\
+Pack formats:\n  \
+.zen file          — tokens, components, actions; declares its own `library` self-entry\n  \
+directory of *.svg — an icon set; one icon per file, id = file stem, converted to native\n                       \
+paths on demand. Optional `library.kdl` adds id/version/license and per-icon\n                       \
+aliases/tags/categories. Without it the id is @local/<dirname>.\n\n\
+Embedded @zenith/* packs are built in (including @zenith/icons-lucide, the full Lucide set).\n\
+Project packs live in libraries/ — a *.zen file, or a subdirectory of *.svg — and shadow them.\n\n\
 WORKFLOW:\n  \
 zenith library list                          # discover packs and items\n  \
-zenith library search device                 # search names, tags, and aliases\n  \
+zenith library search device                 # ranked search over names, aliases, and tags\n  \
 zenith library show @zenith/filters#sepia    # inspect item content before adding\n  \
 zenith library add @zenith/filters#sepia --into poster.zen"
 )]
@@ -57,6 +77,9 @@ pub enum LibrarySub {
     ///
     /// Lists every available pack and its exported items.  Run `zenith library
     /// show <package>#<item>` to inspect any item in detail before adding it.
+    /// Human output lists at most the first few items per pack — an icon library
+    /// exports ~1745 — so use `zenith library search` to find one; `--json`
+    /// carries every item.
     /// A pack's header line shows `(tokens: N)` when it carries a token set
     /// beyond its exported items; merge that whole set into a document with
     /// `zenith theme apply <pack-id> <doc>`.
@@ -69,11 +92,12 @@ pub enum LibrarySub {
     /// the exact `zenith library add` invocation to materialize the item.
     Show(LibraryShowArgs),
 
-    /// Search library items by package, item id, kind, license, and known aliases/tags.
+    /// Ranked search over item id, aliases, tags, package id, kind, and license.
     ///
-    /// Searches resolved project and embedded packs. Embedded icon packs expose
-    /// curated aliases so agent terms such as "device" can find concrete icon
-    /// items like `@zenith/icons-lucide#monitor`.
+    /// Searches resolved project and embedded packs. Results are ranked, best
+    /// first: an item NAMED for the query beats one merely aliased to it, which
+    /// beats one merely tagged with it. Every query term must match. Narrow with
+    /// `--category`, `--kind`, and `--pack`; `--limit 0` lifts the result cap.
     Search(LibrarySearchArgs),
 
     /// Materialize a library item into a target `.zen` document.
@@ -93,7 +117,7 @@ pub struct LibraryAddArgs {
 
     /// Target `.zen` document to materialize the item into (written in-place,
     /// unless `--dry-run`). Its parent directory is the project dir whose
-    /// `libraries/*.zen` packs are resolved alongside the embedded presets.
+    /// `libraries/` packs are resolved alongside the embedded presets.
     #[arg(long, value_name = "FILE")]
     pub into: PathBuf,
 
@@ -120,7 +144,8 @@ pub struct LibraryAddArgs {
 #[derive(Debug, Args)]
 pub struct LibraryListArgs {
     /// Project directory, or a `.zen` file whose parent is the project directory.
-    /// Project `libraries/*.zen` packs are scanned alongside embedded presets.
+    /// Project `libraries/` packs — `*.zen` files and `<name>/` SVG icon
+    /// directories — are scanned alongside embedded presets.
     /// Defaults to the current working directory.
     pub path: Option<PathBuf>,
 
@@ -140,7 +165,8 @@ pub struct LibraryShowArgs {
     pub spec: String,
 
     /// Project directory, or a `.zen` file whose parent is the project directory.
-    /// Project `libraries/*.zen` packs are resolved alongside embedded presets.
+    /// Project `libraries/` packs — `*.zen` files and `<name>/` SVG icon
+    /// directories — are resolved alongside embedded presets.
     /// Defaults to the current working directory.
     pub path: Option<PathBuf>,
 
@@ -152,17 +178,37 @@ pub struct LibraryShowArgs {
 /// Arguments for `zenith library search`.
 #[derive(Debug, Args)]
 #[command(after_help = "EXAMPLES:\n  \
-zenith library search device       # find device-like icon components\n  \
-zenith library search cloud --json # machine-readable results with tags\n  \
+zenith library search device                     # rank device-like icon components\n  \
+zenith library search arrow --category navigation\n  \
+zenith library search cloud --json               # machine-readable results with tags\n  \
+zenith library search token --kind token --limit 0\n  \
 zenith library search noir")]
 pub struct LibrarySearchArgs {
-    /// Query text to match against package id, item id, kind, and known aliases/tags.
+    /// Query text, ranked against item id, aliases, tags, package id, kind, and license.
     pub query: String,
 
     /// Project directory, or a `.zen` file whose parent is the project directory.
-    /// Project `libraries/*.zen` packs are resolved alongside embedded presets.
+    /// Project packs — `libraries/*.zen` files and `libraries/<name>/` SVG icon
+    /// directories — are resolved alongside embedded presets.
     /// Defaults to the current working directory.
     pub path: Option<PathBuf>,
+
+    /// Keep only items in this category (e.g. `navigation`, `shapes`).
+    /// Categories filter; they are never matched as free text.
+    #[arg(long)]
+    pub category: Option<String>,
+
+    /// Keep only items of this kind.
+    #[arg(long, value_parser = ["component", "token", "action"])]
+    pub kind: Option<String>,
+
+    /// Keep only items from this exact package id.
+    #[arg(long)]
+    pub pack: Option<String>,
+
+    /// Maximum results to show; `0` shows every match.
+    #[arg(long, default_value_t = crate::commands::library::DEFAULT_SEARCH_LIMIT)]
+    pub limit: usize,
 
     /// Emit machine-readable JSON instead of a human-readable summary.
     #[arg(long)]

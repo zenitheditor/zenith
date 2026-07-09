@@ -27,9 +27,8 @@
 mod action;
 mod add;
 mod component;
-#[cfg(test)]
-mod lucide_native;
 mod registry;
+mod svg_lib;
 mod token;
 
 #[cfg(test)]
@@ -38,10 +37,13 @@ mod tests;
 // ── Public API (crate-internal callers in `commands::library` / `lib.rs`) ─────
 
 pub use registry::{
-    EMBEDDED_PACKS, EMBEDDED_PRESET_ASSETS, EmbeddedPresetAsset, ItemKind, LibraryPack, PackError,
-    PackItem, PackSource, embedded_preset_asset, embedded_preset_assets_for_document,
-    load_embedded_packs, load_project_packs, parse_pack, resolve_packs, resolve_theme_pack,
+    EMBEDDED_PACKS, EmbeddedPresetAsset, ItemKind, LibraryPack, PackError, PackFormat, PackItem,
+    PackSource, embedded_preset_asset, embedded_preset_assets_for_document, load_embedded_packs,
+    load_project_packs, pack_document, parse_pack, resolve_packs, resolve_theme_pack,
+    svg_library_pack,
 };
+
+pub use svg_lib::{ItemScope, SvgIcon, SvgLibrary, embedded_svg_libraries, load_svg_dir};
 
 pub use add::{AddError, AddOutcome, collect_all_ids, load_pack_document, parse_spec};
 

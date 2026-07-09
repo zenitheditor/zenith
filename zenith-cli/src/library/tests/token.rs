@@ -3,13 +3,16 @@
 use super::support::{FILTERS_SRC, hard_errors, parse_target};
 use crate::library::token::collect_filter_dep_ids;
 use crate::library::{
-    PackSource, load_pack_document, materialize_token, parse_pack, resolve_packs,
+    ItemScope, PackSource, load_pack_document, materialize_token, parse_pack, resolve_packs,
 };
 
 #[test]
 fn collect_filter_dep_ids_duotone_and_simple() {
-    let pack = load_pack_document(&parse_pack(FILTERS_SRC, PackSource::Preset).expect("pack"))
-        .expect("pack doc");
+    let pack = load_pack_document(
+        &parse_pack(FILTERS_SRC, PackSource::Preset).expect("pack"),
+        ItemScope::All,
+    )
+    .expect("pack doc");
 
     let gold = pack
         .tokens

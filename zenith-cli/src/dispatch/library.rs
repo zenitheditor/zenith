@@ -36,9 +36,30 @@ pub(super) fn dispatch_library(args: LibraryArgs) -> ExitCode {
         cli::LibrarySub::Search(search_args) => {
             let project_dir = resolve_project_dir(search_args.path.as_deref());
             let packs = library::resolve_packs(project_dir.as_deref());
+            let kind = match search_args.kind.as_deref() {
+                None => None,
+                Some("component") => Some(library::ItemKind::Component),
+                Some("token") => Some(library::ItemKind::Token),
+                Some("action") => Some(library::ItemKind::Action),
+                // clap's `value_parser` rejects anything else before we get here.
+                Some(other) => {
+                    eprintln!("error: unknown item kind '{other}'");
+                    return ExitCode::from(2);
+                }
+            };
+            let category = search_args.category.as_deref().map(str::to_lowercase);
+            let options = commands::library::SearchOptions {
+                filter: commands::library::SearchFilter {
+                    category: category.as_deref(),
+                    kind,
+                    pack: search_args.pack.as_deref(),
+                },
+                limit: search_args.limit,
+                json: search_args.json,
+            };
             println!(
                 "{}",
-                commands::library::search(&packs, &search_args.query, search_args.json)
+                commands::library::search(&packs, &search_args.query, options)
             );
             ExitCode::SUCCESS
         }
@@ -120,7 +141,7 @@ fn write_embedded_assets(
     assets: &[library::EmbeddedPresetAsset],
 ) -> Result<(), String> {
     for asset in assets {
-        let path = root.join(asset.src);
+        let path = root.join(&asset.src);
         if path.exists() {
             let existing = std::fs::read(&path)
                 .map_err(|e| format!("error reading existing asset '{}': {}", path.display(), e))?;
@@ -135,7 +156,7 @@ fn write_embedded_assets(
     }
 
     for asset in assets {
-        let path = root.join(asset.src);
+        let path = root.join(&asset.src);
         if path.exists() {
             continue;
         }
@@ -164,32 +185,37 @@ fn write_embedded_assets(
 mod tests {
     use super::*;
 
-    const ASSET: library::EmbeddedPresetAsset = library::EmbeddedPresetAsset {
-        src: "assets/zenith/icons/lucide/test.svg",
-        bytes: b"<svg/>",
-    };
+    fn asset() -> library::EmbeddedPresetAsset {
+        library::EmbeddedPresetAsset {
+            src: "assets/zenith/icons/lucide/test.svg".to_owned(),
+            bytes: b"<svg/>",
+        }
+    }
 
     #[test]
     fn write_embedded_assets_creates_missing_files_and_reuses_identical() {
         let dir = tempfile::tempdir().expect("tempdir");
 
-        write_embedded_assets(dir.path(), &[ASSET]).expect("write asset");
-        let path = dir.path().join(ASSET.src);
-        assert_eq!(std::fs::read(&path).expect("read asset"), ASSET.bytes);
+        write_embedded_assets(dir.path(), &[asset()]).expect("write asset");
+        let path = dir.path().join(asset().src);
+        assert_eq!(std::fs::read(&path).expect("read asset"), asset().bytes);
 
-        write_embedded_assets(dir.path(), &[ASSET]).expect("identical asset is ok");
-        assert_eq!(std::fs::read(path).expect("read asset again"), ASSET.bytes);
+        write_embedded_assets(dir.path(), &[asset()]).expect("identical asset is ok");
+        assert_eq!(
+            std::fs::read(path).expect("read asset again"),
+            asset().bytes
+        );
     }
 
     #[test]
     fn write_embedded_assets_refuses_different_existing_file() {
         let dir = tempfile::tempdir().expect("tempdir");
-        let path = dir.path().join(ASSET.src);
+        let path = dir.path().join(asset().src);
         let parent = path.parent().expect("asset path has parent");
         std::fs::create_dir_all(parent).expect("create parent");
         std::fs::write(&path, b"different").expect("write different asset");
 
-        let err = write_embedded_assets(dir.path(), &[ASSET]).expect_err("must refuse overwrite");
+        let err = write_embedded_assets(dir.path(), &[asset()]).expect_err("must refuse overwrite");
         assert!(err.contains("refusing to overwrite"), "err: {}", err);
         assert_eq!(std::fs::read(path).expect("read unchanged"), b"different");
     }
