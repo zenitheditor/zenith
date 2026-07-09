@@ -2,6 +2,7 @@
 
 use std::collections::BTreeSet;
 
+use crate::ast::AssetKind;
 use crate::ast::node::{ImageNode, TextNode};
 use crate::ast::value::dim_to_px;
 use crate::diagnostics::Diagnostic;
@@ -345,6 +346,7 @@ pub(in crate::validate::check) fn check_image(
     let WalkCtx {
         resolved_tokens,
         declared_asset_ids,
+        asset_kinds,
         declared_style_ids,
         zone_ids,
         ..
@@ -576,6 +578,45 @@ pub(in crate::validate::check) fn check_image(
         resolved_tokens,
         diagnostics,
     );
+    // SVG-only style properties (svg-stroke/svg-fill/svg-stroke-width) are
+    // applied at render time only inside the SVG-asset arm; on a raster asset
+    // they are silently ignored. Warn when any is set on an image whose asset is
+    // declared with a non-svg kind. Skipped when the asset id is unknown (that
+    // has its own `asset.unknown_reference` diagnostic) or when no svg-* prop is
+    // set.
+    {
+        let svg_props: [(&str, bool); 3] = [
+            ("svg-stroke", img.svg_stroke.is_some()),
+            ("svg-fill", img.svg_fill.is_some()),
+            ("svg-stroke-width", img.svg_stroke_width.is_some()),
+        ];
+        let set_props: Vec<&str> = svg_props
+            .iter()
+            .filter(|(_, set)| *set)
+            .map(|(name, _)| *name)
+            .collect();
+        if !set_props.is_empty()
+            && let Some(kind) = asset_kinds.get(&img.asset)
+            && !matches!(kind, AssetKind::Svg)
+        {
+            let props_list = set_props.join(", ");
+            diagnostics.push(Diagnostic::warning(
+                "image.svg_style_on_non_svg",
+                format!(
+                    "image '{}': SVG-only propert{} {} {} ignored because asset '{}' is \
+                     of kind '{}', not 'svg'",
+                    img.id,
+                    if set_props.len() == 1 { "y" } else { "ies" },
+                    props_list,
+                    if set_props.len() == 1 { "is" } else { "are" },
+                    img.asset,
+                    kind.kind_str(),
+                ),
+                img.source_span,
+                Some(img.id.clone()),
+            ));
+        }
+    }
     check_visual_prop(
         &img.id,
         "clip-radius",

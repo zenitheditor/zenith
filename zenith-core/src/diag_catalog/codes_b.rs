@@ -182,6 +182,12 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
         "Image source-crop rectangle is only partially specified.",
     ),
     info(
+        "image.svg_style_on_non_svg",
+        Severity::Warning,
+        "SVG-only style properties (svg-stroke/svg-fill/svg-stroke-width) are \
+         set on an image whose asset is not of kind `svg`; they are ignored.",
+    ),
+    info(
         "image.upscale",
         Severity::Advisory,
         "Image is being scaled up beyond its native resolution.",

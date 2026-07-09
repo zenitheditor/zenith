@@ -183,6 +183,16 @@ pub fn validate_with_policy(
     let declared_asset_ids: BTreeSet<String> =
         doc.assets.assets.iter().map(|d| d.id.clone()).collect();
 
+    // Declared asset id → declared kind, so an `image` node can validate that
+    // SVG-only style properties (`svg-stroke`/`svg-fill`/`svg-stroke-width`)
+    // target an `svg` asset rather than being silently ignored on a raster.
+    let asset_kinds: BTreeMap<String, crate::ast::AssetKind> = doc
+        .assets
+        .assets
+        .iter()
+        .map(|d| (d.id.clone(), d.kind.clone()))
+        .collect();
+
     // Declared style ids, collected once so the node walk can validate that
     // every `style="..."` node attribute references a declared style.
     let declared_style_ids: BTreeSet<String> =
@@ -320,6 +330,7 @@ pub fn validate_with_policy(
         let ctx = WalkCtx {
             resolved_tokens,
             declared_asset_ids: &declared_asset_ids,
+            asset_kinds: &asset_kinds,
             declared_style_ids: &declared_style_ids,
             declared_component_ids: &declared_component_ids,
             component_local_ids: &component_local_ids,
@@ -364,6 +375,7 @@ pub fn validate_with_policy(
         let ctx = WalkCtx {
             resolved_tokens,
             declared_asset_ids: &declared_asset_ids,
+            asset_kinds: &asset_kinds,
             declared_style_ids: &declared_style_ids,
             declared_component_ids: &declared_component_ids,
             component_local_ids: &component_local_ids,
@@ -748,6 +760,7 @@ pub fn validate_with_policy(
         let ctx = WalkCtx {
             resolved_tokens,
             declared_asset_ids: &declared_asset_ids,
+            asset_kinds: &asset_kinds,
             declared_style_ids: &declared_style_ids,
             declared_component_ids: &declared_component_ids,
             component_local_ids: &component_local_ids,

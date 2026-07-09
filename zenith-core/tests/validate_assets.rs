@@ -455,3 +455,135 @@ fn test_asset_ai_provenance_no_unknown_property_warning() {
         codes(&report)
     );
 }
+
+// ══════════════════════════════════════════════════════════════════════
+// image.svg_style_on_non_svg: SVG-only style props on a non-svg asset
+// ══════════════════════════════════════════════════════════════════════
+
+/// Build an image node referencing `asset`, optionally setting `svg-stroke`.
+fn image_ref(id: &str, asset: &str, set_svg_stroke: bool) -> Node {
+    Node::Image(ImageNode {
+        id: id.to_owned(),
+        name: None,
+        role: None,
+        asset: asset.to_owned(),
+        x: Some(pxv(0.0)),
+        y: Some(pxv(0.0)),
+        w: Some(pxv(10.0)),
+        h: Some(pxv(10.0)),
+        src_x: None,
+        src_y: None,
+        src_w: None,
+        src_h: None,
+        fit: None,
+        svg_stroke: if set_svg_stroke {
+            Some(token_ref("color.stroke"))
+        } else {
+            None
+        },
+        svg_fill: None,
+        svg_stroke_width: None,
+        clip: None,
+        clip_radius: None,
+        object_position_x: None,
+        object_position_y: None,
+        opacity: None,
+        shadow: None,
+        filter: None,
+        mask: None,
+        visible: None,
+        locked: None,
+        rotate: None,
+        blend_mode: None,
+        blur: None,
+        style: None,
+        anchor: None,
+        anchor_zone: None,
+        anchor_sibling: None,
+        anchor_edge: None,
+        anchor_gap: None,
+        anchor_parent: None,
+        source_span: None,
+        unknown_props: BTreeMap::new(),
+    })
+}
+
+/// Assemble a document with the given assets and a single page holding `node`.
+/// Declares a `color.stroke` token so an svg-stroke token-ref resolves cleanly.
+fn doc_with_asset_and_node(assets: Vec<AssetDecl>, node: Node) -> Document {
+    let mut doc = doc_with_assets(assets);
+    doc.tokens.tokens.push(color_token("color.stroke"));
+    doc.body.pages = vec![minimal_page("page.one", vec![node])];
+    doc
+}
+
+#[test]
+fn svg_style_on_raster_image_warns() {
+    let doc = doc_with_asset_and_node(
+        vec![image_asset("asset.hero", "assets/hero.png")],
+        image_ref("img.hero", "asset.hero", true),
+    );
+    let report = validate(&doc);
+    assert!(
+        has_code(&report, "image.svg_style_on_non_svg"),
+        "expected image.svg_style_on_non_svg, got: {:?}",
+        codes(&report)
+    );
+    // Warning, not an error: the document still renders.
+    assert!(!report.has_errors(), "codes: {:?}", codes(&report));
+    let diag = report
+        .diagnostics
+        .iter()
+        .find(|d| d.code == "image.svg_style_on_non_svg")
+        .expect("diagnostic present");
+    // Message names the node id, the offending property, and the actual kind.
+    assert!(diag.message.contains("img.hero"), "msg: {}", diag.message);
+    assert!(diag.message.contains("svg-stroke"), "msg: {}", diag.message);
+    assert!(diag.message.contains("image"), "msg: {}", diag.message);
+}
+
+#[test]
+fn svg_style_on_svg_image_does_not_warn() {
+    let doc = doc_with_asset_and_node(
+        vec![AssetDecl {
+            id: "asset.logo".to_owned(),
+            kind: AssetKind::Svg,
+            src: "assets/logo.svg".to_owned(),
+            sha256: None,
+            producer_kind: None,
+            producer_source: None,
+            ai_prompt: None,
+            ai_model: None,
+            ai_provider: None,
+            ai_seed: None,
+            ai_generation_date: None,
+            ai_license: None,
+            ai_source_rights: None,
+            ai_safety_status: None,
+            ai_reuse_policy: None,
+            source_span: None,
+            unknown_props: BTreeMap::new(),
+        }],
+        image_ref("img.logo", "asset.logo", true),
+    );
+    let report = validate(&doc);
+    assert!(
+        !has_code(&report, "image.svg_style_on_non_svg"),
+        "svg asset must not warn, got: {:?}",
+        codes(&report)
+    );
+}
+
+#[test]
+fn no_svg_style_on_raster_image_does_not_warn() {
+    let doc = doc_with_asset_and_node(
+        vec![image_asset("asset.hero", "assets/hero.png")],
+        image_ref("img.hero", "asset.hero", false),
+    );
+    let report = validate(&doc);
+    assert!(
+        !has_code(&report, "image.svg_style_on_non_svg"),
+        "no svg-* prop set must not warn, got: {:?}",
+        codes(&report)
+    );
+}

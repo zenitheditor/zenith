@@ -9,6 +9,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use crate::ast::AssetKind;
 use crate::ast::node::Node;
 use crate::diagnostics::Diagnostic;
 use crate::tokens::ResolvedToken;
@@ -26,6 +27,9 @@ pub(super) use node::shared::{
 pub(super) struct WalkCtx<'a> {
     pub(super) resolved_tokens: &'a BTreeMap<String, ResolvedToken>,
     pub(super) declared_asset_ids: &'a BTreeSet<String>,
+    /// Declared asset id → its declared [`AssetKind`], so an `image` node can
+    /// validate that SVG-only style properties target an `svg` asset.
+    pub(super) asset_kinds: &'a BTreeMap<String, AssetKind>,
     pub(super) declared_style_ids: &'a BTreeSet<String>,
     pub(super) declared_component_ids: &'a BTreeSet<String>,
     pub(super) component_local_ids: &'a BTreeMap<String, BTreeSet<String>>,
