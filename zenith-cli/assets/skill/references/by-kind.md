@@ -192,8 +192,8 @@ zenith library add @zenith/icons-lucide#database --into arch.zen --page page.1 -
 
 On dark themes, update `lib.icons.stroke` or override **every** path immediately
 (`references/icons.md`). Multi-edge cards: `ports { … }`, nine-point anchors, or divided
-`i/N` on `process` shapes (no warning). Divided anchors still warn on rounded `rect` /
-path/polygon outlines (`connector.unsupported_outline`). Connector labels: nudge with
+`i/N` on ellipse/rect/process/polygon/polyline/path (exact outlines for divided anchors;
+named/auto stay bounds-based). Connector labels: nudge with
 `label-offset-x` / `label-offset-y` (px) off the midpoint.
 
 Optional polish: `mesh` + one `light` for technical depth.

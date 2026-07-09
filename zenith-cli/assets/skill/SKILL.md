@@ -30,9 +30,12 @@ zenith schema nodes | ops | tokens
 zenith schema node <kind> · zenith schema op <name> · zenith schema token <type>
 zenith validate <file> --json
 zenith inspect <file> --json      # geometry + role facts for critique
+zenith inspect path <file> <id> --json   # path topology + extrema bounds (+ --craft)
 zenith tokens <file>              # palette/type already on the document
 zenith library list               # every embedded + project pack
 zenith fonts                      # Bundled (portable) vs Local
+zenith fonts features "Noto Sans" --json # OT feature tags for a face
+zenith fonts alternates "Noto Sans" --char A --json
 ```
 
 If `zenith` is missing, give the one-line installer from the repo README — do not fake a workflow.
@@ -162,7 +165,8 @@ One strong motif beats five competing effects. Pattern details: `references/patt
 | Recipe provenance block | `references/recipes-model.md` |
 | Bug/feature report | `references/reporting-issues.md` |
 | Any node/op/flag syntax | `zenith schema …` · `zenith <cmd> --help` |
-| Path craft / logo outlines | `zenith schema node path` · `zenith outline-text --help` · `zenith perceive --help` |
+| Path craft / logo outlines | `zenith schema node path` · `zenith inspect path <doc> <id> --json` · `zenith outline-text --help` · `zenith perceive --help` |
+| Font OT features / alternates | `zenith fonts features <family|file> --json` · `zenith fonts alternates … --char A --json` |
 | Live import of another `.zen` | `zenith schema node instance` · `page` |
 
 **Two "variant" tools:** `zenith variant` = size/format; `zenith merge` = content rows.
