@@ -6,44 +6,12 @@ use std::collections::BTreeMap;
 
 use zenith_core::{Dimension, Node, PropertyValue, ResolvedToken, Unit};
 
-use super::super::node_role;
 use super::super::util::resolve_geometry_px;
 
 /// Whether a child is excluded from flow layout entirely (consumes no space):
 /// `visible == Some(false)` or `role == "guide"`.
 pub(super) fn node_skipped_in_flow(node: &Node) -> bool {
-    node_role(node) == Some("guide") || node_visible(node) == Some(false)
-}
-
-/// The `visible` flag of any node kind, if set (kinds without the property
-/// — `Unknown` — yield `None`).
-fn node_visible(node: &Node) -> Option<bool> {
-    match node {
-        Node::Rect(n) => n.visible,
-        Node::Ellipse(n) => n.visible,
-        Node::Line(n) => n.visible,
-        Node::Text(n) => n.visible,
-        Node::Code(n) => n.visible,
-        Node::Frame(n) => n.visible,
-        Node::Group(n) => n.visible,
-        Node::Image(n) => n.visible,
-        Node::Polygon(n) => n.visible,
-        Node::Polyline(n) => n.visible,
-        Node::Path(n) => n.visible,
-        Node::Instance(n) => n.visible,
-        Node::Field(n) => n.visible,
-        Node::Toc(n) => n.visible,
-        Node::Table(n) => n.visible,
-        Node::Shape(n) => n.visible,
-        Node::Connector(n) => n.visible,
-        Node::Pattern(n) => n.visible,
-        Node::Chart(n) => n.visible,
-        Node::Light(n) => n.visible,
-        Node::Mesh(n) => n.visible,
-        // A footnote has no `visible` flag.
-        Node::Footnote(_) => None,
-        Node::Unknown(_) => None,
-    }
+    node.role() == Some("guide") || node.visible() == Some(false)
 }
 
 /// The declared `w` of a node in pixels, if the node kind carries a `w`/`h`

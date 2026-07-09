@@ -530,7 +530,7 @@ fn synthetic_group(instance: &InstanceNode, children: Vec<Node>) -> GroupNode {
 /// the validator already warns via `component.unknown_override_target`.
 fn apply_override(children: &mut [Node], ov: &Override) -> bool {
     for child in children.iter_mut() {
-        if node_local_id(child) == Some(ov.ref_id.as_str()) {
+        if child.id() == Some(ov.ref_id.as_str()) {
             apply_override_to_node(child, ov);
             return true;
         }
@@ -731,35 +731,6 @@ fn set_node_visible(node: &mut Node, v: bool) {
     }
 }
 
-/// The LOCAL id of a node (the id as authored), or `None` for `Unknown`.
-fn node_local_id(node: &Node) -> Option<&str> {
-    match node {
-        Node::Rect(n) => Some(&n.id),
-        Node::Ellipse(n) => Some(&n.id),
-        Node::Line(n) => Some(&n.id),
-        Node::Text(n) => Some(&n.id),
-        Node::Code(n) => Some(&n.id),
-        Node::Frame(n) => Some(&n.id),
-        Node::Group(n) => Some(&n.id),
-        Node::Image(n) => Some(&n.id),
-        Node::Polygon(n) => Some(&n.id),
-        Node::Polyline(n) => Some(&n.id),
-        Node::Path(n) => Some(&n.id),
-        Node::Instance(n) => Some(&n.id),
-        Node::Field(n) => Some(&n.id),
-        Node::Toc(n) => Some(&n.id),
-        Node::Footnote(n) => Some(&n.id),
-        Node::Table(n) => Some(&n.id),
-        Node::Shape(n) => Some(&n.id),
-        Node::Connector(n) => Some(&n.id),
-        Node::Pattern(n) => Some(&n.id),
-        Node::Chart(n) => Some(&n.id),
-        Node::Light(n) => Some(&n.id),
-        Node::Mesh(n) => Some(&n.id),
-        Node::Unknown(_) => None,
-    }
-}
-
 /// Recursively prepend `prefix` to the id of every id-bearing node in
 /// `children`, descending into `group`/`frame` containers (and prefixing nested
 /// instance ids too). Mirrors the suffix walk used by `duplicate_page` in
@@ -767,7 +738,9 @@ fn node_local_id(node: &Node) -> Option<&str> {
 /// a PREFIX with the instance id so two instances of one component never collide.
 pub(in crate::compile) fn prefix_ids_in_children(children: &mut [Node], prefix: &str) {
     for child in children.iter_mut() {
-        prefix_node_id(child, prefix);
+        if let Some(id) = child.id_mut() {
+            *id = format!("{prefix}{id}");
+        }
         match child {
             Node::Frame(f) => prefix_ids_in_children(&mut f.children, prefix),
             Node::Group(g) => prefix_ids_in_children(&mut g.children, prefix),
@@ -799,39 +772,5 @@ pub(in crate::compile) fn prefix_ids_in_children(children: &mut [Node], prefix: 
             | Node::Mesh(_)
             | Node::Unknown(_) => {}
         }
-    }
-}
-
-/// Prepend `prefix` to a single node's id (a no-op for `Unknown`).
-fn prefix_node_id(node: &mut Node, prefix: &str) {
-    macro_rules! pre {
-        ($field:expr) => {{
-            $field = format!("{prefix}{}", $field);
-        }};
-    }
-    match node {
-        Node::Rect(n) => pre!(n.id),
-        Node::Ellipse(n) => pre!(n.id),
-        Node::Line(n) => pre!(n.id),
-        Node::Text(n) => pre!(n.id),
-        Node::Code(n) => pre!(n.id),
-        Node::Frame(n) => pre!(n.id),
-        Node::Group(n) => pre!(n.id),
-        Node::Image(n) => pre!(n.id),
-        Node::Polygon(n) => pre!(n.id),
-        Node::Polyline(n) => pre!(n.id),
-        Node::Path(n) => pre!(n.id),
-        Node::Instance(n) => pre!(n.id),
-        Node::Field(n) => pre!(n.id),
-        Node::Toc(n) => pre!(n.id),
-        Node::Footnote(n) => pre!(n.id),
-        Node::Table(n) => pre!(n.id),
-        Node::Shape(n) => pre!(n.id),
-        Node::Connector(n) => pre!(n.id),
-        Node::Pattern(n) => pre!(n.id),
-        Node::Chart(n) => pre!(n.id),
-        Node::Light(n) => pre!(n.id),
-        Node::Mesh(n) => pre!(n.id),
-        Node::Unknown(_) => {}
     }
 }

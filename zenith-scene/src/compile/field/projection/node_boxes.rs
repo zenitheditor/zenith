@@ -7,7 +7,7 @@ use zenith_core::{
     ComponentDef, InstanceNode, Node, Page, PropertyValue, ResolvedToken, dim_to_px,
 };
 
-use super::common::{node_id, resolve_imported_component};
+use super::common::resolve_imported_component;
 use crate::compile::container::prefix_ids_in_children;
 use crate::compile::imports::ImportScopes;
 use crate::compile::util::resolve_geometry_px;
@@ -56,7 +56,7 @@ fn collect_node_boxes(
     map: &mut BTreeMap<String, (f64, f64, f64, f64)>,
 ) {
     for child in children {
-        if let Some(id) = node_id(child)
+        if let Some(id) = child.id()
             && let Some((x, y, w, h)) = node_rect(child, resolved)
         {
             map.entry(id.to_owned()).or_insert((dx + x, dy + y, w, h));

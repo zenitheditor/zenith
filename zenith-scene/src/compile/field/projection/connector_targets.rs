@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 
 use zenith_core::{ComponentDef, InstanceNode, Node, Point, ResolvedToken, dim_to_px};
 
-use super::common::{node_id, resolve_imported_component};
+use super::common::resolve_imported_component;
 use crate::compile::container::prefix_ids_in_children;
 use crate::compile::imports::ImportScopes;
 use crate::compile::leaf::path_outline_bounds;
@@ -106,7 +106,7 @@ fn collect_connector_targets(
         imports: _,
     } = env;
     for child in children {
-        if let Some(id) = node_id(child) {
+        if let Some(id) = child.id() {
             if node_boxes.contains_key(id) {
                 // Already a rectangular routing box; record only its kind.
                 targets

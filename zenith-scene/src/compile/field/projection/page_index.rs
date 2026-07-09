@@ -4,8 +4,6 @@ use std::collections::BTreeMap;
 
 use zenith_core::Node;
 
-use super::common::node_id;
-
 /// Build the document-wide `node id → 1-based page index` map for `page-ref`
 /// resolution. Deterministic: walks pages in order, descending into
 /// `group`/`frame` containers in source order. The FIRST occurrence of an id
@@ -26,7 +24,12 @@ pub(in crate::compile) fn build_page_index_map(
 /// `group`/`frame` children. First write wins (does not overwrite).
 fn index_nodes(children: &[Node], page_index_1based: usize, map: &mut BTreeMap<String, usize>) {
     for child in children {
-        if let Some(id) = node_id(child) {
+        // Skip `Unknown`: page-ref resolution is for known content nodes only.
+        // Matching the pre-accessor scene helper (which returned `None` for
+        // Unknown) keeps docs with id'd forward-compat nodes byte-identical.
+        if !matches!(child, Node::Unknown(_))
+            && let Some(id) = child.id()
+        {
             map.entry(id.to_owned()).or_insert(page_index_1based);
         }
         match child {
