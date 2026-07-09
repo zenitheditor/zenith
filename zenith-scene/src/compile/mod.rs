@@ -240,7 +240,7 @@ pub(in crate::compile) fn compile_page_inner(
     // From here on, compile against the (possibly substituted) document.
     let doc: &Document = owned_doc.as_ref().unwrap_or(doc);
     let import_scopes = match imports {
-        Some(graph) => imports::ImportScopes::from_graph(graph, &mut diagnostics),
+        Some(graph) => imports::ImportScopes::from_graph(graph, doc, &mut diagnostics),
         None => imports::ImportScopes::disabled(),
     };
 

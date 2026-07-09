@@ -312,6 +312,41 @@ pub(crate) fn collect_missing_asset_diagnostics(
     diagnostics
 }
 
+/// Collect a hard `import.asset_missing` diagnostic for every declared asset of
+/// an IMPORTED document whose file does not exist on disk under that import's
+/// resolved directory.
+///
+/// The host document's own assets are covered by
+/// [`collect_missing_asset_diagnostics`]; this is the imported-document parallel,
+/// carrying the import origin (the import id and the resolved path) so the
+/// failure is attributable to the specific import. Imports and their assets are
+/// iterated in deterministic (`BTreeMap`) order. Returned diagnostics are
+/// `Severity::Error`, so they trip the render gate exactly like `asset.missing`.
+pub(crate) fn collect_missing_import_asset_diagnostics(
+    imports: &LoadedImportGraph,
+) -> Vec<Diagnostic> {
+    let mut diagnostics = Vec::new();
+    for (import_id, doc, dir) in imports.documents_with_dirs() {
+        for decl in &doc.assets.assets {
+            let path = dir.join(&decl.src);
+            if !path.exists() {
+                diagnostics.push(Diagnostic::error(
+                    "import.asset_missing",
+                    format!(
+                        "import '{}' asset '{}' file not found: '{}'",
+                        import_id,
+                        decl.id,
+                        path.display()
+                    ),
+                    decl.source_span,
+                    Some(decl.id.clone()),
+                ));
+            }
+        }
+    }
+    diagnostics
+}
+
 /// Collect `image.overflow` and `image.upscale` advisories for all image nodes
 /// in the document.
 ///
@@ -355,6 +390,21 @@ pub(super) fn disk_diagnostics(doc: &Document, project_dir: Option<&Path>) -> Ve
         }
         None => Vec::new(),
     }
+}
+
+/// [`disk_diagnostics`] for the host document plus `import.asset_missing`
+/// diagnostics for every imported document's missing assets.
+///
+/// This is the single call-site replacement used by every render entry point so
+/// that imported assets are gate-checked alongside the host's own assets.
+pub(super) fn disk_diagnostics_with_imports(
+    doc: &Document,
+    project_dir: Option<&Path>,
+    imports: &LoadedImportGraph,
+) -> Vec<Diagnostic> {
+    let mut d = disk_diagnostics(doc, project_dir);
+    d.extend(collect_missing_import_asset_diagnostics(imports));
+    d
 }
 
 /// Recursively walk `nodes`, collecting image dimension diagnostics.
@@ -557,6 +607,46 @@ mod tests {
             .by_id("brand/logo")
             .expect("imported asset must be registered under import namespace");
         assert_eq!(&asset.bytes[..], b"imported-logo");
+    }
+
+    #[test]
+    fn collect_missing_import_asset_diagnostics_reports_missing_imported_asset() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        std::fs::create_dir(dir.path().join("brand")).expect("create brand dir");
+        // The imported document declares an asset whose file is NOT written.
+        std::fs::write(
+            dir.path().join("brand/brand.zen"),
+            r#"zenith version=1 {
+  project id="proj.brand" name="Brand"
+  assets {
+    asset id="logo" kind="image" src="missing.png"
+  }
+  document id="doc.brand" title="Brand" {
+    page id="page.brand" w=(px)10 h=(px)10
+  }
+}
+"#,
+        )
+        .expect("write imported document");
+        let root = parse(
+            r#"zenith version=1 {
+  project id="proj.host" name="Host"
+  imports {
+    import id="brand" kind="zen" src="brand/brand.zen"
+  }
+  document id="doc.host" title="Host" {
+    page id="page.host" w=(px)10 h=(px)10
+  }
+}
+"#,
+        );
+        let imports = load_import_graph(&root, Some(dir.path()));
+
+        let diagnostics = collect_missing_import_asset_diagnostics(&imports);
+
+        assert_eq!(diagnostics.len(), 1);
+        assert_eq!(diagnostics[0].code, "import.asset_missing");
+        assert_eq!(diagnostics[0].subject_id.as_deref(), Some("logo"));
     }
 
     #[test]

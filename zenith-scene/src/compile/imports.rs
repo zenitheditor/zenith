@@ -5,7 +5,9 @@
 
 use std::collections::BTreeMap;
 
-use zenith_core::{ComponentDef, Diagnostic, Document, Page, ResolvedToken, Style, resolve_tokens};
+use zenith_core::{
+    ComponentDef, Diagnostic, Document, ImportDecl, Page, ResolvedToken, Style, resolve_tokens,
+};
 
 use super::ComponentMap;
 
@@ -61,10 +63,25 @@ impl<'a> ImportScopes<'a> {
         }
     }
 
+    /// Build the import scopes from `graph`, threading the HOST document so that
+    /// each import's declared `token-map` entries can bridge a host token into
+    /// the imported subtree (see [`apply_token_maps`]).
+    ///
+    /// Host token resolution here does NOT push its diagnostics: they are already
+    /// surfaced by the main compile token-resolution step. Imported-document token
+    /// diagnostics ARE surfaced (they have no other emission site).
     pub(in crate::compile) fn from_graph(
         graph: &'a ImportGraph<'a>,
+        host: &Document,
         diagnostics: &mut Vec<Diagnostic>,
     ) -> Self {
+        let host_resolved = resolve_tokens(&host.tokens).resolved;
+        let host_imports: BTreeMap<&str, &ImportDecl> = host
+            .imports
+            .iter()
+            .map(|import| (import.id.as_str(), import))
+            .collect();
+
         let mut scopes = BTreeMap::new();
         for (id, imported) in &graph.documents {
             let token_resolution = resolve_tokens(&imported.document.tokens);
@@ -90,11 +107,16 @@ impl<'a> ImportScopes<'a> {
                 page_map.entry(page.id.as_str()).or_insert(page);
             }
 
+            let mut resolved = token_resolution.resolved;
+            if let Some(import) = host_imports.get(id.as_str()) {
+                apply_token_maps(import, &host_resolved, &mut resolved, diagnostics);
+            }
+
             scopes.insert(
                 id.clone(),
                 ImportedScope {
                     document: imported.document,
-                    resolved: token_resolution.resolved,
+                    resolved,
                     style_map,
                     components: component_map,
                     pages: page_map,
@@ -114,6 +136,49 @@ impl<'a> ImportScopes<'a> {
 
     pub(in crate::compile) fn get(&self, id: &str) -> Option<&ImportedScope<'a>> {
         self.scopes.get(id)
+    }
+}
+
+// NOTE: `import.token_unresolved` is registered in the catalog but intentionally
+// NOT emitted here. Token maps only ever INSERT/override entries in an import
+// scope's resolved table (never remove them), so a token that an imported node
+// references is missing after mapping only if the imported document itself never
+// defined it — a broken-imported-document condition already surfaced generically
+// by `scene.unresolved_token` when the imported subtree is compiled. Emitting a
+// distinct import-scoped code for the same condition would require making the
+// shared color/geometry resolver stack import-aware (a large refactor) purely to
+// duplicate an existing diagnostic, so the code is reserved rather than faked.
+
+/// Apply an import's `token-map` entries, bridging host tokens into the
+/// imported scope's resolved table.
+///
+/// `token-map from="X" to="Y"` overrides the imported token `X` with the host's
+/// resolved token `Y`, so references to `X` inside the imported subtree paint
+/// with the host value. When the host lacks `Y`, an `import.token_conflict`
+/// diagnostic is emitted and the imported value is left untouched (isolation).
+fn apply_token_maps(
+    import: &ImportDecl,
+    host_resolved: &BTreeMap<String, ResolvedToken>,
+    scope_resolved: &mut BTreeMap<String, ResolvedToken>,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    for map in &import.token_maps {
+        match host_resolved.get(&map.to) {
+            Some(host_token) => {
+                scope_resolved.insert(map.from.clone(), host_token.clone());
+            }
+            None => {
+                diagnostics.push(Diagnostic::warning(
+                    "import.token_conflict",
+                    format!(
+                        "import '{}' token-map target '{}' is not a resolved token in the host document; the mapping is ignored",
+                        import.id, map.to
+                    ),
+                    map.source_span,
+                    Some(import.id.clone()),
+                ));
+            }
+        }
     }
 }
 

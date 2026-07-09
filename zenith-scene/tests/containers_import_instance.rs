@@ -121,6 +121,44 @@ fn fill_rects(result: &zenith_scene::CompileResult) -> Vec<FillRectSummary> {
         .collect()
 }
 
+fn scale_translates(result: &zenith_scene::CompileResult) -> Vec<(f64, f64, f64, f64)> {
+    result
+        .scene
+        .commands
+        .iter()
+        .filter_map(|command| match command {
+            SceneCommand::PushScaleTranslate { sx, sy, tx, ty } => Some((*sx, *sy, *tx, *ty)),
+            _ => None,
+        })
+        .collect()
+}
+
+/// A host document declaring a `token-map from="color.brand" to="{map_to}"` on
+/// the `library` import, plus a single imported-card instance.
+fn host_doc_with_token_map(map_to: &str) -> common::Document {
+    parse(&format!(
+        r##"zenith version=1 {{
+  project id="proj.host" name="Host"
+  tokens format="zenith-token-v1" {{
+    token id="color.host" type="color" value="#ff00ff"
+  }}
+  imports {{
+    import id="library" kind="zen" src="lib.zen" {{
+      token-map from="color.brand" to="{map_to}"
+    }}
+  }}
+  styles {{}}
+  components {{}}
+  document id="doc.host" title="Host" {{
+    page id="page.host" w=(px)100 h=(px)80 {{
+      instance id="inst.imported" source="library#component.component.card" x=(px)5 y=(px)7
+    }}
+  }}
+}}
+"##
+    ))
+}
+
 fn diagnostic_codes(result: &zenith_scene::CompileResult) -> Vec<&str> {
     result
         .diagnostics
@@ -310,6 +348,127 @@ fn unsupported_page_target_emits_unsupported_import_target_and_skips() {
         vec!["scene.unsupported_import_target"]
     );
     assert!(fill_rects(&result).is_empty());
+}
+
+#[test]
+fn imported_instance_contain_scales_and_centers() {
+    // Source bounds are (0,0,40,20). w=100,h=40 → contain scale=min(2.5,2.0)=2.0;
+    // centered horizontally: ox=(100-80)/2=10, oy=0; origin (5,7).
+    let host = host_doc_with_instance_body(
+        r#"instance id="inst.imported" source="library#component.component.card" x=(px)5 y=(px)7 w=(px)100 h=(px)40 fit="contain""#,
+    );
+    let imported = imported_doc();
+    let imports = ImportGraph::new().with_document("library", &imported);
+
+    let result = compile_page_with_imports(&host, &default_provider(), 0, None, &imports);
+
+    assert_eq!(diagnostic_codes(&result), Vec::<&str>::new());
+    assert_eq!(scale_translates(&result), vec![(2.0, 2.0, 15.0, 7.0)]);
+}
+
+#[test]
+fn imported_instance_fill_distorts_axes_independently() {
+    // w=80,h=60 → sx=80/40=2, sy=60/20=3; no centering; origin (5,7).
+    let host = host_doc_with_instance_body(
+        r#"instance id="inst.imported" source="library#component.component.card" x=(px)5 y=(px)7 w=(px)80 h=(px)60 fit="fill""#,
+    );
+    let imported = imported_doc();
+    let imports = ImportGraph::new().with_document("library", &imported);
+
+    let result = compile_page_with_imports(&host, &default_provider(), 0, None, &imports);
+
+    assert_eq!(diagnostic_codes(&result), Vec::<&str>::new());
+    assert_eq!(scale_translates(&result), vec![(2.0, 3.0, 5.0, 7.0)]);
+}
+
+#[test]
+fn imported_instance_fit_none_ignores_declared_size() {
+    // fit="none" keeps scale 1; content is placed at the origin unscaled.
+    let host = host_doc_with_instance_body(
+        r#"instance id="inst.imported" source="library#component.component.card" x=(px)5 y=(px)7 w=(px)80 h=(px)60 fit="none""#,
+    );
+    let imported = imported_doc();
+    let imports = ImportGraph::new().with_document("library", &imported);
+
+    let result = compile_page_with_imports(&host, &default_provider(), 0, None, &imports);
+
+    assert_eq!(diagnostic_codes(&result), Vec::<&str>::new());
+    assert_eq!(scale_translates(&result), vec![(1.0, 1.0, 5.0, 7.0)]);
+    // The rect is compiled at the LOCAL origin; the PushScaleTranslate places it
+    // (rendered at 1*0+5 = 5, 1*0+7 = 7) without scaling.
+    assert_eq!(
+        fill_rects(&result),
+        vec![(0.0, 0.0, 40.0, 20.0, (0, 0, 255))]
+    );
+}
+
+#[test]
+fn imported_instance_without_wh_emits_no_scale_transform() {
+    // No w/h → the pre-fit translate path is preserved (byte-identical): the
+    // rect lands at the instance origin with no PushScaleTranslate.
+    let host = host_doc("library#component.component.card");
+    let imported = imported_doc();
+    let imports = ImportGraph::new().with_document("library", &imported);
+
+    let result = compile_page_with_imports(&host, &default_provider(), 0, None, &imports);
+
+    assert_eq!(diagnostic_codes(&result), Vec::<&str>::new());
+    assert!(scale_translates(&result).is_empty());
+    assert_eq!(
+        fill_rects(&result),
+        vec![(5.0, 7.0, 40.0, 20.0, (0, 0, 255))]
+    );
+}
+
+#[test]
+fn imported_instance_unknown_fit_emits_advisory_and_skips() {
+    let host = host_doc_with_instance_body(
+        r#"instance id="inst.imported" source="library#component.component.card" x=(px)5 y=(px)7 w=(px)80 h=(px)60 fit="cover""#,
+    );
+    let imported = imported_doc();
+    let imports = ImportGraph::new().with_document("library", &imported);
+
+    let result = compile_page_with_imports(&host, &default_provider(), 0, None, &imports);
+
+    assert_eq!(
+        diagnostic_codes(&result),
+        vec!["scene.unsupported_import_target"]
+    );
+    assert!(fill_rects(&result).is_empty());
+    assert!(scale_translates(&result).is_empty());
+}
+
+#[test]
+fn token_map_bridges_host_token_into_imported_subtree() {
+    // token-map from="color.brand" to="color.host" (#ff00ff) → the imported
+    // rect that fills with color.brand paints with the host color.
+    let host = host_doc_with_token_map("color.host");
+    let imported = imported_doc();
+    let imports = ImportGraph::new().with_document("library", &imported);
+
+    let result = compile_page_with_imports(&host, &default_provider(), 0, None, &imports);
+
+    assert_eq!(diagnostic_codes(&result), Vec::<&str>::new());
+    assert_eq!(
+        fill_rects(&result),
+        vec![(5.0, 7.0, 40.0, 20.0, (255, 0, 255))]
+    );
+}
+
+#[test]
+fn token_map_missing_host_target_emits_conflict_and_keeps_imported_value() {
+    let host = host_doc_with_token_map("color.nonexistent");
+    let imported = imported_doc();
+    let imports = ImportGraph::new().with_document("library", &imported);
+
+    let result = compile_page_with_imports(&host, &default_provider(), 0, None, &imports);
+
+    assert_eq!(diagnostic_codes(&result), vec!["import.token_conflict"]);
+    // Isolation preserved: the imported value (#0000ff) still paints.
+    assert_eq!(
+        fill_rects(&result),
+        vec![(5.0, 7.0, 40.0, 20.0, (0, 0, 255))]
+    );
 }
 
 #[test]

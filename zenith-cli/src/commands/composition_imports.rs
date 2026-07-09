@@ -4,12 +4,13 @@
 //! resolving import paths relative to the importing document, parsing imported
 //! documents, checking declared source hashes, and detecting graph cycles.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Component, Path, PathBuf};
 
 use sha2::{Digest, Sha256};
 use zenith_core::{
-    Diagnostic, Dimension, Document, ImportDecl, KdlAdapter, KdlSource, Node, Page, dim_to_px,
+    Diagnostic, Dimension, Document, ImportDecl, InstanceNode, KdlAdapter, KdlSource, Node, Page,
+    dim_to_px,
 };
 use zenith_scene::ImportGraph as SceneImportGraph;
 
@@ -68,6 +69,7 @@ pub(crate) fn load_import_graph(root: &Document, root_dir: Option<&Path>) -> Loa
         None => loader.report_unresolvable_root(root),
     }
     loader.validate_root_targets(root);
+    loader.detect_id_collisions(root);
     loader.finish()
 }
 
@@ -207,6 +209,72 @@ impl ImportGraphLoader {
         }
         for master in &root.masters {
             self.validate_node_sources(&master.children, &declared_imports);
+        }
+    }
+
+    /// Detect page-level imported-instance id collisions.
+    ///
+    /// An imported component instance expands its descendant ids as
+    /// `<instance-id>/<local-id>`. Because a host node may be authored with a
+    /// literal slash-bearing id, an expansion can silently duplicate an existing
+    /// host node id. This guard forms every expanded id for each page-level
+    /// imported-component instance and emits `import.id_collision` (a hard Error)
+    /// when it clashes with an authored host page-node id.
+    ///
+    /// (Distinct instance-id prefixes make cross-instance and within-instance
+    /// collisions structurally impossible under this scheme, so only the
+    /// host-clash case is checked.)
+    fn detect_id_collisions(&mut self, root: &Document) {
+        let mut host_ids: BTreeSet<String> = BTreeSet::new();
+        let mut instances: Vec<&InstanceNode> = Vec::new();
+        for page in &root.body.pages {
+            collect_all_node_ids(&page.children, &mut host_ids);
+            collect_instances(&page.children, &mut instances);
+        }
+
+        // Collect owned collisions first so the immutable borrow of `self.documents`
+        // ends before pushing into `self.diagnostics`.
+        let mut collisions: Vec<(String, Option<zenith_core::Span>, String)> = Vec::new();
+        for instance in instances {
+            let Some(source) = instance.source.as_deref() else {
+                continue;
+            };
+            let ImportSource::Component {
+                import_id,
+                component_id,
+            } = parse_import_source(source)
+            else {
+                continue;
+            };
+            let Some(imported) = self.documents.get(import_id) else {
+                continue;
+            };
+            let Some(component) = imported
+                .components
+                .iter()
+                .find(|component| component.id == component_id)
+            else {
+                continue;
+            };
+            let mut local_ids: BTreeSet<String> = BTreeSet::new();
+            collect_all_node_ids(&component.children, &mut local_ids);
+            for local in &local_ids {
+                let expanded = format!("{}/{}", instance.id, local);
+                if host_ids.contains(&expanded) {
+                    collisions.push((instance.id.clone(), instance.source_span, expanded));
+                }
+            }
+        }
+
+        for (instance_id, span, expanded) in collisions {
+            self.diagnostics.push(Diagnostic::error(
+                "import.id_collision",
+                format!(
+                    "instance '{instance_id}' expands to node id '{expanded}' which collides with an existing host node id"
+                ),
+                span,
+                Some(instance_id),
+            ));
         }
     }
 
@@ -481,6 +549,127 @@ fn parse_import_source(source: &str) -> ImportSource<'_> {
     }
 
     ImportSource::UnsupportedTarget
+}
+
+/// Recursively collect every authored node id in `nodes`, descending into
+/// `frame`/`group` containers and `table` cells (mirrors the scene's node walk).
+fn collect_all_node_ids(nodes: &[Node], out: &mut BTreeSet<String>) {
+    for node in nodes {
+        match node {
+            Node::Rect(n) => {
+                out.insert(n.id.clone());
+            }
+            Node::Ellipse(n) => {
+                out.insert(n.id.clone());
+            }
+            Node::Line(n) => {
+                out.insert(n.id.clone());
+            }
+            Node::Text(n) => {
+                out.insert(n.id.clone());
+            }
+            Node::Code(n) => {
+                out.insert(n.id.clone());
+            }
+            Node::Image(n) => {
+                out.insert(n.id.clone());
+            }
+            Node::Polygon(n) => {
+                out.insert(n.id.clone());
+            }
+            Node::Polyline(n) => {
+                out.insert(n.id.clone());
+            }
+            Node::Path(n) => {
+                out.insert(n.id.clone());
+            }
+            Node::Frame(n) => {
+                out.insert(n.id.clone());
+                collect_all_node_ids(&n.children, out);
+            }
+            Node::Group(n) => {
+                out.insert(n.id.clone());
+                collect_all_node_ids(&n.children, out);
+            }
+            Node::Instance(n) => {
+                out.insert(n.id.clone());
+            }
+            Node::Field(n) => {
+                out.insert(n.id.clone());
+            }
+            Node::Toc(n) => {
+                out.insert(n.id.clone());
+            }
+            Node::Footnote(n) => {
+                out.insert(n.id.clone());
+            }
+            Node::Table(n) => {
+                out.insert(n.id.clone());
+                for row in &n.rows {
+                    for cell in &row.cells {
+                        collect_all_node_ids(&cell.children, out);
+                    }
+                }
+            }
+            Node::Shape(n) => {
+                out.insert(n.id.clone());
+            }
+            Node::Connector(n) => {
+                out.insert(n.id.clone());
+            }
+            Node::Pattern(n) => {
+                out.insert(n.id.clone());
+            }
+            Node::Chart(n) => {
+                out.insert(n.id.clone());
+            }
+            Node::Light(n) => {
+                out.insert(n.id.clone());
+            }
+            Node::Mesh(n) => {
+                out.insert(n.id.clone());
+            }
+            Node::Unknown(_) => {}
+        }
+    }
+}
+
+/// Recursively collect every `instance` node in `nodes`, descending into
+/// `frame`/`group` containers and `table` cells.
+fn collect_instances<'a>(nodes: &'a [Node], out: &mut Vec<&'a InstanceNode>) {
+    for node in nodes {
+        match node {
+            Node::Instance(n) => out.push(n),
+            Node::Frame(n) => collect_instances(&n.children, out),
+            Node::Group(n) => collect_instances(&n.children, out),
+            Node::Table(n) => {
+                for row in &n.rows {
+                    for cell in &row.cells {
+                        collect_instances(&cell.children, out);
+                    }
+                }
+            }
+            Node::Rect(_)
+            | Node::Ellipse(_)
+            | Node::Line(_)
+            | Node::Text(_)
+            | Node::Code(_)
+            | Node::Image(_)
+            | Node::Polygon(_)
+            | Node::Polyline(_)
+            | Node::Path(_)
+            | Node::Field(_)
+            | Node::Toc(_)
+            | Node::Footnote(_)
+            | Node::Shape(_)
+            | Node::Connector(_)
+            | Node::Pattern(_)
+            | Node::Chart(_)
+            | Node::Light(_)
+            | Node::Mesh(_)
+            | Node::Unknown(_) => {}
+        }
+    }
 }
 
 fn same_page_size(host: &Page, imported: &Page) -> bool {
@@ -803,6 +992,31 @@ mod tests {
         assert_eq!(diagnostics.len(), 1);
         assert_eq!(diagnostics[0].code, "import.unknown_reference");
         assert_eq!(diagnostics[0].subject_id.as_deref(), Some("page.root"));
+    }
+
+    #[test]
+    fn load_import_graph_reports_expanded_id_collision() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        fs::write(
+            dir.path().join("child.zen"),
+            imported_with_component_and_page("component.card", "cover", 100.0, 100.0),
+        )
+        .expect("write child");
+        // The host authors a node whose id equals what the instance expansion
+        // (`<instance-id>/<local-id>`) would produce: `card/mark`.
+        let root = root_with_import_and_body(
+            "child.zen",
+            r#"    page id="page.root" w=(px)100 h=(px)100 {
+      rect id="card/mark" x=(px)0 y=(px)0 w=(px)10 h=(px)10
+      instance id="card" source="child#component.component.card" x=(px)0 y=(px)0
+    }"#,
+        );
+
+        let diagnostics = load_import_graph(&root, Some(dir.path())).into_diagnostics();
+
+        assert_eq!(diagnostics.len(), 1, "{diagnostics:?}");
+        assert_eq!(diagnostics[0].code, "import.id_collision");
+        assert_eq!(diagnostics[0].subject_id.as_deref(), Some("card"));
     }
 
     #[test]

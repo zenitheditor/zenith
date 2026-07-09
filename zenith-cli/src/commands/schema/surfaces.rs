@@ -65,7 +65,9 @@ fn surface_detail(
         .iter()
         .map(|&a| SchemaAttr {
             name: a.to_owned(),
-            ty: core_schema::attribute_type(a).to_owned(),
+            // Kind-aware so surface-specific overrides (e.g. page `fit`) win;
+            // unmapped attributes fall back to the generic hint.
+            ty: core_schema::attribute_type_for_kind(surface, a).to_owned(),
         })
         .collect();
 

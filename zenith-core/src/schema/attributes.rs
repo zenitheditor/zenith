@@ -192,6 +192,9 @@ fn attribute_type_for_kind_inner(kind: &str, name: &str, fallback: &'static str)
         ("path", "stroke-linejoin") => "enum: miter|round|bevel",
         ("path", "stroke-miter-limit") => "f64 (>0)",
         ("group", "symmetry-mode") => "enum: radial|mirror",
+        // Import composition fit is contain/fill/none only (no `cover`); it scales
+        // the imported subtree into the instance/page box.
+        ("instance", "fit") | ("page", "fit") => "enum: contain|fill|none",
         ("import", "kind") => "enum: zen",
         ("token-map", "from") | ("token-map", "to") => "string",
         // chart axis/legend/caption/bar-mode/orientation/legend-position/legend-layout/legend-align: chart-only attributes (validate/check/nodes/node/chart.rs).

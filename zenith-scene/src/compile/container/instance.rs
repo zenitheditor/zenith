@@ -5,13 +5,16 @@
 
 use std::collections::BTreeMap;
 
-use zenith_core::{Diagnostic, GroupNode, InstanceNode, Node, Override, PropertyValue};
+use zenith_core::{
+    Diagnostic, Dimension, GroupNode, InstanceNode, Node, Override, PropertyValue, ResolvedToken,
+};
 
 use crate::ir::SceneCommand;
 
 use super::super::imports::{ImportSource, parse_import_source};
+use super::super::util::resolve_geometry_px;
 use super::super::{NodeCtx, RenderCtx};
-use super::group::compile_group;
+use super::group::{compile_group, group_children_bounds};
 
 /// Compile an `instance` node by expanding its referenced component subtree.
 ///
@@ -203,15 +206,158 @@ fn compile_imported_instance(
         doc_block_styles: &imported.document.body.block_styles,
     };
 
-    let synthetic = synthetic_group(instance, children);
-    compile_group(
-        &synthetic,
-        imported_cx,
-        commands,
-        diagnostics,
-        connector_strokes,
+    // Resolve the instance `w`/`h`/`fit` against the HOST token scope. When both
+    // dimensions resolve to a positive px box, the imported subtree is scaled to
+    // fit that box (mirroring the page-source fit path); otherwise the current
+    // translate-only path is preserved exactly (byte-identical for no-w/h).
+    match fit_outcome(
+        instance,
+        &children,
+        &imported.resolved,
+        cx,
         ctx,
-    );
+        diagnostics,
+    ) {
+        FitOutcome::Skip => {}
+        FitOutcome::Transform { sx, sy, tx, ty } => {
+            let mut synthetic = synthetic_group(instance, children);
+            // The transform carries all positioning; the synthetic group compiles
+            // its children at the local origin (0,0).
+            synthetic.x = None;
+            synthetic.y = None;
+            let local_ctx = RenderCtx {
+                opacity: ctx.opacity,
+                dx: 0.0,
+                dy: 0.0,
+                baseline_grid: ctx.baseline_grid,
+            };
+            if is_identity_transform(sx, sy, tx, ty) {
+                compile_group(
+                    &synthetic,
+                    imported_cx,
+                    commands,
+                    diagnostics,
+                    connector_strokes,
+                    local_ctx,
+                );
+            } else {
+                commands.push(SceneCommand::PushScaleTranslate { sx, sy, tx, ty });
+                compile_group(
+                    &synthetic,
+                    imported_cx,
+                    commands,
+                    diagnostics,
+                    connector_strokes,
+                    local_ctx,
+                );
+                commands.push(SceneCommand::PopTransform);
+            }
+        }
+        FitOutcome::Translate => {
+            let synthetic = synthetic_group(instance, children);
+            compile_group(
+                &synthetic,
+                imported_cx,
+                commands,
+                diagnostics,
+                connector_strokes,
+                ctx,
+            );
+        }
+    }
+}
+
+/// The scaling decision for an imported instance carrying `w`/`h`/`fit`.
+enum FitOutcome {
+    /// No (positive) `w`/`h` box, or the source bounds are unresolvable: keep the
+    /// translate-only path (byte-identical to the pre-fit behavior).
+    Translate,
+    /// A resolved scale + translate transform to apply around the subtree.
+    Transform { sx: f64, sy: f64, tx: f64, ty: f64 },
+    /// An unknown `fit` value was diagnosed; the instance is skipped entirely.
+    Skip,
+}
+
+/// Resolve the imported-instance fit transform.
+///
+/// `w`/`h`/`x`/`y` resolve against the HOST token scope (`cx.resolved`); the
+/// source bounds resolve against the imported scope (`imported_resolved`), since
+/// the children carry imported-scope geometry. Mirrors `page_source::fit_transform`.
+fn fit_outcome(
+    instance: &InstanceNode,
+    children: &[Node],
+    imported_resolved: &BTreeMap<String, ResolvedToken>,
+    cx: NodeCtx,
+    ctx: RenderCtx,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> FitOutcome {
+    let (Some(w), Some(h)) = (
+        instance_dim_px(instance.w.as_ref(), cx.resolved),
+        instance_dim_px(instance.h.as_ref(), cx.resolved),
+    ) else {
+        return FitOutcome::Translate;
+    };
+    if !(w > 0.0 && h > 0.0) {
+        return FitOutcome::Translate;
+    }
+
+    let Some((smin_x, smin_y, sw, sh)) =
+        group_children_bounds(children, 0.0, 0.0, imported_resolved)
+    else {
+        return FitOutcome::Translate;
+    };
+    if !(sw > 0.0 && sh > 0.0) {
+        return FitOutcome::Translate;
+    }
+
+    let x_px = instance_dim_px(instance.x.as_ref(), cx.resolved).unwrap_or(0.0);
+    let y_px = instance_dim_px(instance.y.as_ref(), cx.resolved).unwrap_or(0.0);
+    let dev_dx = ctx.dx + x_px;
+    let dev_dy = ctx.dy + y_px;
+
+    // Default fit is "contain" whenever a w/h box is present.
+    let (sx, sy, ox, oy) = match instance.fit.as_deref().unwrap_or("contain") {
+        "contain" => {
+            let scale = (w / sw).min(h / sh);
+            (scale, scale, (w - sw * scale) / 2.0, (h - sh * scale) / 2.0)
+        }
+        "fill" => (w / sw, h / sh, 0.0, 0.0),
+        "none" => (1.0, 1.0, 0.0, 0.0),
+        other => {
+            diagnostics.push(Diagnostic::advisory(
+                "scene.unsupported_import_target",
+                format!(
+                    "instance '{}' uses unsupported fit '{}'; the instance is skipped",
+                    instance.id, other
+                ),
+                instance.source_span,
+                Some(instance.id.clone()),
+            ));
+            return FitOutcome::Skip;
+        }
+    };
+
+    FitOutcome::Transform {
+        sx,
+        sy,
+        tx: dev_dx + ox - sx * smin_x,
+        ty: dev_dy + oy - sy * smin_y,
+    }
+}
+
+/// Resolve an instance geometry [`Dimension`] to px against `resolved`, reusing
+/// the shared [`resolve_geometry_px`] path (a raw dimension resolves directly).
+fn instance_dim_px(
+    dim: Option<&Dimension>,
+    resolved: &BTreeMap<String, ResolvedToken>,
+) -> Option<f64> {
+    let prop = dim.cloned().map(PropertyValue::Dimension);
+    resolve_geometry_px(prop.as_ref(), resolved)
+}
+
+/// Whether a `PushScaleTranslate` would be the identity (no-op).
+fn is_identity_transform(sx: f64, sy: f64, tx: f64, ty: f64) -> bool {
+    sx == 1.0 && sy == 1.0 && tx == 0.0 && ty == 0.0
 }
 
 fn invalid_import_source(instance: &InstanceNode, source: &str) -> Diagnostic {

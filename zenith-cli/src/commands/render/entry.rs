@@ -11,7 +11,8 @@ use zenith_scene::{ImportGraph, Scene, append_construction_overlay, compile_page
 use crate::config::CliPolicyFlags;
 
 use super::assets::{
-    build_asset_provider_with_imports, build_font_provider_with_imports, disk_diagnostics,
+    build_asset_provider_with_imports, build_font_provider_with_imports,
+    disk_diagnostics_with_imports,
 };
 use super::pipeline::{govern_compile_diagnostics, parse_validate, resolve_page_index};
 use super::text_source::resolve_text_sources;
@@ -184,7 +185,7 @@ pub fn to_scene_json_with_options(
         .map_err(|e| RenderCmdErr::new(format!("scene serialisation error: {e}"), 2))?;
     let mut diagnostics = text_src_diagnostics;
     diagnostics.extend(import_diagnostics);
-    diagnostics.extend(disk_diagnostics(&doc, project_dir));
+    diagnostics.extend(disk_diagnostics_with_imports(&doc, project_dir, &imports));
     diagnostics.extend(govern_compile_diagnostics(
         compile_result.diagnostics,
         &policy,
@@ -274,7 +275,7 @@ pub fn to_png_with_dir_options(
         .map_err(|e| RenderCmdErr::new(format!("render error: {e}"), 2))?;
     let mut diagnostics = text_src_diagnostics;
     diagnostics.extend(import_diagnostics);
-    diagnostics.extend(disk_diagnostics(&doc, project_dir));
+    diagnostics.extend(disk_diagnostics_with_imports(&doc, project_dir, &imports));
     diagnostics.extend(govern_compile_diagnostics(
         compile_result.diagnostics,
         &policy,
@@ -341,7 +342,7 @@ pub fn to_pdf_with_dir_options(
     );
     let mut diagnostics = text_src_diagnostics;
     diagnostics.extend(import_diagnostics);
-    diagnostics.extend(disk_diagnostics(&doc, project_dir));
+    diagnostics.extend(disk_diagnostics_with_imports(&doc, project_dir, &imports));
     diagnostics.extend(govern_compile_diagnostics(
         compile_result.diagnostics,
         &policy,
@@ -405,7 +406,7 @@ pub fn to_pdf_all_pages_with_dir_options(
         None => BytesAssetProvider::new(),
     };
     let mut scenes: Vec<Scene> = Vec::with_capacity(page_count);
-    diagnostics.extend(disk_diagnostics(&doc, project_dir));
+    diagnostics.extend(disk_diagnostics_with_imports(&doc, project_dir, &imports));
     for page_index in 0..page_count {
         let compile_result =
             compile_page_for_render(&doc, &fonts, page_index, opts, &scene_imports);
@@ -478,7 +479,7 @@ pub fn to_png_all_pages_options(
     let base_diagnostics: Vec<Diagnostic> = text_src_diagnostics
         .into_iter()
         .chain(import_diagnostics)
-        .chain(disk_diagnostics(&doc, project_dir))
+        .chain(disk_diagnostics_with_imports(&doc, project_dir, &imports))
         .collect();
     let mut artifacts = Vec::with_capacity(page_count);
     for page_index in 0..page_count {
@@ -586,7 +587,7 @@ pub fn to_png_spread(
     compile_diagnostics.extend(compile_b.diagnostics);
     let mut diagnostics = text_src_diagnostics;
     diagnostics.extend(import_diagnostics);
-    diagnostics.extend(disk_diagnostics(&doc, project_dir));
+    diagnostics.extend(disk_diagnostics_with_imports(&doc, project_dir, &imports));
     diagnostics.extend(govern_compile_diagnostics(compile_diagnostics, &policy));
     Ok(PngArtifact { png, diagnostics })
 }

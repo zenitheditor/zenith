@@ -157,6 +157,11 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
         "Connector `from`/`to` references an unknown node.",
     ),
     info(
+        "import.asset_missing",
+        Severity::Error,
+        "An imported document's declared asset file could not be resolved on disk.",
+    ),
+    info(
         "import.cycle",
         Severity::Error,
         "Composition import graph contains a cycle.",
@@ -165,6 +170,11 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
         "import.hash_mismatch",
         Severity::Error,
         "Imported source bytes do not match the declared sha256.",
+    ),
+    info(
+        "import.id_collision",
+        Severity::Error,
+        "An expanded imported node id collides with a host node id or another expanded id.",
     ),
     info(
         "import.invalid_kind",
@@ -185,6 +195,16 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
         "import.parse_error",
         Severity::Error,
         "Imported `.zen` source could not be parsed.",
+    ),
+    info(
+        "import.token_conflict",
+        Severity::Warning,
+        "An import `token-map` target is not a resolved token in the host document.",
+    ),
+    info(
+        "import.token_unresolved",
+        Severity::Advisory,
+        "An imported node references a token id absent from the import scope after mapping.",
     ),
     info(
         "import.unknown_reference",

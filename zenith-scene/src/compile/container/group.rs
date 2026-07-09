@@ -404,13 +404,46 @@ fn points_bbox(pts: &[Point]) -> Option<(f64, f64, f64, f64)> {
 /// relative to those origins.
 ///
 /// Returns `None` when no child yields a computable bbox (e.g. an empty group
-/// or one containing only unknown/geometry-less nodes).
+/// or one containing only unknown/geometry-less nodes). The center is computed
+/// directly from the min/max accumulation to stay byte-identical to the prior
+/// implementation (reconstructing `max = min + w` would introduce float drift).
 fn group_children_center(
     children: &[Node],
     base_dx: f64,
     base_dy: f64,
     resolved: &BTreeMap<String, ResolvedToken>,
 ) -> Option<(f64, f64)> {
+    group_children_minmax(children, base_dx, base_dy, resolved)
+        .map(|(min_x, min_y, max_x, max_y)| ((min_x + max_x) / 2.0, (min_y + max_y) / 2.0))
+}
+
+/// Compute the device-space bounding box `(min_x, min_y, w, h)` of a group's
+/// direct-child union, or `None` when no child yields a computable bbox.
+///
+/// Shares the accumulation loop with [`group_children_center`] via
+/// [`group_children_minmax`]. Used by the imported-instance fit path to scale
+/// an imported component subtree into a declared `w`/`h` box.
+pub(in crate::compile) fn group_children_bounds(
+    children: &[Node],
+    base_dx: f64,
+    base_dy: f64,
+    resolved: &BTreeMap<String, ResolvedToken>,
+) -> Option<(f64, f64, f64, f64)> {
+    group_children_minmax(children, base_dx, base_dy, resolved)
+        .map(|(min_x, min_y, max_x, max_y)| (min_x, min_y, max_x - min_x, max_y - min_y))
+}
+
+/// Accumulate the device-space union bounding box of a group's direct children
+/// as `(min_x, min_y, max_x, max_y)`.
+///
+/// `base_dx`/`base_dy` are the device-space origin of the group. Returns `None`
+/// when no child yields a computable bbox (empty group or geometry-less nodes).
+fn group_children_minmax(
+    children: &[Node],
+    base_dx: f64,
+    base_dy: f64,
+    resolved: &BTreeMap<String, ResolvedToken>,
+) -> Option<(f64, f64, f64, f64)> {
     // Accumulate min/max in device space.
     let mut min_x = f64::INFINITY;
     let mut min_y = f64::INFINITY;
@@ -632,7 +665,7 @@ fn group_children_center(
     }
 
     if min_x.is_finite() && min_y.is_finite() && max_x.is_finite() && max_y.is_finite() {
-        Some(((min_x + max_x) / 2.0, (min_y + max_y) / 2.0))
+        Some((min_x, min_y, max_x, max_y))
     } else {
         None
     }
