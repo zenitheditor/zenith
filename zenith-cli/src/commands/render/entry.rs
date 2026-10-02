@@ -6,7 +6,7 @@ use zenith_core::{BytesAssetProvider, DataContext, Diagnostic, dim_to_px};
 use zenith_render::{
     PdfOptions, render_pdf_multi_with, render_pdf_with, render_png, render_spread_png,
 };
-use zenith_scene::{ImportGraph, Scene, append_construction_overlay, compile_page_with_imports};
+use zenith_scene::{DocumentPrep, PageCompiler, Scene};
 
 use crate::config::CliPolicyFlags;
 
@@ -14,6 +14,7 @@ use super::assets::{
     build_asset_provider_with_imports, build_font_provider_with_imports,
     disk_diagnostics_with_imports,
 };
+use super::pages::{compile_for_render, map_pages};
 use super::pipeline::{govern_compile_diagnostics, parse_validate, resolve_page_index};
 use super::text_source::resolve_text_sources;
 
@@ -178,7 +179,9 @@ pub fn to_scene_json_with_options(
     resolve_text_sources(&mut doc, project_dir, &mut text_src_diagnostics);
     let fonts = build_font_provider_with_imports(&doc, project_dir, &imports, false)?;
     let page_index = resolve_page_index(&doc, page)?;
-    let compile_result = compile_page_for_render(&doc, &fonts, page_index, opts, &scene_imports);
+    let prep = DocumentPrep::new(&doc, opts.data, Some(&scene_imports));
+    let compiler = PageCompiler::new(&prep, &fonts);
+    let compile_result = compile_for_render(&doc, &compiler, page_index, opts);
     let json = compile_result
         .scene
         .to_json()
@@ -270,7 +273,9 @@ pub fn to_png_with_dir_options(
         Some(dir) => build_asset_provider_with_imports(&doc, dir, &imports, opts.locked)?,
         None => BytesAssetProvider::new(),
     };
-    let compile_result = compile_page_for_render(&doc, &fonts, page_index, opts, &scene_imports);
+    let prep = DocumentPrep::new(&doc, opts.data, Some(&scene_imports));
+    let compiler = PageCompiler::new(&prep, &fonts);
+    let compile_result = compile_for_render(&doc, &compiler, page_index, opts);
     let png = render_png(&compile_result.scene, &fonts, &assets)
         .map_err(|e| RenderCmdErr::new(format!("render error: {e}"), 2))?;
     let mut diagnostics = text_src_diagnostics;
@@ -331,7 +336,9 @@ pub fn to_pdf_with_dir_options(
         Some(dir) => build_asset_provider_with_imports(&doc, dir, &imports, opts.locked)?,
         None => BytesAssetProvider::new(),
     };
-    let compile_result = compile_page_for_render(&doc, &fonts, page_index, opts, &scene_imports);
+    let prep = DocumentPrep::new(&doc, opts.data, Some(&scene_imports));
+    let compiler = PageCompiler::new(&prep, &fonts);
+    let compile_result = compile_for_render(&doc, &compiler, page_index, opts);
     let pdf = render_pdf_with(
         &compile_result.scene,
         &fonts,
@@ -407,9 +414,13 @@ pub fn to_pdf_all_pages_with_dir_options(
     };
     let mut scenes: Vec<Scene> = Vec::with_capacity(page_count);
     diagnostics.extend(disk_diagnostics_with_imports(&doc, project_dir, &imports));
-    for page_index in 0..page_count {
-        let compile_result =
-            compile_page_for_render(&doc, &fonts, page_index, opts, &scene_imports);
+    let prep = DocumentPrep::new(&doc, opts.data, Some(&scene_imports));
+    let compiler = PageCompiler::new(&prep, &fonts);
+    // Pages compile in parallel. Results merge here in page order.
+    let compiled = map_pages(page_count, |page_index| {
+        compile_for_render(&doc, &compiler, page_index, opts)
+    });
+    for compile_result in compiled {
         scenes.push(compile_result.scene);
         diagnostics.extend(govern_compile_diagnostics(
             compile_result.diagnostics,
@@ -481,12 +492,19 @@ pub fn to_png_all_pages_options(
         .chain(import_diagnostics)
         .chain(disk_diagnostics_with_imports(&doc, project_dir, &imports))
         .collect();
-    let mut artifacts = Vec::with_capacity(page_count);
-    for page_index in 0..page_count {
-        let compile_result =
-            compile_page_for_render(&doc, &fonts, page_index, opts, &scene_imports);
+    let prep = DocumentPrep::new(&doc, opts.data, Some(&scene_imports));
+    let compiler = PageCompiler::new(&prep, &fonts);
+    // Pages compile and rasterize in parallel. Results merge here in page
+    // order, so the first error reported is the lowest failing page.
+    let rendered = map_pages(page_count, |page_index| {
+        let compile_result = compile_for_render(&doc, &compiler, page_index, opts);
         let png = render_png(&compile_result.scene, &fonts, &assets)
-            .map_err(|e| RenderCmdErr::new(format!("render error on page {page_index}: {e}"), 2))?;
+            .map_err(|e| RenderCmdErr::new(format!("render error on page {page_index}: {e}"), 2));
+        (compile_result, png)
+    });
+    let mut artifacts = Vec::with_capacity(page_count);
+    for (compile_result, png) in rendered {
+        let png = png?;
         let mut diagnostics = base_diagnostics.clone();
         diagnostics.extend(govern_compile_diagnostics(
             compile_result.diagnostics,
@@ -573,8 +591,10 @@ pub fn to_png_spread(
     });
     let render_opts = RenderEntryOptions::png(flags, locked, data)
         .with_construction_overlay(construction_overlay);
-    let compile_a = compile_page_for_render(&doc, &fonts, index_a, render_opts, &scene_imports);
-    let compile_b = compile_page_for_render(&doc, &fonts, index_b, render_opts, &scene_imports);
+    let prep = DocumentPrep::new(&doc, data, Some(&scene_imports));
+    let compiler = PageCompiler::new(&prep, &fonts);
+    let compile_a = compile_for_render(&doc, &compiler, index_a, render_opts);
+    let compile_b = compile_for_render(&doc, &compiler, index_b, render_opts);
     let png = render_spread_png(
         &compile_a.scene,
         &compile_b.scene,
@@ -590,20 +610,4 @@ pub fn to_png_spread(
     diagnostics.extend(disk_diagnostics_with_imports(&doc, project_dir, &imports));
     diagnostics.extend(govern_compile_diagnostics(compile_diagnostics, &policy));
     Ok(PngArtifact { png, diagnostics })
-}
-
-fn compile_page_for_render(
-    doc: &zenith_core::Document,
-    fonts: &dyn zenith_core::FontProvider,
-    page_index: usize,
-    opts: RenderEntryOptions<'_>,
-    imports: &ImportGraph<'_>,
-) -> zenith_scene::CompileResult {
-    let mut compile_result = compile_page_with_imports(doc, fonts, page_index, opts.data, imports);
-    if opts.construction_overlay
-        && let Some(page) = doc.body.pages.get(page_index)
-    {
-        append_construction_overlay(&mut compile_result.scene, page);
-    }
-    compile_result
 }

@@ -45,6 +45,9 @@ serde_json = "1"
 sha2 = "0.10"
 csv = "1"
 imagesize = "0.12"
+# Parallel page compile and raster for multi-page renders. Pure Rust and
+# already in the lock via `jpeg-decoder`, so the C-free invariant holds.
+rayon = "1.12"
 # Optional native Streamable-HTTP transport for `zenith mcp --http`. `tiny_http`
 # is pure-Rust and synchronous (default features only — the `ssl-*` features
 # pull C; they stay off), so the C-free, dependency-light invariant holds and

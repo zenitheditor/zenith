@@ -7,6 +7,8 @@
 //! and are skipped.
 //!
 //! [`compile`] renders page 0; [`compile_page`] renders a chosen page by index.
+//! [`DocumentPrep`] and [`PageCompiler`] compile many pages of one document
+//! and share the document-level work.
 //!
 //! The compiler is split across submodules: `leaf` (rect/ellipse/line/
 //! polygon/polyline/path), `text` (text + code shaping), `container` (group +
@@ -36,6 +38,7 @@ mod page_source;
 mod paint;
 mod pattern;
 mod pipeline;
+mod session;
 mod table;
 mod table_flow;
 mod text;
@@ -55,3 +58,4 @@ pub use entry::{compile, compile_page, compile_page_with_imports};
 pub use imports::{ImportGraph, ImportedDocument};
 pub use pipeline::CompileResult;
 pub(in crate::compile) use pipeline::{RenderCtx, compile_page_inner, style_prop};
+pub use session::{DocumentPrep, PageCompiler};

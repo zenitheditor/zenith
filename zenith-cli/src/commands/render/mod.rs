@@ -15,12 +15,14 @@
 //! This module is split across concern-grouped submodules:
 //! - `entry`      — the error type, render artifacts, and the public entry points.
 //! - `assets`     — font/asset provider construction and disk-based diagnostics.
+//! - `pages`      — shared page compile and the parallel page map.
 //! - `pipeline`   — shared parse/validate/page-resolution/hash helpers.
 //! - [`data_input`] — load a [`DataContext`](zenith_core::DataContext) from a JSON or CSV file (`--data`).
 
 mod assets;
 pub mod data_input;
 mod entry;
+mod pages;
 mod pipeline;
 mod text_source;
 

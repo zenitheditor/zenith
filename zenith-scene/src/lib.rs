@@ -41,7 +41,8 @@ pub mod text_outline;
 
 // Curated flat re-exports.
 pub use compile::{
-    CompileResult, ImportGraph, ImportedDocument, compile, compile_page, compile_page_with_imports,
+    CompileResult, DocumentPrep, ImportGraph, ImportedDocument, PageCompiler, compile,
+    compile_page, compile_page_with_imports,
 };
 pub use construction_overlay::append_construction_overlay;
 pub use ir::{

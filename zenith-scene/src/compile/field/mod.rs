@@ -23,4 +23,4 @@ pub(in crate::compile) use projection::{
     build_node_boxes, build_page_index_map, build_port_map, compute_live_area,
 };
 pub(in crate::compile) use resolve::{FieldCtx, resolve_field_to_text};
-pub(in crate::compile) use section::build_section_assignments;
+pub(in crate::compile) use section::{SectionAssignment, build_section_assignments};
