@@ -499,7 +499,6 @@ fn emit_cell_children(
                 cx.resolved,
                 cx.style_map,
                 cx.fonts,
-                diagnostics,
                 &mut family_cache,
             );
             let nat_h = measure_text_wrapped_height(&styled, wrap_w, families, env, diagnostics)

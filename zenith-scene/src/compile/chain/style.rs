@@ -36,15 +36,20 @@ pub(super) fn resolve_chain_base_style(
     let (family_name, fell_back, is_local) =
         resolve_family_with_fallback(fonts, &raw_family_name, "Noto Sans", 400, FontStyle::Normal);
     if fell_back {
-        diagnostics.push(Diagnostic::advisory(
-            "font.unresolved",
-            format!(
-                "text node '{}': font family '{}' not available, falling back to 'Noto Sans'",
-                source.id, raw_family_name
-            ),
-            source.source_span,
-            Some(source.id.clone()),
-        ));
+        diagnostics.push(
+            Diagnostic::advisory(
+                "font.unresolved",
+                format!(
+                    "text node '{}': font family '{}' not available, falling back to 'Noto Sans'",
+                    source.id, raw_family_name
+                ),
+                source.source_span,
+                Some(source.id.clone()),
+            )
+            .with_cause(format!(
+                "font family '{raw_family_name}' not available, falling back to 'Noto Sans'"
+            )),
+        );
     }
     if is_local {
         diagnostics.push(Diagnostic::advisory(

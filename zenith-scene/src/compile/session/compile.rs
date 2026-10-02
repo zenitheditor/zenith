@@ -25,14 +25,45 @@ impl<F: ?Sized + FontProvider> PageCompiler<'_, F> {
     /// Compile the page at `page_index` (0-based) into a [`CompileResult`].
     ///
     /// Diagnostics: the shared document diagnostics first, then this page's.
-    /// Page 0 also reports the text-chain and table-flow diagnostics. An empty
-    /// document or an out-of-range index returns an empty scene with a
-    /// `scene.no_pages` or `scene.page_out_of_range` advisory.
+    /// Page 0 also reports the text-chain and table-flow diagnostics. Repeats
+    /// are removed, first occurrence kept. An empty document or an
+    /// out-of-range index returns an empty scene with a `scene.no_pages` or
+    /// `scene.page_out_of_range` advisory.
     #[must_use]
     pub fn compile_page(&self, page_index: usize) -> CompileResult {
+        self.compile_page_with(page_index, true)
+    }
+
+    /// Compile the page at `page_index` with only its own diagnostics.
+    ///
+    /// The document diagnostics are left out: the shared data, import, and
+    /// token diagnostics, and the page-0 chain and table-flow diagnostics.
+    /// Read them once through [`PageCompiler::document_diagnostics`]. The
+    /// scene is identical to [`PageCompiler::compile_page`].
+    #[must_use]
+    pub fn compile_page_local(&self, page_index: usize) -> CompileResult {
+        self.compile_page_with(page_index, false)
+    }
+
+    /// Document diagnostics, reported once per document.
+    ///
+    /// The shared data, import, and token diagnostics first, then the
+    /// text-chain and table-flow diagnostics. Repeats are removed.
+    #[must_use]
+    pub fn document_diagnostics(&self) -> Vec<Diagnostic> {
+        let mut diagnostics = self.prep.shared_diagnostics.clone();
+        diagnostics.extend(self.page0_diagnostics.iter().cloned());
+        Diagnostic::dedup(diagnostics)
+    }
+
+    fn compile_page_with(&self, page_index: usize, with_document: bool) -> CompileResult {
         let prep = self.prep;
         let doc = prep.document();
-        let mut diagnostics: Vec<Diagnostic> = prep.shared_diagnostics.clone();
+        let mut diagnostics: Vec<Diagnostic> = if with_document {
+            prep.shared_diagnostics.clone()
+        } else {
+            Vec::new()
+        };
 
         let Some(page) = doc.body.pages.get(page_index) else {
             diagnostics.push(missing_page_diagnostic(doc, page_index));
@@ -70,7 +101,7 @@ impl<F: ?Sized + FontProvider> PageCompiler<'_, F> {
         let anchors = build_anchor_map(page, page_w, page_h, resolved);
 
         // Document-wide chain and flow diagnostics surface on page 0 only.
-        if page_index == 0 {
+        if with_document && page_index == 0 {
             diagnostics.extend(self.page0_diagnostics.iter().cloned());
         }
 
@@ -240,7 +271,10 @@ impl<F: ?Sized + FontProvider> PageCompiler<'_, F> {
             });
         }
 
-        CompileResult { scene, diagnostics }
+        CompileResult {
+            scene,
+            diagnostics: Diagnostic::dedup(diagnostics),
+        }
     }
 
     /// Fill the whole media box with the page background, when one is set.
@@ -342,4 +376,54 @@ fn root_render_ctx(page: &Page, bleed: f64) -> RenderCtx {
         .and_then(|d| dim_to_px(d.value, &d.unit))
         .filter(|g| g.is_finite() && *g > 0.0);
     root_ctx
+}
+
+#[cfg(test)]
+mod tests {
+    use zenith_core::{KdlAdapter, KdlSource, default_provider};
+
+    use super::super::super::DocumentPrep;
+    use super::*;
+
+    const THREE_PAGES: &str = r##"zenith version=1 {
+  project id="proj.s" name="S"
+  tokens format="zenith-token-v1" {}
+  styles {}
+  document id="doc.s" title="S" {
+    page id="page.1" w=(px)60 h=(px)40 background=(data)"c"
+    page id="page.2" w=(px)60 h=(px)40 background=(data)"c"
+    page id="page.3" w=(px)60 h=(px)40 background=(data)"c"
+  }
+}
+"##;
+
+    #[test]
+    fn local_compile_omits_document_diagnostics_and_keeps_the_scene() {
+        let doc = KdlAdapter.parse(THREE_PAGES.as_bytes()).expect("parse");
+        let fonts = default_provider();
+        let prep = DocumentPrep::new(&doc, None, None);
+        let compiler = PageCompiler::new(&prep, &fonts);
+        let document = compiler.document_diagnostics();
+        assert_eq!(
+            document
+                .iter()
+                .filter(|d| d.code == "data.no_context")
+                .count(),
+            1
+        );
+        for page_index in 0..3 {
+            let full = compiler.compile_page(page_index);
+            let local = compiler.compile_page_local(page_index);
+            assert_eq!(
+                full.scene.to_json().expect("scene JSON"),
+                local.scene.to_json().expect("scene JSON")
+            );
+            assert!(local.diagnostics.iter().all(|d| !document.contains(d)));
+            let mut joined = document.clone();
+            joined.extend(local.diagnostics);
+            for d in &full.diagnostics {
+                assert!(joined.contains(d), "missing {d:?}");
+            }
+        }
+    }
 }

@@ -67,15 +67,20 @@ pub(in crate::compile) fn resolve_text_families(
         FontStyle::Normal,
     );
     if fell_back {
-        diagnostics.push(Diagnostic::advisory(
-            "font.unresolved",
-            format!(
-                "text node '{}': font family '{}' not available, falling back to 'Noto Sans'",
-                text.id, raw_family_name
-            ),
-            text.source_span,
-            Some(text.id.clone()),
-        ));
+        diagnostics.push(
+            Diagnostic::advisory(
+                "font.unresolved",
+                format!(
+                    "text node '{}': font family '{}' not available, falling back to 'Noto Sans'",
+                    text.id, raw_family_name
+                ),
+                text.source_span,
+                Some(text.id.clone()),
+            )
+            .with_cause(format!(
+                "font family '{raw_family_name}' not available, falling back to 'Noto Sans'"
+            )),
+        );
     }
     if is_local {
         diagnostics.push(Diagnostic::advisory(

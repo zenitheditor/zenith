@@ -217,14 +217,8 @@ fn cell_natural_width(
         let w = match child {
             Node::Text(t) => {
                 let eff = header_styled_text(t, header_style);
-                let families = cached_families(
-                    &eff,
-                    env.resolved,
-                    env.style_map,
-                    env.fonts,
-                    diagnostics,
-                    family_cache,
-                );
+                let families =
+                    cached_families(&eff, env.resolved, env.style_map, env.fonts, family_cache);
                 measure_text_natural(&eff, families, env, diagnostics).unwrap_or(0.0)
             }
             other @ (Node::Rect(_)
@@ -277,14 +271,8 @@ fn cell_content_height(
         let h = match child {
             Node::Text(t) => {
                 let eff = header_styled_text(t, header_style);
-                let families = cached_families(
-                    &eff,
-                    env.resolved,
-                    env.style_map,
-                    env.fonts,
-                    diagnostics,
-                    family_cache,
-                );
+                let families =
+                    cached_families(&eff, env.resolved, env.style_map, env.fonts, family_cache);
                 let nat_h =
                     measure_text_wrapped_height(&eff, content_w, families, env, diagnostics)
                         .unwrap_or(0.0);
@@ -351,17 +339,19 @@ pub(super) fn header_styled_text<'a>(
 }
 
 /// Resolve (and memoize) a text node's font families through [`resolve_text_families`].
-/// The advisory inside that helper fires at most once per node id because a cache
-/// hit skips the resolution entirely.
+///
+/// Measurement is silent: the family diagnostics (`font.unresolved`,
+/// `font.local`) are dropped here. The cell's render pass (`compile_text`)
+/// resolves the same styled node and reports them once.
 pub(super) fn cached_families<'c>(
     text: &zenith_core::TextNode,
     resolved: &BTreeMap<String, ResolvedToken>,
     style_map: &BTreeMap<&str, &Style>,
     fonts: &dyn FontProvider,
-    diagnostics: &mut Vec<Diagnostic>,
     family_cache: &'c mut BTreeMap<String, Vec<String>>,
 ) -> &'c [String] {
-    family_cache
-        .entry(text.id.clone())
-        .or_insert_with(|| resolve_text_families(text, resolved, style_map, fonts, diagnostics))
+    family_cache.entry(text.id.clone()).or_insert_with(|| {
+        let mut silent: Vec<Diagnostic> = Vec::new();
+        resolve_text_families(text, resolved, style_map, fonts, &mut silent)
+    })
 }

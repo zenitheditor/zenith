@@ -189,7 +189,10 @@ fn compile_code_impl(
             ),
             code.source_span,
             Some(code.id.clone()),
-        ));
+        )
+        .with_cause(format!(
+            "font family '{raw_family_name}' not available, falling back to 'Noto Sans Mono'"
+        )));
     }
     if is_local {
         diagnostics.push(Diagnostic::advisory(
