@@ -1,9 +1,9 @@
 //! Font/asset provider construction and disk-based diagnostics for `render`.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use zenith_core::{
     AssetKind, BytesAssetProvider, BytesFontProvider, Diagnostic, Document, FontProvider,
@@ -11,7 +11,7 @@ use zenith_core::{
     dim_to_px,
 };
 
-use crate::commands::fonts::os_font_dirs;
+use crate::commands::fonts::{font_index_path, os_font_dirs};
 
 use crate::commands::composition_imports::LoadedImportGraph;
 
@@ -144,25 +144,27 @@ fn register_project_fonts(
 
 /// Register machine-local/system fonts as a LAST-RESORT resolution source.
 ///
-/// Scans the OS font directories ([`os_font_dirs`]) and registers each face with
-/// [`FontSource::Local`] — but ONLY when the provider does not already resolve
-/// that `(family, weight, style)`. Because bundled and project faces are
-/// registered first, this `is_none()` guard guarantees local fonts NEVER shadow
-/// a bundled or project face: a document that uses only bundled fonts resolves
-/// to exactly the same bytes as before this pass existed (the byte-identical
-/// invariant). A face that resolves from here later trips a `font.local`
-/// advisory at compile time.
+/// Scans the OS font directories ([`os_font_dirs`]) for face metadata, keeps
+/// only the faces whose family the document names (case-insensitive), and
+/// registers those with [`FontSource::Local`]. Unrelated system faces are never
+/// loaded, so they never join per-glyph fallback.
+///
+/// A face is skipped when bundled or project fonts already supply its family, so
+/// local fonts NEVER shadow a bundled or project face: a document that uses only
+/// bundled fonts resolves to exactly the same bytes as before this pass existed
+/// (the byte-identical invariant). Among local faces, the first one in scan order
+/// wins a `(family, weight, style)` slot. A face that resolves from here later
+/// trips a `font.local` advisory at compile time.
 ///
 /// Read failures are skipped silently (no panic, no hard error): a local font is
 /// a best-effort convenience, not a required asset.
 fn register_local_fonts(provider: &mut BytesFontProvider, doc: &Document) {
-    // Scanning the OS font directories reads and parses every installed font, so
-    // do it ONLY when the document actually needs a family that bundled/project
-    // fonts cannot satisfy. In a valid document every `font-family` reference
-    // resolves through a `fontFamily` token, so those token values are the
-    // complete set of families the document can request. A document using only
-    // bundled families never touches the filesystem here — keeping render fast
-    // and byte-identical.
+    // Scanning the OS font directories is the costly step, so do it ONLY when
+    // the document needs a family that bundled/project fonts cannot satisfy. In a
+    // valid document every `font-family` reference resolves through a `fontFamily`
+    // token, so those token values are the complete set of families the document
+    // can request. A document using only bundled families never touches the
+    // filesystem here, which keeps render fast and byte-identical.
     let wanted: BTreeSet<String> = doc
         .tokens
         .tokens
@@ -182,25 +184,42 @@ fn register_local_fonts(provider: &mut BytesFontProvider, doc: &Document) {
         return;
     }
 
-    for entry in zenith_core::scan_font_dirs(&os_font_dirs()) {
-        // Bundled/project ALWAYS win: only register a local face for a slot the
-        // provider cannot already satisfy. This preserves byte-identical output
-        // for documents whose families are covered by bundled/project fonts.
-        if provider
+    let entries = zenith_core::filter_wanted_families(
+        zenith_core::scan_font_dirs(&os_font_dirs(), font_index_path().as_deref()),
+        &wanted,
+    );
+    // One read per file, shared by every face of a collection.
+    let mut loaded: BTreeMap<PathBuf, Arc<[u8]>> = BTreeMap::new();
+    let mut taken: BTreeSet<(String, u16, FontStyle)> = BTreeSet::new();
+    for entry in entries {
+        let slot = (entry.family.to_lowercase(), entry.weight, entry.style);
+        if taken.contains(&slot) {
+            continue;
+        }
+        // Bundled/project ALWAYS win: skip a face whose family a non-local
+        // source already supplies.
+        let supplied = provider
             .resolve(
                 std::slice::from_ref(&entry.family),
                 entry.weight,
                 entry.style,
             )
-            .is_some()
-        {
+            .is_some_and(|d| d.source != FontSource::Local);
+        if supplied {
             continue;
         }
-        let bytes = match std::fs::read(&entry.path) {
-            Ok(b) => b,
-            Err(_) => continue,
+        let arc = match loaded.get(&entry.path) {
+            Some(a) => a.clone(),
+            None => {
+                let bytes = match std::fs::read(&entry.path) {
+                    Ok(b) => b,
+                    Err(_) => continue,
+                };
+                let a: Arc<[u8]> = Arc::from(bytes);
+                loaded.insert(entry.path.clone(), a.clone());
+                a
+            }
         };
-        let arc: Arc<[u8]> = Arc::from(bytes.as_slice());
         provider.register(
             &entry.family,
             entry.weight,
@@ -209,6 +228,7 @@ fn register_local_fonts(provider: &mut BytesFontProvider, doc: &Document) {
             entry.index,
             FontSource::Local,
         );
+        taken.insert(slot);
     }
 }
 

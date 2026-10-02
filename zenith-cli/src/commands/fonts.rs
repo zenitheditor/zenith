@@ -34,13 +34,13 @@ const ALTERNATES_SCHEMA: &str = "zenith-fonts-alternates-v1";
 /// Uses the same discovery code as the renderer so there is no drift:
 /// - Bundled families are the faces in `zenith_core::default_provider()`, named
 ///   in their proper (name-table) case via `zenith_layout::face_metadata`.
-/// - Local families come from `zenith_core::scan_font_dirs(&os_font_dirs())`,
+/// - Local families come from `zenith_core::scan_font_dirs`, which reads only
+///   metadata (no font bytes are loaded) and reuses the on-disk index,
 ///   with any family already in the bundled set excluded (case-insensitively) so
 ///   the local section shows only genuinely machine-specific families.
 ///
-/// Note: scanning reads every system font file on disk, so this command may take
-/// a moment on machines with many fonts installed — that is expected for a
-/// discovery command (similar to `fc-list`).
+/// Note: the first run parses every system font file and writes the metadata
+/// index ([`font_index_path`]). Later runs re-parse only changed files.
 ///
 /// Returns `(output_string, exit_code)` following the convention used by
 /// `commands::schema::*` and other discovery commands.
@@ -62,7 +62,7 @@ pub fn list(json: bool) -> (String, u8) {
     // Local families (proper case), excluding any family already bundled
     // (compared case-insensitively).
     let mut local: BTreeMap<String, String> = BTreeMap::new();
-    for entry in scan_font_dirs(&os_font_dirs()) {
+    for entry in scan_font_dirs(&os_font_dirs(), font_index_path().as_deref()) {
         let key = entry.family.to_lowercase();
         if bundled.contains_key(&key) {
             continue;
@@ -438,6 +438,40 @@ fn render_alternates_human(
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 fn home_dir() -> Option<PathBuf> {
     std::env::var_os("HOME").map(PathBuf::from)
+}
+
+/// Path of the local-font metadata index file, or `None` when the user cache
+/// directory cannot be named.
+///
+/// Linux: `$XDG_CACHE_HOME/zenith/font-index-v1.txt`, else
+/// `$HOME/.cache/zenith/font-index-v1.txt`. macOS: `$HOME/Library/Caches/zenith/`.
+/// Windows: `%LOCALAPPDATA%\zenith\`.
+#[must_use]
+pub fn font_index_path() -> Option<PathBuf> {
+    cache_root().map(|d| d.join("zenith").join("font-index-v1.txt"))
+}
+
+#[cfg(target_os = "linux")]
+fn cache_root() -> Option<PathBuf> {
+    match std::env::var_os("XDG_CACHE_HOME") {
+        Some(x) if !x.is_empty() => Some(PathBuf::from(x)),
+        _ => home_dir().map(|h| h.join(".cache")),
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn cache_root() -> Option<PathBuf> {
+    home_dir().map(|h| h.join("Library/Caches"))
+}
+
+#[cfg(target_os = "windows")]
+fn cache_root() -> Option<PathBuf> {
+    std::env::var_os("LOCALAPPDATA").map(PathBuf::from)
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
+fn cache_root() -> Option<PathBuf> {
+    None
 }
 
 /// The OS font directories to scan for local/system fonts, most-canonical first.
