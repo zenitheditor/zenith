@@ -6,6 +6,7 @@ use std::collections::BTreeSet;
 use crate::ast::node::{AnchorKind, PathAnchor, PathNode, PolygonNode, PolylineNode};
 use crate::diagnostics::Diagnostic;
 
+use crate::schema::enums::{FILL_RULES, PATH_POINT_KINDS, STROKE_ALIGNS};
 use crate::validate::check::nodes::WalkCtx;
 use crate::validate::check::nodes::node::shared::{
     check_dimension_geom, check_stroke_join_props, check_stroke_linecap_prop, check_style_ref,
@@ -105,14 +106,14 @@ pub(in crate::validate::check) fn check_polygon(
 
     // fill-rule: only "nonzero" and "evenodd" are valid.
     if let Some(fr) = &poly.fill_rule
-        && !matches!(fr.as_str(), "nonzero" | "evenodd")
+        && !FILL_RULES.contains(&fr.as_str())
     {
         push_invalid_value(
             &format!("polygon '{}'", poly.id),
             Some(poly.id.clone()),
             "fill-rule",
             fr,
-            &["nonzero", "evenodd"],
+            FILL_RULES,
             poly.source_span,
             diagnostics,
         );
@@ -120,14 +121,14 @@ pub(in crate::validate::check) fn check_polygon(
 
     // stroke-alignment: only "inside", "center", "outside" are valid.
     if let Some(sa) = &poly.stroke_alignment
-        && !matches!(sa.as_str(), "inside" | "center" | "outside")
+        && !STROKE_ALIGNS.contains(&sa.as_str())
     {
         push_invalid_value(
             &format!("polygon '{}'", poly.id),
             Some(poly.id.clone()),
             "stroke-alignment",
             sa,
-            &["inside", "center", "outside"],
+            STROKE_ALIGNS,
             poly.source_span,
             diagnostics,
         );
@@ -233,14 +234,14 @@ pub(in crate::validate::check) fn check_polyline(
 
     // fill-rule: only "nonzero" and "evenodd" are valid.
     if let Some(fr) = &poly.fill_rule
-        && !matches!(fr.as_str(), "nonzero" | "evenodd")
+        && !FILL_RULES.contains(&fr.as_str())
     {
         push_invalid_value(
             &format!("polyline '{}'", poly.id),
             Some(poly.id.clone()),
             "fill-rule",
             fr,
-            &["nonzero", "evenodd"],
+            FILL_RULES,
             poly.source_span,
             diagnostics,
         );
@@ -365,28 +366,28 @@ pub(in crate::validate::check) fn check_path(
     );
 
     if let Some(fr) = &path.fill_rule
-        && !matches!(fr.as_str(), "nonzero" | "evenodd")
+        && !FILL_RULES.contains(&fr.as_str())
     {
         push_invalid_value(
             &format!("path '{}'", path.id),
             Some(path.id.clone()),
             "fill-rule",
             fr,
-            &["nonzero", "evenodd"],
+            FILL_RULES,
             path.source_span,
             diagnostics,
         );
     }
 
     if let Some(sa) = &path.stroke_alignment
-        && !matches!(sa.as_str(), "inside" | "center" | "outside")
+        && !STROKE_ALIGNS.contains(&sa.as_str())
     {
         push_invalid_value(
             &format!("path '{}'", path.id),
             Some(path.id.clone()),
             "stroke-alignment",
             sa,
-            &["inside", "center", "outside"],
+            STROKE_ALIGNS,
             path.source_span,
             diagnostics,
         );
@@ -481,7 +482,7 @@ fn check_path_anchor(
             node_id.clone(),
             "kind",
             kind,
-            &["corner", "smooth", "symmetric"],
+            PATH_POINT_KINDS,
             source_span,
             diagnostics,
         );

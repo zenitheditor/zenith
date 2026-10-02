@@ -4,6 +4,7 @@ use std::collections::BTreeSet;
 
 use crate::ast::node::{LightNode, MeshNode};
 use crate::diagnostics::Diagnostic;
+use crate::schema::enums::{CAMERA_KINDS, LIGHT_KINDS};
 use crate::suggest::invalid_value_message;
 use crate::validate::check::nodes::WalkCtx;
 use crate::validate::check::register_id;
@@ -66,16 +67,11 @@ pub(in crate::validate::check) fn check_light(
         diagnostics,
     );
     if let Some(kind) = &l.kind
-        && !matches!(kind.as_str(), "ambient" | "glow" | "key" | "rim")
+        && !LIGHT_KINDS.contains(&kind.as_str())
     {
         diagnostics.push(Diagnostic::error(
             "light.unknown_kind",
-            invalid_value_message(
-                &format!("light '{}'", l.id),
-                "kind",
-                kind,
-                &["ambient", "glow", "key", "rim"],
-            ),
+            invalid_value_message(&format!("light '{}'", l.id), "kind", kind, LIGHT_KINDS),
             l.source_span,
             Some(l.id.clone()),
         ));
@@ -208,16 +204,11 @@ pub(in crate::validate::check) fn check_mesh(
         diagnostics,
     );
     if let Some(kind) = &m.kind
-        && !matches!(kind.as_str(), "orthographic" | "perspective")
+        && !CAMERA_KINDS.contains(&kind.as_str())
     {
         diagnostics.push(Diagnostic::error(
             "mesh.unknown_kind",
-            invalid_value_message(
-                &format!("mesh '{}'", m.id),
-                "kind",
-                kind,
-                &["orthographic", "perspective"],
-            ),
+            invalid_value_message(&format!("mesh '{}'", m.id), "kind", kind, CAMERA_KINDS),
             m.source_span,
             Some(m.id.clone()),
         ));

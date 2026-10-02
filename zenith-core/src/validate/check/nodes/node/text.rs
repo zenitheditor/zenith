@@ -13,6 +13,7 @@ use super::shared::{
     check_font_features, check_optional_dim, check_spans, check_style_ref, is_valid_blend_mode,
 };
 use super::suggest::{blend_mode_names, check_unknown_props, push_invalid_value};
+use crate::schema::enums::{IMAGE_FITS, TEXT_FORMATS, V_ALIGNS};
 use crate::suggest::invalid_value_message;
 use crate::validate::check::nodes::WalkCtx;
 use crate::validate::check::register_id;
@@ -284,16 +285,11 @@ pub(in crate::validate::check) fn check_text(
 
     // Validate content format value (an unrecognized value is an Error).
     if let Some(fmt) = t.content_format.as_deref()
-        && !matches!(fmt, "markdown" | "plain")
+        && !TEXT_FORMATS.contains(&fmt)
     {
         diagnostics.push(Diagnostic::error(
             "text.invalid_format",
-            invalid_value_message(
-                &format!("text '{}'", t.id),
-                "format",
-                fmt,
-                &["markdown", "plain"],
-            ),
+            invalid_value_message(&format!("text '{}'", t.id), "format", fmt, TEXT_FORMATS),
             t.source_span,
             Some(t.id.clone()),
         ));
@@ -301,16 +297,11 @@ pub(in crate::validate::check) fn check_text(
 
     // Validate v-align value (an unrecognized value is an Error).
     if let Some(va) = t.v_align.as_deref()
-        && !matches!(va, "top" | "middle" | "bottom")
+        && !V_ALIGNS.contains(&va)
     {
         diagnostics.push(Diagnostic::error(
             "text.invalid_v_align",
-            invalid_value_message(
-                &format!("text '{}'", t.id),
-                "v-align",
-                va,
-                &["top", "middle", "bottom"],
-            ),
+            invalid_value_message(&format!("text '{}'", t.id), "v-align", va, V_ALIGNS),
             t.source_span,
             Some(t.id.clone()),
         ));
@@ -537,16 +528,11 @@ pub(in crate::validate::check) fn check_image(
 
     // Validate fit (an unrecognized value is an Error).
     if let Some(fit) = &img.fit
-        && !matches!(fit.as_str(), "contain" | "cover" | "stretch" | "none")
+        && !IMAGE_FITS.contains(&fit.as_str())
     {
         diagnostics.push(Diagnostic::error(
             "image.invalid_fit",
-            invalid_value_message(
-                &format!("image '{}'", img.id),
-                "fit",
-                fit,
-                &["contain", "cover", "stretch", "none"],
-            ),
+            invalid_value_message(&format!("image '{}'", img.id), "fit", fit, IMAGE_FITS),
             img.source_span,
             Some(img.id.clone()),
         ));

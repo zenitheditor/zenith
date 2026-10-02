@@ -4,6 +4,7 @@ use crate::ast::construction::ConstructionGuideDef;
 use crate::ast::document::Page;
 use crate::ast::value::{Dimension, dim_to_px};
 use crate::diagnostics::Diagnostic;
+use crate::schema::enums::GUIDE_TYPES;
 use crate::suggest::invalid_value_message;
 
 pub(super) fn check_construction(page: &Page, diagnostics: &mut Vec<Diagnostic>) {
@@ -17,7 +18,7 @@ pub(super) fn check_construction(page: &Page, diagnostics: &mut Vec<Diagnostic>)
                     &format!("construction guide '{}'", guide.id),
                     "type",
                     other,
-                    &["segment", "circle"],
+                    GUIDE_TYPES,
                 ),
                 guide.source_span,
                 Some(guide.id.clone()),

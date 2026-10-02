@@ -312,7 +312,8 @@ fn transform_mask(node: &KdlNode) -> TokenValue {
 
     if let Some(children) = node.children() {
         for child in children.nodes() {
-            // The first child whose name maps to a shape wins; others ignored.
+            // The first child whose name maps to a shape wins; later shape children
+            // are reported as `token.mask_extra_shape` by `unknown_children`.
             let Some(kind) = MaskShape::from_shape_name(child.name().value()) else {
                 continue;
             };

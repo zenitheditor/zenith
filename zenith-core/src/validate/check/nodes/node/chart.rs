@@ -10,6 +10,10 @@ use super::shared::{
     check_style_ref, check_visual_props,
 };
 use super::suggest::check_unknown_props;
+use crate::schema::enums::{
+    CHART_BAR_MODES, CHART_KINDS, CHART_LEGEND_ALIGNS, CHART_LEGEND_LAYOUTS,
+    CHART_LEGEND_POSITIONS, CHART_ORIENTATIONS, CHART_POINT_PLACEMENTS, CHART_VALUE_LABELS,
+};
 use crate::suggest::invalid_value_message;
 use crate::validate::check::nodes::WalkCtx;
 use crate::validate::check::register_id;
@@ -143,19 +147,11 @@ pub(in crate::validate::check) fn check_chart(
     //
     // The renderer recognizes "bar", "line", "area", "sparkline", "pie", and
     // "donut"; any other kind string cannot render and is reported immediately.
-    let kind_known = matches!(
-        c.kind.as_str(),
-        "bar" | "line" | "area" | "sparkline" | "pie" | "donut"
-    );
+    let kind_known = CHART_KINDS.contains(&c.kind.as_str());
     if !kind_known {
         diagnostics.push(Diagnostic::error(
             "chart.invalid_kind",
-            invalid_value_message(
-                &format!("chart '{}'", c.id),
-                "kind",
-                &c.kind,
-                &["bar", "line", "area", "sparkline", "pie", "donut"],
-            ),
+            invalid_value_message(&format!("chart '{}'", c.id), "kind", &c.kind, CHART_KINDS),
             c.source_span,
             Some(c.id.clone()),
         ));
@@ -165,7 +161,7 @@ pub(in crate::validate::check) fn check_chart(
     // An unknown value is an Error: a typo would otherwise silently fall back
     // to the default at render time.
     if let Some(bar_mode) = &c.bar_mode {
-        let bar_mode_known = matches!(bar_mode.as_str(), "grouped" | "stacked");
+        let bar_mode_known = CHART_BAR_MODES.contains(&bar_mode.as_str());
         if !bar_mode_known {
             diagnostics.push(Diagnostic::error(
                 "chart.invalid_bar_mode",
@@ -173,7 +169,7 @@ pub(in crate::validate::check) fn check_chart(
                     &format!("chart '{}'", c.id),
                     "bar-mode",
                     bar_mode,
-                    &["grouped", "stacked"],
+                    CHART_BAR_MODES,
                 ),
                 c.source_span,
                 Some(c.id.clone()),
@@ -184,7 +180,7 @@ pub(in crate::validate::check) fn check_chart(
     // Validate orientation against the recognized set {"vertical", "horizontal"}.
     // An unknown value is an Error.
     if let Some(orientation) = &c.orientation {
-        let orientation_known = matches!(orientation.as_str(), "vertical" | "horizontal");
+        let orientation_known = CHART_ORIENTATIONS.contains(&orientation.as_str());
         if !orientation_known {
             diagnostics.push(Diagnostic::error(
                 "chart.invalid_orientation",
@@ -192,7 +188,7 @@ pub(in crate::validate::check) fn check_chart(
                     &format!("chart '{}'", c.id),
                     "orientation",
                     orientation,
-                    &["vertical", "horizontal"],
+                    CHART_ORIENTATIONS,
                 ),
                 c.source_span,
                 Some(c.id.clone()),
@@ -202,7 +198,7 @@ pub(in crate::validate::check) fn check_chart(
 
     // Validate point-placement against the recognized set {"edge", "center"}.
     if let Some(point_placement) = &c.point_placement {
-        let point_placement_known = matches!(point_placement.as_str(), "edge" | "center");
+        let point_placement_known = CHART_POINT_PLACEMENTS.contains(&point_placement.as_str());
         if !point_placement_known {
             diagnostics.push(Diagnostic::error(
                 "chart.invalid_point_placement",
@@ -210,7 +206,7 @@ pub(in crate::validate::check) fn check_chart(
                     &format!("chart '{}'", c.id),
                     "point-placement",
                     point_placement,
-                    &["edge", "center"],
+                    CHART_POINT_PLACEMENTS,
                 ),
                 c.source_span,
                 Some(c.id.clone()),
@@ -220,8 +216,7 @@ pub(in crate::validate::check) fn check_chart(
 
     // Validate value-labels against the recognized set {"auto", "none", "top", "center"}.
     if let Some(value_labels) = &c.value_labels {
-        let value_labels_known =
-            matches!(value_labels.as_str(), "auto" | "none" | "top" | "center");
+        let value_labels_known = CHART_VALUE_LABELS.contains(&value_labels.as_str());
         if !value_labels_known {
             diagnostics.push(Diagnostic::error(
                 "chart.invalid_value_labels",
@@ -229,7 +224,7 @@ pub(in crate::validate::check) fn check_chart(
                     &format!("chart '{}'", c.id),
                     "value-labels",
                     value_labels,
-                    &["auto", "none", "top", "center"],
+                    CHART_VALUE_LABELS,
                 ),
                 c.source_span,
                 Some(c.id.clone()),
@@ -239,10 +234,7 @@ pub(in crate::validate::check) fn check_chart(
 
     // Validate legend-position against the recognized set {"right", "left", "top", "bottom"}.
     if let Some(legend_position) = &c.legend_position {
-        let legend_position_known = matches!(
-            legend_position.as_str(),
-            "right" | "left" | "top" | "bottom"
-        );
+        let legend_position_known = CHART_LEGEND_POSITIONS.contains(&legend_position.as_str());
         if !legend_position_known {
             diagnostics.push(Diagnostic::error(
                 "chart.invalid_legend_position",
@@ -250,7 +242,7 @@ pub(in crate::validate::check) fn check_chart(
                     &format!("chart '{}'", c.id),
                     "legend-position",
                     legend_position,
-                    &["right", "left", "top", "bottom"],
+                    CHART_LEGEND_POSITIONS,
                 ),
                 c.source_span,
                 Some(c.id.clone()),
@@ -260,7 +252,7 @@ pub(in crate::validate::check) fn check_chart(
 
     // Validate legend-layout against the recognized set {"wrapped", "list"}.
     if let Some(legend_layout) = &c.legend_layout {
-        let legend_layout_known = matches!(legend_layout.as_str(), "wrapped" | "list");
+        let legend_layout_known = CHART_LEGEND_LAYOUTS.contains(&legend_layout.as_str());
         if !legend_layout_known {
             diagnostics.push(Diagnostic::error(
                 "chart.invalid_legend_layout",
@@ -268,7 +260,7 @@ pub(in crate::validate::check) fn check_chart(
                     &format!("chart '{}'", c.id),
                     "legend-layout",
                     legend_layout,
-                    &["wrapped", "list"],
+                    CHART_LEGEND_LAYOUTS,
                 ),
                 c.source_span,
                 Some(c.id.clone()),
@@ -278,7 +270,7 @@ pub(in crate::validate::check) fn check_chart(
 
     // Validate legend-align against the recognized set {"center", "left", "right"}.
     if let Some(legend_align) = &c.legend_align {
-        let legend_align_known = matches!(legend_align.as_str(), "center" | "left" | "right");
+        let legend_align_known = CHART_LEGEND_ALIGNS.contains(&legend_align.as_str());
         if !legend_align_known {
             diagnostics.push(Diagnostic::error(
                 "chart.invalid_legend_align",
@@ -286,7 +278,7 @@ pub(in crate::validate::check) fn check_chart(
                     &format!("chart '{}'", c.id),
                     "legend-align",
                     legend_align,
-                    &["center", "left", "right"],
+                    CHART_LEGEND_ALIGNS,
                 ),
                 c.source_span,
                 Some(c.id.clone()),

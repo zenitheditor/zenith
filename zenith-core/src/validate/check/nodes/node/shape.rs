@@ -10,6 +10,9 @@ use crate::ast::node::{
     ConnectorAnchorParseError, ConnectorNode, ShapeNode, UnknownNode, parse_connector_anchor,
 };
 use crate::diagnostics::Diagnostic;
+use crate::schema::enums::{
+    CONNECTOR_MARKERS, CONNECTOR_ROUTES, H_ALIGNS, SHAPE_KINDS, STROKE_ALIGNS, V_ALIGNS,
+};
 use crate::suggest::invalid_value_message;
 
 use super::shared::{
@@ -163,22 +166,17 @@ pub(in crate::validate::check) fn check_shape(
 
     // Enum-value checks (an unrecognized value is an Error).
     if let Some(k) = s.kind.as_deref()
-        && !matches!(k, "process" | "decision" | "terminator" | "ellipse")
+        && !SHAPE_KINDS.contains(&k)
     {
         diagnostics.push(Diagnostic::error(
             "shape.unknown_kind",
-            invalid_value_message(
-                &format!("shape '{}'", s.id),
-                "kind",
-                k,
-                &["process", "decision", "terminator", "ellipse"],
-            ),
+            invalid_value_message(&format!("shape '{}'", s.id), "kind", k, SHAPE_KINDS),
             s.source_span,
             Some(s.id.clone()),
         ));
     }
     if let Some(sa) = s.stroke_alignment.as_deref()
-        && !matches!(sa, "inside" | "center" | "outside")
+        && !STROKE_ALIGNS.contains(&sa)
     {
         diagnostics.push(Diagnostic::error(
             "shape.invalid_stroke_alignment",
@@ -186,38 +184,28 @@ pub(in crate::validate::check) fn check_shape(
                 &format!("shape '{}'", s.id),
                 "stroke-alignment",
                 sa,
-                &["inside", "center", "outside"],
+                STROKE_ALIGNS,
             ),
             s.source_span,
             Some(s.id.clone()),
         ));
     }
     if let Some(ha) = s.h_align.as_deref()
-        && !matches!(ha, "start" | "center" | "end")
+        && !H_ALIGNS.contains(&ha)
     {
         diagnostics.push(Diagnostic::error(
             "shape.invalid_h_align",
-            invalid_value_message(
-                &format!("shape '{}'", s.id),
-                "h-align",
-                ha,
-                &["start", "center", "end"],
-            ),
+            invalid_value_message(&format!("shape '{}'", s.id), "h-align", ha, H_ALIGNS),
             s.source_span,
             Some(s.id.clone()),
         ));
     }
     if let Some(va) = s.v_align.as_deref()
-        && !matches!(va, "top" | "middle" | "bottom")
+        && !V_ALIGNS.contains(&va)
     {
         diagnostics.push(Diagnostic::error(
             "shape.invalid_v_align",
-            invalid_value_message(
-                &format!("shape '{}'", s.id),
-                "v-align",
-                va,
-                &["top", "middle", "bottom"],
-            ),
+            invalid_value_message(&format!("shape '{}'", s.id), "v-align", va, V_ALIGNS),
             s.source_span,
             Some(s.id.clone()),
         ));
@@ -316,7 +304,7 @@ pub(in crate::validate::check) fn check_connector(
 
     // Enum-value checks (an unrecognized value is an Error).
     if let Some(r) = c.route.as_deref()
-        && !matches!(r, "straight" | "orthogonal" | "avoid")
+        && !CONNECTOR_ROUTES.contains(&r)
     {
         diagnostics.push(Diagnostic::error(
             "connector.invalid_route",
@@ -324,7 +312,7 @@ pub(in crate::validate::check) fn check_connector(
                 &format!("connector '{}'", c.id),
                 "route",
                 r,
-                &["straight", "orthogonal", "avoid"],
+                CONNECTOR_ROUTES,
             ),
             c.source_span,
             Some(c.id.clone()),
@@ -335,7 +323,7 @@ pub(in crate::validate::check) fn check_connector(
         ("marker-end", c.marker_end.as_deref()),
     ] {
         if let Some(m) = marker
-            && !matches!(m, "none" | "arrow")
+            && !CONNECTOR_MARKERS.contains(&m)
         {
             diagnostics.push(Diagnostic::error(
                 "connector.invalid_marker",
@@ -343,7 +331,7 @@ pub(in crate::validate::check) fn check_connector(
                     &format!("connector '{}'", c.id),
                     label,
                     m,
-                    &["none", "arrow"],
+                    CONNECTOR_MARKERS,
                 ),
                 c.source_span,
                 Some(c.id.clone()),

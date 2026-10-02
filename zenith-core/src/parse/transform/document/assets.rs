@@ -39,8 +39,8 @@ pub(super) fn transform_assets(node: &KdlNode) -> Result<AssetBlock, ParseError>
             if child.name().value() == "asset" {
                 asset_list.push(transform_asset_decl(child)?);
             }
-            // Non-`asset` child nodes inside assets block are silently ignored
-            // (forward-compat).
+            // Non-`asset` children are recorded by `unknown_children` and
+            // reported as `block.unknown_child` Errors.
         }
     }
 

@@ -10,6 +10,7 @@ use std::collections::BTreeSet;
 use crate::ast::node::{FrameNode, GroupNode, TableNode};
 use crate::ast::value::{Dimension, dim_to_px};
 use crate::diagnostics::Diagnostic;
+use crate::schema::enums::{BORDER_COLLAPSES, H_ALIGNS, SYMMETRY_MODES, V_ALIGNS};
 use crate::suggest::invalid_value_message;
 
 use super::shared::{
@@ -280,7 +281,7 @@ pub(in crate::validate::check) fn check_group(
 
 fn check_group_symmetry(g: &GroupNode, diagnostics: &mut Vec<Diagnostic>) {
     if let Some(mode) = g.symmetry_mode.as_deref()
-        && !matches!(mode, "radial" | "mirror")
+        && !SYMMETRY_MODES.contains(&mode)
     {
         diagnostics.push(Diagnostic::error(
             "group.invalid_symmetry",
@@ -288,7 +289,7 @@ fn check_group_symmetry(g: &GroupNode, diagnostics: &mut Vec<Diagnostic>) {
                 &format!("group '{}'", g.id),
                 "symmetry-mode",
                 mode,
-                &["radial", "mirror"],
+                SYMMETRY_MODES,
             ),
             g.source_span,
             Some(g.id.clone()),
@@ -501,37 +502,27 @@ pub(in crate::validate::check) fn check_table(
 
     // Enum-value checks (an unrecognized value is an Error).
     if let Some(ha) = t.h_align.as_deref()
-        && !matches!(ha, "start" | "center" | "end")
+        && !H_ALIGNS.contains(&ha)
     {
         diagnostics.push(Diagnostic::error(
             "table.invalid_h_align",
-            invalid_value_message(
-                &format!("table '{}'", t.id),
-                "h-align",
-                ha,
-                &["start", "center", "end"],
-            ),
+            invalid_value_message(&format!("table '{}'", t.id), "h-align", ha, H_ALIGNS),
             t.source_span,
             Some(t.id.clone()),
         ));
     }
     if let Some(va) = t.v_align.as_deref()
-        && !matches!(va, "top" | "middle" | "bottom")
+        && !V_ALIGNS.contains(&va)
     {
         diagnostics.push(Diagnostic::error(
             "table.invalid_v_align",
-            invalid_value_message(
-                &format!("table '{}'", t.id),
-                "v-align",
-                va,
-                &["top", "middle", "bottom"],
-            ),
+            invalid_value_message(&format!("table '{}'", t.id), "v-align", va, V_ALIGNS),
             t.source_span,
             Some(t.id.clone()),
         ));
     }
     if let Some(bc) = t.border_collapse.as_deref()
-        && !matches!(bc, "separate" | "collapse")
+        && !BORDER_COLLAPSES.contains(&bc)
     {
         diagnostics.push(Diagnostic::error(
             "table.invalid_border_collapse",
@@ -539,7 +530,7 @@ pub(in crate::validate::check) fn check_table(
                 &format!("table '{}'", t.id),
                 "border-collapse",
                 bc,
-                &["separate", "collapse"],
+                BORDER_COLLAPSES,
             ),
             t.source_span,
             Some(t.id.clone()),
@@ -550,7 +541,7 @@ pub(in crate::validate::check) fn check_table(
     for row in &t.rows {
         for cell in &row.cells {
             if let Some(ha) = cell.h_align.as_deref()
-                && !matches!(ha, "start" | "center" | "end")
+                && !H_ALIGNS.contains(&ha)
             {
                 diagnostics.push(Diagnostic::error(
                     "table.invalid_h_align",
@@ -558,14 +549,14 @@ pub(in crate::validate::check) fn check_table(
                         &format!("table '{}'", t.id),
                         "cell h-align",
                         ha,
-                        &["start", "center", "end"],
+                        H_ALIGNS,
                     ),
                     cell.source_span,
                     Some(t.id.clone()),
                 ));
             }
             if let Some(va) = cell.v_align.as_deref()
-                && !matches!(va, "top" | "middle" | "bottom")
+                && !V_ALIGNS.contains(&va)
             {
                 diagnostics.push(Diagnostic::error(
                     "table.invalid_v_align",
@@ -573,7 +564,7 @@ pub(in crate::validate::check) fn check_table(
                         &format!("table '{}'", t.id),
                         "cell v-align",
                         va,
-                        &["top", "middle", "bottom"],
+                        V_ALIGNS,
                     ),
                     cell.source_span,
                     Some(t.id.clone()),

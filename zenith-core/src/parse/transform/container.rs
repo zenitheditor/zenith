@@ -494,7 +494,7 @@ pub(crate) const INSTANCE_KNOWN_PROPS: &[&str] = &[
 /// Reads required `id`; optional local `component` or external `source`;
 /// optional `x`/`y` origin dimensions, external `w`/`h`/`fit`, `opacity`/
 /// `visible`/`locked`; and collects `override` child nodes into [`Override`]s.
-/// Non-`override` children are ignored (forward-compat).
+/// Non-`override` children are reported as `block.unknown_child` Errors.
 pub(super) fn transform_instance(node: &KdlNode) -> Result<InstanceNode, ParseError> {
     let id = required_string_prop(node, "id")?.to_owned();
 

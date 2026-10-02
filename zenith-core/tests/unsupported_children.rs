@@ -1,6 +1,6 @@
 //! Integration tests for the `node.unsupported_child` diagnostic: child nodes
 //! authored under a kind that does not consume them are captured at parse time
-//! and reported (with severity Warning) from validation.
+//! and reported (with severity Error) from validation.
 
 mod common;
 
@@ -194,7 +194,7 @@ fn diagnostic_carries_child_span_parent_id_and_message() {
         .find(|d| d.code == "node.unsupported_child")
         .expect("must emit node.unsupported_child");
 
-    assert_eq!(d.severity, Severity::Warning);
+    assert_eq!(d.severity, Severity::Error);
     // Parent id is carried as the subject.
     assert_eq!(d.subject_id.as_deref(), Some("disc"));
     // The child's source span is present (byte offsets into the source).
@@ -207,9 +207,28 @@ fn diagnostic_carries_child_span_parent_id_and_message() {
 }
 
 #[test]
-fn diagnostic_is_governable_warning_in_catalog() {
+fn diagnostic_is_always_error_in_catalog() {
     let info = zenith_core::diag_catalog::lookup("node.unsupported_child")
         .expect("node.unsupported_child must be catalogued");
-    assert_eq!(info.severity, Severity::Warning);
-    assert!(info.is_governable(), "Warning ⇒ governable");
+    assert_eq!(info.severity, Severity::Error);
+    assert!(!info.is_governable(), "Error ⇒ not governable");
+}
+
+#[test]
+fn near_miss_child_gets_did_you_mean_and_allowed_list() {
+    let doc = parse_doc(r##"text id="t" x=(px)0 y=(px)0 w=(px)10 h=(px)10 { spn "x" }"##);
+    let report = validate(&doc);
+    let d = report
+        .diagnostics
+        .iter()
+        .find(|d| d.code == "node.unsupported_child")
+        .expect("must emit node.unsupported_child");
+    assert_eq!(d.severity, Severity::Error);
+    assert!(d.message.contains("did you mean 'span'?"), "{}", d.message);
+    assert!(
+        d.message
+            .contains("Allowed children: block, kern-pair, span"),
+        "{}",
+        d.message
+    );
 }

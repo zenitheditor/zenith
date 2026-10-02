@@ -5,6 +5,7 @@ use std::collections::BTreeSet;
 use crate::ast::node::PatternNode;
 use crate::ast::value::dim_to_px;
 use crate::diagnostics::Diagnostic;
+use crate::schema::enums::PATTERN_KINDS;
 use crate::suggest::invalid_value_message;
 
 use super::shared::{
@@ -148,7 +149,7 @@ pub(in crate::validate::check) fn check_pattern(
     // The expansion engine recognizes exactly "grid" and "scatter"; any other
     // kind string cannot render and is reported immediately. When the kind is
     // unknown we skip the kind-specific requirement checks to avoid noise.
-    let kind_known = matches!(p.kind.as_str(), "grid" | "scatter");
+    let kind_known = PATTERN_KINDS.contains(&p.kind.as_str());
     if !kind_known {
         diagnostics.push(Diagnostic::error(
             "pattern.unknown_kind",
@@ -156,7 +157,7 @@ pub(in crate::validate::check) fn check_pattern(
                 &format!("pattern '{}'", p.id),
                 "kind",
                 &p.kind,
-                &["grid", "scatter"],
+                PATTERN_KINDS,
             ),
             p.source_span,
             Some(p.id.clone()),

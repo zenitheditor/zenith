@@ -21,8 +21,8 @@ pub(crate) const VARIANT_OVERRIDE_KNOWN_PROPS: &[&str] =
 
 /// Transform the document-level `variants { … }` block into a list of
 /// [`VariantDef`]. Each `variant id="…" source="…" w=(px)N h=(px)N { … }` is
-/// a block node; non-`variant` children inside the block are silently ignored
-/// (forward-compat). Mirrors [`transform_provenance`](super::structure::transform_provenance).
+/// a block node; non-`variant` children inside the block are reported as
+/// `block.unknown_child` Errors. Mirrors [`transform_provenance`](super::structure::transform_provenance).
 pub(super) fn transform_variants(node: &KdlNode) -> Result<Vec<VariantDef>, ParseError> {
     let mut defs: Vec<VariantDef> = Vec::new();
     if let Some(children) = node.children() {
@@ -119,7 +119,7 @@ const RECIPE_PARAM_KNOWN_PROPS: &[&str] = &["name", "value"];
 
 /// Transform the document-level `recipes { … }` block into a list of
 /// [`RecipeDef`]. Each `recipe id="…" kind="…" …` is a block node; non-`recipe`
-/// children inside the block are silently ignored (forward-compat). Mirrors
+/// children inside the block are reported as `block.unknown_child` Errors. Mirrors
 /// [`transform_variants`].
 pub(super) fn transform_recipes(node: &KdlNode) -> Result<Vec<RecipeDef>, ParseError> {
     let mut defs: Vec<RecipeDef> = Vec::new();

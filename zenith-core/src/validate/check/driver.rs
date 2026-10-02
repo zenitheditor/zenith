@@ -16,6 +16,9 @@ use crate::ast::style::Style;
 use crate::ast::value::{PropertyValue, Unit, dim_to_px};
 use crate::color::parse_rgb;
 use crate::diagnostics::Diagnostic;
+use crate::schema::enums::{
+    COLORSPACES, LINE_JUMP_STYLES, PAGE_NUMBER_FORMATS, PAGE_PARITIES, PAGE_PROGRESSIONS,
+};
 use crate::suggest::invalid_value_message;
 use crate::tokens::{ResolvedToken, ResolvedValue};
 
@@ -93,12 +96,11 @@ pub fn validate_with_policy(
     // `colorspace` is informational export metadata; it does not affect PNG
     // output. Only "srgb" and "cmyk" are recognized; any other value is an Error.
     if let Some(cs) = &doc.colorspace
-        && cs != "srgb"
-        && cs != "cmyk"
+        && !COLORSPACES.contains(&cs.as_str())
     {
         diagnostics.push(Diagnostic::error(
             "document.invalid_colorspace",
-            invalid_value_message("document", "colorspace", cs, &["srgb", "cmyk"]),
+            invalid_value_message("document", "colorspace", cs, COLORSPACES),
             None,
             None,
         ));
@@ -109,12 +111,11 @@ pub fn validate_with_policy(
     // order or PNG output. Only "ltr" and "rtl" are recognized; any other value
     // is an Error.
     if let Some(pp) = &doc.page_progression
-        && pp != "ltr"
-        && pp != "rtl"
+        && !PAGE_PROGRESSIONS.contains(&pp.as_str())
     {
         diagnostics.push(Diagnostic::error(
             "document.invalid_page_progression",
-            invalid_value_message("document", "page-progression", pp, &["ltr", "rtl"]),
+            invalid_value_message("document", "page-progression", pp, PAGE_PROGRESSIONS),
             None,
             None,
         ));
@@ -125,12 +126,11 @@ pub fn validate_with_policy(
     // Only "recto" and "verso" (case-insensitive) are recognized; any other value
     // is an Error.
     if let Some(pps) = &doc.page_parity_start
-        && !pps.eq_ignore_ascii_case("recto")
-        && !pps.eq_ignore_ascii_case("verso")
+        && !PAGE_PARITIES.iter().any(|v| pps.eq_ignore_ascii_case(v))
     {
         diagnostics.push(Diagnostic::error(
             "document.invalid_page_parity_start",
-            invalid_value_message("document", "page-parity-start", pps, &["recto", "verso"]),
+            invalid_value_message("document", "page-parity-start", pps, PAGE_PARITIES),
             None,
             None,
         ));
@@ -452,9 +452,7 @@ pub fn validate_with_policy(
         // `folio_style`, if present, must be one of the recognized styles →
         // Error.
         if let Some(style) = &section.folio_style
-            && style != "decimal"
-            && style != "lower-roman"
-            && style != "upper-roman"
+            && !PAGE_NUMBER_FORMATS.contains(&style.as_str())
         {
             diagnostics.push(Diagnostic::error(
                 "section.invalid_folio_style",
@@ -462,7 +460,7 @@ pub fn validate_with_policy(
                     &format!("section '{}'", section.id),
                     "folio-style",
                     style,
-                    &["decimal", "lower-roman", "upper-roman"],
+                    PAGE_NUMBER_FORMATS,
                 ),
                 section.source_span,
                 Some(section.id.clone()),
@@ -553,17 +551,11 @@ pub fn validate_with_policy(
         // `parity` forces this page's recto/verso. Only "recto"/"verso"
         // (case-insensitive) are recognized; any other value is an Error.
         if let Some(p) = &page.parity
-            && !p.eq_ignore_ascii_case("recto")
-            && !p.eq_ignore_ascii_case("verso")
+            && !PAGE_PARITIES.iter().any(|v| p.eq_ignore_ascii_case(v))
         {
             diagnostics.push(Diagnostic::error(
                 "page.invalid_parity",
-                invalid_value_message(
-                    &format!("page '{}'", page.id),
-                    "parity",
-                    p,
-                    &["recto", "verso"],
-                ),
+                invalid_value_message(&format!("page '{}'", page.id), "parity", p, PAGE_PARITIES),
                 page.source_span,
                 Some(page.id.clone()),
             ));
@@ -573,9 +565,7 @@ pub fn validate_with_policy(
         // `line-jumps` selects how connector-vs-connector crossings hop. Only
         // "none"/"arc"/"gap" are recognized; any other value is an Error.
         if let Some(lj) = &page.line_jumps
-            && lj != "none"
-            && lj != "arc"
-            && lj != "gap"
+            && !LINE_JUMP_STYLES.contains(&lj.as_str())
         {
             diagnostics.push(Diagnostic::error(
                 "page.invalid_line_jumps",
@@ -583,7 +573,7 @@ pub fn validate_with_policy(
                     &format!("page '{}'", page.id),
                     "line-jumps",
                     lj,
-                    &["none", "arc", "gap"],
+                    LINE_JUMP_STYLES,
                 ),
                 page.source_span,
                 Some(page.id.clone()),

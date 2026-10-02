@@ -7,6 +7,11 @@ use crate::diagnostics::Severity;
 /// Group c of the diagnostic-code catalog (see `super::catalog::DIAGNOSTIC_CODES`).
 pub(super) const CODES: &[DiagnosticCodeInfo] = &[
     info(
+        "parse.error",
+        Severity::Error,
+        "Document source cannot be parsed.",
+    ),
+    info(
         "provenance.unknown_library",
         Severity::Error,
         "A provenance origin names an undeclared library.",
@@ -42,6 +47,31 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
         "Recipe palette references an unknown or non-color token.",
     ),
     info(
+        "render.no_pages",
+        Severity::Error,
+        "Document has no pages to render.",
+    ),
+    info(
+        "render.page_out_of_range",
+        Severity::Error,
+        "Requested page index is outside the document.",
+    ),
+    info(
+        "render.raster_failed",
+        Severity::Error,
+        "Rasterizing a page failed.",
+    ),
+    info(
+        "render.scene_serialize_failed",
+        Severity::Error,
+        "Scene serialization failed.",
+    ),
+    info(
+        "render.spread_failed",
+        Severity::Error,
+        "Rendering a page spread failed.",
+    ),
+    info(
         "safe_zone.violation",
         Severity::Advisory,
         "Content violates a declared safe/dead zone.",
@@ -50,6 +80,11 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
         "scene.invalid_color",
         Severity::Advisory,
         "A paint value could not be resolved to a valid color at compile time.",
+    ),
+    info(
+        "scene.invalid_symmetry",
+        Severity::Warning,
+        "Group symmetry parameter is out of range or non-finite at compile time.",
     ),
     info(
         "scene.invalid_import_source",
@@ -70,6 +105,11 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
         "scene.page_out_of_range",
         Severity::Advisory,
         "The requested page index is outside the document's page range.",
+    ),
+    info(
+        "scene.text_outline_failed",
+        Severity::Error,
+        "Text outline materialization failed for a node.",
     ),
     info(
         "scene.text_unshaped",
@@ -287,6 +327,11 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
         "A visual property uses a raw literal instead of a token.",
     ),
     info(
+        "token.mask_extra_shape",
+        Severity::Error,
+        "A `mask` token has more than one shape child; only the first is read.",
+    ),
+    info(
         "token.set_partially_used",
         Severity::Advisory,
         "A multi-token provenance `set` has some but not all of its tokens referenced.",
@@ -357,6 +402,11 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
         "A transaction op was skipped because the target node is locked.",
     ),
     info(
+        "tx.no_text_outlines",
+        Severity::Error,
+        "Text outline materialization produced no path geometry.",
+    ),
+    info(
         "tx.noop",
         Severity::Advisory,
         "A transaction op produced no change (the document is already in the requested state).",
@@ -380,6 +430,11 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
         "tx.pattern_unresolved_bounds",
         Severity::Error,
         "A pattern-expand op could not resolve the pattern bounds node.",
+    ),
+    info(
+        "tx.unknown_master",
+        Severity::Error,
+        "Master referenced by a transaction op does not exist.",
     ),
     info(
         "tx.unknown_node",

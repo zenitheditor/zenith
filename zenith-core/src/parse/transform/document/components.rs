@@ -17,7 +17,7 @@ use crate::parse::transform::page::transform_ports;
 /// [`ComponentDef`]. Each `component id="..." { <child nodes> }` becomes one
 /// definition whose children are parsed exactly like page/group children (via
 /// [`crate::parse::transform::node::transform_node`]). Non-`component` children
-/// inside the block are silently ignored (forward-compat).
+/// inside the block are reported as `block.unknown_child` Errors.
 pub(super) fn transform_components(
     node: &KdlNode,
     sink: &mut Vec<UnsupportedChild>,

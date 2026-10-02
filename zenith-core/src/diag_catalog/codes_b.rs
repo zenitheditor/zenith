@@ -7,6 +7,31 @@ use crate::diagnostics::Severity;
 /// Group b of the diagnostic-code catalog (see `super::catalog::DIAGNOSTIC_CODES`).
 pub(super) const CODES: &[DiagnosticCodeInfo] = &[
     info(
+        "construction.degenerate_guide",
+        Severity::Warning,
+        "Construction segment guide has identical endpoints.",
+    ),
+    info(
+        "construction.invalid_geometry",
+        Severity::Warning,
+        "Construction guide property is not a finite px/pt dimension.",
+    ),
+    info(
+        "construction.invalid_radius",
+        Severity::Warning,
+        "Construction circle guide radius is not positive.",
+    ),
+    info(
+        "construction.missing_geometry",
+        Severity::Warning,
+        "Construction guide lacks a required geometry property.",
+    ),
+    info(
+        "construction.unknown_guide_type",
+        Severity::Error,
+        "Construction guide `type` is not a recognized guide type.",
+    ),
+    info(
         "contrast.invisible",
         Severity::Warning,
         "Text/background APCA Lc contrast is near zero, so the text is effectively invisible.",
@@ -92,6 +117,16 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
         "Content crosses a declared fold line.",
     ),
     info(
+        "font.invalid_feature",
+        Severity::Warning,
+        "OpenType feature or alternate spec is malformed.",
+    ),
+    info(
+        "font.parse_failed",
+        Severity::Error,
+        "Font file bytes cannot be parsed.",
+    ),
+    info(
         "font.glyph_missing",
         Severity::Warning,
         "Text contains character(s) with no glyph in any registered font.",
@@ -152,6 +187,11 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
         "Table grid layout has no column definitions.",
     ),
     info(
+        "group.invalid_symmetry",
+        Severity::Error,
+        "Group `symmetry-mode` is not a recognized mode.",
+    ),
+    info(
         "group.invalid_intensity",
         Severity::Warning,
         "Group `intensity` is out of the 0.0–1.0 range.",
@@ -193,6 +233,11 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
         "Image is being scaled up beyond its native resolution.",
     ),
     info(
+        "io.write_failed",
+        Severity::Error,
+        "Output file cannot be written.",
+    ),
+    info(
         "kerning.duplicate_pair",
         Severity::Warning,
         "A text-bearing node declares the same `kern-pair` more than once.",
@@ -218,6 +263,16 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
         "Content intrudes into a declared book live-area margin.",
     ),
     info(
+        "light.angle_ignored",
+        Severity::Warning,
+        "Light `angle` uses a unit other than deg and is ignored.",
+    ),
+    info(
+        "light.unknown_kind",
+        Severity::Error,
+        "Light `kind` is not a recognized light kind.",
+    ),
+    info(
         "mask.invalid_feather",
         Severity::Error,
         "Mask `feather` value is invalid.",
@@ -231,6 +286,21 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
         "master.unknown_reference",
         Severity::Error,
         "A page references an undeclared master id.",
+    ),
+    info(
+        "mesh.invalid_columns",
+        Severity::Error,
+        "Mesh `columns` is not greater than zero.",
+    ),
+    info(
+        "mesh.invalid_rows",
+        Severity::Error,
+        "Mesh `rows` is not greater than zero.",
+    ),
+    info(
+        "mesh.unknown_kind",
+        Severity::Error,
+        "Mesh camera `kind` is not a recognized kind.",
     ),
     info(
         "node.invalid_geometry",
@@ -253,6 +323,11 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
         "A node is missing a required geometry attribute.",
     ),
     info(
+        "node.opacity_out_of_range",
+        Severity::Warning,
+        "Light or mesh `opacity` is outside 0.0–1.0.",
+    ),
+    info(
         "node.unknown_kind",
         Severity::Warning,
         "A node kind is not recognized.",
@@ -264,7 +339,7 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
     ),
     info(
         "node.unsupported_child",
-        Severity::Warning,
+        Severity::Error,
         "A child node was authored under a kind that does not accept it and was discarded.",
     ),
     info(

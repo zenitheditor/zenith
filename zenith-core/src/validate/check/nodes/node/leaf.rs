@@ -15,6 +15,7 @@ use super::shared::{
     is_valid_blend_mode,
 };
 use super::suggest::{blend_mode_names, check_unknown_props, push_invalid_value};
+use crate::schema::enums::STROKE_LINECAPS;
 use crate::validate::check::nodes::WalkCtx;
 use crate::validate::check::register_id;
 use crate::validate::check::visual::{VisualExpect, check_visual_prop};
@@ -299,14 +300,14 @@ pub(in crate::validate::check) fn check_ellipse(
         ));
     }
     if let Some(lc) = e.stroke_linecap.as_deref()
-        && !matches!(lc, "butt" | "round" | "square")
+        && !STROKE_LINECAPS.contains(&lc)
     {
         push_invalid_value(
             &format!("ellipse '{}'", e.id),
             Some(e.id.clone()),
             "stroke-linecap",
             lc,
-            &["butt", "round", "square"],
+            STROKE_LINECAPS,
             e.source_span,
             diagnostics,
         );
@@ -481,14 +482,14 @@ pub(in crate::validate::check) fn check_line(
         ));
     }
     if let Some(lc) = l.stroke_linecap.as_deref()
-        && !matches!(lc, "butt" | "round" | "square")
+        && !STROKE_LINECAPS.contains(&lc)
     {
         push_invalid_value(
             &format!("line '{}'", l.id),
             Some(l.id.clone()),
             "stroke-linecap",
             lc,
-            &["butt", "round", "square"],
+            STROKE_LINECAPS,
             l.source_span,
             diagnostics,
         );

@@ -21,6 +21,7 @@ use crate::parse::transform::helpers::{
     optional_bool_prop, optional_dimension_prop, optional_string_prop, required_u32_prop,
 };
 use crate::parse::transform::tokens::{transform_styles, transform_tokens};
+use crate::parse::transform::unknown_children::collect_unknown_document_children;
 
 use super::assets::transform_assets;
 use super::body::transform_document_body;
@@ -175,6 +176,7 @@ pub fn transform(doc: &KdlDocument) -> Result<Document, ParseError> {
     // Side table of child nodes dropped because their parent kind does not
     // consume them; threaded through every node-producing transform below.
     let mut unsupported_children: Vec<UnsupportedChild> = Vec::new();
+    collect_unknown_document_children(zenith_node, &mut unsupported_children);
 
     for child in children_doc.nodes() {
         match child.name().value() {
@@ -226,8 +228,8 @@ pub fn transform(doc: &KdlDocument) -> Result<Document, ParseError> {
             "document" => {
                 body = Some(transform_document_body(child, &mut unsupported_children)?);
             }
-            // Any other unknown top-level children are accepted without error
-            // (forward-compat); they simply are not represented in the v0 AST.
+            // Unknown top-level children are recorded by
+            // `collect_unknown_document_children` and reported by validation.
             _ => {}
         }
     }

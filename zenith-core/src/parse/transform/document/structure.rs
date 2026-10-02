@@ -25,7 +25,7 @@ use super::body::transform_children;
 /// [`MasterDef`]. Each `master id="..." { <child nodes> }` becomes one
 /// definition whose children are parsed exactly like page/group children (via
 /// [`crate::parse::transform::node::transform_node`]). Non-`master` children
-/// inside the block are silently ignored (forward-compat). Mirrors
+/// inside the block are reported as `block.unknown_child` Errors. Mirrors
 /// [`transform_components`](super::components::transform_components).
 pub(super) fn transform_masters(
     node: &KdlNode,
@@ -62,7 +62,7 @@ fn transform_master_def(
 /// Transform the document-level `sections { … }` block into a list of
 /// [`SectionDef`]. Each `section id="…" name="…" start-page="…" …` is a leaf
 /// marker (it takes no children); non-`section` children inside the block are
-/// silently ignored (forward-compat). Mirrors [`transform_masters`].
+/// reported as `block.unknown_child` Errors. Mirrors [`transform_masters`].
 pub(super) fn transform_sections(node: &KdlNode) -> Result<Vec<SectionDef>, ParseError> {
     let mut defs: Vec<SectionDef> = Vec::new();
     if let Some(children) = node.children() {
@@ -110,8 +110,8 @@ pub(crate) const LIBRARY_KNOWN_PROPS: &[&str] = &["id", "version", "hash"];
 
 /// Transform the document-level `libraries { … }` block into a list of
 /// [`LibraryDef`]. Each `library id="…" version="…" hash="…"` is a leaf marker
-/// (it takes no children); non-`library` children inside the block are silently
-/// ignored (forward-compat). Mirrors [`transform_sections`].
+/// (it takes no children); non-`library` children inside the block are
+/// reported as `block.unknown_child` Errors. Mirrors [`transform_sections`].
 pub(super) fn transform_libraries(node: &KdlNode) -> Result<Vec<LibraryDef>, ParseError> {
     let mut defs: Vec<LibraryDef> = Vec::new();
     if let Some(children) = node.children() {
@@ -149,8 +149,8 @@ const ACTION_KNOWN_PROPS: &[&str] = &["id", "label", "version"];
 /// Transform the document-level `actions { … }` block into a list of
 /// [`ActionDef`]. Each `action id="…" label="…" version="…" { tx "…" }` is a
 /// block node whose `tx` child carries the opaque JSON payload as a positional
-/// string argument; non-`action` children inside the block are silently ignored
-/// (forward-compat). Mirrors [`transform_libraries`].
+/// string argument; non-`action` children inside the block are reported as
+/// `block.unknown_child` Errors. Mirrors [`transform_libraries`].
 pub(super) fn transform_actions(node: &KdlNode) -> Result<Vec<ActionDef>, ParseError> {
     let mut defs: Vec<ActionDef> = Vec::new();
     if let Some(children) = node.children() {
@@ -212,7 +212,7 @@ pub(crate) const PROVENANCE_KNOWN_PROPS: &[&str] = &["id", "node", "library", "i
 /// Transform the document-level `provenance { … }` block into a list of
 /// [`ProvenanceDef`]. Each `origin id="…" node="…" library="…" …` is a leaf
 /// marker (it takes no children); non-`origin` children inside the block are
-/// silently ignored (forward-compat). Mirrors [`transform_libraries`].
+/// reported as `block.unknown_child` Errors. Mirrors [`transform_libraries`].
 pub(super) fn transform_provenance(node: &KdlNode) -> Result<Vec<ProvenanceDef>, ParseError> {
     let mut defs: Vec<ProvenanceDef> = Vec::new();
     if let Some(children) = node.children() {

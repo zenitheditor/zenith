@@ -425,12 +425,13 @@ pub struct Document {
     /// validates and round-trips byte-identically to before this field existed.
     pub brand_contract: BrandContract,
     pub body: DocumentBody,
-    /// Child KDL nodes that were authored under a node kind that does not
-    /// consume them and were therefore silently dropped at parse time. Empty
+    /// Child KDL nodes that were authored under a node kind or structural block
+    /// that does not consume them and were therefore dropped at parse time. Empty
     /// for a document that has no such authoring mistakes, so a well-formed
     /// document is byte-identical to before this field existed. Validation
-    /// reads this table and emits one `node.unsupported_child` Warning per
-    /// entry (see [`crate::validate()`]).
+    /// reads this table and emits one `node.unsupported_child` Error (node
+    /// parent), `block.unknown_child` Error (structural-block parent) or
+    /// `token.mask_extra_shape` Error per entry (see [`crate::validate()`]).
     pub unsupported_children: Vec<UnsupportedChild>,
 }
 

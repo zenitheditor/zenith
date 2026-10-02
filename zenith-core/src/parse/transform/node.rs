@@ -20,6 +20,7 @@ use super::pattern::transform_pattern;
 use super::special::{
     transform_connector, transform_field, transform_footnote, transform_shape, transform_toc,
 };
+use super::unknown_children::collect_unknown_substructure;
 use super::unsupported::collect_unsupported_children;
 
 pub(super) fn transform_node(
@@ -29,6 +30,7 @@ pub(super) fn transform_node(
     // Capture any children this node's kind does not consume BEFORE dispatch, so
     // the silent data loss is recorded even though the transform drops them.
     collect_unsupported_children(node, sink);
+    collect_unknown_substructure(node, sink);
 
     match node.name().value() {
         "rect" => transform_rect(node).map(|r| Node::Rect(Box::new(r))),

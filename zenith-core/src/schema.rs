@@ -21,6 +21,7 @@
 
 mod attributes;
 mod content;
+pub(crate) mod enums;
 mod kinds;
 mod surfaces;
 mod tokens;

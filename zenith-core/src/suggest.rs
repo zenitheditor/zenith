@@ -172,6 +172,49 @@ pub(crate) fn unknown_property_message(
     }
 }
 
+/// Message for an unknown child node inside a structural block.
+///
+/// `subject` names the parent (for example `brand` or `variant 'v1'`). The
+/// message names the child, a did-you-mean when `child` is within edit distance
+/// ≤ 2 of an allowed name, and every allowed child. A block that takes no
+/// children says so and tells the author to remove the child.
+pub(crate) fn unknown_child_message(subject: &str, child: &str, allowed: &[&str]) -> String {
+    if allowed.is_empty() {
+        return format!(
+            "{subject}: unknown child '{child}' — {subject} takes no child nodes; remove it"
+        );
+    }
+    let list = allowed.join(", ");
+    match find_suggestion(child, allowed.iter().copied(), 2) {
+        Some(s) => format!(
+            "{subject}: unknown child '{child}' — did you mean '{s}'? Allowed children: {list}"
+        ),
+        None => format!("{subject}: unknown child '{child}' — allowed children: {list}"),
+    }
+}
+
+/// Message for a child node a renderable node kind does not consume.
+///
+/// `subject` names the parent (for example `ellipse 'e1'`). When the kind has an
+/// accepted-child list the message adds a did-you-mean and that list. Otherwise
+/// it tells the author to place the child as a sibling inside a group.
+pub(crate) fn unsupported_child_message(
+    subject: &str,
+    child: &str,
+    parent: &str,
+    allowed: &[&str],
+) -> String {
+    let head = format!("{subject}: child node '{child}' is not supported by '{parent}'");
+    if allowed.is_empty() {
+        return format!("{head} and is discarded; place it as a sibling inside a group");
+    }
+    let list = allowed.join(", ");
+    match find_suggestion(child, allowed.iter().copied(), 2) {
+        Some(s) => format!("{head} — did you mean '{s}'? Allowed children: {list}"),
+        None => format!("{head} — allowed children: {list}"),
+    }
+}
+
 /// Maximum number of names listed by [`format_candidate_list`].
 const MAX_LISTED: usize = 8;
 
@@ -207,6 +250,29 @@ pub(crate) fn format_candidate_list<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn unknown_child_message_suggests_close_name() {
+        let msg = unknown_child_message("brand", "color", &["colors", "fonts", "weights"]);
+        assert!(msg.contains("did you mean 'colors'?"), "{msg}");
+        assert!(
+            msg.contains("Allowed children: colors, fonts, weights"),
+            "{msg}"
+        );
+    }
+
+    #[test]
+    fn unknown_child_message_lists_allowed_without_suggestion() {
+        let msg = unknown_child_message("brand", "zzzzzz", &["colors", "fonts"]);
+        assert!(!msg.contains("did you mean"), "{msg}");
+        assert!(msg.contains("allowed children: colors, fonts"), "{msg}");
+    }
+
+    #[test]
+    fn unknown_child_message_for_childless_block() {
+        let msg = unknown_child_message("section 's1'", "x", &[]);
+        assert!(msg.contains("takes no child nodes; remove it"), "{msg}");
+    }
 
     #[test]
     fn edit_distance_identical_strings() {

@@ -260,8 +260,8 @@ pub(super) fn transform_chart(node: &KdlNode) -> Result<ChartNode, ParseError> {
                     }
                 }
                 _ => {
-                    // Other children are silently ignored at parse time.
-                    // The validator will flag unrecognised child node names if needed.
+                    // Other direct children are reported by the `unsupported`
+                    // pass as `node.unsupported_child`.
                 }
             }
         }

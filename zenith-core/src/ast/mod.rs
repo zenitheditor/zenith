@@ -52,6 +52,6 @@ pub use token::{
     MaskLiteral, MaskShape, ShadowLayerRef, ShadowLiteral, Token, TokenBlock, TokenLiteral,
     TokenType, TokenValue,
 };
-pub use unsupported::UnsupportedChild;
+pub use unsupported::{ChildSite, UnsupportedChild};
 pub use value::{Dimension, PropertyValue, Unit, dim_to_px};
 pub use variant::{VariantDef, VariantOverride};

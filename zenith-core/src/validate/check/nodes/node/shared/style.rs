@@ -6,6 +6,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use crate::ast::node::TextSpan;
 use crate::ast::value::{Dimension, PropertyValue};
 use crate::diagnostics::Diagnostic;
+use crate::schema::enums::{STROKE_LINECAPS, STROKE_LINEJOINS};
 use crate::tokens::ResolvedToken;
 use crate::validate::check::nodes::node::suggest::{blend_mode_names, push_invalid_value};
 use crate::validate::check::visual::{VisualExpect, check_visual_prop};
@@ -295,7 +296,7 @@ pub(in crate::validate::check) fn check_visual_props(
         ));
     }
     if let Some(lc) = props.stroke_linecap
-        && !matches!(lc, "butt" | "round" | "square")
+        && !STROKE_LINECAPS.contains(&lc)
     {
         check_stroke_linecap_prop(kind, id, Some(lc), source_span, diagnostics);
     }
@@ -431,14 +432,14 @@ pub(in crate::validate::check) fn check_stroke_join_props(
     diagnostics: &mut Vec<Diagnostic>,
 ) {
     if let Some(lj) = stroke_linejoin
-        && !matches!(lj, "miter" | "round" | "bevel")
+        && !STROKE_LINEJOINS.contains(&lj)
     {
         push_invalid_value(
             &format!("{kind} '{id}'"),
             Some(id.to_owned()),
             "stroke-linejoin",
             lj,
-            &["miter", "round", "bevel"],
+            STROKE_LINEJOINS,
             source_span,
             diagnostics,
         );
@@ -463,14 +464,14 @@ pub(in crate::validate::check) fn check_stroke_linecap_prop(
     diagnostics: &mut Vec<Diagnostic>,
 ) {
     if let Some(lc) = stroke_linecap
-        && !matches!(lc, "butt" | "round" | "square")
+        && !STROKE_LINECAPS.contains(&lc)
     {
         push_invalid_value(
             &format!("{kind} '{id}'"),
             Some(id.to_owned()),
             "stroke-linecap",
             lc,
-            &["butt", "round", "square"],
+            STROKE_LINECAPS,
             source_span,
             diagnostics,
         );

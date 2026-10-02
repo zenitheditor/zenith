@@ -5,7 +5,7 @@
 //! `leaf`, `special`, `container`, `chart`, and `pattern` modules). Only child
 //! node NAMES that a transform genuinely consumes are recognized; anything else
 //! authored inside the block is dropped at parse time, so it is captured here
-//! for a `node.unsupported_child` Warning from validation.
+//! for a `node.unsupported_child` Error from validation.
 //!
 //! Called from the single funnel [`super::node::transform_node`] on every node,
 //! against that node's OWN children. Container recursion (frame/group/table
@@ -15,7 +15,7 @@
 
 use kdl::KdlNode;
 
-use crate::ast::UnsupportedChild;
+use crate::ast::{ChildSite, UnsupportedChild};
 
 use super::helpers::{node_span, optional_string_prop};
 
@@ -79,7 +79,7 @@ pub(super) fn collect_unsupported_children(node: &KdlNode, sink: &mut Vec<Unsupp
             if let Some(doc) = node.children() {
                 for child in doc.nodes() {
                     if !allowed.contains(&child.name().value()) {
-                        push_unsupported(node, child, sink);
+                        push_unsupported(node, child, allowed, sink);
                     }
                 }
             }
@@ -88,7 +88,7 @@ pub(super) fn collect_unsupported_children(node: &KdlNode, sink: &mut Vec<Unsupp
             if let Some(doc) = node.children() {
                 // The first child is the consumed motif; the rest are dropped.
                 for child in doc.nodes().iter().skip(1) {
-                    push_unsupported(node, child, sink);
+                    push_unsupported(node, child, &[], sink);
                 }
             }
         }
@@ -96,12 +96,19 @@ pub(super) fn collect_unsupported_children(node: &KdlNode, sink: &mut Vec<Unsupp
 }
 
 /// Push one [`UnsupportedChild`] record describing `child` dropped under `parent`.
-fn push_unsupported(parent: &KdlNode, child: &KdlNode, sink: &mut Vec<UnsupportedChild>) {
+fn push_unsupported(
+    parent: &KdlNode,
+    child: &KdlNode,
+    allowed: &'static [&'static str],
+    sink: &mut Vec<UnsupportedChild>,
+) {
     sink.push(UnsupportedChild {
         parent_id: optional_string_prop(parent, "id").map(str::to_owned),
         parent_kind: parent.name().value().to_owned(),
         child_kind: child.name().value().to_owned(),
         source_span: node_span(child),
+        site: ChildSite::Node,
+        allowed,
     });
 }
 

@@ -21,8 +21,9 @@ use crate::parse::transform::helpers::node_span;
 /// }
 /// ```
 ///
-/// A child whose name is not a recognized verb is silently ignored
-/// (forward-compat — same posture as every other document block). A recognized
+/// A child whose name is not a recognized verb is skipped here; document
+/// parsing records it as a `block.unknown_child` Error and the standalone
+/// config parsers reject it with a [`ParseError`]. A recognized
 /// verb whose code argument is missing or non-string is a hard [`ParseError`]
 /// (the entry is meaningless without a code). Declaration order is preserved;
 /// last-wins resolution happens at consult time (see [`DiagnosticPolicy::verb_for`]).
@@ -34,7 +35,7 @@ pub(crate) fn transform_diagnostic_policy(node: &KdlNode) -> Result<DiagnosticPo
                 "allow" => (PolicyVerb::Allow, "allow"),
                 "deny" => (PolicyVerb::Deny, "deny"),
                 "warn" => (PolicyVerb::Warn, "warn"),
-                // Unknown verb → ignore (forward-compat).
+                // Unknown verb → reported by `unknown_children`.
                 _ => continue,
             };
             let mut positional = child

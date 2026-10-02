@@ -92,6 +92,26 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
         "A text column could not be snapped to the baseline grid.",
     ),
     info(
+        "asset.read_failed",
+        Severity::Error,
+        "Locked render cannot read a declared asset file.",
+    ),
+    info(
+        "asset.sha256_missing",
+        Severity::Error,
+        "Locked render requires a sha256 on every asset.",
+    ),
+    info(
+        "asset.sha256_mismatch",
+        Severity::Error,
+        "Asset file bytes do not match the declared sha256.",
+    ),
+    info(
+        "block.unknown_child",
+        Severity::Error,
+        "Unknown child node inside a structural block.",
+    ),
+    info(
         "brand.color_off_palette",
         Severity::Warning,
         "A color token's value is not in the document brand palette.",
@@ -115,6 +135,11 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
         "component.unknown_reference",
         Severity::Error,
         "Instance references an undeclared component id.",
+    ),
+    info(
+        "config.error",
+        Severity::Error,
+        "Config file cannot be read or parsed.",
     ),
     info(
         "connector.anchor_division_zero",

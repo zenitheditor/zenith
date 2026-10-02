@@ -14,7 +14,7 @@ use crate::parse::transform::helpers::node_span;
 /// - `weights 400 700 …` — approved font weight integers (100–900).
 ///
 /// Absent child = unconstrained for that category. Unknown children are
-/// silently ignored (forward-compat). Declaration order within each child
+/// reported as `block.unknown_child` Errors. Declaration order within each child
 /// node's arguments is preserved.
 ///
 /// Errors:
@@ -129,7 +129,8 @@ pub(crate) fn transform_brand_contract(node: &KdlNode) -> Result<BrandContract, 
                     }
                     allowed_weights = Some(weights);
                 }
-                // Unknown children are silently ignored (forward-compat).
+                // Unknown children are recorded by `unknown_children` and
+                // reported as `block.unknown_child` Errors.
                 _ => {}
             }
         }
