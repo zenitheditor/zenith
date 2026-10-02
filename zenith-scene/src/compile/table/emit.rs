@@ -45,7 +45,7 @@ pub(in crate::compile) struct TableEmitCtx<'a> {
     /// Font provider used to shape and measure text descendants.
     pub(in crate::compile) fonts: &'a dyn FontProvider,
     /// Shaping engine used to shape and measure text descendants.
-    pub(in crate::compile) engine: &'a RustybuzzEngine,
+    pub(in crate::compile) engine: &'a RustybuzzEngine<'a>,
     /// Text-chain assignments cascaded into text descendants.
     pub(in crate::compile) chains: &'a ChainAssignments,
     /// Table-flow assignments cascaded into table descendants.

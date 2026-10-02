@@ -473,7 +473,8 @@ mod tests {
     #[test]
     fn outlines_shaped_run_with_glyph_offsets() -> Result<(), LayoutError> {
         let provider = default_provider();
-        let engine = crate::RustybuzzEngine::new();
+        let store = crate::FontFaceStore::new(&provider);
+        let engine = crate::RustybuzzEngine::new(&store);
         let run = crate::TextLayoutEngine::shape(
             &engine,
             &crate::ShapeRequest {
@@ -525,7 +526,8 @@ mod tests {
     #[test]
     fn glyph_run_outline_returns_none_for_space_only_run() -> Result<(), LayoutError> {
         let provider = default_provider();
-        let engine = crate::RustybuzzEngine::new();
+        let store = crate::FontFaceStore::new(&provider);
+        let engine = crate::RustybuzzEngine::new(&store);
         let run = crate::TextLayoutEngine::shape(
             &engine,
             &crate::ShapeRequest {
@@ -752,7 +754,8 @@ mod tests {
 
     fn glyph_id_for(text: &str) -> u16 {
         let provider = default_provider();
-        let engine = crate::RustybuzzEngine::new();
+        let store = crate::FontFaceStore::new(&provider);
+        let engine = crate::RustybuzzEngine::new(&store);
         let run = crate::TextLayoutEngine::shape(
             &engine,
             &crate::ShapeRequest {

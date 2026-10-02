@@ -32,7 +32,7 @@ pub const SCENE_TEXT_OUTLINE_FAILED: &str = "scene.text_outline_failed";
 /// Returns `Ok(())` when eligible. Returns `Err(diagnostics)` with
 /// `tx.unknown_node` or `tx.unsupported_property` when not — without compiling
 /// the document. Call this **before**
-/// [`zenith_scene::collect_text_outline_paths`].
+/// `zenith_scene::collect_text_outline_paths` (zenith-tx does not depend on zenith-scene).
 pub fn check_text_outline_source(doc: &Document, node_id: &str) -> Result<(), Vec<Diagnostic>> {
     let mut diagnostics = Vec::new();
     if source_outline_paint(doc, node_id, &mut diagnostics).is_none() {

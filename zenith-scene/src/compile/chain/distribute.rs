@@ -225,7 +225,7 @@ struct BlockChainInput<'a> {
     doc_styles: ChainDocStyles<'a>,
     direction: TextDirection,
     fonts: &'a dyn FontProvider,
-    engine: &'a RustybuzzEngine,
+    engine: &'a RustybuzzEngine<'a>,
 }
 
 fn distribute_block_chain(

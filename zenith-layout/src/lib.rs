@@ -28,4 +28,4 @@ pub use ot_layout::{
     FeatureEntry, FeatureList, GLYPH_ALTERNATES_LIMITS, GlyphAlternates, list_glyph_alternates,
     list_layout_features,
 };
-pub use rustybuzz_engine::RustybuzzEngine;
+pub use rustybuzz_engine::{FontFaceStore, RustybuzzEngine};

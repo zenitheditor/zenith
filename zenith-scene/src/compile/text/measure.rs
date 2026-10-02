@@ -198,7 +198,7 @@ pub(in crate::compile) struct MeasureEnv<'a> {
     pub(in crate::compile) resolved: &'a BTreeMap<String, ResolvedToken>,
     pub(in crate::compile) style_map: &'a BTreeMap<&'a str, &'a Style>,
     pub(in crate::compile) fonts: &'a dyn FontProvider,
-    pub(in crate::compile) engine: &'a RustybuzzEngine,
+    pub(in crate::compile) engine: &'a RustybuzzEngine<'a>,
 }
 
 /// Measure a text node's NATURAL (unwrapped) content width + shaping metrics,

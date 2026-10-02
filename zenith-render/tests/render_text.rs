@@ -28,7 +28,7 @@ fn glyph_run_draws_pixels() {
         kerning_pairs: &[],
         letter_spacing_px: 0.0,
     };
-    let run = RustybuzzEngine::new()
+    let run = RustybuzzEngine::new(&FontFaceStore::new(&provider))
         .shape(&req, &provider)
         .expect("shaping must succeed");
 
@@ -104,7 +104,7 @@ fn glyph_run_deterministic_png() {
         kerning_pairs: &[],
         letter_spacing_px: 0.0,
     };
-    let run = RustybuzzEngine::new()
+    let run = RustybuzzEngine::new(&FontFaceStore::new(&provider))
         .shape(&req, &provider)
         .expect("shaping must succeed");
 
@@ -211,7 +211,7 @@ fn glyph_run_clipped_to_subpage_clip() {
         kerning_pairs: &[],
         letter_spacing_px: 0.0,
     };
-    let run = RustybuzzEngine::new()
+    let run = RustybuzzEngine::new(&FontFaceStore::new(&provider))
         .shape(&req, &provider)
         .expect("shaping must succeed");
 
@@ -290,7 +290,7 @@ fn glyph_run_with_stroke_renders_without_panic() {
         kerning_pairs: &[],
         letter_spacing_px: 0.0,
     };
-    let run = RustybuzzEngine::new()
+    let run = RustybuzzEngine::new(&FontFaceStore::new(&provider))
         .shape(&req, &provider)
         .expect("shaping must succeed");
 
@@ -371,7 +371,7 @@ fn glyph_run_without_stroke_is_byte_identical() {
         kerning_pairs: &[],
         letter_spacing_px: 0.0,
     };
-    let run = RustybuzzEngine::new()
+    let run = RustybuzzEngine::new(&FontFaceStore::new(&provider))
         .shape(&req, &provider)
         .expect("shaping must succeed");
 

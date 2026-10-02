@@ -8,7 +8,7 @@ use zenith_core::{
     DataContext, Diagnostic, Document, FontProvider, PropertyValue, Style, dim_to_px,
     resolve_tokens,
 };
-use zenith_layout::RustybuzzEngine;
+use zenith_layout::{FontFaceStore, RustybuzzEngine};
 
 use crate::ir::{Paint, Rect, Scene, SceneCommand};
 
@@ -359,7 +359,10 @@ pub(in crate::compile) fn compile_page_inner(
     // distribution is global, we keep the page-local behaviour deterministic by
     // discarding the pre-pass's own advisories on non-zero pages (they were
     // already surfaced on page 0). Page 0 keeps them.
-    let engine = RustybuzzEngine::new();
+    // One face store + engine per page compile. Each face parses at most once
+    // here, however many runs the page shapes.
+    let font_faces = FontFaceStore::new(fonts);
+    let engine = RustybuzzEngine::new(&font_faces);
     let mut chain_diags: Vec<Diagnostic> = Vec::new();
     let chains = resolve_chains_document(
         doc,

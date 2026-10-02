@@ -182,7 +182,7 @@ pub(in crate::compile) struct FootnoteZoneEnv<'a> {
     pub(in crate::compile) resolved: &'a BTreeMap<String, ResolvedToken>,
     pub(in crate::compile) style_map: &'a BTreeMap<&'a str, &'a Style>,
     pub(in crate::compile) fonts: &'a dyn FontProvider,
-    pub(in crate::compile) engine: &'a RustybuzzEngine,
+    pub(in crate::compile) engine: &'a RustybuzzEngine<'a>,
     pub(in crate::compile) chains: &'a ChainAssignments,
     pub(in crate::compile) anchors: &'a AnchorMap,
     pub(in crate::compile) field_ctx: &'a FieldCtx<'a>,

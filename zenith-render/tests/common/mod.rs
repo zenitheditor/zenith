@@ -17,7 +17,9 @@ use std::sync::Arc;
 pub use zenith_core::{
     AssetKind, BytesAssetProvider, BytesFontProvider, FontStyle, default_provider,
 };
-pub use zenith_layout::{RustybuzzEngine, ShapeRequest, TextDirection, TextLayoutEngine};
+pub use zenith_layout::{
+    FontFaceStore, RustybuzzEngine, ShapeRequest, TextDirection, TextLayoutEngine,
+};
 pub use zenith_render::{RasterBackend, RasterImage, TinySkiaBackend, render_image, render_png};
 pub use zenith_scene::{
     BlendMode, Color, FitMode, GradientPaint, GradientStop, ImageClip, Paint, Scene, SceneCommand,

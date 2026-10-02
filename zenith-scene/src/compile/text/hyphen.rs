@@ -39,7 +39,7 @@ pub(in crate::compile) struct HyphenationContext<'a> {
     /// break-word branch is independent of it, so a node that requests ONLY
     /// `overflow-wrap="break-word"` still gets a context (with `dict: None`).
     pub(in crate::compile) dict: Option<&'static Standard>,
-    pub(in crate::compile) engine: &'a RustybuzzEngine,
+    pub(in crate::compile) engine: &'a RustybuzzEngine<'a>,
     pub(in crate::compile) fonts: &'a dyn FontProvider,
     pub(in crate::compile) families: &'a [String],
     /// The hyphen glyph string shaped onto the head fragment.
@@ -275,7 +275,7 @@ pub(in crate::compile) fn flatten_lines_to_tokens(
 mod break_word_tests {
     use super::{HyphenationContext, try_break_word};
     use zenith_core::{FontProvider, FontStyle, default_provider};
-    use zenith_layout::{RustybuzzEngine, TextDirection};
+    use zenith_layout::{FontFaceStore, RustybuzzEngine, TextDirection};
 
     use super::super::ctx::{NodeShape, ShapeEnv};
     use super::super::pack::pack_lines_reporting;
@@ -322,7 +322,7 @@ mod break_word_tests {
     }
 
     fn ctx<'a>(
-        engine: &'a RustybuzzEngine,
+        engine: &'a RustybuzzEngine<'a>,
         fonts: &'a dyn FontProvider,
         families: &'a [String],
     ) -> HyphenationContext<'a> {
@@ -341,8 +341,9 @@ mod break_word_tests {
     /// at least one char, and head+tail char text reconstructs the original.
     #[test]
     fn splits_and_reconstructs_original_text() {
-        let engine = RustybuzzEngine::new();
         let provider = default_provider();
+        let store = FontFaceStore::new(&provider);
+        let engine = RustybuzzEngine::new(&store);
         let families = vec!["Noto Sans".to_owned()];
         let original = "https://very-long.example.com/some/deep/path";
         let word = shape_word(original, &engine, &provider);
@@ -369,8 +370,9 @@ mod break_word_tests {
     /// char) is split only on char boundaries — no panic, no lost/mojibake bytes.
     #[test]
     fn respects_multibyte_char_boundaries() {
-        let engine = RustybuzzEngine::new();
         let provider = default_provider();
+        let store = FontFaceStore::new(&provider);
+        let engine = RustybuzzEngine::new(&store);
         let families = vec!["Noto Sans".to_owned()];
         let original = "café—über—straße—long—compound—word";
         let word = shape_word(original, &engine, &provider);
@@ -392,8 +394,9 @@ mod break_word_tests {
     /// to keep the word whole (it overflows as today).
     #[test]
     fn returns_none_when_no_char_fits() {
-        let engine = RustybuzzEngine::new();
         let provider = default_provider();
+        let store = FontFaceStore::new(&provider);
+        let engine = RustybuzzEngine::new(&store);
         let families = vec!["Noto Sans".to_owned()];
         let word = shape_word("wide", &engine, &provider);
         let c = ctx(&engine, &provider, &families);
@@ -406,8 +409,9 @@ mod break_word_tests {
     /// A single-character token cannot be split (no useful interior boundary).
     #[test]
     fn single_char_token_is_not_split() {
-        let engine = RustybuzzEngine::new();
         let provider = default_provider();
+        let store = FontFaceStore::new(&provider);
+        let engine = RustybuzzEngine::new(&store);
         let families = vec!["Noto Sans".to_owned()];
         let word = shape_word("W", &engine, &provider);
         let c = ctx(&engine, &provider, &families);
@@ -420,8 +424,9 @@ mod break_word_tests {
     /// Only a token wider than the whole box may break (covered elsewhere).
     #[test]
     fn ordinary_word_wraps_whole_not_broken_into_remaining_space() {
-        let engine = RustybuzzEngine::new();
         let provider = default_provider();
+        let store = FontFaceStore::new(&provider);
+        let engine = RustybuzzEngine::new(&store);
         let families = vec!["Noto Sans".to_owned()];
         let c = ctx(&engine, &provider, &families);
 

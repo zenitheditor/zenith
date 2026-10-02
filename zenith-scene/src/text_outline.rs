@@ -238,7 +238,9 @@ pub fn collect_text_outline_paths(
 #[cfg(test)]
 mod tests {
     use zenith_core::{FontStyle, default_provider};
-    use zenith_layout::{RustybuzzEngine, ShapeRequest, TextDirection, TextLayoutEngine};
+    use zenith_layout::{
+        FontFaceStore, RustybuzzEngine, ShapeRequest, TextDirection, TextLayoutEngine,
+    };
 
     use super::*;
 
@@ -382,7 +384,8 @@ mod tests {
     }
 
     fn shape_sample_run(provider: &dyn FontProvider, text: &str) -> ZenithGlyphRun {
-        let engine = RustybuzzEngine::new();
+        let store = FontFaceStore::new(provider);
+        let engine = RustybuzzEngine::new(&store);
         let families = [String::from("Noto Sans")];
         engine
             .shape(

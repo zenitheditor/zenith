@@ -63,7 +63,7 @@ pub(super) fn resolve_property_color(
                         format!(
                             "node '{}' references token '{}' which resolved to a \
                              non-color value ({:?}); skipped",
-                            subject_id, token_id, &rt.value
+                            subject_id, token_id, rt.value
                         ),
                         None,
                         Some(subject_id.to_owned()),
