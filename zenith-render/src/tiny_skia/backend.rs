@@ -16,11 +16,12 @@ use zenith_scene::{
 };
 
 use super::commands::{DrawCtx, draw_command};
+use super::crop::{draw_ink_region, draw_region, ink_bbox};
 use super::filter::apply_filters;
 use super::mask::attenuate_by_mask;
 use super::paths::intersect_rects;
 use super::pixels::{f64_to_px, premultiplied_to_straight};
-use super::shadow::{composite_shadows, gaussian_blur_premul};
+use super::shadow::{composite_blur, composite_shadows};
 use crate::backend::{RasterBackend, RasterImage};
 use crate::error::RenderError;
 
@@ -378,7 +379,7 @@ impl RasterBackend for TinySkiaBackend {
                     {
                         let shadow_target =
                             current_target(&mut capture_stack, &mut layer_stack, &mut pixmap);
-                        composite_shadows(shadow_target, &ink, &shadows, width, height);
+                        composite_shadows(shadow_target, &ink, &shadows);
                     }
                     continue;
                 }
@@ -395,24 +396,15 @@ impl RasterBackend for TinySkiaBackend {
                     continue;
                 }
 
-                // Close the active blur capture: blur the ink in place, then
-                // composite it onto the target below this capture.
+                // Close the active blur capture: blur the ink, then composite
+                // it onto the target below this capture.
                 SceneCommand::EndBlur => {
                     if let Some(layer) = capture_stack.pop()
-                        && let (Some(mut ink), CaptureEffect::Blur(sigma)) =
-                            (layer.pm, layer.effect)
+                        && let (Some(ink), CaptureEffect::Blur(sigma)) = (layer.pm, layer.effect)
                     {
-                        gaussian_blur_premul(&mut ink, sigma);
                         let blur_target =
                             current_target(&mut capture_stack, &mut layer_stack, &mut pixmap);
-                        blur_target.draw_pixmap(
-                            0,
-                            0,
-                            ink.as_ref(),
-                            &PixmapPaint::default(),
-                            Transform::identity(),
-                            None,
-                        );
+                        composite_blur(blur_target, ink, sigma);
                     }
                     continue;
                 }
@@ -437,22 +429,19 @@ impl RasterBackend for TinySkiaBackend {
 
                 // Close the active filter capture: transform the captured ink
                 // in place, then composite it onto the target below this capture.
+                // A filter never changes a zero-alpha pixel or makes alpha zero,
+                // so the ink box is the same before and after the filter. Empty
+                // ink draws nothing.
                 SceneCommand::EndFilter => {
                     if let Some(layer) = capture_stack.pop()
                         && let (Some(mut ink), CaptureEffect::Filter(filters)) =
                             (layer.pm, layer.effect)
+                        && let Some(bbox) = ink_bbox(&ink)
                     {
                         apply_filters(&mut ink, &filters);
                         let filter_target =
                             current_target(&mut capture_stack, &mut layer_stack, &mut pixmap);
-                        filter_target.draw_pixmap(
-                            0,
-                            0,
-                            ink.as_ref(),
-                            &PixmapPaint::default(),
-                            Transform::identity(),
-                            None,
-                        );
+                        draw_region(filter_target, &ink, bbox, &PixmapPaint::default());
                     }
                     continue;
                 }
@@ -472,21 +461,17 @@ impl RasterBackend for TinySkiaBackend {
 
                 // Close the active mask capture: attenuate the captured ink by
                 // the coverage field, then composite it onto the target below.
+                // Attenuation keeps zero bytes zero, so only the ink box is
+                // masked and drawn. Empty ink draws nothing.
                 SceneCommand::EndMask => {
                     if let Some(layer) = capture_stack.pop()
                         && let (Some(mut ink), CaptureEffect::Mask(spec)) = (layer.pm, layer.effect)
+                        && let Some(bbox) = ink_bbox(&ink)
                     {
-                        attenuate_by_mask(&mut ink, &spec);
+                        attenuate_by_mask(&mut ink, &spec, bbox);
                         let target =
                             current_target(&mut capture_stack, &mut layer_stack, &mut pixmap);
-                        target.draw_pixmap(
-                            0,
-                            0,
-                            ink.as_ref(),
-                            &PixmapPaint::default(),
-                            Transform::identity(),
-                            None,
-                        );
+                        draw_region(target, &ink, bbox, &PixmapPaint::default());
                     }
                     continue;
                 }
@@ -521,18 +506,17 @@ impl RasterBackend for TinySkiaBackend {
                         let target_after_pop =
                             current_target(&mut capture_stack, &mut layer_stack, &mut pixmap);
                         match bm {
+                            // Transparent layer pixels leave the target unchanged,
+                            // so only the layer's ink box is drawn.
                             LayerBlend::SourceOver => {
-                                target_after_pop.draw_pixmap(
-                                    0,
-                                    0,
-                                    layer_pm.as_ref(),
+                                draw_ink_region(
+                                    target_after_pop,
+                                    &layer_pm,
                                     &PixmapPaint {
                                         opacity: op.clamp(0.0, 1.0),
                                         blend_mode: tiny_skia::BlendMode::SourceOver,
                                         quality: FilterQuality::Nearest,
                                     },
-                                    Transform::identity(),
-                                    None,
                                 );
                             }
                             LayerBlend::Raster(mode) => {

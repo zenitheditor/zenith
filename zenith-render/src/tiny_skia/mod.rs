@@ -8,13 +8,14 @@
 //! command-dispatch render loop live in [`backend`]; per-drawing-command
 //! rasterization lives in [`commands`] + the [`draw`] submodules. Self-contained
 //! helpers live in focused submodules: image decoding ([`raster`]), gradient
-//! shaders ([`gradient`]), drop-shadow blur/compositing ([`shadow`]),
-//! geometry/path helpers ([`paths`]), per-pixel color filters ([`filter`]),
-//! soft-mask attenuation ([`mask`]), and dimension/pixel-format conversions
-//! ([`pixels`]). Wiring only — no business logic in this module root.
+//! shaders ([`gradient`]), drop-shadow blur/compositing ([`shadow`]), effect
+//! crop regions ([`crop`]), geometry/path helpers ([`paths`]), per-pixel color
+//! filters ([`filter`]), soft-mask attenuation ([`mask`]), and
+//! dimension/pixel-format conversions ([`pixels`]). Wiring only — no business logic in this module root.
 
 mod backend;
 mod commands;
+mod crop;
 mod draw;
 mod filter;
 mod gradient;
