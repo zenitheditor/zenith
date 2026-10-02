@@ -14,6 +14,8 @@ use crate::ast::node::Node;
 use crate::diagnostics::Diagnostic;
 use crate::tokens::ResolvedToken;
 
+use super::visual::attach_visual_spans;
+
 use node::shared::{node_rotate_deg, pv_to_dim, resolve_axis};
 
 mod node;
@@ -65,6 +67,23 @@ pub(super) struct WalkPos {
 /// guard.  Pathologically deep trees can overflow the stack.  This is an
 /// accepted v0 limitation.
 pub(super) fn walk_node(
+    node: &Node,
+    ctx: WalkCtx,
+    seen_ids: &mut BTreeSet<String>,
+    referenced_token_ids: &mut BTreeSet<String>,
+    pos: WalkPos,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    let start = diagnostics.len();
+    walk_node_checks(node, ctx, seen_ids, referenced_token_ids, pos, diagnostics);
+    // Token-reference diagnostics are emitted without a position; anchor them
+    // to this node. Children already attached their own spans.
+    let (_, node_span) = node.id_and_span();
+    attach_visual_spans(diagnostics, start, node_span);
+}
+
+/// Body of [`walk_node`]: prologue advisories, per-kind dispatch, recursion.
+fn walk_node_checks(
     node: &Node,
     ctx: WalkCtx,
     seen_ids: &mut BTreeSet<String>,

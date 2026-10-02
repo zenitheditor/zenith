@@ -433,7 +433,7 @@ fn fill_raw_literal_produces_raw_visual_literal() {
 // ── Test 7: unknown node kind → node.unknown_kind (Warning) ──────────
 
 #[test]
-fn unknown_node_kind_produces_warning_not_error() {
+fn unknown_node_kind_is_warning_with_allowed_kinds() {
     let doc = doc_with(
         vec![],
         vec![minimal_page(
@@ -453,10 +453,9 @@ fn unknown_node_kind_produces_warning_not_error() {
         "codes: {:?}",
         codes(&report)
     );
-    // Must NOT be an error.
     assert!(
         !report.has_errors(),
-        "unknown_kind should be Warning, not Error. codes: {:?}",
+        "unknown_kind stays a Warning (library nodes). codes: {:?}",
         codes(&report)
     );
     let diag = report
@@ -465,6 +464,11 @@ fn unknown_node_kind_produces_warning_not_error() {
         .find(|d| d.code == "node.unknown_kind")
         .expect("should exist");
     assert_eq!(diag.severity, Severity::Warning);
+    assert!(
+        diag.message.contains("'sparkle'") && diag.message.contains("allowed values:"),
+        "message must name the kind and allowed kinds; got: {}",
+        diag.message
+    );
 }
 
 /// **Unknown node id participates in duplicate-id detection**: an unknown node
@@ -814,7 +818,7 @@ fn empty_document_produces_no_pages_error() {
 // ── Bonus: node with unknown property → node.unknown_property ─────────
 
 #[test]
-fn unknown_property_on_rect_produces_warning() {
+fn unknown_property_on_rect_produces_error() {
     let mut unknown_props = BTreeMap::new();
     unknown_props.insert(
         "magic-glow".to_owned(),
@@ -886,6 +890,6 @@ fn unknown_property_on_rect_produces_warning() {
         .iter()
         .find(|d| d.code == "node.unknown_property")
         .expect("should exist");
-    assert_eq!(diag.severity, Severity::Warning);
-    assert!(!report.has_errors());
+    assert_eq!(diag.severity, Severity::Error);
+    assert!(report.has_errors());
 }

@@ -17,7 +17,7 @@ use crate::parse::transform::helpers::node_span;
 ///   allow "layout.off_canvas"
 ///   allow "layout.off_canvas" "bg.glow" "bg.rim"
 ///   deny  "token.unused"
-///   warn  "node.unknown_property"
+///   warn  "image.upscale"
 /// }
 /// ```
 ///

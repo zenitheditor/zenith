@@ -4,6 +4,7 @@ use std::collections::BTreeSet;
 
 use crate::ast::node::FieldNode;
 use crate::diagnostics::Diagnostic;
+use crate::suggest::invalid_value_message;
 
 use crate::validate::check::nodes::WalkCtx;
 use crate::validate::check::nodes::node::shared::{
@@ -79,16 +80,15 @@ pub(in crate::validate::check) fn check_field(
         diagnostics,
     );
 
-    // Unknown field type → Warning (never a hard error; the field simply renders
-    // nothing at compile time).
+    // Unknown field type → Error.
     if !KNOWN_FIELD_TYPES.contains(&field.field_type.as_str()) {
-        diagnostics.push(Diagnostic::warning(
+        diagnostics.push(Diagnostic::error(
             "field.unknown_type",
-            format!(
-                "field '{}': unknown type '{}'; expected one of {}",
-                field.id,
-                field.field_type,
-                KNOWN_FIELD_TYPES.join(", ")
+            invalid_value_message(
+                &format!("field '{}'", field.id),
+                "type",
+                &field.field_type,
+                KNOWN_FIELD_TYPES,
             ),
             field.source_span,
             Some(field.id.clone()),

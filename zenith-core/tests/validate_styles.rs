@@ -135,7 +135,7 @@ fn code_node_unknown_style_reference() {
 
 /// An unknown property on a `code` node → `node.unknown_property` warning.
 #[test]
-fn code_node_unknown_property_warns() {
+fn code_node_unknown_property_errors() {
     let code = match minimal_code("code.one", None) {
         Node::Code(mut c) => {
             c.unknown_props.insert(
@@ -156,7 +156,7 @@ fn code_node_unknown_property_warns() {
         "expected node.unknown_property; codes: {:?}",
         codes(&report)
     );
-    assert!(!report.has_errors());
+    assert!(report.has_errors());
 }
 
 /// A style property that references a missing token → `token.unknown_reference` error.
@@ -237,7 +237,7 @@ fn style_gap_raw_literal_rejected() {
 
 /// Unknown style property children → `style.unknown_property` warning.
 #[test]
-fn style_unknown_property_warns() {
+fn style_unknown_property_is_error() {
     let style = Style {
         id: "style.s".to_owned(),
         properties: BTreeMap::new(),
@@ -257,7 +257,7 @@ fn style_unknown_property_warns() {
     let report = validate(&doc);
     assert!(
         has_code(&report, "style.unknown_property"),
-        "expected style.unknown_property warning; codes: {:?}",
+        "expected style.unknown_property error; codes: {:?}",
         codes(&report)
     );
     let diag = report
@@ -265,10 +265,10 @@ fn style_unknown_property_warns() {
         .iter()
         .find(|d| d.code == "style.unknown_property")
         .expect("must exist");
-    assert_eq!(diag.severity, Severity::Warning);
+    assert_eq!(diag.severity, Severity::Error);
     assert!(
-        !report.has_errors(),
-        "unknown prop must only warn, not error"
+        report.has_errors(),
+        "an unknown style prop must be a hard error"
     );
 }
 
@@ -395,7 +395,7 @@ fn library_duplicate_id_is_error() {
 }
 
 #[test]
-fn library_unknown_property_produces_warning() {
+fn library_unknown_property_is_error() {
     let mut unknown_props = BTreeMap::new();
     unknown_props.insert(
         "registry".to_owned(),
@@ -415,7 +415,7 @@ fn library_unknown_property_produces_warning() {
     let report = validate(&doc);
     assert!(
         has_code(&report, "library.unknown_property"),
-        "an unknown prop on a library must warn; got {:?}",
+        "an unknown prop on a library must be flagged; got {:?}",
         codes(&report)
     );
     let diag = report
@@ -423,8 +423,8 @@ fn library_unknown_property_produces_warning() {
         .iter()
         .find(|d| d.code == "library.unknown_property")
         .expect("should exist");
-    assert_eq!(diag.severity, Severity::Warning);
-    assert!(!report.has_errors());
+    assert_eq!(diag.severity, Severity::Error);
+    assert!(report.has_errors());
 }
 
 // ── provenance: cross-reference validation ────────────────────────────
@@ -552,7 +552,7 @@ fn provenance_duplicate_id_is_error() {
 }
 
 #[test]
-fn provenance_unknown_property_produces_warning() {
+fn provenance_unknown_property_is_error() {
     let mut unknown_props = BTreeMap::new();
     unknown_props.insert(
         "registry".to_owned(),
@@ -578,7 +578,7 @@ fn provenance_unknown_property_produces_warning() {
     let report = validate(&doc);
     assert!(
         has_code(&report, "provenance.unknown_property"),
-        "an unknown prop on an origin must warn; got {:?}",
+        "an unknown prop on an origin must be flagged; got {:?}",
         codes(&report)
     );
     let diag = report
@@ -586,9 +586,9 @@ fn provenance_unknown_property_produces_warning() {
         .iter()
         .find(|d| d.code == "provenance.unknown_property")
         .expect("should exist");
-    assert_eq!(diag.severity, Severity::Warning);
-    // The unknown-property warning is not itself an error; node + library resolve.
-    assert!(!report.has_errors());
+    assert_eq!(diag.severity, Severity::Error);
+    // Node and library resolve, so the unknown property is the only error.
+    assert!(report.has_errors());
 }
 
 #[test]

@@ -10,7 +10,7 @@ use crate::validate::check::nodes::WalkCtx;
 use crate::validate::check::nodes::node::shared::{
     check_dimension_geom, check_stroke_join_props, check_stroke_linecap_prop, check_style_ref,
 };
-use crate::validate::check::nodes::node::suggest::check_unknown_props;
+use crate::validate::check::nodes::node::suggest::{check_unknown_props, push_invalid_value};
 use crate::validate::check::register_id;
 use crate::validate::check::visual::{VisualExpect, check_visual_prop};
 
@@ -107,32 +107,30 @@ pub(in crate::validate::check) fn check_polygon(
     if let Some(fr) = &poly.fill_rule
         && !matches!(fr.as_str(), "nonzero" | "evenodd")
     {
-        diagnostics.push(Diagnostic::warning(
-            "node.unknown_property",
-            format!(
-                "polygon '{}': unrecognized fill-rule '{}' (version-relative; \
-                 allowed values are nonzero, evenodd)",
-                poly.id, fr
-            ),
-            poly.source_span,
+        push_invalid_value(
+            &format!("polygon '{}'", poly.id),
             Some(poly.id.clone()),
-        ));
+            "fill-rule",
+            fr,
+            &["nonzero", "evenodd"],
+            poly.source_span,
+            diagnostics,
+        );
     }
 
     // stroke-alignment: only "inside", "center", "outside" are valid.
     if let Some(sa) = &poly.stroke_alignment
         && !matches!(sa.as_str(), "inside" | "center" | "outside")
     {
-        diagnostics.push(Diagnostic::warning(
-            "node.unknown_property",
-            format!(
-                "polygon '{}': unrecognized stroke-alignment '{}' (version-relative; \
-                 allowed values are inside, center, outside)",
-                poly.id, sa
-            ),
-            poly.source_span,
+        push_invalid_value(
+            &format!("polygon '{}'", poly.id),
             Some(poly.id.clone()),
-        ));
+            "stroke-alignment",
+            sa,
+            &["inside", "center", "outside"],
+            poly.source_span,
+            diagnostics,
+        );
     }
 
     // Unknown properties.
@@ -237,16 +235,15 @@ pub(in crate::validate::check) fn check_polyline(
     if let Some(fr) = &poly.fill_rule
         && !matches!(fr.as_str(), "nonzero" | "evenodd")
     {
-        diagnostics.push(Diagnostic::warning(
-            "node.unknown_property",
-            format!(
-                "polyline '{}': unrecognized fill-rule '{}' (version-relative; \
-                 allowed values are nonzero, evenodd)",
-                poly.id, fr
-            ),
-            poly.source_span,
+        push_invalid_value(
+            &format!("polyline '{}'", poly.id),
             Some(poly.id.clone()),
-        ));
+            "fill-rule",
+            fr,
+            &["nonzero", "evenodd"],
+            poly.source_span,
+            diagnostics,
+        );
     }
 
     // Unknown properties.
@@ -370,31 +367,29 @@ pub(in crate::validate::check) fn check_path(
     if let Some(fr) = &path.fill_rule
         && !matches!(fr.as_str(), "nonzero" | "evenodd")
     {
-        diagnostics.push(Diagnostic::warning(
-            "node.unknown_property",
-            format!(
-                "path '{}': unrecognized fill-rule '{}' (version-relative; \
-                 allowed values are nonzero, evenodd)",
-                path.id, fr
-            ),
-            path.source_span,
+        push_invalid_value(
+            &format!("path '{}'", path.id),
             Some(path.id.clone()),
-        ));
+            "fill-rule",
+            fr,
+            &["nonzero", "evenodd"],
+            path.source_span,
+            diagnostics,
+        );
     }
 
     if let Some(sa) = &path.stroke_alignment
         && !matches!(sa.as_str(), "inside" | "center" | "outside")
     {
-        diagnostics.push(Diagnostic::warning(
-            "node.unknown_property",
-            format!(
-                "path '{}': unrecognized stroke-alignment '{}' (version-relative; \
-                 allowed values are inside, center, outside)",
-                path.id, sa
-            ),
-            path.source_span,
+        push_invalid_value(
+            &format!("path '{}'", path.id),
             Some(path.id.clone()),
-        ));
+            "stroke-alignment",
+            sa,
+            &["inside", "center", "outside"],
+            path.source_span,
+            diagnostics,
+        );
     }
     check_stroke_join_props(
         "path",
@@ -481,16 +476,15 @@ fn check_path_anchor(
     );
 
     if let Some(AnchorKind::Unknown(kind)) = &anchor.kind {
-        diagnostics.push(Diagnostic::warning(
-            "node.unknown_property",
-            format!(
-                "path '{path_id}': anchor[{idx}] has unrecognized kind '{}' \
-                 (version-relative; allowed values are corner, smooth, symmetric)",
-                kind
-            ),
-            source_span,
+        push_invalid_value(
+            &format!("path '{path_id}': anchor[{idx}]"),
             node_id.clone(),
-        ));
+            "kind",
+            kind,
+            &["corner", "smooth", "symmetric"],
+            source_span,
+            diagnostics,
+        );
     }
 
     if anchor.in_x.is_some() != anchor.in_y.is_some() {

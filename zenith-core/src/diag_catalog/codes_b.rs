@@ -33,17 +33,17 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
     ),
     info(
         "document.invalid_colorspace",
-        Severity::Warning,
+        Severity::Error,
         "Document `colorspace` value is unrecognized.",
     ),
     info(
         "document.invalid_page_parity_start",
-        Severity::Warning,
+        Severity::Error,
         "Document `page-parity-start` value is unrecognized.",
     ),
     info(
         "document.invalid_page_progression",
-        Severity::Warning,
+        Severity::Error,
         "Document `page-progression` value is unrecognized.",
     ),
     info(
@@ -58,7 +58,7 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
     ),
     info(
         "field.unknown_type",
-        Severity::Warning,
+        Severity::Error,
         "Field `type` is not a recognized field type.",
     ),
     info(
@@ -163,7 +163,7 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
     ),
     info(
         "image.invalid_fit",
-        Severity::Warning,
+        Severity::Error,
         "Image `fit` value is not recognized.",
     ),
     info(
@@ -209,7 +209,7 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
     ),
     info(
         "library.unknown_property",
-        Severity::Warning,
+        Severity::Error,
         "Unrecognized property on a `library` declaration.",
     ),
     info(
@@ -238,6 +238,11 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
         "A node geometry attribute uses an unknown unit.",
     ),
     info(
+        "node.invalid_value",
+        Severity::Error,
+        "A node property has a value outside its allowed set.",
+    ),
+    info(
         "node.locked",
         Severity::Error,
         "A transaction attempted to modify a locked node.",
@@ -250,12 +255,12 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
     info(
         "node.unknown_kind",
         Severity::Warning,
-        "A node kind is not recognized by this engine version.",
+        "A node kind is not recognized.",
     ),
     info(
         "node.unknown_property",
-        Severity::Warning,
-        "A node carries a property this engine does not recognize.",
+        Severity::Error,
+        "A node carries a property name this engine does not recognize.",
     ),
     info(
         "node.unsupported_child",
@@ -269,12 +274,12 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
     ),
     info(
         "page.invalid_line_jumps",
-        Severity::Warning,
+        Severity::Error,
         "Page `line-jumps` value is not recognized.",
     ),
     info(
         "page.invalid_parity",
-        Severity::Warning,
+        Severity::Error,
         "Page `parity` value is not recognized.",
     ),
     info(
@@ -284,7 +289,7 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
     ),
     info(
         "chart.invalid_bar_mode",
-        Severity::Warning,
+        Severity::Error,
         "Chart `bar-mode` is not `grouped` or `stacked`.",
     ),
     info(
@@ -294,32 +299,32 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
     ),
     info(
         "chart.invalid_legend_align",
-        Severity::Warning,
+        Severity::Error,
         "Chart `legend-align` is not one of `center`, `left`, or `right`.",
     ),
     info(
         "chart.invalid_legend_layout",
-        Severity::Warning,
+        Severity::Error,
         "Chart `legend-layout` is not `wrapped` or `list`.",
     ),
     info(
         "chart.invalid_legend_position",
-        Severity::Warning,
+        Severity::Error,
         "Chart `legend-position` is not one of `right`, `left`, `top`, or `bottom`.",
     ),
     info(
         "chart.invalid_orientation",
-        Severity::Warning,
+        Severity::Error,
         "Chart `orientation` is not `vertical` or `horizontal`.",
     ),
     info(
         "chart.invalid_point_placement",
-        Severity::Warning,
+        Severity::Error,
         "Chart `point-placement` is not `edge` or `center`.",
     ),
     info(
         "chart.invalid_value_labels",
-        Severity::Warning,
+        Severity::Error,
         "Chart `value-labels` is not one of `auto`, `none`, `top`, or `center`.",
     ),
     info(

@@ -106,7 +106,7 @@ fn transform_section_def(node: &KdlNode) -> Result<SectionDef, ParseError> {
 // Libraries
 // ---------------------------------------------------------------------------
 
-const LIBRARY_KNOWN_PROPS: &[&str] = &["id", "version", "hash"];
+pub(crate) const LIBRARY_KNOWN_PROPS: &[&str] = &["id", "version", "hash"];
 
 /// Transform the document-level `libraries { … }` block into a list of
 /// [`LibraryDef`]. Each `library id="…" version="…" hash="…"` is a leaf marker
@@ -207,7 +207,7 @@ fn transform_action_def(node: &KdlNode) -> Result<ActionDef, ParseError> {
 // Provenance
 // ---------------------------------------------------------------------------
 
-const PROVENANCE_KNOWN_PROPS: &[&str] = &["id", "node", "library", "item", "linked"];
+pub(crate) const PROVENANCE_KNOWN_PROPS: &[&str] = &["id", "node", "library", "item", "linked"];
 
 /// Transform the document-level `provenance { … }` block into a list of
 /// [`ProvenanceDef`]. Each `origin id="…" node="…" library="…" …` is a leaf

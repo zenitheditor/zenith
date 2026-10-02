@@ -12,7 +12,8 @@ use super::shared::{
     AnchorParentCtx, AnchorProps, TokenEnv, check_anchor, check_dimension_geom,
     check_font_features, check_optional_dim, check_spans, check_style_ref, is_valid_blend_mode,
 };
-use super::suggest::check_unknown_props;
+use super::suggest::{blend_mode_names, check_unknown_props, push_invalid_value};
+use crate::suggest::invalid_value_message;
 use crate::validate::check::nodes::WalkCtx;
 use crate::validate::check::register_id;
 use crate::validate::check::visual::{VisualExpect, check_block_styles, check_visual_prop};
@@ -37,16 +38,15 @@ pub(in crate::validate::check) fn check_text(
     if let Some(bm) = t.blend_mode.as_deref()
         && !is_valid_blend_mode(bm)
     {
-        diagnostics.push(Diagnostic::warning(
-            "node.unknown_property",
-            format!(
-                "text '{}': blend-mode '{bm}' is not a recognized value; valid values are: {}",
-                t.id,
-                crate::color::BlendMode::joined_kebab(", ")
-            ),
-            t.source_span,
+        push_invalid_value(
+            &format!("text '{}'", t.id),
             Some(t.id.clone()),
-        ));
+            "blend-mode",
+            bm,
+            &blend_mode_names(),
+            t.source_span,
+            diagnostics,
+        );
     }
     check_style_ref(
         &t.id,
@@ -282,30 +282,34 @@ pub(in crate::validate::check) fn check_text(
         diagnostics,
     );
 
-    // Validate content format value (warning, unknown → treated as plain).
+    // Validate content format value (an unrecognized value is an Error).
     if let Some(fmt) = t.content_format.as_deref()
         && !matches!(fmt, "markdown" | "plain")
     {
-        diagnostics.push(Diagnostic::warning(
+        diagnostics.push(Diagnostic::error(
             "text.invalid_format",
-            format!(
-                "text '{}': format '{fmt}' is not one of markdown/plain; treated as plain",
-                t.id
+            invalid_value_message(
+                &format!("text '{}'", t.id),
+                "format",
+                fmt,
+                &["markdown", "plain"],
             ),
             t.source_span,
             Some(t.id.clone()),
         ));
     }
 
-    // Validate v-align value (advisory warning, unknown → top at compile time).
+    // Validate v-align value (an unrecognized value is an Error).
     if let Some(va) = t.v_align.as_deref()
         && !matches!(va, "top" | "middle" | "bottom")
     {
-        diagnostics.push(Diagnostic::warning(
+        diagnostics.push(Diagnostic::error(
             "text.invalid_v_align",
-            format!(
-                "text '{}': v-align '{va}' is not one of top/middle/bottom",
-                t.id
+            invalid_value_message(
+                &format!("text '{}'", t.id),
+                "v-align",
+                va,
+                &["top", "middle", "bottom"],
             ),
             t.source_span,
             Some(t.id.clone()),
@@ -355,16 +359,15 @@ pub(in crate::validate::check) fn check_image(
     if let Some(bm) = img.blend_mode.as_deref()
         && !is_valid_blend_mode(bm)
     {
-        diagnostics.push(Diagnostic::warning(
-            "node.unknown_property",
-            format!(
-                "image '{}': blend-mode '{bm}' is not a recognized value; valid values are: {}",
-                img.id,
-                crate::color::BlendMode::joined_kebab(", ")
-            ),
-            img.source_span,
+        push_invalid_value(
+            &format!("image '{}'", img.id),
             Some(img.id.clone()),
-        ));
+            "blend-mode",
+            bm,
+            &blend_mode_names(),
+            img.source_span,
+            diagnostics,
+        );
     }
     check_style_ref(
         &img.id,
@@ -532,16 +535,17 @@ pub(in crate::validate::check) fn check_image(
         ));
     }
 
-    // Validate fit (version-relative; forward-compat warning).
+    // Validate fit (an unrecognized value is an Error).
     if let Some(fit) = &img.fit
         && !matches!(fit.as_str(), "contain" | "cover" | "stretch" | "none")
     {
-        diagnostics.push(Diagnostic::warning(
+        diagnostics.push(Diagnostic::error(
             "image.invalid_fit",
-            format!(
-                "image '{}': unrecognized fit '{}' (version-relative; allowed \
-                 values are contain, cover, stretch, none)",
-                img.id, fit
+            invalid_value_message(
+                &format!("image '{}'", img.id),
+                "fit",
+                fit,
+                &["contain", "cover", "stretch", "none"],
             ),
             img.source_span,
             Some(img.id.clone()),

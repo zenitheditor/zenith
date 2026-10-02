@@ -6,6 +6,7 @@ use crate::ast::value::{PropertyValue, dim_to_px};
 use crate::ast::{KerningPair, Span};
 use crate::diagnostics::Diagnostic;
 use crate::tokens::{ResolvedToken, ResolvedValue};
+use crate::validate::check::visual::{VisualExpect, raw_literal_hint, unknown_token_hint};
 
 pub(super) fn check_kerning_pairs(
     node_kind: &str,
@@ -51,6 +52,7 @@ pub(super) fn check_kerning_pairs(
             node_kind,
             node_id,
             &pair.by,
+            source_span,
             referenced_token_ids,
             resolved_tokens,
             diagnostics,
@@ -62,6 +64,7 @@ fn check_kerning_by(
     node_kind: &str,
     node_id: &str,
     by: &PropertyValue,
+    source_span: Option<Span>,
     referenced_token_ids: &mut BTreeSet<String>,
     resolved_tokens: &BTreeMap<String, ResolvedToken>,
     diagnostics: &mut Vec<Diagnostic>,
@@ -85,9 +88,10 @@ fn check_kerning_by(
                 diagnostics.push(Diagnostic::error(
                     "token.unknown_reference",
                     format!(
-                        "{node_kind} '{node_id}': kern-pair by references token '{token_id}' which does not exist or failed resolution"
+                        "{node_kind} '{node_id}': kern-pair by references token '{token_id}' which does not exist — {}",
+                        unknown_token_hint(token_id, VisualExpect::Dimension, resolved_tokens)
                     ),
-                    None,
+                    source_span,
                     Some(node_id.to_owned()),
                 ));
                 return;
@@ -127,9 +131,10 @@ fn check_kerning_by(
         PropertyValue::Literal(_) => diagnostics.push(Diagnostic::error(
             "token.raw_visual_literal",
             format!(
-                "{node_kind} '{node_id}': kern-pair by must be a dimension literal or dimension token"
+                "{node_kind} '{node_id}': kern-pair by has an unsupported literal value — {}",
+                raw_literal_hint(VisualExpect::Dimension, resolved_tokens)
             ),
-            None,
+            source_span,
             Some(node_id.to_owned()),
         )),
         PropertyValue::DataRef(_) => diagnostics.push(Diagnostic::error(

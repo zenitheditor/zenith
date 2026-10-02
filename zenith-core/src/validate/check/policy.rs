@@ -205,11 +205,11 @@ mod tests {
 
     #[test]
     fn warn_forces_warning_and_last_wins_over_deny() {
-        let input = vec![diag("node.unknown_property", Severity::Warning)];
+        let input = vec![diag("image.upscale", Severity::Warning)];
         // deny then warn → warn wins (last).
         let p = policy(vec![
-            (PolicyVerb::Deny, "node.unknown_property"),
-            (PolicyVerb::Warn, "node.unknown_property"),
+            (PolicyVerb::Deny, "image.upscale"),
+            (PolicyVerb::Warn, "image.upscale"),
         ]);
         let out = apply_policy(input, &p);
         assert_eq!(out[0].severity, Severity::Warning);

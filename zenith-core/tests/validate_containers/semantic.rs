@@ -90,7 +90,7 @@ fn group_live_symmetry_valid_no_warning() {
 }
 
 #[test]
-fn group_live_symmetry_invalid_count_warns() {
+fn group_live_symmetry_invalid_count_errors() {
     let src = r##"zenith version=1 {
   project id="proj.gsi" name="GSI"
   tokens format="zenith-token-v1" {
@@ -110,14 +110,14 @@ fn group_live_symmetry_invalid_count_warns() {
     let report = validate(&doc);
     assert!(
         has_code(&report, "group.invalid_symmetry"),
-        "symmetry-count=73 must warn; codes: {:?}",
+        "symmetry-count=73 must be flagged; codes: {:?}",
         codes(&report)
     );
-    assert!(!report.has_errors());
+    assert!(report.has_errors());
 }
 
 #[test]
-fn group_live_symmetry_missing_center_warns() {
+fn group_live_symmetry_missing_center_errors() {
     let src = r##"zenith version=1 {
   project id="proj.gsm" name="GSM"
   tokens format="zenith-token-v1" {
@@ -137,10 +137,10 @@ fn group_live_symmetry_missing_center_warns() {
     let report = validate(&doc);
     assert!(
         has_code(&report, "group.invalid_symmetry"),
-        "missing symmetry-cy must warn; codes: {:?}",
+        "missing symmetry-cy must be flagged; codes: {:?}",
         codes(&report)
     );
-    assert!(!report.has_errors());
+    assert!(report.has_errors());
 }
 
 /// `semantic-role` with any string value must not produce any `group.invalid_*`

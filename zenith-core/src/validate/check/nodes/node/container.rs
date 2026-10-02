@@ -10,6 +10,7 @@ use std::collections::BTreeSet;
 use crate::ast::node::{FrameNode, GroupNode, TableNode};
 use crate::ast::value::{Dimension, dim_to_px};
 use crate::diagnostics::Diagnostic;
+use crate::suggest::invalid_value_message;
 
 use super::shared::{
     AnchorParentCtx, AnchorProps, TokenEnv, VisualProps, check_anchor, check_optional_dim,
@@ -281,11 +282,13 @@ fn check_group_symmetry(g: &GroupNode, diagnostics: &mut Vec<Diagnostic>) {
     if let Some(mode) = g.symmetry_mode.as_deref()
         && !matches!(mode, "radial" | "mirror")
     {
-        diagnostics.push(Diagnostic::warning(
+        diagnostics.push(Diagnostic::error(
             "group.invalid_symmetry",
-            format!(
-                "group '{}': symmetry-mode must be 'radial' or 'mirror', got '{mode}'",
-                g.id
+            invalid_value_message(
+                &format!("group '{}'", g.id),
+                "symmetry-mode",
+                mode,
+                &["radial", "mirror"],
             ),
             g.source_span,
             Some(g.id.clone()),
@@ -296,7 +299,7 @@ fn check_group_symmetry(g: &GroupNode, diagnostics: &mut Vec<Diagnostic>) {
         return;
     };
     if count == 0 || count > 72 {
-        diagnostics.push(Diagnostic::warning(
+        diagnostics.push(Diagnostic::error(
             "group.invalid_symmetry",
             format!(
                 "group '{}': symmetry-count {count} is out of range 1..=72",
@@ -323,7 +326,7 @@ fn check_symmetry_center_dimension(
     diagnostics: &mut Vec<Diagnostic>,
 ) {
     let Some(value) = value else {
-        diagnostics.push(Diagnostic::warning(
+        diagnostics.push(Diagnostic::error(
             "group.invalid_symmetry",
             format!("group '{}': live symmetry requires {field}", g.id),
             g.source_span,
@@ -333,7 +336,7 @@ fn check_symmetry_center_dimension(
     };
 
     let Some(px) = dim_to_px(value.value, &value.unit) else {
-        diagnostics.push(Diagnostic::warning(
+        diagnostics.push(Diagnostic::error(
             "group.invalid_symmetry",
             format!("group '{}': {field} must use a px/pt dimension", g.id),
             g.source_span,
@@ -342,7 +345,7 @@ fn check_symmetry_center_dimension(
         return;
     };
     if !px.is_finite() {
-        diagnostics.push(Diagnostic::warning(
+        diagnostics.push(Diagnostic::error(
             "group.invalid_symmetry",
             format!("group '{}': {field} must resolve to a finite value", g.id),
             g.source_span,
@@ -360,7 +363,7 @@ fn check_symmetry_start_angle(
         return;
     };
     if !value.value.is_finite() {
-        diagnostics.push(Diagnostic::warning(
+        diagnostics.push(Diagnostic::error(
             "group.invalid_symmetry",
             format!("group '{}': symmetry-start-angle must be finite", g.id),
             g.source_span,
@@ -496,15 +499,17 @@ pub(in crate::validate::check) fn check_table(
         );
     }
 
-    // Enum-value checks (Warnings on unrecognized values, not errors).
+    // Enum-value checks (an unrecognized value is an Error).
     if let Some(ha) = t.h_align.as_deref()
         && !matches!(ha, "start" | "center" | "end")
     {
-        diagnostics.push(Diagnostic::warning(
+        diagnostics.push(Diagnostic::error(
             "table.invalid_h_align",
-            format!(
-                "table '{}': h-align '{ha}' is not one of start/center/end",
-                t.id
+            invalid_value_message(
+                &format!("table '{}'", t.id),
+                "h-align",
+                ha,
+                &["start", "center", "end"],
             ),
             t.source_span,
             Some(t.id.clone()),
@@ -513,11 +518,13 @@ pub(in crate::validate::check) fn check_table(
     if let Some(va) = t.v_align.as_deref()
         && !matches!(va, "top" | "middle" | "bottom")
     {
-        diagnostics.push(Diagnostic::warning(
+        diagnostics.push(Diagnostic::error(
             "table.invalid_v_align",
-            format!(
-                "table '{}': v-align '{va}' is not one of top/middle/bottom",
-                t.id
+            invalid_value_message(
+                &format!("table '{}'", t.id),
+                "v-align",
+                va,
+                &["top", "middle", "bottom"],
             ),
             t.source_span,
             Some(t.id.clone()),
@@ -526,11 +533,13 @@ pub(in crate::validate::check) fn check_table(
     if let Some(bc) = t.border_collapse.as_deref()
         && !matches!(bc, "separate" | "collapse")
     {
-        diagnostics.push(Diagnostic::warning(
+        diagnostics.push(Diagnostic::error(
             "table.invalid_border_collapse",
-            format!(
-                "table '{}': border-collapse '{bc}' is not one of separate/collapse",
-                t.id
+            invalid_value_message(
+                &format!("table '{}'", t.id),
+                "border-collapse",
+                bc,
+                &["separate", "collapse"],
             ),
             t.source_span,
             Some(t.id.clone()),
@@ -543,11 +552,13 @@ pub(in crate::validate::check) fn check_table(
             if let Some(ha) = cell.h_align.as_deref()
                 && !matches!(ha, "start" | "center" | "end")
             {
-                diagnostics.push(Diagnostic::warning(
+                diagnostics.push(Diagnostic::error(
                     "table.invalid_h_align",
-                    format!(
-                        "table '{}': cell h-align '{ha}' is not one of start/center/end",
-                        t.id
+                    invalid_value_message(
+                        &format!("table '{}'", t.id),
+                        "cell h-align",
+                        ha,
+                        &["start", "center", "end"],
                     ),
                     cell.source_span,
                     Some(t.id.clone()),
@@ -556,11 +567,13 @@ pub(in crate::validate::check) fn check_table(
             if let Some(va) = cell.v_align.as_deref()
                 && !matches!(va, "top" | "middle" | "bottom")
             {
-                diagnostics.push(Diagnostic::warning(
+                diagnostics.push(Diagnostic::error(
                     "table.invalid_v_align",
-                    format!(
-                        "table '{}': cell v-align '{va}' is not one of top/middle/bottom",
-                        t.id
+                    invalid_value_message(
+                        &format!("table '{}'", t.id),
+                        "cell v-align",
+                        va,
+                        &["top", "middle", "bottom"],
                     ),
                     cell.source_span,
                     Some(t.id.clone()),

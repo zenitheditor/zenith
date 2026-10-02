@@ -126,7 +126,7 @@ fn text_literal_font_size_min_dimension_is_raw_visual_literal() {
 // ── polygon: unknown fill-rule warns ──────────────────────────────────
 
 #[test]
-fn polygon_unknown_fill_rule_warns() {
+fn polygon_unknown_fill_rule_errors() {
     let doc = doc_with(
         vec![],
         vec![minimal_page(
@@ -153,23 +153,30 @@ fn polygon_unknown_fill_rule_warns() {
     );
     let report = validate(&doc);
     assert!(
-        has_code(&report, "node.unknown_property"),
-        "expected node.unknown_property warning for bad fill-rule; codes: {:?}",
+        has_code(&report, "node.invalid_value"),
+        "expected node.invalid_value error for bad fill-rule; codes: {:?}",
         codes(&report)
     );
     let diag = report
         .diagnostics
         .iter()
-        .find(|d| d.code == "node.unknown_property")
+        .find(|d| d.code == "node.invalid_value")
         .expect("must exist");
-    assert_eq!(diag.severity, Severity::Warning);
-    assert!(!report.has_errors());
+    assert_eq!(diag.severity, Severity::Error);
+    assert!(
+        diag.message.contains("fill-rule")
+            && diag.message.contains("'oddeven'")
+            && diag.message.contains("nonzero, evenodd"),
+        "message must name property, value, allowed values; got: {}",
+        diag.message
+    );
+    assert!(report.has_errors());
 }
 
 // ── polygon: invalid stroke-alignment warns; valid does not ───────────
 
 #[test]
-fn polygon_invalid_stroke_alignment_warns() {
+fn polygon_invalid_stroke_alignment_errors() {
     let doc = doc_with(
         vec![],
         vec![minimal_page(
@@ -198,15 +205,16 @@ fn polygon_invalid_stroke_alignment_warns() {
     let diag = report
         .diagnostics
         .iter()
-        .find(|d| d.code == "node.unknown_property")
-        .expect("expected node.unknown_property warning for bad stroke-alignment");
-    assert_eq!(diag.severity, Severity::Warning);
+        .find(|d| d.code == "node.invalid_value")
+        .expect("expected node.invalid_value error for bad stroke-alignment");
+    assert_eq!(diag.severity, Severity::Error);
     assert!(
-        diag.message.contains("stroke-alignment"),
-        "message must mention stroke-alignment; got: {}",
+        diag.message.contains("stroke-alignment")
+            && diag.message.contains("inside, center, outside"),
+        "message must mention stroke-alignment and allowed values; got: {}",
         diag.message
     );
-    assert!(!report.has_errors());
+    assert!(report.has_errors());
 }
 
 #[test]
@@ -238,9 +246,10 @@ fn polygon_valid_stroke_alignment_no_warn() {
         );
         let report = validate(&doc);
         assert!(
-            !report.diagnostics.iter().any(
-                |d| d.code == "node.unknown_property" && d.message.contains("stroke-alignment")
-            ),
+            !report
+                .diagnostics
+                .iter()
+                .any(|d| d.code == "node.invalid_value" && d.message.contains("stroke-alignment")),
             "valid stroke-alignment '{value}' must not warn; codes: {:?}",
             codes(&report)
         );

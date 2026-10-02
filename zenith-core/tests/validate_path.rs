@@ -51,7 +51,7 @@ fn valid_path_with_handles_has_no_validation_errors() {
 }
 
 #[test]
-fn path_invalid_stroke_linecap_warns() {
+fn path_invalid_stroke_linecap_is_invalid_value_error() {
     let doc = parse_doc(
         r##"path id="line.curve" stroke-linecap="triangle" {
         anchor x=(px)0 y=(px)0
@@ -60,10 +60,22 @@ fn path_invalid_stroke_linecap_warns() {
     );
 
     let report = validate(&doc);
+    let diag = report
+        .diagnostics
+        .iter()
+        .find(|d| d.code == "node.invalid_value")
+        .expect("invalid linecap diagnostic");
 
+    assert_eq!(diag.severity, Severity::Error);
     assert!(
-        has_code(&report, "node.unknown_property"),
-        "expected invalid linecap warning; got {:?}",
+        diag.message.contains("stroke-linecap")
+            && diag.message.contains("'triangle'")
+            && diag.message.contains("butt, round, square"),
+        "message must name property, value, allowed values; got {diag:?}"
+    );
+    assert!(
+        !has_code(&report, "node.unknown_property"),
+        "a bad enum value is not an unknown property; got {:?}",
         report.diagnostics
     );
 }
@@ -242,7 +254,7 @@ fn path_unknown_property_suggests_fill() {
 }
 
 #[test]
-fn unknown_anchor_kind_warns_without_parse_failure() {
+fn unknown_anchor_kind_is_invalid_value_without_parse_failure() {
     let doc = parse_doc(
         r##"path id="line.curve" {
         anchor x=(px)0 y=(px)0 kind="auto"
@@ -254,18 +266,20 @@ fn unknown_anchor_kind_warns_without_parse_failure() {
     let diag = report
         .diagnostics
         .iter()
-        .find(|d| d.code == "node.unknown_property")
+        .find(|d| d.code == "node.invalid_value")
         .expect("unknown anchor kind diagnostic");
 
-    assert_eq!(diag.severity, Severity::Warning);
+    assert_eq!(diag.severity, Severity::Error);
     assert!(
-        diag.message.contains("anchor[0]") && diag.message.contains("kind 'auto'"),
-        "expected anchor kind warning; got {diag:?}"
+        diag.message.contains("anchor[0]")
+            && diag.message.contains("kind 'auto'")
+            && diag.message.contains("corner, smooth, symmetric"),
+        "expected anchor kind error naming allowed values; got {diag:?}"
     );
 }
 
 #[test]
-fn unknown_path_stroke_linejoin_warns_without_parse_failure() {
+fn unknown_path_stroke_linejoin_is_invalid_value_without_parse_failure() {
     let doc = parse_doc(
         r##"path id="line.curve" stroke-linejoin="arced" {
         anchor x=(px)0 y=(px)0
@@ -277,11 +291,15 @@ fn unknown_path_stroke_linejoin_warns_without_parse_failure() {
     let diag = report
         .diagnostics
         .iter()
-        .find(|d| d.code == "node.unknown_property" && d.message.contains("stroke-linejoin"))
+        .find(|d| d.code == "node.invalid_value" && d.message.contains("stroke-linejoin"))
         .expect("unknown stroke-linejoin diagnostic");
 
-    assert_eq!(diag.severity, Severity::Warning);
-    assert!(!report.has_errors());
+    assert_eq!(diag.severity, Severity::Error);
+    assert!(
+        diag.message.contains("'arced'") && diag.message.contains("miter, round, bevel"),
+        "message must name the value and allowed values; got {diag:?}"
+    );
+    assert!(report.has_errors());
 }
 
 #[test]

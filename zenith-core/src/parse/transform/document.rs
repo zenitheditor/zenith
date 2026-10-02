@@ -29,3 +29,5 @@ pub(crate) use brand::transform_brand_contract;
 pub(crate) use entry::DOCUMENT_KNOWN_PROPS;
 pub use entry::transform;
 pub(crate) use policy::transform_diagnostic_policy;
+pub(crate) use structure::{LIBRARY_KNOWN_PROPS, PROVENANCE_KNOWN_PROPS};
+pub(crate) use variants::VARIANT_OVERRIDE_KNOWN_PROPS;

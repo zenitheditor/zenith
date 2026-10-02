@@ -225,7 +225,7 @@ fn table_cell_text_without_geometry_is_clean() {
 }
 
 #[test]
-fn table_cell_unknown_property_warns() {
+fn table_cell_unknown_property_errors() {
     // A cell with an unrecognized property produces node.unknown_property.
     let mut unknown_props = BTreeMap::new();
     unknown_props.insert(
@@ -262,14 +262,14 @@ fn table_cell_unknown_property_warns() {
     let report = validate(&doc);
     assert!(
         has_code(&report, "node.unknown_property"),
-        "cell with unknown property must warn node.unknown_property; got {:?}",
+        "cell with unknown property must error node.unknown_property; got {:?}",
         codes(&report)
     );
-    assert!(!report.has_errors());
+    assert!(report.has_errors());
 }
 
 #[test]
-fn table_row_unknown_property_warns() {
+fn table_row_unknown_property_errors() {
     // A row with an unrecognized property produces node.unknown_property.
     let mut row_unknown_props = BTreeMap::new();
     row_unknown_props.insert(
@@ -289,14 +289,14 @@ fn table_row_unknown_property_warns() {
     let report = validate(&doc);
     assert!(
         has_code(&report, "node.unknown_property"),
-        "row with unknown property must warn node.unknown_property; got {:?}",
+        "row with unknown property must error node.unknown_property; got {:?}",
         codes(&report)
     );
-    assert!(!report.has_errors());
+    assert!(report.has_errors());
 }
 
 #[test]
-fn table_column_unknown_property_warns() {
+fn table_column_unknown_property_errors() {
     // A column with an unrecognized property produces node.unknown_property.
     let mut col_unknown_props = BTreeMap::new();
     col_unknown_props.insert(
@@ -328,10 +328,10 @@ fn table_column_unknown_property_warns() {
     let report = validate(&doc);
     assert!(
         has_code(&report, "node.unknown_property"),
-        "column with unknown property must warn node.unknown_property; got {:?}",
+        "column with unknown property must error node.unknown_property; got {:?}",
         codes(&report)
     );
-    assert!(!report.has_errors());
+    assert!(report.has_errors());
 }
 
 #[test]

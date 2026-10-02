@@ -12,7 +12,7 @@ use common::*;
 // ── rect: "did you mean?" triplet ────────────────────────────────────
 
 /// A rect with a near-miss typo `fil` (one edit from `fill`) must produce a
-/// `node.unknown_property` warning whose message contains "did you mean 'fill'?".
+/// `node.unknown_property` error whose message contains "did you mean 'fill'?".
 #[test]
 fn rect_near_miss_unknown_prop_suggests_did_you_mean() {
     // Parse via KDL so the unknown-prop is actually stored in `unknown_props`.
@@ -34,14 +34,14 @@ fn rect_near_miss_unknown_prop_suggests_did_you_mean() {
     let doc = adapter.parse(src.as_bytes()).expect("parse must succeed");
     let report = validate(&doc);
 
-    // Must have the node.unknown_property warning.
+    // Must have the node.unknown_property error.
     assert!(
         has_code(&report, "node.unknown_property"),
         "near-miss typo must fire node.unknown_property; got: {:?}",
         codes(&report)
     );
 
-    // The warning message must contain the suggestion.
+    // The error message must contain the suggestion.
     let diag = report
         .diagnostics
         .iter()
@@ -52,11 +52,11 @@ fn rect_near_miss_unknown_prop_suggests_did_you_mean() {
         "message must contain \"did you mean 'fill'?\"; got: {:?}",
         diag.message
     );
-    assert_eq!(diag.severity, Severity::Warning);
+    assert_eq!(diag.severity, Severity::Error);
 }
 
 /// A rect with a completely unrelated unknown property (`quantum_flux`) must
-/// produce a `node.unknown_property` warning using the version-relative message,
+/// produce a `node.unknown_property` error using the `zenith schema` hint,
 /// NOT a "did you mean?" suggestion.
 #[test]
 fn rect_far_miss_unknown_prop_no_suggestion() {
@@ -77,7 +77,7 @@ fn rect_far_miss_unknown_prop_no_suggestion() {
     let doc = adapter.parse(src.as_bytes()).expect("parse must succeed");
     let report = validate(&doc);
 
-    // Must have the node.unknown_property warning.
+    // Must have the node.unknown_property error.
     assert!(
         has_code(&report, "node.unknown_property"),
         "far-miss unknown prop must fire node.unknown_property; got: {:?}",
@@ -95,13 +95,13 @@ fn rect_far_miss_unknown_prop_no_suggestion() {
         "far-miss message must NOT contain \"did you mean\"; got: {:?}",
         diag.message
     );
-    // Must still carry the version-relative note.
+    // Must point at `zenith schema` as the next action.
     assert!(
-        diag.message.contains("version-relative"),
-        "far-miss message must mention version-relative; got: {:?}",
+        diag.message.contains("zenith schema"),
+        "far-miss message must point at `zenith schema`; got: {:?}",
         diag.message
     );
-    assert_eq!(diag.severity, Severity::Warning);
+    assert_eq!(diag.severity, Severity::Error);
 }
 
 /// A correctly-spelled document (all props are recognised) must produce no
@@ -136,7 +136,7 @@ fn rect_correctly_spelled_props_no_unknown_property() {
 // ── ellipse: "did you mean?" triplet ─────────────────────────────────
 
 /// An ellipse with a near-miss typo `fil` (one edit from `fill`) must produce
-/// a `node.unknown_property` warning whose message contains "did you mean 'fill'?".
+/// a `node.unknown_property` error whose message contains "did you mean 'fill'?".
 #[test]
 fn ellipse_near_miss_unknown_prop_suggests_did_you_mean() {
     let src = r##"zenith version=1 {
@@ -173,11 +173,11 @@ fn ellipse_near_miss_unknown_prop_suggests_did_you_mean() {
         "message must contain \"did you mean 'fill'?\"; got: {:?}",
         diag.message
     );
-    assert_eq!(diag.severity, Severity::Warning);
+    assert_eq!(diag.severity, Severity::Error);
 }
 
 /// An ellipse with a completely unrelated unknown property (`quantum_flux`) must
-/// produce a `node.unknown_property` warning with NO "did you mean?" suggestion.
+/// produce a `node.unknown_property` error with NO "did you mean?" suggestion.
 #[test]
 fn ellipse_far_miss_unknown_prop_no_suggestion() {
     let src = r##"zenith version=1 {
@@ -214,11 +214,11 @@ fn ellipse_far_miss_unknown_prop_no_suggestion() {
         diag.message
     );
     assert!(
-        diag.message.contains("version-relative"),
-        "far-miss message must mention version-relative; got: {:?}",
+        diag.message.contains("zenith schema"),
+        "far-miss message must point at `zenith schema`; got: {:?}",
         diag.message
     );
-    assert_eq!(diag.severity, Severity::Warning);
+    assert_eq!(diag.severity, Severity::Error);
 }
 
 /// A correctly-spelled ellipse must produce no `node.unknown_property` diagnostic.
@@ -252,7 +252,7 @@ fn ellipse_correctly_spelled_props_no_unknown_property() {
 // ── text: "did you mean?" triplet ────────────────────────────────────
 
 /// A text node with the near-miss typo `alin` (one edit from `align`) must
-/// produce a `node.unknown_property` warning whose message contains "did you mean 'align'?".
+/// produce a `node.unknown_property` error whose message contains "did you mean 'align'?".
 #[test]
 fn text_near_miss_unknown_prop_suggests_did_you_mean() {
     let src = r##"zenith version=1 {
@@ -290,11 +290,11 @@ fn text_near_miss_unknown_prop_suggests_did_you_mean() {
         "message must contain \"did you mean 'align'?\"; got: {:?}",
         diag.message
     );
-    assert_eq!(diag.severity, Severity::Warning);
+    assert_eq!(diag.severity, Severity::Error);
 }
 
 /// A text node with a completely unrelated unknown property (`quantum_flux`) must
-/// produce a `node.unknown_property` warning with NO "did you mean?" suggestion.
+/// produce a `node.unknown_property` error with NO "did you mean?" suggestion.
 #[test]
 fn text_far_miss_unknown_prop_no_suggestion() {
     let src = r##"zenith version=1 {
@@ -333,11 +333,11 @@ fn text_far_miss_unknown_prop_no_suggestion() {
         diag.message
     );
     assert!(
-        diag.message.contains("version-relative"),
-        "far-miss message must mention version-relative; got: {:?}",
+        diag.message.contains("zenith schema"),
+        "far-miss message must point at `zenith schema`; got: {:?}",
         diag.message
     );
-    assert_eq!(diag.severity, Severity::Warning);
+    assert_eq!(diag.severity, Severity::Error);
 }
 
 /// A correctly-spelled text node must produce no `node.unknown_property` diagnostic.
@@ -372,7 +372,7 @@ fn text_correctly_spelled_props_no_unknown_property() {
 // ── group: "did you mean?" triplet ───────────────────────────────────
 
 /// A group with the near-miss typo `opacty` (one edit from `opacity`) must
-/// produce a `node.unknown_property` warning whose message contains "did you mean 'opacity'?".
+/// produce a `node.unknown_property` error whose message contains "did you mean 'opacity'?".
 #[test]
 fn group_near_miss_unknown_prop_suggests_did_you_mean() {
     let src = r##"zenith version=1 {
@@ -409,11 +409,11 @@ fn group_near_miss_unknown_prop_suggests_did_you_mean() {
         "message must contain \"did you mean 'opacity'?\"; got: {:?}",
         diag.message
     );
-    assert_eq!(diag.severity, Severity::Warning);
+    assert_eq!(diag.severity, Severity::Error);
 }
 
 /// A group with a completely unrelated unknown property (`quantum_flux`) must
-/// produce a `node.unknown_property` warning with NO "did you mean?" suggestion.
+/// produce a `node.unknown_property` error with NO "did you mean?" suggestion.
 #[test]
 fn group_far_miss_unknown_prop_no_suggestion() {
     let src = r##"zenith version=1 {
@@ -451,11 +451,11 @@ fn group_far_miss_unknown_prop_no_suggestion() {
         diag.message
     );
     assert!(
-        diag.message.contains("version-relative"),
-        "far-miss message must mention version-relative; got: {:?}",
+        diag.message.contains("zenith schema"),
+        "far-miss message must point at `zenith schema`; got: {:?}",
         diag.message
     );
-    assert_eq!(diag.severity, Severity::Warning);
+    assert_eq!(diag.severity, Severity::Error);
 }
 
 /// A correctly-spelled group must produce no `node.unknown_property` diagnostic.
@@ -489,7 +489,7 @@ fn group_correctly_spelled_props_no_unknown_property() {
 // ── connector: "did you mean?" triplet ───────────────────────────────
 
 /// A connector with the near-miss typo `frm` (one edit from `from`) must
-/// produce a `node.unknown_property` warning whose message contains "did you mean 'from'?".
+/// produce a `node.unknown_property` error whose message contains "did you mean 'from'?".
 #[test]
 fn connector_near_miss_unknown_prop_suggests_did_you_mean() {
     let src = r##"zenith version=1 {
@@ -527,11 +527,11 @@ fn connector_near_miss_unknown_prop_suggests_did_you_mean() {
         "message must contain \"did you mean 'from'?\"; got: {:?}",
         diag.message
     );
-    assert_eq!(diag.severity, Severity::Warning);
+    assert_eq!(diag.severity, Severity::Error);
 }
 
 /// A connector with a completely unrelated unknown property (`quantum_flux`) must
-/// produce a `node.unknown_property` warning with NO "did you mean?" suggestion.
+/// produce a `node.unknown_property` error with NO "did you mean?" suggestion.
 #[test]
 fn connector_far_miss_unknown_prop_no_suggestion() {
     let src = r##"zenith version=1 {
@@ -570,11 +570,11 @@ fn connector_far_miss_unknown_prop_no_suggestion() {
         diag.message
     );
     assert!(
-        diag.message.contains("version-relative"),
-        "far-miss message must mention version-relative; got: {:?}",
+        diag.message.contains("zenith schema"),
+        "far-miss message must point at `zenith schema`; got: {:?}",
         diag.message
     );
-    assert_eq!(diag.severity, Severity::Warning);
+    assert_eq!(diag.severity, Severity::Error);
 }
 
 /// A correctly-spelled connector must produce no `node.unknown_property` diagnostic.
@@ -609,7 +609,7 @@ fn connector_correctly_spelled_props_no_unknown_property() {
 // ── polygon: "did you mean?" triplet ─────────────────────────────────
 
 /// A polygon with the near-miss typo `fil` (one edit from `fill`) must
-/// produce a `node.unknown_property` warning whose message contains "did you mean 'fill'?".
+/// produce a `node.unknown_property` error whose message contains "did you mean 'fill'?".
 #[test]
 fn polygon_near_miss_unknown_prop_suggests_did_you_mean() {
     let src = r##"zenith version=1 {
@@ -650,11 +650,11 @@ fn polygon_near_miss_unknown_prop_suggests_did_you_mean() {
         "message must contain \"did you mean 'fill'?\"; got: {:?}",
         diag.message
     );
-    assert_eq!(diag.severity, Severity::Warning);
+    assert_eq!(diag.severity, Severity::Error);
 }
 
 /// A polygon with a completely unrelated unknown property (`quantum_flux`) must
-/// produce a `node.unknown_property` warning with NO "did you mean?" suggestion.
+/// produce a `node.unknown_property` error with NO "did you mean?" suggestion.
 #[test]
 fn polygon_far_miss_unknown_prop_no_suggestion() {
     let src = r##"zenith version=1 {
@@ -695,11 +695,11 @@ fn polygon_far_miss_unknown_prop_no_suggestion() {
         diag.message
     );
     assert!(
-        diag.message.contains("version-relative"),
-        "far-miss message must mention version-relative; got: {:?}",
+        diag.message.contains("zenith schema"),
+        "far-miss message must point at `zenith schema`; got: {:?}",
         diag.message
     );
-    assert_eq!(diag.severity, Severity::Warning);
+    assert_eq!(diag.severity, Severity::Error);
 }
 
 /// A correctly-spelled polygon must produce no `node.unknown_property` diagnostic.
@@ -737,7 +737,7 @@ fn polygon_correctly_spelled_props_no_unknown_property() {
 // ── pattern: "did you mean?" triplet ─────────────────────────────────
 
 /// A pattern with the near-miss typo `spacng` (one edit from `spacing`) must
-/// produce a `node.unknown_property` warning whose message contains "did you mean 'spacing'?".
+/// produce a `node.unknown_property` error whose message contains "did you mean 'spacing'?".
 #[test]
 fn pattern_near_miss_unknown_prop_suggests_did_you_mean() {
     let src = r##"zenith version=1 {
@@ -776,11 +776,11 @@ fn pattern_near_miss_unknown_prop_suggests_did_you_mean() {
         "message must contain \"did you mean 'spacing'?\"; got: {:?}",
         diag.message
     );
-    assert_eq!(diag.severity, Severity::Warning);
+    assert_eq!(diag.severity, Severity::Error);
 }
 
 /// A pattern with a completely unrelated unknown property (`quantum_flux`) must
-/// produce a `node.unknown_property` warning with NO "did you mean?" suggestion.
+/// produce a `node.unknown_property` error with NO "did you mean?" suggestion.
 #[test]
 fn pattern_far_miss_unknown_prop_no_suggestion() {
     let src = r##"zenith version=1 {
@@ -820,11 +820,11 @@ fn pattern_far_miss_unknown_prop_no_suggestion() {
         diag.message
     );
     assert!(
-        diag.message.contains("version-relative"),
-        "far-miss message must mention version-relative; got: {:?}",
+        diag.message.contains("zenith schema"),
+        "far-miss message must point at `zenith schema`; got: {:?}",
         diag.message
     );
-    assert_eq!(diag.severity, Severity::Warning);
+    assert_eq!(diag.severity, Severity::Error);
 }
 
 /// A correctly-spelled pattern must produce no `node.unknown_property` diagnostic.

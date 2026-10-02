@@ -18,6 +18,7 @@ pub mod format;
 pub mod markdown;
 pub mod parse;
 pub mod schema;
+mod suggest;
 pub mod theme;
 pub mod tokens;
 pub mod util;

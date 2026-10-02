@@ -20,9 +20,8 @@ use zenith_core::{
 
 // ── Fixture ─────────────────────────────────────────────────────────────────
 
-/// A document with one unknown property → `node.unknown_property` (Warning by
-/// default) and one unused token → `token.unused` (Advisory by default). Both
-/// are non-Error, so policy can move them around.
+/// A document with one unused token → `token.unused` (Advisory by default).
+/// It is non-Error, so policy can move it around.
 const DOC: &str = r##"zenith version=1 {
   project id="proj.p" name="Policy"
   tokens format="zenith-token-v1" {
@@ -31,7 +30,7 @@ const DOC: &str = r##"zenith version=1 {
   styles {}
   document id="doc.p" title="Policy" {
     page id="page.p" w=(px)100 h=(px)100 {
-      rect id="r.one" x=(px)0 y=(px)0 w=(px)10 h=(px)10 future-prop="x"
+      rect id="r.one" x=(px)0 y=(px)0 w=(px)10 h=(px)10
     }
   }
 }

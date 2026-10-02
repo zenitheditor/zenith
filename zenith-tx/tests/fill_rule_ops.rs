@@ -105,7 +105,7 @@ fn set_fill_rule_invalid_value_rejected_at_tx_boundary() {
             .diagnostics
             .iter()
             .any(|d| d.code == "node.unknown_property"),
-        "invalid fill-rule should be rejected by tx before core warning; got: {:?}",
+        "invalid fill-rule should be rejected by tx before core validation; got: {:?}",
         result.diagnostics
     );
     assert_eq!(result.source_after, result.source_before);

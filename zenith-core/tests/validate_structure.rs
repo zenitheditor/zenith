@@ -429,7 +429,7 @@ fn section_duplicate_start_page_is_error() {
 }
 
 #[test]
-fn section_invalid_folio_style_is_warning() {
+fn section_invalid_folio_style_is_error() {
     let page = minimal_page("p1", vec![]);
     let mut sec = minimal_section("sec.bad", "p1");
     sec.folio_style = Some("arabic".to_owned()); // unrecognized
@@ -437,13 +437,12 @@ fn section_invalid_folio_style_is_warning() {
     let report = validate(&doc);
     assert!(
         has_code(&report, "section.invalid_folio_style"),
-        "an unknown folio-style must be a Warning; got {:?}",
+        "an unknown folio-style must be flagged; got {:?}",
         codes(&report)
     );
-    // A Warning must NOT be counted as an error.
     assert!(
-        !report.has_errors(),
-        "section.invalid_folio_style must not be a hard error; got {:?}",
+        report.has_errors(),
+        "section.invalid_folio_style must be a hard error; got {:?}",
         codes(&report)
     );
 }

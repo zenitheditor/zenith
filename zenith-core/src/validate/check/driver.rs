@@ -16,6 +16,7 @@ use crate::ast::style::Style;
 use crate::ast::value::{PropertyValue, Unit, dim_to_px};
 use crate::color::parse_rgb;
 use crate::diagnostics::Diagnostic;
+use crate::suggest::invalid_value_message;
 use crate::tokens::{ResolvedToken, ResolvedValue};
 
 use super::brand::check_brand_contract;
@@ -31,7 +32,7 @@ use super::recipes::check_recipes;
 use super::report::ValidationReport;
 use super::unsupported::check_unsupported_children;
 use super::variants::check_variants;
-use super::visual::{VisualExpect, check_block_styles, check_visual_prop};
+use super::visual::{VisualExpect, attach_visual_spans, check_block_styles, check_visual_prop};
 use super::{fold, margin, safezone};
 
 mod ports;
@@ -90,20 +91,14 @@ pub fn validate_with_policy(
 
     // ── Document color space ──────────────────────────────────────────────
     // `colorspace` is informational export metadata; it does not affect PNG
-    // output. Only "srgb" and "cmyk" are recognized; any other value is a
-    // Warning (forward-compatible — never a hard error).
+    // output. Only "srgb" and "cmyk" are recognized; any other value is an Error.
     if let Some(cs) = &doc.colorspace
         && cs != "srgb"
         && cs != "cmyk"
     {
-        diagnostics.push(Diagnostic::warning(
+        diagnostics.push(Diagnostic::error(
             "document.invalid_colorspace",
-            format!(
-                "document colorspace '{}' is unrecognized; expected \"srgb\" or \
-                 \"cmyk\" (this attribute is export metadata and does not change \
-                 PNG output)",
-                cs
-            ),
+            invalid_value_message("document", "colorspace", cs, &["srgb", "cmyk"]),
             None,
             None,
         ));
@@ -112,19 +107,14 @@ pub fn validate_with_policy(
     // ── Document page-progression ─────────────────────────────────────────
     // `page_progression` is export metadata; it does not affect page render
     // order or PNG output. Only "ltr" and "rtl" are recognized; any other value
-    // is a Warning (forward-compatible — never a hard error).
+    // is an Error.
     if let Some(pp) = &doc.page_progression
         && pp != "ltr"
         && pp != "rtl"
     {
-        diagnostics.push(Diagnostic::warning(
+        diagnostics.push(Diagnostic::error(
             "document.invalid_page_progression",
-            format!(
-                "document page-progression '{}' is unrecognized; expected \"ltr\" or \
-                 \"rtl\" (this attribute is export metadata and does not change \
-                 page order or PNG output)",
-                pp
-            ),
+            invalid_value_message("document", "page-progression", pp, &["ltr", "rtl"]),
             None,
             None,
         ));
@@ -133,19 +123,14 @@ pub fn validate_with_policy(
     // ── Document page-parity-start ────────────────────────────────────────
     // `page_parity_start` selects whether page 1 is a recto (default) or a verso.
     // Only "recto" and "verso" (case-insensitive) are recognized; any other value
-    // is a Warning (forward-compatible — never a hard error) and falls back to the
-    // default parity.
+    // is an Error.
     if let Some(pps) = &doc.page_parity_start
         && !pps.eq_ignore_ascii_case("recto")
         && !pps.eq_ignore_ascii_case("verso")
     {
-        diagnostics.push(Diagnostic::warning(
+        diagnostics.push(Diagnostic::error(
             "document.invalid_page_parity_start",
-            format!(
-                "document page-parity-start '{}' is unrecognized; expected \"recto\" \
-                 or \"verso\" (falling back to the default where page 1 is a recto)",
-                pps
-            ),
+            invalid_value_message("document", "page-parity-start", pps, &["recto", "verso"]),
             None,
             None,
         ));
@@ -465,19 +450,19 @@ pub fn validate_with_policy(
         }
 
         // `folio_style`, if present, must be one of the recognized styles →
-        // Warning (forward-compat: an unknown style value is preserved verbatim
-        // rather than rejected, so future styles don't break old validators).
+        // Error.
         if let Some(style) = &section.folio_style
             && style != "decimal"
             && style != "lower-roman"
             && style != "upper-roman"
         {
-            diagnostics.push(Diagnostic::warning(
+            diagnostics.push(Diagnostic::error(
                 "section.invalid_folio_style",
-                format!(
-                    "section '{}': folio-style '{}' is unrecognized; \
-                     expected \"decimal\", \"lower-roman\", or \"upper-roman\"",
-                    section.id, style
+                invalid_value_message(
+                    &format!("section '{}'", section.id),
+                    "folio-style",
+                    style,
+                    &["decimal", "lower-roman", "upper-roman"],
                 ),
                 section.source_span,
                 Some(section.id.clone()),
@@ -554,6 +539,7 @@ pub fn validate_with_policy(
     for (page_idx0, page) in doc.body.pages.iter().enumerate() {
         let page_index_1based = page_idx0 + 1;
         register_id(&page.id, &mut seen_ids, &mut diagnostics);
+        let block_start = diagnostics.len();
         check_block_styles(
             &page.id,
             &page.block_styles,
@@ -561,22 +547,22 @@ pub fn validate_with_policy(
             resolved_tokens,
             &mut diagnostics,
         );
+        attach_visual_spans(&mut diagnostics, block_start, page.source_span);
 
         // ── Per-page parity override validity ─────────────────────────────
         // `parity` forces this page's recto/verso. Only "recto"/"verso"
-        // (case-insensitive) are recognized; any other value is a Warning
-        // (forward-compatible — never a hard error) and falls back to the derived
-        // parity (an invalid value resolves to recto, see `Document::page_is_recto`).
+        // (case-insensitive) are recognized; any other value is an Error.
         if let Some(p) = &page.parity
             && !p.eq_ignore_ascii_case("recto")
             && !p.eq_ignore_ascii_case("verso")
         {
-            diagnostics.push(Diagnostic::warning(
+            diagnostics.push(Diagnostic::error(
                 "page.invalid_parity",
-                format!(
-                    "page '{}': parity '{}' is unrecognized; expected \"recto\" or \
-                     \"verso\" (falling back to the derived page parity)",
-                    page.id, p
+                invalid_value_message(
+                    &format!("page '{}'", page.id),
+                    "parity",
+                    p,
+                    &["recto", "verso"],
                 ),
                 page.source_span,
                 Some(page.id.clone()),
@@ -585,19 +571,19 @@ pub fn validate_with_policy(
 
         // ── Per-page line-jump style validity ─────────────────────────────
         // `line-jumps` selects how connector-vs-connector crossings hop. Only
-        // "none"/"arc"/"gap" are recognized; any other value is a Warning
-        // (forward-compatible — never a hard error) and renders as if absent
-        // (no hops).
+        // "none"/"arc"/"gap" are recognized; any other value is an Error.
         if let Some(lj) = &page.line_jumps
             && lj != "none"
             && lj != "arc"
             && lj != "gap"
         {
-            diagnostics.push(Diagnostic::warning(
+            diagnostics.push(Diagnostic::error(
                 "page.invalid_line_jumps",
-                format!(
-                    "page '{}': line-jumps '{}' is not one of none/arc/gap",
-                    page.id, lj
+                invalid_value_message(
+                    &format!("page '{}'", page.id),
+                    "line-jumps",
+                    lj,
+                    &["none", "arc", "gap"],
                 ),
                 page.source_span,
                 Some(page.id.clone()),
@@ -712,6 +698,7 @@ pub fn validate_with_policy(
 
         // ── Page background token: validate type/existence and record the
         //    reference so it is not falsely reported as an unused token.
+        let bg_start = diagnostics.len();
         check_visual_prop(
             &page.id,
             "background",
@@ -721,6 +708,7 @@ pub fn validate_with_policy(
             resolved_tokens,
             &mut diagnostics,
         );
+        attach_visual_spans(&mut diagnostics, bg_start, page.source_span);
 
         // ── Resolve page dimensions to px for off_canvas checks ──────────
         // If either dimension is unresolvable (e.g. Pct/Deg unit — already

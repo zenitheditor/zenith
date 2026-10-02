@@ -240,7 +240,7 @@ fn diagnostics_block_round_trips_and_is_idempotent() {
   diagnostics {
     allow "layout.off_canvas" "bg.glow" "bg.rim"
     deny "token.unused"
-    warn "node.unknown_property"
+    warn "image.upscale"
   }
   document id="doc.rt" title="RT" {
     page id="page.1" w=(px)100 h=(px)100 {

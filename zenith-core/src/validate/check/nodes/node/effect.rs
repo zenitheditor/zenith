@@ -4,6 +4,7 @@ use std::collections::BTreeSet;
 
 use crate::ast::node::{LightNode, MeshNode};
 use crate::diagnostics::Diagnostic;
+use crate::suggest::invalid_value_message;
 use crate::validate::check::nodes::WalkCtx;
 use crate::validate::check::register_id;
 use crate::validate::check::visual::{VisualExpect, check_visual_prop};
@@ -67,11 +68,13 @@ pub(in crate::validate::check) fn check_light(
     if let Some(kind) = &l.kind
         && !matches!(kind.as_str(), "ambient" | "glow" | "key" | "rim")
     {
-        diagnostics.push(Diagnostic::warning(
+        diagnostics.push(Diagnostic::error(
             "light.unknown_kind",
-            format!(
-                "light '{}': kind '{}' is not recognized; expected ambient, glow, key, or rim",
-                l.id, kind
+            invalid_value_message(
+                &format!("light '{}'", l.id),
+                "kind",
+                kind,
+                &["ambient", "glow", "key", "rim"],
             ),
             l.source_span,
             Some(l.id.clone()),
@@ -207,11 +210,13 @@ pub(in crate::validate::check) fn check_mesh(
     if let Some(kind) = &m.kind
         && !matches!(kind.as_str(), "orthographic" | "perspective")
     {
-        diagnostics.push(Diagnostic::warning(
+        diagnostics.push(Diagnostic::error(
             "mesh.unknown_kind",
-            format!(
-                "mesh '{}': kind '{}' is not recognized; expected orthographic or perspective",
-                m.id, kind
+            invalid_value_message(
+                &format!("mesh '{}'", m.id),
+                "kind",
+                kind,
+                &["orthographic", "perspective"],
             ),
             m.source_span,
             Some(m.id.clone()),

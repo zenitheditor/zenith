@@ -331,6 +331,8 @@ pub(super) fn kdl_value_to_unknown_value(v: &KdlValue) -> UnknownValue {
 /// edit-distance candidates without duplicating the per-kind arrays. Returns
 /// `&[]` for kinds that either have no fixed prop list or are not recognised.
 /// The kind strings match the KDL node-name strings (lowercase, no namespace).
+/// Document-level blocks are included: `asset`, `library`, `provenance`, and
+/// the variant `override`.
 pub(crate) fn known_props_for_kind(kind: &str) -> &'static [&'static str] {
     // Import the per-submodule consts here at the point of use.
     use super::chart::CHART_KNOWN_PROPS;
@@ -350,7 +352,16 @@ pub(crate) fn known_props_for_kind(kind: &str) -> &'static [&'static str] {
         TOC_KNOWN_PROPS,
     };
 
+    use super::document::{
+        ASSET_KNOWN_PROPS, LIBRARY_KNOWN_PROPS, PROVENANCE_KNOWN_PROPS,
+        VARIANT_OVERRIDE_KNOWN_PROPS,
+    };
+
     match kind {
+        "asset" => ASSET_KNOWN_PROPS,
+        "library" => LIBRARY_KNOWN_PROPS,
+        "provenance" => PROVENANCE_KNOWN_PROPS,
+        "override" => VARIANT_OVERRIDE_KNOWN_PROPS,
         "rect" => RECT_KNOWN_PROPS,
         "ellipse" => ELLIPSE_KNOWN_PROPS,
         "image" => IMAGE_KNOWN_PROPS,

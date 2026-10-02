@@ -21,6 +21,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use crate::ast::document::Document;
 use crate::ast::value::dim_to_px;
 use crate::diagnostics::Diagnostic;
+use crate::parse::transform::known_props_for_kind;
+use crate::suggest::unknown_property_message;
 
 /// Validate the `variants` block of `doc`.
 ///
@@ -162,13 +164,14 @@ pub(in crate::validate::check) fn check_variants(
                         variant.id, ov.node, prop_name
                     )
                 } else {
-                    format!(
-                        "variant '{}': override for node '{}' has unknown property '{}'; \
-                         recognized override properties are: node, visible, text, fill, x, y, w, h",
-                        variant.id, ov.node, prop_name
+                    unknown_property_message(
+                        &format!("variant '{}': override for node '{}'", variant.id, ov.node),
+                        "override",
+                        prop_name,
+                        known_props_for_kind("override"),
                     )
                 };
-                diagnostics.push(Diagnostic::warning(
+                diagnostics.push(Diagnostic::error(
                     "variant.override_unknown_property",
                     hint,
                     ov.source_span,

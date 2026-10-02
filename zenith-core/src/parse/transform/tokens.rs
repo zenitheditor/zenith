@@ -365,7 +365,7 @@ pub(super) fn transform_styles(node: &KdlNode) -> Result<StyleBlock, ParseError>
                                 properties.insert(canonical.to_owned(), pv);
                             }
                         } else {
-                            // Unrecognized property: preserve for validator warnings.
+                            // Unrecognized property: preserve for the validator error.
                             let raw = prop_node
                                 .entries()
                                 .iter()

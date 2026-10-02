@@ -8,6 +8,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use crate::ast::STYLE_RECOGNIZED_KEYS;
 use crate::ast::asset::{AssetDecl, AssetKind};
 use crate::ast::document::ImportDecl;
 use crate::ast::library::LibraryDef;
@@ -15,9 +16,11 @@ use crate::ast::provenance::ProvenanceDef;
 use crate::ast::style::StyleBlock;
 use crate::ast::value::PropertyValue;
 use crate::diagnostics::Diagnostic;
+use crate::parse::transform::known_props_for_kind;
+use crate::suggest::unknown_property_message;
 use crate::tokens::ResolvedToken;
 
-use super::visual::{VisualExpect, check_visual_prop};
+use super::visual::{VisualExpect, attach_visual_spans, check_visual_prop};
 
 /// Recursively collect the LOCAL ids of every id-bearing node in `children`
 /// (descending into `group`/`frame`/`instance` containers) into `out`.
@@ -241,7 +244,7 @@ pub(in crate::validate::check) fn register_id(
 /// Validate a single [`AssetDecl`] beyond ID uniqueness:
 /// - unknown kind → `asset.invalid_kind` (Error)
 /// - unsafe src path → `asset.invalid_src` (Error)
-/// - unknown properties → `asset.unknown_property` (Warning)
+/// - unknown properties → `asset.unknown_property` (Error)
 pub(in crate::validate::check) fn validate_asset_decl(
     decl: &AssetDecl,
     diagnostics: &mut Vec<Diagnostic>,
@@ -298,12 +301,13 @@ pub(in crate::validate::check) fn validate_asset_decl(
 
     // ── Unknown properties ────────────────────────────────────────────────
     for prop_name in decl.unknown_props.keys() {
-        diagnostics.push(Diagnostic::warning(
+        diagnostics.push(Diagnostic::error(
             "asset.unknown_property",
-            format!(
-                "asset '{}': unknown property '{}' (version-relative; \
-                 may be valid in a later schema version)",
-                decl.id, prop_name
+            unknown_property_message(
+                &format!("asset '{}'", decl.id),
+                "asset",
+                prop_name,
+                known_props_for_kind("asset"),
             ),
             decl.source_span,
             Some(decl.id.clone()),
@@ -312,7 +316,7 @@ pub(in crate::validate::check) fn validate_asset_decl(
 }
 
 /// Validate a single [`LibraryDef`] beyond ID uniqueness:
-/// - unknown properties → `library.unknown_property` (Warning)
+/// - unknown properties → `library.unknown_property` (Error)
 ///
 /// `version`/`hash` are free-form strings in v0 (a lockfile/external tool owns
 /// their format), so no format enforcement is performed here.
@@ -321,12 +325,13 @@ pub(in crate::validate::check) fn validate_library_decl(
     diagnostics: &mut Vec<Diagnostic>,
 ) {
     for prop_name in decl.unknown_props.keys() {
-        diagnostics.push(Diagnostic::warning(
+        diagnostics.push(Diagnostic::error(
             "library.unknown_property",
-            format!(
-                "library '{}': unknown property '{}' (version-relative; \
-                 may be valid in a later schema version)",
-                decl.id, prop_name
+            unknown_property_message(
+                &format!("library '{}'", decl.id),
+                "library",
+                prop_name,
+                known_props_for_kind("library"),
             ),
             decl.source_span,
             Some(decl.id.clone()),
@@ -400,12 +405,13 @@ pub(in crate::validate::check) fn validate_provenance_def(
         ));
     }
     for prop_name in prov.unknown_props.keys() {
-        diagnostics.push(Diagnostic::warning(
+        diagnostics.push(Diagnostic::error(
             "provenance.unknown_property",
-            format!(
-                "provenance '{}': unknown property '{}' (version-relative; \
-                 may be valid in a later schema version)",
-                prov.id, prop_name
+            unknown_property_message(
+                &format!("provenance '{}'", prov.id),
+                "provenance",
+                prop_name,
+                known_props_for_kind("provenance"),
             ),
             prov.source_span,
             Some(prov.id.clone()),
@@ -431,6 +437,7 @@ pub(in crate::validate::check) fn validate_style_block(
         for (key, value) in &style.properties {
             let expect = style_prop_expect(key);
             if let Some(expect) = expect {
+                let start = diagnostics.len();
                 check_visual_prop(
                     &style.id,
                     key,
@@ -440,6 +447,7 @@ pub(in crate::validate::check) fn validate_style_block(
                     resolved_tokens,
                     diagnostics,
                 );
+                attach_visual_spans(diagnostics, start, style.source_span);
             } else {
                 // stroke-alignment and font-weight: no strict type check;
                 // still track token refs so they count as used.
@@ -449,14 +457,15 @@ pub(in crate::validate::check) fn validate_style_block(
             }
         }
 
-        // Warn on unknown properties.
+        // Unknown properties are errors.
         for prop_name in style.unknown_props.keys() {
-            diagnostics.push(Diagnostic::warning(
+            diagnostics.push(Diagnostic::error(
                 "style.unknown_property",
-                format!(
-                    "style '{}': unknown property '{}' (not a recognized visual property; \
-                     this property will not be applied to nodes that reference this style)",
-                    style.id, prop_name
+                unknown_property_message(
+                    &format!("style '{}'", style.id),
+                    "style",
+                    prop_name,
+                    STYLE_RECOGNIZED_KEYS,
                 ),
                 style.source_span,
                 Some(style.id.clone()),

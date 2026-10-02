@@ -231,7 +231,7 @@ fn asset_url_src_produces_invalid_src() {
 // ── asset.unknown_property: unknown prop → asset.unknown_property ─────
 
 #[test]
-fn asset_unknown_property_produces_warning() {
+fn asset_unknown_property_is_error() {
     let mut unknown_props = BTreeMap::new();
     unknown_props.insert(
         "dpi".to_owned(),
@@ -270,8 +270,8 @@ fn asset_unknown_property_produces_warning() {
         .iter()
         .find(|d| d.code == "asset.unknown_property")
         .expect("should exist");
-    assert_eq!(diag.severity, Severity::Warning);
-    assert!(!report.has_errors());
+    assert_eq!(diag.severity, Severity::Error);
+    assert!(report.has_errors());
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -395,7 +395,7 @@ fn image_unknown_asset_reference() {
 // ── image with an unknown fit → image.invalid_fit (Warning) ───────────
 
 #[test]
-fn image_invalid_fit_warns() {
+fn image_invalid_fit_is_error_naming_allowed_values() {
     let doc = doc_with_assets_and_nodes(
         vec![image_asset("asset.swatch", "assets/swatch.png")],
         vec![Node::Image(full_image(
@@ -415,9 +415,13 @@ fn image_invalid_fit_warns() {
         .iter()
         .find(|d| d.code == "image.invalid_fit")
         .expect("should exist");
-    assert_eq!(diag.severity, Severity::Warning);
-    // invalid_fit is forward-compat: a Warning, not an Error.
-    assert!(!report.has_errors());
+    assert_eq!(diag.severity, Severity::Error);
+    assert!(
+        diag.message.contains("'squish'") && diag.message.contains("contain, cover, stretch, none"),
+        "message must name the value and allowed values; got: {}",
+        diag.message
+    );
+    assert!(report.has_errors());
 }
 
 // ── AI-provenance fields: no asset.unknown_property diagnostic ────────

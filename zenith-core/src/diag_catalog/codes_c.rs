@@ -18,7 +18,7 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
     ),
     info(
         "provenance.unknown_property",
-        Severity::Warning,
+        Severity::Error,
         "Unrecognized property on a provenance `origin`.",
     ),
     info(
@@ -138,7 +138,7 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
     ),
     info(
         "section.invalid_folio_style",
-        Severity::Warning,
+        Severity::Error,
         "Section `folio-style` value is not recognized.",
     ),
     info(
@@ -168,27 +168,27 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
     ),
     info(
         "shape.invalid_h_align",
-        Severity::Warning,
+        Severity::Error,
         "Shape `h-align` value is not recognized.",
     ),
     info(
         "shape.invalid_stroke_alignment",
-        Severity::Warning,
+        Severity::Error,
         "Shape `stroke-alignment` value is not recognized.",
     ),
     info(
         "shape.invalid_v_align",
-        Severity::Warning,
+        Severity::Error,
         "Shape `v-align` value is not recognized.",
     ),
     info(
         "shape.unknown_kind",
-        Severity::Warning,
+        Severity::Error,
         "Shape `kind` is not a recognized preset shape.",
     ),
     info(
         "style.unknown_property",
-        Severity::Warning,
+        Severity::Error,
         "A style block carries an unrecognized property.",
     ),
     info(
@@ -208,17 +208,17 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
     ),
     info(
         "table.invalid_border_collapse",
-        Severity::Warning,
+        Severity::Error,
         "Table `border-collapse` value is not recognized.",
     ),
     info(
         "table.invalid_h_align",
-        Severity::Warning,
+        Severity::Error,
         "Table `h-align` value is not recognized.",
     ),
     info(
         "table.invalid_v_align",
-        Severity::Warning,
+        Severity::Error,
         "Table `v-align` value is not recognized.",
     ),
     info(
@@ -233,12 +233,12 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
     ),
     info(
         "text.invalid_format",
-        Severity::Warning,
-        "Text `format` value is not recognized; treated as plain.",
+        Severity::Error,
+        "Text `format` value is not recognized.",
     ),
     info(
         "text.invalid_v_align",
-        Severity::Warning,
+        Severity::Error,
         "Text `v-align` value is not recognized.",
     ),
     info(
@@ -303,7 +303,7 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
     ),
     info(
         "token.unknown_type",
-        Severity::Warning,
+        Severity::Error,
         "A token declares an unrecognized type.",
     ),
     info(
@@ -443,7 +443,7 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
     ),
     info(
         "variant.override_unknown_property",
-        Severity::Warning,
+        Severity::Error,
         "A variant override carries an unrecognized property.",
     ),
     info(

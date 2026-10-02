@@ -5,6 +5,7 @@ use std::collections::BTreeSet;
 use crate::ast::node::PatternNode;
 use crate::ast::value::dim_to_px;
 use crate::diagnostics::Diagnostic;
+use crate::suggest::invalid_value_message;
 
 use super::shared::{
     AnchorParentCtx, AnchorProps, TokenEnv, VisualProps, check_anchor, check_optional_dim,
@@ -151,9 +152,11 @@ pub(in crate::validate::check) fn check_pattern(
     if !kind_known {
         diagnostics.push(Diagnostic::error(
             "pattern.unknown_kind",
-            format!(
-                "pattern '{}': kind '{}' is not recognized; expected \"grid\" or \"scatter\"",
-                p.id, p.kind
+            invalid_value_message(
+                &format!("pattern '{}'", p.id),
+                "kind",
+                &p.kind,
+                &["grid", "scatter"],
             ),
             p.source_span,
             Some(p.id.clone()),

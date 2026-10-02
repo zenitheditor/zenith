@@ -78,7 +78,7 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
     ),
     info(
         "asset.unknown_property",
-        Severity::Warning,
+        Severity::Error,
         "Unrecognized property on an `asset` declaration.",
     ),
     info(
@@ -138,12 +138,12 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
     ),
     info(
         "connector.invalid_marker",
-        Severity::Warning,
+        Severity::Error,
         "Connector marker value is not recognized.",
     ),
     info(
         "connector.invalid_route",
-        Severity::Warning,
+        Severity::Error,
         "Connector route value is not recognized.",
     ),
     info(

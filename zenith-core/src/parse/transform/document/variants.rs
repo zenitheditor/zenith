@@ -16,7 +16,7 @@ use crate::parse::transform::helpers::{
 // ---------------------------------------------------------------------------
 
 const VARIANT_KNOWN_PROPS: &[&str] = &["id", "source", "w", "h"];
-const VARIANT_OVERRIDE_KNOWN_PROPS: &[&str] =
+pub(crate) const VARIANT_OVERRIDE_KNOWN_PROPS: &[&str] =
     &["node", "visible", "x", "y", "w", "h", "fill", "text"];
 
 /// Transform the document-level `variants { … }` block into a list of

@@ -82,7 +82,7 @@ fn set_path_anchor_kind_targets_compound_subpath() {
 }
 
 #[test]
-fn set_path_anchor_kind_preserves_unknown_future_kind_with_warning() {
+fn set_path_anchor_kind_rejects_unrecognized_kind_without_source_change() {
     let doc = parse(PATH_DOC);
     let tx = Transaction {
         ops: vec![Op::SetPathAnchorKind {
@@ -95,19 +95,20 @@ fn set_path_anchor_kind_preserves_unknown_future_kind_with_warning() {
     };
     let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
 
-    assert_eq!(result.status, TxStatus::AcceptedWithWarnings);
+    assert_eq!(result.status, TxStatus::Rejected);
     assert!(
-        result
-            .diagnostics
-            .iter()
-            .any(|d| d.code == "node.unknown_property"),
-        "expected node.unknown_property warning; got: {:?}",
+        result.diagnostics.iter().any(|d| {
+            d.code == "node.invalid_value"
+                && d.severity == zenith_core::Severity::Error
+                && d.message.contains("'future'")
+                && d.message.contains("corner, smooth, symmetric")
+        }),
+        "expected node.invalid_value error naming allowed kinds; got: {:?}",
         result.diagnostics
     );
-    assert!(
-        anchor_line(&result.source_after, 0).contains("kind=\"future\""),
-        "future kind should be preserved; got:\n{}",
-        result.source_after
+    assert_eq!(
+        result.source_after, result.source_before,
+        "a rejected transaction must leave the source unchanged"
     );
 }
 

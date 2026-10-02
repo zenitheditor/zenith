@@ -253,7 +253,7 @@ fn group_child_missing_geometry_surfaces() {
 // ── Group: unknown property → node.unknown_property (Warning) ─────────
 
 #[test]
-fn group_unknown_property_warns() {
+fn group_unknown_property_errors() {
     let mut unknown_props = BTreeMap::new();
     unknown_props.insert(
         "future-blend".to_owned(),
@@ -317,6 +317,6 @@ fn group_unknown_property_warns() {
         .iter()
         .find(|d| d.code == "node.unknown_property")
         .expect("should exist");
-    assert_eq!(diag.severity, Severity::Warning);
-    assert!(!report.has_errors());
+    assert_eq!(diag.severity, Severity::Error);
+    assert!(report.has_errors());
 }

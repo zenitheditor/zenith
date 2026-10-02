@@ -1,6 +1,6 @@
 //! Per-kind checks for `shape`, `connector`, and `unknown` nodes.
 //!
-//! `check_unknown` emits the forward-compat warning and registers the optional
+//! `check_unknown` emits the unknown-kind warning and registers the optional
 //! id; the dispatcher in [`super::super::nodes::walk_node`] performs the child
 //! recursion so traversal order is unchanged.
 
@@ -10,6 +10,7 @@ use crate::ast::node::{
     ConnectorAnchorParseError, ConnectorNode, ShapeNode, UnknownNode, parse_connector_anchor,
 };
 use crate::diagnostics::Diagnostic;
+use crate::suggest::invalid_value_message;
 
 use super::shared::{
     AnchorParentCtx, AnchorProps, TokenEnv, check_anchor, check_optional_dim, check_spans,
@@ -160,16 +161,17 @@ pub(in crate::validate::check) fn check_shape(
         diagnostics,
     );
 
-    // Enum-value checks (Warnings on unrecognized values, not errors).
+    // Enum-value checks (an unrecognized value is an Error).
     if let Some(k) = s.kind.as_deref()
         && !matches!(k, "process" | "decision" | "terminator" | "ellipse")
     {
-        diagnostics.push(Diagnostic::warning(
+        diagnostics.push(Diagnostic::error(
             "shape.unknown_kind",
-            format!(
-                "shape '{}': kind '{k}' is not one of \
-                 process/decision/terminator/ellipse",
-                s.id
+            invalid_value_message(
+                &format!("shape '{}'", s.id),
+                "kind",
+                k,
+                &["process", "decision", "terminator", "ellipse"],
             ),
             s.source_span,
             Some(s.id.clone()),
@@ -178,12 +180,13 @@ pub(in crate::validate::check) fn check_shape(
     if let Some(sa) = s.stroke_alignment.as_deref()
         && !matches!(sa, "inside" | "center" | "outside")
     {
-        diagnostics.push(Diagnostic::warning(
+        diagnostics.push(Diagnostic::error(
             "shape.invalid_stroke_alignment",
-            format!(
-                "shape '{}': stroke-alignment '{sa}' is not one of \
-                 inside/center/outside",
-                s.id
+            invalid_value_message(
+                &format!("shape '{}'", s.id),
+                "stroke-alignment",
+                sa,
+                &["inside", "center", "outside"],
             ),
             s.source_span,
             Some(s.id.clone()),
@@ -192,11 +195,13 @@ pub(in crate::validate::check) fn check_shape(
     if let Some(ha) = s.h_align.as_deref()
         && !matches!(ha, "start" | "center" | "end")
     {
-        diagnostics.push(Diagnostic::warning(
+        diagnostics.push(Diagnostic::error(
             "shape.invalid_h_align",
-            format!(
-                "shape '{}': h-align '{ha}' is not one of start/center/end",
-                s.id
+            invalid_value_message(
+                &format!("shape '{}'", s.id),
+                "h-align",
+                ha,
+                &["start", "center", "end"],
             ),
             s.source_span,
             Some(s.id.clone()),
@@ -205,11 +210,13 @@ pub(in crate::validate::check) fn check_shape(
     if let Some(va) = s.v_align.as_deref()
         && !matches!(va, "top" | "middle" | "bottom")
     {
-        diagnostics.push(Diagnostic::warning(
+        diagnostics.push(Diagnostic::error(
             "shape.invalid_v_align",
-            format!(
-                "shape '{}': v-align '{va}' is not one of top/middle/bottom",
-                s.id
+            invalid_value_message(
+                &format!("shape '{}'", s.id),
+                "v-align",
+                va,
+                &["top", "middle", "bottom"],
             ),
             s.source_span,
             Some(s.id.clone()),
@@ -307,15 +314,17 @@ pub(in crate::validate::check) fn check_connector(
         ));
     }
 
-    // Enum-value checks (Warnings on unrecognized values, not errors).
+    // Enum-value checks (an unrecognized value is an Error).
     if let Some(r) = c.route.as_deref()
         && !matches!(r, "straight" | "orthogonal" | "avoid")
     {
-        diagnostics.push(Diagnostic::warning(
+        diagnostics.push(Diagnostic::error(
             "connector.invalid_route",
-            format!(
-                "connector '{}': route '{r}' is not one of straight/orthogonal/avoid",
-                c.id
+            invalid_value_message(
+                &format!("connector '{}'", c.id),
+                "route",
+                r,
+                &["straight", "orthogonal", "avoid"],
             ),
             c.source_span,
             Some(c.id.clone()),
@@ -328,11 +337,13 @@ pub(in crate::validate::check) fn check_connector(
         if let Some(m) = marker
             && !matches!(m, "none" | "arrow")
         {
-            diagnostics.push(Diagnostic::warning(
+            diagnostics.push(Diagnostic::error(
                 "connector.invalid_marker",
-                format!(
-                    "connector '{}': {label} '{m}' is not one of none/arrow",
-                    c.id
+                invalid_value_message(
+                    &format!("connector '{}'", c.id),
+                    label,
+                    m,
+                    &["none", "arrow"],
                 ),
                 c.source_span,
                 Some(c.id.clone()),
@@ -450,7 +461,8 @@ fn check_connector_endpoint(
     }
 }
 
-/// Emit the forward-compat `node.unknown_kind` warning and register the
+/// Emit the `node.unknown_kind` warning (library nodes use kinds the engine does
+/// not know, so this stays a Warning) and register the
 /// optional id. The child recursion stays in the dispatcher so the unknown
 /// node's children are walked in the same position as before.
 pub(in crate::validate::check) fn check_unknown(
@@ -458,13 +470,13 @@ pub(in crate::validate::check) fn check_unknown(
     seen_ids: &mut BTreeSet<String>,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
+    let subject = match &u.id {
+        Some(id) => format!("node '{id}'"),
+        None => "node".to_owned(),
+    };
     diagnostics.push(Diagnostic::warning(
         "node.unknown_kind",
-        format!(
-            "unknown node kind '{}' (forward-compatibility; \
-             this kind may be valid in a later schema version)",
-            u.kind
-        ),
+        invalid_value_message(&subject, "kind", &u.kind, crate::schema::node_kinds()),
         u.source_span,
         u.id.clone(),
     ));

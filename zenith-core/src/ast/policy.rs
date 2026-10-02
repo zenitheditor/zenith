@@ -9,7 +9,7 @@
 //!     allow "layout.off_canvas"     // suppress this advisory
 //!     allow "layout.off_canvas" "bg.glow" "bg.rim" // suppress only these nodes
 //!     deny  "font.local"            // elevate to a blocking Error (CI gate)
-//!     warn  "node.unknown_property" // force to Warning
+//!     warn  "image.upscale" // force to Warning
 //! }
 //! ```
 //!
@@ -146,15 +146,12 @@ mod tests {
     fn verb_for_is_last_wins() {
         let p = DiagnosticPolicy {
             entries: vec![
-                entry(PolicyVerb::Deny, "node.unknown_property"),
-                entry(PolicyVerb::Warn, "node.unknown_property"),
+                entry(PolicyVerb::Deny, "image.upscale"),
+                entry(PolicyVerb::Warn, "image.upscale"),
             ],
         };
         // The later `warn` overrides the earlier `deny`.
-        assert_eq!(
-            p.verb_for("node.unknown_property", None),
-            Some(&PolicyVerb::Warn)
-        );
+        assert_eq!(p.verb_for("image.upscale", None), Some(&PolicyVerb::Warn));
     }
 
     #[test]

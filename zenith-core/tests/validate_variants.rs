@@ -224,7 +224,7 @@ fn override_targeting_absent_node_is_error() {
 /// An override with an unknown property key (e.g. `foo=1`) →
 /// `variant.override_unknown_property` (Warning, not an Error).
 #[test]
-fn override_unknown_property_fires_warning() {
+fn override_unknown_property_is_error() {
     let src = r##"zenith version=1 {
   project id="proj.oup" name="OUP"
   tokens format="zenith-token-v1" {
@@ -249,14 +249,13 @@ fn override_unknown_property_fires_warning() {
         "override with unknown property must fire variant.override_unknown_property; got {:?}",
         codes(&report)
     );
-    // Must be a Warning, not an Error.
-    let is_warning = report
+    let is_error = report
         .diagnostics
         .iter()
-        .any(|d| d.code == "variant.override_unknown_property" && d.severity == Severity::Warning);
+        .any(|d| d.code == "variant.override_unknown_property" && d.severity == Severity::Error);
     assert!(
-        is_warning,
-        "variant.override_unknown_property must be Warning severity; got {:?}",
+        is_error,
+        "variant.override_unknown_property must be Error severity; got {:?}",
         codes(&report)
     );
     // A single unknown property → exactly one such diagnostic.
@@ -269,16 +268,16 @@ fn override_unknown_property_fires_warning() {
         count, 1,
         "exactly one variant.override_unknown_property expected; got {count}"
     );
-    // Must not block rendering (no errors from this alone).
+    // An unknown override property blocks rendering.
     assert!(
-        !report.has_errors(),
-        "unknown override property must not produce any errors; got {:?}",
+        report.has_errors(),
+        "unknown override property must be a hard error; got {:?}",
         codes(&report)
     );
 }
 
 /// An override with `id=` instead of `node=` (the wrong-selector case) →
-/// `variant.override_unknown_property` warning for the key `id`.
+/// `variant.override_unknown_property` error for the key `id`.
 #[test]
 fn override_id_selector_fires_unknown_property_warning() {
     let src = r##"zenith version=1 {

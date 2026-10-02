@@ -7,6 +7,7 @@ use crate::ast::node::TextSpan;
 use crate::ast::value::{Dimension, PropertyValue};
 use crate::diagnostics::Diagnostic;
 use crate::tokens::ResolvedToken;
+use crate::validate::check::nodes::node::suggest::{blend_mode_names, push_invalid_value};
 use crate::validate::check::visual::{VisualExpect, check_visual_prop};
 
 /// Whether `s` is one of the recognized `blend-mode` values. Unknown values
@@ -334,15 +335,15 @@ pub(in crate::validate::check) fn check_visual_props(
     if let Some(bm) = props.blend_mode
         && !is_valid_blend_mode(bm)
     {
-        diagnostics.push(Diagnostic::warning(
-            "node.unknown_property",
-            format!(
-                "{kind} '{id}': blend-mode '{bm}' is not a recognized value; valid values are: {}",
-                crate::color::BlendMode::joined_kebab(", ")
-            ),
-            source_span,
+        push_invalid_value(
+            &format!("{kind} '{id}'"),
             Some(id.to_owned()),
-        ));
+            "blend-mode",
+            bm,
+            &blend_mode_names(),
+            source_span,
+            diagnostics,
+        );
     }
     // Corner radius: uniform then per-corner overrides. Absent for patterns
     // (all radius fields `None`), so a pattern emits nothing here while a rect
@@ -432,12 +433,15 @@ pub(in crate::validate::check) fn check_stroke_join_props(
     if let Some(lj) = stroke_linejoin
         && !matches!(lj, "miter" | "round" | "bevel")
     {
-        diagnostics.push(Diagnostic::warning(
-            "node.unknown_property",
-            format!("{kind} '{id}': stroke-linejoin '{lj}' is not one of miter/round/bevel"),
-            source_span,
+        push_invalid_value(
+            &format!("{kind} '{id}'"),
             Some(id.to_owned()),
-        ));
+            "stroke-linejoin",
+            lj,
+            &["miter", "round", "bevel"],
+            source_span,
+            diagnostics,
+        );
     }
     if let Some(limit) = stroke_miter_limit
         && (!limit.is_finite() || limit <= 0.0)
@@ -461,11 +465,14 @@ pub(in crate::validate::check) fn check_stroke_linecap_prop(
     if let Some(lc) = stroke_linecap
         && !matches!(lc, "butt" | "round" | "square")
     {
-        diagnostics.push(Diagnostic::warning(
-            "node.unknown_property",
-            format!("{kind} '{id}': stroke-linecap '{lc}' is not one of butt/round/square"),
-            source_span,
+        push_invalid_value(
+            &format!("{kind} '{id}'"),
             Some(id.to_owned()),
-        ));
+            "stroke-linecap",
+            lc,
+            &["butt", "round", "square"],
+            source_span,
+            diagnostics,
+        );
     }
 }

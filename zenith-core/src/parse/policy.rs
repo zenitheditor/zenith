@@ -9,7 +9,7 @@
 //! diagnostics {
 //!     allow "layout.off_canvas"
 //!     deny  "font.local"
-//!     warn  "node.unknown_property"
+//!     warn  "image.upscale"
 //! }
 //!
 //! brand {
@@ -122,7 +122,7 @@ mod tests {
         let src = br#"diagnostics {
             allow "layout.off_canvas" "bg.glow" "bg.rim"
             deny  "font.local"
-            warn  "node.unknown_property"
+            warn  "image.upscale"
         }"#;
         let policy = parse_diagnostic_policy(src).expect("must parse");
         assert_eq!(policy.entries.len(), 3);
@@ -137,7 +137,7 @@ mod tests {
         assert_eq!(policy.verb_for("layout.off_canvas", Some("shape.1")), None);
         assert_eq!(policy.verb_for("font.local", None), Some(&PolicyVerb::Deny));
         assert_eq!(
-            policy.verb_for("node.unknown_property", None),
+            policy.verb_for("image.upscale", None),
             Some(&PolicyVerb::Warn)
         );
     }
@@ -195,12 +195,12 @@ mod tests {
     #[test]
     fn last_wins_across_entries() {
         let src = br#"diagnostics {
-            deny "node.unknown_property"
-            warn "node.unknown_property"
+            deny "image.upscale"
+            warn "image.upscale"
         }"#;
         let policy = parse_diagnostic_policy(src).expect("must parse");
         assert_eq!(
-            policy.verb_for("node.unknown_property", None),
+            policy.verb_for("image.upscale", None),
             Some(&PolicyVerb::Warn)
         );
     }

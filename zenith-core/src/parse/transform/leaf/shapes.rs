@@ -436,7 +436,7 @@ pub(crate) const LINE_KNOWN_PROPS: &[&str] = &[
     "locked",
     // NOTE: "stroke-alignment" is intentionally absent — it does not apply to
     // line nodes. An author who writes it will receive a node.unknown_property
-    // warning, which is the correct diagnostic for inapplicable properties.
+    // error, which is the correct diagnostic for inapplicable properties.
 ];
 
 pub(in crate::parse::transform) fn transform_line(node: &KdlNode) -> Result<LineNode, ParseError> {

@@ -18,7 +18,8 @@
 //!    stroke-width, font-family, font-size, radius) whose value is a
 //!    `Literal(...)` → `token.raw_visual_literal` (Error).
 //! 5. **Unknown node kind** → `node.unknown_kind` (Warning).
-//!    **Unknown property** → `node.unknown_property` (Warning).
+//!    **Unknown property name** → `node.unknown_property` (Error).
+//!    **Invalid enum value** on a known property → `node.invalid_value` (Error).
 //! 6. **Unused token** — a token defined but never referenced by any node
 //!    visual property or style → `token.unused` (Advisory).
 //!

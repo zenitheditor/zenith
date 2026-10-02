@@ -305,18 +305,18 @@ fn page_progression_rtl_is_valid() {
 }
 
 #[test]
-fn page_progression_invalid_warns() {
+fn page_progression_invalid_is_error() {
     let mut doc = doc_with(vec![], vec![minimal_page("page.one", vec![])]);
     doc.page_progression = Some("sideways".to_owned());
     let report = validate(&doc);
     assert!(
         has_code(&report, "document.invalid_page_progression"),
-        "an unrecognized page-progression must warn; got {:?}",
+        "an unrecognized page-progression must be flagged; got {:?}",
         codes(&report)
     );
     assert!(
-        !report.has_errors(),
-        "page-progression warning must not be a hard error"
+        report.has_errors(),
+        "an invalid page-progression must be a hard error"
     );
 }
 
@@ -334,18 +334,18 @@ fn page_parity_start_verso_is_valid() {
 }
 
 #[test]
-fn page_parity_start_invalid_warns() {
+fn page_parity_start_invalid_is_error() {
     let mut doc = doc_with(vec![], vec![minimal_page("page.one", vec![])]);
     doc.page_parity_start = Some("sideways".to_owned());
     let report = validate(&doc);
     assert!(
         has_code(&report, "document.invalid_page_parity_start"),
-        "an unrecognized page-parity-start must warn; got {:?}",
+        "an unrecognized page-parity-start must be flagged; got {:?}",
         codes(&report)
     );
     assert!(
-        !report.has_errors(),
-        "page-parity-start warning must not be a hard error"
+        report.has_errors(),
+        "an invalid page-parity-start must be a hard error"
     );
 }
 
@@ -360,19 +360,19 @@ fn page_parity_override_valid_does_not_warn() {
 }
 
 #[test]
-fn page_parity_override_invalid_warns() {
+fn page_parity_override_invalid_is_error() {
     let mut page = minimal_page("page.one", vec![]);
     page.parity = Some("upside-down".to_owned());
     let doc = doc_with(vec![], vec![page]);
     let report = validate(&doc);
     assert!(
         has_code(&report, "page.invalid_parity"),
-        "an unrecognized per-page parity must warn; got {:?}",
+        "an unrecognized per-page parity must be flagged; got {:?}",
         codes(&report)
     );
     assert!(
-        !report.has_errors(),
-        "page parity warning must not be a hard error"
+        report.has_errors(),
+        "an invalid page parity must be a hard error"
     );
 }
 
@@ -394,18 +394,18 @@ fn line_jumps_known_values_do_not_warn() {
 }
 
 #[test]
-fn line_jumps_unknown_value_warns_not_errors() {
+fn line_jumps_unknown_value_is_error() {
     let mut page = minimal_page("page.lj", vec![]);
     page.line_jumps = Some("sproing".to_owned());
     let report = validate(&doc_with(vec![], vec![page]));
     assert!(
         has_code(&report, "page.invalid_line_jumps"),
-        "an unrecognized line-jumps value must warn; got {:?}",
+        "an unrecognized line-jumps value must be flagged; got {:?}",
         codes(&report)
     );
     assert!(
-        !report.has_errors(),
-        "line-jumps warning must not be a hard error"
+        report.has_errors(),
+        "an invalid line-jumps value must be a hard error"
     );
 }
 

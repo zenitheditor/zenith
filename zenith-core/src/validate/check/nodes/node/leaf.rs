@@ -14,7 +14,7 @@ use super::shared::{
     check_font_features, check_optional_dim, check_style_ref, check_visual_props,
     is_valid_blend_mode,
 };
-use super::suggest::check_unknown_props;
+use super::suggest::{blend_mode_names, check_unknown_props, push_invalid_value};
 use crate::validate::check::nodes::WalkCtx;
 use crate::validate::check::register_id;
 use crate::validate::check::visual::{VisualExpect, check_visual_prop};
@@ -301,29 +301,28 @@ pub(in crate::validate::check) fn check_ellipse(
     if let Some(lc) = e.stroke_linecap.as_deref()
         && !matches!(lc, "butt" | "round" | "square")
     {
-        diagnostics.push(Diagnostic::warning(
-            "node.unknown_property",
-            format!(
-                "ellipse '{}': stroke-linecap '{}' is not one of butt/round/square",
-                e.id, lc
-            ),
-            e.source_span,
+        push_invalid_value(
+            &format!("ellipse '{}'", e.id),
             Some(e.id.clone()),
-        ));
+            "stroke-linecap",
+            lc,
+            &["butt", "round", "square"],
+            e.source_span,
+            diagnostics,
+        );
     }
     if let Some(bm) = e.blend_mode.as_deref()
         && !is_valid_blend_mode(bm)
     {
-        diagnostics.push(Diagnostic::warning(
-            "node.unknown_property",
-            format!(
-                "ellipse '{}': blend-mode '{bm}' is not a recognized value; valid values are: {}",
-                e.id,
-                crate::color::BlendMode::joined_kebab(", ")
-            ),
-            e.source_span,
+        push_invalid_value(
+            &format!("ellipse '{}'", e.id),
             Some(e.id.clone()),
-        ));
+            "blend-mode",
+            bm,
+            &blend_mode_names(),
+            e.source_span,
+            diagnostics,
+        );
     }
     // Independent axis radii: same validation as dimension props.
     for (prop_name, prop_val) in [("rx", e.rx.as_ref()), ("ry", e.ry.as_ref())] {
@@ -484,15 +483,15 @@ pub(in crate::validate::check) fn check_line(
     if let Some(lc) = l.stroke_linecap.as_deref()
         && !matches!(lc, "butt" | "round" | "square")
     {
-        diagnostics.push(Diagnostic::warning(
-            "node.unknown_property",
-            format!(
-                "line '{}': stroke-linecap '{}' is not one of butt/round/square",
-                l.id, lc
-            ),
-            l.source_span,
+        push_invalid_value(
+            &format!("line '{}'", l.id),
             Some(l.id.clone()),
-        ));
+            "stroke-linecap",
+            lc,
+            &["butt", "round", "square"],
+            l.source_span,
+            diagnostics,
+        );
     }
 
     // Unknown properties.

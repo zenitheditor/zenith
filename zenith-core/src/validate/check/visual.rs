@@ -8,10 +8,12 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use crate::ast::Span;
 use crate::ast::block_style::BlockStyle;
 use crate::ast::token::TokenType;
 use crate::ast::value::PropertyValue;
 use crate::diagnostics::Diagnostic;
+use crate::suggest::{find_suggestion, format_candidate_list};
 use crate::tokens::{ResolvedToken, ResolvedValue};
 
 /// The expected token type for a visual property.
@@ -64,9 +66,11 @@ pub(super) fn check_visual_prop(
                     "token.unknown_reference",
                     format!(
                         "node '{}': property '{}' references token '{}' which \
-                         does not exist or failed resolution \
-                         — check the spelling and that the token is declared in the `tokens` block",
-                        node_id, prop_name, token_id
+                         does not exist — {}",
+                        node_id,
+                        prop_name,
+                        token_id,
+                        unknown_token_hint(token_id, expect, resolved_tokens)
                     ),
                     None,
                     Some(node_id.to_owned()),
@@ -107,32 +111,7 @@ pub(super) fn check_visual_prop(
             }
 
             // Type compatibility check.
-            let type_ok = match expect {
-                VisualExpect::Color => {
-                    matches!(resolved.token_type, TokenType::Color)
-                }
-                VisualExpect::ColorOrGradient => {
-                    matches!(resolved.token_type, TokenType::Color | TokenType::Gradient)
-                }
-                VisualExpect::Dimension => {
-                    matches!(resolved.token_type, TokenType::Dimension)
-                }
-                VisualExpect::FontFamily => {
-                    matches!(resolved.token_type, TokenType::FontFamily)
-                }
-                VisualExpect::FontWeight => {
-                    matches!(resolved.token_type, TokenType::FontWeight)
-                }
-                VisualExpect::Shadow => {
-                    matches!(resolved.token_type, TokenType::Shadow)
-                }
-                VisualExpect::Filter => {
-                    matches!(resolved.token_type, TokenType::Filter)
-                }
-                VisualExpect::Mask => {
-                    matches!(resolved.token_type, TokenType::Mask)
-                }
-            };
+            let type_ok = expect_accepts(expect, &resolved.token_type);
 
             if !type_ok {
                 diagnostics.push(Diagnostic::error(
@@ -158,8 +137,10 @@ pub(super) fn check_visual_prop(
                 format!(
                     "node '{}': visual property '{}' has a raw literal value; \
                      visual properties must reference design tokens \
-                     — define a token and reference it as `(token)\"token-id\"`",
-                    node_id, prop_name
+                     — {}",
+                    node_id,
+                    prop_name,
+                    raw_literal_hint(expect, resolved_tokens)
                 ),
                 None,
                 Some(node_id.to_owned()),
@@ -225,6 +206,93 @@ pub(super) fn check_block_styles(
             resolved_tokens,
             diagnostics,
         );
+    }
+}
+
+/// Attach `span` to every `token.unknown_reference` and
+/// `token.raw_visual_literal` diagnostic at index `from` or later that has no
+/// span yet.
+///
+/// The visual-property checks run without a source position; the caller that
+/// owns the node (or page, or style) fills it in afterwards so `validate`
+/// prints line numbers. Diagnostics that already carry a span (for example
+/// from a nested child) are left untouched.
+pub(super) fn attach_visual_spans(diagnostics: &mut [Diagnostic], from: usize, span: Option<Span>) {
+    let Some(tail) = diagnostics.get_mut(from..) else {
+        return;
+    };
+    for d in tail {
+        if d.span.is_none()
+            && matches!(
+                d.code.as_str(),
+                "token.unknown_reference" | "token.raw_visual_literal"
+            )
+        {
+            d.span = span;
+        }
+    }
+}
+
+/// `true` when a property with expectation `expect` accepts a token of type
+/// `token_type`.
+fn expect_accepts(expect: VisualExpect, token_type: &TokenType) -> bool {
+    match expect {
+        VisualExpect::Color => matches!(token_type, TokenType::Color),
+        VisualExpect::ColorOrGradient => {
+            matches!(token_type, TokenType::Color | TokenType::Gradient)
+        }
+        VisualExpect::Dimension => matches!(token_type, TokenType::Dimension),
+        VisualExpect::FontFamily => matches!(token_type, TokenType::FontFamily),
+        VisualExpect::FontWeight => matches!(token_type, TokenType::FontWeight),
+        VisualExpect::Shadow => matches!(token_type, TokenType::Shadow),
+        VisualExpect::Filter => matches!(token_type, TokenType::Filter),
+        VisualExpect::Mask => matches!(token_type, TokenType::Mask),
+    }
+}
+
+/// Ids of every resolved token that a property with `expect` accepts, sorted.
+fn accepted_token_ids(
+    expect: VisualExpect,
+    resolved_tokens: &BTreeMap<String, ResolvedToken>,
+) -> Vec<&str> {
+    resolved_tokens
+        .iter()
+        .filter(|(_, t)| expect_accepts(expect, &t.token_type))
+        .map(|(id, _)| id.as_str())
+        .collect()
+}
+
+/// Next-action text for an unknown token reference: a did-you-mean when a
+/// declared token of an accepted type is close, otherwise the declared list.
+pub(super) fn unknown_token_hint(
+    token_id: &str,
+    expect: VisualExpect,
+    resolved_tokens: &BTreeMap<String, ResolvedToken>,
+) -> String {
+    let ids = accepted_token_ids(expect, resolved_tokens);
+    match find_suggestion(token_id, ids.iter().copied(), 2) {
+        Some(s) => format!("did you mean '{s}'?"),
+        None => format_candidate_list(&format!("{} tokens", visual_expect_name(expect)), ids),
+    }
+}
+
+/// Next-action text for a raw visual literal: the expected token type, an
+/// example reference, and the declared candidates.
+pub(super) fn raw_literal_hint(
+    expect: VisualExpect,
+    resolved_tokens: &BTreeMap<String, ResolvedToken>,
+) -> String {
+    let label = visual_expect_name(expect);
+    let ids = accepted_token_ids(expect, resolved_tokens);
+    match ids.first() {
+        Some(first) => format!(
+            "expects a {label} token, e.g. (token)\"{first}\"; {}",
+            format_candidate_list(&format!("{label} tokens"), ids.iter().copied())
+        ),
+        None => format!(
+            "expects a {label} token; no {label} tokens declared — \
+             declare one in the `tokens` block"
+        ),
     }
 }
 

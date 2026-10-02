@@ -34,7 +34,7 @@ pub(crate) const POLYGON_KNOWN_PROPS: &[&str] = &[
 ];
 
 // NOTE: polyline intentionally omits stroke-alignment — an author
-// writing it gets a node.unknown_property warning, which is correct.
+// writing it gets a node.unknown_property error, which is correct.
 pub(crate) const POLYLINE_KNOWN_PROPS: &[&str] = &[
     "id",
     "name",

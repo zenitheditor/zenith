@@ -472,7 +472,7 @@ fn frame_nested_id_duplicate_with_page_sibling() {
 // ── Frame: unknown property → node.unknown_property (Warning) ─────────
 
 #[test]
-fn frame_unknown_property_warns() {
+fn frame_unknown_property_errors() {
     let mut unknown_props = BTreeMap::new();
     unknown_props.insert(
         "future-scroll".to_owned(),
@@ -529,6 +529,6 @@ fn frame_unknown_property_warns() {
         .iter()
         .find(|d| d.code == "node.unknown_property")
         .expect("should exist");
-    assert_eq!(diag.severity, Severity::Warning);
-    assert!(!report.has_errors());
+    assert_eq!(diag.severity, Severity::Error);
+    assert!(report.has_errors());
 }

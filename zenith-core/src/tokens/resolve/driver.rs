@@ -19,6 +19,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::ast::token::{Token, TokenBlock, TokenLiteral, TokenType, TokenValue};
 use crate::diagnostics::Diagnostic;
+use crate::suggest::{find_suggestion, format_candidate_list, invalid_value_message};
 
 use super::types::{ResolvedToken, ResolvedValue, TokenResolution};
 use super::validate::{type_name_of, validate_literal};
@@ -67,14 +68,15 @@ pub fn resolve_tokens(block: &TokenBlock) -> TokenResolution {
             continue;
         }
 
-        // Unknown type → advisory warning, skip resolution.
+        // Unknown type → error, skip resolution.
         if let TokenType::Unknown(ref type_name) = token.token_type {
-            diagnostics.push(Diagnostic::warning(
+            diagnostics.push(Diagnostic::error(
                 "token.unknown_type",
-                format!(
-                    "token '{}' has unrecognized type '{}' (version-relative; \
-                     this type may be valid in a later schema version)",
-                    token.id, type_name
+                invalid_value_message(
+                    &format!("token '{}'", token.id),
+                    "type",
+                    type_name,
+                    crate::schema::token_types(),
                 ),
                 token.source_span,
                 Some(token.id.clone()),
@@ -260,6 +262,21 @@ pub fn resolve_tokens(block: &TokenBlock) -> TokenResolution {
 
 // ── Alias-chain resolution ────────────────────────────────────────────────────
 
+/// Next-action text for an alias that targets an undeclared token: a
+/// did-you-mean over declared tokens of the same type as `start`, otherwise
+/// the declared list of that type.
+fn unknown_alias_hint(start: &Token, target: &str, index: &BTreeMap<&str, &Token>) -> String {
+    let ids: Vec<&str> = index
+        .iter()
+        .filter(|(id, t)| **id != start.id && t.token_type == start.token_type)
+        .map(|(id, _)| *id)
+        .collect();
+    match find_suggestion(target, ids.iter().copied(), 2) {
+        Some(s) => format!("did you mean '{s}'?"),
+        None => format_candidate_list(&format!("{} tokens", type_name_of(&start.token_type)), ids),
+    }
+}
+
 /// Follow the alias chain from `start` until a literal is reached, or until a
 /// cycle / missing reference is detected.
 ///
@@ -324,9 +341,10 @@ fn resolve_token_to_literal<'a>(
                         diagnostics.push(Diagnostic::error(
                             "token.unknown_reference",
                             format!(
-                                "token '{}' references '{}' which does not exist \
-                                 — check the spelling and that the token is declared in the `tokens` block",
-                                start.id, token_id
+                                "token '{}' references '{}' which does not exist — {}",
+                                start.id,
+                                token_id,
+                                unknown_alias_hint(start, token_id, index)
                             ),
                             start.source_span,
                             Some(start.id.clone()),

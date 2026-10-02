@@ -529,7 +529,7 @@ fn dimension_wrong_literal_type_produces_diagnostic() {
 // ── Unknown type ──────────────────────────────────────────────────────
 
 #[test]
-fn unknown_type_produces_warning_and_is_not_resolved() {
+fn unknown_type_is_error_and_is_not_resolved() {
     let b = block(vec![literal_token(
         "gradient.hero",
         TokenType::Unknown("gradient".to_owned()),
@@ -546,7 +546,7 @@ fn unknown_type_produces_warning_and_is_not_resolved() {
         .iter()
         .find(|d| d.code == "token.unknown_type")
         .expect("should exist");
-    assert_eq!(unknown_diag.severity, Severity::Warning);
+    assert_eq!(unknown_diag.severity, Severity::Error);
     assert!(!r.resolved.contains_key("gradient.hero"));
 }
 
