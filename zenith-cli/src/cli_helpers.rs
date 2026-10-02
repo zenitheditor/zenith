@@ -1,5 +1,6 @@
 use std::io::Write as _;
 
+use crate::report::CliError;
 use crate::{cli, commands};
 
 /// Map the CLI scope flag to the plugin module's [`Scope`](commands::plugin::Scope).
@@ -44,12 +45,12 @@ pub(crate) fn targets_from_flags(f: &cli::AgentFlags) -> commands::plugin::Targe
 
 // ── Diagnostics ───────────────────────────────────────────────────────────────
 
-/// Print compile-stage diagnostics (advisories/warnings) to stderr, one per
-/// line, so they are surfaced without polluting the stdout success message.
-/// Does nothing when there are no diagnostics.
+/// Print diagnostics to stderr, one line each, with same-cause advisories and
+/// warnings grouped (see [`crate::report::human_diagnostic_lines`]). Does
+/// nothing when there are no diagnostics.
 pub(crate) fn print_diagnostics_stderr(diagnostics: &[zenith_core::Diagnostic]) {
-    for d in diagnostics {
-        eprintln!("{}", commands::format_diagnostic_line(d));
+    for line in crate::report::human_diagnostic_lines(diagnostics) {
+        eprintln!("{line}");
     }
 }
 
@@ -139,14 +140,29 @@ pub(crate) fn resolve_project_dir(path: Option<&std::path::Path>) -> Option<std:
 
 /// Read a file to a UTF-8 string.
 ///
-/// Returns a human-readable error message on failure (never panics).
-pub(crate) fn read_file(path: &std::path::Path) -> Result<String, String> {
-    std::fs::read(path)
-        .map_err(|e| format!("error reading '{}': {}", path.display(), e))
-        .and_then(|bytes| {
-            String::from_utf8(bytes)
-                .map_err(|_| format!("error: '{}' is not valid UTF-8", path.display()))
-        })
+/// Returns an `io.read_failed` or `io.not_utf8` [`CliError`] (exit code 2) on
+/// failure. Never panics.
+pub(crate) fn read_file(path: &std::path::Path) -> Result<String, CliError> {
+    let bytes = std::fs::read(path).map_err(|e| {
+        CliError::new(
+            "io.read_failed",
+            format!(
+                "error[io.read_failed]: cannot read '{}': {e}; check the path exists and is readable",
+                path.display()
+            ),
+            2,
+        )
+    })?;
+    String::from_utf8(bytes).map_err(|_| {
+        CliError::new(
+            "io.not_utf8",
+            format!(
+                "error[io.not_utf8]: '{}' is not valid UTF-8; save it as UTF-8 text",
+                path.display()
+            ),
+            2,
+        )
+    })
 }
 
 /// Write raw bytes to a file.

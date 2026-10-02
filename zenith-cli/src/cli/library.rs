@@ -138,6 +138,10 @@ pub struct LibraryAddArgs {
     /// Print the resulting source to stdout WITHOUT writing the file.
     #[arg(long)]
     pub dry_run: bool,
+
+    /// Emit a machine-readable JSON result (and JSON errors) instead of text.
+    #[arg(long)]
+    pub json: bool,
 }
 
 /// Arguments for `zenith library list`.

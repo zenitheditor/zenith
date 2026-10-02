@@ -141,8 +141,8 @@ pub fn run(src: &str, node_id: Option<&str>, json: bool) -> Result<String, Inspe
 
     if let Some(id) = node_id {
         // --node <ID>: find the subtree rooted at that node.
-        let entry = find_node_tree(&doc.body.pages, id, &resolved)
-            .ok_or_else(|| InspectCmdErr::new(format!("error: node '{}' not found", id), 2))?;
+        let entry =
+            find_node_tree(&doc.body.pages, id, &resolved).ok_or_else(|| node_not_found(id))?;
 
         let out = if json {
             let output = InspectNodeOutput {
@@ -207,8 +207,8 @@ pub fn summary(
     let resolved = resolve_tokens(&doc.tokens).resolved;
 
     if let Some(id) = node {
-        let entry = find_node_tree(&doc.body.pages, id, &resolved)
-            .ok_or_else(|| InspectCmdErr::new(format!("error: node '{id}' not found"), 2))?;
+        let entry =
+            find_node_tree(&doc.body.pages, id, &resolved).ok_or_else(|| node_not_found(id))?;
         Ok(serde_json::json!({
             "schema": "zenith-inspect-summary-v1",
             "node": trim_node(&entry, depth, detail),
@@ -964,6 +964,17 @@ fn fmt_f64(v: f64) -> String {
     } else {
         v.to_string()
     }
+}
+
+/// An `inspect.node_not_found` error for `id` (exit code 2).
+fn node_not_found(id: &str) -> InspectCmdErr {
+    InspectCmdErr::new(
+        format!(
+            "error[inspect.node_not_found]: node '{id}' not found; run `zenith inspect <FILE>` \
+             to list node ids"
+        ),
+        2,
+    )
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────

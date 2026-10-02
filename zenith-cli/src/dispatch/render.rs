@@ -1,336 +1,309 @@
 //! Dispatch logic for `zenith render`.
+//!
+//! Every requested output (spread, scene, PNG, PDF, all pages) renders in
+//! turn. Diagnostics from all of them merge, repeats removed, and print once:
+//! one `zenith-render-v1` envelope on stdout under `--json`, else grouped
+//! lines on stderr. The first output that fails stops the run with status
+//! `blocked` and every diagnostic known so far.
 
+use std::path::Path;
 use std::process::ExitCode;
 
-use zenith_core::DataContext;
+use zenith_core::{DataContext, Diagnostic, Severity};
 
 use crate::cli::RenderArgs;
 use crate::cli_helpers::{
     count_hard_diagnostics, parse_spread_spec, print_diagnostics_stderr, read_file, write_bytes,
 };
 use crate::commands;
+use crate::commands::render::{RenderCmdErr, RenderEntryOptions, SpreadRenderOpts};
 use crate::commands::serialize_pretty;
 use crate::config::CliPolicyFlags;
-use crate::json_types::RenderOutput;
+use crate::json_types::{DiagnosticJson, RenderOutput};
+use crate::report::CliError;
+
+const RENDER_SCHEMA: &str = "zenith-render-v1";
 
 pub(super) fn dispatch_render(args: RenderArgs) -> ExitCode {
-    // Require at least one output flag.
+    let json = args.json;
     if args.scene.is_none() && args.png.is_none() && args.pdf.is_none() && args.all_pages.is_none()
     {
-        eprintln!(
-            "error: at least one of --scene <OUT>, --png <OUT>, --pdf <OUT>, or --all-pages <DIR> is required"
-        );
-        return ExitCode::from(2);
+        return CliError::usage(
+            "error: at least one of --scene <OUT>, --png <OUT>, --pdf <OUT>, or --all-pages <DIR> is required",
+        )
+        .emit(json);
     }
-
+    if args.spread.is_some() && args.png.is_none() {
+        return CliError::usage("error: --spread requires --png <OUT>").emit(json);
+    }
+    if args.spread.is_some() && args.pdf.is_some() {
+        return CliError::usage("error: --spread cannot be combined with --pdf (not supported)")
+            .emit(json);
+    }
+    let spread = match args.spread.as_deref().map(parse_spread_spec).transpose() {
+        Ok(pair) => pair,
+        Err(msg) => return CliError::usage(msg).emit(json),
+    };
     let src = match read_file(&args.path) {
         Ok(s) => s,
-        Err(msg) => {
-            eprintln!("{}", msg);
-            return ExitCode::from(2);
-        }
+        Err(e) => return e.emit(json),
     };
-
-    let flags = CliPolicyFlags {
-        allow: args.allow,
-        warn: args.warn,
-        deny: args.deny,
-    };
-
-    // --data ──────────────────────────────────────────────────────────
-    // Load the data context once (if requested) and pass a reference to each
-    // render entry function so `(data)"field"` refs resolve at compile time.
+    // Load the data context once so `(data)"field"` refs resolve on every
+    // output.
     let data_ctx: Option<DataContext> = match &args.data {
         Some(data_path) => match commands::render::load_data_context(data_path) {
             Ok(ctx) => Some(ctx),
             Err(e) => {
-                eprintln!("error: {}", e);
-                return ExitCode::from(2);
+                return CliError::new(
+                    "data.load_failed",
+                    format!(
+                        "error[data.load_failed]: {e}; check '{}' is valid JSON or CSV",
+                        data_path.display()
+                    ),
+                    2,
+                )
+                .emit(json);
             }
         },
         None => None,
     };
-    let data: Option<&DataContext> = data_ctx.as_ref();
+    let flags = CliPolicyFlags {
+        allow: args.allow.clone(),
+        warn: args.warn.clone(),
+        deny: args.deny.clone(),
+    };
+    let mut run = RenderRun {
+        args: &args,
+        src: &src,
+        flags: &flags,
+        data: data_ctx.as_ref(),
+        outputs: Vec::new(),
+        diagnostics: Vec::new(),
+    };
+    match run.render_all(spread) {
+        Ok(()) => run.finish_ok(),
+        Err(stop) => run.finish_blocked(stop),
+    }
+}
 
-    // --spread ────────────────────────────────────────────────────────
-    // When set, parse the "A-B" page pair up front and render a single
-    // composited PNG to the --png target. --spread requires --png; it is
-    // mutually exclusive with --pdf (deferred) and takes over the --png
-    // target (the normal single-page --png render is skipped below).
-    if let Some(spread_spec) = &args.spread {
-        let png_out = match &args.png {
-            Some(p) => p,
-            None => {
-                eprintln!("error: --spread requires --png <OUT>");
-                return ExitCode::from(2);
-            }
-        };
-        if args.pdf.is_some() {
-            eprintln!("error: --spread cannot be combined with --pdf (not supported)");
-            return ExitCode::from(2);
+/// Why a render run stopped.
+struct Stop {
+    /// Diagnostics of the failing output. At least one is an error.
+    diagnostics: Vec<Diagnostic>,
+    exit_code: u8,
+}
+
+impl From<RenderCmdErr> for Stop {
+    fn from(e: RenderCmdErr) -> Self {
+        Self {
+            diagnostics: e.diagnostics,
+            exit_code: e.exit_code,
         }
-        let (page_a, page_b) = match parse_spread_spec(spread_spec) {
-            Ok(pair) => pair,
-            Err(msg) => {
-                eprintln!("{}", msg);
-                return ExitCode::from(2);
-            }
-        };
-        match commands::render::to_png_spread(
-            &src,
-            args.path.parent(),
-            page_a,
-            page_b,
-            args.gutter,
-            commands::render::SpreadRenderOpts {
-                locked: args.locked,
-                flags: &flags,
-                data,
-                construction_overlay: args.construction_overlay,
-            },
-        ) {
-            Ok(artifact) => {
-                let n_hard = count_hard_diagnostics(&artifact.diagnostics);
-                if n_hard > 0 {
-                    print_diagnostics_stderr(&artifact.diagnostics);
-                    eprintln!("render blocked by {} hard diagnostic(s)", n_hard);
-                    return ExitCode::from(2);
-                }
-                if let Err(e) = write_bytes(png_out, &artifact.png) {
-                    eprintln!("error writing PNG to '{}': {}", png_out.display(), e);
-                    return ExitCode::from(2);
-                }
-                if args.json {
-                    let out = RenderOutput {
-                        schema: "zenith-render-v1",
-                        diagnostics: artifact.diagnostics.iter().map(Into::into).collect(),
-                    };
-                    println!("{}", serialize_pretty(&out));
-                } else {
-                    println!("spread PNG written to '{}'", png_out.display());
-                    print_diagnostics_stderr(&artifact.diagnostics);
-                }
-            }
-            Err(e) => {
-                eprintln!("{}", e.message);
-                return ExitCode::from(e.exit_code);
-            }
+    }
+}
+
+/// State of one `zenith render` invocation.
+struct RenderRun<'a> {
+    args: &'a RenderArgs,
+    src: &'a str,
+    flags: &'a CliPolicyFlags,
+    data: Option<&'a DataContext>,
+    /// Written paths, in write order.
+    outputs: Vec<String>,
+    /// Diagnostics of every finished output, in output order.
+    diagnostics: Vec<Diagnostic>,
+}
+
+impl RenderRun<'_> {
+    fn entry_options(&self) -> RenderEntryOptions<'_> {
+        RenderEntryOptions {
+            locked: self.args.locked,
+            subset: !self.args.embed_full_fonts,
+            flags: self.flags,
+            data: self.data,
+            construction_overlay: self.args.construction_overlay,
         }
     }
 
-    // --scene ─────────────────────────────────────────────────────────
-    if let Some(scene_out) = &args.scene {
-        match commands::render::to_scene_json_with_options(
-            &src,
-            args.path.parent(),
-            args.page.unwrap_or(1),
-            commands::render::RenderEntryOptions {
-                locked: args.locked,
-                subset: !args.embed_full_fonts,
-                flags: &flags,
-                data,
-                construction_overlay: args.construction_overlay,
-            },
-        ) {
-            Ok(artifact) => {
-                // Block on hard (Error-severity) compile diagnostics.
-                let n_hard = count_hard_diagnostics(&artifact.diagnostics);
-                if n_hard > 0 {
-                    print_diagnostics_stderr(&artifact.diagnostics);
-                    eprintln!("render blocked by {} hard diagnostic(s)", n_hard);
-                    return ExitCode::from(2);
-                }
-                if let Err(e) = std::fs::write(scene_out, artifact.json.as_bytes()) {
-                    eprintln!("error writing scene to '{}': {}", scene_out.display(), e);
-                    return ExitCode::from(2);
-                }
-                if args.json {
-                    let out = RenderOutput {
-                        schema: "zenith-render-v1",
-                        diagnostics: artifact.diagnostics.iter().map(Into::into).collect(),
-                    };
-                    println!("{}", serialize_pretty(&out));
-                } else {
-                    println!("scene written to '{}'", scene_out.display());
-                    print_diagnostics_stderr(&artifact.diagnostics);
-                }
-            }
-            Err(e) => {
-                eprintln!("{}", e.message);
-                return ExitCode::from(e.exit_code);
-            }
-        }
-    }
-
-    // --png ───────────────────────────────────────────────────────────
-    // Skipped when --spread is active: the spread branch above already
-    // wrote the composited image to the --png target.
-    if let (Some(png_out), None) = (&args.png, &args.spread) {
-        // Source image asset bytes relative to the .zen file's parent
-        // directory so `image` nodes render their raster.
-        match commands::render::to_png_with_dir_options(
-            &src,
-            args.path.parent(),
-            args.page.unwrap_or(1),
-            commands::render::RenderEntryOptions {
-                locked: args.locked,
-                subset: !args.embed_full_fonts,
-                flags: &flags,
-                data,
-                construction_overlay: args.construction_overlay,
-            },
-        ) {
-            Ok(artifact) => {
-                // Block on hard (Error-severity) compile diagnostics.
-                let n_hard = count_hard_diagnostics(&artifact.diagnostics);
-                if n_hard > 0 {
-                    print_diagnostics_stderr(&artifact.diagnostics);
-                    eprintln!("render blocked by {} hard diagnostic(s)", n_hard);
-                    return ExitCode::from(2);
-                }
-                if let Err(e) = write_bytes(png_out, &artifact.png) {
-                    eprintln!("error writing PNG to '{}': {}", png_out.display(), e);
-                    return ExitCode::from(2);
-                }
-                if args.json {
-                    let out = RenderOutput {
-                        schema: "zenith-render-v1",
-                        diagnostics: artifact.diagnostics.iter().map(Into::into).collect(),
-                    };
-                    println!("{}", serialize_pretty(&out));
-                } else {
-                    println!("PNG written to '{}'", png_out.display());
-                    print_diagnostics_stderr(&artifact.diagnostics);
-                }
-            }
-            Err(e) => {
-                eprintln!("{}", e.message);
-                return ExitCode::from(e.exit_code);
-            }
-        }
-    }
-
-    // --pdf ───────────────────────────────────────────────────────────
-    if let Some(pdf_out) = &args.pdf {
-        // An explicit `--page N` selects one page (single-page PDF); without it
-        // every page is rendered into one multi-page PDF.
-        let result = match args.page {
-            Some(n) => commands::render::to_pdf_with_dir_options(
-                &src,
-                args.path.parent(),
-                n,
-                commands::render::RenderEntryOptions {
+    fn render_all(&mut self, spread: Option<(usize, usize)>) -> Result<(), Stop> {
+        let args = self.args;
+        let dir = args.path.parent();
+        if let (Some((page_a, page_b)), Some(png_out)) = (spread, &args.png) {
+            let artifact = commands::render::to_png_spread(
+                self.src,
+                dir,
+                page_a,
+                page_b,
+                args.gutter,
+                SpreadRenderOpts {
                     locked: args.locked,
-                    subset: !args.embed_full_fonts,
-                    flags: &flags,
-                    data,
+                    flags: self.flags,
+                    data: self.data,
                     construction_overlay: args.construction_overlay,
                 },
-            ),
-            None => commands::render::to_pdf_all_pages_with_dir_options(
-                &src,
-                args.path.parent(),
-                commands::render::RenderEntryOptions {
-                    locked: args.locked,
-                    subset: !args.embed_full_fonts,
-                    flags: &flags,
-                    data,
-                    construction_overlay: args.construction_overlay,
-                },
-            ),
-        };
-        match result {
-            Ok(artifact) => {
-                // Block on hard (Error-severity) compile diagnostics.
-                let n_hard = count_hard_diagnostics(&artifact.diagnostics);
-                if n_hard > 0 {
-                    print_diagnostics_stderr(&artifact.diagnostics);
-                    eprintln!("render blocked by {} hard diagnostic(s)", n_hard);
-                    return ExitCode::from(2);
-                }
-                if let Err(e) = write_bytes(pdf_out, &artifact.pdf) {
-                    eprintln!("error writing PDF to '{}': {}", pdf_out.display(), e);
-                    return ExitCode::from(2);
-                }
-                if args.json {
-                    let out = RenderOutput {
-                        schema: "zenith-render-v1",
-                        diagnostics: artifact.diagnostics.iter().map(Into::into).collect(),
-                    };
-                    println!("{}", serialize_pretty(&out));
-                } else {
-                    println!("PDF written to '{}'", pdf_out.display());
-                    print_diagnostics_stderr(&artifact.diagnostics);
-                }
-            }
-            Err(e) => {
-                eprintln!("{}", e.message);
-                return ExitCode::from(e.exit_code);
-            }
+            )?;
+            self.write(png_out, &artifact.png, artifact.diagnostics, "spread PNG")?;
         }
+        if let Some(scene_out) = &args.scene {
+            let artifact = commands::render::to_scene_json_with_options(
+                self.src,
+                dir,
+                args.page.unwrap_or(1),
+                self.entry_options(),
+            )?;
+            self.write(
+                scene_out,
+                artifact.json.as_bytes(),
+                artifact.diagnostics,
+                "scene",
+            )?;
+        }
+        // --spread already wrote the composited image to the --png target.
+        if let (Some(png_out), None) = (&args.png, spread) {
+            let artifact = commands::render::to_png_with_dir_options(
+                self.src,
+                dir,
+                args.page.unwrap_or(1),
+                self.entry_options(),
+            )?;
+            self.write(png_out, &artifact.png, artifact.diagnostics, "PNG")?;
+        }
+        if let Some(pdf_out) = &args.pdf {
+            // `--page N` selects one page. Without it every page goes into one
+            // multi-page PDF.
+            let artifact = match args.page {
+                Some(n) => commands::render::to_pdf_with_dir_options(
+                    self.src,
+                    dir,
+                    n,
+                    self.entry_options(),
+                ),
+                None => commands::render::to_pdf_all_pages_with_dir_options(
+                    self.src,
+                    dir,
+                    self.entry_options(),
+                ),
+            }?;
+            self.write(pdf_out, &artifact.pdf, artifact.diagnostics, "PDF")?;
+        }
+        if let Some(out_dir) = &args.all_pages {
+            self.render_pages(out_dir)?;
+        }
+        Ok(())
     }
 
-    // --all-pages ─────────────────────────────────────────────────────
-    if let Some(dir) = &args.all_pages {
-        if let Err(e) = std::fs::create_dir_all(dir) {
-            eprintln!("error creating directory '{}': {}", dir.display(), e);
-            return ExitCode::from(2);
+    fn render_pages(&mut self, out_dir: &Path) -> Result<(), Stop> {
+        if let Err(e) = std::fs::create_dir_all(out_dir) {
+            return Err(write_stop(out_dir, &e));
         }
-        match commands::render::to_png_all_pages_options(
-            &src,
-            args.path.parent(),
-            commands::render::RenderEntryOptions {
-                locked: args.locked,
-                subset: !args.embed_full_fonts,
-                flags: &flags,
-                data,
-                construction_overlay: args.construction_overlay,
-            },
-        ) {
-            Ok(artifacts) => {
-                // Collect all diagnostics first; block if any are hard errors
-                // before writing any page to disk.
-                let all_diagnostics: Vec<&zenith_core::Diagnostic> = artifacts
-                    .iter()
-                    .flat_map(|a| a.diagnostics.iter())
-                    .collect();
-                let n_hard = all_diagnostics
-                    .iter()
-                    .filter(|d| d.severity == zenith_core::Severity::Error)
-                    .count();
-                if n_hard > 0 {
-                    for d in &all_diagnostics {
-                        eprintln!("{}", commands::format_diagnostic_line(d));
-                    }
-                    eprintln!("render blocked by {} hard diagnostic(s)", n_hard);
-                    return ExitCode::from(2);
-                }
-                for (i, artifact) in artifacts.iter().enumerate() {
-                    let page_path = dir.join(format!("page-{}.png", i + 1));
-                    if let Err(e) = write_bytes(&page_path, &artifact.png) {
-                        eprintln!("error writing PNG to '{}': {}", page_path.display(), e);
-                        return ExitCode::from(2);
-                    }
-                }
-                if args.json {
-                    let out = RenderOutput {
-                        schema: "zenith-render-v1",
-                        diagnostics: all_diagnostics.iter().map(|d| (*d).into()).collect(),
-                    };
-                    println!("{}", serialize_pretty(&out));
-                } else {
-                    println!("{} page(s) written to '{}'", artifacts.len(), dir.display());
-                    for d in all_diagnostics {
-                        eprintln!("{}", commands::format_diagnostic_line(d));
-                    }
-                }
+        let artifact = commands::render::to_png_all_pages_options(
+            self.src,
+            self.args.path.parent(),
+            self.entry_options(),
+        )?;
+        // Block on hard diagnostics before any page reaches disk.
+        gate(&artifact.diagnostics)?;
+        for (i, png) in artifact.pages.iter().enumerate() {
+            let page_path = out_dir.join(format!("page-{}.png", i + 1));
+            if let Err(e) = write_bytes(&page_path, png) {
+                return Err(write_stop(&page_path, &e));
             }
-            Err(e) => {
-                eprintln!("{}", e.message);
-                return ExitCode::from(e.exit_code);
-            }
+            self.outputs.push(page_path.display().to_string());
         }
+        if !self.args.json {
+            println!(
+                "{} page(s) written to '{}'",
+                artifact.pages.len(),
+                out_dir.display()
+            );
+        }
+        self.diagnostics.extend(artifact.diagnostics);
+        Ok(())
     }
 
-    ExitCode::SUCCESS
+    /// Gate on `diagnostics`, write `bytes` to `out`, and record the output.
+    fn write(
+        &mut self,
+        out: &Path,
+        bytes: &[u8],
+        diagnostics: Vec<Diagnostic>,
+        label: &str,
+    ) -> Result<(), Stop> {
+        gate(&diagnostics)?;
+        if let Err(e) = write_bytes(out, bytes) {
+            return Err(write_stop(out, &e));
+        }
+        self.outputs.push(out.display().to_string());
+        if !self.args.json {
+            println!("{label} written to '{}'", out.display());
+        }
+        self.diagnostics.extend(diagnostics);
+        Ok(())
+    }
+
+    fn finish_ok(self) -> ExitCode {
+        let diagnostics = Diagnostic::dedup(self.diagnostics);
+        if self.args.json {
+            print_envelope("ok", self.outputs, &diagnostics, self.src);
+        } else {
+            print_diagnostics_stderr(&diagnostics);
+        }
+        ExitCode::SUCCESS
+    }
+
+    fn finish_blocked(mut self, stop: Stop) -> ExitCode {
+        self.diagnostics.extend(stop.diagnostics);
+        let diagnostics = Diagnostic::dedup(self.diagnostics);
+        if self.args.json {
+            print_envelope("blocked", self.outputs, &diagnostics, self.src);
+        } else {
+            print_diagnostics_stderr(&diagnostics);
+            eprintln!(
+                "render blocked by {} hard diagnostic(s)",
+                count_hard_diagnostics(&diagnostics)
+            );
+        }
+        ExitCode::from(stop.exit_code)
+    }
+}
+
+/// Stop with exit code 2 when any diagnostic is an error.
+fn gate(diagnostics: &[Diagnostic]) -> Result<(), Stop> {
+    if diagnostics.iter().any(|d| d.severity == Severity::Error) {
+        return Err(Stop {
+            diagnostics: diagnostics.to_vec(),
+            exit_code: 2,
+        });
+    }
+    Ok(())
+}
+
+fn write_stop(path: &Path, e: &std::io::Error) -> Stop {
+    Stop {
+        diagnostics: vec![Diagnostic::error(
+            "io.write_failed",
+            format!(
+                "cannot write '{}': {e}; check the directory exists and is writable",
+                path.display()
+            ),
+            None,
+            None,
+        )],
+        exit_code: 2,
+    }
+}
+
+fn print_envelope(
+    status: &'static str,
+    outputs: Vec<String>,
+    diagnostics: &[Diagnostic],
+    src: &str,
+) {
+    let out = RenderOutput {
+        schema: RENDER_SCHEMA,
+        status,
+        outputs,
+        diagnostics: DiagnosticJson::located_all(diagnostics, src),
+    };
+    println!("{}", serialize_pretty(&out));
 }

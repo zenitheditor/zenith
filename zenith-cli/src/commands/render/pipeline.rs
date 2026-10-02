@@ -5,7 +5,7 @@ use std::path::Path;
 use sha2::{Digest, Sha256};
 
 use zenith_core::{
-    Diagnostic, DiagnosticPolicy, Document, KdlAdapter, KdlSource, Severity, apply_policy,
+    Diagnostic, DiagnosticPolicy, Document, KdlAdapter, KdlSource, apply_policy,
     merge_brand_contract, validate_with_policy,
 };
 
@@ -13,6 +13,7 @@ use crate::config::{CliPolicyFlags, load_global_and_local, merge_policy};
 
 use crate::commands::composition_imports::{LoadedImportGraph, load_import_graph};
 
+use super::assets::disk_diagnostics_with_imports;
 use super::entry::RenderCmdErr;
 
 /// Verify that `bytes` match the `sha256` field declared on an asset.
@@ -31,11 +32,19 @@ pub(super) fn verify_locked_sha256(
     bytes: &[u8],
 ) -> Result<(), RenderCmdErr> {
     let declared = sha256.ok_or_else(|| {
-        RenderCmdErr::new(format!("--locked: {kind} '{id}' has no declared sha256"), 2)
+        RenderCmdErr::new(
+            "asset.sha256_missing",
+            format!(
+                "--locked: {kind} '{id}' has no declared sha256; add sha256=\"<hex>\" to it or \
+                 drop --locked"
+            ),
+            2,
+        )
     })?;
     let hex = format!("{:x}", Sha256::digest(bytes));
     if declared.trim().to_lowercase() != hex {
         return Err(RenderCmdErr::new(
+            "asset.sha256_mismatch",
             format!("--locked: {kind} '{id}' sha256 mismatch (declared {declared}, actual {hex})"),
             2,
         ));
@@ -73,12 +82,15 @@ pub(super) fn parse_validate(
 ) -> Result<(Document, DiagnosticPolicy, LoadedImportGraph), RenderCmdErr> {
     // Resolve config policy and brand contract ───────────────────────────────
     let (global, local, global_brand, local_brand) = load_global_and_local(start_dir)
-        .map_err(|msg| RenderCmdErr::new(format!("error[config.error]: {msg}"), 2))?;
+        .map_err(|msg| RenderCmdErr::new("config.error", msg, 2))?;
 
     // Parse ─────────────────────────────────────────────────────────────────
-    let doc = KdlAdapter
-        .parse(src.as_bytes())
-        .map_err(|e| RenderCmdErr::new(format!("error[parse.error]: {}", e.message), 2))?;
+    let doc = KdlAdapter.parse(src.as_bytes()).map_err(|e| {
+        RenderCmdErr::blocked(
+            vec![Diagnostic::error("parse.error", e.message, e.span, None)],
+            2,
+        )
+    })?;
 
     // Validate ───────────────────────────────────────────────────────────────
     let merged = merge_policy(&global, &local, &doc.diagnostic_policy, flags);
@@ -87,17 +99,15 @@ pub(super) fn parse_validate(
         &doc.brand_contract,
     );
     let report = validate_with_policy(&doc, &merged, &effective_brand);
-    if report.has_errors() {
-        let msgs: Vec<String> = report
-            .diagnostics
-            .iter()
-            .filter(|d| d.severity == Severity::Error)
-            .map(crate::commands::format_error_diag)
-            .collect();
-        return Err(RenderCmdErr::new(msgs.join("\n"), 1));
-    }
-
     let imports = load_import_graph(&doc, start_dir);
+    if report.has_errors() {
+        // Report the cheap disk and import diagnostics with the validation
+        // errors, so one round shows every known problem.
+        let mut diagnostics = report.diagnostics;
+        diagnostics.extend(imports.diagnostics().iter().cloned());
+        diagnostics.extend(disk_diagnostics_with_imports(&doc, start_dir, &imports));
+        return Err(RenderCmdErr::blocked(diagnostics, 1));
+    }
 
     Ok((doc, merged, imports))
 }
@@ -115,7 +125,7 @@ pub(super) fn parse_validate(
 /// This function is **infallible**: it applies the policy and returns the
 /// governed `Vec<Diagnostic>` directly. The caller attaches it to the artifact;
 /// the dispatch layer (`count_hard_diagnostics`) decides the exit code when any
-/// of those diagnostics are [`Severity::Error`].
+/// of those diagnostics are [`Severity::Error`](zenith_core::Severity::Error).
 ///
 /// With an empty policy this is an exact identity pass: the diagnostics are
 /// returned unchanged, so artifacts and exit codes stay byte-identical to the
@@ -137,7 +147,8 @@ pub(super) fn resolve_page_index(doc: &Document, page: usize) -> Result<usize, R
     let n = doc.body.pages.len();
     if doc.body.pages.is_empty() || page < 1 || page > n {
         return Err(RenderCmdErr::new(
-            format!("page {page} out of range; document has {n} page(s)"),
+            "render.page_out_of_range",
+            format!("page {page} out of range; document has {n} page(s); pass --page 1 to {n}"),
             2,
         ));
     }

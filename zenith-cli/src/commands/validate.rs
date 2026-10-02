@@ -5,15 +5,19 @@
 
 use std::path::Path;
 
-use zenith_core::{KdlAdapter, KdlSource, Severity, merge_brand_contract, validate_with_policy};
+use zenith_core::{
+    Diagnostic, KdlAdapter, KdlSource, Severity, merge_brand_contract, validate_with_policy,
+};
 
 use crate::commands::composition_imports::load_import_graph;
 use crate::commands::render::{
     collect_image_dimension_diagnostics, collect_missing_asset_diagnostics,
+    compile_check_diagnostics,
 };
 use crate::commands::serialize_pretty;
 use crate::config::{CliPolicyFlags, load_global_and_local, merge_policy};
 use crate::json_types::{DiagnosticJson, ValidateOutput};
+use crate::report::human_diagnostic_lines;
 
 // ── Result type ───────────────────────────────────────────────────────────────
 
@@ -42,6 +46,11 @@ pub struct CmdOutput {
 /// [`validate_with_policy`]. With no config files and no flags the merged policy
 /// is identical to the document's in-file policy, so output is unchanged.
 ///
+/// With no Error diagnostic, every page also compiles (no raster), so the
+/// compile-stage diagnostics `render` reports (`text.overflow`,
+/// `font.unresolved`, …) show here in the same round. Repeats are removed.
+/// JSON diagnostics carry 1-based `line`/`col` when they have a span.
+///
 /// - Parse errors and config-load errors produce `exit_code = 2`.
 /// - Documents with at least one error-severity diagnostic produce
 ///   `exit_code = 1`.
@@ -52,32 +61,18 @@ pub fn run(src: &str, project_dir: Option<&Path>, json: bool, flags: &CliPolicyF
     // document's directory when known. A load error is a hard exit-2 failure.
     let (global, local, global_brand, local_brand) = match load_global_and_local(project_dir) {
         Ok(quad) => quad,
-        Err(msg) => return config_error(&msg, json),
+        Err(msg) => {
+            let d = Diagnostic::error("config.error", msg, None, None);
+            return output(&[d], src, json, 2);
+        }
     };
 
     // Parse ─────────────────────────────────────────────────────────────────
     let doc = match KdlAdapter.parse(src.as_bytes()) {
         Ok(d) => d,
         Err(e) => {
-            let msg = if json {
-                let out = ValidateOutput {
-                    schema: "zenith-validate-v1",
-                    valid: false,
-                    diagnostics: vec![DiagnosticJson {
-                        code: "parse.error".to_owned(),
-                        severity: "error".to_owned(),
-                        message: e.message.clone(),
-                        subject_id: None,
-                    }],
-                };
-                serialize_pretty(&out)
-            } else {
-                format!("error[parse.error]: {}", e.message)
-            };
-            return CmdOutput {
-                stdout: msg,
-                exit_code: 2,
-            };
+            let d = Diagnostic::error("parse.error", e.message, e.span, None);
+            return output(&[d], src, json, 2);
         }
     };
 
@@ -94,63 +89,41 @@ pub fn run(src: &str, project_dir: Option<&Path>, json: bool, flags: &CliPolicyF
         diagnostics.extend(collect_missing_asset_diagnostics(&doc, dir));
         diagnostics.extend(collect_image_dimension_diagnostics(&doc, dir));
     }
-    diagnostics.extend(load_import_graph(&doc, project_dir).into_diagnostics());
-    let has_errors = diagnostics.iter().any(|d| d.severity == Severity::Error);
-
-    let stdout = if json {
-        let out = ValidateOutput {
-            schema: "zenith-validate-v1",
-            valid: !has_errors,
-            diagnostics: diagnostics.iter().map(DiagnosticJson::from).collect(),
-        };
-        serialize_pretty(&out)
-    } else {
-        format_human(&diagnostics)
-    };
-
-    CmdOutput {
-        stdout,
-        exit_code: if has_errors { 1 } else { 0 },
+    let imports = load_import_graph(&doc, project_dir);
+    diagnostics.extend(imports.diagnostics().iter().cloned());
+    if !has_errors(&diagnostics) {
+        diagnostics.extend(compile_check_diagnostics(
+            &doc,
+            project_dir,
+            &imports,
+            &merged,
+        ));
     }
+    let diagnostics = Diagnostic::dedup(diagnostics);
+    let exit_code = if has_errors(&diagnostics) { 1 } else { 0 };
+    output(&diagnostics, src, json, exit_code)
 }
 
-// ── Config-load error ──────────────────────────────────────────────────────────
-
-/// Build an exit-2 [`CmdOutput`] for a config-load failure, in either the JSON
-/// or human output shape (mirroring the parse-error path).
-fn config_error(msg: &str, json: bool) -> CmdOutput {
-    let stdout = if json {
-        let out = ValidateOutput {
-            schema: "zenith-validate-v1",
-            valid: false,
-            diagnostics: vec![DiagnosticJson {
-                code: "config.error".to_owned(),
-                severity: "error".to_owned(),
-                message: msg.to_owned(),
-                subject_id: None,
-            }],
-        };
-        serialize_pretty(&out)
-    } else {
-        format!("error[config.error]: {msg}")
-    };
-    CmdOutput {
-        stdout,
-        exit_code: 2,
-    }
+fn has_errors(diagnostics: &[Diagnostic]) -> bool {
+    diagnostics.iter().any(|d| d.severity == Severity::Error)
 }
 
-// ── Human-readable formatter ──────────────────────────────────────────────────
-
-fn format_human(diagnostics: &[zenith_core::Diagnostic]) -> String {
-    if diagnostics.is_empty() {
-        return "ok — no diagnostics".to_owned();
-    }
-    diagnostics
-        .iter()
-        .map(crate::commands::format_diagnostic_line)
-        .collect::<Vec<_>>()
-        .join("\n")
+/// Format `diagnostics` as the JSON envelope or human lines.
+///
+/// `valid` is false when any diagnostic is an error.
+fn output(diagnostics: &[Diagnostic], src: &str, json: bool, exit_code: u8) -> CmdOutput {
+    let stdout = if json {
+        serialize_pretty(&ValidateOutput {
+            schema: "zenith-validate-v1",
+            valid: !has_errors(diagnostics),
+            diagnostics: DiagnosticJson::located_all(diagnostics, src),
+        })
+    } else if diagnostics.is_empty() {
+        "ok — no diagnostics".to_owned()
+    } else {
+        human_diagnostic_lines(diagnostics).join("\n")
+    };
+    CmdOutput { stdout, exit_code }
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────

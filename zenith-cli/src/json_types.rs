@@ -7,6 +7,10 @@
 use serde::Serialize;
 
 /// JSON representation of a [`zenith_core::Diagnostic`].
+///
+/// `line` and `col` are 1-based. They are present only when the diagnostic
+/// has a span and the caller supplied the source text. `cause` names a root
+/// cause shared by many subjects.
 #[derive(Debug, Serialize)]
 pub struct DiagnosticJson {
     pub code: String,
@@ -14,6 +18,45 @@ pub struct DiagnosticJson {
     pub message: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub subject_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub line: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub col: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cause: Option<String>,
+}
+
+impl DiagnosticJson {
+    /// An error entry with no subject, location, or cause.
+    pub fn error(code: impl Into<String>, message: impl Into<String>) -> Self {
+        Self {
+            code: code.into(),
+            severity: "error".to_owned(),
+            message: message.into(),
+            subject_id: None,
+            line: None,
+            col: None,
+            cause: None,
+        }
+    }
+
+    /// Convert `d`, adding `line`/`col` from its span over `src`.
+    pub fn located(d: &zenith_core::Diagnostic, src: &str) -> Self {
+        let mut out = Self::from(d);
+        if let Some((line, col)) = d
+            .span
+            .and_then(|span| crate::report::line_col(src, span.start))
+        {
+            out.line = Some(line);
+            out.col = Some(col);
+        }
+        out
+    }
+
+    /// Convert every diagnostic in `diagnostics`, located over `src`.
+    pub fn located_all(diagnostics: &[zenith_core::Diagnostic], src: &str) -> Vec<Self> {
+        diagnostics.iter().map(|d| Self::located(d, src)).collect()
+    }
 }
 
 impl From<&zenith_core::Diagnostic> for DiagnosticJson {
@@ -23,6 +66,9 @@ impl From<&zenith_core::Diagnostic> for DiagnosticJson {
             severity: severity_str(&d.severity).to_owned(),
             message: d.message.clone(),
             subject_id: d.subject_id.clone(),
+            line: None,
+            col: None,
+            cause: d.cause.as_deref().map(str::to_owned),
         }
     }
 }
@@ -68,8 +114,35 @@ pub struct TokensOutput {
 }
 
 /// Top-level JSON envelope for `render`.
+///
+/// `status` is `"ok"` when every requested output was written, else
+/// `"blocked"`. `outputs` lists the written paths in write order.
 #[derive(Debug, Serialize)]
 pub struct RenderOutput {
+    pub schema: &'static str,
+    pub status: &'static str,
+    pub outputs: Vec<String>,
+    pub diagnostics: Vec<DiagnosticJson>,
+}
+
+/// JSON result of `library add --json`.
+///
+/// `written` is false under `--dry-run`. `source` holds the resulting document
+/// text under `--dry-run` only.
+#[derive(Debug, Serialize)]
+pub struct LibraryAddOutput {
+    pub schema: &'static str,
+    pub path: String,
+    pub written: bool,
+    pub summary: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source: Option<String>,
+}
+
+/// JSON envelope for a failure outside a command's own output shape: a
+/// missing file, a bad flag, or a parse error before the command runs.
+#[derive(Debug, Serialize)]
+pub struct ErrorOutput {
     pub schema: &'static str,
     pub diagnostics: Vec<DiagnosticJson>,
 }

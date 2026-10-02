@@ -383,10 +383,8 @@ pub fn to_json_output(report: &VariantReport) -> VariantOutput {
                 diagnostics: match &r.failure {
                     None => Vec::new(),
                     Some(reason) => vec![DiagnosticJson {
-                        code: "variant.failed".to_owned(),
-                        severity: "error".to_owned(),
-                        message: reason.clone(),
                         subject_id: Some(r.id.clone()),
+                        ..DiagnosticJson::error("variant.failed", reason.clone())
                     }],
                 },
             })

@@ -41,13 +41,13 @@ pub struct FmtResult {
 pub fn run(src: &str) -> Result<FmtResult, FmtErr> {
     // Parse ─────────────────────────────────────────────────────────────────
     let doc = KdlAdapter.parse(src.as_bytes()).map_err(|e| FmtErr {
-        message: format!("parse error: {}", e.message),
+        message: format!("error[parse.error]: {}", e.message),
         exit_code: 2,
     })?;
 
     // Format ─────────────────────────────────────────────────────────────────
     let formatted = KdlAdapter.format(&doc).map_err(|e| FmtErr {
-        message: format!("format error: {}", e.message),
+        message: format!("error[fmt.format_failed]: {}", e.message),
         exit_code: 2,
     })?;
 

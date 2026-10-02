@@ -16,14 +16,41 @@ const MAX_PAGE_THREADS: usize = 8;
 /// Compile `page_index` from `compiler`, then append the construction overlay
 /// when `opts` asks for it.
 ///
-/// The overlay reads the page from `doc`, the caller's parsed document.
+/// The result carries the document diagnostics too (see
+/// [`PageCompiler::compile_page`]). The overlay reads the page from `doc`, the
+/// caller's parsed document.
 pub(super) fn compile_for_render(
     doc: &Document,
     compiler: &PageCompiler<'_, BytesFontProvider>,
     page_index: usize,
     opts: RenderEntryOptions<'_>,
 ) -> CompileResult {
-    let mut compile_result = compiler.compile_page(page_index);
+    with_overlay(doc, compiler.compile_page(page_index), page_index, opts)
+}
+
+/// [`compile_for_render`] with only the page's own diagnostics.
+///
+/// Multi-page paths read [`PageCompiler::document_diagnostics`] once instead.
+pub(super) fn compile_local_for_render(
+    doc: &Document,
+    compiler: &PageCompiler<'_, BytesFontProvider>,
+    page_index: usize,
+    opts: RenderEntryOptions<'_>,
+) -> CompileResult {
+    with_overlay(
+        doc,
+        compiler.compile_page_local(page_index),
+        page_index,
+        opts,
+    )
+}
+
+fn with_overlay(
+    doc: &Document,
+    mut compile_result: CompileResult,
+    page_index: usize,
+    opts: RenderEntryOptions<'_>,
+) -> CompileResult {
     if opts.construction_overlay
         && let Some(page) = doc.body.pages.get(page_index)
     {

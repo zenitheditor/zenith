@@ -5,7 +5,12 @@ use std::process::ExitCode;
 
 use crate::cli::{self, LibraryArgs};
 use crate::cli_helpers::{parse_at_spec, read_file, resolve_project_dir};
-use crate::{commands, history, library};
+use crate::commands::serialize_pretty;
+use crate::json_types::LibraryAddOutput;
+use crate::report::CliError;
+use crate::{commands, library};
+
+use super::output::apply_edit;
 
 pub(super) fn dispatch_library(args: LibraryArgs) -> ExitCode {
     match args.command {
@@ -26,10 +31,8 @@ pub(super) fn dispatch_library(args: LibraryArgs) -> ExitCode {
                     println!("{}", out);
                     ExitCode::SUCCESS
                 }
-                Err(e) => {
-                    eprintln!("{}", e.message);
-                    ExitCode::from(e.exit_code)
-                }
+                Err(e) => CliError::new("library.show_failed", e.message, e.exit_code)
+                    .emit(show_args.json),
             }
         }
 
@@ -43,8 +46,10 @@ pub(super) fn dispatch_library(args: LibraryArgs) -> ExitCode {
                 Some("action") => Some(library::ItemKind::Action),
                 // clap's `value_parser` rejects anything else before we get here.
                 Some(other) => {
-                    eprintln!("error: unknown item kind '{other}'");
-                    return ExitCode::from(2);
+                    return CliError::usage(format!(
+                        "error: unknown item kind '{other}'; use component, token, or action"
+                    ))
+                    .emit(search_args.json);
                 }
             };
             let category = search_args.category.as_deref().map(str::to_lowercase);
@@ -64,76 +69,80 @@ pub(super) fn dispatch_library(args: LibraryArgs) -> ExitCode {
             ExitCode::SUCCESS
         }
 
-        cli::LibrarySub::Add(add_args) => {
-            // Parse the optional `--at "X,Y"` origin up front.
-            let at = match parse_at_spec(add_args.at.as_deref()) {
-                Ok(pair) => pair,
-                Err(msg) => {
-                    eprintln!("{}", msg);
-                    return ExitCode::from(2);
-                }
-            };
-
-            let target_src = match read_file(&add_args.into) {
-                Ok(s) => s,
-                Err(msg) => {
-                    eprintln!("{}", msg);
-                    return ExitCode::from(2);
-                }
-            };
-
-            // The project dir is the --into file's parent directory.
-            let project_dir = add_args
-                .into
-                .parent()
-                .filter(|p| !p.as_os_str().is_empty())
-                .map(std::path::Path::to_path_buf);
-
-            match commands::library::add(
-                &target_src,
-                &add_args.spec,
-                project_dir.as_deref(),
-                add_args.page.as_deref(),
-                at,
-                add_args.id.as_deref(),
-            ) {
-                Ok(result) => {
-                    if add_args.dry_run {
-                        // Print the resulting source WITHOUT writing.
-                        match String::from_utf8(result.formatted) {
-                            Ok(s) => print!("{}", s),
-                            Err(_) => {
-                                eprintln!("error: formatted output is not valid UTF-8");
-                                return ExitCode::from(2);
-                            }
-                        }
-                    } else {
-                        let asset_root = project_dir.as_deref().unwrap_or_else(|| Path::new("."));
-                        if let Err(msg) = write_embedded_assets(asset_root, &result.embedded_assets)
-                        {
-                            eprintln!("{msg}");
-                            return ExitCode::from(2);
-                        }
-                        let recorded =
-                            history::record_edit(&result.formatted, &add_args.into, "library.add");
-                        if let Some(w) = &recorded.warning {
-                            eprintln!("warning: {w}");
-                        }
-                        if let Err(e) = std::fs::write(&add_args.into, &recorded.bytes) {
-                            eprintln!("error writing '{}': {}", add_args.into.display(), e);
-                            return ExitCode::from(2);
-                        }
-                        println!("{}", result.summary);
-                    }
-                    ExitCode::SUCCESS
-                }
-                Err(e) => {
-                    eprintln!("{}", e.message);
-                    ExitCode::from(e.exit_code)
-                }
-            }
-        }
+        cli::LibrarySub::Add(add_args) => dispatch_add(add_args),
     }
+}
+
+fn dispatch_add(add_args: cli::LibraryAddArgs) -> ExitCode {
+    let json = add_args.json;
+    let at = match parse_at_spec(add_args.at.as_deref()) {
+        Ok(pair) => pair,
+        Err(msg) => return CliError::usage(msg).emit(json),
+    };
+    let target_src = match read_file(&add_args.into) {
+        Ok(s) => s,
+        Err(e) => return e.emit(json),
+    };
+    // The project dir is the --into file's parent directory.
+    let project_dir = add_args
+        .into
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .map(std::path::Path::to_path_buf);
+    let result = match commands::library::add(
+        &target_src,
+        &add_args.spec,
+        project_dir.as_deref(),
+        add_args.page.as_deref(),
+        at,
+        add_args.id.as_deref(),
+    ) {
+        Ok(result) => result,
+        Err(e) => return CliError::new("library.add_failed", e.message, e.exit_code).emit(json),
+    };
+    let source = match String::from_utf8(result.formatted) {
+        Ok(s) => s,
+        Err(_) => {
+            return CliError::new(
+                "io.not_utf8",
+                "error[io.not_utf8]: formatted output is not valid UTF-8",
+                2,
+            )
+            .emit(json);
+        }
+    };
+    if add_args.dry_run {
+        if json {
+            print_add_json(&add_args.into, false, result.summary, Some(source));
+        } else {
+            print!("{}", source);
+        }
+        return ExitCode::SUCCESS;
+    }
+    let asset_root = project_dir.as_deref().unwrap_or_else(|| Path::new("."));
+    if let Err(msg) = write_embedded_assets(asset_root, &result.embedded_assets) {
+        return CliError::new("library.asset_write_failed", msg, 2).emit(json);
+    }
+    if let Err(e) = apply_edit(&add_args.into, source.as_bytes(), "library.add") {
+        return e.emit(json);
+    }
+    if json {
+        print_add_json(&add_args.into, true, result.summary, None);
+    } else {
+        println!("{}", result.summary);
+    }
+    ExitCode::SUCCESS
+}
+
+fn print_add_json(path: &Path, written: bool, summary: String, source: Option<String>) {
+    let out = LibraryAddOutput {
+        schema: "zenith-library-add-v1",
+        path: path.display().to_string(),
+        written,
+        summary,
+        source,
+    };
+    println!("{}", serialize_pretty(&out));
 }
 
 fn write_embedded_assets(

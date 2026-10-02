@@ -4,6 +4,9 @@ use std::process::ExitCode;
 
 use crate::cli::{self, WorkspaceArgs};
 use crate::commands;
+use crate::report::CliError;
+
+use super::output::warn;
 
 pub(super) fn dispatch_workspace(args: WorkspaceArgs) -> ExitCode {
     match args.command {
@@ -12,22 +15,23 @@ pub(super) fn dispatch_workspace(args: WorkspaceArgs) -> ExitCode {
                 let doc_bytes = match std::fs::read(&a.doc) {
                     Ok(b) => b,
                     Err(e) => {
-                        eprintln!("error reading '{}': {}", a.doc.display(), e);
-                        return ExitCode::from(2);
+                        return CliError::new(
+                            "io.read_failed",
+                            format!("error reading '{}': {}", a.doc.display(), e),
+                            2,
+                        )
+                        .emit(false);
                     }
                 };
                 match commands::workspace::scratch_new(&doc_bytes, &a.doc, &a) {
                     Ok(outcome) => {
                         if let Some(w) = &outcome.warning {
-                            eprintln!("warning: {w}");
+                            warn(w);
                         }
                         println!("{}", outcome.id);
                         ExitCode::SUCCESS
                     }
-                    Err(e) => {
-                        eprintln!("{}", e);
-                        ExitCode::from(2)
-                    }
+                    Err(e) => CliError::new("workspace.failed", e.to_string(), 2).emit(false),
                 }
             }
             cli::ScratchSub::List(a) => match commands::workspace::scratch_list(&a.doc, a.json) {
@@ -35,10 +39,7 @@ pub(super) fn dispatch_workspace(args: WorkspaceArgs) -> ExitCode {
                     println!("{}", out);
                     ExitCode::SUCCESS
                 }
-                Err(e) => {
-                    eprintln!("{}", e);
-                    ExitCode::from(2)
-                }
+                Err(e) => CliError::new("workspace.failed", e.to_string(), 2).emit(a.json),
             },
             cli::ScratchSub::Show(a) => {
                 match commands::workspace::scratch_show(&a.doc, &a.candidate, a.json) {
@@ -46,10 +47,7 @@ pub(super) fn dispatch_workspace(args: WorkspaceArgs) -> ExitCode {
                         println!("{}", out);
                         ExitCode::SUCCESS
                     }
-                    Err(e) => {
-                        eprintln!("{}", e);
-                        ExitCode::from(2)
-                    }
+                    Err(e) => CliError::new("workspace.failed", e.to_string(), 2).emit(a.json),
                 }
             }
         },
@@ -59,10 +57,7 @@ pub(super) fn dispatch_workspace(args: WorkspaceArgs) -> ExitCode {
                     println!("{}", out);
                     ExitCode::SUCCESS
                 }
-                Err(e) => {
-                    eprintln!("{}", e);
-                    ExitCode::from(2)
-                }
+                Err(e) => CliError::new("workspace.failed", e.to_string(), 2).emit(false),
             }
         }
         cli::WorkspaceSub::Promote(a) => {
@@ -71,10 +66,7 @@ pub(super) fn dispatch_workspace(args: WorkspaceArgs) -> ExitCode {
                     println!("{}", out);
                     ExitCode::SUCCESS
                 }
-                Err(e) => {
-                    eprintln!("{}", e);
-                    ExitCode::from(2)
-                }
+                Err(e) => CliError::new("workspace.failed", e.to_string(), 2).emit(false),
             }
         }
         cli::WorkspaceSub::Finalize(a) => match commands::workspace::finalize(&a.doc, a.json) {
@@ -82,30 +74,21 @@ pub(super) fn dispatch_workspace(args: WorkspaceArgs) -> ExitCode {
                 println!("{}", out);
                 ExitCode::SUCCESS
             }
-            Err(e) => {
-                eprintln!("{}", e);
-                ExitCode::from(2)
-            }
+            Err(e) => CliError::new("workspace.failed", e.to_string(), 2).emit(a.json),
         },
         cli::WorkspaceSub::Bundle(a) => match commands::workspace::bundle_doc(&a.doc, &a.out) {
             Ok(out) => {
                 println!("{}", out);
                 ExitCode::SUCCESS
             }
-            Err(e) => {
-                eprintln!("{}", e);
-                ExitCode::from(2)
-            }
+            Err(e) => CliError::new("workspace.failed", e.to_string(), 2).emit(false),
         },
         cli::WorkspaceSub::Unbundle(a) => match commands::workspace::unbundle_doc(&a.bundle) {
             Ok(doc_id) => {
                 println!("{}", doc_id);
                 ExitCode::SUCCESS
             }
-            Err(e) => {
-                eprintln!("{}", e);
-                ExitCode::from(2)
-            }
+            Err(e) => CliError::new("workspace.failed", e.to_string(), 2).emit(false),
         },
     }
 }

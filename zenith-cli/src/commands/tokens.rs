@@ -37,11 +37,7 @@ pub fn list(src: &str, json: bool) -> Result<String, (String, u8)> {
         let out = TokensOutput {
             schema: "zenith-tokens-v1",
             tokens: entries,
-            diagnostics: resolution
-                .diagnostics
-                .iter()
-                .map(DiagnosticJson::from)
-                .collect(),
+            diagnostics: DiagnosticJson::located_all(&resolution.diagnostics, src),
         };
         serialize_pretty(&out)
     } else {

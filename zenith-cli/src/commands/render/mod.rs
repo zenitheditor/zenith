@@ -17,9 +17,11 @@
 //! - `assets`     — font/asset provider construction and disk-based diagnostics.
 //! - `pages`      — shared page compile and the parallel page map.
 //! - `pipeline`   — shared parse/validate/page-resolution/hash helpers.
+//! - `check`      — compile-stage diagnostics without raster, for `validate`.
 //! - [`data_input`] — load a [`DataContext`](zenith_core::DataContext) from a JSON or CSV file (`--data`).
 
 mod assets;
+mod check;
 pub mod data_input;
 mod entry;
 mod pages;
@@ -33,11 +35,13 @@ pub use assets::collect_image_dimension_diagnostics;
 pub(crate) use assets::{
     build_asset_provider, build_font_provider, collect_missing_asset_diagnostics,
 };
+pub(crate) use check::compile_check_diagnostics;
 pub use data_input::{DataInputError, load_data_context};
 pub use entry::{
-    PdfArtifact, PngArtifact, RenderCmdErr, RenderEntryOptions, SceneArtifact, SpreadRenderOpts,
-    to_pdf_all_pages_with_dir, to_pdf_all_pages_with_dir_options, to_pdf_with_dir,
-    to_pdf_with_dir_options, to_png, to_png_all_pages, to_png_all_pages_options, to_png_spread,
-    to_png_with_dir, to_png_with_dir_options, to_scene_json, to_scene_json_with_options,
+    PdfArtifact, PngArtifact, PngPagesArtifact, RenderCmdErr, RenderEntryOptions, SceneArtifact,
+    SpreadRenderOpts, to_pdf_all_pages_with_dir, to_pdf_all_pages_with_dir_options,
+    to_pdf_with_dir, to_pdf_with_dir_options, to_png, to_png_all_pages, to_png_all_pages_options,
+    to_png_spread, to_png_with_dir, to_png_with_dir_options, to_scene_json,
+    to_scene_json_with_options,
 };
 pub(crate) use text_source::resolve_text_sources;

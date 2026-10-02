@@ -14,26 +14,46 @@ use super::assets::{
     build_asset_provider_with_imports, build_font_provider_with_imports,
     disk_diagnostics_with_imports,
 };
-use super::pages::{compile_for_render, map_pages};
+use super::pages::{compile_for_render, compile_local_for_render, map_pages};
 use super::pipeline::{govern_compile_diagnostics, parse_validate, resolve_page_index};
 use super::text_source::resolve_text_sources;
 
 // ── Error type ────────────────────────────────────────────────────────────────
 
 /// Error produced by the render command.
+///
+/// `diagnostics` holds every diagnostic known when the render stopped. It
+/// always has at least one [`Severity::Error`](zenith_core::Severity::Error)
+/// entry. `message` is the human text of the error lines.
 #[derive(Debug)]
 pub struct RenderCmdErr {
     /// Human-readable message.
     pub message: String,
     /// Recommended exit code.
     pub exit_code: u8,
+    /// Every diagnostic known at the failure point, in report order.
+    pub diagnostics: Vec<Diagnostic>,
 }
 
 impl RenderCmdErr {
-    pub(super) fn new(msg: impl Into<String>, exit_code: u8) -> Self {
+    /// One error diagnostic with `code` and `msg`.
+    pub(super) fn new(code: &str, msg: impl Into<String>, exit_code: u8) -> Self {
+        Self::blocked(vec![Diagnostic::error(code, msg, None, None)], exit_code)
+    }
+
+    /// A render stopped by `diagnostics`. The message joins the error lines.
+    pub(super) fn blocked(diagnostics: Vec<Diagnostic>, exit_code: u8) -> Self {
+        let diagnostics = Diagnostic::dedup(diagnostics);
+        let message = diagnostics
+            .iter()
+            .filter(|d| d.severity == zenith_core::Severity::Error)
+            .map(crate::commands::format_error_diag)
+            .collect::<Vec<_>>()
+            .join("\n");
         Self {
-            message: msg.into(),
+            message,
             exit_code,
+            diagnostics,
         }
     }
 }
@@ -182,10 +202,13 @@ pub fn to_scene_json_with_options(
     let prep = DocumentPrep::new(&doc, opts.data, Some(&scene_imports));
     let compiler = PageCompiler::new(&prep, &fonts);
     let compile_result = compile_for_render(&doc, &compiler, page_index, opts);
-    let json = compile_result
-        .scene
-        .to_json()
-        .map_err(|e| RenderCmdErr::new(format!("scene serialisation error: {e}"), 2))?;
+    let json = compile_result.scene.to_json().map_err(|e| {
+        RenderCmdErr::new(
+            "render.scene_serialize_failed",
+            format!("scene serialisation error: {e}"),
+            2,
+        )
+    })?;
     let mut diagnostics = text_src_diagnostics;
     diagnostics.extend(import_diagnostics);
     diagnostics.extend(disk_diagnostics_with_imports(&doc, project_dir, &imports));
@@ -193,6 +216,7 @@ pub fn to_scene_json_with_options(
         compile_result.diagnostics,
         &policy,
     ));
+    let diagnostics = Diagnostic::dedup(diagnostics);
     Ok(SceneArtifact { json, diagnostics })
 }
 
@@ -277,7 +301,7 @@ pub fn to_png_with_dir_options(
     let compiler = PageCompiler::new(&prep, &fonts);
     let compile_result = compile_for_render(&doc, &compiler, page_index, opts);
     let png = render_png(&compile_result.scene, &fonts, &assets)
-        .map_err(|e| RenderCmdErr::new(format!("render error: {e}"), 2))?;
+        .map_err(|e| RenderCmdErr::new("render.raster_failed", format!("render error: {e}"), 2))?;
     let mut diagnostics = text_src_diagnostics;
     diagnostics.extend(import_diagnostics);
     diagnostics.extend(disk_diagnostics_with_imports(&doc, project_dir, &imports));
@@ -285,6 +309,7 @@ pub fn to_png_with_dir_options(
         compile_result.diagnostics,
         &policy,
     ));
+    let diagnostics = Diagnostic::dedup(diagnostics);
     Ok(PngArtifact { png, diagnostics })
 }
 
@@ -354,6 +379,7 @@ pub fn to_pdf_with_dir_options(
         compile_result.diagnostics,
         &policy,
     ));
+    let diagnostics = Diagnostic::dedup(diagnostics);
     Ok(PdfArtifact { pdf, diagnostics })
 }
 
@@ -366,7 +392,8 @@ pub fn to_pdf_with_dir_options(
 /// multi-page PDF. Use [`to_pdf_with_dir`] to select one explicit page.
 ///
 /// Diagnostics from disk plus every page's governed compile diagnostics are
-/// merged in document order (page 1's first); duplicates are not removed. The
+/// merged in document order (page 1's first), document diagnostics once and
+/// repeats removed. The
 /// PDF carries print box metadata and native DeviceCMYK exactly as the
 /// single-page path; a one-page document yields byte-identical output to
 /// [`to_pdf_with_dir`] for page 1.
@@ -406,7 +433,11 @@ pub fn to_pdf_all_pages_with_dir_options(
     let fonts = build_font_provider_with_imports(&doc, project_dir, &imports, opts.locked)?;
     let page_count = doc.body.pages.len();
     if page_count == 0 {
-        return Err(RenderCmdErr::new("document has no pages to render", 2));
+        return Err(RenderCmdErr::new(
+            "render.no_pages",
+            "document has no pages to render; add a page node",
+            2,
+        ));
     }
     let assets = match project_dir {
         Some(dir) => build_asset_provider_with_imports(&doc, dir, &imports, opts.locked)?,
@@ -416,9 +447,13 @@ pub fn to_pdf_all_pages_with_dir_options(
     diagnostics.extend(disk_diagnostics_with_imports(&doc, project_dir, &imports));
     let prep = DocumentPrep::new(&doc, opts.data, Some(&scene_imports));
     let compiler = PageCompiler::new(&prep, &fonts);
+    diagnostics.extend(govern_compile_diagnostics(
+        compiler.document_diagnostics(),
+        &policy,
+    ));
     // Pages compile in parallel. Results merge here in page order.
     let compiled = map_pages(page_count, |page_index| {
-        compile_for_render(&doc, &compiler, page_index, opts)
+        compile_local_for_render(&doc, &compiler, page_index, opts)
     });
     for compile_result in compiled {
         scenes.push(compile_result.scene);
@@ -427,6 +462,7 @@ pub fn to_pdf_all_pages_with_dir_options(
             &policy,
         ));
     }
+    let diagnostics = Diagnostic::dedup(diagnostics);
     let pdf = render_pdf_multi_with(
         &scenes,
         &fonts,
@@ -438,15 +474,27 @@ pub fn to_pdf_all_pages_with_dir_options(
     Ok(PdfArtifact { pdf, diagnostics })
 }
 
+/// PNG bytes for every page plus the diagnostics of the whole render.
+#[derive(Debug)]
+pub struct PngPagesArtifact {
+    /// Encoded PNG bytes, one entry per page in document order.
+    pub pages: Vec<Vec<u8>>,
+    /// Document diagnostics once, then each page's own, in page order.
+    /// Repeats are removed.
+    pub diagnostics: Vec<Diagnostic>,
+}
+
 /// Parse `src`, validate it with the merged diagnostic policy, and render
-/// EVERY page to PNG, returning one [`PngArtifact`] per page in document
-/// order (page 1 first).
+/// EVERY page to PNG, in document order (page 1 first).
 ///
 /// Image and SVG asset bytes are sourced once from `project_dir` (shared
 /// across all pages). Returns `Err` on parse failure (exit 2), validation
 /// errors (exit 1), an empty document (exit 2), or a render failure (exit 2).
 /// When `locked` is set, image and SVG asset bytes are verified against their
 /// declared `sha256` (exit 2 on any mismatch/missing hash/read failure).
+///
+/// Document-level diagnostics (disk, import, text-source, token, data, chain,
+/// and table-flow) are reported once, not once per page.
 ///
 /// `data` is an optional data context for resolving `(data)"field"` property
 /// references at compile time (applied to every page). When `None`, data refs
@@ -460,7 +508,7 @@ pub fn to_png_all_pages(
     locked: bool,
     flags: &CliPolicyFlags,
     data: Option<&DataContext>,
-) -> Result<Vec<PngArtifact>, RenderCmdErr> {
+) -> Result<PngPagesArtifact, RenderCmdErr> {
     to_png_all_pages_options(
         src,
         project_dir,
@@ -472,47 +520,58 @@ pub fn to_png_all_pages_options(
     src: &str,
     project_dir: Option<&Path>,
     opts: RenderEntryOptions<'_>,
-) -> Result<Vec<PngArtifact>, RenderCmdErr> {
+) -> Result<PngPagesArtifact, RenderCmdErr> {
     let (mut doc, policy, imports) = parse_validate(src, project_dir, opts.flags)?;
     let import_diagnostics = imports.diagnostics().to_vec();
     let scene_imports = imports.to_scene_graph();
-    let mut text_src_diagnostics: Vec<Diagnostic> = Vec::new();
-    resolve_text_sources(&mut doc, project_dir, &mut text_src_diagnostics);
+    let mut diagnostics: Vec<Diagnostic> = Vec::new();
+    resolve_text_sources(&mut doc, project_dir, &mut diagnostics);
     let fonts = build_font_provider_with_imports(&doc, project_dir, &imports, opts.locked)?;
     let page_count = doc.body.pages.len();
     if page_count == 0 {
-        return Err(RenderCmdErr::new("document has no pages to render", 2));
+        return Err(RenderCmdErr::new(
+            "render.no_pages",
+            "document has no pages to render; add a page node",
+            2,
+        ));
     }
     let assets = match project_dir {
         Some(dir) => build_asset_provider_with_imports(&doc, dir, &imports, opts.locked)?,
         None => BytesAssetProvider::new(),
     };
-    let base_diagnostics: Vec<Diagnostic> = text_src_diagnostics
-        .into_iter()
-        .chain(import_diagnostics)
-        .chain(disk_diagnostics_with_imports(&doc, project_dir, &imports))
-        .collect();
+    diagnostics.extend(import_diagnostics);
+    diagnostics.extend(disk_diagnostics_with_imports(&doc, project_dir, &imports));
     let prep = DocumentPrep::new(&doc, opts.data, Some(&scene_imports));
     let compiler = PageCompiler::new(&prep, &fonts);
+    diagnostics.extend(govern_compile_diagnostics(
+        compiler.document_diagnostics(),
+        &policy,
+    ));
     // Pages compile and rasterize in parallel. Results merge here in page
     // order, so the first error reported is the lowest failing page.
     let rendered = map_pages(page_count, |page_index| {
-        let compile_result = compile_for_render(&doc, &compiler, page_index, opts);
-        let png = render_png(&compile_result.scene, &fonts, &assets)
-            .map_err(|e| RenderCmdErr::new(format!("render error on page {page_index}: {e}"), 2));
+        let compile_result = compile_local_for_render(&doc, &compiler, page_index, opts);
+        let png = render_png(&compile_result.scene, &fonts, &assets).map_err(|e| {
+            RenderCmdErr::new(
+                "render.raster_failed",
+                format!("render error on page {}: {e}", page_index + 1),
+                2,
+            )
+        });
         (compile_result, png)
     });
-    let mut artifacts = Vec::with_capacity(page_count);
+    let mut pages = Vec::with_capacity(page_count);
     for (compile_result, png) in rendered {
-        let png = png?;
-        let mut diagnostics = base_diagnostics.clone();
+        pages.push(png?);
         diagnostics.extend(govern_compile_diagnostics(
             compile_result.diagnostics,
             &policy,
         ));
-        artifacts.push(PngArtifact { png, diagnostics });
     }
-    Ok(artifacts)
+    Ok(PngPagesArtifact {
+        pages,
+        diagnostics: Diagnostic::dedup(diagnostics),
+    })
 }
 
 /// Bundled render options for [`to_png_spread`], keeping its argument count
@@ -593,8 +652,8 @@ pub fn to_png_spread(
         .with_construction_overlay(construction_overlay);
     let prep = DocumentPrep::new(&doc, data, Some(&scene_imports));
     let compiler = PageCompiler::new(&prep, &fonts);
-    let compile_a = compile_for_render(&doc, &compiler, index_a, render_opts);
-    let compile_b = compile_for_render(&doc, &compiler, index_b, render_opts);
+    let compile_a = compile_local_for_render(&doc, &compiler, index_a, render_opts);
+    let compile_b = compile_local_for_render(&doc, &compiler, index_b, render_opts);
     let png = render_spread_png(
         &compile_a.scene,
         &compile_b.scene,
@@ -602,12 +661,20 @@ pub fn to_png_spread(
         &fonts,
         &assets,
     )
-    .map_err(|e| RenderCmdErr::new(format!("spread render error: {e}"), 2))?;
-    let mut compile_diagnostics = compile_a.diagnostics;
+    .map_err(|e| {
+        RenderCmdErr::new(
+            "render.spread_failed",
+            format!("spread render error: {e}"),
+            2,
+        )
+    })?;
+    let mut compile_diagnostics = compiler.document_diagnostics();
+    compile_diagnostics.extend(compile_a.diagnostics);
     compile_diagnostics.extend(compile_b.diagnostics);
     let mut diagnostics = text_src_diagnostics;
     diagnostics.extend(import_diagnostics);
     diagnostics.extend(disk_diagnostics_with_imports(&doc, project_dir, &imports));
     diagnostics.extend(govern_compile_diagnostics(compile_diagnostics, &policy));
+    let diagnostics = Diagnostic::dedup(diagnostics);
     Ok(PngArtifact { png, diagnostics })
 }

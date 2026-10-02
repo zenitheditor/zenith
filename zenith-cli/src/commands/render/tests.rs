@@ -307,18 +307,18 @@ fn all_page_render_paths_expand_loaded_page_source_import() {
     )
     .expect("all-pages PNG render must succeed");
     assert_eq!(
-        png_artifacts.len(),
+        png_artifacts.pages.len(),
         2,
-        "host document must yield one PNG artifact per page"
+        "host document must yield one PNG per page"
     );
-    for artifact in &png_artifacts {
+    assert!(
+        png_artifacts.diagnostics.is_empty(),
+        "imported page-source PNG render must be clean; got {:?}",
+        png_artifacts.diagnostics
+    );
+    for png in &png_artifacts.pages {
         assert!(
-            artifact.diagnostics.is_empty(),
-            "imported page-source PNG render must be clean; got {:?}",
-            artifact.diagnostics
-        );
-        assert!(
-            artifact.png.starts_with(&[0x89, 0x50, 0x4E, 0x47]),
+            png.starts_with(&[0x89, 0x50, 0x4E, 0x47]),
             "imported page-source all-pages render must produce PNG bytes"
         );
     }
@@ -464,20 +464,20 @@ fn to_png_all_pages_returns_one_artifact_per_page() {
     let artifacts = to_png_all_pages(TWO_PAGE_DOC, None, false, &CliPolicyFlags::default(), None)
         .expect("all-pages render must succeed");
     assert_eq!(
-        artifacts.len(),
+        artifacts.pages.len(),
         2,
-        "a two-page doc must yield two artifacts"
+        "a two-page doc must yield two PNGs"
     );
-    for (i, a) in artifacts.iter().enumerate() {
+    for (i, png) in artifacts.pages.iter().enumerate() {
         assert!(
-            a.png.starts_with(&[0x89, 0x50, 0x4E, 0x47]),
+            png.starts_with(&[0x89, 0x50, 0x4E, 0x47]),
             "page {} must be a valid PNG",
             i + 1
         );
     }
     // The two pages have different backgrounds → different bytes.
     assert_ne!(
-        artifacts[0].png, artifacts[1].png,
+        artifacts.pages[0], artifacts.pages[1],
         "distinct pages must render to distinct PNGs"
     );
 }

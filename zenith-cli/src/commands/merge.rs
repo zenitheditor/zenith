@@ -280,7 +280,10 @@ pub fn run(
         collect_data_nodes(&page.children, &mut bindings, &mut asset_bindings)?;
     }
     if bindings.is_empty() && asset_bindings.is_empty() {
-        return Err(MergeError::new("no role=\"data.*\" template nodes found"));
+        return Err(MergeError::new(
+            "error[merge.no_data_nodes]: no role=\"data.*\" template nodes found; tag a text or \
+             image node with role=\"data.<column>\"",
+        ));
     }
 
     // ── 3. Validate: asset bindings require a project_dir ────────────────
@@ -829,12 +832,7 @@ pub fn to_json_output(report: &MergeReport) -> MergeOutput {
                 outputs: r.outputs.clone(),
                 diagnostics: match &r.failure {
                     None => Vec::new(),
-                    Some(reason) => vec![DiagnosticJson {
-                        code: "merge.row.failed".to_owned(),
-                        severity: "error".to_owned(),
-                        message: reason.clone(),
-                        subject_id: None,
-                    }],
+                    Some(reason) => vec![DiagnosticJson::error("merge.row.failed", reason.clone())],
                 },
             })
             .collect(),

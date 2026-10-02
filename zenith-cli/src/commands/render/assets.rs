@@ -94,6 +94,7 @@ fn register_project_fonts(
             Err(e) => {
                 if locked {
                     return Err(RenderCmdErr::new(
+                        "asset.read_failed",
                         format!(
                             "--locked: could not read font asset '{}' from '{}': {}",
                             decl.id,
@@ -125,6 +126,7 @@ fn register_project_fonts(
             Err(e) => {
                 if locked {
                     return Err(RenderCmdErr::new(
+                        "font.parse_failed",
                         format!(
                             "--locked: font asset '{}' could not be parsed: {}",
                             decl.id, e
@@ -291,6 +293,7 @@ fn register_document_assets(
             Err(e) => {
                 if locked {
                     return Err(RenderCmdErr::new(
+                        "asset.read_failed",
                         format!(
                             "--locked: could not read asset '{}' from '{}': {}",
                             decl.id,

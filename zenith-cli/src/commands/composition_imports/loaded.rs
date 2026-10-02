@@ -83,6 +83,7 @@ pub(crate) struct LoadedImportGraph {
 
 impl LoadedImportGraph {
     /// Consume the graph and return diagnostics in deterministic traversal order.
+    #[cfg(test)]
     pub(crate) fn into_diagnostics(self) -> Vec<Diagnostic> {
         self.diagnostics
     }

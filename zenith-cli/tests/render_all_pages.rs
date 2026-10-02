@@ -16,8 +16,8 @@ use zenith_cli::config::CliPolicyFlags;
 const PAGE_COUNT: usize = 12;
 
 /// A 12-page document. Each page has a distinct fill and a member of one
-/// cross-page text chain. Every page carries a `(data)` reference, so every
-/// page reports `data.no_context`.
+/// cross-page text chain. Every page carries a `(data)` reference. The shared
+/// `data.no_context` advisory reports once per render, not once per page.
 fn multi_page_src() -> String {
     let mut pages = String::new();
     let mut tokens = String::new();
@@ -76,26 +76,25 @@ fn all_pages_png_is_stable_and_matches_single_page_renders() {
     let flags = CliPolicyFlags::default();
     let first = to_png_all_pages_options(&src, None, opts(&flags)).expect("first all-pages run");
     let second = to_png_all_pages_options(&src, None, opts(&flags)).expect("second all-pages run");
-    assert_eq!(first.len(), PAGE_COUNT);
-    assert_eq!(second.len(), PAGE_COUNT);
-    for (index, (a, b)) in first.iter().zip(&second).enumerate() {
-        assert_eq!(a.png, b.png, "page {index}: PNG bytes differ across runs");
-        assert_eq!(
-            a.diagnostics, b.diagnostics,
-            "page {index}: diagnostics differ across runs"
-        );
+    assert_eq!(first.pages.len(), PAGE_COUNT);
+    assert_eq!(second.pages.len(), PAGE_COUNT);
+    assert_eq!(
+        first.diagnostics, second.diagnostics,
+        "diagnostics differ across runs"
+    );
+    for (index, (a, b)) in first.pages.iter().zip(&second.pages).enumerate() {
+        assert_eq!(a, b, "page {index}: PNG bytes differ across runs");
         let single = to_png_with_dir_options(&src, None, index + 1, opts(&flags))
             .expect("single-page render");
-        assert_eq!(
-            a.png, single.png,
-            "page {index}: PNG differs from single-page"
-        );
-        assert_eq!(
-            a.diagnostics, single.diagnostics,
-            "page {index}: diagnostics differ from single-page"
-        );
+        assert_eq!(*a, single.png, "page {index}: PNG differs from single-page");
+        for d in &single.diagnostics {
+            assert!(
+                first.diagnostics.contains(d),
+                "page {index}: single-page diagnostic missing from all-pages: {d:?}"
+            );
+        }
     }
-    let distinct: std::collections::BTreeSet<&Vec<u8>> = first.iter().map(|a| &a.png).collect();
+    let distinct: std::collections::BTreeSet<&Vec<u8>> = first.pages.iter().collect();
     assert_eq!(
         distinct.len(),
         PAGE_COUNT,
@@ -116,7 +115,7 @@ fn all_pages_pdf_is_stable_across_runs() {
         .iter()
         .filter(|d| d.code == "data.no_context")
         .count();
-    assert_eq!(no_context, PAGE_COUNT, "one data.no_context per page");
+    assert_eq!(no_context, 1, "the shared data.no_context reports once");
 }
 
 /// Run `zenith render <doc> --all-pages <dir> --json` and return stdout.
@@ -144,9 +143,14 @@ fn all_pages_cli_writes_identical_files_across_runs() {
     fs::write(&doc, multi_page_src()).expect("write doc");
     let out_a = tmp.path().join("a");
     let out_b = tmp.path().join("b");
-    let json_a = run_all_pages(&doc, &out_a);
-    let json_b = run_all_pages(&doc, &out_b);
-    assert_eq!(json_a, json_b, "diagnostic JSON differs across runs");
+    let json_a: serde_json::Value =
+        serde_json::from_str(&run_all_pages(&doc, &out_a)).expect("run a JSON");
+    let json_b: serde_json::Value =
+        serde_json::from_str(&run_all_pages(&doc, &out_b)).expect("run b JSON");
+    assert_eq!(
+        json_a["diagnostics"], json_b["diagnostics"],
+        "diagnostic JSON differs across runs"
+    );
 
     let flags = CliPolicyFlags::default();
     for page in 1..=PAGE_COUNT {

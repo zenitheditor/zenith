@@ -13,6 +13,7 @@
 //! - `commands/` — one module per subcommand; all business logic is here,
 //!   operating on in-memory bytes, never touching the FS.
 //! - `json_types` — serialisable DTOs for JSON output.
+//! - `report` — failure envelopes and grouped human diagnostic lines.
 //! - `lib.rs` — this file: wiring + `run()` dispatcher + file I/O edge.
 
 pub mod cli;
@@ -26,5 +27,6 @@ pub mod selfupdate;
 
 mod cli_helpers;
 mod dispatch;
+mod report;
 
 pub use dispatch::run;

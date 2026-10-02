@@ -247,7 +247,10 @@ fn craft_diagnostic(diagnostic: &PerceptionDiagnostic) -> CraftDiagnosticOutput 
 fn find_path_node<'a>(pages: &'a [Page], id: &str) -> Result<&'a PathNode, InspectCmdErr> {
     match find_node(pages, id) {
         None => Err(InspectCmdErr {
-            message: format!("error: node '{id}' not found"),
+            message: format!(
+                "error[inspect.node_not_found]: node '{id}' not found; run `zenith inspect \
+                 <FILE>` to list node ids"
+            ),
             exit_code: 2,
         }),
         Some(Node::Path(path)) => Ok(path),
