@@ -17,6 +17,7 @@ use zenith_scene::{
 
 use super::commands::{DrawCtx, draw_command};
 use super::crop::{draw_ink_region, draw_region, ink_bbox};
+use super::encode::{encode_straight_png, premultiplied_to_straight_rgba};
 use super::filter::apply_filters;
 use super::mask::attenuate_by_mask;
 use super::paths::intersect_rects;
@@ -36,7 +37,7 @@ use crate::error::RenderError;
 ///   require AA for legible output. tiny-skia AA is pure-software and
 ///   deterministic on the same machine (no GPU, no random numbers).
 /// - No `HashMap`, no random numbers, no timestamps.
-/// - PNG encoding via `tiny_skia::Pixmap::encode_png` writes no timestamps.
+/// - PNG encoding writes no timestamps.
 pub struct TinySkiaBackend;
 
 #[derive(Debug, Clone, Copy)]
@@ -571,16 +572,7 @@ impl RasterBackend for TinySkiaBackend {
         }
 
         // Convert tiny-skia's premultiplied RGBA8 to straight-alpha RGBA8.
-        let raw = pixmap.data(); // &[u8], len = width*height*4, premul RGBA
-        let mut rgba = Vec::with_capacity(raw.len());
-        for chunk in raw.chunks_exact(4) {
-            let (sr, sg, sb, sa) =
-                premultiplied_to_straight(chunk[0], chunk[1], chunk[2], chunk[3]);
-            rgba.push(sr);
-            rgba.push(sg);
-            rgba.push(sb);
-            rgba.push(sa);
-        }
+        let rgba = premultiplied_to_straight_rgba(pixmap.data());
 
         Ok(RasterImage {
             width,
@@ -590,42 +582,6 @@ impl RasterBackend for TinySkiaBackend {
     }
 
     fn encode_png(&self, image: &RasterImage) -> Result<Vec<u8>, RenderError> {
-        // Re-premultiply straight-alpha back to premultiplied for tiny-skia.
-        let mut premul = Vec::with_capacity(image.rgba.len());
-        for chunk in image.rgba.chunks_exact(4) {
-            let (r, g, b, a) = (chunk[0], chunk[1], chunk[2], chunk[3]);
-            if a == 0 {
-                premul.extend_from_slice(&[0, 0, 0, 0]);
-            } else {
-                let a_u16 = u16::from(a);
-                let mul = |v: u8| -> u8 {
-                    let result = (u16::from(v) * a_u16 + 127) / 255;
-                    result.min(255) as u8
-                };
-                premul.push(mul(r));
-                premul.push(mul(g));
-                premul.push(mul(b));
-                premul.push(a);
-            }
-        }
-
-        let mut pixmap = Pixmap::new(image.width, image.height).ok_or_else(|| {
-            RenderError::new(format!(
-                "failed to allocate pixmap for encoding ({}×{})",
-                image.width, image.height
-            ))
-        })?;
-
-        let dst = pixmap.data_mut();
-        if dst.len() != premul.len() {
-            return Err(RenderError::new(
-                "pixel buffer length mismatch during PNG encoding",
-            ));
-        }
-        dst.copy_from_slice(&premul);
-
-        pixmap
-            .encode_png()
-            .map_err(|e| RenderError::new(format!("PNG encoding failed: {e}")))
+        encode_straight_png(image)
     }
 }

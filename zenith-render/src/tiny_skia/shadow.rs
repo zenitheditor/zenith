@@ -4,15 +4,12 @@
 //! At EndShadow, each shadow layer is derived from the ink's coverage (alpha),
 //! tinted with the layer color, blurred, and composited behind the crisp ink.
 //!
-//! Blur uses a deterministic three-box approximation of a Gaussian
-//! (Ivan Kuchin / "Fastest Gaussian Blur" 3-box method,
-//! <http://blog.ivank.net/fastest-gaussian-blur.html>). All arithmetic uses
-//! fixed integer/float evaluation order with consistent rounding, so output is
-//! byte-identical across runs (no time, randomness, or hashing).
+//! The blur kernel lives in `blur`.
 
 use tiny_skia::{Pixmap, PixmapPaint};
 use zenith_scene::ShadowSpec;
 
+use super::blur::{BlurScratch, gaussian_blur_premul};
 use super::crop::{Region, blur_crop, copy_region, draw_at, draw_region, ink_bbox};
 
 /// Local alias for the scene `Color` carried inside a `ShadowSpec`, so this
@@ -32,6 +29,7 @@ pub(super) fn composite_shadows(canvas: &mut Pixmap, ink: &Pixmap, shadows: &[Sh
     };
     let (width, height) = (ink.width(), ink.height());
     let paint = PixmapPaint::default(); // source-over, opacity 1.0
+    let mut scratch = BlurScratch::default();
     for spec in shadows.iter().rev() {
         let Some(crop) = blur_crop(bbox, spec.blur, width, height) else {
             continue;
@@ -43,7 +41,7 @@ pub(super) fn composite_shadows(canvas: &mut Pixmap, ink: &Pixmap, shadows: &[Sh
         tint_coverage(&mut shadow, ink, crop, spec.color);
 
         // Blur in premultiplied space (correct for source-over compositing).
-        gaussian_blur_premul(&mut shadow, spec.blur);
+        gaussian_blur_premul(&mut shadow, spec.blur, &mut scratch);
 
         let (ox, oy) = (round_offset(spec.dx), round_offset(spec.dy));
 
@@ -67,15 +65,16 @@ pub(super) fn composite_blur(target: &mut Pixmap, mut ink: Pixmap, sigma: f64) {
         return;
     };
     let paint = PixmapPaint::default();
+    let mut scratch = BlurScratch::default();
     let crop = blur_crop(bbox, sigma, ink.width(), ink.height());
     if let Some(crop) = crop
         && let Some(mut part) = copy_region(&ink, crop)
     {
-        gaussian_blur_premul(&mut part, sigma);
+        gaussian_blur_premul(&mut part, sigma, &mut scratch);
         draw_at(target, &part, i64::from(crop.x), i64::from(crop.y), &paint);
         return;
     }
-    gaussian_blur_premul(&mut ink, sigma);
+    gaussian_blur_premul(&mut ink, sigma, &mut scratch);
     draw_at(target, &ink, 0, 0, &paint);
 }
 
@@ -131,162 +130,6 @@ fn tint_coverage(shadow: &mut Pixmap, ink: &Pixmap, region: Region, color: Scene
             out[1] = pg.min(255) as u8;
             out[2] = pb.min(255) as u8;
             out[3] = a.min(255) as u8;
-        }
-    }
-}
-
-/// True when `sigma` selects a real blur. NaN, infinite and non-positive values
-/// leave the pixmap unchanged.
-fn blur_active(sigma: f64) -> bool {
-    sigma.is_finite() && sigma > 0.0
-}
-
-/// Box radius for a box of width `w`.
-fn box_radius(w: u32) -> u32 {
-    (w.max(1) - 1) / 2
-}
-
-/// Total horizontal (and vertical) reach of `gaussian_blur_premul` for `sigma`.
-///
-/// This is the sum of the three box radii. A pixel further than this from all
-/// ink stays zero after the blur. Saturates instead of overflowing.
-pub(super) fn blur_reach(sigma: f64) -> u32 {
-    if !blur_active(sigma) {
-        return 0;
-    }
-    boxes_for_gauss(sigma)
-        .iter()
-        .fold(0u32, |acc, &w| acc.saturating_add(box_radius(w)))
-}
-
-/// Compute the three box-blur sizes that approximate a Gaussian of the given
-/// `sigma` with `n == 3` passes (Kuchin's method).
-///
-/// Returns three odd box widths; the box radius for a width `w` is `(w - 1) / 2`.
-fn boxes_for_gauss(sigma: f64) -> [u32; 3] {
-    const N: f64 = 3.0;
-    if sigma <= 0.0 {
-        return [1, 1, 1];
-    }
-    let w_ideal = ((12.0 * sigma * sigma / N) + 1.0).sqrt();
-    let mut wl = w_ideal.floor() as i64;
-    if wl % 2 == 0 {
-        wl -= 1;
-    }
-    if wl < 1 {
-        wl = 1;
-    }
-    let wu = wl + 2;
-    let wl_f = wl as f64;
-    let m_ideal =
-        (12.0 * sigma * sigma - N * wl_f * wl_f - 4.0 * N * wl_f - 3.0 * N) / (-4.0 * wl_f - 4.0);
-    let m = m_ideal.round() as i64;
-    let mut out = [0u32; 3];
-    for (i, slot) in out.iter_mut().enumerate() {
-        let w = if (i as i64) < m { wl } else { wu };
-        *slot = w.max(1) as u32;
-    }
-    out
-}
-
-/// Apply a deterministic separable Gaussian-approximation blur (three box
-/// passes) to a premultiplied RGBA8 `Pixmap`, in place.
-///
-/// Each pass is a horizontal box blur followed by a vertical box blur, computed
-/// with running sums over each of the four premultiplied channels independently
-/// (premultiplied blur is correct for source-over compositing). All indexing is
-/// bounds-guarded; arithmetic uses `u32` running sums with fixed rounding, so
-/// the result is byte-identical across runs.
-pub(super) fn gaussian_blur_premul(pm: &mut Pixmap, sigma: f64) {
-    // Non-positive or non-finite sigma → no blur (NaN-safe: the `> 0.0` test is
-    // false for NaN, so we return early).
-    if !blur_active(sigma) {
-        return;
-    }
-    let width = pm.width() as usize;
-    let height = pm.height() as usize;
-    if width == 0 || height == 0 {
-        return;
-    }
-    let boxes = boxes_for_gauss(sigma);
-    let data = pm.data_mut();
-    let expected = width * height * 4;
-    if data.len() != expected {
-        return; // defensive: unexpected layout → leave untouched
-    }
-    let mut scratch = vec![0u8; expected];
-    for w in boxes {
-        let radius = box_radius(w) as usize;
-        if radius == 0 {
-            continue; // a 1-wide box is identity
-        }
-        // Horizontal: data → scratch.
-        box_blur_h(data, &mut scratch, width, height, radius);
-        // Vertical: scratch → data.
-        box_blur_v(&scratch, data, width, height, radius);
-    }
-}
-
-/// Horizontal box blur of radius `radius` over premultiplied RGBA8, writing the
-/// result into `dst`. Uses a running sum per channel; no panic indexing.
-fn box_blur_h(src: &[u8], dst: &mut [u8], width: usize, height: usize, radius: usize) {
-    let window = (2 * radius + 1) as u32;
-    let last = width.saturating_sub(1);
-    for y in 0..height {
-        let row = y * width * 4;
-        for c in 0..4 {
-            // Initialize the running sum for the window CENTERED at x=0, i.e.
-            // positions [-radius, radius] each clamped to [0, width-1] (edge
-            // extension). Positions < 0 collapse onto column 0.
-            let mut sum: u32 = 0;
-            for i in 0..=(2 * radius) {
-                // Map loop index i∈[0,2r] to signed offset (i - radius), clamped.
-                let xx = (i.saturating_sub(radius)).min(last);
-                let v = src.get(row + xx * 4 + c).copied().unwrap_or(0);
-                sum += u32::from(v);
-            }
-            for x in 0..width {
-                if let Some(o) = dst.get_mut(row + x * 4 + c) {
-                    *o = ((sum + window / 2) / window).min(255) as u8;
-                }
-                // Slide one column right: add pixel at x+radius+1 (clamped),
-                // drop the leftmost at x-radius (clamped to 0 via saturating_sub).
-                let add_x = (x + radius + 1).min(last);
-                let sub_x = x.saturating_sub(radius);
-                let add = src.get(row + add_x * 4 + c).copied().unwrap_or(0);
-                let sub = src.get(row + sub_x * 4 + c).copied().unwrap_or(0);
-                sum = sum + u32::from(add) - u32::from(sub);
-            }
-        }
-    }
-}
-
-/// Vertical box blur of radius `radius` over premultiplied RGBA8, writing the
-/// result into `dst`. Uses a running sum per channel; no panic indexing.
-fn box_blur_v(src: &[u8], dst: &mut [u8], width: usize, height: usize, radius: usize) {
-    let window = (2 * radius + 1) as u32;
-    let stride = width * 4;
-    let last = height.saturating_sub(1);
-    for x in 0..width {
-        let col = x * 4;
-        for c in 0..4 {
-            // Window centered at y=0 with edge extension (see box_blur_h).
-            let mut sum: u32 = 0;
-            for i in 0..=(2 * radius) {
-                let yy = (i.saturating_sub(radius)).min(last);
-                let v = src.get(col + yy * stride + c).copied().unwrap_or(0);
-                sum += u32::from(v);
-            }
-            for y in 0..height {
-                if let Some(o) = dst.get_mut(col + y * stride + c) {
-                    *o = ((sum + window / 2) / window).min(255) as u8;
-                }
-                let add_y = (y + radius + 1).min(last);
-                let sub_y = y.saturating_sub(radius);
-                let add = src.get(col + add_y * stride + c).copied().unwrap_or(0);
-                let sub = src.get(col + sub_y * stride + c).copied().unwrap_or(0);
-                sum = sum + u32::from(add) - u32::from(sub);
-            }
         }
     }
 }
@@ -352,7 +195,7 @@ mod tests {
             Region::full(W, H).expect("region"),
             s.color,
         );
-        gaussian_blur_premul(&mut shadow, s.blur);
+        gaussian_blur_premul(&mut shadow, s.blur, &mut BlurScratch::default());
         shadow
     }
 
@@ -378,7 +221,7 @@ mod tests {
 
     /// The full-page blur algorithm, kept as the byte reference.
     fn reference_blur(canvas: &mut Pixmap, mut ink: Pixmap, sigma: f64) {
-        gaussian_blur_premul(&mut ink, sigma);
+        gaussian_blur_premul(&mut ink, sigma, &mut BlurScratch::default());
         canvas.draw_pixmap(
             0,
             0,
@@ -576,14 +419,5 @@ mod tests {
         let mut canvas = backdrop();
         composite_shadows(&mut canvas, &ink, &[spec(4.0, 4.0, 3.0)]);
         assert_eq!(canvas.data(), backdrop().data(), "empty ink draws nothing");
-    }
-
-    #[test]
-    fn blur_reach_sums_box_radii() {
-        assert_eq!(blur_reach(0.0), 0);
-        assert_eq!(blur_reach(f64::NAN), 0);
-        // sigma 2.0 -> boxes [3, 3, 5] -> radii 1 + 1 + 2.
-        assert_eq!(boxes_for_gauss(2.0), [3, 3, 5]);
-        assert_eq!(blur_reach(2.0), 4);
     }
 }

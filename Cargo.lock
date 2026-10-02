@@ -1465,6 +1465,7 @@ dependencies = [
  "jpeg-decoder",
  "miniz_oxide",
  "pdf-writer",
+ "png",
  "resvg",
  "subsetter",
  "tiny-skia",

@@ -17,7 +17,7 @@
 
 use tiny_skia::{Pixmap, PixmapPaint, Transform};
 
-use super::shadow::blur_reach;
+use super::blur::blur_reach;
 
 /// Page-space pixel rectangle. `w` and `h` are at least 1.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

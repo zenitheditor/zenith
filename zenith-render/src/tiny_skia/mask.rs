@@ -16,9 +16,9 @@
 use tiny_skia::{FillRule, Mask, PathBuilder, Pixmap, Rect, Transform};
 use zenith_scene::{MaskShape, MaskSpec};
 
+use super::blur::{BlurScratch, gaussian_blur_premul};
 use super::crop::{Region, blur_crop};
 use super::paths::build_rounded_rect_path;
-use super::shadow::gaussian_blur_premul;
 
 /// Attenuate `pm` (premultiplied RGBA8) in place by the coverage field described
 /// by `spec`.
@@ -121,7 +121,7 @@ fn build_mask_coverage(
                 }
             }
         }
-        gaussian_blur_premul(&mut temp, spec.feather);
+        gaussian_blur_premul(&mut temp, spec.feather, &mut BlurScratch::default());
         let inner = Region {
             x: region.x.checked_sub(crop.x)?,
             y: region.y.checked_sub(crop.y)?,
