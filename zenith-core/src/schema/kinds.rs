@@ -51,7 +51,8 @@ pub fn node_summary(kind: &str) -> Option<&'static str> {
         "text" => Some("Multi-span text block with typography and layout properties."),
         "code" => Some("Monospace code block with syntax-theme highlighting."),
         "frame" => Some(
-            "Container box. layout=\"row\"|\"column\"|\"grid\" places and sizes its children \
+            "Container box. Child x/y count from its top-left. \
+             layout=\"row\"|\"column\"|\"grid\" places and sizes its children \
              (gap, padding, justify, align, wrap); children size with w/h=\"hug\"|\"fill\", \
              min/max-w/h, and leave the flow with position=\"absolute\".",
         ),

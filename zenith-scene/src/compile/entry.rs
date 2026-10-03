@@ -56,7 +56,7 @@ pub fn compile_page_with_imports(
 /// The resolved auto-layout boxes on page `page_index` of `doc`, by node id.
 ///
 /// Holds every `row` / `column` / `grid` frame on the page and every child it
-/// places, in page-absolute px (group translations applied). The map is empty
+/// places, in page-absolute px (container translations applied). The map is empty
 /// for a page without a layout frame or an out-of-range index. Master-page
 /// content is not included.
 pub fn layout_boxes(

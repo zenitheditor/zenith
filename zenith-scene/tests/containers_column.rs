@@ -106,8 +106,8 @@ page id="page.col2" w=(px)200 h=(px)200 {
 #[test]
 fn layout_absent_is_byte_identical() {
     // Same document twice: once with layout="absolute", once with no layout.
-    // Both must equal the clip-only output where the child keeps its own
-    // x=50 y=60 coords.
+    // Both must equal the plain-frame output where the child at frame-local
+    // x=30 y=30 lands at 50/60.
     let make = |layout_attr: &str| {
         format!(
             r##"zenith version=1 {{
@@ -119,7 +119,7 @@ token id="color.k" type="color" value="#000000"
   document id="doc.col3" title="Col3" {{
 page id="page.col3" w=(px)200 h=(px)200 {{
   frame id="frame.abs" x=(px)20 y=(px)30 w=(px)160 h=(px)160 {layout_attr} {{
-    rect id="rect.a" x=(px)50 y=(px)60 w=(px)40 h=(px)30 fill=(token)"color.k"
+    rect id="rect.a" x=(px)30 y=(px)30 w=(px)40 h=(px)30 fill=(token)"color.k"
   }}
 }}
   }}
@@ -135,7 +135,7 @@ page id="page.col3" w=(px)200 h=(px)200 {{
         base.scene.commands, absolute.scene.commands,
         "layout=\"absolute\" must be byte-identical to no-layout clip-only output"
     );
-    // And the child kept its own absolute coords (no column injection).
+    // And the child kept its own coords (no column injection).
     let rects = fill_rects(&base);
     assert_eq!(rects, vec![(50.0, 60.0, 40.0, 30.0)]);
 }

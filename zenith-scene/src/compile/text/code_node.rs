@@ -169,7 +169,7 @@ fn compile_code_impl(
         }
     };
 
-    // Apply group translation offset.
+    // Apply the container translation offset.
     let code_x = code_x_raw + ctx.dx;
     let code_y = code_y_raw + ctx.dy;
 

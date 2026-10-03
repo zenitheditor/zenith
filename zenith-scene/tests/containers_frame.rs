@@ -17,7 +17,7 @@ token id="color.fill" type="color" value="#3b82f6"
   document id="doc.f1" title="F1" {
 page id="page.f1" w=(px)320 h=(px)200 {
   frame id="frame.clip" x=(px)40 y=(px)40 w=(px)120 h=(px)100 {
-    rect id="rect.inner" x=(px)50 y=(px)50 w=(px)60 h=(px)60 fill=(token)"color.fill"
+    rect id="rect.inner" x=(px)10 y=(px)10 w=(px)60 h=(px)60 fill=(token)"color.fill"
   }
 }
   }
@@ -79,7 +79,7 @@ token id="color.fill" type="color" value="#f97316"
   document id="doc.f2" title="F2" {
 page id="page.f2" w=(px)320 h=(px)200 {
   frame id="frame.clip" x=(px)40 y=(px)40 w=(px)120 h=(px)100 {
-    rect id="rect.overflow" x=(px)100 y=(px)30 w=(px)100 h=(px)120 fill=(token)"color.fill"
+    rect id="rect.overflow" x=(px)60 y=(px)-10 w=(px)100 h=(px)120 fill=(token)"color.fill"
   }
 }
   }
@@ -110,7 +110,7 @@ page id="page.f2" w=(px)320 h=(px)200 {
     let (rx, ry, rw, rh) = fill_rects_vec[0];
     assert_eq!(
         rx, 100.0,
-        "child FillRect x must be 100 (absolute, unclipped)"
+        "child FillRect x must be 100 (frame-local 60 + frame 40, unclipped)"
     );
     assert_eq!(ry, 30.0, "child FillRect y must be 30");
     assert_eq!(rw, 100.0, "child FillRect w must be 100");
@@ -258,13 +258,12 @@ page id="page.f5" w=(px)100 h=(px)100 {
     }
 }
 
-// ── Frame: does NOT translate children (clip-only) ─────────────────────
+// ── Frame: translates children by its top-left ─────────────────────────
 
 #[test]
-fn frame_does_not_translate_child() {
-    // Frame at x=(px)40 y=(px)40; child rect at x=(px)50 y=(px)50.
-    // Because frame is clip-only (no translation), the child FillRect must
-    // be at x=50.0 y=50.0, NOT 90.0/90.0.
+fn frame_translates_child() {
+    // Frame at x=(px)40 y=(px)40; child rect at x=(px)50 y=(px)50. The child
+    // counts from the frame's top-left, so its FillRect lands at 90/90.
     let src = r##"zenith version=1 {
   project id="proj.f6" name="F6"
   tokens format="zenith-token-v1" {
@@ -296,14 +295,8 @@ page id="page.f6" w=(px)200 h=(px)200 {
         .find(|c| matches!(c, SceneCommand::FillRect { .. }));
     match fill_rect {
         Some(SceneCommand::FillRect { x, y, .. }) => {
-            assert_eq!(
-                *x, 50.0,
-                "child x must be 50 (absolute, frame does not translate); got {x}"
-            );
-            assert_eq!(
-                *y, 50.0,
-                "child y must be 50 (absolute, frame does not translate); got {y}"
-            );
+            assert_eq!(*x, 90.0, "child x must be 40 + 50; got {x}");
+            assert_eq!(*y, 90.0, "child y must be 40 + 50; got {y}");
         }
         _ => panic!("expected a FillRect command"),
     }

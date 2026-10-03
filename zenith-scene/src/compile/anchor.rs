@@ -10,6 +10,10 @@
 //!
 //! **Page-relative:** reference rectangle is the full page.
 //!
+//! Page-, zone-, and parent-relative entries stay page-absolute at any
+//! depth: each subtracts the summed child spaces of the enclosing frames,
+//! groups, and instances (a frame's child space is its `x` / `y`).
+//!
 //! **Safe-zone-relative:** when the node also carries
 //! `anchor-zone="<id>"` and a safe-zone with that id is declared on the same
 //! page, the reference rectangle is that zone's rect instead of the page.
@@ -20,14 +24,14 @@
 //! (and NOT `anchor-zone`, which takes precedence), the reference rectangle is
 //! its DIRECT PARENT CONTAINER's box (a `frame` or `group`). The pre-pass
 //! recurses into frame/group children, threading the parent box and the
-//! cumulative group translation so the stored value cancels the `ctx.dx`/
-//! `ctx.dy` that the leaf compiler re-applies.
+//! cumulative container translation so the stored value cancels the
+//! `ctx.dx`/`ctx.dy` that the leaf compiler re-applies.
 //!
 //! **Sibling-relative:** when the node carries `anchor-sibling="<id>"`
 //! (and NOT `anchor-zone`, which takes precedence), the reference rectangle is
 //! the resolved box of the named sibling in the SAME scope (same direct
 //! parent's children). Because node and sibling share the same accumulated
-//! group translation, this derivation is purely local — no `acc` term is added
+//! container translation, this derivation is purely local — no `acc` term is added
 //! or subtracted. Each scope is processed in sibling-dependency (topological)
 //! order so a referenced sibling's entry exists before its dependent derives.
 //!
@@ -485,14 +489,12 @@ fn collect_anchor(
                 env.resolved,
             )
             .map(|(x, y, w, h)| (x + ctx.acc_dx, y + ctx.acc_dy, w, h));
-            let (acc_dx, acc_dy) = match frame.child_space(env.resolved) {
-                Some((sx, sy)) => (ctx.acc_dx + sx, ctx.acc_dy + sy),
-                None => (ctx.acc_dx, ctx.acc_dy),
-            };
+            // Children count from the frame's top-left.
+            let (sx, sy) = frame.child_space(env.resolved);
             let child_ctx = ParentCtx {
                 parent_box: frame_box,
-                acc_dx,
-                acc_dy,
+                acc_dx: ctx.acc_dx + sx,
+                acc_dy: ctx.acc_dy + sy,
             };
             // The frame's direct children form a new sibling scope.
             let child_scope: BTreeMap<&str, &Node> = frame
@@ -699,7 +701,7 @@ fn derive_xy<'n>(
     //      When anchor-edge is set here, use adjacent-edge placement instead
     //      of within-box anchor_xy.
     //   3. anchor-parent when no zone/sibling — use the enclosing
-    //      container box and pre-subtract the accumulated group translation.
+    //      container box and pre-subtract the accumulated container translation.
     //      (anchor-edge without sibling falls through to here or page.)
     //   4. page-relative otherwise.
     if let Some(zone_id) = anchor_zone_str {
@@ -798,7 +800,7 @@ fn derive_xy<'n>(
         // no entry is produced (the validator emits anchor.unresolvable_parent).
         let (rx, ry, rw, rh) = ctx.parent_box?;
         let (ox, oy) = anchor_xy(anchor, rw, rh, node_w, node_h);
-        // Subtract the accumulated group translation: the leaf compiler re-adds
+        // Subtract the accumulated container translation: the leaf compiler re-adds
         // ctx.dx/ctx.dy (== acc_dx/acc_dy) so the device coordinate lands at
         // (rx + ox, ry + oy).
         return Some((rx + ox - ctx.acc_dx, ry + oy - ctx.acc_dy));

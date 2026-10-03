@@ -12,7 +12,8 @@ use crate::compile::{resolve_geometry_px, resolve_property_dimension_px, style_p
 
 /// A resolved layout box in px: the top-left corner, then the size.
 ///
-/// Coordinates are page-absolute: group translations are applied.
+/// A recorded or compiled box is page-absolute: the child spaces of its
+/// enclosing frames, groups, and instances are applied.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct LayoutBox {
     pub x: f64,

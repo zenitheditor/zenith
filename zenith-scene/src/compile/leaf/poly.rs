@@ -89,7 +89,7 @@ pub(in crate::compile) fn compile_line(
         return;
     };
 
-    // Apply group translation offset.
+    // Apply the container translation offset.
     let x1 = x1_raw + ctx.dx;
     let y1 = y1_raw + ctx.dy;
     let x2 = x2_raw + ctx.dx;
@@ -437,7 +437,7 @@ fn outline_geometry_anchor(anchor: &PathAnchor, dx: f64, dy: f64) -> Option<Geom
 }
 
 /// Build a compound path geometry from a structured `path` node, in coordinates
-/// translated by `(dx, dy)` (group/instance absolute page space when non-zero;
+/// translated by `(dx, dy)` (frame/group/instance absolute page space when non-zero;
 /// local when both are 0). `None` when any subpath fails conversion/topology.
 ///
 /// Shared by outline-bounds lookup and exact connector divided-anchor sampling.

@@ -48,8 +48,8 @@ fn minimal_frame(id: &str, x: f64, y: f64, w: f64, h: f64, children: Vec<Node>) 
 
 #[test]
 fn frame_clean_doc_no_errors() {
-    // Child rect sits fully inside the frame box (40,40,120,100), so neither
-    // off_canvas nor frame.child_overflow fire.
+    // Child rect at frame-local (10,10) sits fully inside the frame box
+    // (40,40,120,100), so neither off_canvas nor frame.child_overflow fire.
     let inner = Node::Rect(Box::new(RectNode {
         shadow: None,
         filter: None,
@@ -57,8 +57,8 @@ fn frame_clean_doc_no_errors() {
         id: "rect.inner".to_owned(),
         name: None,
         role: None,
-        x: Some(pxv(50.0)),
-        y: Some(pxv(50.0)),
+        x: Some(pxv(10.0)),
+        y: Some(pxv(10.0)),
         w: Some(pxv(40.0)),
         h: Some(pxv(40.0)),
         layout_item: Default::default(),
@@ -317,7 +317,7 @@ fn frame_child_missing_geometry_surfaces() {
 #[test]
 fn frame_child_overflowing_right_edge_advises() {
     // Frame box: x=40 y=40 w=120 h=100 → right edge at 160.
-    // Child rect: x=100 w=100 → right edge at 200 > 160 → protrudes.
+    // Child rect: frame-local x=60 w=100 → right edge at 200 > 160 → protrudes.
     let doc = doc_with(
         vec![],
         vec![bounded_page(
@@ -330,7 +330,7 @@ fn frame_child_overflowing_right_edge_advises() {
                 40.0,
                 120.0,
                 100.0,
-                vec![rect_at("rect.over", 100.0, 50.0, 100.0, 40.0)],
+                vec![rect_at("rect.over", 60.0, 10.0, 100.0, 40.0)],
             )],
         )],
     );
@@ -345,7 +345,8 @@ fn frame_child_overflowing_right_edge_advises() {
 /// A frame child fully inside the frame box → no overflow advisory.
 #[test]
 fn frame_child_fully_inside_is_clean() {
-    // Frame box: x=40 y=40 w=120 h=100. Child rect fully inside.
+    // Frame box: x=40 y=40 w=120 h=100. Child rect at frame-local (10,10)
+    // fully inside.
     let doc = doc_with(
         vec![],
         vec![bounded_page(
@@ -358,7 +359,7 @@ fn frame_child_fully_inside_is_clean() {
                 40.0,
                 120.0,
                 100.0,
-                vec![rect_at("rect.in", 50.0, 50.0, 40.0, 40.0)],
+                vec![rect_at("rect.in", 10.0, 10.0, 40.0, 40.0)],
             )],
         )],
     );

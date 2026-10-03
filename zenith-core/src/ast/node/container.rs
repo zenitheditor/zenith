@@ -13,9 +13,10 @@ use super::layout_item::{LayoutContainer, LayoutItem, LayoutKind};
 /// children, rendering them in source order (first child = bottom of z-order).
 ///
 /// An absolute frame (no `layout`) has required geometry (x, y, w, h) that
-/// defines the clip rectangle; children render at their **absolute** page
-/// coordinates — frame does NOT translate children (dx/dy are unchanged). A
-/// `column` / `grid` frame places its children inside its padded content box.
+/// defines the clip rectangle. Every frame translates its children: a child
+/// `x` / `y` counts from the frame's top-left ([`Node::child_space`]). A
+/// `row` / `column` / `grid` frame places its flow children inside its padded
+/// content box.
 /// `fill` / `stroke` / `radius` paint the frame box under its children, and a
 /// clipping frame with a radius clips to the rounded box.
 ///
@@ -26,9 +27,9 @@ pub struct FrameNode {
     pub id: String,
     pub name: Option<String>,
     pub role: Option<String>,
-    /// Required: clip-rectangle left edge in page coordinates.
+    /// Required: clip-rectangle left edge in the parent's child space.
     pub x: Option<PropertyValue>,
-    /// Required: clip-rectangle top edge in page coordinates.
+    /// Required: clip-rectangle top edge in the parent's child space.
     pub y: Option<PropertyValue>,
     /// Clip-rectangle width (optional on a layout frame placed by its parent).
     pub w: Option<PropertyValue>,
@@ -37,7 +38,8 @@ pub struct FrameNode {
     /// Layout mode. `column` stacks children top to bottom inside the padded
     /// content box with `gap` between them; `grid` tiles children row-major into
     /// a `columns × rows` grid with uniform `gap` gutters; `row` stacks children
-    /// left to right; `None` / `absolute` keeps authored child coordinates.
+    /// left to right; `None` / `absolute` keeps authored child coordinates,
+    /// counted from the frame's top-left.
     pub layout: Option<LayoutKind>,
     /// Container attributes (`gap`, `padding*`, `justify`, `align`, `wrap`, …).
     pub container: LayoutContainer,
@@ -306,9 +308,9 @@ pub struct TableNode {
     pub id: String,
     pub name: Option<String>,
     pub role: Option<String>,
-    /// Required: table box left edge in page coordinates.
+    /// Required: table box left edge in the parent's child space.
     pub x: Option<PropertyValue>,
-    /// Required: table box top edge in page coordinates.
+    /// Required: table box top edge in the parent's child space.
     pub y: Option<PropertyValue>,
     /// Required: table box width.
     pub w: Option<PropertyValue>,

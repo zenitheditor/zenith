@@ -411,7 +411,7 @@ pub(in crate::compile) fn compile_markdown_blocks(
     let mut synth_env = env;
     synth_env.md_blocks = empty_md_blocks();
 
-    // Absolute origin of the block stack (group translation handled by the synth
+    // Absolute origin of the block stack (container translation handled by the synth
     // compile via `ctx`, so the synth node geometry stays in authored space).
     let mut y_cursor = box_y;
     // First command of the block stack (the overflow clip wraps from here).

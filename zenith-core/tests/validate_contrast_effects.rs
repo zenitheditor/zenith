@@ -105,8 +105,8 @@ fn nested_translated_groups_accumulate_offset() {
 #[test]
 fn translated_text_within_frame_clip_over_backdrop_flags() {
     // A frame clip (400,100,400,300) holds a navy rect filling it and a group
-    // translated by (300,200); the text lands at absolute (450,250), inside both
-    // the clip and the rect. The clip test compares the ABSOLUTE text box.
+    // at frame-local (-100,100); the text lands at absolute (450,250), inside
+    // both the clip and the rect. The clip test compares the ABSOLUTE text box.
     let doc = doc_with(
         base_contrast_tokens(),
         vec![page_with_bg(
@@ -119,11 +119,11 @@ fn translated_text_within_frame_clip_over_backdrop_flags() {
                 400.0,
                 300.0,
                 vec![
-                    rect_backdrop_at("backdrop", "color.backdrop", 400.0, 100.0, 400.0, 300.0),
+                    rect_backdrop_at("backdrop", "color.backdrop", 0.0, 0.0, 400.0, 300.0),
                     group_at(
                         "badge",
-                        300.0,
-                        200.0,
+                        -100.0,
+                        100.0,
                         vec![text_at("mono", "color.text", 150.0, 50.0, 80.0, 30.0)],
                     ),
                 ],
@@ -660,7 +660,7 @@ fn frame_fill_is_a_backdrop_for_its_text() {
             "color.page",
             vec![filled_frame(
                 "color.backdrop",
-                vec![text_at("mono", "color.text", 150.0, 150.0, 80.0, 30.0)],
+                vec![text_at("mono", "color.text", 50.0, 50.0, 80.0, 30.0)],
             )],
         )],
     );
@@ -686,8 +686,8 @@ fn frame_child_paints_over_frame_fill() {
             vec![filled_frame(
                 "color.backdrop",
                 vec![
-                    rect_backdrop_at("card", "color.card", 120.0, 120.0, 200.0, 100.0),
-                    text_at("mono", "color.text", 150.0, 150.0, 80.0, 30.0),
+                    rect_backdrop_at("card", "color.card", 20.0, 20.0, 200.0, 100.0),
+                    text_at("mono", "color.text", 50.0, 50.0, 80.0, 30.0),
                 ],
             )],
         )],
@@ -710,7 +710,7 @@ fn unclipped_frame_does_not_clip_text_sampling() {
         100.0,
         100.0,
         100.0,
-        vec![text_at("mono", "color.text", 450.0, 450.0, 80.0, 30.0)],
+        vec![text_at("mono", "color.text", 350.0, 350.0, 80.0, 30.0)],
     ) else {
         unreachable!("frame_clip returns Node::Frame");
     };

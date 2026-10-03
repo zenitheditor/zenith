@@ -92,6 +92,7 @@ pub(super) fn solve(
         inner_w: aw.inset(ins.left + ins.right),
         inner_h: ah.inset(ins.top + ins.bottom),
         content: (origin.0 + ins.left, origin.1 + ins.top),
+        origin,
         dev: at.dev,
     };
     let items = flow_items(engine, frame, &spec, sink);

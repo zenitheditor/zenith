@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 
 use zenith_core::{ComponentDef, InstanceNode, Node, PropertyValue, ResolvedToken};
 
-use super::common::{child_offset, resolve_imported_component};
+use super::common::resolve_imported_component;
 use crate::compile::container::prefix_ids_in_children;
 use crate::compile::imports::ImportScopes;
 use crate::compile::util::resolve_geometry_px;
@@ -14,9 +14,9 @@ use crate::compile::util::resolve_geometry_px;
 /// pixels for text-runaround exclusion lookup, from the page's `children`.
 ///
 /// Walks the children recursively, accumulating the translation offset of
-/// each ancestor container: its [`Node::child_space`] (a `group` or an
-/// `instance` shifts its children by its own `x`/`y`, a `frame` adds none),
-/// matching the render-offset semantics in [`crate::compile::container`]. A
+/// each ancestor container: its [`Node::child_space`] (a `frame`, a `group`,
+/// or an `instance` shifts its children by its own `x`/`y`), matching the
+/// render-offset semantics in [`crate::compile::container`]. A
 /// node's absolute box is `(dx + node_x, dy + node_y, node_w, node_h)`. Only nodes whose x/y/w/h ALL resolve to pixels are
 /// recorded (a node without a complete rect — `line`/`polygon`/`polyline`, or
 /// any node missing a dimension — is skipped: it cannot serve as a rectangular
@@ -53,11 +53,11 @@ fn collect_node_boxes(
         match child {
             // A frame and a group add their child space to their children.
             Node::Frame(f) => {
-                let (cdx, cdy) = child_offset(child, dx, dy, resolved);
+                let (cdx, cdy) = child.child_origin((dx, dy), resolved);
                 collect_node_boxes(&f.children, cdx, cdy, resolved, components, imports, map);
             }
             Node::Group(g) => {
-                let (cdx, cdy) = child_offset(child, dx, dy, resolved);
+                let (cdx, cdy) = child.child_origin((dx, dy), resolved);
                 collect_node_boxes(&g.children, cdx, cdy, resolved, components, imports, map);
             }
             Node::Instance(i) => {
@@ -71,7 +71,7 @@ fn collect_node_boxes(
                     let mut children = component.children.clone();
                     let prefix = format!("{}/", i.id);
                     prefix_ids_in_children(&mut children, &prefix);
-                    let (cdx, cdy) = child_offset(child, dx, dy, resolved);
+                    let (cdx, cdy) = child.child_origin((dx, dy), resolved);
                     collect_node_boxes(
                         &children,
                         cdx,

@@ -179,7 +179,7 @@ token id="color.a" type="color" value="#112233"
   document id="doc.fr1" title="FR1" {
 page id="page.fr1" w=(px)200 h=(px)200 {
   frame id="frm.rot" x=(px)10 y=(px)20 w=(px)100 h=(px)60 rotate=(deg)20 {
-    rect id="r1" x=(px)15 y=(px)25 w=(px)40 h=(px)30 fill=(token)"color.a"
+    rect id="r1" x=(px)5 y=(px)5 w=(px)40 h=(px)30 fill=(token)"color.a"
   }
 }
   }

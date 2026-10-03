@@ -335,7 +335,7 @@ fn walk_node_checks(
             // This frame's own px box; children are checked for overflow
             // against it. A missing/bad x/y/w/h or a layout frame gives None.
             let frame_box = placement::frame_child_box(f, pos.origin, pos.page_px_bounds);
-            let child_origin = placement::child_origin(node, pos.origin, ctx.resolved_tokens);
+            let child_origin = node.child_origin(pos.origin, ctx.resolved_tokens);
 
             // Validate this frame's sibling-anchor graph (one scope = its
             // direct children) once, before descending.
@@ -387,7 +387,7 @@ fn walk_node_checks(
             // Groups don't clip, so the enclosing frame (if any) is propagated
             // unchanged: a group inside a frame still has the frame as the
             // clipping ancestor. The group adds its child space to the origin.
-            let child_origin = placement::child_origin(node, pos.origin, ctx.resolved_tokens);
+            let child_origin = node.child_origin(pos.origin, ctx.resolved_tokens);
             for child in &g.children {
                 walk_node(
                     child,

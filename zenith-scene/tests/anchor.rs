@@ -624,12 +624,13 @@ fn anchor_parent_frame_all_nine() {
 
 #[test]
 fn anchor_parent_explicit_x_wins() {
-    // Frame at x=50 y=40 w=200 h=100; rect anchor="center" anchor-parent but x=0.
-    //   x explicit: 0 (device, no frame translation).
+    // Frame at x=50 y=40 w=200 h=100; rect anchor="center" anchor-parent but
+    // x=-50.
+    //   x explicit: frame-local -50 → device 50 + -50 = 0.
     //   y derived: 40 + (100-30)/2 = 75.
     let src = doc_with_frame_child(
         "x=(px)50 y=(px)40 w=(px)200 h=(px)100",
-        r##"rect id="r.fxw" anchor="center" anchor-parent=#true x=(px)0 w=(px)40 h=(px)30 fill="#00ffff""##,
+        r##"rect id="r.fxw" anchor="center" anchor-parent=#true x=(px)-50 w=(px)40 h=(px)30 fill="#00ffff""##,
     );
     let doc = parse(&src);
     let result = compile(&doc, &default_provider());

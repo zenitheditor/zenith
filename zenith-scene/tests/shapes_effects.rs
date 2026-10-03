@@ -278,7 +278,7 @@ token id="shadow.panel" type="shadow" {
   document id="doc.frame.effect" title="Frame Effect" {
 page id="page.frame.effect" w=(px)200 h=(px)200 {
   frame id="panel" x=(px)10 y=(px)20 w=(px)100 h=(px)80 shadow=(token)"shadow.panel" {
-    rect id="panel.bg" x=(px)10 y=(px)20 w=(px)100 h=(px)80 fill=(token)"color.fill"
+    rect id="panel.bg" x=(px)0 y=(px)0 w=(px)100 h=(px)80 fill=(token)"color.fill"
   }
 }
   }

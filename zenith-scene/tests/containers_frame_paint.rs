@@ -33,7 +33,7 @@ token id="shadow.soft" type="shadow" {{
   document id="doc.fp" title="FP" {{
 page id="page.fp" w=(px)320 h=(px)200 {{
   frame id="frame.p" x=(px)40 y=(px)40 w=(px)120 h=(px)100 {frame_attrs} {{
-    rect id="rect.child" x=(px)50 y=(px)50 w=(px)60 h=(px)60 fill=(token)"color.child"
+    rect id="rect.child" x=(px)10 y=(px)10 w=(px)60 h=(px)60 fill=(token)"color.child"
   }}
 }}
   }}
@@ -270,7 +270,7 @@ token id="color.child" type="color" value="#708090"
 page id="page.fg" w=(px)320 h=(px)200 {
   group id="g" x=(px)100 y=(px)20 {
     frame id="frame.g" x=(px)10 y=(px)10 w=(px)50 h=(px)40 fill=(token)"color.bg" {
-      rect id="rect.g" x=(px)10 y=(px)10 w=(px)20 h=(px)20 fill=(token)"color.child"
+      rect id="rect.g" x=(px)0 y=(px)0 w=(px)20 h=(px)20 fill=(token)"color.child"
     }
   }
 }
@@ -309,7 +309,7 @@ token id="color.child" type="color" value="#708090"
 page id="page.fb" w=(px)320 h=(px)200 {
   group id="g" opacity=0.5 {
     frame id="frame.b" x=(px)10 y=(px)10 w=(px)50 h=(px)40 fill=(token)"color.bg" blend-mode="multiply" {
-      rect id="rect.b" x=(px)10 y=(px)10 w=(px)20 h=(px)20 fill=(token)"color.child"
+      rect id="rect.b" x=(px)0 y=(px)0 w=(px)20 h=(px)20 fill=(token)"color.child"
     }
   }
 }

@@ -203,7 +203,8 @@ page id="page.grid3" w=(px)400 h=(px)400 {
 /// regardless of the grid fields existing on the AST — default-off identity.
 #[test]
 fn non_grid_frame_byte_identical() {
-    // Absolute frame: child keeps its own coords.
+    // Absolute frame: child keeps its own coords, counted from the frame's
+    // top-left.
     let abs_src = r##"zenith version=1 {
   project id="proj.grid4" name="Grid4"
   tokens format="zenith-token-v1" {
@@ -213,14 +214,14 @@ token id="color.k" type="color" value="#000000"
   document id="doc.grid4" title="Grid4" {
 page id="page.grid4" w=(px)200 h=(px)200 {
   frame id="frame.abs" x=(px)20 y=(px)30 w=(px)160 h=(px)160 {
-    rect id="rect.a" x=(px)50 y=(px)60 w=(px)40 h=(px)30 fill=(token)"color.k"
+    rect id="rect.a" x=(px)30 y=(px)30 w=(px)40 h=(px)30 fill=(token)"color.k"
   }
 }
   }
 }
 "##;
     let abs = compile(&parse(abs_src), &default_provider());
-    // The child kept its own absolute coords (no grid injection).
+    // The child kept its own coords (no grid injection).
     assert_eq!(fill_rects(&abs), vec![(50.0, 60.0, 40.0, 30.0)]);
 
     // Column frame: still stacks vertically, unaffected by grid code.

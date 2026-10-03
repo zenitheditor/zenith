@@ -7,7 +7,7 @@ use zenith_core::{Diagnostic, PropertyValue, ResolvedToken, TextNode};
 
 use crate::compile::util::{resolve_geometry_px, unsupported_unit_diag};
 
-/// The `(x, y)` origin in px before the group translation, or `None` after
+/// The `(x, y)` origin in px before the container translation, or `None` after
 /// pushing a diagnostic (unsupported unit, or no geometry and no anchor).
 pub(super) fn resolve_origin(
     text: &TextNode,

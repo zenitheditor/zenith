@@ -1,8 +1,10 @@
 //! `frame` container compilation: box paint (fill, stroke, radius) under the
 //! children, an optional clip, and rotation / blend / effect brackets. A frame
-//! adds its child space ([`zenith_core::Node::child_space`]) to its children's
-//! translation. Row / column / grid frames arrive here
-//! already lowered to absolute geometry by [`crate::layout`].
+//! adds its child space ([`zenith_core::Node::child_space`]), its resolved
+//! `x` / `y`, to its children's translation: a child counts from the frame's
+//! top-left. Row / column / grid frames arrive here already lowered by
+//! [`crate::layout`], with their own box and their children's boxes written
+//! frame-local.
 
 use zenith_core::{Diagnostic, FrameNode, dim_to_px};
 
@@ -169,15 +171,13 @@ pub(in crate::compile) fn compile_frame(
         resolve_property_mask(p, cx.resolved, (g.x, g.y, g.w, g.h))
     });
 
-    // Children add the frame's child space to the inherited translation.
-    let (child_dx, child_dy) = match frame.child_space(cx.resolved) {
-        Some((sx, sy)) => (ctx.dx + sx, ctx.dy + sy),
-        None => (ctx.dx, ctx.dy),
-    };
+    // Children count from the frame's top-left: its child space adds to the
+    // inherited translation.
+    let (space_x, space_y) = frame.child_space(cx.resolved);
     let child_ctx = RenderCtx {
         opacity: child_opacity,
-        dx: child_dx,
-        dy: child_dy,
+        dx: ctx.dx + space_x,
+        dy: ctx.dy + space_y,
         // Page baseline grid cascades unchanged so all text shares one grid.
         baseline_grid: ctx.baseline_grid,
         page_origin: ctx.page_origin,

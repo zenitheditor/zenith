@@ -180,6 +180,7 @@ pub fn node_content(kind: &str) -> Option<NodeContentDescriptor> {
         // ── Generic container kinds ───────────────────────────────────────────
         "frame" => Some(NodeContentDescriptor {
             description: "Arbitrary renderable child nodes (any node kind). \
+                Every frame places child x/y from the frame's top-left. \
                 layout=\"absolute\" (default) keeps child x/y and clips to the frame box. \
                 layout=\"row\" / \"column\" stack children left to right / top to bottom \
                 inside the padded box, `gap` apart, with justify (start|center|end|\

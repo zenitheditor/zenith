@@ -57,6 +57,8 @@ Thin brand bars flush to the page edge emit `safe_zone.violation`. That advisory
 
 ## Frames and groups
 
+- Children of every frame count `x`/`y` from the frame's top-left. A child at `x=(px)0 y=(px)0` sits on the frame's corner.
+- Moving a frame moves its children. Never offset child coordinates by the frame's position.
 - `frame` with the default `layout="absolute"` clips its children. Use it for image windows.
 - `group` bundles nodes without clipping. A motif then moves, dims, or deletes in one op.
 - Opacity and transforms cascade through groups and frames.

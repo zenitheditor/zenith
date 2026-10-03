@@ -1,13 +1,17 @@
 //! Connector-target lookups: shape family per node id, outline-box map for
 //! named/auto anchors on free-form targets, and exact geometry maps for
 //! divided-anchor perimeter sampling (polygon / polyline / path).
+//!
+//! Every box and outline is page-absolute: a target adds the child spaces
+//! ([`zenith_core::Node::child_space`]) of its enclosing frames, groups, and
+//! instances, so a connector can join targets inside different frames.
 
 use std::collections::BTreeMap;
 
 use zenith_core::{ComponentDef, InstanceNode, Node, Point, ResolvedToken, dim_to_px};
 use zenith_geometry::{CompoundFillRule, CompoundPathGeometry, Point2};
 
-use super::common::{child_offset, resolve_imported_component};
+use super::common::resolve_imported_component;
 use crate::compile::container::prefix_ids_in_children;
 use crate::compile::imports::ImportScopes;
 use crate::compile::leaf::{path_outline_bounds, path_to_compound_geometry};
@@ -155,11 +159,11 @@ fn collect_connector_targets(
         match child {
             // A frame and a group add their child space to their children.
             Node::Frame(f) => {
-                let (cdx, cdy) = child_offset(child, dx, dy, resolved);
+                let (cdx, cdy) = child.child_origin((dx, dy), resolved);
                 collect_connector_targets(&f.children, cdx, cdy, env, targets);
             }
             Node::Group(g) => {
-                let (cdx, cdy) = child_offset(child, dx, dy, resolved);
+                let (cdx, cdy) = child.child_origin((dx, dy), resolved);
                 collect_connector_targets(&g.children, cdx, cdy, env, targets);
             }
             Node::Instance(i) => {

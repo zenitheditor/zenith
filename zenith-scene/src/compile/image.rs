@@ -136,7 +136,7 @@ pub(super) fn compile_image(
         }
     };
 
-    // Apply group translation offset.
+    // Apply the container translation offset.
     let x = x_raw + ctx.dx;
     let y = y_raw + ctx.dy;
 

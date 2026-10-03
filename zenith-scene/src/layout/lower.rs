@@ -2,6 +2,12 @@
 //! resolved geometry into the nodes, so later passes see absolute geometry
 //! only.
 //!
+//! Every frame translates its children ([`Node::child_space`]): a layout
+//! frame's box is written in its parent's space, and its flow children's
+//! slots are written frame-local. Absolute children already count from the
+//! frame's top-left and keep their authored values. [`Lowered::boxes`] stays
+//! page-absolute.
+//!
 //! A layout frame no layout frame places is a root. A root with a resolvable
 //! `x` and `y` lowers at them. A root placed by an anchor (`anchor`,
 //! `anchor-parent`, `anchor-sibling`, `anchor-zone`, `anchor-edge`) is
@@ -26,7 +32,7 @@ use super::measure::Engine;
 use super::memo::Memo;
 use super::model::{Avail, ChildRole, LayoutBox, Mode, child_role, px_of};
 use super::solve::{At, Slot, solve};
-use super::write::{mark_hugging_text, set_box, set_frame_box, set_instance_box, translate};
+use super::write::{mark_hugging_text, set_box, set_frame_box, set_instance_box};
 
 /// The result of lowering one node list.
 #[derive(Debug, Default)]
@@ -104,18 +110,13 @@ impl Place {
     }
 
     /// The children of a container with the local box `b`, when it
-    /// resolves. `space` is the container's [`Node::child_space`]: the
-    /// origin it adds to its children, or `None` when they keep this list's
-    /// space.
-    fn enter(self, space: Option<(f64, f64)>, b: Option<(f64, f64, f64, f64)>) -> Self {
-        let parent_box = b.map(|(x, y, w, h)| (x + self.offset.0, y + self.offset.1, w, h));
-        match space {
-            None => Self { parent_box, ..self },
-            Some((sx, sy)) => Self {
-                offset: (self.offset.0 + sx, self.offset.1 + sy),
-                dev: (self.dev.0 + sx, self.dev.1 + sy),
-                parent_box,
-            },
+    /// resolves. `(sx, sy)` is the container's [`Node::child_space`]: the
+    /// origin it adds to its children.
+    fn enter(self, (sx, sy): (f64, f64), b: Option<(f64, f64, f64, f64)>) -> Self {
+        Self {
+            offset: (self.offset.0 + sx, self.offset.1 + sy),
+            dev: (self.dev.0 + sx, self.dev.1 + sy),
+            parent_box: b.map(|(x, y, w, h)| (x + self.offset.0, y + self.offset.1, w, h)),
         }
     }
 
@@ -353,7 +354,7 @@ fn walk_node(cx: &Walk<'_>, node: &mut Node, place: Place, out: &mut Lowered) {
         Node::Group(g) => {
             let (gx, gy) = g.child_space(resolved);
             let size = px_of(g.w.as_ref(), resolved).zip(px_of(g.h.as_ref(), resolved));
-            let inner = place.enter(Some((gx, gy)), size.map(|(w, h)| (gx, gy, w, h)));
+            let inner = place.enter((gx, gy), size.map(|(w, h)| (gx, gy, w, h)));
             walk_scope(cx, &mut g.children, inner, &|_| true, out);
         }
         Node::Unknown(u) => walk_scope(cx, &mut u.children, place.detached(), &|_| true, out),
@@ -409,8 +410,10 @@ fn arrange_root(
     arrange_frame(cx, f, origin, avail, place, out);
 }
 
-/// Solve `f` at `origin` with the offered size, write its box, place its flow
-/// children, and move its absolute children to its top-left.
+/// Solve `f` at `origin` with the offered size, write its box, and place its
+/// flow children. Slots solve in the frame's parent space and are written
+/// frame-local (`slot - origin`). Absolute children already count from the
+/// frame's top-left and stay as authored.
 fn arrange_frame(
     cx: &Walk<'_>,
     f: &mut FrameNode,
@@ -440,47 +443,25 @@ fn arrange_frame(
     };
     record(out, &f.id, own, place);
     set_frame_box(f, own);
-    let resolved = cx.engine.resolved();
-    let space = f.child_space(resolved);
+    // The written box makes the frame's child space its origin.
+    let space = f.child_space(cx.engine.resolved());
     let inner = place.enter(space, Some((own.x, own.y, own.w, own.h)));
     for slot in &sol.slots {
         if let Some(child) = f.children.get_mut(slot.index) {
-            place_child(cx, child, in_child_space(*slot, space), inner, out);
+            place_child(cx, child, frame_local(*slot, space), inner, out);
         }
     }
     let absolute = |n: &Node| child_role(n) == ChildRole::Absolute;
-    if let Some((dx, dy)) = top_left_shift(origin, space) {
-        for child in &mut f.children {
-            if absolute(child) {
-                translate(child, dx, dy, resolved);
-            }
-        }
-    }
     walk_scope(cx, &mut f.children, inner, &absolute, out);
 }
 
 /// A slot solved in the frame's parent space, moved into the frame's child
-/// `space`.
-fn in_child_space(slot: Slot, space: Option<(f64, f64)>) -> Slot {
-    match space {
-        None => slot,
-        Some((sx, sy)) => Slot {
-            x: slot.x - sx,
-            y: slot.y - sy,
-            ..slot
-        },
-    }
-}
-
-/// The move that takes children authored from a frame's top-left at
-/// `origin` into the frame's child `space`. `None` when they already are.
-fn top_left_shift(origin: (f64, f64), space: Option<(f64, f64)>) -> Option<(f64, f64)> {
-    match space {
-        None => Some(origin),
-        Some((sx, sy)) => {
-            let d = (origin.0 - sx, origin.1 - sy);
-            (d != (0.0, 0.0)).then_some(d)
-        }
+/// space `(sx, sy)`.
+fn frame_local(slot: Slot, (sx, sy): (f64, f64)) -> Slot {
+    Slot {
+        x: slot.x - sx,
+        y: slot.y - sy,
+        ..slot
     }
 }
 
@@ -536,22 +517,17 @@ fn place_child(cx: &Walk<'_>, child: &mut Node, slot: Slot, place: Place, out: &
         mark_hugging_text(child);
     }
     match child {
-        // An absolute frame's children count from its top-left.
+        // An absolute frame's children count from its top-left; they stay
+        // frame-local.
         Node::Frame(f) => {
-            let resolved = cx.engine.resolved();
-            let space = f.child_space(resolved);
-            if let Some((dx, dy)) = top_left_shift((b.x, b.y), space) {
-                for grandchild in &mut f.children {
-                    translate(grandchild, dx, dy, resolved);
-                }
-            }
+            let space = f.child_space(cx.engine.resolved());
             let inner = place.enter(space, Some((b.x, b.y, b.w, b.h)));
             walk_scope(cx, &mut f.children, inner, &|_| true, out);
         }
         // A group translates its children; they stay group-local.
         Node::Group(g) => {
             let space = g.child_space(cx.engine.resolved());
-            let inner = place.enter(Some(space), Some((b.x, b.y, b.w, b.h)));
+            let inner = place.enter(space, Some((b.x, b.y, b.w, b.h)));
             walk_scope(cx, &mut g.children, inner, &|_| true, out);
         }
         Node::Rect(_)

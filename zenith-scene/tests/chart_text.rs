@@ -131,7 +131,7 @@ fn engine_default_ink_contrasts_with_the_backdrop() {
     let body = format!(
         "{}\n      frame id=\"dark\" x=(px)0 y=(px)400 w=(px)500 h=(px)400 fill=(token)\"color.night\" {{\n{}\n      }}",
         bar("light", (0, 0, 400, 300), ""),
-        bar("ondark", (20, 420, 400, 300), ""),
+        bar("ondark", (20, 20, 400, 300), ""),
     );
     let result = compile_doc(&doc("", "", "", (600, 900), &body));
     assert_eq!(role_look(&result, "light", "axis").1, BLACK);
@@ -162,7 +162,7 @@ fn defaults_row_and_content_pairing_drive_chart_text() {
     let body = format!(
         "{}\n      frame id=\"dark\" x=(px)0 y=(px)400 w=(px)500 h=(px)400 fill=(token)\"color.night\" {{\n{}\n      }}",
         bar("page", (0, 0, 400, 300), ""),
-        bar("framed", (20, 420, 400, 300), ""),
+        bar("framed", (20, 20, 400, 300), ""),
     );
     let result = compile_doc(&doc(tokens, styles, top, (600, 900), &body));
     assert_eq!(
@@ -331,7 +331,7 @@ fn engine_default_chart_passes_the_lint() {
     let body = format!(
         "{}\n      frame id=\"dark\" x=(px)900 y=(px)100 w=(px)900 h=(px)800 fill=(token)\"color.night\" {{\n{}\n      }}",
         bar("light", (100, 100, 700, 500), ""),
-        bar("ondark", (950, 150, 700, 500), ""),
+        bar("ondark", (50, 50, 700, 500), ""),
     );
     let result = compile_doc(&doc("", "", "", (1920, 1080), &body));
     let flagged: Vec<&Diagnostic> = result

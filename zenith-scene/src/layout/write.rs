@@ -1,13 +1,15 @@
-//! Write lowered geometry into nodes: set a box, mark hugging text, and
-//! translate a subtree.
+//! Write lowered geometry into nodes: set a box and mark hugging text.
+//!
+//! Every box is written in the node's parent space: a layout frame's own box
+//! in its parent's space, a flow child's slot frame-local (the frame's
+//! child space is its `x` / `y`). Nothing moves a subtree: absolute children
+//! already count from their frame's top-left.
 
-use std::collections::BTreeMap;
-
-use zenith_core::{FrameNode, InstanceNode, Node, PropertyValue, ResolvedToken, translate_node};
+use zenith_core::{FrameNode, InstanceNode, Node, PropertyValue};
 
 use crate::compile::{px as px_dim, px_prop as px};
 
-use super::model::{LayoutBox, Mode};
+use super::model::LayoutBox;
 
 fn put(
     x: &mut Option<PropertyValue>,
@@ -90,29 +92,5 @@ pub(super) fn set_frame_box(f: &mut FrameNode, b: LayoutBox) {
 pub(super) fn mark_hugging_text(node: &mut Node) {
     if let Node::Text(t) = node {
         t.overflow = Some("visible".to_owned());
-    }
-}
-
-/// Move `node` by `(dx, dy)` px, with the descendants that do not follow it.
-///
-/// [`translate_node`] moves the node's own position. A container whose
-/// [`Node::child_space`] translates its children carries them along. An
-/// absolute frame that keeps its children in its parent's space moves them
-/// too. A layout frame moves only itself: its children count from its
-/// top-left until it is lowered, and every frame is moved before it lowers.
-pub(super) fn translate(
-    node: &mut Node,
-    dx: f64,
-    dy: f64,
-    resolved: &BTreeMap<String, ResolvedToken>,
-) {
-    translate_node(node, dx, dy, resolved);
-    if let Node::Frame(f) = node
-        && Mode::of(f).is_none()
-        && f.child_space(resolved).is_none()
-    {
-        for child in &mut f.children {
-            translate(child, dx, dy, resolved);
-        }
     }
 }

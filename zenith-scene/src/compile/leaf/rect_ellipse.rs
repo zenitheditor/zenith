@@ -106,7 +106,7 @@ pub(in crate::compile) fn compile_rect(
         return;
     };
 
-    // Apply group translation offset.
+    // Apply the container translation offset.
     let x = x_raw + ctx.dx;
     let y = y_raw + ctx.dy;
 
@@ -459,7 +459,7 @@ pub(in crate::compile) fn compile_ellipse(
         return;
     };
 
-    // Apply group translation offset.
+    // Apply the container translation offset.
     let x = x_raw + ctx.dx;
     let y = y_raw + ctx.dy;
 

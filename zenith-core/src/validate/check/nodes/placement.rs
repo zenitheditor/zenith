@@ -20,19 +20,6 @@ pub(super) type PxBox = (f64, f64, f64, f64);
 /// A px translation `(dx, dy)` from a node list's space to page space.
 pub(super) type Origin = (f64, f64);
 
-/// The page-space origin of the children of `node` in a list at `origin`:
-/// `origin` plus the node's [`Node::child_space`].
-pub(super) fn child_origin(
-    node: &Node,
-    origin: Origin,
-    resolved: &BTreeMap<String, ResolvedToken>,
-) -> Origin {
-    match node.child_space(resolved) {
-        Some((sx, sy)) => (origin.0 + sx, origin.1 + sy),
-        None => origin,
-    }
-}
-
 /// `b` moved by `origin` into page space.
 fn to_page((x, y, w, h): PxBox, origin: Origin) -> PxBox {
     if origin == (0.0, 0.0) {
@@ -195,14 +182,14 @@ pub(in crate::validate::check) fn placement_walk(
             Node::Frame(f) => {
                 let inner = PlacementSite {
                     enclosing_frame: frame_child_box(f, origin, Some(page_bounds)),
-                    origin: child_origin(node, origin, resolved),
+                    origin: node.child_origin(origin, resolved),
                     page_bounds,
                 };
                 placement_walk(&f.children, inner, resolved, diagnostics);
             }
             Node::Group(g) => {
                 let inner = PlacementSite {
-                    origin: child_origin(node, origin, resolved),
+                    origin: node.child_origin(origin, resolved),
                     ..site
                 };
                 placement_walk(&g.children, inner, resolved, diagnostics);

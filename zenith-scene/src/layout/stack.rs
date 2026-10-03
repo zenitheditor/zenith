@@ -26,8 +26,11 @@ pub(super) struct StackCx<'a> {
     pub(super) inner_w: Avail,
     /// Content box height (outer height minus top and bottom padding).
     pub(super) inner_h: Avail,
-    /// Top-left corner of the content box.
+    /// Top-left corner of the content box, in the frame's parent space.
     pub(super) content: (f64, f64),
+    /// The frame's top-left in its parent space: the origin its children
+    /// count from.
+    pub(super) origin: (f64, f64),
     /// The render translation of the frame's list, when the frame is solved
     /// at its final origin (placing, or measuring at a known slot). Measure
     /// probes of position-dependent children then compile where they draw.
@@ -48,11 +51,19 @@ impl StackCx<'_> {
         })
     }
 
-    /// The probe position of a child at the local `(x, y)`, when both it and
-    /// the render translation are known.
+    /// The probe position of a child at `(x, y)` in the frame's parent space,
+    /// when both it and the render translation are known. The probe is
+    /// frame-local, as lowering places the child: `x - origin` under the
+    /// translation `dev + origin`.
     fn probe(&self, at: Option<(f64, f64)>) -> Option<ProbeAt> {
         let ((x, y), (dx, dy)) = at.zip(self.dev)?;
-        Some(ProbeAt { x, y, dx, dy })
+        let (ox, oy) = self.origin;
+        Some(ProbeAt {
+            x: x - ox,
+            y: y - oy,
+            dx: dx + ox,
+            dy: dy + oy,
+        })
     }
 
     /// Hug height at `w` (measured at `at` when known), reporting

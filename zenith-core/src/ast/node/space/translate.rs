@@ -76,8 +76,11 @@ fn shift_anchors(anchors: &mut [PathAnchor], dx: f64, dy: f64) {
 /// Move `node` by `(dx, dy)` px. Shallow: only the node's own position
 /// properties change, never its children.
 ///
-/// - Box kinds and `light`, `frame`: `x` / `y` move when they resolve. An
-///   absent value (anchor-placed) stays absent.
+/// - Box kinds and `light`: `x` / `y` move when they resolve. An absent value
+///   (anchor-placed) stays absent.
+/// - `frame`: `x` / `y` move when they resolve, and children follow through
+///   [`Node::child_space`]. An absent value (anchor- or layout-placed) stays
+///   absent.
 /// - `group`, `instance`: the origin moves, and an absent origin counts as 0.
 ///   Children follow through [`Node::child_space`].
 /// - `line`: both endpoints. `polygon` / `polyline`: every point.
