@@ -832,7 +832,7 @@ pub fn to_json_output(report: &MergeReport) -> MergeOutput {
                 outputs: r.outputs.clone(),
                 diagnostics: match &r.failure {
                     None => Vec::new(),
-                    Some(reason) => vec![DiagnosticJson::error("merge.row.failed", reason.clone())],
+                    Some(reason) => vec![DiagnosticJson::error("merge.row_failed", reason.clone())],
                 },
             })
             .collect(),

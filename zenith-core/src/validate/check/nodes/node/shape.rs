@@ -13,7 +13,7 @@ use crate::diagnostics::Diagnostic;
 use crate::schema::enums::{
     CONNECTOR_MARKERS, CONNECTOR_ROUTES, H_ALIGNS, SHAPE_KINDS, STROKE_ALIGNS, V_ALIGNS,
 };
-use crate::suggest::invalid_value_message;
+use crate::suggest::{invalid_value_message, replace_value_fix};
 
 use super::shared::{
     AnchorParentCtx, AnchorProps, TokenEnv, check_anchor, check_optional_dim, check_spans,
@@ -168,47 +168,59 @@ pub(in crate::validate::check) fn check_shape(
     if let Some(k) = s.kind.as_deref()
         && !SHAPE_KINDS.contains(&k)
     {
-        diagnostics.push(Diagnostic::error(
-            "shape.unknown_kind",
-            invalid_value_message(&format!("shape '{}'", s.id), "kind", k, SHAPE_KINDS),
-            s.source_span,
-            Some(s.id.clone()),
-        ));
+        diagnostics.push(
+            Diagnostic::error(
+                "shape.unknown_kind",
+                invalid_value_message(&format!("shape '{}'", s.id), "kind", k, SHAPE_KINDS),
+                s.source_span,
+                Some(s.id.clone()),
+            )
+            .with_fix(replace_value_fix("kind", k, SHAPE_KINDS)),
+        );
     }
     if let Some(sa) = s.stroke_alignment.as_deref()
         && !STROKE_ALIGNS.contains(&sa)
     {
-        diagnostics.push(Diagnostic::error(
-            "shape.invalid_stroke_alignment",
-            invalid_value_message(
-                &format!("shape '{}'", s.id),
-                "stroke-alignment",
-                sa,
-                STROKE_ALIGNS,
-            ),
-            s.source_span,
-            Some(s.id.clone()),
-        ));
+        diagnostics.push(
+            Diagnostic::error(
+                "shape.invalid_stroke_alignment",
+                invalid_value_message(
+                    &format!("shape '{}'", s.id),
+                    "stroke-alignment",
+                    sa,
+                    STROKE_ALIGNS,
+                ),
+                s.source_span,
+                Some(s.id.clone()),
+            )
+            .with_fix(replace_value_fix("stroke-alignment", sa, STROKE_ALIGNS)),
+        );
     }
     if let Some(ha) = s.h_align.as_deref()
         && !H_ALIGNS.contains(&ha)
     {
-        diagnostics.push(Diagnostic::error(
-            "shape.invalid_h_align",
-            invalid_value_message(&format!("shape '{}'", s.id), "h-align", ha, H_ALIGNS),
-            s.source_span,
-            Some(s.id.clone()),
-        ));
+        diagnostics.push(
+            Diagnostic::error(
+                "shape.invalid_h_align",
+                invalid_value_message(&format!("shape '{}'", s.id), "h-align", ha, H_ALIGNS),
+                s.source_span,
+                Some(s.id.clone()),
+            )
+            .with_fix(replace_value_fix("h-align", ha, H_ALIGNS)),
+        );
     }
     if let Some(va) = s.v_align.as_deref()
         && !V_ALIGNS.contains(&va)
     {
-        diagnostics.push(Diagnostic::error(
-            "shape.invalid_v_align",
-            invalid_value_message(&format!("shape '{}'", s.id), "v-align", va, V_ALIGNS),
-            s.source_span,
-            Some(s.id.clone()),
-        ));
+        diagnostics.push(
+            Diagnostic::error(
+                "shape.invalid_v_align",
+                invalid_value_message(&format!("shape '{}'", s.id), "v-align", va, V_ALIGNS),
+                s.source_span,
+                Some(s.id.clone()),
+            )
+            .with_fix(replace_value_fix("v-align", va, V_ALIGNS)),
+        );
     }
 
     // Per-span visual properties (mirrors Node::Text). Registers token
@@ -306,17 +318,20 @@ pub(in crate::validate::check) fn check_connector(
     if let Some(r) = c.route.as_deref()
         && !CONNECTOR_ROUTES.contains(&r)
     {
-        diagnostics.push(Diagnostic::error(
-            "connector.invalid_route",
-            invalid_value_message(
-                &format!("connector '{}'", c.id),
-                "route",
-                r,
-                CONNECTOR_ROUTES,
-            ),
-            c.source_span,
-            Some(c.id.clone()),
-        ));
+        diagnostics.push(
+            Diagnostic::error(
+                "connector.invalid_route",
+                invalid_value_message(
+                    &format!("connector '{}'", c.id),
+                    "route",
+                    r,
+                    CONNECTOR_ROUTES,
+                ),
+                c.source_span,
+                Some(c.id.clone()),
+            )
+            .with_fix(replace_value_fix("route", r, CONNECTOR_ROUTES)),
+        );
     }
     for (label, marker) in [
         ("marker-start", c.marker_start.as_deref()),
@@ -325,17 +340,20 @@ pub(in crate::validate::check) fn check_connector(
         if let Some(m) = marker
             && !CONNECTOR_MARKERS.contains(&m)
         {
-            diagnostics.push(Diagnostic::error(
-                "connector.invalid_marker",
-                invalid_value_message(
-                    &format!("connector '{}'", c.id),
-                    label,
-                    m,
-                    CONNECTOR_MARKERS,
-                ),
-                c.source_span,
-                Some(c.id.clone()),
-            ));
+            diagnostics.push(
+                Diagnostic::error(
+                    "connector.invalid_marker",
+                    invalid_value_message(
+                        &format!("connector '{}'", c.id),
+                        label,
+                        m,
+                        CONNECTOR_MARKERS,
+                    ),
+                    c.source_span,
+                    Some(c.id.clone()),
+                )
+                .with_fix(replace_value_fix(label, m, CONNECTOR_MARKERS)),
+            );
         }
     }
     for (label, anchor) in [

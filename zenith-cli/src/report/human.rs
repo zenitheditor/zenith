@@ -53,10 +53,9 @@ pub(crate) fn human_diagnostic_lines(diagnostics: &[Diagnostic]) -> Vec<String> 
 fn group_key(d: &Diagnostic) -> Option<GroupKey<'_>> {
     match d.severity {
         Severity::Error => None,
-        Severity::Warning | Severity::Advisory => d
-            .cause
-            .as_deref()
-            .map(|cause| (d.code.as_str(), d.severity, cause)),
+        Severity::Warning | Severity::Advisory => {
+            d.cause().map(|cause| (d.code.as_str(), d.severity, cause))
+        }
     }
 }
 

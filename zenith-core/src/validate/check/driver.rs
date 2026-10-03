@@ -19,7 +19,7 @@ use crate::diagnostics::Diagnostic;
 use crate::schema::enums::{
     COLORSPACES, LINE_JUMP_STYLES, PAGE_NUMBER_FORMATS, PAGE_PARITIES, PAGE_PROGRESSIONS,
 };
-use crate::suggest::invalid_value_message;
+use crate::suggest::{invalid_value_message, replace_value_fix};
 use crate::tokens::{ResolvedToken, ResolvedValue};
 
 use super::brand::check_brand_contract;
@@ -454,17 +454,24 @@ pub fn validate_with_policy(
         if let Some(style) = &section.folio_style
             && !PAGE_NUMBER_FORMATS.contains(&style.as_str())
         {
-            diagnostics.push(Diagnostic::error(
-                "section.invalid_folio_style",
-                invalid_value_message(
-                    &format!("section '{}'", section.id),
+            diagnostics.push(
+                Diagnostic::error(
+                    "section.invalid_folio_style",
+                    invalid_value_message(
+                        &format!("section '{}'", section.id),
+                        "folio-style",
+                        style,
+                        PAGE_NUMBER_FORMATS,
+                    ),
+                    section.source_span,
+                    Some(section.id.clone()),
+                )
+                .with_fix(replace_value_fix(
                     "folio-style",
                     style,
                     PAGE_NUMBER_FORMATS,
-                ),
-                section.source_span,
-                Some(section.id.clone()),
-            ));
+                )),
+            );
         }
     }
 
@@ -553,12 +560,20 @@ pub fn validate_with_policy(
         if let Some(p) = &page.parity
             && !PAGE_PARITIES.iter().any(|v| p.eq_ignore_ascii_case(v))
         {
-            diagnostics.push(Diagnostic::error(
-                "page.invalid_parity",
-                invalid_value_message(&format!("page '{}'", page.id), "parity", p, PAGE_PARITIES),
-                page.source_span,
-                Some(page.id.clone()),
-            ));
+            diagnostics.push(
+                Diagnostic::error(
+                    "page.invalid_parity",
+                    invalid_value_message(
+                        &format!("page '{}'", page.id),
+                        "parity",
+                        p,
+                        PAGE_PARITIES,
+                    ),
+                    page.source_span,
+                    Some(page.id.clone()),
+                )
+                .with_fix(replace_value_fix("parity", p, PAGE_PARITIES)),
+            );
         }
 
         // ── Per-page line-jump style validity ─────────────────────────────
@@ -567,17 +582,20 @@ pub fn validate_with_policy(
         if let Some(lj) = &page.line_jumps
             && !LINE_JUMP_STYLES.contains(&lj.as_str())
         {
-            diagnostics.push(Diagnostic::error(
-                "page.invalid_line_jumps",
-                invalid_value_message(
-                    &format!("page '{}'", page.id),
-                    "line-jumps",
-                    lj,
-                    LINE_JUMP_STYLES,
-                ),
-                page.source_span,
-                Some(page.id.clone()),
-            ));
+            diagnostics.push(
+                Diagnostic::error(
+                    "page.invalid_line_jumps",
+                    invalid_value_message(
+                        &format!("page '{}'", page.id),
+                        "line-jumps",
+                        lj,
+                        LINE_JUMP_STYLES,
+                    ),
+                    page.source_span,
+                    Some(page.id.clone()),
+                )
+                .with_fix(replace_value_fix("line-jumps", lj, LINE_JUMP_STYLES)),
+            );
         }
 
         // Single source of truth for this page's parity (drives the margin

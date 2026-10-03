@@ -14,6 +14,7 @@ mod asset;
 mod batch;
 mod document;
 mod edit;
+mod fix;
 mod history;
 mod library;
 mod output;
@@ -28,6 +29,7 @@ pub fn run() -> ExitCode {
         Command::New(args) => tools::dispatch_new(args),
         Command::Validate(args) => document::dispatch_validate(args),
         Command::Fmt(args) => document::dispatch_fmt(args),
+        Command::Fix(args) => fix::dispatch_fix(args),
         Command::Tokens(args) => document::dispatch_tokens(args),
         Command::Render(args) => render::dispatch_render(args),
         Command::Inspect(args) => document::dispatch_inspect(args),

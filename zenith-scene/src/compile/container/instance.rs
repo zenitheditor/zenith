@@ -12,7 +12,7 @@ use zenith_core::{
 use crate::ir::SceneCommand;
 
 use super::super::font_ns::NamespacedFontProvider;
-use super::super::imports::{ImportSource, parse_import_source};
+use super::super::imports::{ImportSource, parse_import_source, stamp_import};
 use super::super::util::resolve_geometry_px;
 use super::super::{NodeCtx, RenderCtx};
 use super::group::{compile_group, group_children_bounds};
@@ -254,6 +254,9 @@ fn compile_imported_instance(
     // dimensions resolve to a positive px box, the imported subtree is scaled to
     // fit that box (mirroring the page-source fit path); otherwise the current
     // translate-only path is preserved exactly (byte-identical for no-w/h).
+    // Spans of diagnostics from the imported subtree index into the imported
+    // document, so they are tagged with the import id.
+    let mut imported_diagnostics: Vec<Diagnostic> = Vec::new();
     match fit_outcome(
         instance,
         &children,
@@ -280,7 +283,7 @@ fn compile_imported_instance(
                     &synthetic,
                     imported_cx,
                     commands,
-                    diagnostics,
+                    &mut imported_diagnostics,
                     connector_strokes,
                     local_ctx,
                 );
@@ -290,7 +293,7 @@ fn compile_imported_instance(
                     &synthetic,
                     imported_cx,
                     commands,
-                    diagnostics,
+                    &mut imported_diagnostics,
                     connector_strokes,
                     local_ctx,
                 );
@@ -303,12 +306,14 @@ fn compile_imported_instance(
                 &synthetic,
                 imported_cx,
                 commands,
-                diagnostics,
+                &mut imported_diagnostics,
                 connector_strokes,
                 ctx,
             );
         }
     }
+    stamp_import(&mut imported_diagnostics, import_id);
+    diagnostics.append(&mut imported_diagnostics);
 }
 
 /// The scaling decision for an imported instance carrying `w`/`h`/`fit`.

@@ -14,7 +14,7 @@ use super::shared::{
 };
 use super::suggest::{blend_mode_names, check_unknown_props, push_invalid_value};
 use crate::schema::enums::{IMAGE_FITS, TEXT_FORMATS, V_ALIGNS};
-use crate::suggest::invalid_value_message;
+use crate::suggest::{invalid_value_message, replace_value_fix};
 use crate::validate::check::nodes::WalkCtx;
 use crate::validate::check::register_id;
 use crate::validate::check::visual::{VisualExpect, check_block_styles, check_visual_prop};
@@ -287,24 +287,30 @@ pub(in crate::validate::check) fn check_text(
     if let Some(fmt) = t.content_format.as_deref()
         && !TEXT_FORMATS.contains(&fmt)
     {
-        diagnostics.push(Diagnostic::error(
-            "text.invalid_format",
-            invalid_value_message(&format!("text '{}'", t.id), "format", fmt, TEXT_FORMATS),
-            t.source_span,
-            Some(t.id.clone()),
-        ));
+        diagnostics.push(
+            Diagnostic::error(
+                "text.invalid_format",
+                invalid_value_message(&format!("text '{}'", t.id), "format", fmt, TEXT_FORMATS),
+                t.source_span,
+                Some(t.id.clone()),
+            )
+            .with_fix(replace_value_fix("format", fmt, TEXT_FORMATS)),
+        );
     }
 
     // Validate v-align value (an unrecognized value is an Error).
     if let Some(va) = t.v_align.as_deref()
         && !V_ALIGNS.contains(&va)
     {
-        diagnostics.push(Diagnostic::error(
-            "text.invalid_v_align",
-            invalid_value_message(&format!("text '{}'", t.id), "v-align", va, V_ALIGNS),
-            t.source_span,
-            Some(t.id.clone()),
-        ));
+        diagnostics.push(
+            Diagnostic::error(
+                "text.invalid_v_align",
+                invalid_value_message(&format!("text '{}'", t.id), "v-align", va, V_ALIGNS),
+                t.source_span,
+                Some(t.id.clone()),
+            )
+            .with_fix(replace_value_fix("v-align", va, V_ALIGNS)),
+        );
     }
 
     // Text-runaround exclusion: an `text-exclusion` naming an id that
@@ -530,12 +536,15 @@ pub(in crate::validate::check) fn check_image(
     if let Some(fit) = &img.fit
         && !IMAGE_FITS.contains(&fit.as_str())
     {
-        diagnostics.push(Diagnostic::error(
-            "image.invalid_fit",
-            invalid_value_message(&format!("image '{}'", img.id), "fit", fit, IMAGE_FITS),
-            img.source_span,
-            Some(img.id.clone()),
-        ));
+        diagnostics.push(
+            Diagnostic::error(
+                "image.invalid_fit",
+                invalid_value_message(&format!("image '{}'", img.id), "fit", fit, IMAGE_FITS),
+                img.source_span,
+                Some(img.id.clone()),
+            )
+            .with_fix(replace_value_fix("fit", fit, IMAGE_FITS)),
+        );
     }
 
     // Visual properties.

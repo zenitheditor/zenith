@@ -12,8 +12,11 @@ use crate::ast::Span;
 use crate::ast::block_style::BlockStyle;
 use crate::ast::token::TokenType;
 use crate::ast::value::PropertyValue;
-use crate::diagnostics::Diagnostic;
-use crate::suggest::{find_suggestion, format_candidate_list};
+use crate::diagnostics::{Diagnostic, FixHint};
+use crate::suggest::{
+    LiteralValue, best_token, exact_token, find_token_suggestion, format_candidate_list,
+    literal_text, raw_literal_message, replace_token_ref_fix, unknown_reference_message,
+};
 use crate::tokens::{ResolvedToken, ResolvedValue};
 
 /// The expected token type for a visual property.
@@ -62,19 +65,21 @@ pub(super) fn check_visual_prop(
 
             // Existence check.
             let Some(resolved) = resolved_tokens.get(token_id.as_str()) else {
-                diagnostics.push(Diagnostic::error(
-                    "token.unknown_reference",
-                    format!(
-                        "node '{}': property '{}' references token '{}' which \
-                         does not exist — {}",
-                        node_id,
-                        prop_name,
-                        token_id,
-                        unknown_token_hint(token_id, expect, resolved_tokens)
-                    ),
-                    None,
-                    Some(node_id.to_owned()),
-                ));
+                let accepted = accepted_token_ids(expect, resolved_tokens);
+                diagnostics.push(
+                    Diagnostic::error(
+                        "token.unknown_reference",
+                        unknown_reference_message(
+                            node_id,
+                            prop_name,
+                            token_id,
+                            &unknown_token_hint(token_id, expect, resolved_tokens),
+                        ),
+                        None,
+                        Some(node_id.to_owned()),
+                    )
+                    .with_fix(replace_token_ref_fix(prop_name, token_id, accepted)),
+                );
                 return;
             };
 
@@ -132,19 +137,16 @@ pub(super) fn check_visual_prop(
         }
 
         PropertyValue::Literal(_) | PropertyValue::Dimension(_) => {
-            diagnostics.push(Diagnostic::error(
-                "token.raw_visual_literal",
-                format!(
-                    "node '{}': visual property '{}' has a raw literal value; \
-                     visual properties must reference design tokens \
-                     — {}",
-                    node_id,
-                    prop_name,
-                    raw_literal_hint(expect, resolved_tokens)
-                ),
-                None,
-                Some(node_id.to_owned()),
-            ));
+            let (hint, fix) = raw_literal_analysis(expect, prop_name, pv, resolved_tokens);
+            diagnostics.push(
+                Diagnostic::error(
+                    "token.raw_visual_literal",
+                    raw_literal_message(node_id, prop_name, &hint),
+                    None,
+                    Some(node_id.to_owned()),
+                )
+                .with_fix(fix),
+            );
         }
 
         // A data-binding reference is a valid future-facing value; no error is
@@ -264,35 +266,124 @@ fn accepted_token_ids(
 
 /// Next-action text for an unknown token reference: a did-you-mean when a
 /// declared token of an accepted type is close, otherwise the declared list.
+///
+/// Ranking: a declared prefix of `token_id` first (`color.primary.500` →
+/// `color.primary`), then edit distance, then the dotted-segment fallback.
 pub(super) fn unknown_token_hint(
     token_id: &str,
     expect: VisualExpect,
     resolved_tokens: &BTreeMap<String, ResolvedToken>,
 ) -> String {
     let ids = accepted_token_ids(expect, resolved_tokens);
-    match find_suggestion(token_id, ids.iter().copied(), 2) {
+    match find_token_suggestion(token_id, ids.iter().copied()) {
         Some(s) => format!("did you mean '{s}'?"),
         None => format_candidate_list(&format!("{} tokens", visual_expect_name(expect)), ids),
     }
 }
 
-/// Next-action text for a raw visual literal: the expected token type, an
-/// example reference, and the declared candidates.
+/// Next-action text for a raw visual literal. See [`raw_literal_analysis`].
 pub(super) fn raw_literal_hint(
     expect: VisualExpect,
+    prop_name: &str,
+    value: &PropertyValue,
     resolved_tokens: &BTreeMap<String, ResolvedToken>,
 ) -> String {
+    raw_literal_analysis(expect, prop_name, value, resolved_tokens).0
+}
+
+/// Next-action text and fix hint for a raw visual literal.
+///
+/// The text names the expected token type, the token with the same value
+/// (else the nearest value), and the declared candidates. Without a value
+/// match, an example reference stands in. The hint exists when `zenith fix`
+/// can reference or mint a token for the value.
+fn raw_literal_analysis(
+    expect: VisualExpect,
+    prop_name: &str,
+    value: &PropertyValue,
+    resolved_tokens: &BTreeMap<String, ResolvedToken>,
+) -> (String, Option<FixHint>) {
     let label = visual_expect_name(expect);
     let ids = accepted_token_ids(expect, resolved_tokens);
-    match ids.first() {
-        Some(first) => format!(
-            "expects a {label} token, e.g. (token)\"{first}\"; {}",
-            format_candidate_list(&format!("{label} tokens"), ids.iter().copied())
-        ),
-        None => format!(
+    let lit = literal_value(expect, value);
+    let exact = lit
+        .as_ref()
+        .and_then(|l| exact_token(l, prop_name, resolved_tokens))
+        .filter(|id| ids.contains(id));
+    let best = lit
+        .as_ref()
+        .and_then(|l| best_token(l, prop_name, resolved_tokens))
+        .filter(|m| ids.contains(&m.id));
+    let nearest = best.as_ref().filter(|m| Some(m.id) != exact);
+    let fix = match (&lit, mint_type(expect), literal_text(value)) {
+        (Some(_), Some(token_type), Some(literal)) => Some(FixHint::RawLiteral {
+            property: prop_name.to_owned(),
+            literal,
+            token_type: token_type.to_owned(),
+            exact_match: exact.map(str::to_owned),
+            nearest: nearest.map(|m| m.id.to_owned()),
+        }),
+        _ => None,
+    };
+    let Some(first) = ids.first() else {
+        let text = format!(
             "expects a {label} token; no {label} tokens declared — \
              declare one in the `tokens` block"
+        );
+        return (text, fix);
+    };
+    let candidates = format_candidate_list(&format!("{label} tokens"), ids.iter().copied());
+    let text = match (exact, nearest) {
+        (Some(id), _) => {
+            let shown = best
+                .as_ref()
+                .filter(|m| m.id == id)
+                .map_or(String::new(), |m| format!(" ({})", m.value));
+            format!("expects a {label} token; use (token)\"{id}\"{shown}; {candidates}")
+        }
+        (None, Some(m)) => format!(
+            "expects a {label} token; nearest is (token)\"{}\" ({}); {candidates}",
+            m.id, m.value
         ),
+        (None, None) => format!("expects a {label} token, e.g. (token)\"{first}\"; {candidates}"),
+    };
+    (text, fix)
+}
+
+/// The token type `zenith fix` mints for a raw literal under `expect`.
+fn mint_type(expect: VisualExpect) -> Option<&'static str> {
+    match expect {
+        VisualExpect::Color | VisualExpect::ColorOrGradient => Some("color"),
+        VisualExpect::Dimension => Some("dimension"),
+        VisualExpect::FontFamily => Some("fontFamily"),
+        VisualExpect::FontWeight => Some("fontWeight"),
+        VisualExpect::Shadow | VisualExpect::Filter | VisualExpect::Mask => None,
+    }
+}
+
+/// Read a raw property value as a [`LiteralValue`] of the kind `expect` takes.
+fn literal_value(expect: VisualExpect, value: &PropertyValue) -> Option<LiteralValue> {
+    match (expect, value) {
+        (VisualExpect::Color | VisualExpect::ColorOrGradient, PropertyValue::Literal(s)) => {
+            LiteralValue::color(s)
+        }
+        (VisualExpect::Dimension, PropertyValue::Dimension(d)) => LiteralValue::dimension(d),
+        (VisualExpect::FontFamily, PropertyValue::Literal(s)) => LiteralValue::font_family(s),
+        (VisualExpect::FontWeight, PropertyValue::Literal(s)) => LiteralValue::font_weight(s),
+        (
+            VisualExpect::Color
+            | VisualExpect::ColorOrGradient
+            | VisualExpect::Dimension
+            | VisualExpect::FontFamily
+            | VisualExpect::FontWeight
+            | VisualExpect::Shadow
+            | VisualExpect::Filter
+            | VisualExpect::Mask,
+            PropertyValue::TokenRef(_)
+            | PropertyValue::Literal(_)
+            | PropertyValue::Dimension(_)
+            | PropertyValue::DataRef(_),
+        ) => None,
     }
 }
 

@@ -17,7 +17,7 @@ use crate::ast::style::StyleBlock;
 use crate::ast::value::PropertyValue;
 use crate::diagnostics::Diagnostic;
 use crate::parse::transform::known_props_for_kind;
-use crate::suggest::unknown_property_message;
+use crate::suggest::{rename_property_fix, unknown_property_message};
 use crate::tokens::ResolvedToken;
 
 use super::visual::{VisualExpect, attach_visual_spans, check_visual_prop};
@@ -301,17 +301,23 @@ pub(in crate::validate::check) fn validate_asset_decl(
 
     // ── Unknown properties ────────────────────────────────────────────────
     for prop_name in decl.unknown_props.keys() {
-        diagnostics.push(Diagnostic::error(
-            "asset.unknown_property",
-            unknown_property_message(
-                &format!("asset '{}'", decl.id),
-                "asset",
+        diagnostics.push(
+            Diagnostic::error(
+                "asset.unknown_property",
+                unknown_property_message(
+                    &format!("asset '{}'", decl.id),
+                    "asset",
+                    prop_name,
+                    known_props_for_kind("asset"),
+                ),
+                decl.source_span,
+                Some(decl.id.clone()),
+            )
+            .with_fix(rename_property_fix(
                 prop_name,
                 known_props_for_kind("asset"),
-            ),
-            decl.source_span,
-            Some(decl.id.clone()),
-        ));
+            )),
+        );
     }
 }
 
@@ -325,17 +331,23 @@ pub(in crate::validate::check) fn validate_library_decl(
     diagnostics: &mut Vec<Diagnostic>,
 ) {
     for prop_name in decl.unknown_props.keys() {
-        diagnostics.push(Diagnostic::error(
-            "library.unknown_property",
-            unknown_property_message(
-                &format!("library '{}'", decl.id),
-                "library",
+        diagnostics.push(
+            Diagnostic::error(
+                "library.unknown_property",
+                unknown_property_message(
+                    &format!("library '{}'", decl.id),
+                    "library",
+                    prop_name,
+                    known_props_for_kind("library"),
+                ),
+                decl.source_span,
+                Some(decl.id.clone()),
+            )
+            .with_fix(rename_property_fix(
                 prop_name,
                 known_props_for_kind("library"),
-            ),
-            decl.source_span,
-            Some(decl.id.clone()),
-        ));
+            )),
+        );
     }
 }
 
@@ -405,17 +417,23 @@ pub(in crate::validate::check) fn validate_provenance_def(
         ));
     }
     for prop_name in prov.unknown_props.keys() {
-        diagnostics.push(Diagnostic::error(
-            "provenance.unknown_property",
-            unknown_property_message(
-                &format!("provenance '{}'", prov.id),
-                "provenance",
+        diagnostics.push(
+            Diagnostic::error(
+                "provenance.unknown_property",
+                unknown_property_message(
+                    &format!("provenance '{}'", prov.id),
+                    "provenance",
+                    prop_name,
+                    known_props_for_kind("provenance"),
+                ),
+                prov.source_span,
+                Some(prov.id.clone()),
+            )
+            .with_fix(rename_property_fix(
                 prop_name,
                 known_props_for_kind("provenance"),
-            ),
-            prov.source_span,
-            Some(prov.id.clone()),
-        ));
+            )),
+        );
     }
 }
 

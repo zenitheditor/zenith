@@ -5,9 +5,7 @@
 
 use std::path::Path;
 
-use zenith_core::{
-    Diagnostic, KdlAdapter, KdlSource, Severity, merge_brand_contract, validate_with_policy,
-};
+use zenith_core::{Diagnostic, KdlAdapter, KdlSource, merge_brand_contract, validate_with_policy};
 
 use crate::commands::composition_imports::load_import_graph;
 use crate::commands::render::{
@@ -17,7 +15,7 @@ use crate::commands::render::{
 use crate::commands::serialize_pretty;
 use crate::config::{CliPolicyFlags, load_global_and_local, merge_policy};
 use crate::json_types::{DiagnosticJson, ValidateOutput};
-use crate::report::human_diagnostic_lines;
+use crate::report::{ImportFiles, attributed_loader_diagnostics, human_diagnostic_lines};
 
 // ── Result type ───────────────────────────────────────────────────────────────
 
@@ -49,31 +47,57 @@ pub struct CmdOutput {
 /// With no Error diagnostic, every page also compiles (no raster), so the
 /// compile-stage diagnostics `render` reports (`text.overflow`,
 /// `font.unresolved`, …) show here in the same round. Repeats are removed.
-/// JSON diagnostics carry 1-based `line`/`col` when they have a span.
+/// JSON diagnostics carry 1-based `line`/`col` when they have a span. A span
+/// from an imported file adds `file` and locates over that file's text.
 ///
 /// - Parse errors and config-load errors produce `exit_code = 2`.
 /// - Documents with at least one error-severity diagnostic produce
 ///   `exit_code = 1`.
 /// - Clean documents produce `exit_code = 0`.
 pub fn run(src: &str, project_dir: Option<&Path>, json: bool, flags: &CliPolicyFlags) -> CmdOutput {
+    let collected = collect(src, project_dir, flags);
+    output(
+        &collected.diagnostics,
+        src,
+        &collected.files,
+        json,
+        collected.exit_code,
+    )
+}
+
+/// Diagnostics of one validate run, before formatting.
+#[derive(Debug)]
+pub struct Collected {
+    /// Every diagnostic, repeats removed.
+    pub diagnostics: Vec<Diagnostic>,
+    /// Import files that diagnostic spans index into.
+    pub files: ImportFiles,
+    /// 0 = no errors, 1 = validation errors, 2 = parse/config error.
+    pub exit_code: u8,
+}
+
+/// Run the full validate pipeline on `src` and return its diagnostics.
+///
+/// This is the single source of what `zenith validate` reports; see [`run`]
+/// for the stages. `zenith fix` uses it for its `remaining` list.
+pub fn collect(src: &str, project_dir: Option<&Path>, flags: &CliPolicyFlags) -> Collected {
+    let failed = |d: Diagnostic| Collected {
+        diagnostics: vec![d],
+        files: ImportFiles::default(),
+        exit_code: 2,
+    };
     // Resolve config policy and brand contract ───────────────────────────────
     // Global config is always consulted; local config is walked up from the
     // document's directory when known. A load error is a hard exit-2 failure.
     let (global, local, global_brand, local_brand) = match load_global_and_local(project_dir) {
         Ok(quad) => quad,
-        Err(msg) => {
-            let d = Diagnostic::error("config.error", msg, None, None);
-            return output(&[d], src, json, 2);
-        }
+        Err(msg) => return failed(Diagnostic::error("config.error", msg, None, None)),
     };
 
     // Parse ─────────────────────────────────────────────────────────────────
     let doc = match KdlAdapter.parse(src.as_bytes()) {
         Ok(d) => d,
-        Err(e) => {
-            let d = Diagnostic::error("parse.error", e.message, e.span, None);
-            return output(&[d], src, json, 2);
-        }
+        Err(e) => return failed(Diagnostic::error("parse.error", e.message, e.span, None)),
     };
 
     // Validate ───────────────────────────────────────────────────────────────
@@ -90,8 +114,8 @@ pub fn run(src: &str, project_dir: Option<&Path>, json: bool, flags: &CliPolicyF
         diagnostics.extend(collect_image_dimension_diagnostics(&doc, dir));
     }
     let imports = load_import_graph(&doc, project_dir);
-    diagnostics.extend(imports.diagnostics().iter().cloned());
-    if !has_errors(&diagnostics) {
+    diagnostics.extend(attributed_loader_diagnostics(&imports));
+    if !Diagnostic::has_errors(&diagnostics) {
         diagnostics.extend(compile_check_diagnostics(
             &doc,
             project_dir,
@@ -100,23 +124,33 @@ pub fn run(src: &str, project_dir: Option<&Path>, json: bool, flags: &CliPolicyF
         ));
     }
     let diagnostics = Diagnostic::dedup(diagnostics);
-    let exit_code = if has_errors(&diagnostics) { 1 } else { 0 };
-    output(&diagnostics, src, json, exit_code)
-}
-
-fn has_errors(diagnostics: &[Diagnostic]) -> bool {
-    diagnostics.iter().any(|d| d.severity == Severity::Error)
+    let exit_code = if Diagnostic::has_errors(&diagnostics) {
+        1
+    } else {
+        0
+    };
+    Collected {
+        diagnostics,
+        files: ImportFiles::from_graph(&imports),
+        exit_code,
+    }
 }
 
 /// Format `diagnostics` as the JSON envelope or human lines.
 ///
 /// `valid` is false when any diagnostic is an error.
-fn output(diagnostics: &[Diagnostic], src: &str, json: bool, exit_code: u8) -> CmdOutput {
+fn output(
+    diagnostics: &[Diagnostic],
+    src: &str,
+    files: &ImportFiles,
+    json: bool,
+    exit_code: u8,
+) -> CmdOutput {
     let stdout = if json {
         serialize_pretty(&ValidateOutput {
             schema: "zenith-validate-v1",
-            valid: !has_errors(diagnostics),
-            diagnostics: DiagnosticJson::located_all(diagnostics, src),
+            valid: !Diagnostic::has_errors(diagnostics),
+            diagnostics: DiagnosticJson::located_all_in(diagnostics, src, files),
         })
     } else if diagnostics.is_empty() {
         "ok — no diagnostics".to_owned()

@@ -11,7 +11,7 @@ use crate::ast::node::{FrameNode, GroupNode, TableNode};
 use crate::ast::value::{Dimension, dim_to_px};
 use crate::diagnostics::Diagnostic;
 use crate::schema::enums::{BORDER_COLLAPSES, H_ALIGNS, SYMMETRY_MODES, V_ALIGNS};
-use crate::suggest::invalid_value_message;
+use crate::suggest::{invalid_value_message, replace_value_fix};
 
 use super::shared::{
     AnchorParentCtx, AnchorProps, TokenEnv, VisualProps, check_anchor, check_optional_dim,
@@ -283,17 +283,20 @@ fn check_group_symmetry(g: &GroupNode, diagnostics: &mut Vec<Diagnostic>) {
     if let Some(mode) = g.symmetry_mode.as_deref()
         && !SYMMETRY_MODES.contains(&mode)
     {
-        diagnostics.push(Diagnostic::error(
-            "group.invalid_symmetry",
-            invalid_value_message(
-                &format!("group '{}'", g.id),
-                "symmetry-mode",
-                mode,
-                SYMMETRY_MODES,
-            ),
-            g.source_span,
-            Some(g.id.clone()),
-        ));
+        diagnostics.push(
+            Diagnostic::error(
+                "group.invalid_symmetry",
+                invalid_value_message(
+                    &format!("group '{}'", g.id),
+                    "symmetry-mode",
+                    mode,
+                    SYMMETRY_MODES,
+                ),
+                g.source_span,
+                Some(g.id.clone()),
+            )
+            .with_fix(replace_value_fix("symmetry-mode", mode, SYMMETRY_MODES)),
+        );
     }
 
     let Some(count) = g.symmetry_count else {
@@ -504,37 +507,46 @@ pub(in crate::validate::check) fn check_table(
     if let Some(ha) = t.h_align.as_deref()
         && !H_ALIGNS.contains(&ha)
     {
-        diagnostics.push(Diagnostic::error(
-            "table.invalid_h_align",
-            invalid_value_message(&format!("table '{}'", t.id), "h-align", ha, H_ALIGNS),
-            t.source_span,
-            Some(t.id.clone()),
-        ));
+        diagnostics.push(
+            Diagnostic::error(
+                "table.invalid_h_align",
+                invalid_value_message(&format!("table '{}'", t.id), "h-align", ha, H_ALIGNS),
+                t.source_span,
+                Some(t.id.clone()),
+            )
+            .with_fix(replace_value_fix("h-align", ha, H_ALIGNS)),
+        );
     }
     if let Some(va) = t.v_align.as_deref()
         && !V_ALIGNS.contains(&va)
     {
-        diagnostics.push(Diagnostic::error(
-            "table.invalid_v_align",
-            invalid_value_message(&format!("table '{}'", t.id), "v-align", va, V_ALIGNS),
-            t.source_span,
-            Some(t.id.clone()),
-        ));
+        diagnostics.push(
+            Diagnostic::error(
+                "table.invalid_v_align",
+                invalid_value_message(&format!("table '{}'", t.id), "v-align", va, V_ALIGNS),
+                t.source_span,
+                Some(t.id.clone()),
+            )
+            .with_fix(replace_value_fix("v-align", va, V_ALIGNS)),
+        );
     }
     if let Some(bc) = t.border_collapse.as_deref()
         && !BORDER_COLLAPSES.contains(&bc)
     {
-        diagnostics.push(Diagnostic::error(
-            "table.invalid_border_collapse",
-            invalid_value_message(
-                &format!("table '{}'", t.id),
-                "border-collapse",
-                bc,
-                BORDER_COLLAPSES,
-            ),
-            t.source_span,
-            Some(t.id.clone()),
-        ));
+        diagnostics.push(
+            Diagnostic::error(
+                "table.invalid_border_collapse",
+                invalid_value_message(
+                    &format!("table '{}'", t.id),
+                    "border-collapse",
+                    bc,
+                    BORDER_COLLAPSES,
+                ),
+                t.source_span,
+                Some(t.id.clone()),
+            )
+            .with_fix(replace_value_fix("border-collapse", bc, BORDER_COLLAPSES)),
+        );
     }
 
     // Per-cell enum checks, mirroring the table-level checks.

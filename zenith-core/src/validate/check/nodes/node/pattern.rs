@@ -6,7 +6,7 @@ use crate::ast::node::PatternNode;
 use crate::ast::value::dim_to_px;
 use crate::diagnostics::Diagnostic;
 use crate::schema::enums::PATTERN_KINDS;
-use crate::suggest::invalid_value_message;
+use crate::suggest::{invalid_value_message, replace_value_fix};
 
 use super::shared::{
     AnchorParentCtx, AnchorProps, TokenEnv, VisualProps, check_anchor, check_optional_dim,
@@ -151,17 +151,20 @@ pub(in crate::validate::check) fn check_pattern(
     // unknown we skip the kind-specific requirement checks to avoid noise.
     let kind_known = PATTERN_KINDS.contains(&p.kind.as_str());
     if !kind_known {
-        diagnostics.push(Diagnostic::error(
-            "pattern.unknown_kind",
-            invalid_value_message(
-                &format!("pattern '{}'", p.id),
-                "kind",
-                &p.kind,
-                PATTERN_KINDS,
-            ),
-            p.source_span,
-            Some(p.id.clone()),
-        ));
+        diagnostics.push(
+            Diagnostic::error(
+                "pattern.unknown_kind",
+                invalid_value_message(
+                    &format!("pattern '{}'", p.id),
+                    "kind",
+                    &p.kind,
+                    PATTERN_KINDS,
+                ),
+                p.source_span,
+                Some(p.id.clone()),
+            )
+            .with_fix(replace_value_fix("kind", &p.kind, PATTERN_KINDS)),
+        );
     }
 
     if kind_known {

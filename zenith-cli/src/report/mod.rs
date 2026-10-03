@@ -4,11 +4,14 @@
 //!   outside a command's own JSON shape.
 //! - `human` — grouped human diagnostic lines.
 //! - `location` — 1-based line/column from a byte span.
+//! - `source` — the file behind each diagnostic span.
 
 mod error;
 mod human;
 mod location;
+mod source;
 
 pub(crate) use error::CliError;
 pub(crate) use human::human_diagnostic_lines;
 pub(crate) use location::line_col;
+pub(crate) use source::{ImportFiles, attributed_loader_diagnostics};

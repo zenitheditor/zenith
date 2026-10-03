@@ -50,6 +50,17 @@ impl<'a> ImportGraph<'a> {
     }
 }
 
+/// Tag every diagnostic in `diagnostics` that has no import yet with
+/// `import_id`: its span indexes into that import's document. A diagnostic
+/// already tagged by a nested import keeps its own id.
+pub(in crate::compile) fn stamp_import(diagnostics: &mut [Diagnostic], import_id: &str) {
+    for d in diagnostics {
+        if d.import().is_none() {
+            d.set_import(import_id);
+        }
+    }
+}
+
 pub(in crate::compile) struct ImportScopes<'a> {
     enabled: bool,
     scopes: BTreeMap<String, ImportedScope<'a>>,
@@ -85,7 +96,9 @@ impl<'a> ImportScopes<'a> {
         let mut scopes = BTreeMap::new();
         for (id, imported) in &graph.documents {
             let token_resolution = resolve_tokens(&imported.document.tokens);
-            diagnostics.extend(token_resolution.diagnostics);
+            let mut token_diagnostics = token_resolution.diagnostics;
+            stamp_import(&mut token_diagnostics, id);
+            diagnostics.extend(token_diagnostics);
 
             let style_map: BTreeMap<&str, &Style> = imported
                 .document

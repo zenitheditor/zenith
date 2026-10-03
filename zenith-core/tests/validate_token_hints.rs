@@ -160,7 +160,7 @@ fn raw_font_weight_names_type_and_candidates() {
     let d = find(&report, "token.raw_visual_literal");
     assert!(
         d.message
-            .contains("expects a fontWeight token, e.g. (token)\"weight.bold\""),
+            .contains("expects a fontWeight token; use (token)\"weight.bold\" (700)"),
         "got: {}",
         d.message
     );

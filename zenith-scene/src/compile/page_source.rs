@@ -5,7 +5,7 @@ use zenith_core::{DataContext, Diagnostic, FontProvider, Page, dim_to_px};
 use crate::ir::SceneCommand;
 
 use super::font_ns::NamespacedFontProvider;
-use super::imports::{ImportGraph, ImportScopes, ImportSource, parse_import_source};
+use super::imports::{ImportGraph, ImportScopes, ImportSource, parse_import_source, stamp_import};
 use super::{RenderCtx, compile_page_inner};
 
 #[derive(Clone, Copy)]
@@ -149,6 +149,8 @@ pub(in crate::compile) fn compile_page_source(
         env.data,
         Some(graph),
     );
+    // Spans in the imported page's diagnostics index into the imported document.
+    stamp_import(&mut imported_result.diagnostics, import_id);
     diagnostics.append(&mut imported_result.diagnostics);
     prefix_imported_command_refs(
         &mut imported_result.scene.commands,

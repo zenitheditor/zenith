@@ -6,11 +6,17 @@
 //! argument: a string literal, or a `const NAME: &str = "…"` constant declared
 //! anywhere in the scanned sources. A first argument that is a plain variable
 //! (a code forwarded from a caller) is skipped.
+//!
+//! The scan covers the CLI error envelope too: `CliError::new` and
+//! `DiagnosticJson::error` codes, plus `error[<code>]` prefixes in string
+//! literals. An undotted prefix such as `error[arg]` fails the shape test.
+//! A constructor with a fixed severity also checks that severity against the catalog.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use zenith_core::Severity;
 use zenith_core::diag_catalog::{DIAGNOSTIC_CODES, lookup};
 
 /// Crates whose `src/` is scanned. Everything except `zenith-core` is read-only.
@@ -23,15 +29,35 @@ const SCANNED_CRATES: &[&str] = &[
     "zenith-render",
 ];
 
+/// How a constructor fixes the severity of the diagnostic it builds.
+#[derive(Clone, Copy)]
+enum Sev {
+    Fixed(Severity),
+    /// The second argument names it: `Severity::Warning`.
+    FromArg,
+}
+
 /// Constructors whose first argument is a diagnostic code. `RenderCmdErr::new`
-/// wraps `Diagnostic::error` in the CLI render path.
-const CONSTRUCTORS: &[&str] = &[
-    "Diagnostic::error(",
-    "Diagnostic::warning(",
-    "Diagnostic::advisory(",
-    "Diagnostic::new(",
-    "RenderCmdErr::new(",
+/// wraps `Diagnostic::error` in the CLI render path. `CliError::new` and
+/// `DiagnosticJson::error` build the CLI error envelope, which is always an
+/// error.
+const CONSTRUCTORS: &[(&str, Sev)] = &[
+    ("Diagnostic::error(", Sev::Fixed(Severity::Error)),
+    ("Diagnostic::warning(", Sev::Fixed(Severity::Warning)),
+    ("Diagnostic::advisory(", Sev::Fixed(Severity::Advisory)),
+    ("Diagnostic::new(", Sev::FromArg),
+    ("RenderCmdErr::new(", Sev::Fixed(Severity::Error)),
+    ("CliError::new(", Sev::Fixed(Severity::Error)),
+    ("DiagnosticJson::error(", Sev::Fixed(Severity::Error)),
 ];
+
+/// One code found at one call site.
+struct Hit {
+    code: String,
+    file: String,
+    /// `None` when the scan cannot see the severity.
+    severity: Option<Severity>,
+}
 
 fn workspace_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("..")
@@ -126,8 +152,42 @@ fn collect_str_consts(src: &str, consts: &mut BTreeMap<String, BTreeSet<String>>
     }
 }
 
-/// Every code string (and the file it was found in) passed to a constructor.
-fn emitted_codes() -> BTreeMap<String, BTreeSet<String>> {
+/// Read the severity named by `rest`, the text after a constructor's first
+/// argument: `, Severity::Warning, …`.
+fn severity_from_arg(rest: &str) -> Option<Severity> {
+    let after = rest.trim_start().strip_prefix(',')?.trim_start();
+    let name = after.strip_prefix("Severity::")?;
+    [
+        ("Error", Severity::Error),
+        ("Warning", Severity::Warning),
+        ("Advisory", Severity::Advisory),
+    ]
+    .into_iter()
+    .find(|(label, _)| name.starts_with(label))
+    .map(|(_, severity)| severity)
+}
+
+/// Every `error[<code>]` prefix in `src`, in order.
+fn inline_error_codes(src: &str) -> Vec<&str> {
+    const MARK: &str = "error[";
+    let mut out = Vec::new();
+    let mut from = 0;
+    while let Some(rel) = src[from..].find(MARK) {
+        let start = from + rel + MARK.len();
+        from = start;
+        let tail = &src[start..];
+        let len = tail
+            .find(|c: char| !(c.is_ascii_lowercase() || c.is_ascii_digit() || "_.-".contains(c)))
+            .unwrap_or(tail.len());
+        if len > 0 && tail[len..].starts_with(']') {
+            out.push(&tail[..len]);
+        }
+    }
+    out
+}
+
+/// Every code passed to a constructor or named by an inline `error[<code>]`.
+fn scan_hits() -> Vec<Hit> {
     let root = workspace_root();
     let mut files = BTreeSet::new();
     for krate in SCANNED_CRATES {
@@ -151,29 +211,54 @@ fn emitted_codes() -> BTreeMap<String, BTreeSet<String>> {
         collect_str_consts(src, &mut consts);
     }
 
-    let mut found: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    let mut hits = Vec::new();
     for (file, src) in &sources {
-        for ctor in CONSTRUCTORS {
+        for (ctor, sev) in CONSTRUCTORS {
             let mut from = 0;
             while let Some(rel) = src[from..].find(ctor) {
                 let start = from + rel + ctor.len();
                 from = start;
                 let arg = src[start..].trim_start();
-                let codes: Vec<String> = if let Some(lit) = read_literal(arg) {
-                    vec![lit.to_owned()]
+                let (codes, arg_len): (Vec<String>, usize) = if let Some(lit) = read_literal(arg) {
+                    (vec![lit.to_owned()], lit.len() + 2)
                 } else {
                     let len = arg.find(|c: char| !is_ident_char(c)).unwrap_or(arg.len());
                     let ident = arg[..len].rsplit("::").next().unwrap_or("");
-                    consts
+                    let codes = consts
                         .get(ident)
                         .map(|set| set.iter().cloned().collect())
-                        .unwrap_or_default()
+                        .unwrap_or_default();
+                    (codes, len)
+                };
+                let severity = match sev {
+                    Sev::Fixed(severity) => Some(*severity),
+                    Sev::FromArg => severity_from_arg(&arg[arg_len..]),
                 };
                 for code in codes {
-                    found.entry(code).or_default().insert(file.clone());
+                    hits.push(Hit {
+                        code,
+                        file: file.clone(),
+                        severity,
+                    });
                 }
             }
         }
+        for code in inline_error_codes(src) {
+            hits.push(Hit {
+                code: code.to_owned(),
+                file: file.clone(),
+                severity: None,
+            });
+        }
+    }
+    hits
+}
+
+/// Every code string (and the files it was found in).
+fn emitted_codes() -> BTreeMap<String, BTreeSet<String>> {
+    let mut found: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    for hit in scan_hits() {
+        found.entry(hit.code).or_default().insert(hit.file);
     }
     found
 }
@@ -251,5 +336,41 @@ fn every_catalogued_code_has_namespace_event_shape() {
     assert!(
         bad.is_empty(),
         "catalog codes not shaped <namespace>.<snake_event>: {bad:?}"
+    );
+}
+
+#[test]
+fn scanner_finds_cli_error_envelope_codes() {
+    let found = emitted_codes();
+    for code in [
+        "io.read_failed",
+        "io.not_utf8",
+        "cli.invalid_argument",
+        "tx.failed",
+        "merge.row_failed",
+        "library.add_failed",
+        "inspect.node_not_found",
+    ] {
+        assert!(found.contains_key(code), "scanner missed CLI code {code}");
+    }
+}
+
+#[test]
+fn every_emitted_severity_matches_the_catalog() {
+    let mut mismatched: BTreeSet<String> = BTreeSet::new();
+    for hit in scan_hits() {
+        let (Some(seen), Some(info)) = (hit.severity, lookup(&hit.code)) else {
+            continue;
+        };
+        if seen != info.severity {
+            mismatched.insert(format!(
+                "{} emitted as {seen:?} in {}, catalogued as {:?}",
+                hit.code, hit.file, info.severity
+            ));
+        }
+    }
+    assert!(
+        mismatched.is_empty(),
+        "emission severity differs from zenith-core/src/diag_catalog: {mismatched:#?}"
     );
 }

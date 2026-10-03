@@ -366,17 +366,20 @@ pub(crate) fn collect_missing_import_asset_diagnostics(
         for decl in &doc.assets.assets {
             let path = dir.join(&decl.src);
             if !path.exists() {
-                diagnostics.push(Diagnostic::error(
-                    "import.asset_missing",
-                    format!(
-                        "import '{}' asset '{}' file not found: '{}'",
-                        import_id,
-                        decl.id,
-                        path.display()
-                    ),
-                    decl.source_span,
-                    Some(decl.id.clone()),
-                ));
+                diagnostics.push(
+                    Diagnostic::error(
+                        "import.asset_missing",
+                        format!(
+                            "import '{}' asset '{}' file not found: '{}'",
+                            import_id,
+                            decl.id,
+                            path.display()
+                        ),
+                        decl.source_span,
+                        Some(decl.id.clone()),
+                    )
+                    .with_import(import_id),
+                );
             }
         }
     }

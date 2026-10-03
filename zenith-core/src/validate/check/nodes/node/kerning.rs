@@ -132,7 +132,7 @@ fn check_kerning_by(
             "token.raw_visual_literal",
             format!(
                 "{node_kind} '{node_id}': kern-pair by has an unsupported literal value — {}",
-                raw_literal_hint(VisualExpect::Dimension, resolved_tokens)
+                raw_literal_hint(VisualExpect::Dimension, "by", by, resolved_tokens)
             ),
             source_span,
             Some(node_id.to_owned()),

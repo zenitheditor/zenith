@@ -12,7 +12,9 @@ use crate::ast::Span;
 use crate::ast::node::UnknownProperty;
 use crate::diagnostics::Diagnostic;
 use crate::parse::transform::known_props_for_kind;
-use crate::suggest::{invalid_value_message, unknown_property_message};
+use crate::suggest::{
+    invalid_value_message, rename_property_fix, replace_value_fix, unknown_property_message,
+};
 
 /// Emit one `node.unknown_property` Error for every entry in `unknown`.
 ///
@@ -34,12 +36,10 @@ pub(super) fn check_unknown_props(
     for prop_name in unknown.keys() {
         let message = unknown_property_message(&format!("{kind} '{id}'"), kind, prop_name, known);
 
-        diagnostics.push(Diagnostic::error(
-            "node.unknown_property",
-            message,
-            span,
-            Some(id.to_owned()),
-        ));
+        diagnostics.push(
+            Diagnostic::error("node.unknown_property", message, span, Some(id.to_owned()))
+                .with_fix(rename_property_fix(prop_name, known)),
+        );
     }
 }
 
@@ -59,12 +59,10 @@ pub(in crate::validate::check) fn push_invalid_value(
     diagnostics: &mut Vec<Diagnostic>,
 ) {
     let message = invalid_value_message(subject, prop, value, allowed);
-    diagnostics.push(Diagnostic::error(
-        "node.invalid_value",
-        message,
-        span,
-        node_id,
-    ));
+    diagnostics.push(
+        Diagnostic::error("node.invalid_value", message, span, node_id)
+            .with_fix(replace_value_fix(prop, value, allowed)),
+    );
 }
 
 /// Allowed `blend-mode` values, in canonical order.

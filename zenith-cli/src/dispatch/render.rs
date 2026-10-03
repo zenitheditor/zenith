@@ -9,18 +9,16 @@
 use std::path::Path;
 use std::process::ExitCode;
 
-use zenith_core::{DataContext, Diagnostic, Severity};
+use zenith_core::{DataContext, Diagnostic};
 
 use crate::cli::RenderArgs;
-use crate::cli_helpers::{
-    count_hard_diagnostics, parse_spread_spec, print_diagnostics_stderr, read_file, write_bytes,
-};
+use crate::cli_helpers::{parse_spread_spec, print_diagnostics_stderr, read_file, write_bytes};
 use crate::commands;
 use crate::commands::render::{RenderCmdErr, RenderEntryOptions, SpreadRenderOpts};
 use crate::commands::serialize_pretty;
 use crate::config::CliPolicyFlags;
 use crate::json_types::{DiagnosticJson, RenderOutput};
-use crate::report::CliError;
+use crate::report::{CliError, ImportFiles};
 
 const RENDER_SCHEMA: &str = "zenith-render-v1";
 
@@ -79,6 +77,7 @@ pub(super) fn dispatch_render(args: RenderArgs) -> ExitCode {
         data: data_ctx.as_ref(),
         outputs: Vec::new(),
         diagnostics: Vec::new(),
+        import_files: ImportFiles::default(),
     };
     match run.render_all(spread) {
         Ok(()) => run.finish_ok(),
@@ -91,6 +90,8 @@ struct Stop {
     /// Diagnostics of the failing output. At least one is an error.
     diagnostics: Vec<Diagnostic>,
     exit_code: u8,
+    /// Files of the composition imports behind the diagnostic spans.
+    import_files: ImportFiles,
 }
 
 impl From<RenderCmdErr> for Stop {
@@ -98,6 +99,7 @@ impl From<RenderCmdErr> for Stop {
         Self {
             diagnostics: e.diagnostics,
             exit_code: e.exit_code,
+            import_files: e.import_files,
         }
     }
 }
@@ -112,6 +114,8 @@ struct RenderRun<'a> {
     outputs: Vec<String>,
     /// Diagnostics of every finished output, in output order.
     diagnostics: Vec<Diagnostic>,
+    /// Files of the composition imports behind the diagnostic spans.
+    import_files: ImportFiles,
 }
 
 impl RenderRun<'_> {
@@ -142,7 +146,13 @@ impl RenderRun<'_> {
                     construction_overlay: args.construction_overlay,
                 },
             )?;
-            self.write(png_out, &artifact.png, artifact.diagnostics, "spread PNG")?;
+            self.write(
+                png_out,
+                &artifact.png,
+                artifact.diagnostics,
+                &artifact.import_files,
+                "spread PNG",
+            )?;
         }
         if let Some(scene_out) = &args.scene {
             let artifact = commands::render::to_scene_json_with_options(
@@ -155,6 +165,7 @@ impl RenderRun<'_> {
                 scene_out,
                 artifact.json.as_bytes(),
                 artifact.diagnostics,
+                &artifact.import_files,
                 "scene",
             )?;
         }
@@ -166,7 +177,13 @@ impl RenderRun<'_> {
                 args.page.unwrap_or(1),
                 self.entry_options(),
             )?;
-            self.write(png_out, &artifact.png, artifact.diagnostics, "PNG")?;
+            self.write(
+                png_out,
+                &artifact.png,
+                artifact.diagnostics,
+                &artifact.import_files,
+                "PNG",
+            )?;
         }
         if let Some(pdf_out) = &args.pdf {
             // `--page N` selects one page. Without it every page goes into one
@@ -184,7 +201,13 @@ impl RenderRun<'_> {
                     self.entry_options(),
                 ),
             }?;
-            self.write(pdf_out, &artifact.pdf, artifact.diagnostics, "PDF")?;
+            self.write(
+                pdf_out,
+                &artifact.pdf,
+                artifact.diagnostics,
+                &artifact.import_files,
+                "PDF",
+            )?;
         }
         if let Some(out_dir) = &args.all_pages {
             self.render_pages(out_dir)?;
@@ -202,7 +225,7 @@ impl RenderRun<'_> {
             self.entry_options(),
         )?;
         // Block on hard diagnostics before any page reaches disk.
-        gate(&artifact.diagnostics)?;
+        gate(&artifact.diagnostics, &artifact.import_files)?;
         for (i, png) in artifact.pages.iter().enumerate() {
             let page_path = out_dir.join(format!("page-{}.png", i + 1));
             if let Err(e) = write_bytes(&page_path, png) {
@@ -218,6 +241,7 @@ impl RenderRun<'_> {
             );
         }
         self.diagnostics.extend(artifact.diagnostics);
+        self.import_files.extend(&artifact.import_files);
         Ok(())
     }
 
@@ -227,9 +251,10 @@ impl RenderRun<'_> {
         out: &Path,
         bytes: &[u8],
         diagnostics: Vec<Diagnostic>,
+        import_files: &ImportFiles,
         label: &str,
     ) -> Result<(), Stop> {
-        gate(&diagnostics)?;
+        gate(&diagnostics, import_files)?;
         if let Err(e) = write_bytes(out, bytes) {
             return Err(write_stop(out, &e));
         }
@@ -238,13 +263,20 @@ impl RenderRun<'_> {
             println!("{label} written to '{}'", out.display());
         }
         self.diagnostics.extend(diagnostics);
+        self.import_files.extend(import_files);
         Ok(())
     }
 
     fn finish_ok(self) -> ExitCode {
         let diagnostics = Diagnostic::dedup(self.diagnostics);
         if self.args.json {
-            print_envelope("ok", self.outputs, &diagnostics, self.src);
+            print_envelope(
+                "ok",
+                self.outputs,
+                &diagnostics,
+                self.src,
+                &self.import_files,
+            );
         } else {
             print_diagnostics_stderr(&diagnostics);
         }
@@ -253,14 +285,21 @@ impl RenderRun<'_> {
 
     fn finish_blocked(mut self, stop: Stop) -> ExitCode {
         self.diagnostics.extend(stop.diagnostics);
+        self.import_files.extend(&stop.import_files);
         let diagnostics = Diagnostic::dedup(self.diagnostics);
         if self.args.json {
-            print_envelope("blocked", self.outputs, &diagnostics, self.src);
+            print_envelope(
+                "blocked",
+                self.outputs,
+                &diagnostics,
+                self.src,
+                &self.import_files,
+            );
         } else {
             print_diagnostics_stderr(&diagnostics);
             eprintln!(
                 "render blocked by {} hard diagnostic(s)",
-                count_hard_diagnostics(&diagnostics)
+                diagnostics.iter().filter(|d| d.is_error()).count()
             );
         }
         ExitCode::from(stop.exit_code)
@@ -268,11 +307,12 @@ impl RenderRun<'_> {
 }
 
 /// Stop with exit code 2 when any diagnostic is an error.
-fn gate(diagnostics: &[Diagnostic]) -> Result<(), Stop> {
-    if diagnostics.iter().any(|d| d.severity == Severity::Error) {
+fn gate(diagnostics: &[Diagnostic], import_files: &ImportFiles) -> Result<(), Stop> {
+    if Diagnostic::has_errors(diagnostics) {
         return Err(Stop {
             diagnostics: diagnostics.to_vec(),
             exit_code: 2,
+            import_files: import_files.clone(),
         });
     }
     Ok(())
@@ -290,6 +330,7 @@ fn write_stop(path: &Path, e: &std::io::Error) -> Stop {
             None,
         )],
         exit_code: 2,
+        import_files: ImportFiles::default(),
     }
 }
 
@@ -298,12 +339,13 @@ fn print_envelope(
     outputs: Vec<String>,
     diagnostics: &[Diagnostic],
     src: &str,
+    import_files: &ImportFiles,
 ) {
     let out = RenderOutput {
         schema: RENDER_SCHEMA,
         status,
         outputs,
-        diagnostics: DiagnosticJson::located_all(diagnostics, src),
+        diagnostics: DiagnosticJson::located_all_in(diagnostics, src, import_files),
     };
     println!("{}", serialize_pretty(&out));
 }

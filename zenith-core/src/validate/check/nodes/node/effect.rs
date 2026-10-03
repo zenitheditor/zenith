@@ -5,7 +5,7 @@ use std::collections::BTreeSet;
 use crate::ast::node::{LightNode, MeshNode};
 use crate::diagnostics::Diagnostic;
 use crate::schema::enums::{CAMERA_KINDS, LIGHT_KINDS};
-use crate::suggest::invalid_value_message;
+use crate::suggest::{invalid_value_message, replace_value_fix};
 use crate::validate::check::nodes::WalkCtx;
 use crate::validate::check::register_id;
 use crate::validate::check::visual::{VisualExpect, check_visual_prop};
@@ -69,12 +69,15 @@ pub(in crate::validate::check) fn check_light(
     if let Some(kind) = &l.kind
         && !LIGHT_KINDS.contains(&kind.as_str())
     {
-        diagnostics.push(Diagnostic::error(
-            "light.unknown_kind",
-            invalid_value_message(&format!("light '{}'", l.id), "kind", kind, LIGHT_KINDS),
-            l.source_span,
-            Some(l.id.clone()),
-        ));
+        diagnostics.push(
+            Diagnostic::error(
+                "light.unknown_kind",
+                invalid_value_message(&format!("light '{}'", l.id), "kind", kind, LIGHT_KINDS),
+                l.source_span,
+                Some(l.id.clone()),
+            )
+            .with_fix(replace_value_fix("kind", kind, LIGHT_KINDS)),
+        );
     }
     if let Some(opacity) = l.opacity
         && !(0.0..=1.0).contains(&opacity)
@@ -206,12 +209,15 @@ pub(in crate::validate::check) fn check_mesh(
     if let Some(kind) = &m.kind
         && !CAMERA_KINDS.contains(&kind.as_str())
     {
-        diagnostics.push(Diagnostic::error(
-            "mesh.unknown_kind",
-            invalid_value_message(&format!("mesh '{}'", m.id), "kind", kind, CAMERA_KINDS),
-            m.source_span,
-            Some(m.id.clone()),
-        ));
+        diagnostics.push(
+            Diagnostic::error(
+                "mesh.unknown_kind",
+                invalid_value_message(&format!("mesh '{}'", m.id), "kind", kind, CAMERA_KINDS),
+                m.source_span,
+                Some(m.id.clone()),
+            )
+            .with_fix(replace_value_fix("kind", kind, CAMERA_KINDS)),
+        );
     }
     if matches!(m.rows, Some(0)) {
         diagnostics.push(Diagnostic::error(

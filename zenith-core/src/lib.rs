@@ -2,6 +2,7 @@
 //!
 //! Owns the KDL-v2 parser adapter, semantic AST types, canonical formatter,
 //! token types and resolution, validation engine with the full diagnostic set,
+//! machine fixes for diagnostics (`fix`),
 //! AST-based migrations, and deterministic font and asset resolution.
 //! Pure geometry (`zenith-geometry`) is the only other Zenith dependency —
 //! used for exact path-fill contrast containment.
@@ -13,6 +14,7 @@ pub mod data;
 pub mod diag_catalog;
 pub mod diagnostics;
 pub mod error;
+pub mod fix;
 pub mod font;
 pub mod format;
 pub mod markdown;
@@ -48,7 +50,7 @@ pub use color::{
     parse_cmyk, parse_rgb, relative_luminance,
 };
 pub use data::{DataContext, DataFormat, format_data_value};
-pub use diagnostics::{Diagnostic, Severity};
+pub use diagnostics::{Diagnostic, DiagnosticExtra, FixHint, Severity};
 pub use error::{FormatError, ParseError, ParseErrorCode};
 pub use font::{
     BytesFontProvider, FontAlternateFeature, FontAlternateParseError, FontData, FontProvider,

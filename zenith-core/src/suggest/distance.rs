@@ -1,9 +1,5 @@
-//! Shared "did you mean?" helpers: edit distance, nearest-name suggestion,
-//! and a bounded candidate list for diagnostics.
-//!
-//! Used by property-name checks (`node.unknown_property`), enum-value checks
-//! (`node.invalid_value`), and token-reference checks
-//! (`token.unknown_reference`, `token.raw_visual_literal`).
+//! Name ranking: edit distance, nearest-name suggestion, and the token-id
+//! ranking rules used by hints and by `zenith fix`.
 
 /// Compute the Levenshtein distance between `a` and `b`, returning `Some(dist)`
 /// if the distance is ≤ `max`, or `None` if it exceeds `max`.
@@ -56,7 +52,7 @@ pub(crate) fn edit_distance_within(a: &str, b: &str, max: usize) -> Option<usize
 }
 
 /// Number of leading dot-separated segments shared by `a` and `b`.
-fn common_dotted_prefix(a: &str, b: &str) -> usize {
+pub(crate) fn common_dotted_prefix(a: &str, b: &str) -> usize {
     a.split('.')
         .zip(b.split('.'))
         .take_while(|(x, y)| x == y)
@@ -132,147 +128,90 @@ pub(crate) fn find_suggestion<'a>(
     best.map(|(c, _, _)| c)
 }
 
-/// Message for a known property whose enum value is not allowed.
+/// Truncated-segment match: drop trailing dot segments of `name` one at a
+/// time and return the first (longest) prefix that is a candidate.
 ///
-/// `subject` names the owner (for example `polygon 'p1'`). The message names
-/// the property, the bad value, a did-you-mean when `value` is within edit
-/// distance ≤ 2 of an allowed value, and every allowed value.
-pub(crate) fn invalid_value_message(
-    subject: &str,
-    prop: &str,
-    value: &str,
-    allowed: &[&str],
-) -> String {
-    let list = allowed.join(", ");
-    match find_suggestion(value, allowed.iter().copied(), 2) {
-        Some(s) => format!(
-            "{subject}: invalid {prop} '{value}' — did you mean '{s}'? Allowed values: {list}"
-        ),
-        None => format!("{subject}: invalid {prop} '{value}' — allowed values: {list}"),
-    }
-}
-
-/// Message for an unknown property name on `kind`.
-///
-/// `subject` names the owner (for example `asset 'a1'`). The message suggests
-/// the closest entry of `known` within edit distance ≤ 2, otherwise it points
-/// at `zenith schema`.
-pub(crate) fn unknown_property_message(
-    subject: &str,
-    kind: &str,
+/// `color.primary.500` matches `color.primary`. A name without a dot never
+/// matches. The result is unique by construction.
+pub(crate) fn truncated_match<'a>(
     name: &str,
-    known: &[&str],
-) -> String {
-    match find_suggestion(name, known.iter().copied(), 2) {
-        Some(s) => format!("{subject}: unknown property '{name}' — did you mean '{s}'?"),
-        None => format!(
-            "{subject}: unknown property '{name}' \
-             — remove it or run `zenith schema` to list the {kind} properties"
-        ),
+    candidates: impl IntoIterator<Item = &'a str>,
+) -> Option<&'a str> {
+    let candidates: Vec<&'a str> = candidates.into_iter().collect();
+    let mut prefix = name;
+    while let Some((head, _)) = prefix.rsplit_once('.') {
+        if let Some(&hit) = candidates.iter().find(|c| **c == head) {
+            return Some(hit);
+        }
+        prefix = head;
     }
+    None
 }
 
-/// Message for an unknown child node inside a structural block.
+/// Rank a suggestion for an unknown token id.
 ///
-/// `subject` names the parent (for example `brand` or `variant 'v1'`). The
-/// message names the child, a did-you-mean when `child` is within edit distance
-/// ≤ 2 of an allowed name, and every allowed child. A block that takes no
-/// children says so and tells the author to remove the child.
-pub(crate) fn unknown_child_message(subject: &str, child: &str, allowed: &[&str]) -> String {
-    if allowed.is_empty() {
-        return format!(
-            "{subject}: unknown child '{child}' — {subject} takes no child nodes; remove it"
-        );
-    }
-    let list = allowed.join(", ");
-    match find_suggestion(child, allowed.iter().copied(), 2) {
-        Some(s) => format!(
-            "{subject}: unknown child '{child}' — did you mean '{s}'? Allowed children: {list}"
-        ),
-        None => format!("{subject}: unknown child '{child}' — allowed children: {list}"),
-    }
+/// Rule 1: [`truncated_match`]. Rule 2: [`find_suggestion`] at edit distance
+/// ≤ 2, which already ends with its dotted-segment fallback.
+pub(crate) fn find_token_suggestion<'a>(
+    name: &str,
+    candidates: impl IntoIterator<Item = &'a str>,
+) -> Option<&'a str> {
+    let candidates: Vec<&'a str> = candidates.into_iter().collect();
+    truncated_match(name, candidates.iter().copied())
+        .or_else(|| find_suggestion(name, candidates.iter().copied(), 2))
 }
 
-/// Message for a child node a renderable node kind does not consume.
+/// The single candidate at the smallest edit distance ≤ `max` from `name`.
 ///
-/// `subject` names the parent (for example `ellipse 'e1'`). When the kind has an
-/// accepted-child list the message adds a did-you-mean and that list. Otherwise
-/// it tells the author to place the child as a sibling inside a group.
-pub(crate) fn unsupported_child_message(
-    subject: &str,
-    child: &str,
-    parent: &str,
-    allowed: &[&str],
-) -> String {
-    let head = format!("{subject}: child node '{child}' is not supported by '{parent}'");
-    if allowed.is_empty() {
-        return format!("{head} and is discarded; place it as a sibling inside a group");
+/// Returns `None` when no candidate is within `max`, or when two or more
+/// candidates share the smallest distance. Candidates equal to `name` are
+/// skipped.
+pub(crate) fn unique_nearest<'a>(
+    name: &str,
+    candidates: impl IntoIterator<Item = &'a str>,
+    max: usize,
+) -> Option<&'a str> {
+    let mut best: Option<(&'a str, usize)> = None;
+    let mut tied = false;
+    for candidate in candidates {
+        if candidate == name {
+            continue;
+        }
+        let Some(dist) = edit_distance_within(name, candidate, max) else {
+            continue;
+        };
+        match best {
+            Some((prev, prev_dist)) if dist == prev_dist => {
+                if prev != candidate {
+                    tied = true;
+                }
+            }
+            Some((_, prev_dist)) if dist > prev_dist => {}
+            _ => {
+                best = Some((candidate, dist));
+                tied = false;
+            }
+        }
     }
-    let list = allowed.join(", ");
-    match find_suggestion(child, allowed.iter().copied(), 2) {
-        Some(s) => format!("{head} — did you mean '{s}'? Allowed children: {list}"),
-        None => format!("{head} — allowed children: {list}"),
-    }
+    if tied { None } else { best.map(|(c, _)| c) }
 }
 
-/// Maximum number of names listed by [`format_candidate_list`].
-const MAX_LISTED: usize = 8;
-
-/// Format a bounded candidate list for a diagnostic.
+/// The token id `zenith fix` swaps in for an unknown token reference.
 ///
-/// `label` names the kind of candidate (for example `"color tokens"`).
-/// Returns `declared <label>: a, b, … (+N more)` with the first 8 names in
-/// sorted order, or `no <label> declared` when `names` is empty.
-pub(crate) fn format_candidate_list<'a>(
-    label: &str,
-    names: impl IntoIterator<Item = &'a str>,
-) -> String {
-    let mut sorted: Vec<&str> = names.into_iter().collect();
-    sorted.sort_unstable();
-    sorted.dedup();
-    if sorted.is_empty() {
-        return format!("no {label} declared");
-    }
-    let total = sorted.len();
-    let shown = sorted
-        .iter()
-        .take(MAX_LISTED)
-        .copied()
-        .collect::<Vec<_>>()
-        .join(", ");
-    if total > MAX_LISTED {
-        format!("declared {label}: {shown} (+{} more)", total - MAX_LISTED)
-    } else {
-        format!("declared {label}: {shown}")
-    }
+/// Rule 1: [`truncated_match`]. Rule 2: [`unique_nearest`] at edit distance
+/// ≤ 2. A tie under rule 2 returns `None`.
+pub(crate) fn token_fix_target<'a>(
+    name: &str,
+    candidates: impl IntoIterator<Item = &'a str>,
+) -> Option<&'a str> {
+    let candidates: Vec<&'a str> = candidates.into_iter().collect();
+    truncated_match(name, candidates.iter().copied())
+        .or_else(|| unique_nearest(name, candidates.iter().copied(), 2))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn unknown_child_message_suggests_close_name() {
-        let msg = unknown_child_message("brand", "color", &["colors", "fonts", "weights"]);
-        assert!(msg.contains("did you mean 'colors'?"), "{msg}");
-        assert!(
-            msg.contains("Allowed children: colors, fonts, weights"),
-            "{msg}"
-        );
-    }
-
-    #[test]
-    fn unknown_child_message_lists_allowed_without_suggestion() {
-        let msg = unknown_child_message("brand", "zzzzzz", &["colors", "fonts"]);
-        assert!(!msg.contains("did you mean"), "{msg}");
-        assert!(msg.contains("allowed children: colors, fonts"), "{msg}");
-    }
-
-    #[test]
-    fn unknown_child_message_for_childless_block() {
-        let msg = unknown_child_message("section 's1'", "x", &[]);
-        assert!(msg.contains("takes no child nodes; remove it"), "{msg}");
-    }
 
     #[test]
     fn edit_distance_identical_strings() {
@@ -331,8 +270,6 @@ mod tests {
     #[test]
     fn dotted_fallback_prefers_longest_shared_prefix() {
         let known = ["color.base.content", "color.brand.contentx", "size.base"];
-        // Full distance is too large; shares `color.base` and last segments
-        // `contents` / `content` are 1 edit apart.
         assert_eq!(
             find_suggestion("color.base.contents.x", known, 0),
             None,
@@ -350,20 +287,92 @@ mod tests {
     }
 
     #[test]
-    fn candidate_list_empty() {
+    fn truncated_match_drops_trailing_segments() {
+        let known = ["color.base.100", "color.primary", "color.primary.content"];
         assert_eq!(
-            format_candidate_list("color tokens", []),
-            "no color tokens declared"
+            truncated_match("color.primary.500", known),
+            Some("color.primary")
+        );
+        assert_eq!(
+            truncated_match("color.primary.500.x", known),
+            Some("color.primary")
         );
     }
 
     #[test]
-    fn candidate_list_truncates_with_more_count() {
-        let names: Vec<String> = (0..11).map(|i| format!("t{i:02}")).collect();
-        let out = format_candidate_list("color tokens", names.iter().map(String::as_str));
+    fn truncated_match_prefers_longest_prefix() {
+        let known = ["color", "color.primary"];
         assert_eq!(
-            out,
-            "declared color tokens: t00, t01, t02, t03, t04, t05, t06, t07 (+3 more)"
+            truncated_match("color.primary.500", known),
+            Some("color.primary")
+        );
+    }
+
+    #[test]
+    fn truncated_match_misses_without_declared_prefix() {
+        let known = ["color.base.100", "color.base.200"];
+        assert_eq!(truncated_match("color.base.900", known), None);
+        assert_eq!(truncated_match("nodot", ["nodot"]), None);
+    }
+
+    #[test]
+    fn token_suggestion_truncation_beats_edit_distance() {
+        // Edit distance alone picks `color.base.100` (2 edits); the declared
+        // prefix `color.primary` wins first.
+        let known = ["color.base.100", "color.primary", "color.primary.content"];
+        assert_eq!(
+            find_token_suggestion("color.primary.500", known),
+            Some("color.primary")
+        );
+    }
+
+    #[test]
+    fn token_suggestion_falls_back_to_edit_distance() {
+        let known = ["color.base.100", "color.base.200"];
+        assert_eq!(
+            find_token_suggestion("color.base.900", known),
+            Some("color.base.100"),
+            "tie goes to the lexicographically smallest id"
+        );
+    }
+
+    #[test]
+    fn token_suggestion_falls_back_to_dotted_rule() {
+        let known = ["color.base.content-primary"];
+        assert_eq!(
+            find_token_suggestion("color.base.contnt-primry", known),
+            Some("color.base.content-primary")
+        );
+    }
+
+    #[test]
+    fn unique_nearest_rejects_ties() {
+        assert_eq!(unique_nearest("ab", ["ac", "ad"], 2), None);
+        assert_eq!(unique_nearest("ab", ["ac", "xyz"], 2), Some("ac"));
+    }
+
+    #[test]
+    fn unique_nearest_prefers_strictly_closer() {
+        assert_eq!(unique_nearest("abcd", ["abce", "abzz"], 2), Some("abce"));
+        assert_eq!(unique_nearest("abcd", ["abzz", "abce"], 2), Some("abce"));
+    }
+
+    #[test]
+    fn unique_nearest_ignores_duplicate_candidates() {
+        assert_eq!(unique_nearest("ab", ["ac", "ac"], 2), Some("ac"));
+    }
+
+    #[test]
+    fn token_fix_target_rules() {
+        let known = ["color.base.100", "color.base.200", "color.primary"];
+        assert_eq!(
+            token_fix_target("color.primary.500", known),
+            Some("color.primary")
+        );
+        assert_eq!(token_fix_target("color.base.900", known), None);
+        assert_eq!(
+            token_fix_target("color.primry", known),
+            Some("color.primary")
         );
     }
 }

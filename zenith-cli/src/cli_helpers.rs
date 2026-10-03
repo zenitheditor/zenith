@@ -54,14 +54,6 @@ pub(crate) fn print_diagnostics_stderr(diagnostics: &[zenith_core::Diagnostic]) 
     }
 }
 
-/// Count diagnostics with [`Severity::Error`].
-pub(crate) fn count_hard_diagnostics(diagnostics: &[zenith_core::Diagnostic]) -> usize {
-    diagnostics
-        .iter()
-        .filter(|d| d.severity == zenith_core::Severity::Error)
-        .count()
-}
-
 /// Parse a `--spread` spec of the form `"A-B"` (two 1-based page numbers) into
 /// `(a, b)`.
 ///

@@ -28,6 +28,7 @@ pub fn call(name: &str, args: &Value) -> ToolResult {
         "zenith_tokens" => run_tokens(args),
         "zenith_fmt" => run_fmt(args),
         "zenith_tx" => run_tx(args),
+        "zenith_fix" => run_fix(args),
         "zenith_render" => run_render(args),
         "zenith_merge" => run_merge(args),
         "zenith_theme_new" => run_theme_new(args),
@@ -198,6 +199,36 @@ fn run_tx(args: &Value) -> Result<Value, String> {
         insert(&mut out, "after_source", link);
     }
     Ok(out)
+}
+
+fn run_fix(args: &Value) -> Result<Value, String> {
+    let loc = doc_ref::locate(req_str(args, "doc")?)?;
+    let src = read(&loc.path)?;
+    let label = loc.path.display().to_string();
+    let out = commands::fix::run(&src, &label, loc.path.parent(), flag(args, "apply"))
+        .map_err(|e| e.message)?;
+    let changed = out.outcome.changed();
+    if flag(args, "apply") && changed {
+        std::fs::write(&loc.path, out.outcome.source_after.as_bytes())
+            .map_err(|e| format!("error writing '{}': {e}", loc.path.display()))?;
+    }
+    let parsed = parse_json(&out.json_str)?;
+    let remaining = parsed
+        .get("remaining")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let errors: Vec<Value> = remaining
+        .iter()
+        .filter(|d| d.get("severity").and_then(Value::as_str) == Some("error"))
+        .map(trim_diagnostic)
+        .collect();
+    Ok(json!({
+        "changed": changed,
+        "applied": parsed.get("applied").cloned().unwrap_or(json!([])),
+        "error_count": errors.len(),
+        "errors": errors,
+    }))
 }
 
 fn run_render(args: &Value) -> Result<Value, String> {

@@ -204,7 +204,7 @@ pub(in crate::compile) fn compile_text_sized(
     // `footnote_ref` keeps its text, then is IMMEDIATELY followed by a synthetic
     // SUPERSCRIPT marker span (the referenced footnote's marker string), reusing
     // the vertical-align="super" path (reduced size + raised baseline). A ref that
-    // names no footnote on this page → advisory `footnote.unresolved_ref` + no
+    // names no footnote on this page → warning `footnote.unresolved_ref` + no
     // marker. When no span carries a ref the effective list equals `text.spans`
     // (byte-identical to before). The synthetic marker inherits the ref span's
     // fill so it matches the marked word's color.
@@ -232,7 +232,7 @@ pub(in crate::compile) fn compile_text_sized(
                         code: None,
                         link: None,
                     }),
-                    None => diagnostics.push(Diagnostic::advisory(
+                    None => diagnostics.push(Diagnostic::warning(
                         "footnote.unresolved_ref",
                         format!(
                             "text node '{}': span footnote-ref '{}' matches no footnote \

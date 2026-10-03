@@ -10,6 +10,7 @@ use zenith_core::{
 };
 
 use crate::config::{CliPolicyFlags, load_global_and_local, merge_policy};
+use crate::report::{ImportFiles, attributed_loader_diagnostics};
 
 use crate::commands::composition_imports::{LoadedImportGraph, load_import_graph};
 
@@ -53,8 +54,8 @@ pub(super) fn verify_locked_sha256(
 }
 
 /// Parse → validate with the merged diagnostic policy and brand contract,
-/// returning the parsed [`Document`] together with the merged
-/// [`DiagnosticPolicy`] and effective [`BrandContract`].
+/// returning the parsed [`Document`], the merged [`DiagnosticPolicy`], the
+/// import graph, and the validation diagnostics (warnings and advisories).
 ///
 /// The effective policy is `merge_policy(global, local, in_file, flags)`,
 /// mirroring the `validate` command exactly:
@@ -79,7 +80,7 @@ pub(super) fn parse_validate(
     src: &str,
     start_dir: Option<&Path>,
     flags: &CliPolicyFlags,
-) -> Result<(Document, DiagnosticPolicy, LoadedImportGraph), RenderCmdErr> {
+) -> Result<Validated, RenderCmdErr> {
     // Resolve config policy and brand contract ───────────────────────────────
     let (global, local, global_brand, local_brand) = load_global_and_local(start_dir)
         .map_err(|msg| RenderCmdErr::new("config.error", msg, 2))?;
@@ -100,16 +101,33 @@ pub(super) fn parse_validate(
     );
     let report = validate_with_policy(&doc, &merged, &effective_brand);
     let imports = load_import_graph(&doc, start_dir);
-    if report.has_errors() {
+    if Diagnostic::has_errors(&report.diagnostics) {
         // Report the cheap disk and import diagnostics with the validation
         // errors, so one round shows every known problem.
         let mut diagnostics = report.diagnostics;
-        diagnostics.extend(imports.diagnostics().iter().cloned());
+        diagnostics.extend(attributed_loader_diagnostics(&imports));
         diagnostics.extend(disk_diagnostics_with_imports(&doc, start_dir, &imports));
-        return Err(RenderCmdErr::blocked(diagnostics, 1));
+        return Err(RenderCmdErr::blocked(diagnostics, 1)
+            .with_import_files(ImportFiles::from_graph(&imports)));
     }
 
-    Ok((doc, merged, imports))
+    Ok(Validated {
+        doc,
+        policy: merged,
+        imports,
+        diagnostics: report.diagnostics,
+    })
+}
+
+/// A parsed, validated document with the state the render entry points share.
+pub(super) struct Validated {
+    pub(super) doc: Document,
+    /// The merged diagnostic policy, applied to compile-stage diagnostics too.
+    pub(super) policy: DiagnosticPolicy,
+    pub(super) imports: LoadedImportGraph,
+    /// Policy-governed validation diagnostics. None is an error. Entry points
+    /// put them first in their own diagnostic list.
+    pub(super) diagnostics: Vec<Diagnostic>,
 }
 
 /// Apply the merged diagnostic `policy` to a list of compile-stage diagnostics
@@ -124,7 +142,7 @@ pub(super) fn parse_validate(
 ///
 /// This function is **infallible**: it applies the policy and returns the
 /// governed `Vec<Diagnostic>` directly. The caller attaches it to the artifact;
-/// the dispatch layer (`count_hard_diagnostics`) decides the exit code when any
+/// the dispatch layer (`Diagnostic::has_errors`) decides the exit code when any
 /// of those diagnostics are [`Severity::Error`](zenith_core::Severity::Error).
 ///
 /// With an empty policy this is an exact identity pass: the diagnostics are

@@ -8,6 +8,7 @@
 
 pub mod asset;
 pub(crate) mod composition_imports;
+pub mod fix;
 pub mod fmt;
 pub mod fonts;
 pub mod inspect;

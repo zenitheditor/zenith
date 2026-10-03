@@ -103,7 +103,7 @@ fn ping_returns_empty_result() {
 fn tools_list_is_the_small_stable_surface() {
     let resp = call(json!({ "jsonrpc": "2.0", "id": 3, "method": "tools/list" }));
     let tools = resp["result"]["tools"].as_array().expect("tools array");
-    assert_eq!(tools.len(), 14, "expected 14 top-level tools");
+    assert_eq!(tools.len(), 15, "expected 15 top-level tools");
     let names: Vec<&str> = tools.iter().filter_map(|t| t["name"].as_str()).collect();
     for expected in [
         "zenith_schema",
@@ -111,6 +111,7 @@ fn tools_list_is_the_small_stable_surface() {
         "zenith_validate",
         "zenith_inspect",
         "zenith_tx",
+        "zenith_fix",
         "zenith_render",
         "zenith_workspace_scratch",
         "zenith_workspace_promote",
@@ -600,7 +601,7 @@ fn http_transport_matches_stdio() {
     );
     assert_eq!(
         list["result"]["tools"].as_array().map(|a| a.len()),
-        Some(13),
+        Some(15),
         "http tools/list must match stdio"
     );
 

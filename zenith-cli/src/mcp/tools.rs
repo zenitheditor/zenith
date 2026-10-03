@@ -1,4 +1,4 @@
-//! The MCP tool catalog: 13 tools with token-lean JSON-Schema inputs.
+//! The MCP tool catalog: 15 tools with token-lean JSON-Schema inputs.
 //!
 //! The surface is deliberately small and stable (clients cache `tools/list`
 //! once). All node/op/surface schema detail lives behind the single
@@ -120,6 +120,21 @@ Use zenith_schema op to learn an op's shape.",
                     "diff": { "type": "boolean", "description": "Return a resource link to the before→after diff." }
                 },
                 "required": ["doc", "transaction"]
+            }),
+        },
+        Tool {
+            name: "zenith_fix",
+            description: "Apply machine-fixable diagnostics in one step: raw visual literals become \
+token references (exact-value token, else a minted token), typo'd property names, token ids, and \
+enum values become their unique did-you-mean. Dry-run by default; set apply=true to write. Returns \
+the applied fixes and the remaining errors.",
+            schema: json!({
+                "type": "object",
+                "properties": {
+                    "doc": doc_arg(),
+                    "apply": { "type": "boolean", "description": "Write the fixed source to disk." }
+                },
+                "required": ["doc"]
             }),
         },
         Tool {

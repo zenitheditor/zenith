@@ -124,6 +124,7 @@ The release binary lands at `target/release/zenith`. No C toolchain or system li
 ```bash
 zenith validate examples/hello.zen          # report diagnostics (add --json for machine output)
 zenith fmt examples/hello.zen               # canonical, idempotent formatting
+zenith fix draft.zen --apply                # apply machine fixes (tokens, typos) in one step
 zenith tokens examples/hello.zen            # list design tokens and their resolved values
 zenith inspect examples/hello.zen           # print the node tree (read-only)
 zenith render examples/hello.zen --out .    # compile + render to PNG
@@ -416,7 +417,7 @@ Run `zenith <command> --help` for flags (each prints a description and an exampl
 | ------------- | --------------------------------------------------------------------------------------------------------- |
 | **Author**    | `new` · `validate` · `fmt` · `tokens` · `inspect`                                                         |
 | **Render**    | `render` (`--pdf` · `--scene` · `--all-pages` · `--spread` · `--page`)                                    |
-| **Edit**      | `tx` (typed transactions, dry-run by default)                                                             |
+| **Edit**      | `tx` (typed transactions, dry-run by default) · `fix` (machine fixes for diagnostics, dry-run by default) |
 | **Variants**  | `variant` (one design → many sizes/formats) · `merge` (CSV data mail-merge)                               |
 | **Library**   | `library list` · `library search` · `library show` · `library add`                                        |
 | **Theme**     | `theme new` (synthesize a token pack from brand colours)                                                  |
@@ -487,7 +488,7 @@ single `zenith_schema` tool (so the model never carries every node/op schema), l
 artifacts (renders, big trees, diffs) come back as **resource links** into a content-addressed
 store instead of being inlined, and documents are addressable by `doc-id` so agents stop
 juggling paths. The full author loop is exposed — `zenith_schema`, `zenith_validate`,
-`zenith_inspect`, `zenith_tokens`, `zenith_tx`, `zenith_render`, `zenith_fmt`, `zenith_merge`,
+`zenith_inspect`, `zenith_tokens`, `zenith_tx`, `zenith_fix`, `zenith_render`, `zenith_fmt`, `zenith_merge`,
 `zenith_theme_new`, plus the scratch/candidate/promote/finalize workspace tools.
 
 Run it over stdio (the default transport):

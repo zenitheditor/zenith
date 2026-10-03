@@ -14,7 +14,7 @@ use crate::schema::enums::{
     CHART_BAR_MODES, CHART_KINDS, CHART_LEGEND_ALIGNS, CHART_LEGEND_LAYOUTS,
     CHART_LEGEND_POSITIONS, CHART_ORIENTATIONS, CHART_POINT_PLACEMENTS, CHART_VALUE_LABELS,
 };
-use crate::suggest::invalid_value_message;
+use crate::suggest::{invalid_value_message, replace_value_fix};
 use crate::validate::check::nodes::WalkCtx;
 use crate::validate::check::register_id;
 
@@ -149,12 +149,15 @@ pub(in crate::validate::check) fn check_chart(
     // "donut"; any other kind string cannot render and is reported immediately.
     let kind_known = CHART_KINDS.contains(&c.kind.as_str());
     if !kind_known {
-        diagnostics.push(Diagnostic::error(
-            "chart.invalid_kind",
-            invalid_value_message(&format!("chart '{}'", c.id), "kind", &c.kind, CHART_KINDS),
-            c.source_span,
-            Some(c.id.clone()),
-        ));
+        diagnostics.push(
+            Diagnostic::error(
+                "chart.invalid_kind",
+                invalid_value_message(&format!("chart '{}'", c.id), "kind", &c.kind, CHART_KINDS),
+                c.source_span,
+                Some(c.id.clone()),
+            )
+            .with_fix(replace_value_fix("kind", &c.kind, CHART_KINDS)),
+        );
     }
 
     // Validate bar-mode against the recognized set {"grouped", "stacked"}.
@@ -163,17 +166,20 @@ pub(in crate::validate::check) fn check_chart(
     if let Some(bar_mode) = &c.bar_mode {
         let bar_mode_known = CHART_BAR_MODES.contains(&bar_mode.as_str());
         if !bar_mode_known {
-            diagnostics.push(Diagnostic::error(
-                "chart.invalid_bar_mode",
-                invalid_value_message(
-                    &format!("chart '{}'", c.id),
-                    "bar-mode",
-                    bar_mode,
-                    CHART_BAR_MODES,
-                ),
-                c.source_span,
-                Some(c.id.clone()),
-            ));
+            diagnostics.push(
+                Diagnostic::error(
+                    "chart.invalid_bar_mode",
+                    invalid_value_message(
+                        &format!("chart '{}'", c.id),
+                        "bar-mode",
+                        bar_mode,
+                        CHART_BAR_MODES,
+                    ),
+                    c.source_span,
+                    Some(c.id.clone()),
+                )
+                .with_fix(replace_value_fix("bar-mode", bar_mode, CHART_BAR_MODES)),
+            );
         }
     }
 
@@ -182,17 +188,24 @@ pub(in crate::validate::check) fn check_chart(
     if let Some(orientation) = &c.orientation {
         let orientation_known = CHART_ORIENTATIONS.contains(&orientation.as_str());
         if !orientation_known {
-            diagnostics.push(Diagnostic::error(
-                "chart.invalid_orientation",
-                invalid_value_message(
-                    &format!("chart '{}'", c.id),
+            diagnostics.push(
+                Diagnostic::error(
+                    "chart.invalid_orientation",
+                    invalid_value_message(
+                        &format!("chart '{}'", c.id),
+                        "orientation",
+                        orientation,
+                        CHART_ORIENTATIONS,
+                    ),
+                    c.source_span,
+                    Some(c.id.clone()),
+                )
+                .with_fix(replace_value_fix(
                     "orientation",
                     orientation,
                     CHART_ORIENTATIONS,
-                ),
-                c.source_span,
-                Some(c.id.clone()),
-            ));
+                )),
+            );
         }
     }
 
@@ -200,17 +213,24 @@ pub(in crate::validate::check) fn check_chart(
     if let Some(point_placement) = &c.point_placement {
         let point_placement_known = CHART_POINT_PLACEMENTS.contains(&point_placement.as_str());
         if !point_placement_known {
-            diagnostics.push(Diagnostic::error(
-                "chart.invalid_point_placement",
-                invalid_value_message(
-                    &format!("chart '{}'", c.id),
+            diagnostics.push(
+                Diagnostic::error(
+                    "chart.invalid_point_placement",
+                    invalid_value_message(
+                        &format!("chart '{}'", c.id),
+                        "point-placement",
+                        point_placement,
+                        CHART_POINT_PLACEMENTS,
+                    ),
+                    c.source_span,
+                    Some(c.id.clone()),
+                )
+                .with_fix(replace_value_fix(
                     "point-placement",
                     point_placement,
                     CHART_POINT_PLACEMENTS,
-                ),
-                c.source_span,
-                Some(c.id.clone()),
-            ));
+                )),
+            );
         }
     }
 
@@ -218,17 +238,24 @@ pub(in crate::validate::check) fn check_chart(
     if let Some(value_labels) = &c.value_labels {
         let value_labels_known = CHART_VALUE_LABELS.contains(&value_labels.as_str());
         if !value_labels_known {
-            diagnostics.push(Diagnostic::error(
-                "chart.invalid_value_labels",
-                invalid_value_message(
-                    &format!("chart '{}'", c.id),
+            diagnostics.push(
+                Diagnostic::error(
+                    "chart.invalid_value_labels",
+                    invalid_value_message(
+                        &format!("chart '{}'", c.id),
+                        "value-labels",
+                        value_labels,
+                        CHART_VALUE_LABELS,
+                    ),
+                    c.source_span,
+                    Some(c.id.clone()),
+                )
+                .with_fix(replace_value_fix(
                     "value-labels",
                     value_labels,
                     CHART_VALUE_LABELS,
-                ),
-                c.source_span,
-                Some(c.id.clone()),
-            ));
+                )),
+            );
         }
     }
 
@@ -236,17 +263,24 @@ pub(in crate::validate::check) fn check_chart(
     if let Some(legend_position) = &c.legend_position {
         let legend_position_known = CHART_LEGEND_POSITIONS.contains(&legend_position.as_str());
         if !legend_position_known {
-            diagnostics.push(Diagnostic::error(
-                "chart.invalid_legend_position",
-                invalid_value_message(
-                    &format!("chart '{}'", c.id),
+            diagnostics.push(
+                Diagnostic::error(
+                    "chart.invalid_legend_position",
+                    invalid_value_message(
+                        &format!("chart '{}'", c.id),
+                        "legend-position",
+                        legend_position,
+                        CHART_LEGEND_POSITIONS,
+                    ),
+                    c.source_span,
+                    Some(c.id.clone()),
+                )
+                .with_fix(replace_value_fix(
                     "legend-position",
                     legend_position,
                     CHART_LEGEND_POSITIONS,
-                ),
-                c.source_span,
-                Some(c.id.clone()),
-            ));
+                )),
+            );
         }
     }
 
@@ -254,17 +288,24 @@ pub(in crate::validate::check) fn check_chart(
     if let Some(legend_layout) = &c.legend_layout {
         let legend_layout_known = CHART_LEGEND_LAYOUTS.contains(&legend_layout.as_str());
         if !legend_layout_known {
-            diagnostics.push(Diagnostic::error(
-                "chart.invalid_legend_layout",
-                invalid_value_message(
-                    &format!("chart '{}'", c.id),
+            diagnostics.push(
+                Diagnostic::error(
+                    "chart.invalid_legend_layout",
+                    invalid_value_message(
+                        &format!("chart '{}'", c.id),
+                        "legend-layout",
+                        legend_layout,
+                        CHART_LEGEND_LAYOUTS,
+                    ),
+                    c.source_span,
+                    Some(c.id.clone()),
+                )
+                .with_fix(replace_value_fix(
                     "legend-layout",
                     legend_layout,
                     CHART_LEGEND_LAYOUTS,
-                ),
-                c.source_span,
-                Some(c.id.clone()),
-            ));
+                )),
+            );
         }
     }
 
@@ -272,17 +313,24 @@ pub(in crate::validate::check) fn check_chart(
     if let Some(legend_align) = &c.legend_align {
         let legend_align_known = CHART_LEGEND_ALIGNS.contains(&legend_align.as_str());
         if !legend_align_known {
-            diagnostics.push(Diagnostic::error(
-                "chart.invalid_legend_align",
-                invalid_value_message(
-                    &format!("chart '{}'", c.id),
+            diagnostics.push(
+                Diagnostic::error(
+                    "chart.invalid_legend_align",
+                    invalid_value_message(
+                        &format!("chart '{}'", c.id),
+                        "legend-align",
+                        legend_align,
+                        CHART_LEGEND_ALIGNS,
+                    ),
+                    c.source_span,
+                    Some(c.id.clone()),
+                )
+                .with_fix(replace_value_fix(
                     "legend-align",
                     legend_align,
                     CHART_LEGEND_ALIGNS,
-                ),
-                c.source_span,
-                Some(c.id.clone()),
-            ));
+                )),
+            );
         }
     }
 

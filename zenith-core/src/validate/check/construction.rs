@@ -5,24 +5,27 @@ use crate::ast::document::Page;
 use crate::ast::value::{Dimension, dim_to_px};
 use crate::diagnostics::Diagnostic;
 use crate::schema::enums::GUIDE_TYPES;
-use crate::suggest::invalid_value_message;
+use crate::suggest::{invalid_value_message, replace_value_fix};
 
 pub(super) fn check_construction(page: &Page, diagnostics: &mut Vec<Diagnostic>) {
     for guide in &page.construction.guides {
         match guide.guide_type.as_str() {
             "segment" => check_segment(guide, diagnostics),
             "circle" => check_circle(guide, diagnostics),
-            other => diagnostics.push(Diagnostic::error(
-                "construction.unknown_guide_type",
-                invalid_value_message(
-                    &format!("construction guide '{}'", guide.id),
-                    "type",
-                    other,
-                    GUIDE_TYPES,
-                ),
-                guide.source_span,
-                Some(guide.id.clone()),
-            )),
+            other => diagnostics.push(
+                Diagnostic::error(
+                    "construction.unknown_guide_type",
+                    invalid_value_message(
+                        &format!("construction guide '{}'", guide.id),
+                        "type",
+                        other,
+                        GUIDE_TYPES,
+                    ),
+                    guide.source_span,
+                    Some(guide.id.clone()),
+                )
+                .with_fix(replace_value_fix("type", other, GUIDE_TYPES)),
+            ),
         }
     }
 }

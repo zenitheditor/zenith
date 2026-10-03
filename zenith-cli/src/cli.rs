@@ -8,6 +8,7 @@
 //!
 //! Submodules:
 //! - `asset` — `AssetArgs`, `AssetSub`, `AssetImportArgs`, `AssetZpxBakeArgs`.
+//! - `fix` — `FixArgs`.
 //! - `library` — `LibraryArgs`, `LibrarySub`, and library item arg types.
 //! - `plugin` — `PluginArgs`, `PluginSub`, `ScopeArg`, `AgentFlags`, and install/uninstall args.
 //! - `render` — `RenderArgs`.
@@ -15,6 +16,7 @@
 //! - `workspace` — `WorkspaceArgs`, `WorkspaceSub`, scratch, candidate, and promote arg types.
 
 mod asset;
+mod fix;
 mod library;
 mod perceive;
 mod plugin;
@@ -23,6 +25,7 @@ mod schema;
 mod workspace;
 
 pub use asset::{AssetArgs, AssetImportArgs, AssetSub, AssetZpxBakeArgs};
+pub use fix::FixArgs;
 pub use library::{
     LibraryAddArgs, LibraryArgs, LibraryListArgs, LibrarySearchArgs, LibraryShowArgs, LibrarySub,
 };
@@ -89,6 +92,16 @@ pub enum Command {
 
     /// Format a `.zen` document in-place (idempotent).
     Fmt(FmtArgs),
+
+    /// Apply machine-fixable diagnostics to a `.zen` document (dry-run by default).
+    ///
+    /// Turns a loose draft into a valid document in one step: raw visual literals
+    /// become token references (an exact-value token, else a minted one), typo'd
+    /// property names, token ids, and enum values become their unique
+    /// did-you-mean. Runs up to 3 passes, since one fix can expose another. The
+    /// output is canonical. Dry-run prints the fixes and a unified source diff;
+    /// `--apply` writes. Exit code is 1 when errors remain.
+    Fix(FixArgs),
 
     /// List all design tokens and their resolved values.
     ///

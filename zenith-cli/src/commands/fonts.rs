@@ -261,7 +261,7 @@ fn resolve_target(
     let families = [target.to_owned()];
     let face = provider.resolve(&families, weight, style).ok_or_else(|| {
         format!(
-            "error[font.unresolved]: no face for family '{target}' \
+            "error[fonts.family_not_found]: no face for family '{target}' \
 (weight={weight}, style={}); use a bundled family, a .ttf/.otf path, \
 or --doc with a project font asset",
             style_str(style)
@@ -291,7 +291,7 @@ fn register_doc_project_fonts(
 ) -> Result<(), String> {
     let src = std::fs::read_to_string(doc_path).map_err(|e| {
         format!(
-            "error[io]: could not read document '{}': {e}",
+            "error[io.read_failed]: could not read document '{}': {e}",
             doc_path.display()
         )
     })?;
@@ -333,7 +333,7 @@ fn parse_style(style: &str) -> Result<FontStyle, String> {
         "normal" => Ok(FontStyle::Normal),
         "italic" => Ok(FontStyle::Italic),
         other => Err(format!(
-            "error[arg]: invalid --style '{other}'; expected normal or italic"
+            "error[cli.invalid_argument]: invalid --style '{other}'; expected normal or italic"
         )),
     }
 }
@@ -353,22 +353,25 @@ fn parse_char_arg(s: &str) -> Result<char, String> {
         .or_else(|| trimmed.strip_prefix("u+"))
     {
         if hex.is_empty() {
-            return Err("error[arg]: --char U+ form requires hex digits (e.g. U+0041)".to_owned());
+            return Err(
+                "error[cli.invalid_argument]: --char U+ form requires hex digits (e.g. U+0041)"
+                    .to_owned(),
+            );
         }
         let cp = u32::from_str_radix(hex, 16).map_err(|_| {
-            format!("error[arg]: invalid --char codepoint 'U+{hex}'; expected hex digits")
+            format!("error[cli.invalid_argument]: invalid --char codepoint 'U+{hex}'; expected hex digits")
         })?;
         return char::from_u32(cp).ok_or_else(|| {
-            format!("error[arg]: --char U+{hex:0>4} is not a valid Unicode scalar value")
+            format!("error[cli.invalid_argument]: --char U+{hex:0>4} is not a valid Unicode scalar value")
         });
     }
 
     let mut chars = trimmed.chars();
     match (chars.next(), chars.next()) {
         (Some(c), None) => Ok(c),
-        (None, _) => Err("error[arg]: --char must not be empty".to_owned()),
+        (None, _) => Err("error[cli.invalid_argument]: --char must not be empty".to_owned()),
         (Some(_), Some(_)) => Err(format!(
-            "error[arg]: --char '{trimmed}' must be a single character or U+XXXX form"
+            "error[cli.invalid_argument]: --char '{trimmed}' must be a single character or U+XXXX form"
         )),
     }
 }
@@ -608,7 +611,7 @@ mod tests {
         let (output, code) = features("DefinitelyNotARealFontFamilyXYZ", 400, "normal", None, true);
         assert_eq!(code, 2);
         assert!(
-            output.contains("font.unresolved"),
+            output.contains("fonts.family_not_found"),
             "expected unresolved error, got: {output}"
         );
     }

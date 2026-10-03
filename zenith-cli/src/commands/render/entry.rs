@@ -9,13 +9,14 @@ use zenith_render::{
 use zenith_scene::{DocumentPrep, PageCompiler, Scene};
 
 use crate::config::CliPolicyFlags;
+use crate::report::{ImportFiles, attributed_loader_diagnostics};
 
 use super::assets::{
     build_asset_provider_with_imports, build_font_provider_with_imports,
     disk_diagnostics_with_imports,
 };
 use super::pages::{compile_for_render, compile_local_for_render, map_pages};
-use super::pipeline::{govern_compile_diagnostics, parse_validate, resolve_page_index};
+use super::pipeline::{Validated, govern_compile_diagnostics, parse_validate, resolve_page_index};
 use super::text_source::resolve_text_sources;
 
 // ── Error type ────────────────────────────────────────────────────────────────
@@ -33,6 +34,8 @@ pub struct RenderCmdErr {
     pub exit_code: u8,
     /// Every diagnostic known at the failure point, in report order.
     pub diagnostics: Vec<Diagnostic>,
+    /// Files of the composition imports, for locating diagnostic spans.
+    pub import_files: ImportFiles,
 }
 
 impl RenderCmdErr {
@@ -46,7 +49,7 @@ impl RenderCmdErr {
         let diagnostics = Diagnostic::dedup(diagnostics);
         let message = diagnostics
             .iter()
-            .filter(|d| d.severity == zenith_core::Severity::Error)
+            .filter(|d| d.is_error())
             .map(crate::commands::format_error_diag)
             .collect::<Vec<_>>()
             .join("\n");
@@ -54,7 +57,15 @@ impl RenderCmdErr {
             message,
             exit_code,
             diagnostics,
+            import_files: ImportFiles::default(),
         }
+    }
+
+    /// Return this error with the composition import files that its
+    /// diagnostic spans can index into.
+    pub(super) fn with_import_files(mut self, import_files: ImportFiles) -> Self {
+        self.import_files = import_files;
+        self
     }
 }
 
@@ -65,8 +76,10 @@ impl RenderCmdErr {
 pub struct SceneArtifact {
     /// The serialised scene JSON.
     pub json: String,
-    /// Compile-stage diagnostics (advisories/warnings surfaced by `compile`).
+    /// Validation diagnostics, then compile-stage diagnostics.
     pub diagnostics: Vec<Diagnostic>,
+    /// Files of the composition imports, for locating diagnostic spans.
+    pub import_files: ImportFiles,
 }
 
 /// Rendered PNG bytes plus the compile-stage diagnostics that produced them.
@@ -74,8 +87,10 @@ pub struct SceneArtifact {
 pub struct PngArtifact {
     /// The encoded PNG bytes.
     pub png: Vec<u8>,
-    /// Compile-stage diagnostics (advisories/warnings surfaced by `compile`).
+    /// Validation diagnostics, then compile-stage diagnostics.
     pub diagnostics: Vec<Diagnostic>,
+    /// Files of the composition imports, for locating diagnostic spans.
+    pub import_files: ImportFiles,
 }
 
 /// Rendered vector PDF bytes plus the compile-stage diagnostics that produced
@@ -84,8 +99,10 @@ pub struct PngArtifact {
 pub struct PdfArtifact {
     /// The encoded PDF bytes.
     pub pdf: Vec<u8>,
-    /// Compile-stage diagnostics (advisories/warnings surfaced by `compile`).
+    /// Validation diagnostics, then compile-stage diagnostics.
     pub diagnostics: Vec<Diagnostic>,
+    /// Files of the composition imports, for locating diagnostic spans.
+    pub import_files: ImportFiles,
 }
 
 /// Shared options for render entry points.
@@ -192,8 +209,14 @@ pub fn to_scene_json_with_options(
     page: usize,
     opts: RenderEntryOptions<'_>,
 ) -> Result<SceneArtifact, RenderCmdErr> {
-    let (mut doc, policy, imports) = parse_validate(src, project_dir, opts.flags)?;
-    let import_diagnostics = imports.diagnostics().to_vec();
+    let Validated {
+        mut doc,
+        policy,
+        imports,
+        diagnostics: validation,
+    } = parse_validate(src, project_dir, opts.flags)?;
+    let import_diagnostics = attributed_loader_diagnostics(&imports);
+    let import_files = ImportFiles::from_graph(&imports);
     let scene_imports = imports.to_scene_graph();
     let mut text_src_diagnostics: Vec<Diagnostic> = Vec::new();
     resolve_text_sources(&mut doc, project_dir, &mut text_src_diagnostics);
@@ -209,7 +232,8 @@ pub fn to_scene_json_with_options(
             2,
         )
     })?;
-    let mut diagnostics = text_src_diagnostics;
+    let mut diagnostics = validation;
+    diagnostics.extend(text_src_diagnostics);
     diagnostics.extend(import_diagnostics);
     diagnostics.extend(disk_diagnostics_with_imports(&doc, project_dir, &imports));
     diagnostics.extend(govern_compile_diagnostics(
@@ -217,7 +241,11 @@ pub fn to_scene_json_with_options(
         &policy,
     ));
     let diagnostics = Diagnostic::dedup(diagnostics);
-    Ok(SceneArtifact { json, diagnostics })
+    Ok(SceneArtifact {
+        json,
+        diagnostics,
+        import_files,
+    })
 }
 
 /// Parse `src`, validate it, compile the scene, and return PNG bytes.
@@ -286,8 +314,14 @@ pub fn to_png_with_dir_options(
     page: usize,
     opts: RenderEntryOptions<'_>,
 ) -> Result<PngArtifact, RenderCmdErr> {
-    let (mut doc, policy, imports) = parse_validate(src, project_dir, opts.flags)?;
-    let import_diagnostics = imports.diagnostics().to_vec();
+    let Validated {
+        mut doc,
+        policy,
+        imports,
+        diagnostics: validation,
+    } = parse_validate(src, project_dir, opts.flags)?;
+    let import_diagnostics = attributed_loader_diagnostics(&imports);
+    let import_files = ImportFiles::from_graph(&imports);
     let scene_imports = imports.to_scene_graph();
     let mut text_src_diagnostics: Vec<Diagnostic> = Vec::new();
     resolve_text_sources(&mut doc, project_dir, &mut text_src_diagnostics);
@@ -302,7 +336,8 @@ pub fn to_png_with_dir_options(
     let compile_result = compile_for_render(&doc, &compiler, page_index, opts);
     let png = render_png(&compile_result.scene, &fonts, &assets)
         .map_err(|e| RenderCmdErr::new("render.raster_failed", format!("render error: {e}"), 2))?;
-    let mut diagnostics = text_src_diagnostics;
+    let mut diagnostics = validation;
+    diagnostics.extend(text_src_diagnostics);
     diagnostics.extend(import_diagnostics);
     diagnostics.extend(disk_diagnostics_with_imports(&doc, project_dir, &imports));
     diagnostics.extend(govern_compile_diagnostics(
@@ -310,7 +345,11 @@ pub fn to_png_with_dir_options(
         &policy,
     ));
     let diagnostics = Diagnostic::dedup(diagnostics);
-    Ok(PngArtifact { png, diagnostics })
+    Ok(PngArtifact {
+        png,
+        diagnostics,
+        import_files,
+    })
 }
 
 /// Parse `src`, validate it with the merged diagnostic policy, compile the
@@ -350,8 +389,14 @@ pub fn to_pdf_with_dir_options(
     page: usize,
     opts: RenderEntryOptions<'_>,
 ) -> Result<PdfArtifact, RenderCmdErr> {
-    let (mut doc, policy, imports) = parse_validate(src, project_dir, opts.flags)?;
-    let import_diagnostics = imports.diagnostics().to_vec();
+    let Validated {
+        mut doc,
+        policy,
+        imports,
+        diagnostics: validation,
+    } = parse_validate(src, project_dir, opts.flags)?;
+    let import_diagnostics = attributed_loader_diagnostics(&imports);
+    let import_files = ImportFiles::from_graph(&imports);
     let scene_imports = imports.to_scene_graph();
     let mut text_src_diagnostics: Vec<Diagnostic> = Vec::new();
     resolve_text_sources(&mut doc, project_dir, &mut text_src_diagnostics);
@@ -372,7 +417,8 @@ pub fn to_pdf_with_dir_options(
             subset: opts.subset,
         },
     );
-    let mut diagnostics = text_src_diagnostics;
+    let mut diagnostics = validation;
+    diagnostics.extend(text_src_diagnostics);
     diagnostics.extend(import_diagnostics);
     diagnostics.extend(disk_diagnostics_with_imports(&doc, project_dir, &imports));
     diagnostics.extend(govern_compile_diagnostics(
@@ -380,7 +426,11 @@ pub fn to_pdf_with_dir_options(
         &policy,
     ));
     let diagnostics = Diagnostic::dedup(diagnostics);
-    Ok(PdfArtifact { pdf, diagnostics })
+    Ok(PdfArtifact {
+        pdf,
+        diagnostics,
+        import_files,
+    })
 }
 
 /// Parse `src`, validate it with the merged diagnostic policy, compile EVERY
@@ -424,10 +474,16 @@ pub fn to_pdf_all_pages_with_dir_options(
     project_dir: Option<&Path>,
     opts: RenderEntryOptions<'_>,
 ) -> Result<PdfArtifact, RenderCmdErr> {
-    let (mut doc, policy, imports) = parse_validate(src, project_dir, opts.flags)?;
-    let import_diagnostics = imports.diagnostics().to_vec();
+    let Validated {
+        mut doc,
+        policy,
+        imports,
+        diagnostics: validation,
+    } = parse_validate(src, project_dir, opts.flags)?;
+    let import_diagnostics = attributed_loader_diagnostics(&imports);
+    let import_files = ImportFiles::from_graph(&imports);
     let scene_imports = imports.to_scene_graph();
-    let mut diagnostics: Vec<Diagnostic> = Vec::new();
+    let mut diagnostics: Vec<Diagnostic> = validation;
     resolve_text_sources(&mut doc, project_dir, &mut diagnostics);
     diagnostics.extend(import_diagnostics);
     let fonts = build_font_provider_with_imports(&doc, project_dir, &imports, opts.locked)?;
@@ -471,7 +527,11 @@ pub fn to_pdf_all_pages_with_dir_options(
             subset: opts.subset,
         },
     );
-    Ok(PdfArtifact { pdf, diagnostics })
+    Ok(PdfArtifact {
+        pdf,
+        diagnostics,
+        import_files,
+    })
 }
 
 /// PNG bytes for every page plus the diagnostics of the whole render.
@@ -479,9 +539,11 @@ pub fn to_pdf_all_pages_with_dir_options(
 pub struct PngPagesArtifact {
     /// Encoded PNG bytes, one entry per page in document order.
     pub pages: Vec<Vec<u8>>,
-    /// Document diagnostics once, then each page's own, in page order.
-    /// Repeats are removed.
+    /// Validation diagnostics, document diagnostics once, then each page's
+    /// own, in page order. Repeats are removed.
     pub diagnostics: Vec<Diagnostic>,
+    /// Files of the composition imports, for locating diagnostic spans.
+    pub import_files: ImportFiles,
 }
 
 /// Parse `src`, validate it with the merged diagnostic policy, and render
@@ -521,10 +583,16 @@ pub fn to_png_all_pages_options(
     project_dir: Option<&Path>,
     opts: RenderEntryOptions<'_>,
 ) -> Result<PngPagesArtifact, RenderCmdErr> {
-    let (mut doc, policy, imports) = parse_validate(src, project_dir, opts.flags)?;
-    let import_diagnostics = imports.diagnostics().to_vec();
+    let Validated {
+        mut doc,
+        policy,
+        imports,
+        diagnostics: validation,
+    } = parse_validate(src, project_dir, opts.flags)?;
+    let import_diagnostics = attributed_loader_diagnostics(&imports);
+    let import_files = ImportFiles::from_graph(&imports);
     let scene_imports = imports.to_scene_graph();
-    let mut diagnostics: Vec<Diagnostic> = Vec::new();
+    let mut diagnostics: Vec<Diagnostic> = validation;
     resolve_text_sources(&mut doc, project_dir, &mut diagnostics);
     let fonts = build_font_provider_with_imports(&doc, project_dir, &imports, opts.locked)?;
     let page_count = doc.body.pages.len();
@@ -571,6 +639,7 @@ pub fn to_png_all_pages_options(
     Ok(PngPagesArtifact {
         pages,
         diagnostics: Diagnostic::dedup(diagnostics),
+        import_files,
     })
 }
 
@@ -628,8 +697,14 @@ pub fn to_png_spread(
         data,
         construction_overlay,
     } = opts;
-    let (mut doc, policy, imports) = parse_validate(src, project_dir, flags)?;
-    let import_diagnostics = imports.diagnostics().to_vec();
+    let Validated {
+        mut doc,
+        policy,
+        imports,
+        diagnostics: validation,
+    } = parse_validate(src, project_dir, flags)?;
+    let import_diagnostics = attributed_loader_diagnostics(&imports);
+    let import_files = ImportFiles::from_graph(&imports);
     let scene_imports = imports.to_scene_graph();
     let mut text_src_diagnostics: Vec<Diagnostic> = Vec::new();
     resolve_text_sources(&mut doc, project_dir, &mut text_src_diagnostics);
@@ -671,10 +746,15 @@ pub fn to_png_spread(
     let mut compile_diagnostics = compiler.document_diagnostics();
     compile_diagnostics.extend(compile_a.diagnostics);
     compile_diagnostics.extend(compile_b.diagnostics);
-    let mut diagnostics = text_src_diagnostics;
+    let mut diagnostics = validation;
+    diagnostics.extend(text_src_diagnostics);
     diagnostics.extend(import_diagnostics);
     diagnostics.extend(disk_diagnostics_with_imports(&doc, project_dir, &imports));
     diagnostics.extend(govern_compile_diagnostics(compile_diagnostics, &policy));
     let diagnostics = Diagnostic::dedup(diagnostics);
-    Ok(PngArtifact { png, diagnostics })
+    Ok(PngArtifact {
+        png,
+        diagnostics,
+        import_files,
+    })
 }

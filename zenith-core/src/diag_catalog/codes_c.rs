@@ -517,4 +517,202 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
         Severity::Warning,
         "`allow`/`warn` cannot weaken an always-Error diagnostic code.",
     ),
+    // ── CLI error envelope (emitted by zenith-cli outside a command's own output) ──
+    info(
+        "asset.exists",
+        Severity::Error,
+        "The destination asset file exists with different bytes.",
+    ),
+    info(
+        "asset.import",
+        Severity::Error,
+        "`zenith asset import` failed.",
+    ),
+    info(
+        "asset.import_failed",
+        Severity::Error,
+        "`zenith asset import` failed; the error envelope names the cause.",
+    ),
+    info(
+        "asset.zpx_bake",
+        Severity::Error,
+        "`zenith asset` ZPX bake failed.",
+    ),
+    info(
+        "asset.zpx_bake_failed",
+        Severity::Error,
+        "`zenith asset` ZPX bake failed; the error envelope names the cause.",
+    ),
+    info(
+        "cli.invalid_argument",
+        Severity::Error,
+        "A command-line argument or flag combination is invalid.",
+    ),
+    info(
+        "data.load_failed",
+        Severity::Error,
+        "The `--data` file is missing, unreadable, or not valid JSON or CSV.",
+    ),
+    info(
+        "fix.failed",
+        Severity::Error,
+        "`zenith fix` failed; the document does not parse.",
+    ),
+    info("fmt.failed", Severity::Error, "`zenith fmt` failed."),
+    info(
+        "fmt.format_failed",
+        Severity::Error,
+        "The document failed to parse, so `zenith fmt` cannot format it.",
+    ),
+    info(
+        "font.missing",
+        Severity::Error,
+        "A font file named on the command line cannot be read.",
+    ),
+    info(
+        "font.parse",
+        Severity::Error,
+        "A font file cannot be parsed.",
+    ),
+    info(
+        "fonts.family_not_found",
+        Severity::Error,
+        "`zenith fonts` finds no face for the requested family.",
+    ),
+    info("fonts.failed", Severity::Error, "`zenith fonts` failed."),
+    info(
+        "history.failed",
+        Severity::Error,
+        "A history command failed.",
+    ),
+    info(
+        "history.redo_failed",
+        Severity::Error,
+        "`zenith history redo` failed.",
+    ),
+    info(
+        "history.restore_failed",
+        Severity::Error,
+        "`zenith history restore` failed.",
+    ),
+    info(
+        "history.sync_failed",
+        Severity::Error,
+        "`zenith history sync` failed.",
+    ),
+    info(
+        "history.undo_failed",
+        Severity::Error,
+        "`zenith history undo` failed.",
+    ),
+    info(
+        "history.version_failed",
+        Severity::Error,
+        "`zenith history version` failed.",
+    ),
+    info(
+        "imports.failed",
+        Severity::Error,
+        "`zenith imports` failed.",
+    ),
+    info(
+        "inspect.failed",
+        Severity::Error,
+        "`zenith inspect` failed.",
+    ),
+    info(
+        "inspect.node_not_found",
+        Severity::Error,
+        "`zenith inspect` names a node id the document does not contain.",
+    ),
+    info(
+        "io.not_utf8",
+        Severity::Error,
+        "A file or formatted output is not valid UTF-8.",
+    ),
+    info("io.read_failed", Severity::Error, "A file cannot be read."),
+    info(
+        "library.add_failed",
+        Severity::Error,
+        "`zenith library add` failed.",
+    ),
+    info(
+        "library.asset_write_failed",
+        Severity::Error,
+        "`zenith library` cannot write an asset file.",
+    ),
+    info(
+        "library.show_failed",
+        Severity::Error,
+        "`zenith library show` failed.",
+    ),
+    info(
+        "merge.no_data_nodes",
+        Severity::Error,
+        "The merge template has no node with a `data.*` role.",
+    ),
+    info(
+        "merge.row_failed",
+        Severity::Error,
+        "One merge row failed to render.",
+    ),
+    info(
+        "merge.setup_failed",
+        Severity::Error,
+        "`zenith merge` failed before it rendered any row.",
+    ),
+    info("new.failed", Severity::Error, "`zenith new` failed."),
+    info(
+        "perceive.failed",
+        Severity::Error,
+        "`zenith perceive` failed.",
+    ),
+    info(
+        "perceive.node_not_found",
+        Severity::Error,
+        "`zenith perceive` names a path node the document does not contain.",
+    ),
+    info(
+        "text_outline.failed",
+        Severity::Error,
+        "`zenith text-outline` failed.",
+    ),
+    info(
+        "theme.apply_failed",
+        Severity::Error,
+        "`zenith theme apply` failed.",
+    ),
+    info(
+        "theme.new_failed",
+        Severity::Error,
+        "`zenith theme new` failed.",
+    ),
+    info("tokens.failed", Severity::Error, "`zenith tokens` failed."),
+    info(
+        "tx.engine",
+        Severity::Error,
+        "The transaction engine rejected the transaction.",
+    ),
+    info("tx.failed", Severity::Error, "`zenith tx` failed."),
+    info(
+        "tx.parse",
+        Severity::Error,
+        "The transaction file cannot be parsed.",
+    ),
+    info("update.failed", Severity::Error, "`zenith update` failed."),
+    info(
+        "variant.failed",
+        Severity::Error,
+        "One variant failed to render.",
+    ),
+    info(
+        "variant.setup_failed",
+        Severity::Error,
+        "`zenith variant` failed before it rendered any variant.",
+    ),
+    info(
+        "workspace.failed",
+        Severity::Error,
+        "A `zenith workspace` command failed.",
+    ),
 ];

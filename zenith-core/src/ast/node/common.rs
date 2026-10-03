@@ -83,8 +83,8 @@ pub struct TextSpan {
     /// `Some(id)`, the renderer emits the referenced footnote's auto-number as a
     /// SUPERSCRIPT marker run immediately AFTER this span's text (reusing the
     /// [`TextSpan::vertical_align`] `"super"` rendering: reduced size + raised
-    /// baseline). An id that names no footnote on the same page yields an
-    /// advisory `footnote.unresolved_ref` and no marker. KDL: `footnote-ref="fn.1"`.
+    /// baseline). An id that names no footnote on the same page yields a
+    /// warning `footnote.unresolved_ref` and no marker. KDL: `footnote-ref="fn.1"`.
     pub footnote_ref: Option<String>,
     /// Runtime data-field reference for the span's TEXT CONTENT. When `Some(path)`,
     /// the scene compiler's data pre-pass looks `path` up in the active

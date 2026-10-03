@@ -4,13 +4,18 @@
 //! zenith-core.  Each type maps from zenith-core/zenith-scene types to a
 //! schema-versioned JSON shape.
 
+use std::collections::BTreeMap;
+
 use serde::Serialize;
+
+use crate::report::ImportFiles;
 
 /// JSON representation of a [`zenith_core::Diagnostic`].
 ///
 /// `line` and `col` are 1-based. They are present only when the diagnostic
-/// has a span and the caller supplied the source text. `cause` names a root
-/// cause shared by many subjects.
+/// has a span and the caller supplied the source text. `file` names the
+/// imported file the span indexes into; it is absent for spans in the host
+/// document. `cause` names a root cause shared by many subjects.
 #[derive(Debug, Serialize)]
 pub struct DiagnosticJson {
     pub code: String,
@@ -23,7 +28,12 @@ pub struct DiagnosticJson {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub col: Option<usize>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub file: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub cause: Option<String>,
+    /// Structured machine fix (`zenith fix` applies it).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fix: Option<zenith_core::FixHint>,
 }
 
 impl DiagnosticJson {
@@ -36,26 +46,75 @@ impl DiagnosticJson {
             subject_id: None,
             line: None,
             col: None,
+            file: None,
             cause: None,
+            fix: None,
         }
     }
 
-    /// Convert `d`, adding `line`/`col` from its span over `src`.
+    /// Convert `d`, adding `line`/`col` from its span over the host `src`.
+    ///
+    /// A diagnostic from an import has no known file here, so it gets no
+    /// `line`/`col`. Use [`Self::located_all_in`] when imports are known.
     pub fn located(d: &zenith_core::Diagnostic, src: &str) -> Self {
+        Self::located_with(d, src, &ImportFiles::default(), &mut BTreeMap::new())
+    }
+
+    /// Convert every diagnostic in `diagnostics`, located over the host `src`.
+    pub fn located_all(diagnostics: &[zenith_core::Diagnostic], src: &str) -> Vec<Self> {
+        Self::located_all_in(diagnostics, src, &ImportFiles::default())
+    }
+
+    /// Convert every diagnostic in `diagnostics`.
+    ///
+    /// A span with no import indexes into the host `src`. A span from an import
+    /// indexes into that import's file in `files`: `file` names it and
+    /// `line`/`col` come from its text. When the file is unknown or unreadable,
+    /// `line`/`col` are omitted.
+    pub fn located_all_in(
+        diagnostics: &[zenith_core::Diagnostic],
+        src: &str,
+        files: &ImportFiles,
+    ) -> Vec<Self> {
+        let mut texts: BTreeMap<String, Option<String>> = BTreeMap::new();
+        diagnostics
+            .iter()
+            .map(|d| Self::located_with(d, src, files, &mut texts))
+            .collect()
+    }
+
+    fn located_with(
+        d: &zenith_core::Diagnostic,
+        src: &str,
+        files: &ImportFiles,
+        texts: &mut BTreeMap<String, Option<String>>,
+    ) -> Self {
         let mut out = Self::from(d);
-        if let Some((line, col)) = d
-            .span
-            .and_then(|span| crate::report::line_col(src, span.start))
+        let Some(span) = d.span else {
+            return out;
+        };
+        let Some(import) = d.import() else {
+            if let Some((line, col)) = crate::report::line_col(src, span.start) {
+                out.line = Some(line);
+                out.col = Some(col);
+            }
+            return out;
+        };
+        let Some(path) = files.path(import) else {
+            return out;
+        };
+        out.file = Some(path.display().to_string());
+        let text = texts
+            .entry(import.to_owned())
+            .or_insert_with(|| std::fs::read_to_string(path).ok());
+        if let Some((line, col)) = text
+            .as_deref()
+            .and_then(|text| crate::report::line_col(text, span.start))
         {
             out.line = Some(line);
             out.col = Some(col);
         }
         out
-    }
-
-    /// Convert every diagnostic in `diagnostics`, located over `src`.
-    pub fn located_all(diagnostics: &[zenith_core::Diagnostic], src: &str) -> Vec<Self> {
-        diagnostics.iter().map(|d| Self::located(d, src)).collect()
     }
 }
 
@@ -68,7 +127,9 @@ impl From<&zenith_core::Diagnostic> for DiagnosticJson {
             subject_id: d.subject_id.clone(),
             line: None,
             col: None,
-            cause: d.cause.as_deref().map(str::to_owned),
+            file: None,
+            cause: d.cause().map(str::to_owned),
+            fix: d.fix().cloned(),
         }
     }
 }

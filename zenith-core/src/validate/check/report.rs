@@ -4,7 +4,7 @@
 //! pass; it is re-exported from the check module root as part of the crate's
 //! public validate API.
 
-use crate::diagnostics::{Diagnostic, Severity};
+use crate::diagnostics::Diagnostic;
 
 /// The outcome of a full document validation pass.
 #[derive(Debug, Clone, PartialEq)]
@@ -15,10 +15,8 @@ pub struct ValidationReport {
 }
 
 impl ValidationReport {
-    /// Returns `true` if any diagnostic has [`Severity::Error`].
+    /// Returns `true` if any diagnostic has error severity.
     pub fn has_errors(&self) -> bool {
-        self.diagnostics
-            .iter()
-            .any(|d| d.severity == Severity::Error)
+        Diagnostic::has_errors(&self.diagnostics)
     }
 }
