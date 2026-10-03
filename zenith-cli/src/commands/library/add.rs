@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use zenith_core::{Document, KdlAdapter, KdlSource, validate};
+use zenith_core::{Dimension, Document, KdlAdapter, KdlSource, Node, Unit, validate};
 use zenith_tx::{Op, Permissions, Position, Transaction, TxStatus, run_transaction};
 
 use crate::library::{
@@ -221,7 +221,7 @@ pub fn add(
                     .map_err(|e| AddCmdErr::new(e.message, 2))?;
             let mut placement = format!("on page '{page}'");
             if let Some(parent) = parent {
-                target = move_into_parent(&target, page, &outcome.instance_id, parent)?;
+                target = move_into_parent(&target, page, &outcome.instance_id, parent, at)?;
                 placement = format!("in '{parent}' on page '{page}'");
             }
             let mut summary = String::new();
@@ -250,11 +250,15 @@ pub fn add(
 
 /// Move the instance `instance_id` (placed on `page`) into the frame or group
 /// `parent` with a `Reparent` transaction. `parent` must sit on `page`.
+///
+/// `Reparent` converts x / y to keep the page position. `--at` counts in the
+/// parent's space, so the instance gets `at` back after the move.
 fn move_into_parent(
     target: &Document,
     page: &str,
     instance_id: &str,
     parent: &str,
+    at: (f64, f64),
 ) -> Result<Document, AddCmdErr> {
     let on_page = target
         .body
@@ -296,18 +300,50 @@ fn move_into_parent(
                 1,
             ))
         }
-        TxStatus::Accepted | TxStatus::AcceptedWithWarnings => KdlAdapter
-            .parse(result.source_after.as_bytes())
-            .map_err(|e| {
-                AddCmdErr::new(
-                    format!(
-                        "internal error: could not re-parse moved document: {}",
-                        e.message
-                    ),
-                    2,
-                )
-            }),
+        TxStatus::Accepted | TxStatus::AcceptedWithWarnings => {
+            let mut moved = KdlAdapter
+                .parse(result.source_after.as_bytes())
+                .map_err(|e| {
+                    AddCmdErr::new(
+                        format!(
+                            "internal error: could not re-parse moved document: {}",
+                            e.message
+                        ),
+                        2,
+                    )
+                })?;
+            for p in &mut moved.body.pages {
+                if set_instance_origin(&mut p.children, instance_id, at) {
+                    break;
+                }
+            }
+            Ok(moved)
+        }
     }
+}
+
+/// Write `at` as the px x / y of instance `id` below `nodes`. `true` once
+/// the instance is found.
+fn set_instance_origin(nodes: &mut [Node], id: &str, at: (f64, f64)) -> bool {
+    let px = |v: f64| Dimension {
+        value: v,
+        unit: Unit::Px,
+    };
+    for node in nodes {
+        if let Node::Instance(inst) = node
+            && inst.id == id
+        {
+            inst.x = Some(px(at.0));
+            inst.y = Some(px(at.1));
+            return true;
+        }
+        if let Some(children) = node.children_mut()
+            && set_instance_origin(children, id, at)
+        {
+            return true;
+        }
+    }
+    false
 }
 
 /// Validate the mutated `target` (hard errors abort with no write) then format it

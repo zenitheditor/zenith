@@ -37,15 +37,15 @@ pub use document::{
 pub use kerning::KerningPair;
 pub use library::LibraryDef;
 pub use node::{
-    Anchor, AnchorEdge, AnchorKind, ChartNode, ChartSeries, CodeNode, ConnectorAnchor,
-    ConnectorAnchorParseError, ConnectorNode, EllipseNode, FieldNode, FootnoteNode, FrameNode,
-    GroupNode, ImageNode, InstanceNode, LayoutAlign, LayoutContainer, LayoutItem, LayoutJustify,
-    LayoutKind, LayoutPosition, LightNode, LineNode, MeshNode, Node, ObjectPosition, Override,
-    PathAnchor, PathNode, PathSubpath, PathSubpathRef, PatternNode, Point, PolygonNode,
-    PolylineNode, ProtectedRegion, RectNode, ShapeNode, SizeKeyword, TableCell, TableColumn,
-    TableNode, TableRow, TextNode, TextSpan, TocNode, UnknownNode, UnknownProperty, UnknownValue,
-    anchor_xy, parse_anchor, parse_anchor_edge, parse_connector_anchor, resolve_geometry_px,
-    subtree_uses_layout, translate_node,
+    Anchor, AnchorEdge, AnchorKind, AnchorRefs, AnchorSiblings, AnchorView, ChartNode, ChartSeries,
+    CodeNode, ConnectorAnchor, ConnectorAnchorParseError, ConnectorNode, EllipseNode, FieldNode,
+    FootnoteNode, FrameNode, GroupNode, ImageNode, InstanceNode, LayoutAlign, LayoutContainer,
+    LayoutItem, LayoutJustify, LayoutKind, LayoutPosition, LightNode, LineNode, MeshNode, Node,
+    ObjectPosition, Override, PathAnchor, PathNode, PathSubpath, PathSubpathRef, PatternNode,
+    Point, PolygonNode, PolylineNode, ProtectedRegion, RectNode, ShapeNode, SizeKeyword, TableCell,
+    TableColumn, TableNode, TableRow, TextNode, TextSpan, TocNode, UnknownNode, UnknownProperty,
+    UnknownValue, anchor_xy, derive_anchor_origin, parse_anchor, parse_anchor_edge,
+    parse_connector_anchor, resolve_geometry_px, subtree_uses_layout, translate_node,
 };
 pub use policy::{DiagnosticPolicy, PolicyEntry, PolicyVerb};
 pub use provenance::ProvenanceDef;

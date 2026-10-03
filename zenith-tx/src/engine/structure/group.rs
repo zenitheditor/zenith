@@ -1,14 +1,14 @@
-//! `Group` / `Ungroup` / `Reparent` application, plus the common-parent finder
-//! and ungroup splice helper they use.
+//! `Group` / `Ungroup` application, plus the common-parent finder and
+//! ungroup splice helper they use.
 
 use std::collections::BTreeMap;
 
-use zenith_core::{Diagnostic, Document, GroupNode, Node};
+use zenith_core::{Diagnostic, Document, GroupNode, Node, ResolvedToken, translate_node};
 
-use crate::op::Position;
-
-use super::super::{find_node_shared, record_affected, subtree_contains};
-use super::finders::{find_container_children_mut, remove_node_by_id, resolve_position};
+use super::super::layout::places_in_flow;
+use super::super::space::{container_chain, parent_frame, resolved_tokens};
+use super::super::{find_node_any_shared, record_affected};
+use super::finders::find_container_children_mut;
 
 /// Find which page directly contains (at the top level of `page.children`) ALL
 /// of the ids in `node_ids`. Returns `(page_index, sorted_indices)` where
@@ -181,19 +181,12 @@ pub(in crate::engine) fn apply_group(
         children.remove(i);
     }
 
-    // Adjust insert_at: each removal of an index < insert_at shifts insert_at
-    // down by one.  Since we sorted indices ascending and insert_at == indices[0],
-    // all removed indices that were < insert_at have already been removed by the
-    // rev-order loop above.  Actually insert_at is indices[0] (the minimum), so
-    // no indices precede it — insert_at is stable after we remove >= insert_at
-    // indices. We need to count how many indices were strictly less than insert_at
-    // before the removals: since insert_at = indices[0] (minimum), zero indices
-    // are smaller. So insert_at doesn't change.
+    // `insert_at` is the lowest removed index, so no removal shifts it.
     let insert_at = insert_at.min(children.len());
 
     // Build the group node with all fields at defaults (None / empty).
-    // v0: x/y are None — no translation offset; authors must adjust child
-    // geometry themselves if a specific group origin is needed.
+    // x/y stay unset: the group origin is 0, so the children keep their
+    // coordinates and their page position.
     let group_node = Node::Group(GroupNode {
         id: group_id.to_owned(),
         name: None,
@@ -245,64 +238,69 @@ pub(in crate::engine) fn apply_ungroup(
     diagnostics: &mut Vec<Diagnostic>,
     affected: &mut Vec<String>,
 ) {
-    // Phase 1 (shared scan): verify node exists and is a group; also capture
-    // whether it has a non-zero x/y (for the advisory) and its page index.
+    // Phase 1 (shared scan): verify the node exists (on a page or a master)
+    // and is a group, and compute the shift each child needs to keep its
+    // page position.
     struct GroupInfo {
-        page_index: usize,
-        has_nonzero_offset: bool,
+        /// Per child: the px shift into the group's parent space, if any.
+        shifts: Vec<Option<(f64, f64)>>,
+        /// A child leaves the group but the group origin does not resolve.
+        unresolved: bool,
     }
 
-    let info: Option<Result<GroupInfo, &'static str>> = {
-        let mut result = None;
-        'outer: for (pi, page) in doc.body.pages.iter().enumerate() {
-            if let Some(node) = find_node_shared(&page.children, group_id) {
-                let info = match node {
-                    Node::Group(g) => {
-                        // A geometry offset is "non-zero" for a literal dimension
-                        // whose value is non-zero, or for any token ref (its value
-                        // isn't resolvable here, so treat it as a meaningful offset).
-                        let nonzero = |pv: Option<&zenith_core::PropertyValue>| match pv {
-                            Some(zenith_core::PropertyValue::Dimension(d)) => d.value != 0.0,
-                            Some(zenith_core::PropertyValue::TokenRef(_)) => true,
-                            Some(zenith_core::PropertyValue::Literal(_))
-                            | Some(zenith_core::PropertyValue::DataRef(_))
-                            | None => false,
-                        };
-                        let has_offset = nonzero(g.x.as_ref()) || nonzero(g.y.as_ref());
-                        Ok(GroupInfo {
-                            page_index: pi,
-                            has_nonzero_offset: has_offset,
-                        })
-                    }
-                    Node::Rect(_)
-                    | Node::Ellipse(_)
-                    | Node::Line(_)
-                    | Node::Text(_)
-                    | Node::Code(_)
-                    | Node::Frame(_)
-                    | Node::Image(_)
-                    | Node::Polygon(_)
-                    | Node::Polyline(_)
-                    | Node::Path(_)
-                    | Node::Instance(_)
-                    | Node::Field(_)
-                    | Node::Footnote(_)
-                    | Node::Toc(_)
-                    | Node::Table(_)
-                    | Node::Shape(_)
-                    | Node::Connector(_)
-                    | Node::Pattern(_)
-                    | Node::Chart(_)
-                    | Node::Light(_)
-                    | Node::Mesh(_)
-                    | Node::Unknown(_) => Err("not a group"),
-                };
-                result = Some(info);
-                break 'outer;
+    let resolved = resolved_tokens(doc);
+    let info: Option<Result<GroupInfo, &'static str>> =
+        find_node_any_shared(doc, group_id).map(|node| match node {
+            Node::Group(g) => {
+                let parent = parent_frame(doc, group_id);
+                // The group's own link ends its container chain.
+                let offset = container_chain(doc, group_id, &resolved)
+                    .and_then(|chain| chain.last().and_then(|link| link.offset));
+                let mut unresolved = false;
+                let shifts = g
+                    .children
+                    .iter()
+                    .map(|child| {
+                        // A flow slot of the new parent frame: layout places
+                        // the child.
+                        if parent.is_some_and(|f| places_in_flow(f, child)) {
+                            return None;
+                        }
+                        match offset {
+                            Some((dx, dy)) if dx == 0.0 && dy == 0.0 => None,
+                            Some(shift) => Some(shift),
+                            None => {
+                                unresolved = true;
+                                None
+                            }
+                        }
+                    })
+                    .collect();
+                Ok(GroupInfo { shifts, unresolved })
             }
-        }
-        result
-    };
+            Node::Rect(_)
+            | Node::Ellipse(_)
+            | Node::Line(_)
+            | Node::Text(_)
+            | Node::Code(_)
+            | Node::Frame(_)
+            | Node::Image(_)
+            | Node::Polygon(_)
+            | Node::Polyline(_)
+            | Node::Path(_)
+            | Node::Instance(_)
+            | Node::Field(_)
+            | Node::Footnote(_)
+            | Node::Toc(_)
+            | Node::Table(_)
+            | Node::Shape(_)
+            | Node::Connector(_)
+            | Node::Pattern(_)
+            | Node::Chart(_)
+            | Node::Light(_)
+            | Node::Mesh(_)
+            | Node::Unknown(_) => Err("not a group"),
+        });
 
     let info = match info {
         None => {
@@ -326,36 +324,53 @@ pub(in crate::engine) fn apply_ungroup(
         Some(Ok(info)) => info,
     };
 
-    // Advisory: v0 limitation — group x/y offset is not propagated to children.
-    if info.has_nonzero_offset {
+    if info.unresolved {
         diagnostics.push(Diagnostic::advisory(
-            "tx.noop",
+            "tx.coordinate_unresolved",
             format!(
-                "ungroup: group {:?} has a non-zero x/y offset; v0 does not \
-                 apply the offset to children on ungroup — child positions may \
-                 shift visually",
-                group_id
+                "ungroup: children of group {group_id:?} keep their x/y unchanged: the \
+                 group's px origin does not resolve, or a layout frame places the group; \
+                 check the children's positions and set x/y with set_geometry"
             ),
             None,
             Some(group_id.to_owned()),
         ));
     }
 
-    // Phase 2 (exclusive borrow): splice the group's children in-place.
-    let Some(page) = doc.body.pages.get_mut(info.page_index) else {
-        return; // unreachable: page_index came from the shared scan above.
+    // Phase 2 (exclusive borrow): remove the group from its page or master
+    // and splice its children in place.
+    let splice = Splice {
+        group_id,
+        shifts: &info.shifts,
+        resolved: &resolved,
     };
+    let lists = doc
+        .body
+        .pages
+        .iter_mut()
+        .map(|p| &mut p.children)
+        .chain(doc.masters.iter_mut().map(|m| &mut m.children));
+    for children in lists {
+        if splice_ungroup(children, &splice) {
+            record_affected(group_id, affected);
+            return;
+        }
+    }
+}
 
-    // Find and remove the group node from the page's subtree, then splice.
-    splice_ungroup(&mut page.children, group_id);
-
-    record_affected(group_id, affected);
+/// What [`splice_ungroup`] removes and how it moves each child.
+struct Splice<'a> {
+    group_id: &'a str,
+    /// Per child: the px shift into the group's parent space, if any.
+    shifts: &'a [Option<(f64, f64)>],
+    resolved: &'a BTreeMap<String, ResolvedToken>,
 }
 
 /// Walk `children` to find the group with `group_id`, remove it, and insert
 /// its children at the same index. Returns `true` if the group was found and
 /// spliced, `false` otherwise (to continue recursion).
-fn splice_ungroup(children: &mut Vec<Node>, group_id: &str) -> bool {
+fn splice_ungroup(children: &mut Vec<Node>, splice: &Splice<'_>) -> bool {
+    let group_id = splice.group_id;
     // Check direct children first.
     if let Some(i) = children.iter().position(|n| n.id() == Some(group_id)) {
         // We confirmed it's a group in the shared-scan phase; use .get() for
@@ -389,16 +404,29 @@ fn splice_ungroup(children: &mut Vec<Node>, group_id: &str) -> bool {
         };
         children.remove(i);
         // Insert the group's children at the same position, in order.
-        for (offset, child) in group_children.into_iter().enumerate() {
-            children.insert(i + offset, child);
-        }
+        let moved = group_children
+            .into_iter()
+            .enumerate()
+            .map(|(offset, mut child)| {
+                if let Some(Some((dx, dy))) = splice.shifts.get(offset) {
+                    translate_node(&mut child, *dx, *dy, splice.resolved);
+                }
+                child
+            });
+        children.splice(i..i, moved);
         return true;
     }
-    // Descend into nested containers.
+    // Descend into nested containers, table cells, and unknown nodes.
     for child in children.iter_mut() {
-        let grandchildren = match child {
-            Node::Frame(f) => &mut f.children,
-            Node::Group(g) => &mut g.children,
+        let found = match child {
+            Node::Frame(f) => splice_ungroup(&mut f.children, splice),
+            Node::Group(g) => splice_ungroup(&mut g.children, splice),
+            Node::Table(t) => t
+                .rows
+                .iter_mut()
+                .flat_map(|r| r.cells.iter_mut())
+                .any(|c| splice_ungroup(&mut c.children, splice)),
+            Node::Unknown(u) => splice_ungroup(&mut u.children, splice),
             Node::Rect(_)
             | Node::Ellipse(_)
             | Node::Line(_)
@@ -412,139 +440,16 @@ fn splice_ungroup(children: &mut Vec<Node>, group_id: &str) -> bool {
             | Node::Field(_)
             | Node::Footnote(_)
             | Node::Toc(_)
-            | Node::Table(_)
             | Node::Shape(_)
             | Node::Connector(_)
             | Node::Pattern(_)
             | Node::Chart(_)
             | Node::Light(_)
-            | Node::Mesh(_)
-            | Node::Unknown(_) => continue,
+            | Node::Mesh(_) => false,
         };
-        if splice_ungroup(grandchildren, group_id) {
+        if found {
             return true;
         }
     }
     false
-}
-
-pub(in crate::engine) fn apply_reparent(
-    node_id: &str,
-    new_parent: &str,
-    position: &Position,
-    doc: &mut Document,
-    diagnostics: &mut Vec<Diagnostic>,
-    affected: &mut Vec<String>,
-) {
-    // Phase 1 (shared scan): verify the node exists and capture the subtree so
-    // we can run the cycle check without a mutable borrow.
-    let node_page_index = doc.body.pages.iter().enumerate().find_map(|(pi, page)| {
-        if page.children.iter().any(|n| subtree_contains(n, node_id)) {
-            Some(pi)
-        } else {
-            None
-        }
-    });
-
-    let pi = match node_page_index {
-        Some(pi) => pi,
-        None => {
-            diagnostics.push(Diagnostic::error(
-                "tx.unknown_node",
-                format!("node {:?} not found in document", node_id),
-                None,
-                Some(node_id.to_owned()),
-            ));
-            return;
-        }
-    };
-
-    // Cycle check (shared borrow): new_parent must not be node itself or a
-    // descendant of node.  We locate the node in the shared slice and run
-    // subtree_contains on it.
-    {
-        let page = match doc.body.pages.get(pi) {
-            Some(p) => p,
-            None => return, // unreachable
-        };
-        if let Some(node_ref) = find_node_shared(&page.children, node_id)
-            && subtree_contains(node_ref, new_parent)
-        {
-            diagnostics.push(Diagnostic::error(
-                "tx.invalid_parent",
-                format!(
-                    "cannot reparent {:?} into {:?}: new_parent is within \
-                     the node's own subtree",
-                    node_id, new_parent
-                ),
-                None,
-                Some(new_parent.to_owned()),
-            ));
-            return;
-        }
-        // Shared borrow of `page` ends here.
-    }
-
-    // Phase 2 (exclusive borrows): remove then re-insert.
-    // Step 2a — remove the node from its current parent.
-    let node = {
-        // We need a mutable borrow of the page to remove; we know the page index.
-        let page = match doc.body.pages.get_mut(pi) {
-            Some(p) => p,
-            None => return, // unreachable
-        };
-        match remove_node_by_id(&mut page.children, node_id) {
-            Some(n) => n,
-            None => {
-                // Unexpected: the shared scan found it but remove didn't.
-                diagnostics.push(Diagnostic::error(
-                    "tx.unknown_node",
-                    format!("node {:?} disappeared during reparent", node_id),
-                    None,
-                    Some(node_id.to_owned()),
-                ));
-                return;
-            }
-        }
-    };
-    // The mutable borrow of `doc.body.pages[pi]` ends here.
-
-    // Step 2b — locate the new parent's children vec.
-    // `find_container_children_mut` handles page ids AND nested container ids.
-    let new_children = match find_container_children_mut(doc, new_parent) {
-        Some(c) => c,
-        None => {
-            // new_parent is not a container — roll back by re-inserting the node
-            // at the end of its original page (best-effort; the transaction will
-            // be rejected by the error diagnostic anyway).
-            if let Some(page) = doc.body.pages.get_mut(pi) {
-                page.children.push(node);
-            }
-            diagnostics.push(Diagnostic::error(
-                "tx.invalid_parent",
-                format!(
-                    "no container with id {:?} (new_parent must be a page, group, or frame)",
-                    new_parent
-                ),
-                None,
-                Some(new_parent.to_owned()),
-            ));
-            return;
-        }
-    };
-
-    // Step 2c — resolve the insertion index and insert.
-    let idx = match resolve_position(position, new_children, new_parent, diagnostics) {
-        Some(i) => i,
-        None => {
-            // resolve_position already pushed a diagnostic; roll back.
-            if let Some(page) = doc.body.pages.get_mut(pi) {
-                page.children.push(node);
-            }
-            return;
-        }
-    };
-
-    new_children.insert(idx, node);
-    record_affected(node_id, affected);
 }

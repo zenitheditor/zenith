@@ -59,9 +59,17 @@ pub fn op_summary(name: &str) -> Option<&'static str> {
         "duplicate_node" => Some("Clone a leaf node and insert the copy after the original."),
         "duplicate_page" => Some("Deep-clone a page and insert the copy after the original."),
         "group" => Some("Wrap a set of sibling nodes inside a new group node."),
-        "ungroup" => Some("Dissolve a group node, moving its children up to the parent."),
-        "reparent" => Some("Move a node into a different container (page, group, or frame)."),
-        "align_nodes" => Some("Align a set of nodes to a common edge or centre along one axis."),
+        "ungroup" => Some(
+            "Dissolve a group node, moving its children up to the parent; children keep their page position.",
+        ),
+        "reparent" => Some(
+            "Move a node into a different container (page, group, or frame); x/y convert so the \
+             node keeps its page position, except in a layout flow slot.",
+        ),
+        "align_nodes" => Some(
+            "Align a set of nodes to a common edge or centre along one axis; nodes in different \
+             containers align by page position.",
+        ),
         "set_text_overflow" => {
             Some("Set the overflow mode (fit, clip, or visible) of a text or code node.")
         }

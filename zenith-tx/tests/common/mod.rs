@@ -435,7 +435,7 @@ pub const PAGE_WITH_GROUP: &str = r##"zenith version=1 {
   }
 }"##;
 
-/// A page with a group that has a non-zero x/y offset (advisory test).
+/// A page with a group that has a non-zero x/y offset (ungroup shift test).
 pub const PAGE_WITH_OFFSET_GROUP: &str = r##"zenith version=1 {
   project id="proj" name="Test"
   tokens format="zenith-token-v1" { }

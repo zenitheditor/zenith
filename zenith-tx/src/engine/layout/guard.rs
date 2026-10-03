@@ -107,6 +107,12 @@ fn search<'d>(nodes: &'d [Node], id: &str) -> Option<Option<(&'d str, &'static s
     None
 }
 
+/// `true` when `frame` places `child` in flow: the frame is a `row`,
+/// `column`, or `grid` frame and `child` takes a flow slot.
+pub(in crate::engine) fn places_in_flow(frame: &FrameNode, child: &Node) -> bool {
+    flow_mode(frame).is_some() && in_flow(child)
+}
+
 /// The layout mode name of a frame that positions its children.
 fn flow_mode(f: &FrameNode) -> Option<&'static str> {
     match f.layout.as_ref()? {

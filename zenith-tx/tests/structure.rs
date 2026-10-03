@@ -427,9 +427,10 @@ fn ungroup_non_group_rejected() {
     assert_eq!(result.source_after, result.source_before);
 }
 
-/// Ungrouping a group with non-zero x/y emits an advisory but still applies.
+/// Ungrouping a group with a non-zero x/y shifts each child by the group
+/// origin, so the child keeps its page position.
 #[test]
-fn ungroup_with_offset_emits_advisory() {
+fn ungroup_with_offset_shifts_children() {
     let doc = parse(PAGE_WITH_OFFSET_GROUP);
     let tx = Transaction {
         ops: vec![Op::Ungroup {
@@ -439,28 +440,18 @@ fn ungroup_with_offset_emits_advisory() {
     };
     let result = run_transaction(&doc, &tx).expect("run_transaction must not error");
 
-    // Must not be rejected.
-    assert_ne!(
+    assert_eq!(
         result.status,
-        TxStatus::Rejected,
-        "ungroup with offset must not be rejected; diagnostics: {:?}",
+        TxStatus::Accepted,
+        "diagnostics: {:?}",
         result.diagnostics
     );
-    // Advisory (tx.noop) must be present.
-    assert!(
-        result.diagnostics.iter().any(|d| d.code == "tx.noop"),
-        "expected tx.noop advisory for offset group; got: {:?}",
-        result.diagnostics
-    );
-    // Group must be gone; r1 must remain.
     assert!(
         !result.source_after.contains("id=\"grp1\""),
         "group must be dissolved"
     );
-    assert!(
-        result.source_after.contains("id=\"r1\""),
-        "r1 must survive ungroup"
-    );
+    assert_eq!(extract_px_attr(&result.source_after, "r1", "x"), Some(50.0));
+    assert_eq!(extract_px_attr(&result.source_after, "r1", "y"), Some(20.0));
 }
 
 // ── Reparent tests ────────────────────────────────────────────────────────

@@ -15,6 +15,7 @@ mod path;
 mod pattern;
 mod recipe;
 mod run;
+mod space;
 pub(crate) mod structure;
 mod style;
 mod text_outline;

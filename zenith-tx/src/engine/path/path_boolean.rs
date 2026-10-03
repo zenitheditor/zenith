@@ -1,12 +1,17 @@
+use std::collections::BTreeMap;
+
 use zenith_core::{
-    Diagnostic, Document, Node, PathAnchor as CorePathAnchor, PathNode, PathSubpath,
+    Diagnostic, Document, Node, PathAnchor as CorePathAnchor, PathNode, PathSubpath, ResolvedToken,
+    translate_node,
 };
 use zenith_geometry::{
     ClosedPolyline, ClosedPolylineBooleanOp, GeometryError, Point2,
     reconstruct_contour_boolean_result,
 };
 
+use super::super::space::resolved_tokens;
 use super::super::{find_node_shared, px, record_affected, subtree_contains};
+use super::geometry::target_shift;
 use super::{resolved_path_geometry, unknown_node};
 use crate::op::OpPathBooleanOperation;
 
@@ -38,10 +43,23 @@ pub(crate) fn apply_path_boolean(
         Some(path) => path,
         None => return,
     };
-    let target = match input_path(doc, args.target_id, "path_boolean", diagnostics) {
+    let mut target = match input_path(doc, args.target_id, "path_boolean", diagnostics) {
         Some(path) => path,
         None => return,
     };
+    // The result lands beside the source: move the target into its space.
+    match target_shift(doc, args.node_id, args.target_id, "path_boolean") {
+        Ok((dx, dy)) => {
+            if dx != 0.0 || dy != 0.0 {
+                let resolved = resolved_tokens(doc);
+                shift_path(&mut target, dx, dy, &resolved);
+            }
+        }
+        Err(diagnostic) => {
+            diagnostics.push(diagnostic);
+            return;
+        }
+    }
     let result = match boolean_result_path(
         BooleanResultArgs {
             source_id: args.node_id,
@@ -70,6 +88,15 @@ pub(crate) fn apply_path_boolean(
             }
             return;
         }
+    }
+}
+
+/// Move `path` by `(dx, dy)` px through [`translate_node`].
+fn shift_path(path: &mut PathNode, dx: f64, dy: f64, resolved: &BTreeMap<String, ResolvedToken>) {
+    let mut node = Node::Path(path.clone());
+    translate_node(&mut node, dx, dy, resolved);
+    if let Node::Path(moved) = node {
+        *path = moved;
     }
 }
 

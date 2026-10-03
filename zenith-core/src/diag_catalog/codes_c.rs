@@ -392,6 +392,12 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
         "A token is declared but never referenced.",
     ),
     info(
+        "tx.coordinate_unresolved",
+        Severity::Advisory,
+        "A transaction moved a node between containers, but a container origin does not resolve \
+         to px, so the node's x/y stay unchanged; check its position.",
+    ),
+    info(
         "tx.duplicate_id",
         Severity::Error,
         "A transaction tried to add a node or asset with an id already in use.",

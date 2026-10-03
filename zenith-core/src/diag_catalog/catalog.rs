@@ -237,6 +237,7 @@ mod tests {
         // validation can recognise them as known codes.
         let known_tx_codes: &[(&str, Severity)] = &[
             ("node.locked", Severity::Error),
+            ("tx.coordinate_unresolved", Severity::Advisory),
             ("tx.duplicate_id", Severity::Error),
             ("tx.geometry_unresolved", Severity::Warning),
             ("tx.invalid_geometry", Severity::Error),

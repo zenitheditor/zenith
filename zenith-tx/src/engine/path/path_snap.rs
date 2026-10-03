@@ -6,6 +6,7 @@ use zenith_geometry::{
 };
 
 use super::super::{find_node_any_mut, record_affected};
+use super::geometry::target_shift;
 use super::{geometry_anchor_to_core, resolved_path_geometry, unknown_node};
 
 pub(crate) fn apply_snap_path_anchors(
@@ -30,6 +31,23 @@ pub(crate) fn apply_snap_path_anchors(
             return;
         }
     };
+
+    // Compare in the source's parent space.
+    let target_geometry =
+        match target_shift(doc, node_id, target_id, "snap_path_anchors").and_then(|(dx, dy)| {
+            if dx == 0.0 && dy == 0.0 {
+                return Ok(target_geometry);
+            }
+            AffineTransform::translation(dx, dy)
+                .and_then(|affine| target_geometry.transform(affine))
+                .map_err(|error| snap_geometry_diagnostic(node_id, error))
+        }) {
+            Ok(geometry) => geometry,
+            Err(diagnostic) => {
+                diagnostics.push(diagnostic);
+                return;
+            }
+        };
 
     let nearest = match nearest_compound_path_geometry_points(
         &source_geometry,

@@ -1,6 +1,8 @@
 //! Geometry resolution and anchor/coordinate conversion helpers for path ops.
 
-use zenith_core::{AnchorKind, Diagnostic, Dimension, PathAnchor as CorePathAnchor, Unit};
+use zenith_core::{
+    AnchorKind, Diagnostic, Dimension, Document, PathAnchor as CorePathAnchor, Unit,
+};
 use zenith_geometry::{
     AffineTransform, GeometryError, PathAnchor, PathGeometry, PathSegment, Point2,
 };
@@ -9,6 +11,7 @@ use super::diagnostics::{
     geometry_diagnostic, insert_geometry_diagnostic, invalid_anchor, transform_geometry_diagnostic,
 };
 use crate::engine::px;
+use crate::engine::space::{parent_chain, resolved_tokens, shift_between};
 use crate::op::OpPathTransform;
 
 const MAX_SIMPLIFY_INTERMEDIATE_POINTS: usize = 8192;
@@ -265,4 +268,37 @@ pub(crate) fn optional_handle(
             &format!("path anchor {label} handle requires both {label}-x and {label}-y"),
         )),
     }
+}
+
+/// The px shift that moves the coordinates of path `target_id` into the
+/// parent space of path `source_id`: origin(target parent) minus
+/// origin(source parent), counted below their shared ancestor.
+///
+/// `(0, 0)` when either node is missing (the caller reports it). Errors
+/// with `tx.invalid_geometry` when a container origin does not resolve.
+pub(super) fn target_shift(
+    doc: &Document,
+    source_id: &str,
+    target_id: &str,
+    op_name: &str,
+) -> Result<(f64, f64), Diagnostic> {
+    let resolved = resolved_tokens(doc);
+    let (Some(source), Some(target)) = (
+        parent_chain(doc, source_id, &resolved),
+        parent_chain(doc, target_id, &resolved),
+    ) else {
+        return Ok((0.0, 0.0));
+    };
+    shift_between(&target, &source).map_err(|container| {
+        Diagnostic::error(
+            "tx.invalid_geometry",
+            format!(
+                "{op_name}: paths {source_id:?} and {target_id:?} sit in different containers, \
+                 and the px origin of container {container:?} does not resolve; move both \
+                 paths into one container with reparent"
+            ),
+            None,
+            Some(source_id.to_owned()),
+        )
+    })
 }

@@ -8,6 +8,9 @@
 //! reference rectangle and the node's resolved w/h. An explicitly-authored x or
 //! y always wins over the anchor-derived value.
 //!
+//! The derivation itself is [`zenith_core::derive_anchor_origin`], shared
+//! with tx. This module walks the page and supplies its reference boxes.
+//!
 //! **Page-relative:** reference rectangle is the full page.
 //!
 //! Page-, zone-, and parent-relative entries stay page-absolute at any
@@ -55,8 +58,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use zenith_core::{
-    Anchor, AnchorEdge, Dimension, Node, Page, PropertyValue, ResolvedToken, SafeZone, anchor_xy,
-    dim_to_px, parse_anchor, parse_anchor_edge,
+    AnchorRefs, AnchorSiblings, AnchorView, Node, Page, PropertyValue, ResolvedToken, SafeZone,
+    derive_anchor_origin,
 };
 
 use super::util::resolve_geometry_px;
@@ -81,6 +84,19 @@ pub(crate) struct PrePassEnv<'a> {
     pub(crate) page_h: f64,
     pub(crate) safe_zones: &'a [SafeZone],
     pub(crate) resolved: &'a BTreeMap<String, ResolvedToken>,
+}
+
+impl<'a> PrePassEnv<'a> {
+    /// The reference boxes of a scope with container context `ctx`.
+    fn refs(self, ctx: ParentCtx) -> AnchorRefs<'a> {
+        AnchorRefs {
+            page: Some((self.page_w, self.page_h)),
+            safe_zones: self.safe_zones,
+            parent_box: ctx.parent_box,
+            origin: Some((ctx.acc_dx, ctx.acc_dy)),
+            resolved: self.resolved,
+        }
+    }
 }
 
 /// Per-recursion container context for parent-relative derivation.
@@ -133,7 +149,7 @@ pub(crate) fn build_anchor_map(
     let scope: BTreeMap<&str, &Node> = page
         .children
         .iter()
-        .filter_map(|n| anchor_fields(n).map(|f| (f.id, n)))
+        .filter_map(|n| n.anchor_view().map(|f| (f.id, n)))
         .collect();
     for node in sibling_topo_order(&page.children) {
         collect_anchor(node, env, ParentCtx::ROOT, &scope, &mut map);
@@ -156,7 +172,7 @@ fn sibling_topo_order(children: &[Node]) -> Vec<&Node> {
     // In-scope anchor-bearing ids, plus a quick id → node lookup.
     let mut by_id: BTreeMap<&str, &Node> = BTreeMap::new();
     for node in children {
-        if let Some(f) = anchor_fields(node) {
+        if let Some(f) = node.anchor_view() {
             by_id.insert(f.id, node);
         }
     }
@@ -168,7 +184,7 @@ fn sibling_topo_order(children: &[Node]) -> Vec<&Node> {
     let mut adjacency: BTreeMap<&str, BTreeSet<&str>> = BTreeMap::new();
     for (&id, node) in &by_id {
         in_degree.entry(id).or_insert(0);
-        if let Some(f) = anchor_fields(node)
+        if let Some(f) = node.anchor_view()
             && let Some(target) = f.anchor_sibling
             && target != id
             && by_id.contains_key(target)
@@ -219,7 +235,7 @@ fn sibling_topo_order(children: &[Node]) -> Vec<&Node> {
         }
     }
     for node in children {
-        match anchor_fields(node) {
+        match node.anchor_view() {
             Some(f) if placed.contains(f.id) => {}
             _ => order.push(node),
         }
@@ -227,218 +243,9 @@ fn sibling_topo_order(children: &[Node]) -> Vec<&Node> {
     order
 }
 
-/// The anchor-bearing fields pulled from a node that may carry an anchor.
-///
-/// `x`/`y` are included (in addition to `w`/`h`) because sibling-relative
-/// anchoring reads the sibling's authored origin per axis.
-#[derive(Clone, Copy)]
-struct AnchorFields<'a> {
-    id: &'a str,
-    anchor: Option<&'a str>,
-    anchor_zone: Option<&'a str>,
-    anchor_sibling: Option<&'a str>,
-    anchor_parent: Option<bool>,
-    anchor_edge: Option<&'a str>,
-    anchor_gap: Option<&'a Dimension>,
-    x: Option<&'a PropertyValue>,
-    y: Option<&'a PropertyValue>,
-    w: Option<&'a PropertyValue>,
-    h: Option<&'a PropertyValue>,
-}
-
 /// The `anchor-sibling` target id of `node`, when it names one.
 pub(crate) fn anchor_sibling_of(node: &Node) -> Option<&str> {
-    anchor_fields(node).and_then(|f| f.anchor_sibling)
-}
-
-/// Extract the anchor-bearing fields of a node, or `None` for kinds that never
-/// carry an `anchor`.
-fn anchor_fields(node: &Node) -> Option<AnchorFields<'_>> {
-    let f = match node {
-        Node::Rect(n) => AnchorFields {
-            id: n.id.as_str(),
-            anchor: n.anchor.as_deref(),
-            anchor_zone: n.anchor_zone.as_deref(),
-            anchor_sibling: n.anchor_sibling.as_deref(),
-            anchor_parent: n.anchor_parent,
-            anchor_edge: n.anchor_edge.as_deref(),
-            anchor_gap: n.anchor_gap.as_ref(),
-            x: n.x.as_ref(),
-            y: n.y.as_ref(),
-            w: n.w.as_ref(),
-            h: n.h.as_ref(),
-        },
-        Node::Ellipse(n) => AnchorFields {
-            id: n.id.as_str(),
-            anchor: n.anchor.as_deref(),
-            anchor_zone: n.anchor_zone.as_deref(),
-            anchor_sibling: n.anchor_sibling.as_deref(),
-            anchor_parent: n.anchor_parent,
-            anchor_edge: n.anchor_edge.as_deref(),
-            anchor_gap: n.anchor_gap.as_ref(),
-            x: n.x.as_ref(),
-            y: n.y.as_ref(),
-            w: n.w.as_ref(),
-            h: n.h.as_ref(),
-        },
-        Node::Text(n) => AnchorFields {
-            id: n.id.as_str(),
-            anchor: n.anchor.as_deref(),
-            anchor_zone: n.anchor_zone.as_deref(),
-            anchor_sibling: n.anchor_sibling.as_deref(),
-            anchor_parent: n.anchor_parent,
-            anchor_edge: n.anchor_edge.as_deref(),
-            anchor_gap: n.anchor_gap.as_ref(),
-            x: n.x.as_ref(),
-            y: n.y.as_ref(),
-            w: n.w.as_ref(),
-            h: n.h.as_ref(),
-        },
-        Node::Code(n) => AnchorFields {
-            id: n.id.as_str(),
-            anchor: n.anchor.as_deref(),
-            anchor_zone: n.anchor_zone.as_deref(),
-            anchor_sibling: n.anchor_sibling.as_deref(),
-            anchor_parent: n.anchor_parent,
-            anchor_edge: n.anchor_edge.as_deref(),
-            anchor_gap: n.anchor_gap.as_ref(),
-            x: n.x.as_ref(),
-            y: n.y.as_ref(),
-            w: n.w.as_ref(),
-            h: n.h.as_ref(),
-        },
-        Node::Image(n) => AnchorFields {
-            id: n.id.as_str(),
-            anchor: n.anchor.as_deref(),
-            anchor_zone: n.anchor_zone.as_deref(),
-            anchor_sibling: n.anchor_sibling.as_deref(),
-            anchor_parent: n.anchor_parent,
-            anchor_edge: n.anchor_edge.as_deref(),
-            anchor_gap: n.anchor_gap.as_ref(),
-            x: n.x.as_ref(),
-            y: n.y.as_ref(),
-            w: n.w.as_ref(),
-            h: n.h.as_ref(),
-        },
-        Node::Frame(n) => AnchorFields {
-            id: n.id.as_str(),
-            anchor: n.anchor.as_deref(),
-            anchor_zone: n.anchor_zone.as_deref(),
-            anchor_sibling: n.anchor_sibling.as_deref(),
-            anchor_parent: n.anchor_parent,
-            anchor_edge: n.anchor_edge.as_deref(),
-            anchor_gap: n.anchor_gap.as_ref(),
-            x: n.x.as_ref(),
-            y: n.y.as_ref(),
-            w: n.w.as_ref(),
-            h: n.h.as_ref(),
-        },
-        Node::Group(n) => AnchorFields {
-            id: n.id.as_str(),
-            anchor: n.anchor.as_deref(),
-            anchor_zone: n.anchor_zone.as_deref(),
-            anchor_sibling: n.anchor_sibling.as_deref(),
-            anchor_parent: n.anchor_parent,
-            anchor_edge: n.anchor_edge.as_deref(),
-            anchor_gap: n.anchor_gap.as_ref(),
-            x: n.x.as_ref(),
-            y: n.y.as_ref(),
-            w: n.w.as_ref(),
-            h: n.h.as_ref(),
-        },
-        Node::Shape(n) => AnchorFields {
-            id: n.id.as_str(),
-            anchor: n.anchor.as_deref(),
-            anchor_zone: n.anchor_zone.as_deref(),
-            anchor_sibling: n.anchor_sibling.as_deref(),
-            anchor_parent: n.anchor_parent,
-            anchor_edge: n.anchor_edge.as_deref(),
-            anchor_gap: n.anchor_gap.as_ref(),
-            x: n.x.as_ref(),
-            y: n.y.as_ref(),
-            w: n.w.as_ref(),
-            h: n.h.as_ref(),
-        },
-        Node::Table(n) => AnchorFields {
-            id: n.id.as_str(),
-            anchor: n.anchor.as_deref(),
-            anchor_zone: n.anchor_zone.as_deref(),
-            anchor_sibling: n.anchor_sibling.as_deref(),
-            anchor_parent: n.anchor_parent,
-            anchor_edge: n.anchor_edge.as_deref(),
-            anchor_gap: n.anchor_gap.as_ref(),
-            x: n.x.as_ref(),
-            y: n.y.as_ref(),
-            w: n.w.as_ref(),
-            h: n.h.as_ref(),
-        },
-        Node::Field(n) => AnchorFields {
-            id: n.id.as_str(),
-            anchor: n.anchor.as_deref(),
-            anchor_zone: n.anchor_zone.as_deref(),
-            anchor_sibling: n.anchor_sibling.as_deref(),
-            anchor_parent: n.anchor_parent,
-            anchor_edge: n.anchor_edge.as_deref(),
-            anchor_gap: n.anchor_gap.as_ref(),
-            x: n.x.as_ref(),
-            y: n.y.as_ref(),
-            w: n.w.as_ref(),
-            h: n.h.as_ref(),
-        },
-        Node::Toc(n) => AnchorFields {
-            id: n.id.as_str(),
-            anchor: n.anchor.as_deref(),
-            anchor_zone: n.anchor_zone.as_deref(),
-            anchor_sibling: n.anchor_sibling.as_deref(),
-            anchor_parent: n.anchor_parent,
-            anchor_edge: n.anchor_edge.as_deref(),
-            anchor_gap: n.anchor_gap.as_ref(),
-            x: n.x.as_ref(),
-            y: n.y.as_ref(),
-            w: n.w.as_ref(),
-            h: n.h.as_ref(),
-        },
-        Node::Pattern(n) => AnchorFields {
-            id: n.id.as_str(),
-            anchor: n.anchor.as_deref(),
-            anchor_zone: n.anchor_zone.as_deref(),
-            anchor_sibling: n.anchor_sibling.as_deref(),
-            anchor_parent: n.anchor_parent,
-            anchor_edge: n.anchor_edge.as_deref(),
-            anchor_gap: n.anchor_gap.as_ref(),
-            x: n.x.as_ref(),
-            y: n.y.as_ref(),
-            w: n.w.as_ref(),
-            h: n.h.as_ref(),
-        },
-        Node::Chart(n) => AnchorFields {
-            id: n.id.as_str(),
-            anchor: n.anchor.as_deref(),
-            anchor_zone: n.anchor_zone.as_deref(),
-            anchor_sibling: n.anchor_sibling.as_deref(),
-            anchor_parent: n.anchor_parent,
-            anchor_edge: n.anchor_edge.as_deref(),
-            anchor_gap: n.anchor_gap.as_ref(),
-            x: n.x.as_ref(),
-            y: n.y.as_ref(),
-            w: n.w.as_ref(),
-            h: n.h.as_ref(),
-        },
-        // Nodes that never carry an `anchor` property are listed explicitly so
-        // that adding a future node kind forces a decision here rather than
-        // silently falling through.
-        Node::Line(_)
-        | Node::Connector(_)
-        | Node::Polygon(_)
-        | Node::Polyline(_)
-        | Node::Path(_)
-        | Node::Footnote(_)
-        | Node::Instance(_)
-        | Node::Light(_)
-        | Node::Mesh(_)
-        | Node::Unknown(_) => return None,
-    };
-    Some(f)
+    node.anchor_view().and_then(|f| f.anchor_sibling)
 }
 
 /// Resolve the px box `(x, y, w, h)` of a node from its four geometry
@@ -470,7 +277,7 @@ fn collect_anchor(
     scope: &BTreeMap<&str, &Node>,
     map: &mut AnchorMap,
 ) {
-    if let Some(fields) = anchor_fields(node) {
+    if let Some(fields) = node.anchor_view() {
         derive_entry(fields, env, ctx, scope, map);
     }
 
@@ -500,7 +307,7 @@ fn collect_anchor(
             let child_scope: BTreeMap<&str, &Node> = frame
                 .children
                 .iter()
-                .filter_map(|n| anchor_fields(n).map(|f| (f.id, n)))
+                .filter_map(|n| n.anchor_view().map(|f| (f.id, n)))
                 .collect();
             for child in sibling_topo_order(&frame.children) {
                 collect_anchor(child, env, child_ctx, &child_scope, map);
@@ -529,7 +336,7 @@ fn collect_anchor(
             let child_scope: BTreeMap<&str, &Node> = group
                 .children
                 .iter()
-                .filter_map(|n| anchor_fields(n).map(|f| (f.id, n)))
+                .filter_map(|n| n.anchor_view().map(|f| (f.id, n)))
                 .collect();
             for child in sibling_topo_order(&group.children) {
                 collect_anchor(child, env, child_ctx, &child_scope, map);
@@ -560,43 +367,11 @@ fn collect_anchor(
     }
 }
 
-/// Compute the cross-axis horizontal coordinate (x) for Above/Below edges.
-///
-/// `anchor` is the optional 9-pt anchor (supplies horizontal alignment);
-/// absent anchor → leading edge (left-align, i.e. `sib_x`).
-fn cross_h(anchor: Option<Anchor>, sib_x: f64, sib_w: f64, node_w: f64) -> f64 {
-    match anchor {
-        None | Some(Anchor::TopLeft) | Some(Anchor::CenterLeft) | Some(Anchor::BottomLeft) => sib_x,
-        Some(Anchor::TopCenter) | Some(Anchor::Center) | Some(Anchor::BottomCenter) => {
-            sib_x + (sib_w - node_w) / 2.0
-        }
-        Some(Anchor::TopRight) | Some(Anchor::CenterRight) | Some(Anchor::BottomRight) => {
-            sib_x + sib_w - node_w
-        }
-    }
-}
-
-/// Compute the cross-axis vertical coordinate (y) for Before/After edges.
-///
-/// `anchor` is the optional 9-pt anchor (supplies vertical alignment);
-/// absent anchor → leading edge (top-align, i.e. `sib_y`).
-fn cross_v(anchor: Option<Anchor>, sib_y: f64, sib_h: f64, node_h: f64) -> f64 {
-    match anchor {
-        None | Some(Anchor::TopLeft) | Some(Anchor::TopCenter) | Some(Anchor::TopRight) => sib_y,
-        Some(Anchor::CenterLeft) | Some(Anchor::Center) | Some(Anchor::CenterRight) => {
-            sib_y + (sib_h - node_h) / 2.0
-        }
-        Some(Anchor::BottomLeft) | Some(Anchor::BottomCenter) | Some(Anchor::BottomRight) => {
-            sib_y + sib_h - node_h
-        }
-    }
-}
-
 /// Derive and insert the anchor map entry for one node from its fields.
 ///
 /// The node's `w` and `h` must both resolve to px; otherwise no entry.
 fn derive_entry(
-    fields: AnchorFields<'_>,
+    fields: AnchorView<'_>,
     env: PrePassEnv,
     ctx: ParentCtx,
     scope: &BTreeMap<&str, &Node>,
@@ -610,16 +385,13 @@ fn derive_entry(
     ) else {
         return;
     };
-    let id = fields.id;
-    if let Some(xy) = derive_xy(
-        &fields,
-        (node_w, node_h),
-        env,
-        ctx,
-        &|sib| scope.get(sib).copied(),
+    let mut siblings = Siblings {
+        lookup: &|sib| scope.get(sib).copied(),
         map,
-    ) {
-        map.insert(id.to_owned(), xy);
+    };
+    let xy = derive_anchor_origin(&fields, (node_w, node_h), env.refs(ctx), &mut siblings);
+    if let Some(xy) = xy {
+        map.insert(fields.id.to_owned(), xy);
     }
 }
 
@@ -638,175 +410,24 @@ pub(crate) fn anchor_origin<'n>(
     lookup: &dyn Fn(&str) -> Option<&'n Node>,
     map: &AnchorMap,
 ) -> Option<(f64, f64)> {
-    let fields = anchor_fields(node)?;
-    derive_xy(&fields, size, env, ctx, lookup, map)
+    let fields = node.anchor_view()?;
+    let mut siblings = Siblings { lookup, map };
+    derive_anchor_origin(&fields, size, env.refs(ctx), &mut siblings)
 }
 
-/// The anchor `(x, y)` of a node with `fields` at `(node_w, node_h)`.
-fn derive_xy<'n>(
-    fields: &AnchorFields<'_>,
-    (node_w, node_h): (f64, f64),
-    env: PrePassEnv,
-    ctx: ParentCtx,
-    lookup: &dyn Fn(&str) -> Option<&'n Node>,
-    map: &AnchorMap,
-) -> Option<(f64, f64)> {
-    let AnchorFields {
-        id: _,
-        anchor: anchor_str,
-        anchor_zone: anchor_zone_str,
-        anchor_sibling,
-        anchor_parent,
-        anchor_edge: anchor_edge_str,
-        anchor_gap,
-        x: _,
-        y: _,
-        w: _,
-        h: _,
-    } = *fields;
+/// The siblings of one scope: `lookup` finds a node by id, and `map` holds
+/// the anchor entries already derived.
+struct Siblings<'s, 'n> {
+    lookup: &'s dyn Fn(&str) -> Option<&'n Node>,
+    map: &'s AnchorMap,
+}
 
-    // Resolve the edge placement request (may be None when anchor-edge is
-    // absent or unrecognized). This is needed BEFORE the early-return so we
-    // can decide whether to proceed even when anchor-string is absent.
-    let edge = anchor_edge_str.and_then(parse_anchor_edge);
-
-    // When BOTH anchor string and anchor-edge are absent, nothing to derive.
-    if anchor_str.is_none() && edge.is_none() {
-        return None;
+impl AnchorSiblings for Siblings<'_, '_> {
+    fn sibling(&self, id: &str) -> Option<&Node> {
+        (self.lookup)(id)
     }
 
-    // Parse the 9-pt anchor string. For edge-placement paths, this is
-    // OPTIONAL (supplies cross-axis alignment only); None means default
-    // (leading edge). For the non-edge paths it is required — unrecognized
-    // values exit early (validator already errors on them).
-    let anchor_parsed: Option<Anchor> = match anchor_str {
-        Some(s) => match parse_anchor(s) {
-            Some(a) => Some(a),
-            // Unrecognized anchor. For edge paths, don't block; treat as None.
-            // For non-edge paths (classic derivation), exit early.
-            None => {
-                edge?;
-                None
-            }
-        },
-        None => None,
-    };
-
-    // Reference rectangle precedence:
-    //   1. anchor-zone wins when set — resolve the zone rect; skip on
-    //      unknown id / non-px dims (validator diagnoses).
-    //      (Edge placement does NOT combine with anchor-zone; zone wins.)
-    //   2. anchor-sibling when no zone — derive against the named
-    //      sibling's resolved box, purely in local space.
-    //      When anchor-edge is set here, use adjacent-edge placement instead
-    //      of within-box anchor_xy.
-    //   3. anchor-parent when no zone/sibling — use the enclosing
-    //      container box and pre-subtract the accumulated container translation.
-    //      (anchor-edge without sibling falls through to here or page.)
-    //   4. page-relative otherwise.
-    if let Some(zone_id) = anchor_zone_str {
-        // For zone-relative paths the 9-pt anchor is required (classic path).
-        let anchor = anchor_parsed?;
-        let zone = env.safe_zones.iter().find(|z| z.id == zone_id)?;
-        let ref_x = dim_to_px(zone.x.value, &zone.x.unit)?;
-        let ref_y = dim_to_px(zone.y.value, &zone.y.unit)?;
-        let ref_w = dim_to_px(zone.w.value, &zone.w.unit)?;
-        let ref_h = dim_to_px(zone.h.value, &zone.h.unit)?;
-        let (ox, oy) = anchor_xy(anchor, ref_w, ref_h, node_w, node_h);
-        // A zone is page-space: subtract the accumulated container
-        // translation that the leaf compiler re-adds.
-        return Some((ref_x + ox - ctx.acc_dx, ref_y + oy - ctx.acc_dy));
+    fn sibling_origin(&mut self, id: &str, _size: (f64, f64)) -> Option<(f64, f64)> {
+        self.map.get(id).copied()
     }
-
-    // Sibling-relative: the node's origin is derived from a named
-    // sibling's resolved box. The node and its sibling share the SAME scope
-    // (same direct parent's children) and hence the SAME accumulated group
-    // translation, so this derivation is PURELY in local space — no acc term.
-    if let Some(sib_id) = anchor_sibling {
-        // Unresolved reference → no entry (the validator emits
-        // anchor.unresolved_sibling).
-        let sib_node = lookup(sib_id)?;
-        // Not an anchor-bearing kind → no entry.
-        let sib = anchor_fields(sib_node)?;
-        // The sibling's size must be authored and px-convertible.
-        let (Some(sib_w), Some(sib_h)) = (
-            resolve_geometry_px(sib.w, env.resolved),
-            resolve_geometry_px(sib.h, env.resolved),
-        ) else {
-            return None;
-        };
-        // The sibling's origin: explicit-wins-per-axis (authored x/y), else its
-        // own anchor-map entry, else unresolved (no entry for this node).
-        let entry = map.get(sib_id).copied();
-        let sib_x = resolve_geometry_px(sib.x, env.resolved).or(entry.map(|e| e.0));
-        let sib_y = resolve_geometry_px(sib.y, env.resolved).or(entry.map(|e| e.1));
-        let (Some(sib_x), Some(sib_y)) = (sib_x, sib_y) else {
-            return None;
-        };
-
-        // When anchor-edge is set, use adjacent-edge placement instead of
-        // the within-box anchor_xy derivation.
-        if let Some(edge) = edge {
-            let gap = anchor_gap
-                .and_then(|d| dim_to_px(d.value, &d.unit))
-                .unwrap_or(0.0);
-            let (x, y) = match edge {
-                AnchorEdge::Below => (
-                    cross_h(anchor_parsed, sib_x, sib_w, node_w),
-                    sib_y + sib_h + gap,
-                ),
-                AnchorEdge::Above => (
-                    cross_h(anchor_parsed, sib_x, sib_w, node_w),
-                    sib_y - gap - node_h,
-                ),
-                AnchorEdge::After => (
-                    sib_x + sib_w + gap,
-                    cross_v(anchor_parsed, sib_y, sib_h, node_h),
-                ),
-                AnchorEdge::Before => (
-                    sib_x - gap - node_w,
-                    cross_v(anchor_parsed, sib_y, sib_h, node_h),
-                ),
-            };
-            return Some((x, y));
-        }
-
-        // Classic within-box sibling derivation (anchor-edge absent).
-        // anchor_parsed is Some here because we returned early above when both
-        // anchor_str and edge are None, and zone path has returned. When
-        // anchor_str was None and edge is also None we returned above, so
-        // anchor_parsed must be Some for this branch.
-        let anchor = anchor_parsed?;
-        let (ox, oy) = anchor_xy(anchor, sib_w, sib_h, node_w, node_h);
-        return Some((sib_x + ox, sib_y + oy));
-    }
-
-    // Edge placement without an anchor-sibling: no entry (sibling is required
-    // for edge placement; validation warns separately).
-    if edge.is_some() {
-        return None;
-    }
-
-    // From here: classic non-edge paths (anchor-parent, page-relative).
-    // anchor_parsed must be Some at this point (we exited early when both
-    // anchor_str and edge are None; edge is None here; so anchor_str was Some
-    // and anchor_parsed is Some unless it was unrecognized, but unrecognized
-    // anchor with no edge already returned above).
-    let anchor = anchor_parsed?;
-
-    if anchor_parent == Some(true) {
-        // Parent-relative: requires a usable enclosing container box. When the
-        // node is not inside a frame/group, or the container box is unknown,
-        // no entry is produced (the validator emits anchor.unresolvable_parent).
-        let (rx, ry, rw, rh) = ctx.parent_box?;
-        let (ox, oy) = anchor_xy(anchor, rw, rh, node_w, node_h);
-        // Subtract the accumulated container translation: the leaf compiler re-adds
-        // ctx.dx/ctx.dy (== acc_dx/acc_dy) so the device coordinate lands at
-        // (rx + ox, ry + oy).
-        return Some((rx + ox - ctx.acc_dx, ry + oy - ctx.acc_dy));
-    }
-
-    // Page-relative: origin is (0, 0), in page space like a zone.
-    let (x, y) = anchor_xy(anchor, env.page_w, env.page_h, node_w, node_h);
-    Some((x - ctx.acc_dx, y - ctx.acc_dy))
 }

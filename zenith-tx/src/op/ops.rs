@@ -214,6 +214,8 @@ pub enum Op {
         transform: OpPathTransform,
     },
     /// Translate one `path` node so its nearest boundary point lands on another path.
+    /// The target path counts in its page position, so the two paths can sit
+    /// in different containers.
     SnapPathAnchors {
         /// The stable source path `id` to translate.
         node: String,
@@ -245,6 +247,8 @@ pub enum Op {
         mirror: bool,
     },
     /// Materialize a boolean result between two simple closed `path` nodes as a new sibling path.
+    /// The target path counts in its page position, and the result lands in
+    /// the source path's container.
     PathBoolean {
         /// Stable source path id. The result inherits render-relevant style from this path.
         node: String,
@@ -332,11 +336,22 @@ pub enum Op {
         group_id: String,
     },
     /// Dissolve a group node, moving its children up to the group's parent.
+    ///
+    /// Each child shifts by the group origin, so it keeps its page position.
+    /// A child that takes a flow slot of a layout parent frame does not shift.
+    /// When the group origin does not resolve to px, children keep their
+    /// x/y and `tx.coordinate_unresolved` reports it.
     Ungroup {
         /// The id of the group node to dissolve.
         group_id: String,
     },
     /// Move a node to a different container (page, group, or frame).
+    ///
+    /// The node's x/y convert into the new container's space, so it keeps its
+    /// page position. Into a flow slot of a row/column/grid frame, x/y stay
+    /// unchanged: the frame places the node. When a container origin does not
+    /// resolve to px, x/y stay unchanged and `tx.coordinate_unresolved`
+    /// reports it.
     Reparent {
         /// The stable id of the node to move.
         node: String,
@@ -347,6 +362,10 @@ pub enum Op {
         position: Position,
     },
     /// Align a set of nodes to a common edge or centre along one axis.
+    ///
+    /// Boxes compare in page space (for a `page` or dimension anchor) or in
+    /// the space of the deepest container they share. Each node is written
+    /// back in its parent's space.
     AlignNodes {
         /// Ids of the nodes to align.
         node_ids: Vec<String>,
@@ -354,7 +373,8 @@ pub enum Op {
         /// `top`, `vcenter`, or `bottom`.
         align: String,
         /// Reference rectangle: `"selection"` (union bbox), `"page"`, a node id,
-        /// or an explicit dimension like `"(px)120"`. Defaults to `"selection"`.
+        /// or an explicit page-space dimension like `"(px)120"`. Defaults to
+        /// `"selection"`.
         #[serde(default = "default_anchor")]
         anchor: String,
     },
@@ -414,6 +434,8 @@ pub enum Op {
         asset_id: String,
     },
     /// Evenly distribute a set of nodes along one axis so the gaps between
+    /// them are equal. Boxes compare in the space of the deepest container
+    /// they share, and each node is written back in its parent's space.
     DistributeNodes {
         /// Ids of the nodes to distribute.
         node_ids: Vec<String>,
@@ -556,6 +578,8 @@ pub enum Op {
         h: String,
     },
     /// Snap a single node's edge (or center) to the boundary of the page that
+    /// contains it. The edge is in page space, and the node is written back in
+    /// its parent's space.
     AlignToEdge {
         /// The stable node `id` to snap.
         node: String,

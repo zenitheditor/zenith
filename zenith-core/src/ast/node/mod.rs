@@ -6,6 +6,8 @@
 
 mod accessors;
 mod anchor;
+mod anchor_origin;
+mod anchor_view;
 mod common;
 mod container;
 mod effect;
@@ -20,6 +22,8 @@ pub use anchor::{
     Anchor, AnchorEdge, ConnectorAnchor, ConnectorAnchorParseError, anchor_xy, parse_anchor,
     parse_anchor_edge, parse_connector_anchor,
 };
+pub use anchor_origin::{AnchorRefs, AnchorSiblings, derive_anchor_origin};
+pub use anchor_view::AnchorView;
 pub use common::{Node, ObjectPosition, Point, TextSpan, UnknownProperty, UnknownValue};
 pub use container::{
     FrameNode, GroupNode, ProtectedRegion, TableCell, TableColumn, TableNode, TableRow,
