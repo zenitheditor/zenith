@@ -16,6 +16,7 @@ use zenith_tx::{
 
 use super::boxes::{BoxSides, box_deltas, page_box_warnings, page_boxes};
 use super::render::{TxView, render_human, render_json};
+use super::tree::Tree;
 
 // ── Error type ────────────────────────────────────────────────────────────────
 
@@ -176,9 +177,10 @@ fn finish(doc: &Document, ops: &[Op], mut result: TxResult, ctx: Option<&TxCtx<'
                 before: &before_boxes,
                 after: &after_boxes,
             };
-            page_box_warnings(ops, doc, &after, &sides, &mut result.diagnostics);
+            let after_tree = Tree::of(&after);
+            page_box_warnings(ops, doc, &after_tree, &sides, &mut result.diagnostics);
             if ctx.show_diff {
-                view.boxes = Some(box_deltas(&before_boxes, &after_boxes));
+                view.boxes = Some(box_deltas(&before_boxes, &after_boxes, &after_tree));
             }
         }
         if result.status == TxStatus::Accepted

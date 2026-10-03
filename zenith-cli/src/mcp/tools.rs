@@ -106,7 +106,8 @@ reference tokens, so this reveals the palette/type/spacing a document exposes.",
         Tool {
             name: "zenith_tx",
             description: "Apply a typed transaction (JSON edit script) to a document. Dry-run by \
-default (returns status, affected ids, source_diff, and boxes: the moved/resized node boxes); set \
+default (returns status, affected ids, source_diff, and boxes: the moved/resized node boxes; a \
+node whose whole subtree moved rigidly is one entry with descendants: N); set \
 apply=true to write. Set diff=true to also get the resulting (after) source as a resource link, and \
 source_diff and boxes with apply=true. Enforces id-uniqueness and referential integrity. \
 Use zenith_schema op to learn an op's shape.",
@@ -128,7 +129,9 @@ Use zenith_schema op to learn an op's shape.",
             name: "zenith_fix",
             description: "Apply machine-fixable diagnostics in one step: raw visual literals become \
 token references (exact-value token, else a minted token), typo'd property names, token ids, and \
-enum values become their unique did-you-mean. Dry-run by default; set apply=true to write. Returns \
+enum values become their unique did-you-mean, and attributes with no effect \
+(layout.position_ignored, layout.inert_attribute) are removed. Dry-run by default; set apply=true \
+to write. Returns \
 the applied fixes and the remaining errors.",
             schema: json!({
                 "type": "object",

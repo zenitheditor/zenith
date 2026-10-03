@@ -93,13 +93,19 @@ pub fn render_human(result: &TxResult, view: &TxView) -> String {
 }
 
 /// `moved card.3: (526.7,340 219x120) -> (48,590 698x120)`. `resized` when
-/// only w/h changed; `added` / `removed` when one side has no box.
+/// only w/h changed; `added` / `removed` when one side has no box. A folded
+/// rigid subtree ends with `(+N descendants)`.
 fn box_line(d: &BoxDelta) -> String {
     let id = &d.id;
     match (d.before, d.after) {
         (Some(a), Some(b)) => {
             let kind = if moved(a, b) { "moved" } else { "resized" };
-            format!("{kind} {id}: {} -> {}", fmt_box(a), fmt_box(b))
+            let folded = match d.descendants {
+                0 => String::new(),
+                1 => " (+1 descendant)".to_owned(),
+                n => format!(" (+{n} descendants)"),
+            };
+            format!("{kind} {id}: {} -> {}{folded}", fmt_box(a), fmt_box(b))
         }
         (None, Some(b)) => format!("added {id}: {}", fmt_box(b)),
         (Some(a), None) => format!("removed {id}: {}", fmt_box(a)),
@@ -141,6 +147,7 @@ mod tests {
             id: "card.3".to_owned(),
             before,
             after,
+            descendants: 0,
         };
         assert_eq!(
             box_line(&delta(
@@ -160,6 +167,14 @@ mod tests {
         assert_eq!(
             box_line(&delta(nb(0.0, 0.0, 1.0, 1.0), None)),
             "removed card.3: (0,0 1x1)"
+        );
+        let folded = BoxDelta {
+            descendants: 12,
+            ..delta(nb(0.0, 0.0, 1.0, 1.0), nb(5.0, 0.0, 1.0, 1.0))
+        };
+        assert_eq!(
+            box_line(&folded),
+            "moved card.3: (0,0 1x1) -> (5,0 1x1) (+12 descendants)"
         );
     }
 }

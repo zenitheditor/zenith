@@ -4,13 +4,16 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
-use zenith_core::{Diagnostic, Document, Node};
+use zenith_core::{Diagnostic, Document};
 use zenith_tx::Op;
 
 use crate::commands::inspect::{NodeBox, resolved_boxes};
 
+use super::collapse::collapse;
+use super::tree::Tree;
+
 /// A box change at or under this many px counts as unchanged.
-const SAME_PX: f64 = 0.01;
+pub(super) const SAME_PX: f64 = 0.01;
 
 /// Reflowed sibling ids named in one warning before the `+N more` tail.
 const LISTED_SIBLINGS: usize = 5;
@@ -25,6 +28,15 @@ pub struct BoxDelta {
     pub before: Option<NodeBox>,
     /// The page box after the transaction.
     pub after: Option<NodeBox>,
+    /// How many descendants moved by this node's x/y delta with their size
+    /// unchanged. They are folded into this entry and have no entry of
+    /// their own. JSON omits the key when it is 0.
+    #[serde(skip_serializing_if = "is_zero")]
+    pub descendants: usize,
+}
+
+fn is_zero(n: &usize) -> bool {
+    *n == 0
 }
 
 /// Page-absolute box per node id over all pages. On a repeated id the
@@ -48,18 +60,21 @@ pub(super) fn moved(a: NodeBox, b: NodeBox) -> bool {
 }
 
 /// `true` when the w or h of `a` and `b` differ by more than [`SAME_PX`].
-fn resized(a: NodeBox, b: NodeBox) -> bool {
+pub(super) fn resized(a: NodeBox, b: NodeBox) -> bool {
     (a.w - b.w).abs() > SAME_PX || (a.h - b.h).abs() > SAME_PX
 }
 
-fn differs(a: NodeBox, b: NodeBox) -> bool {
+pub(super) fn differs(a: NodeBox, b: NodeBox) -> bool {
     moved(a, b) || resized(a, b)
 }
 
-/// Every id whose box differs between `before` and `after`, sorted by id.
-pub(super) fn box_deltas(before: &PageBoxes, after: &PageBoxes) -> Vec<BoxDelta> {
+/// Every id whose box differs between `before` and `after`, sorted by id,
+/// with rigid subtrees folded into their root (see [`collapse`]). `tree` is
+/// the id tree of the result.
+pub(super) fn box_deltas(before: &PageBoxes, after: &PageBoxes, tree: &Tree) -> Vec<BoxDelta> {
     let ids: BTreeSet<&String> = before.keys().chain(after.keys()).collect();
-    ids.into_iter()
+    let raw: Vec<BoxDelta> = ids
+        .into_iter()
         .filter_map(|id| {
             let old = before.get(id).copied();
             let new = after.get(id).copied();
@@ -72,9 +87,11 @@ pub(super) fn box_deltas(before: &PageBoxes, after: &PageBoxes) -> Vec<BoxDelta>
                 id: id.clone(),
                 before: old,
                 after: new,
+                descendants: 0,
             })
         })
-        .collect()
+        .collect();
+    collapse(raw, &BoxSides { before, after }, tree)
 }
 
 /// `(x,y wxh)` with each value rounded to 0.01 px.
@@ -98,16 +115,15 @@ pub(super) struct BoxSides<'a> {
 /// whose page box changed. A subject below an already reported subject is
 /// not reported again. A `tx.flow_placed` for the same subject moves out of
 /// `diagnostics` into the warning's cause. Ids missing on either side are
-/// skipped.
+/// skipped. `after_tree` is the id tree of the result.
 pub(super) fn page_box_warnings(
     ops: &[Op],
     before: &Document,
-    after: &Document,
+    after_tree: &Tree,
     boxes: &BoxSides<'_>,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
     let before_tree = Tree::of(before);
-    let after_tree = Tree::of(after);
     let changed: BTreeSet<&str> = boxes
         .before
         .iter()
@@ -197,84 +213,6 @@ fn op_name(op: &Op) -> String {
         .unwrap_or_else(|| "tx".to_owned())
 }
 
-/// Parent and child ids of every node with an id. A page or master id is
-/// the parent of its top-level nodes. A node without an id passes its
-/// children to its nearest ancestor with an id.
-#[derive(Default)]
-struct Tree {
-    parent: BTreeMap<String, String>,
-    children: BTreeMap<String, Vec<String>>,
-}
-
-impl Tree {
-    fn of(doc: &Document) -> Self {
-        let mut tree = Tree::default();
-        for page in &doc.body.pages {
-            tree.add(&page.id, &page.children);
-        }
-        for master in &doc.masters {
-            tree.add(&master.id, &master.children);
-        }
-        tree
-    }
-
-    fn add(&mut self, parent: &str, nodes: &[Node]) {
-        for node in nodes {
-            let key = match node.id() {
-                Some(id) => {
-                    self.parent.insert(id.to_owned(), parent.to_owned());
-                    self.children
-                        .entry(parent.to_owned())
-                        .or_default()
-                        .push(id.to_owned());
-                    id
-                }
-                None => parent,
-            };
-            match node {
-                Node::Frame(f) => self.add(key, &f.children),
-                Node::Group(g) => self.add(key, &g.children),
-                Node::Unknown(u) => self.add(key, &u.children),
-                Node::Table(t) => {
-                    for cell in t.rows.iter().flat_map(|r| r.cells.iter()) {
-                        self.add(key, &cell.children);
-                    }
-                }
-                Node::Rect(_)
-                | Node::Ellipse(_)
-                | Node::Line(_)
-                | Node::Text(_)
-                | Node::Code(_)
-                | Node::Image(_)
-                | Node::Polygon(_)
-                | Node::Polyline(_)
-                | Node::Path(_)
-                | Node::Instance(_)
-                | Node::Field(_)
-                | Node::Footnote(_)
-                | Node::Toc(_)
-                | Node::Shape(_)
-                | Node::Connector(_)
-                | Node::Pattern(_)
-                | Node::Chart(_)
-                | Node::Light(_)
-                | Node::Mesh(_) => {}
-            }
-        }
-    }
-
-    /// The other children of `id`'s parent.
-    fn siblings<'t>(&'t self, id: &'t str) -> impl Iterator<Item = &'t str> + 't {
-        self.parent
-            .get(id)
-            .and_then(|p| self.children.get(p))
-            .into_iter()
-            .flatten()
-            .map(String::as_str)
-            .filter(move |s| *s != id)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -299,7 +237,7 @@ mod tests {
         ]
         .into_iter()
         .collect();
-        let ids: Vec<String> = box_deltas(&before, &after)
+        let ids: Vec<String> = box_deltas(&before, &after, &Tree::default())
             .into_iter()
             .map(|d| d.id)
             .collect();
