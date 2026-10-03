@@ -132,7 +132,7 @@ fn apply_fixes_draft_leaving_only_the_ambiguous_reference() {
         ("card", "radius", "(token)\"radius.24\""),
         ("cta", "fill", "(token)\"color.primary\""),
         ("title", "font-size", "(token)\"size.96\""),
-        ("title", "font-weight", "(token)\"weight.700\""),
+        ("title", "font-weight", "(token)\"font.weight.heading\""),
         ("title", "font-wieght", "font-weight"),
     ]
     .iter()
@@ -162,10 +162,11 @@ fn apply_fixes_draft_leaving_only_the_ambiguous_reference() {
         r##"token id="color.custom.ffffff" type="color" value="#ffffff""##,
         r#"token id="radius.24" type="dimension" value=(px)24"#,
         r#"token id="size.96" type="dimension" value=(px)96"#,
-        r#"token id="weight.700" type="fontWeight" value=700"#,
     ] {
         assert!(src.contains(minted), "missing {minted}\n{src}");
     }
+    // The theme ships `font.weight.heading` (700), so the weight reuses it.
+    assert!(!src.contains("weight.700"), "{src}");
     // Minted tokens sit with their group.
     let pos = |needle: &str| src.find(needle).expect(needle);
     assert!(pos("color.custom.ffffff") < pos("radius.box"), "{src}");

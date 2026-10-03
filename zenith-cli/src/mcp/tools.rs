@@ -187,8 +187,9 @@ variable nodes with role=\"data.<column>\". Use for localized/personalized/batch
         },
         Tool {
             name: "zenith_theme_new",
-            description: "Synthesize a complete token-only theme pack (.zen) from brand colours, \
-with APCA-correct content pairings for WCAG 3 contrast. Returns the generated source; pass out to \
+            description: "Synthesize a complete theme pack (.zen: tokens, fixed styles, and a \
+defaults block for text, shape, and connector) from brand colours, with APCA-correct content \
+pairings for WCAG 3 contrast. Returns the generated source; pass out to \
 write it to a file instead.",
             schema: theme_schema(),
         },

@@ -91,6 +91,8 @@ pub(super) fn op_tag(op: &Op) -> &'static str {
         Op::CreateRecipe { .. } => "create_recipe",
         Op::UpdateRecipe { .. } => "update_recipe",
         Op::DeleteRecipe { .. } => "delete_recipe",
+        Op::SetDefault { .. } => "set_default",
+        Op::RemoveDefault { .. } => "remove_default",
         Op::DetachPattern { .. } => "detach_pattern",
         Op::SetLayout(_) => "set_layout",
     }
@@ -159,6 +161,8 @@ pub(super) fn all_exhaustive_tags() -> BTreeSet<&'static str> {
         "create_recipe",
         "update_recipe",
         "delete_recipe",
+        "set_default",
+        "remove_default",
         "detach_pattern",
         "set_layout",
     ])

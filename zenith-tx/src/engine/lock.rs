@@ -89,7 +89,10 @@ pub(super) fn op_lock_targets(op: &Op) -> Vec<&str> {
         // Recipe ops mutate the recipes block, not the node tree; no per-node lock target.
         | Op::CreateRecipe { .. }
         | Op::UpdateRecipe { .. }
-        | Op::DeleteRecipe { .. } => Vec::new(),
+        | Op::DeleteRecipe { .. }
+        // Defaults ops mutate `defaults` blocks, not the node tree; no per-node lock target.
+        | Op::SetDefault { .. }
+        | Op::RemoveDefault { .. } => Vec::new(),
     }
 }
 

@@ -3,6 +3,7 @@
 use zenith_core::{Diagnostic, Document};
 
 use super::asset::{AddAssetSpec, apply_add_asset, apply_set_asset};
+use super::defaults::{SetDefaultScalars, apply_remove_default, apply_set_default};
 use super::fill_rule::apply_set_fill_rule;
 use super::flags::{apply_set_locked, apply_set_points, apply_set_visible};
 use super::geometry::{
@@ -571,6 +572,27 @@ pub(super) fn apply_op(
         }
         Op::DeleteRecipe { id } => {
             apply_delete_recipe(id, doc, diagnostics, affected);
+        }
+        Op::SetDefault {
+            page,
+            kind,
+            style,
+            text_style,
+        } => {
+            apply_set_default(
+                SetDefaultScalars {
+                    page: page.as_deref(),
+                    kind,
+                    style,
+                    text_style: text_style.as_ref().map(Option::as_deref),
+                },
+                doc,
+                diagnostics,
+                affected,
+            );
+        }
+        Op::RemoveDefault { page, kind } => {
+            apply_remove_default(page.as_deref(), kind, doc, diagnostics, affected);
         }
         Op::DetachPattern { node: node_id } => {
             apply_detach_pattern(node_id, doc, diagnostics, affected);

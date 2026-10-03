@@ -37,6 +37,18 @@ text contrast-safe by construction:
 **Type** (added — daisyUI omits type):
 
 - `font.heading`, `font.body` (both Noto Sans), `size.h1` 64, `size.h2` 40, `size.body` 28, `size.caption` 18 (px)
+- `font.weight.heading` 700
+
+## Styles and defaults (every theme ships them)
+
+- Styles: `ui.body`, `ui.h1`, `ui.h2`, `ui.caption`, `ui.label`, `ui.control`, `ui.button`,
+  `ui.card`, `ui.connector`. The `ui.` prefix keeps them clear of node ids (ids are global).
+- Defaults: `text` → `ui.body`, `shape` → `ui.control` + label `ui.label`, `connector` →
+  `ui.connector` + label `ui.caption`.
+- `rect`, `frame`, `ellipse` take no default. They are backgrounds. Set `style="ui.card"` to opt in.
+- A bare `text` gets `font.body`, `size.body`, `color.base.content`. A bare filled `shape` gets
+  `radius.field` and a label fill paired to its fill (`color.primary` → `color.primary.content`).
+- Read the exact keys in the document's `styles` block.
 
 ## Catalog
 
@@ -73,14 +85,13 @@ theme from brand colors — logo, website, or brand docs — run `zenith theme n
 zenith new doc.zen --theme sunset
 ```
 
-This scaffolds the full contract below into `tokens { … }` and points the page background at
-`color.base.100`, so every node you add can build on the role tokens directly:
+This copies the theme's tokens, styles, and `defaults` block into the document and points the
+page background at `color.base.100`. Nodes you add pick up the defaults:
 
 ```kdl
-// styles { style id="cta.label" { fill (token)"color.primary.content" font-family (token)"font.body" font-size (token)"size.body" } }
-rect id="card" x=(px)80 y=(px)120 w=(px)600 h=(px)360 fill=(token)"color.base.200" radius=(token)"radius.box" shadow=(token)"shadow.depth"
-text id="title" x=(px)112 y=(px)152 w=(px)536 h=(px)80 fill=(token)"color.base.content" font-family=(token)"font.heading" font-size=(token)"size.h1" { span "On-theme" }
-shape id="cta" kind="process" x=(px)112 y=(px)400 w=(px)220 h=(px)64 fill=(token)"color.primary" radius=(token)"radius.field" text-style="cta.label" h-align="center" v-align="middle" {
+rect id="card" x=(px)80 y=(px)120 w=(px)600 h=(px)360 style="ui.card"
+text id="title" x=(px)112 y=(px)152 w=(px)536 h=(px)80 style="ui.h1" { span "On-theme" }
+shape id="cta" kind="process" x=(px)112 y=(px)400 w=(px)220 h=(px)64 fill=(token)"color.primary" {
   span "Get started"
 }
 ```
@@ -98,6 +109,8 @@ zenith theme apply cobalt doc.zen --apply   # write it
 `<pack>` is a bare embedded theme name or a full pack id (`@zenith/theme.cobalt`); it works for
 any pack that carries a `tokens` block, project or embedded (`zenith library list`). Switching
 light/dark, or between any two themes, is one `theme apply` away — no manual token editing.
+`theme apply` also adds the theme's styles and `defaults` entries the document lacks. It keeps
+an existing style id or `defaults` kind and reports it as skipped.
 
 **Provenance:** tokens written by a theme carry `set="@zenith/theme.<name>"`. A theme file is a
 full contract, so a given document rarely uses every member; `validate` rolls those up into one

@@ -4,6 +4,7 @@
 //! document (it works on a clone). Dry-run vs. apply is the caller's concern.
 
 mod asset;
+mod defaults;
 mod dispatch;
 mod fill_rule;
 mod flags;

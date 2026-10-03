@@ -610,6 +610,33 @@ pub enum Op {
         /// The id of the recipe to remove.
         id: String,
     },
+    /// Upsert one `defaults` entry (node kind → default style) in the document
+    /// or one page `defaults { }` block.
+    SetDefault {
+        /// Page id for a page-scope block, or `null`/omit for document scope.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        page: Option<String>,
+        /// Node kind the entry applies to (e.g. `"text"`, `"shape"`).
+        kind: String,
+        /// Style id the kind takes when a node sets no `style` of its own.
+        style: String,
+        /// Default label style id (`shape` and `connector` only). Omit to keep
+        /// the current value, `null` to clear it, a style id to set it.
+        #[serde(
+            default,
+            deserialize_with = "super::layout::nullable",
+            skip_serializing_if = "Option::is_none"
+        )]
+        text_style: Option<Option<String>>,
+    },
+    /// Remove one `defaults` entry from the document or one page block.
+    RemoveDefault {
+        /// Page id for a page-scope block, or `null`/omit for document scope.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        page: Option<String>,
+        /// Node kind whose entry to remove.
+        kind: String,
+    },
     /// Set or clear auto-layout attributes: frame container fields (`layout`,
     /// `gap`, `padding*`, `justify`, `align`, `wrap`, `clip`) and item fields
     /// (`position`, `min_w`, `max_w`, `min_h`, `max_h`). `null` clears a field.

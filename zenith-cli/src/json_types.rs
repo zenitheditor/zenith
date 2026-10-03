@@ -265,6 +265,23 @@ impl From<&crate::commands::theme::SkippedToken> for ThemeApplySkipJson {
     }
 }
 
+/// One skipped style or `defaults` entry in the `zenith theme apply --json`
+/// extras. `id` is the style id, or the node kind of a `defaults` entry.
+#[derive(Debug, Serialize)]
+pub struct ThemeApplyBlockSkipJson {
+    pub id: String,
+    pub reason: &'static str,
+}
+
+impl From<&crate::commands::theme::SkippedBlockItem> for ThemeApplyBlockSkipJson {
+    fn from(s: &crate::commands::theme::SkippedBlockItem) -> Self {
+        Self {
+            id: s.id.clone(),
+            reason: s.reason.label(),
+        }
+    }
+}
+
 /// Per-row result in the `merge --json` batch report.
 #[derive(Debug, Serialize)]
 pub struct MergeRowResult {

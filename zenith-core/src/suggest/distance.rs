@@ -76,7 +76,7 @@ fn last_segment(s: &str) -> &str {
 /// distance, then the lexicographically smallest candidate.
 ///
 /// Returns `None` when neither rule matches.
-pub(crate) fn find_suggestion<'a>(
+pub fn find_suggestion<'a>(
     name: &str,
     candidates: impl IntoIterator<Item = &'a str>,
     max_distance: usize,

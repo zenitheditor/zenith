@@ -37,12 +37,59 @@ zenith version=1 {
     token id="size.h2" type="dimension" value=(px)40
     token id="size.body" type="dimension" value=(px)24
     token id="size.caption" type="dimension" value=(px)18
+    token id="font.weight.heading" type="fontWeight" value=700
     token id="color.shadow" type="color" value="#0000002a"
     token id="shadow.depth" type="shadow" {
       layer dx=(px)0 dy=(px)8 blur=(px)24 color=(token)"color.shadow"
     }
   }
   styles {
+    style id="ui.body" {
+      fill (token)"color.base.content"
+      font-family (token)"font.body"
+      font-size (token)"size.body"
+    }
+    style id="ui.h1" {
+      font-family (token)"font.heading"
+      font-size (token)"size.h1"
+      font-weight (token)"font.weight.heading"
+    }
+    style id="ui.h2" {
+      font-family (token)"font.heading"
+      font-size (token)"size.h2"
+      font-weight (token)"font.weight.heading"
+    }
+    style id="ui.caption" {
+      font-family (token)"font.body"
+      font-size (token)"size.caption"
+    }
+    style id="ui.label" {
+      font-family (token)"font.body"
+      font-size (token)"size.body"
+    }
+    style id="ui.control" {
+      radius (token)"radius.field"
+      stroke-width (token)"border.width"
+    }
+    style id="ui.button" {
+      fill (token)"color.primary"
+      radius (token)"radius.field"
+    }
+    style id="ui.card" {
+      fill (token)"color.base.200"
+      radius (token)"radius.box"
+      stroke (token)"color.base.300"
+      stroke-width (token)"border.width"
+    }
+    style id="ui.connector" {
+      stroke (token)"color.base.content"
+      stroke-width (token)"border.width"
+    }
+  }
+  defaults {
+    connector style="ui.connector" text-style="ui.caption"
+    shape style="ui.control" text-style="ui.label"
+    text style="ui.body"
   }
   document id="theme.zenith.preview" title="Theme zenith" {
     page id="pg" w=(px)960 h=(px)360 background=(token)"color.paper" {

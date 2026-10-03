@@ -323,6 +323,16 @@ fn op_tag_strings_match_exhaustive_set() {
             detached: None,
         },
         Op::DeleteRecipe { id: String::new() },
+        Op::SetDefault {
+            page: None,
+            kind: String::new(),
+            style: String::new(),
+            text_style: None,
+        },
+        Op::RemoveDefault {
+            page: None,
+            kind: String::new(),
+        },
         Op::DetachPattern {
             node: String::new(),
         },

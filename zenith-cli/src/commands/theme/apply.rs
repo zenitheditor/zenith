@@ -22,13 +22,19 @@
 //!
 //! Tokens that exist only in the target document (not in the theme) are never
 //! touched.
+//!
+//! The theme's named styles and document `defaults` entries follow the token
+//! ops in the same transaction: missing style ids and missing `defaults` kinds
+//! are created, existing ones are skipped and reported (see the `blocks`
+//! submodule).
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
-use zenith_core::{KdlAdapter, KdlSource as _, TokenLiteral, TokenType, TokenValue};
+use zenith_core::{KdlAdapter, KdlSource as _, Token, TokenLiteral, TokenType, TokenValue};
 use zenith_tx::{Op, Permissions, Transaction};
 
+use super::blocks::{BlockPlan, SkippedBlockItem, plan_blocks};
 use crate::commands::tx::run as tx_run;
 use crate::library::resolve_theme_pack;
 
@@ -92,6 +98,14 @@ pub struct ApplyOutcome {
     pub added_tokens: Vec<String>,
     /// Theme tokens left untouched, with the reason.
     pub skipped: Vec<SkippedToken>,
+    /// Ids of styles created (present in the theme, absent from the doc).
+    pub added_styles: Vec<String>,
+    /// Theme styles left untouched, with the reason.
+    pub skipped_styles: Vec<SkippedBlockItem>,
+    /// Kinds whose document `defaults` entry was created.
+    pub added_defaults: Vec<String>,
+    /// Theme document `defaults` entries left untouched, with the reason.
+    pub skipped_defaults: Vec<SkippedBlockItem>,
     /// Human-readable summary (the tx summary plus theme-apply extras).
     pub human: String,
     /// JSON summary (the tx JSON schema plus theme-apply extras).
@@ -142,8 +156,11 @@ pub fn run(
         .map(|p| p.id.clone())
         .unwrap_or_else(|| pack_ref.to_owned());
 
-    let (ops, added_tokens, skipped) =
+    let (mut ops, added_tokens, skipped) =
         plan_ops(&doc.tokens.tokens, &theme_doc.tokens.tokens, &pack_id);
+    let tokens_after = tokens_after(&doc.tokens.tokens, &theme_doc.tokens.tokens, &added_tokens);
+    let mut blocks = plan_blocks(&doc, &theme_doc, &tokens_after);
+    ops.append(&mut blocks.ops);
 
     let tx = Transaction {
         ops,
@@ -159,21 +176,50 @@ pub fn run(
         exit_code: e.exit_code,
     })?;
 
-    let human = format!(
-        "{}\n{}",
-        outcome.human,
-        render_extra_human(&added_tokens, &skipped)
-    );
-    let json_str = augment_json(&outcome.json_str, &added_tokens, &skipped);
+    let extras = Extras {
+        added: &added_tokens,
+        skipped: &skipped,
+        blocks: &blocks,
+    };
+    let human = format!("{}\n{}", outcome.human, render_extra_human(extras));
+    let json_str = augment_json(&outcome.json_str, extras);
 
     Ok(ApplyOutcome {
         result: outcome.result,
         added_tokens,
         skipped,
+        added_styles: blocks.added_styles,
+        skipped_styles: blocks.skipped_styles,
+        added_defaults: blocks.added_defaults,
+        skipped_defaults: blocks.skipped_defaults,
         human,
         json_str,
         exit_code: outcome.exit_code,
     })
+}
+
+/// Token ids the document carries with the theme's declared type once the
+/// token ops apply: every doc token the theme does not retype, plus every
+/// token the theme adds.
+fn tokens_after<'a>(
+    doc_tokens: &'a [Token],
+    theme_tokens: &[Token],
+    added: &'a [String],
+) -> BTreeSet<&'a str> {
+    let theme_types: BTreeMap<&str, &TokenType> = theme_tokens
+        .iter()
+        .map(|t| (t.id.as_str(), &t.token_type))
+        .collect();
+    doc_tokens
+        .iter()
+        .filter(|t| {
+            theme_types
+                .get(t.id.as_str())
+                .is_none_or(|ty| **ty == t.token_type)
+        })
+        .map(|t| t.id.as_str())
+        .chain(added.iter().map(String::as_str))
+        .collect()
 }
 
 // ── Pre-filter: theme tokens → ops + skips ────────────────────────────────────
@@ -184,8 +230,8 @@ pub fn run(
 /// Doc-only tokens (ids in `doc_tokens` absent from `theme_tokens`) are never
 /// touched and never appear in either report.
 fn plan_ops(
-    doc_tokens: &[zenith_core::Token],
-    theme_tokens: &[zenith_core::Token],
+    doc_tokens: &[Token],
+    theme_tokens: &[Token],
     pack_id: &str,
 ) -> (Vec<Op>, Vec<String>, Vec<SkippedToken>) {
     let mut ops = Vec::new();
@@ -194,8 +240,7 @@ fn plan_ops(
 
     // Index the (small, but potentially large-doc) target once, rather than
     // rescanning `doc_tokens` per theme token.
-    let doc_by_id: BTreeMap<&str, &zenith_core::Token> =
-        doc_tokens.iter().map(|t| (t.id.as_str(), t)).collect();
+    let doc_by_id: BTreeMap<&str, &Token> = doc_tokens.iter().map(|t| (t.id.as_str(), t)).collect();
 
     for theme_token in theme_tokens {
         let doc_match = doc_by_id.get(theme_token.id.as_str()).copied();
@@ -331,20 +376,27 @@ fn encode_literal(lit: &TokenLiteral) -> Option<String> {
 
 // ── Output rendering (extras layered on top of the tx black box) ────────────
 
+/// The theme-apply reports layered on top of the tx output.
+#[derive(Clone, Copy)]
+struct Extras<'a> {
+    added: &'a [String],
+    skipped: &'a [SkippedToken],
+    blocks: &'a BlockPlan,
+}
+
 /// Render the theme-apply-specific extra lines appended after the tx human
-/// summary: the added token ids and the skipped tokens with their reasons.
-fn render_extra_human(added: &[String], skipped: &[SkippedToken]) -> String {
+/// summary: the added token, style, and `defaults` ids, then each skipped item
+/// with its reason.
+fn render_extra_human(extras: Extras<'_>) -> String {
     let mut out = String::new();
-    if added.is_empty() {
-        out.push_str("added tokens: (none)\n");
-    } else {
-        out.push_str(&format!("added tokens: {}\n", added.join(", ")));
-    }
-    if skipped.is_empty() {
+    push_list(&mut out, "added tokens", extras.added);
+    push_list(&mut out, "added styles", &extras.blocks.added_styles);
+    push_list(&mut out, "added defaults", &extras.blocks.added_defaults);
+    if extras.skipped.is_empty() {
         out.push_str("skipped: (none)");
     } else {
         out.push_str("skipped:");
-        for s in skipped {
+        for s in extras.skipped {
             let doc_type = s.doc_type.as_deref().unwrap_or("(absent)");
             out.push_str(&format!(
                 "\n  {} (doc: {}, theme: {}) [{}]",
@@ -355,24 +407,78 @@ fn render_extra_human(added: &[String], skipped: &[SkippedToken]) -> String {
             ));
         }
     }
+    push_skipped_blocks(&mut out, "skipped styles", &extras.blocks.skipped_styles);
+    push_skipped_blocks(
+        &mut out,
+        "skipped defaults",
+        &extras.blocks.skipped_defaults,
+    );
     out
 }
 
+/// Append `label: a, b` (or `label: (none)`) and a newline.
+fn push_list(out: &mut String, label: &str, ids: &[String]) {
+    if ids.is_empty() {
+        out.push_str(&format!("{label}: (none)\n"));
+    } else {
+        out.push_str(&format!("{label}: {}\n", ids.join(", ")));
+    }
+}
+
+/// Append `\nlabel:` and one `id [reason]` row per item; nothing when empty.
+fn push_skipped_blocks(out: &mut String, label: &str, items: &[SkippedBlockItem]) {
+    if items.is_empty() {
+        return;
+    }
+    out.push_str(&format!("\n{label}:"));
+    for s in items {
+        out.push_str(&format!("\n  {} [{}]", s.id, s.reason.label()));
+    }
+}
+
 /// Parse the tx JSON output back into a value and layer the theme-apply
-/// extras (`added_tokens`, `skipped_token_mismatches`) onto it, keeping the
-/// output a strict superset of the `zenith-tx-v1` schema.
-fn augment_json(tx_json_str: &str, added: &[String], skipped: &[SkippedToken]) -> String {
+/// extras (`added_tokens`, `skipped_token_mismatches`, `added_styles`,
+/// `skipped_styles`, `added_defaults`, `skipped_defaults`) onto it, keeping
+/// the output a strict superset of the `zenith-tx-v1` schema.
+fn augment_json(tx_json_str: &str, extras: Extras<'_>) -> String {
+    use crate::json_types::{ThemeApplyBlockSkipJson, ThemeApplySkipJson};
     let mut value: serde_json::Value =
         serde_json::from_str(tx_json_str).unwrap_or_else(|_| serde_json::json!({}));
     if let serde_json::Value::Object(map) = &mut value {
-        let added_json = serde_json::to_value(added).unwrap_or(serde_json::Value::Null);
-        let skip_json: Vec<crate::json_types::ThemeApplySkipJson> = skipped
+        let to_value = |v: serde_json::Result<serde_json::Value>| v.unwrap_or_default();
+        let skip_json: Vec<ThemeApplySkipJson> = extras
+            .skipped
             .iter()
-            .map(crate::json_types::ThemeApplySkipJson::from)
+            .map(ThemeApplySkipJson::from)
             .collect();
-        let skip_json = serde_json::to_value(skip_json).unwrap_or(serde_json::Value::Null);
-        map.insert("added_tokens".to_owned(), added_json);
-        map.insert("skipped_token_mismatches".to_owned(), skip_json);
+        let block_skips = |items: &[SkippedBlockItem]| -> Vec<ThemeApplyBlockSkipJson> {
+            items.iter().map(ThemeApplyBlockSkipJson::from).collect()
+        };
+        let blocks = extras.blocks;
+        map.insert(
+            "added_tokens".to_owned(),
+            to_value(serde_json::to_value(extras.added)),
+        );
+        map.insert(
+            "skipped_token_mismatches".to_owned(),
+            to_value(serde_json::to_value(skip_json)),
+        );
+        map.insert(
+            "added_styles".to_owned(),
+            to_value(serde_json::to_value(&blocks.added_styles)),
+        );
+        map.insert(
+            "skipped_styles".to_owned(),
+            to_value(serde_json::to_value(block_skips(&blocks.skipped_styles))),
+        );
+        map.insert(
+            "added_defaults".to_owned(),
+            to_value(serde_json::to_value(&blocks.added_defaults)),
+        );
+        map.insert(
+            "skipped_defaults".to_owned(),
+            to_value(serde_json::to_value(block_skips(&blocks.skipped_defaults))),
+        );
     }
     serde_json::to_string_pretty(&value).unwrap_or_else(|e| e.to_string())
 }

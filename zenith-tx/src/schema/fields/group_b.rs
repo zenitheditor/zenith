@@ -627,6 +627,46 @@ pub(super) fn op_fields(name: &str) -> Option<&'static [OpFieldSchema]> {
             ];
             Some(F)
         }
+        "set_default" => {
+            static F: &[OpFieldSchema] = &[
+                OpFieldSchema {
+                    name: "page",
+                    ty: "string or null (page id; omit for document scope)",
+                    required: false,
+                },
+                OpFieldSchema {
+                    name: "kind",
+                    ty: "string (node kind, e.g. text|shape|rect)",
+                    required: true,
+                },
+                OpFieldSchema {
+                    name: "style",
+                    ty: "string (style id)",
+                    required: true,
+                },
+                OpFieldSchema {
+                    name: "text_style",
+                    ty: "string or null (style id; shape|connector only; omit keeps, null clears)",
+                    required: false,
+                },
+            ];
+            Some(F)
+        }
+        "remove_default" => {
+            static F: &[OpFieldSchema] = &[
+                OpFieldSchema {
+                    name: "page",
+                    ty: "string or null (page id; omit for document scope)",
+                    required: false,
+                },
+                OpFieldSchema {
+                    name: "kind",
+                    ty: "string (node kind)",
+                    required: true,
+                },
+            ];
+            Some(F)
+        }
         "delete_recipe" => {
             static F: &[OpFieldSchema] = &[OpFieldSchema {
                 name: "id",

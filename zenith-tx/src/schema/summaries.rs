@@ -103,6 +103,12 @@ pub fn op_summary(name: &str) -> Option<&'static str> {
         "create_recipe" => Some("Create a new recipe entry in the document's recipes block."),
         "update_recipe" => Some("Replace the scalar fields of an existing recipe."),
         "delete_recipe" => Some("Remove a recipe from the document's recipes block."),
+        "set_default" => Some(
+            "Upsert a defaults entry (node kind to default style) in the document or a page defaults block.",
+        ),
+        "remove_default" => {
+            Some("Remove a defaults entry by node kind from the document or a page defaults block.")
+        }
         "detach_pattern" => {
             Some("Materialize a pattern node into an editable group of native shapes.")
         }

@@ -37,8 +37,56 @@ zenith version=1 {
     token id="size.h2" type="dimension" set="@zenith/theme.cobalt" value=(px)40
     token id="size.body" type="dimension" set="@zenith/theme.cobalt" value=(px)28
     token id="size.caption" type="dimension" set="@zenith/theme.cobalt" value=(px)18
+    token id="font.weight.heading" type="fontWeight" set="@zenith/theme.cobalt" value=700
   }
-  styles {}
+  styles {
+    style id="ui.body" {
+      fill (token)"color.base.content"
+      font-family (token)"font.body"
+      font-size (token)"size.body"
+    }
+    style id="ui.h1" {
+      font-family (token)"font.heading"
+      font-size (token)"size.h1"
+      font-weight (token)"font.weight.heading"
+    }
+    style id="ui.h2" {
+      font-family (token)"font.heading"
+      font-size (token)"size.h2"
+      font-weight (token)"font.weight.heading"
+    }
+    style id="ui.caption" {
+      font-family (token)"font.body"
+      font-size (token)"size.caption"
+    }
+    style id="ui.label" {
+      font-family (token)"font.body"
+      font-size (token)"size.body"
+    }
+    style id="ui.control" {
+      radius (token)"radius.field"
+      stroke-width (token)"border.width"
+    }
+    style id="ui.button" {
+      fill (token)"color.primary"
+      radius (token)"radius.field"
+    }
+    style id="ui.card" {
+      fill (token)"color.base.200"
+      radius (token)"radius.box"
+      stroke (token)"color.base.300"
+      stroke-width (token)"border.width"
+    }
+    style id="ui.connector" {
+      stroke (token)"color.base.content"
+      stroke-width (token)"border.width"
+    }
+  }
+  defaults {
+    connector style="ui.connector" text-style="ui.caption"
+    shape style="ui.control" text-style="ui.label"
+    text style="ui.body"
+  }
   document id="theme.cobalt.preview" title="Theme cobalt" {
     page id="pg" w=(px)760 h=(px)220 background=(token)"color.base.100" {
       text id="t.title" x=(px)40 y=(px)28 w=(px)680 h=(px)52 fill=(token)"color.base.content" font-family=(token)"font.heading" font-size=(token)"size.h2" { span "cobalt" }

@@ -78,8 +78,9 @@ pub fn run(
 /// version has been recorded into `paths`. When `theme` is given, it names a
 /// theme pack (a bare name like `sunset`, or a full pack id) resolved via
 /// [`crate::library::resolve_theme_pack`] — an embedded preset, or a project
-/// pack of the same name/id when one shadows it — whose full token contract is
-/// copied in and whose `color.base.100` token becomes the page background, in
+/// pack of the same name/id when one shadows it — whose tokens, styles, and
+/// document `defaults` are copied in and whose `color.base.100` token becomes
+/// the page background, in
 /// place of the bare default `color.bg` token.
 pub fn run_in(
     paths: &StorePaths,
@@ -138,9 +139,10 @@ pub fn run_in(
         exit_code: 2,
     })?;
 
-    // When a theme was requested, splice its full token block into the
-    // canonical document and re-format; without a theme this is a no-op and
-    // the output is byte-identical to before `--theme` existed.
+    // When a theme was requested, splice its token, style, and `defaults`
+    // blocks into the canonical document and re-format (the formatter writes
+    // them in canonical order: tokens, styles, defaults). Without a theme this
+    // is a no-op and the output is byte-identical to before `--theme` existed.
     let canonical_bytes = match theme_pack {
         Some(theme_doc) => {
             let mut doc = KdlAdapter.parse(&canonical.formatted).map_err(|e| NewErr {
@@ -151,8 +153,10 @@ pub fn run_in(
                 exit_code: 2,
             })?;
             doc.tokens = theme_doc.tokens;
+            doc.styles = theme_doc.styles;
+            doc.defaults = theme_doc.defaults;
             KdlAdapter.format(&doc).map_err(|e| NewErr {
-                message: format!("internal: failed to apply theme tokens: {}", e.message),
+                message: format!("internal: failed to apply theme blocks: {}", e.message),
                 exit_code: 2,
             })?
         }
@@ -296,7 +300,8 @@ fn slugify(input: &str) -> String {
 /// original hard-coded template byte-for-byte after canonicalization. When
 /// `theme_bg_token` is `Some` (a themed scaffold), every page's background
 /// references that token instead and the tokens block is left empty — the
-/// caller splices in a full theme token pack after canonicalization.
+/// caller splices in the theme's tokens, styles, and `defaults` after
+/// canonicalization.
 fn emit(slug: &str, name: &str, page: PageSpec, theme_bg_token: Option<&str>) -> String {
     // `name` may contain characters that need escaping inside a KDL string; the
     // formatter re-quotes canonically, so a backslash/quote escape here is enough

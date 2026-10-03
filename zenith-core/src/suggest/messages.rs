@@ -115,10 +115,7 @@ const MAX_LISTED: usize = 8;
 /// `label` names the kind of candidate (for example `"color tokens"`).
 /// Returns `declared <label>: a, b, … (+N more)` with the first 8 names in
 /// sorted order, or `no <label> declared` when `names` is empty.
-pub(crate) fn format_candidate_list<'a>(
-    label: &str,
-    names: impl IntoIterator<Item = &'a str>,
-) -> String {
+pub fn format_candidate_list<'a>(label: &str, names: impl IntoIterator<Item = &'a str>) -> String {
     let mut sorted: Vec<&str> = names.into_iter().collect();
     sorted.sort_unstable();
     sorted.dedup();

@@ -486,6 +486,22 @@ fn op_fields_names_match_serde_keys() {
         ),
         ("delete_recipe", Op::DeleteRecipe { id: "r".into() }),
         (
+            "set_default",
+            Op::SetDefault {
+                page: Some("p".into()),
+                kind: "shape".into(),
+                style: "box".into(),
+                text_style: Some(Some("box.label".into())),
+            },
+        ),
+        (
+            "remove_default",
+            Op::RemoveDefault {
+                page: Some("p".into()),
+                kind: "shape".into(),
+            },
+        ),
+        (
             "detach_pattern",
             Op::DetachPattern {
                 node: "dots".into(),

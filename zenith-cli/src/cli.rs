@@ -221,7 +221,7 @@ pub enum Command {
     /// Update the installed `zenith` binary to a published release.
     Update(UpdateArgs),
 
-    /// Generate design themes (token packs) from brand colours.
+    /// Generate design themes (token, style, and defaults packs) from brand colours.
     Theme(ThemeArgs),
 
     /// Install the Zenith agent skill into AI coding tools (Claude Code, Codex, OpenCode, …).
@@ -333,10 +333,13 @@ pub struct ThemeArgs {
 pub enum ThemeSub {
     /// Synthesize a complete theme pack from a primary colour (+ optional roles).
     ///
-    /// Synthesize a complete theme pack (a token-only .zen) from brand colours.
+    /// Synthesize a complete theme pack (.zen) from brand colours.
     /// Surfaces are tinted toward the primary; each role gets an APCA-correct `.content` pairing for
     /// WCAG 3 contrast. Captures radius, border, spacing, type, and optional depth/noise — not just
-    /// colour. The output validates clean and can be merged into a document or used as a starting palette.
+    /// colour. The pack also carries the fixed styles (`ui.body`, `ui.h1`, `ui.h2`, `ui.caption`,
+    /// `ui.label`, `ui.control`, `ui.button`, `ui.card`, `ui.connector`) and a `defaults` block
+    /// for `text`, `shape`, and `connector`. The output validates clean and can be merged into a
+    /// document or used as a starting palette.
     New(Box<ThemeNewArgs>),
 
     /// Re-skin a document's token values from a theme pack (dry-run by default).
@@ -350,7 +353,9 @@ pub enum ThemeSub {
     /// value that can't be expressed as a scalar (a structured
     /// gradient/shadow/filter/mask, or a `(token)` alias), is left untouched
     /// and reported instead of guessed at. Tokens that exist only in the
-    /// document are never touched.
+    /// document are never touched. The theme's styles and document `defaults`
+    /// entries are added when the document lacks that style id or kind. An
+    /// existing style id or `defaults` kind is kept and reported as skipped.
     Apply(ThemeApplyArgs),
 }
 
@@ -523,9 +528,10 @@ pub struct NewArgs {
     #[arg(long, default_value_t = 1, value_name = "N", value_parser = clap::value_parser!(u32).range(1..))]
     pub pages: u32,
 
-    /// Apply an embedded theme token pack (e.g. `sunset`, `cobalt`) to the new
+    /// Apply an embedded theme pack (e.g. `sunset`, `cobalt`) to the new
     /// document instead of the bare default tokens. The theme's full token
-    /// contract (color, radius, border, spacing, type scale) is copied in, and
+    /// contract (color, radius, border, spacing, type scale), its styles, and
+    /// its `defaults` block are copied in, and
     /// the page background references the theme's `color.base.100` token
     /// instead of the default `color.bg`.
     #[arg(long, value_name = "NAME")]

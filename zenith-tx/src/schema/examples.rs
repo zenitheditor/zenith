@@ -135,6 +135,10 @@ pub fn op_example(name: &str) -> Option<&'static str> {
             Some(r#"{"op":"update_recipe","id":"recipe.scatter","kind":"scatter","detached":true}"#)
         }
         "delete_recipe" => Some(r#"{"op":"delete_recipe","id":"recipe.scatter"}"#),
+        "set_default" => {
+            Some(r#"{"op":"set_default","kind":"shape","style":"box","text_style":"box.label"}"#)
+        }
+        "remove_default" => Some(r#"{"op":"remove_default","page":"page.1","kind":"shape"}"#),
         "detach_pattern" => Some(r#"{"op":"detach_pattern","node":"dots"}"#),
         _ => None,
     }

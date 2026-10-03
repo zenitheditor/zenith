@@ -33,20 +33,21 @@ pub use ast::brand::merge_brand_contract;
 pub use ast::{
     ActionDef, Anchor, AnchorEdge, AnchorKind, AssetBlock, AssetDecl, AssetKind, BLOCK_ROLE_VOCAB,
     BlockStyle, BrandContract, ChartNode, ChartSeries, CodeNode, ComponentDef, ConnectorNode,
-    ConstructionBlock, ConstructionGuideDef, DefaultsBlock, DefaultsEntry, DefaultsKind,
-    DefaultsRejection, DiagnosticPolicy, Dimension, Document, DocumentBody, EllipseNode, FieldNode,
-    FilterKind, FilterLiteral, FilterOp, FootnoteNode, FrameNode, GradientKind, GradientLiteral,
-    GradientStopRef, GroupNode, ImageNode, ImportDecl, InstanceNode, KerningPair, LayoutAlign,
-    LayoutContainer, LayoutItem, LayoutJustify, LayoutKind, LayoutPosition, LibraryDef, LightNode,
-    LineNode, MaskLiteral, MaskShape, MasterDef, MeshNode, Node, ObjectPosition, Override, Page,
-    PathAnchor, PathNode, PathSubpath, PathSubpathRef, PatternNode, Point, PolicyEntry, PolicyVerb,
-    PolygonNode, PolylineNode, Project, PropertyValue, ProtectedRegion, ProvenanceDef, RecipeDef,
-    RecipeParam, RectNode, STYLE_ENUM_KEYS, STYLE_RECOGNIZED_KEYS, SafeZone, SafeZoneType,
-    SectionDef, ShadowLayerRef, ShadowLiteral, ShapeNode, SizeKeyword, Span, Style, StyleBlock,
-    TableCell, TableColumn, TableNode, TableRow, TextNode, TextSpan, TocNode, Token, TokenBlock,
-    TokenLiteral, TokenMapDecl, TokenType, TokenValue, Unit, UnknownNode, UnknownProperty,
-    UnknownStyleProp, UnknownValue, VariantDef, VariantOverride, anchor_xy, canonicalize_style_key,
-    dim_to_px, parse_anchor, parse_anchor_edge, style_enum_values, subtree_uses_layout,
+    ConstructionBlock, ConstructionGuideDef, DEFAULTS_UNSUPPORTED_KINDS, DefaultsBlock,
+    DefaultsEntry, DefaultsKind, DefaultsRejection, DiagnosticPolicy, Dimension, Document,
+    DocumentBody, EllipseNode, FieldNode, FilterKind, FilterLiteral, FilterOp, FootnoteNode,
+    FrameNode, GradientKind, GradientLiteral, GradientStopRef, GroupNode, ImageNode, ImportDecl,
+    InstanceNode, KerningPair, LayoutAlign, LayoutContainer, LayoutItem, LayoutJustify, LayoutKind,
+    LayoutPosition, LibraryDef, LightNode, LineNode, MaskLiteral, MaskShape, MasterDef, MeshNode,
+    Node, ObjectPosition, Override, Page, PathAnchor, PathNode, PathSubpath, PathSubpathRef,
+    PatternNode, Point, PolicyEntry, PolicyVerb, PolygonNode, PolylineNode, Project, PropertyValue,
+    ProtectedRegion, ProvenanceDef, RecipeDef, RecipeParam, RectNode, STYLE_ENUM_KEYS,
+    STYLE_RECOGNIZED_KEYS, SafeZone, SafeZoneType, SectionDef, ShadowLayerRef, ShadowLiteral,
+    ShapeNode, SizeKeyword, Span, Style, StyleBlock, TableCell, TableColumn, TableNode, TableRow,
+    TextNode, TextSpan, TocNode, Token, TokenBlock, TokenLiteral, TokenMapDecl, TokenType,
+    TokenValue, Unit, UnknownNode, UnknownProperty, UnknownStyleProp, UnknownValue, VariantDef,
+    VariantOverride, anchor_xy, canonicalize_style_key, dim_to_px, parse_anchor, parse_anchor_edge,
+    style_enum_values, subtree_uses_layout,
 };
 pub use color::{
     BlendMode, Cmyk, Color, GradientPaint, GradientStop, cmyk_to_hex, cmyk_to_srgb, contrast_ratio,
@@ -62,6 +63,7 @@ pub use font::{
 };
 pub use markdown::{ListKind, MdBlock, parse_block_markdown, parse_inline_markdown};
 pub use parse::{KdlAdapter, KdlSource, parse_brand_contract, parse_diagnostic_policy};
+pub use suggest::{find_suggestion, format_candidate_list};
 pub use tokens::{
     HighlightToken, ResolvedFilter, ResolvedFilterOp, ResolvedGradient, ResolvedMask,
     ResolvedShadow, ResolvedShadowLayer, ResolvedToken, ResolvedValue, SyntaxTheme, TokenKind,

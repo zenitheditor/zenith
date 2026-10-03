@@ -56,7 +56,7 @@ impl From<&str> for LayoutDim {
 /// Deserialize a field where an absent key means "leave unchanged" and an
 /// explicit `null` means "clear": absent → `None`, `null` → `Some(None)`,
 /// a value → `Some(Some(v))`. Pair with `#[serde(default)]`.
-fn nullable<'de, D, T>(de: D) -> Result<Option<Option<T>>, D::Error>
+pub(super) fn nullable<'de, D, T>(de: D) -> Result<Option<Option<T>>, D::Error>
 where
     D: Deserializer<'de>,
     T: Deserialize<'de>,
