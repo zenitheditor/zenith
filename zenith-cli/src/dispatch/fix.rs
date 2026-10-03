@@ -19,7 +19,7 @@ pub(super) fn dispatch_fix(args: FixArgs) -> ExitCode {
         Err(e) => return e.emit(json),
     };
     let label = args.path.display().to_string();
-    let out = match commands::fix::run(&src, &label, args.path.parent(), args.apply) {
+    let out = match commands::fix::run(&src, &label, args.path.parent(), args.apply, args.diff) {
         Ok(o) => o,
         Err(e) => return CliError::new("fix.failed", e.message, e.exit_code).emit(json),
     };

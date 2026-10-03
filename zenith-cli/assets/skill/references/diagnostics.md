@@ -12,7 +12,7 @@ Codes, severities, and summaries: `zenith schema diagnostics`. The full catalog 
 
 ## `zenith fix`
 
-`zenith fix <file>` previews fixes and a source diff. `--apply` writes. Fix table: `zenith fix --help`.
+`zenith fix <file>` previews fixes and a source diff. `--apply` writes and prints a summary; add `--diff` to print the diff too. Fix table: `zenith fix --help`.
 
 - A machine-fixable diagnostic carries a structured `fix` object in `validate --json`.
 - Raw visual literals become the same-value token, else a minted one (`color.custom.<hex>`, `size.<n>`, …).

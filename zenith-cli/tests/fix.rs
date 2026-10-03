@@ -209,6 +209,24 @@ fn dry_run_leaves_file_unchanged_and_prints_diff() {
 }
 
 #[test]
+fn apply_prints_summary_without_diff_unless_diff_flag() {
+    let env = Env::new();
+    env.draft();
+    let quiet = stdout(&env.zenith(&["fix", "t.zen", "--apply"]));
+    assert!(quiet.contains("written"), "{quiet}");
+    assert!(quiet.contains("applied:"), "{quiet}");
+    assert!(quiet.contains("minted tokens:"), "{quiet}");
+    assert!(quiet.contains("remaining:"), "{quiet}");
+    assert!(!quiet.contains("--- a/t.zen"), "{quiet}");
+
+    let env = Env::new();
+    env.draft();
+    let shown = stdout(&env.zenith(&["fix", "t.zen", "--apply", "--diff"]));
+    assert!(shown.contains("--- a/t.zen"), "{shown}");
+    assert!(shown.contains("+++ b/t.zen"), "{shown}");
+}
+
+#[test]
 fn json_envelope_shape() {
     let env = Env::new();
     env.draft();

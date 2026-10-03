@@ -64,8 +64,9 @@ pub struct FixOutputJson {
 ///
 /// `label` names the file in the diff headers. `project_dir` is the
 /// document's directory, for the validate pipeline (assets, config,
-/// imports). `apply` only changes the summary wording; the caller writes the
-/// file.
+/// imports). `apply` changes the summary wording and hides the diff; the
+/// caller writes the file. `show_diff` prints the diff with `apply` too (a
+/// dry-run always prints it).
 ///
 /// # Errors
 ///
@@ -75,6 +76,7 @@ pub fn run(
     label: &str,
     project_dir: Option<&Path>,
     apply: bool,
+    show_diff: bool,
 ) -> Result<FixCmdOutcome, FixCmdErr> {
     // Compile-stage diagnostics carry fixes too (`text.ink_overlap`); the
     // core validate inside `fix_source_with` does not compile pages.
@@ -92,7 +94,7 @@ pub fn run(
         &CliPolicyFlags::default(),
     );
     let exit_code = remaining.exit_code;
-    let human = render_human(&outcome, &remaining, label, apply);
+    let human = render_human(&outcome, &remaining, label, apply, show_diff);
     let json_str = render_json(&outcome, &remaining);
     Ok(FixCmdOutcome {
         outcome,
@@ -110,7 +112,13 @@ fn applied_line(f: &AppliedFix) -> String {
     )
 }
 
-fn render_human(outcome: &FixOutcome, remaining: &Collected, label: &str, apply: bool) -> String {
+fn render_human(
+    outcome: &FixOutcome,
+    remaining: &Collected,
+    label: &str,
+    apply: bool,
+    show_diff: bool,
+) -> String {
     let errors = remaining
         .diagnostics
         .iter()
@@ -145,10 +153,12 @@ fn render_human(outcome: &FixOutcome, remaining: &Collected, label: &str, apply:
             out.push_str(&format_diagnostic_line(d));
         }
     }
-    let diff = unified_diff(label, &outcome.source_before, &outcome.source_after);
-    if !diff.is_empty() {
-        out.push('\n');
-        out.push_str(diff.trim_end());
+    if show_diff || !apply {
+        let diff = unified_diff(label, &outcome.source_before, &outcome.source_after);
+        if !diff.is_empty() {
+            out.push('\n');
+            out.push_str(diff.trim_end());
+        }
     }
     out
 }
@@ -196,7 +206,7 @@ mod tests {
 
     #[test]
     fn exact_token_fix_reports_and_diffs() {
-        let out = run(DOC, "d.zen", None, false).expect("parses");
+        let out = run(DOC, "d.zen", None, false, false).expect("parses");
         assert_eq!(out.exit_code, 0, "{}", out.human);
         assert!(
             out.human.contains(
@@ -211,7 +221,25 @@ mod tests {
 
     #[test]
     fn parse_error_is_exit_two() {
-        let err = run("not {{{ kdl", "d.zen", None, false).expect_err("must fail");
+        let err = run("not {{{ kdl", "d.zen", None, false, false).expect_err("must fail");
         assert_eq!(err.exit_code, 2);
+    }
+
+    #[test]
+    fn apply_hides_the_diff_unless_asked() {
+        let quiet = run(DOC, "d.zen", None, true, false).expect("parses");
+        assert!(quiet.human.contains("(written)"), "{}", quiet.human);
+        assert!(quiet.human.contains("applied:"), "{}", quiet.human);
+        assert!(!quiet.human.contains("--- a/d.zen"), "{}", quiet.human);
+
+        let shown = run(DOC, "d.zen", None, true, true).expect("parses");
+        assert!(shown.human.contains("--- a/d.zen"), "{}", shown.human);
+        assert_eq!(quiet.json_str, shown.json_str);
+    }
+
+    #[test]
+    fn dry_run_always_shows_the_diff() {
+        let out = run(DOC, "d.zen", None, false, true).expect("parses");
+        assert!(out.human.contains("--- a/d.zen"), "{}", out.human);
     }
 }

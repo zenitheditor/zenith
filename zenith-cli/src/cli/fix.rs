@@ -17,6 +17,7 @@ Everything else stays in `remaining`. The result is canonical (`zenith fmt`).\n\
 EXAMPLES:\n  \
 zenith fix draft.zen            # preview the fixes and the source diff (dry-run)\n  \
 zenith fix draft.zen --apply    # write the fixed source (recorded in history)\n  \
+zenith fix draft.zen --apply --diff   # write, then also print the source diff\n  \
 zenith fix draft.zen --json     # zenith-fix-v1: applied + remaining diagnostics")]
 pub struct FixArgs {
     /// Path to the `.zen` document.
@@ -25,6 +26,10 @@ pub struct FixArgs {
     /// Write the fixed source back to disk (dry-run by default).
     #[arg(long)]
     pub apply: bool,
+
+    /// Print the source diff with `--apply` (a dry-run always prints it).
+    #[arg(long)]
+    pub diff: bool,
 
     /// Emit machine-readable JSON (`zenith-fix-v1`) instead of a summary and diff.
     #[arg(long)]

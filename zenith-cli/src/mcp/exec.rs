@@ -216,7 +216,7 @@ fn run_fix(args: &Value) -> Result<Value, String> {
     let loc = doc_ref::locate(req_str(args, "doc")?)?;
     let src = read(&loc.path)?;
     let label = loc.path.display().to_string();
-    let out = commands::fix::run(&src, &label, loc.path.parent(), flag(args, "apply"))
+    let out = commands::fix::run(&src, &label, loc.path.parent(), flag(args, "apply"), false)
         .map_err(|e| e.message)?;
     let changed = out.outcome.changed();
     if flag(args, "apply") && changed {
