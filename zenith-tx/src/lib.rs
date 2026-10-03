@@ -2,8 +2,9 @@
 //!
 //! Owns the v0 transaction op set and the apply/dry-run engine, referential-
 //! integrity and ID-uniqueness enforcement, the transaction-result contract
-//! (status, diagnostics, source diff, scene diff, affected node IDs, audit
-//! preview and audit record), and audit record production. Both the CLI and
+//! (status, diagnostics, source before and after, affected node IDs, audit
+//! preview and audit record), and audit record production. The CLI renders
+//! the source diff and the moved/resized node boxes. Both the CLI and
 //! the future MCP surface sit on top of this crate; neither reimplements it.
 
 pub mod engine;

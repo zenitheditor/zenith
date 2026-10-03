@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 
 use zenith_core::{Diagnostic, Document, GroupNode, Node, ResolvedToken, translate_node};
 
-use super::super::layout::places_in_flow;
+use super::super::layout::{flow_placed, flow_slot_mode};
 use super::super::space::{container_chain, parent_frame, resolved_tokens};
 use super::super::{find_node_any_shared, record_affected};
 use super::finders::find_container_children_mut;
@@ -125,6 +125,16 @@ pub(in crate::engine) fn apply_group(
         return;
     }
 
+    // The new group takes a flow slot when the members' parent is a layout
+    // frame. Probe with an empty group: its item fields are the defaults.
+    let flow = node_ids
+        .first()
+        .and_then(|id| parent_frame(doc, id))
+        .and_then(|frame| {
+            flow_slot_mode(frame, &Node::Group(new_group(group_id, Vec::new())))
+                .map(|mode| (frame.id.clone(), mode))
+        });
+
     // Phase 1: locate the common parent children vec (shared-then-exclusive
     // two-phase, handled inside find_common_parent_children_mut).
     let children = match find_common_parent_children_mut(doc, node_ids) {
@@ -184,10 +194,31 @@ pub(in crate::engine) fn apply_group(
     // `insert_at` is the lowest removed index, so no removal shifts it.
     let insert_at = insert_at.min(children.len());
 
-    // Build the group node with all fields at defaults (None / empty).
-    // x/y stay unset: the group origin is 0, so the children keep their
-    // coordinates and their page position.
-    let group_node = Node::Group(GroupNode {
+    children.insert(insert_at, Node::Group(new_group(group_id, group_children)));
+    record_affected(group_id, affected);
+    if let Some((frame, mode)) = flow {
+        for id in node_ids {
+            diagnostics.push(Diagnostic::advisory(
+                "tx.flow_placed",
+                format!(
+                    "group: node {id:?} moves into group {group_id:?}, which layout frame \
+                     {frame:?} ({mode}) places; its page box follows the group's flow slot \
+                     and siblings reflow. To keep its page box, set position=\"absolute\" on \
+                     the group or use set_geometry."
+                ),
+                None,
+                Some(id.clone()),
+            ));
+        }
+    }
+    // Post-validation catches group_id collision (id.duplicate).
+}
+
+/// A new group node with every field at its default (None / empty).
+/// x/y stay unset: the group origin is 0, so the children keep their
+/// coordinates and their page position.
+fn new_group(group_id: &str, children: Vec<Node>) -> GroupNode {
+    GroupNode {
         id: group_id.to_owned(),
         name: None,
         role: None,
@@ -220,16 +251,12 @@ pub(in crate::engine) fn apply_group(
         anchor_edge: None,
         anchor_gap: None,
         anchor_parent: None,
-        children: group_children,
+        children,
         protected_regions: Vec::new(),
         editable_param_ids: Vec::new(),
         source_span: None,
         unknown_props: BTreeMap::new(),
-    });
-
-    children.insert(insert_at, group_node);
-    record_affected(group_id, affected);
-    // Post-validation catches group_id collision (id.duplicate).
+    }
 }
 
 pub(in crate::engine) fn apply_ungroup(
@@ -246,6 +273,9 @@ pub(in crate::engine) fn apply_ungroup(
         shifts: Vec<Option<(f64, f64)>>,
         /// A child leaves the group but the group origin does not resolve.
         unresolved: bool,
+        /// Per child that takes a flow slot of the parent frame: the
+        /// child id, the frame id, and the layout mode.
+        flow: Vec<(String, String, &'static str)>,
     }
 
     let resolved = resolved_tokens(doc);
@@ -257,13 +287,19 @@ pub(in crate::engine) fn apply_ungroup(
                 let offset = container_chain(doc, group_id, &resolved)
                     .and_then(|chain| chain.last().and_then(|link| link.offset));
                 let mut unresolved = false;
+                let mut flow = Vec::new();
                 let shifts = g
                     .children
                     .iter()
                     .map(|child| {
                         // A flow slot of the new parent frame: layout places
                         // the child.
-                        if parent.is_some_and(|f| places_in_flow(f, child)) {
+                        if let Some(frame) = parent
+                            && let Some(mode) = flow_slot_mode(frame, child)
+                        {
+                            if let Some(id) = child.id() {
+                                flow.push((id.to_owned(), frame.id.clone(), mode));
+                            }
                             return None;
                         }
                         match offset {
@@ -276,7 +312,11 @@ pub(in crate::engine) fn apply_ungroup(
                         }
                     })
                     .collect();
-                Ok(GroupInfo { shifts, unresolved })
+                Ok(GroupInfo {
+                    shifts,
+                    unresolved,
+                    flow,
+                })
             }
             Node::Rect(_)
             | Node::Ellipse(_)
@@ -353,6 +393,9 @@ pub(in crate::engine) fn apply_ungroup(
     for children in lists {
         if splice_ungroup(children, &splice) {
             record_affected(group_id, affected);
+            for (id, frame, mode) in &info.flow {
+                diagnostics.push(flow_placed("ungroup", id, frame, mode));
+            }
             return;
         }
     }

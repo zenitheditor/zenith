@@ -16,11 +16,13 @@
 //! ```
 //!
 //! Submodules: `types` (supporting value types), `layout` (auto-layout
-//! payloads), `ops` (the [`Op`] enum itself), `transaction` (the
-//! [`Transaction`] envelope).
+//! payloads), `ops` (the [`Op`] enum itself), `subjects` (the ids an op
+//! keeps at their page position), `transaction` (the [`Transaction`]
+//! envelope).
 
 mod layout;
 mod ops;
+mod subjects;
 mod transaction;
 mod types;
 

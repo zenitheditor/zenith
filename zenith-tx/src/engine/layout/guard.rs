@@ -110,7 +110,28 @@ fn search<'d>(nodes: &'d [Node], id: &str) -> Option<Option<(&'d str, &'static s
 /// `true` when `frame` places `child` in flow: the frame is a `row`,
 /// `column`, or `grid` frame and `child` takes a flow slot.
 pub(in crate::engine) fn places_in_flow(frame: &FrameNode, child: &Node) -> bool {
-    flow_mode(frame).is_some() && in_flow(child)
+    flow_slot_mode(frame, child).is_some()
+}
+
+/// The layout mode name (`row` / `column` / `grid`) when `frame` places
+/// `child` in flow, or `None` when it does not.
+pub(in crate::engine) fn flow_slot_mode(frame: &FrameNode, child: &Node) -> Option<&'static str> {
+    flow_mode(frame).filter(|_| in_flow(child))
+}
+
+/// The `tx.flow_placed` advisory: `op` puts node `id` into a flow slot of
+/// layout frame `frame` with layout `mode`.
+pub(in crate::engine) fn flow_placed(op: &str, id: &str, frame: &str, mode: &str) -> Diagnostic {
+    Diagnostic::advisory(
+        "tx.flow_placed",
+        format!(
+            "{op}: node {id:?} is placed by layout frame {frame:?} ({mode}); its x/y and size \
+             are ignored and siblings reflow. To keep its page box, set position=\"absolute\" \
+             or use set_geometry."
+        ),
+        None,
+        Some(id.to_owned()),
+    )
 }
 
 /// The layout mode name of a frame that positions its children.

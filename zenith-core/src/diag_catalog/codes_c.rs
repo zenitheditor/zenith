@@ -403,6 +403,13 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
         "A transaction tried to add a node or asset with an id already in use.",
     ),
     info(
+        "tx.flow_placed",
+        Severity::Advisory,
+        "A reparent, group, or ungroup puts a node into a flow slot of a row, column, or grid \
+         frame; the frame places it, so its x/y and size are ignored and siblings reflow. Set \
+         position=\"absolute\" or use set_geometry to keep its page box.",
+    ),
+    info(
         "tx.geometry_unresolved",
         Severity::Warning,
         "An align/distribute target has no resolvable geometry and was skipped.",
@@ -467,6 +474,12 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
         "tx.out_of_range",
         Severity::Error,
         "A transaction op value is outside the allowed range for the target property.",
+    ),
+    info(
+        "tx.page_box_changed",
+        Severity::Warning,
+        "A reparent, group, or ungroup changes the compiled page box of a node it moves; the \
+         op is meant to keep page position. Check the reported box and the reflowed siblings.",
     ),
     info(
         "tx.pattern_not_expandable",

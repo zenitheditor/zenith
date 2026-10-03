@@ -329,6 +329,11 @@ pub enum Op {
         id_suffix: String,
     },
     /// Wrap a set of sibling nodes inside a new group node.
+    ///
+    /// The children keep their page position, except in a row/column/grid
+    /// frame: the new group takes a flow slot, and `tx.flow_placed` reports
+    /// each grouped id. The CLI warns with `tx.page_box_changed` when a
+    /// grouped node's compiled page box changes.
     Group {
         /// Ids of the nodes to group. Must be ≥ 1 and share a common parent.
         node_ids: Vec<String>,
@@ -338,9 +343,11 @@ pub enum Op {
     /// Dissolve a group node, moving its children up to the group's parent.
     ///
     /// Each child shifts by the group origin, so it keeps its page position.
-    /// A child that takes a flow slot of a layout parent frame does not shift.
-    /// When the group origin does not resolve to px, children keep their
-    /// x/y and `tx.coordinate_unresolved` reports it.
+    /// A child that takes a flow slot of a layout parent frame does not shift:
+    /// the frame places it, and `tx.flow_placed` reports it. When the group
+    /// origin does not resolve to px, children keep their x/y and
+    /// `tx.coordinate_unresolved` reports it. The CLI warns with
+    /// `tx.page_box_changed` when a child's compiled page box changes.
     Ungroup {
         /// The id of the group node to dissolve.
         group_id: String,
@@ -349,9 +356,11 @@ pub enum Op {
     ///
     /// The node's x/y convert into the new container's space, so it keeps its
     /// page position. Into a flow slot of a row/column/grid frame, x/y stay
-    /// unchanged: the frame places the node. When a container origin does not
-    /// resolve to px, x/y stay unchanged and `tx.coordinate_unresolved`
-    /// reports it.
+    /// unchanged: the frame places the node, siblings reflow, and
+    /// `tx.flow_placed` reports it. When a container origin does not resolve
+    /// to px, x/y stay unchanged and `tx.coordinate_unresolved` reports it.
+    /// The CLI warns with `tx.page_box_changed` when the node's or a
+    /// descendant's compiled page box changes.
     Reparent {
         /// The stable id of the node to move.
         node: String,

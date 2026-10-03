@@ -31,7 +31,5 @@ pub use text_outline::{
 // Internal re-exports so sibling submodules can reach shared helpers via
 // `super::`, exactly as before the split.
 use run::{finish_candidate, format_source};
-use tree::{
-    find_node_any_mut, find_node_any_shared, find_node_shared, px, record_affected,
-    subtree_contains,
-};
+pub(crate) use tree::find_node_any_shared;
+use tree::{find_node_any_mut, find_node_shared, px, record_affected, subtree_contains};

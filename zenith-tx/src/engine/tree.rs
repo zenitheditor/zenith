@@ -204,7 +204,7 @@ fn find_in_children_any_mut<'a>(children: &'a mut [Node], id: &str) -> Option<&'
 }
 
 /// Shared-borrow document walk: find a node with `id` on any page or master.
-pub(super) fn find_node_any_shared<'doc>(
+pub(crate) fn find_node_any_shared<'doc>(
     doc: &'doc zenith_core::Document,
     id: &str,
 ) -> Option<&'doc Node> {

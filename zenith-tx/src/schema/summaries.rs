@@ -58,13 +58,19 @@ pub fn op_summary(name: &str) -> Option<&'static str> {
         "replace_text" => Some("Replace all text spans of a text or shape node."),
         "duplicate_node" => Some("Clone a leaf node and insert the copy after the original."),
         "duplicate_page" => Some("Deep-clone a page and insert the copy after the original."),
-        "group" => Some("Wrap a set of sibling nodes inside a new group node."),
+        "group" => Some(
+            "Wrap a set of sibling nodes inside a new group node; in a layout flow frame the group \
+             takes a flow slot (tx.flow_placed), and a changed page box warns (tx.page_box_changed).",
+        ),
         "ungroup" => Some(
-            "Dissolve a group node, moving its children up to the parent; children keep their page position.",
+            "Dissolve a group node, moving its children up to the parent; children keep their page \
+             position, except in a layout flow slot (tx.flow_placed); a changed page box warns \
+             (tx.page_box_changed).",
         ),
         "reparent" => Some(
             "Move a node into a different container (page, group, or frame); x/y convert so the \
-             node keeps its page position, except in a layout flow slot.",
+             node keeps its page position, except in a layout flow slot (tx.flow_placed); a \
+             changed page box warns (tx.page_box_changed).",
         ),
         "align_nodes" => Some(
             "Align a set of nodes to a common edge or centre along one axis; nodes in different \

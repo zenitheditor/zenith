@@ -5,7 +5,7 @@ use zenith_core::{Diagnostic, Document, Node, translate_node};
 
 use crate::op::Position;
 
-use super::super::layout::places_in_flow;
+use super::super::layout::{flow_placed, flow_slot_mode, places_in_flow};
 use super::super::space::{
     container_chain, parent_chain, parent_frame, resolved_tokens, shift_between,
 };
@@ -16,6 +16,9 @@ use super::finders::{find_container_children_mut, remove_node_by_id, resolve_pos
 enum Conversion {
     /// The coordinates stay as authored.
     Keep,
+    /// A flow slot of the named layout frame places the node. The
+    /// coordinates stay as authored; the `&str` is the layout mode.
+    Flow(String, &'static str),
     /// Add `(dx, dy)` px: the old space origin minus the new one.
     Shift(f64, f64),
     /// The page position is not known. The string names the container
@@ -25,7 +28,7 @@ enum Conversion {
 
 /// Decide the conversion before any mutation.
 ///
-/// - Into a flow slot of a `row` / `column` / `grid` frame: keep (the frame
+/// - Into a flow slot of a `row` / `column` / `grid` frame: flow (the frame
 ///   places the node).
 /// - Out of a flow slot: unresolved (the old frame placed the node).
 /// - Otherwise shift by the origin difference below the shared ancestor.
@@ -35,9 +38,9 @@ fn conversion(doc: &Document, node_id: &str, new_parent: &str) -> Conversion {
         return Conversion::Keep;
     };
     if let Some(Node::Frame(target)) = find_node_any_shared(doc, new_parent)
-        && places_in_flow(target, node)
+        && let Some(mode) = flow_slot_mode(target, node)
     {
-        return Conversion::Keep;
+        return Conversion::Flow(target.id.clone(), mode);
     }
     if let Some(old) = parent_frame(doc, node_id)
         && places_in_flow(old, node)
@@ -180,6 +183,9 @@ pub(in crate::engine) fn apply_reparent(
 
     match conversion {
         Conversion::Keep => {}
+        Conversion::Flow(frame, mode) => {
+            diagnostics.push(flow_placed("reparent", node_id, &frame, mode));
+        }
         Conversion::Shift(dx, dy) => translate_node(&mut node, dx, dy, &resolved),
         Conversion::Unresolved(container) => diagnostics.push(Diagnostic::advisory(
             "tx.coordinate_unresolved",
@@ -194,4 +200,62 @@ pub(in crate::engine) fn apply_reparent(
     }
     new_children.insert(idx, node);
     record_affected(node_id, affected);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use zenith_core::{KdlAdapter, KdlSource};
+
+    fn doc(body: &str) -> Document {
+        let src = format!(
+            r##"zenith version=1 {{
+  project id="proj" name="Test"
+  tokens format="zenith-token-v1" {{
+    token id="color.k" type="color" value="#000000"
+  }}
+  styles {{ }}
+  document id="doc1" title="T" {{
+    page id="pg1" w=(px)800 h=(px)600 {{
+      {body}
+    }}
+  }}
+}}"##
+        );
+        KdlAdapter.parse(src.as_bytes()).expect("fixture parses")
+    }
+
+    const BODY: &str = r#"frame id="row" x=(px)0 y=(px)0 w=(px)400 h=(px)100 layout="row" {
+        rect id="c1" w=(px)50 h=(px)50 fill=(token)"color.k"
+      }
+      frame id="grid" x=(px)0 y=(px)200 w=(px)400 h=(px)100 layout="grid" { }
+      frame id="plain" x=(px)0 y=(px)400 w=(px)400 h=(px)100 { }
+      rect id="r" x=(px)500 y=(px)0 w=(px)50 h=(px)50 fill=(token)"color.k"
+      rect id="abs" x=(px)500 y=(px)100 w=(px)50 h=(px)50 position="absolute" fill=(token)"color.k""#;
+
+    #[test]
+    fn into_flow_frame_is_flow() {
+        let d = doc(BODY);
+        assert!(matches!(
+            conversion(&d, "r", "row"),
+            Conversion::Flow(frame, "row") if frame == "row"
+        ));
+        assert!(matches!(
+            conversion(&d, "r", "grid"),
+            Conversion::Flow(frame, "grid") if frame == "grid"
+        ));
+    }
+
+    #[test]
+    fn absolute_node_or_frame_is_not_flow() {
+        let d = doc(BODY);
+        assert!(!matches!(
+            conversion(&d, "abs", "row"),
+            Conversion::Flow(..)
+        ));
+        assert!(!matches!(
+            conversion(&d, "r", "plain"),
+            Conversion::Flow(..)
+        ));
+    }
 }
