@@ -74,6 +74,7 @@ pub fn layout_geometry_checks(doc: &Document) -> Vec<Vec<Diagnostic>> {
                 enclosing_frame: None,
                 origin: (0.0, 0.0),
                 page_bounds: (page_w, page_h),
+                exempt: false,
             };
             placement_walk(&page.children, site, &tokens.resolved, &mut diagnostics);
             safezone::check_safe_zones(page, page_w, page_h, &mut diagnostics);

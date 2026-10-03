@@ -182,7 +182,7 @@ impl PageLedger {
         };
         let visible = node.is_visible();
         let opacity = inherit.opacity * node.opacity().unwrap_or(1.0).clamp(0.0, 1.0);
-        let exempt = inherit.exempt || matches!(node.role(), Some("decoration" | "background"));
+        let exempt = inherit.exempt || node.is_decorative();
         let compiled = input.boxes.get(id).copied();
         let own_effects = own_effects(node);
         let occluder = match compiled {

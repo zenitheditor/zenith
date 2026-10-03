@@ -250,7 +250,9 @@ fn attribute_type_generic(name: &str, fallback: &'static str) -> &'static str {
         // ── Identity / labelling ──────────────────────────────────────────
         "id" => "string",
         "name" => "string",
-        "role" => "string",
+        "role" => {
+            "string. Reserved: guide (never drawn), decoration|background (node and subtree skip overlap, occlusion, crossing, frame.child_overflow, layout.off_canvas lint)"
+        }
         "style" => "string",
         "source" => "string",
 

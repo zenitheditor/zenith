@@ -96,7 +96,7 @@ fn visit(node: &Node, walk: Walk<'_>, out: &mut PageText) {
     if node.role() == Some("guide") || !node.is_visible() {
         return;
     }
-    let walk = if matches!(node.role(), Some("decoration" | "background")) {
+    let walk = if node.is_decorative() {
         Walk {
             sized: false,
             ..walk

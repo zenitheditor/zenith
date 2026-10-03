@@ -189,7 +189,7 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
     info(
         "frame.child_overflow",
         Severity::Advisory,
-        "A frame child extends outside the frame box.",
+        "A frame child extends outside the frame box. A decoration or background node, and its subtree, is silent.",
     ),
     info(
         "gradient.invalid_radius",
@@ -316,7 +316,7 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
     info(
         "layout.off_canvas",
         Severity::Advisory,
-        "A node extends outside the page bounds.",
+        "A node extends outside the page bounds. A decoration or background node, and its subtree, is silent.",
     ),
     info(
         "layout.position_ignored",

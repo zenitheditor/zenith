@@ -375,6 +375,7 @@ fn validate_pass(
                     origin: (0.0, 0.0),
                     in_container: false,
                     parent_box_known: false,
+                    exempt: false,
                 },
                 &mut diagnostics,
             );
@@ -423,6 +424,7 @@ fn validate_pass(
                     origin: (0.0, 0.0),
                     in_container: false,
                     parent_box_known: false,
+                    exempt: false,
                 },
                 &mut diagnostics,
             );
@@ -816,6 +818,7 @@ fn validate_pass(
                     origin: (0.0, 0.0),
                     in_container: false,
                     parent_box_known: false,
+                    exempt: false,
                 },
                 &mut diagnostics,
             );

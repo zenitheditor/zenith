@@ -60,6 +60,9 @@ pub(super) struct WalkPos {
     /// `true` when the enclosing container's reference box is usable (frame:
     /// always; group: only when it declares both `w` and `h`).
     pub(super) parent_box_known: bool,
+    /// `true` when an ancestor has `role="decoration"` or `role="background"`.
+    /// Placement advisories skip the whole subtree.
+    pub(super) exempt: bool,
 }
 
 /// Recursively walk a [`Node`], collecting all diagnostics.
@@ -102,11 +105,16 @@ fn walk_node_checks(
     diagnostics: &mut Vec<Diagnostic>,
 ) {
     // ── frame.child_overflow + layout.off_canvas advisories ───────────────
+    // Own role or an ancestor's: the exemption covers the whole subtree.
+    let exempt = pos.exempt || node.is_decorative();
     placement::check_placement(
         node,
-        pos.enclosing_frame,
-        pos.origin,
-        pos.page_px_bounds,
+        placement::PlacementCtx {
+            enclosing_frame: pos.enclosing_frame,
+            origin: pos.origin,
+            page_bounds: pos.page_px_bounds,
+            exempt,
+        },
         diagnostics,
     );
 
@@ -357,6 +365,7 @@ fn walk_node_checks(
                         // usable box (its geometry is required + validated).
                         in_container: true,
                         parent_box_known: true,
+                        exempt,
                     },
                     diagnostics,
                 );
@@ -402,6 +411,7 @@ fn walk_node_checks(
                         origin: child_origin,
                         in_container: true,
                         parent_box_known: group_box_known,
+                        exempt,
                     },
                     diagnostics,
                 );
@@ -443,6 +453,7 @@ fn walk_node_checks(
                                 // cell, so anchor-parent there is unresolvable.
                                 in_container: false,
                                 parent_box_known: false,
+                                exempt,
                             },
                             diagnostics,
                         );
@@ -474,6 +485,7 @@ fn walk_node_checks(
                         // An unknown parent is not a known anchor-parent container.
                         in_container: false,
                         parent_box_known: false,
+                        exempt,
                     },
                     diagnostics,
                 );

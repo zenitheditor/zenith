@@ -20,6 +20,19 @@ pub(super) type PxBox = (f64, f64, f64, f64);
 /// A px translation `(dx, dy)` from a node list's space to page space.
 pub(super) type Origin = (f64, f64);
 
+/// Inputs to [`check_placement`] besides the node.
+#[derive(Clone, Copy)]
+pub(super) struct PlacementCtx {
+    /// The page-space box of the nearest enclosing absolute frame.
+    pub(super) enclosing_frame: Option<PxBox>,
+    /// The page-space origin of the node's list.
+    pub(super) origin: Origin,
+    /// The page size in px, when it resolved.
+    pub(super) page_bounds: Option<(f64, f64)>,
+    /// `true` when the node or an ancestor has a decorative role.
+    pub(super) exempt: bool,
+}
+
 /// `b` moved by `origin` into page space.
 fn to_page((x, y, w, h): PxBox, origin: Origin) -> PxBox {
     if origin == (0.0, 0.0) {
@@ -34,13 +47,17 @@ fn to_page((x, y, w, h): PxBox, origin: Origin) -> PxBox {
 /// `origin` moves the node's authored box into page space.
 /// `enclosing_frame` is a page-space box. Both checks need the page size.
 /// With `page_bounds = None` they are skipped.
-pub(super) fn check_placement(
-    node: &Node,
-    enclosing_frame: Option<PxBox>,
-    origin: Origin,
-    page_bounds: Option<(f64, f64)>,
-    diagnostics: &mut Vec<Diagnostic>,
-) {
+/// An `exempt` node (decoration/background, own or inherited) gets neither.
+pub(super) fn check_placement(node: &Node, ctx: PlacementCtx, diagnostics: &mut Vec<Diagnostic>) {
+    let PlacementCtx {
+        enclosing_frame,
+        origin,
+        page_bounds,
+        exempt,
+    } = ctx;
+    if exempt {
+        return;
+    }
     let Some((page_w, page_h)) = page_bounds else {
         return;
     };
@@ -155,6 +172,8 @@ pub(in crate::validate::check) struct PlacementSite {
     /// The page-space origin of the list.
     pub(in crate::validate::check) origin: Origin,
     pub(in crate::validate::check) page_bounds: (f64, f64),
+    /// `true` when an ancestor has `role="decoration"` or `role="background"`.
+    pub(in crate::validate::check) exempt: bool,
 }
 
 /// Run [`check_placement`] over `children` and their descendants, with the
@@ -169,21 +188,28 @@ pub(in crate::validate::check) fn placement_walk(
         enclosing_frame,
         origin,
         page_bounds,
+        exempt: inherited,
     } = site;
     for node in children {
+        let exempt = inherited || node.is_decorative();
         check_placement(
             node,
-            enclosing_frame,
-            origin,
-            Some(page_bounds),
+            PlacementCtx {
+                enclosing_frame,
+                origin,
+                page_bounds: Some(page_bounds),
+                exempt,
+            },
             diagnostics,
         );
+        let site = PlacementSite { exempt, ..site };
         match node {
             Node::Frame(f) => {
                 let inner = PlacementSite {
                     enclosing_frame: frame_child_box(f, origin, Some(page_bounds)),
                     origin: node.child_origin(origin, resolved),
                     page_bounds,
+                    exempt,
                 };
                 placement_walk(&f.children, inner, resolved, diagnostics);
             }

@@ -112,6 +112,14 @@ impl Node {
         }
     }
 
+    /// `true` when this node's own `role` is `decoration` or `background`.
+    ///
+    /// Callers fold it with the inherited flag so the exemption covers the
+    /// whole subtree. Lint and placement advisories skip exempt nodes.
+    pub fn is_decorative(&self) -> bool {
+        matches!(self.role(), Some("decoration" | "background"))
+    }
+
     /// Optional `role` attribute (`guide`, block roles, …). `Unknown` has none.
     pub fn role(&self) -> Option<&str> {
         match self {

@@ -56,7 +56,7 @@ Text `overflow` sets what happens when glyph ink leaves the box. The check measu
 | `type.near_duplicate_size` | Two font sizes in one group or frame are within 1 px or 8% |
 
 - `align.near_miss` and `spacing.uneven_gap` come from hand-placed siblings. Move them into a layout frame.
-- `role="decoration"` or `role="background"` exempts a node and its subtree from overlap, occlusion, and crossing lint.
+- `role="decoration"` or `role="background"` exempts a node and its whole subtree from overlap, occlusion, and crossing lint. The exemption also covers `frame.child_overflow` and `layout.off_canvas`.
 - Use those roles for intentional overlap: glows, watermarks, background type.
 
 ## Contrast

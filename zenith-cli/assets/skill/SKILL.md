@@ -91,7 +91,7 @@ Read the matching section of `references/by-kind.md` before authoring new work.
 - **Text fits its box** — omit `h` on text in a layout frame. On an absolute text, the overflow message names the `h` and font size that fit. Grow the box before shrinking type. Report any shrink.
 - **Muted text on dark themes** — captions use `color.base.content` (optional `opacity`), never `color.base.300`.
 - **Icons on dark themes** — recolor Lucide strokes before the first render (`references/icons.md`).
-- **Intentional overlap** — set `role="decoration"` or `role="background"`. The node then leaves overlap, occlusion, and crossing lint.
+- **Intentional overlap** — set `role="decoration"` or `role="background"`. The node and its whole subtree then leave overlap, occlusion, and crossing lint. They also leave `frame.child_overflow` and `layout.off_canvas`.
 - **Shared chrome** — decks and books use `create_master` + `set_page_master`, never copied footers.
 - **Right primitive** — flow: `shape` + `connector`. Data: `chart` / `table`. Things: Lucide icons. Prose: `text`.
 - **Assets external** — `zenith asset import` + `image`. Never bake layout into a flat picture.
