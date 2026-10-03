@@ -233,13 +233,14 @@ pub(super) fn style_property<'a>(
 
 pub(super) fn resolve_font_size(
     text: &TextNode,
+    style: Option<&str>,
     style_map: &BTreeMap<&str, &Style>,
     resolved_tokens: &BTreeMap<String, ResolvedToken>,
 ) -> f64 {
     font_size_px(
         text.font_size
             .as_ref()
-            .or_else(|| style_property(text.style.as_deref(), "font-size", style_map)),
+            .or_else(|| style_property(style, "font-size", style_map)),
         resolved_tokens,
     )
 }
@@ -268,13 +269,14 @@ pub(super) fn font_size_px(
 
 pub(super) fn resolve_font_weight(
     text: &TextNode,
+    style: Option<&str>,
     style_map: &BTreeMap<&str, &Style>,
     resolved_tokens: &BTreeMap<String, ResolvedToken>,
 ) -> u32 {
     font_weight_of(
         text.font_weight
             .as_ref()
-            .or_else(|| style_property(text.style.as_deref(), "font-weight", style_map)),
+            .or_else(|| style_property(style, "font-weight", style_map)),
         resolved_tokens,
     )
 }

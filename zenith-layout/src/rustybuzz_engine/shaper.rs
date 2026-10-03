@@ -1,5 +1,8 @@
 //! The public engine and the cached shaper behind it.
 
+use std::cell::RefCell;
+use std::collections::BTreeMap;
+
 use zenith_core::{FontData, FontProvider};
 
 use super::face_cache::{FaceCache, FontFaceStore, parse_error};
@@ -72,12 +75,16 @@ impl TextLayoutEngine for RustybuzzEngine<'_> {
 /// the same either way.
 struct CachedShaper<'s> {
     faces: FaceCache<'s>,
+    /// Ink boxes of stored faces, by `(slot, glyph id, font size bits)`.
+    /// The page lint and the box recorder ask for the same glyph many times.
+    ink_boxes: RefCell<BTreeMap<(usize, u16, u32), Option<GlyphInkBox>>>,
 }
 
 impl<'s> CachedShaper<'s> {
     fn new(store: &'s FontFaceStore) -> Self {
         Self {
             faces: FaceCache::new(store),
+            ink_boxes: RefCell::new(BTreeMap::new()),
         }
     }
 }
@@ -171,8 +178,16 @@ impl TextLayoutEngine for CachedShaper<'_> {
     ) -> Option<GlyphInkBox> {
         let font = provider.by_id(font_id)?;
         match self.faces.store().slot_of(&font) {
-            // A stored face: read the cached parse.
-            Some(slot) => ink_box_with_face(self.faces.face(slot)?, glyph_id, font_size),
+            // A stored face: read the memo, else the cached parse.
+            Some(slot) => {
+                let key = (slot, glyph_id, font_size.to_bits());
+                if let Some(hit) = self.ink_boxes.borrow().get(&key) {
+                    return *hit;
+                }
+                let ink = ink_box_with_face(self.faces.face(slot)?, glyph_id, font_size);
+                self.ink_boxes.borrow_mut().insert(key, ink);
+                ink
+            }
             // A face outside the store: parse it for this call only.
             None => crate::ink::glyph_ink_box(&font.bytes, font.index, glyph_id, font_size),
         }

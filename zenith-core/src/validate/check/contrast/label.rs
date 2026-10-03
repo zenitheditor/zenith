@@ -11,10 +11,8 @@ use crate::diagnostics::Diagnostic;
 
 use super::geometry::{RectPx, Rotation};
 use super::props::{font_weight_of, style_property};
-use super::{
-    BackdropCandidate, ContrastEnv, ContrastSample, INVISIBLE_LC_FLOOR, PaintCtx,
-    collect_backdrop_samples, lc_threshold, select_contrast_sample,
-};
+use super::text::{collect_backdrop_samples, lc_threshold, select_contrast_sample};
+use super::types::{BackdropCandidate, ContrastEnv, ContrastSample, INVISIBLE_LC_FLOOR, PaintCtx};
 
 /// The measured ink of one drawn label, in page px (trim-box origin).
 #[derive(Debug, Clone, PartialEq)]
@@ -38,7 +36,7 @@ pub struct LabelInk {
 /// Judge the label of `node` when the label pass measured one for it.
 pub(super) fn check_label(
     node: &Node,
-    ctx: PaintCtx,
+    ctx: PaintCtx<'_>,
     candidates: &[BackdropCandidate],
     env: ContrastEnv<'_>,
     diagnostics: &mut Vec<Diagnostic>,

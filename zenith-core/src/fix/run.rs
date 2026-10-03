@@ -54,13 +54,28 @@ impl FixOutcome {
 ///
 /// Returns the [`ParseError`] when `src` does not parse.
 pub fn fix_source(src: &str) -> Result<FixOutcome, ParseError> {
+    fix_source_with(src, &[])
+}
+
+/// [`fix_source`] that also applies the fixes of `extra`: diagnostics a later
+/// stage reported for `src` (the compile-stage checks the CLI runs).
+///
+/// `extra` describes `src` as given, so its fixes join the first pass only.
+/// A site that a core diagnostic already fixes in that pass is not fixed
+/// twice.
+///
+/// # Errors
+///
+/// Returns the [`ParseError`] when `src` does not parse.
+pub fn fix_source_with(src: &str, extra: &[Diagnostic]) -> Result<FixOutcome, ParseError> {
     let mut doc = KdlAdapter.parse(src.as_bytes())?;
     let mut current = src.to_owned();
     let mut applied: Vec<AppliedFix> = Vec::new();
     let mut minted: Vec<MintedToken> = Vec::new();
 
-    for _ in 0..MAX_PASSES {
-        let Some(pass) = run_pass(&doc, &current) else {
+    for pass_index in 0..MAX_PASSES {
+        let pass_extra = if pass_index == 0 { extra } else { &[] };
+        let Some(pass) = run_pass(&doc, &current, pass_extra) else {
             break;
         };
         doc = pass.doc;
@@ -90,10 +105,12 @@ struct Pass {
     minted: Vec<MintedToken>,
 }
 
-/// One pass over `doc` (parsed from `source`). `None` when nothing applies
-/// or the result does not parse.
-fn run_pass(doc: &Document, source: &str) -> Option<Pass> {
-    let diagnostics = validate(doc).diagnostics;
+/// One pass over `doc` (parsed from `source`), with the fixes of `extra`
+/// after the core ones. `None` when nothing applies or the result does not
+/// parse.
+fn run_pass(doc: &Document, source: &str, extra: &[Diagnostic]) -> Option<Pass> {
+    let mut diagnostics = validate(doc).diagnostics;
+    diagnostics.extend(extra.iter().filter(|d| d.fix().is_some()).cloned());
     let declared: BTreeSet<String> = doc.tokens.tokens.iter().map(|t| t.id.clone()).collect();
 
     let mut kdl: KdlDocument = source.parse().ok()?;

@@ -6,7 +6,7 @@
 use std::path::Path;
 
 use serde::Serialize;
-use zenith_core::fix::{AppliedFix, FixOutcome, fix_source, unified_diff};
+use zenith_core::fix::{AppliedFix, FixOutcome, fix_source_with, unified_diff};
 
 use crate::commands::validate::{Collected, collect};
 use crate::commands::{format_diagnostic_line, serialize_pretty};
@@ -58,6 +58,10 @@ pub struct FixOutputJson {
 
 /// Fix `src` and render the result.
 ///
+/// The fixes come from the core validation of each pass and, in the first
+/// pass, from the compile-stage diagnostics `zenith validate` reports for
+/// `src`.
+///
 /// `label` names the file in the diff headers. `project_dir` is the
 /// document's directory, for the validate pipeline (assets, config,
 /// imports). `apply` only changes the summary wording; the caller writes the
@@ -72,7 +76,10 @@ pub fn run(
     project_dir: Option<&Path>,
     apply: bool,
 ) -> Result<FixCmdOutcome, FixCmdErr> {
-    let outcome = fix_source(src).map_err(|e| FixCmdErr {
+    // Compile-stage diagnostics carry fixes too (`text.ink_overlap`); the
+    // core validate inside `fix_source_with` does not compile pages.
+    let before = collect(src, project_dir, &CliPolicyFlags::default());
+    let outcome = fix_source_with(src, &before.diagnostics).map_err(|e| FixCmdErr {
         message: format!(
             "error[parse.error]: {}; fix the syntax, then run `zenith fix` again",
             e.message

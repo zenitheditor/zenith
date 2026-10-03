@@ -18,6 +18,8 @@ pub(super) enum Slot {
     Entry(usize),
     /// The node name (a `defaults` row kind).
     Name,
+    /// A property the node does not set yet; the fix adds it.
+    NewProperty(String),
 }
 
 /// One edit site: the node path plus the slot on that node.
@@ -89,7 +91,7 @@ pub(super) fn node_at_mut<'a>(doc: &'a mut KdlDocument, path: &[usize]) -> Optio
 pub(super) fn entry_at<'a>(doc: &'a KdlDocument, site: &Site) -> Option<&'a KdlEntry> {
     match site.slot {
         Slot::Entry(index) => node_at(doc, &site.node)?.entries().get(index),
-        Slot::Name => None,
+        Slot::Name | Slot::NewProperty(_) => None,
     }
 }
 
@@ -97,7 +99,7 @@ pub(super) fn entry_at<'a>(doc: &'a KdlDocument, site: &Site) -> Option<&'a KdlE
 pub(super) fn entry_at_mut<'a>(doc: &'a mut KdlDocument, site: &Site) -> Option<&'a mut KdlEntry> {
     match site.slot {
         Slot::Entry(index) => node_at_mut(doc, &site.node)?.entries_mut().get_mut(index),
-        Slot::Name => None,
+        Slot::Name | Slot::NewProperty(_) => None,
     }
 }
 
@@ -195,6 +197,29 @@ pub(super) fn value_text(entry: &KdlEntry) -> String {
     }
 }
 
+/// The KDL value a fix value text denotes, with its type annotation:
+/// `(px)140` → `(Some("px"), 140)`, `700` → `(None, 700)`, `cover` →
+/// `(None, "cover")`. `None` for an unclosed annotation.
+pub(super) fn parse_value_text(text: &str) -> Option<(Option<String>, KdlValue)> {
+    let (ty, raw) = match text.strip_prefix('(') {
+        Some(rest) => {
+            let (ty, raw) = rest.split_once(')')?;
+            (Some(ty.to_owned()), raw)
+        }
+        None => (None, text),
+    };
+    let value = if let Ok(i) = raw.parse::<i128>() {
+        KdlValue::Integer(i)
+    } else if let Ok(f) = raw.parse::<f64>()
+        && f.is_finite()
+    {
+        KdlValue::Float(f)
+    } else {
+        KdlValue::String(raw.to_owned())
+    };
+    Some((ty, value))
+}
+
 /// A quoted KDL string.
 pub(super) fn quote(s: &str) -> String {
     format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\""))
@@ -223,6 +248,23 @@ mod tests {
     }
   }
 }"##;
+
+    #[test]
+    fn parse_value_text_reads_annotation_and_number() {
+        assert_eq!(
+            parse_value_text("(px)140"),
+            Some((Some("px".to_owned()), KdlValue::Integer(140)))
+        );
+        assert_eq!(
+            parse_value_text("(px)12.5"),
+            Some((Some("px".to_owned()), KdlValue::Float(12.5)))
+        );
+        assert_eq!(
+            parse_value_text("cover"),
+            Some((None, KdlValue::String("cover".to_owned())))
+        );
+        assert_eq!(parse_value_text("(px140"), None);
+    }
 
     #[test]
     fn find_node_skips_tokens() {

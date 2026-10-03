@@ -278,6 +278,11 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
         "`kern-pair` left and right strings must be non-empty.",
     ),
     info(
+        "label.overflow",
+        Severity::Warning,
+        "A `shape` label's ink stays inside the padded box but crosses the shape's ellipse, diamond, or pill outline; the message names the shape size that holds the ink and the font size that fits.",
+    ),
+    info(
         "layout.absolute_unplaced",
         Severity::Error,
         "A `position=\"absolute\"` child of a row/column frame has no x/y or anchor.",

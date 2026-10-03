@@ -12,6 +12,7 @@ mod layout;
 mod page;
 mod prep;
 
+pub(in crate::compile) use label_contrast::label_contrast;
 pub use layout::LayoutStats;
 pub use page::PageCompiler;
 pub use prep::DocumentPrep;

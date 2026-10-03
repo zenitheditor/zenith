@@ -18,5 +18,5 @@ mod wrap;
 pub(super) use frame::compile_frame;
 pub(super) use group::{compile_group, group_children_bounds};
 pub(super) use instance::{
-    compile_instance, expand_imported, expand_local, prefix_ids_in_children,
+    compile_instance, expand_imported, expand_local, prefix_ids_in_children, synthetic_group,
 };

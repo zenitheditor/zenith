@@ -25,6 +25,6 @@
 mod check;
 
 pub use check::{
-    LabelInk, ValidationReport, apply_policy, label_contrast_checks, layout_geometry_checks,
-    validate, validate_with_policy,
+    LabelInk, ValidationReport, apply_policy, expanded_text_contrast_checks, label_contrast_checks,
+    layout_geometry_checks, validate, validate_with_policy,
 };

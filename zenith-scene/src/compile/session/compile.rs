@@ -1,6 +1,6 @@
 //! [`PageCompiler::compile_page`]: compile one page into a display list.
 
-use zenith_core::{Diagnostic, FontProvider, Page, dim_to_px};
+use zenith_core::{Diagnostic, FontProvider, Node, Page, dim_to_px};
 use zenith_layout::RustybuzzEngine;
 
 use crate::ir::{Paint, Rect, Scene, SceneCommand};
@@ -19,12 +19,12 @@ use super::super::field::{
 use super::super::footnote;
 use super::super::intrinsic::lower_expanded;
 use super::super::line_jumps;
+use super::super::lint::{LintEnv, PaintEnv, lint_page};
 use super::super::page_source::{PageSourceEnv, compile_page_source};
 use super::super::paint::{resolve_property_color, resolve_property_gradient};
 use super::super::text::ShapeEnv;
 use super::super::{CompileResult, RenderCtx};
 use super::fonts::FontsRef;
-use super::label_contrast;
 use super::page::PageCompiler;
 
 impl<F: ?Sized + FontProvider> PageCompiler<'_, F> {
@@ -37,7 +37,7 @@ impl<F: ?Sized + FontProvider> PageCompiler<'_, F> {
     /// `scene.page_out_of_range` advisory.
     #[must_use]
     pub fn compile_page(&self, page_index: usize) -> CompileResult {
-        self.compile_page_with(page_index, true, None)
+        self.compile_page_with(page_index, true, None, true)
     }
 
     /// Compile the page at `page_index` with only its own diagnostics.
@@ -48,7 +48,7 @@ impl<F: ?Sized + FontProvider> PageCompiler<'_, F> {
     /// scene is identical to [`PageCompiler::compile_page`].
     #[must_use]
     pub fn compile_page_local(&self, page_index: usize) -> CompileResult {
-        self.compile_page_with(page_index, false, None)
+        self.compile_page_with(page_index, false, None, true)
     }
 
     /// The final geometry of every node compiled on page `page_index`, by id,
@@ -62,7 +62,7 @@ impl<F: ?Sized + FontProvider> PageCompiler<'_, F> {
     #[must_use]
     pub fn compiled_boxes(&self, page_index: usize) -> BTreeMap<String, CompiledBox> {
         let recorder = BoxRecorder::default();
-        let _ = self.compile_page_with(page_index, false, Some(&recorder));
+        let _ = self.compile_page_with(page_index, false, Some(&recorder), false);
         recorder.into_boxes()
     }
 
@@ -83,7 +83,11 @@ impl<F: ?Sized + FontProvider> PageCompiler<'_, F> {
         page_index: usize,
         with_document: bool,
         boxes: Option<&BoxRecorder>,
+        lint: bool,
     ) -> CompileResult {
+        // The lint reads the final boxes of this same compile.
+        let lint_recorder = lint.then(BoxRecorder::default);
+        let boxes = boxes.or(lint_recorder.as_ref());
         let prep = self.prep;
         let doc: &zenith_core::Document = &self.lowered;
         let mut diagnostics: Vec<Diagnostic> = if with_document {
@@ -213,6 +217,7 @@ impl<F: ?Sized + FontProvider> PageCompiler<'_, F> {
 
         // Master projection, under the page's own children. Projected ids get
         // the page id prefix. An unknown master is skipped.
+        let mut master_nodes: Vec<Node> = Vec::new();
         if let Some(master_id) = &page.master
             && let Some(master) = self.master_map.get(master_id.as_str())
         {
@@ -231,6 +236,7 @@ impl<F: ?Sized + FontProvider> PageCompiler<'_, F> {
                     root_ctx,
                 );
             }
+            master_nodes = projected;
         }
 
         compile_page_source(
@@ -301,18 +307,29 @@ impl<F: ?Sized + FontProvider> PageCompiler<'_, F> {
             });
         }
 
-        // Shape and connector label contrast, judged on the drawn label ink.
-        diagnostics.extend(label_contrast::label_contrast(
-            &scene.commands,
-            page,
-            bleed,
-            resolved,
-            &self.style_map,
-            ShapeEnv {
-                engine: &engine,
-                fonts,
-            },
-        ));
+        // Visual QA over the final geometry: ink overlap, occlusion, label
+        // overflow, and label / expanded-content contrast.
+        if let Some(recorder) = lint_recorder {
+            let env = LintEnv {
+                page,
+                authored: prep.document().body.pages.get(page_index),
+                master: &master_nodes,
+                commands: &scene.commands,
+                bleed,
+                paint: PaintEnv {
+                    resolved,
+                    style_map: &self.style_map,
+                    assets: &doc.assets.assets,
+                },
+                shape: ShapeEnv {
+                    engine: &engine,
+                    fonts,
+                },
+                compiled: &diagnostics,
+            };
+            let found = lint_page(&env, recorder);
+            diagnostics.extend(found);
+        }
 
         // Internal defaults copy ids never leave the compile.
         prep.id_aliases.scrub(&mut diagnostics);

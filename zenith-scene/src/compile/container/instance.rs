@@ -12,6 +12,7 @@ use zenith_core::{
 
 use crate::ir::SceneCommand;
 
+use super::super::boxes::Expansion;
 use super::super::font_ns::NamespacedFontProvider;
 use super::super::imports::{ImportSource, parse_import_source, stamp_import};
 use super::super::intrinsic::lower_expanded;
@@ -90,7 +91,9 @@ pub(in crate::compile) fn compile_instance(
     // Resolve `w`/`h`/`fit`. With a positive box the component subtree is scaled
     // into it (an icon component is all `path` nodes, whose extent is its
     // outline); with no box the translate-only path is preserved exactly.
-    match fit_outcome(instance, &children, cx.resolved, cx, ctx, diagnostics) {
+    let outcome = fit_outcome(instance, &children, cx.resolved, cx, ctx, diagnostics);
+    record_expansion(instance, &children, &outcome, false, cx);
+    match outcome {
         FitOutcome::Skip => {}
         FitOutcome::Transform { sx, sy, tx, ty } => {
             let mut synthetic = synthetic_group(instance, children);
@@ -263,14 +266,16 @@ fn compile_imported_instance(
     // translate-only path is preserved exactly (byte-identical for no-w/h).
     // Spans of diagnostics from the imported subtree index into the imported
     // document, so they are tagged with the import id.
-    match fit_outcome(
+    let outcome = fit_outcome(
         instance,
         &children,
         &imported.resolved,
         cx,
         ctx,
         diagnostics,
-    ) {
+    );
+    record_expansion(instance, &children, &outcome, true, cx);
+    match outcome {
         FitOutcome::Skip => {}
         FitOutcome::Transform { sx, sy, tx, ty } => {
             let mut synthetic = synthetic_group(instance, children);
@@ -321,6 +326,33 @@ fn compile_imported_instance(
     }
     stamp_import(&mut imported_diagnostics, import_id);
     diagnostics.append(&mut imported_diagnostics);
+}
+
+/// Record the lowered subtree `instance` draws, when the compile records
+/// boxes. A skipped instance draws nothing and records nothing.
+fn record_expansion(
+    instance: &InstanceNode,
+    children: &[Node],
+    outcome: &FitOutcome,
+    imported: bool,
+    cx: NodeCtx,
+) {
+    let Some(recorder) = cx.boxes else {
+        return;
+    };
+    let scaled = match *outcome {
+        FitOutcome::Skip => return,
+        FitOutcome::Translate => false,
+        FitOutcome::Transform { sx, sy, tx, ty } => !is_identity_transform(sx, sy, tx, ty),
+    };
+    recorder.expand(
+        &instance.id,
+        Expansion {
+            children: children.to_vec(),
+            scaled,
+            imported,
+        },
+    );
 }
 
 /// The component subtree a local `instance` expands to: a clone of the
@@ -543,7 +575,12 @@ fn remap_color_override(
     }
 }
 
-fn synthetic_group(instance: &InstanceNode, children: Vec<Node>) -> GroupNode {
+/// The group an `instance` compiles as: its `x` / `y` origin, opacity, and
+/// visibility around `children`.
+pub(in crate::compile) fn synthetic_group(
+    instance: &InstanceNode,
+    children: Vec<Node>,
+) -> GroupNode {
     GroupNode {
         id: instance.id.clone(),
         name: instance.name.clone(),

@@ -11,6 +11,7 @@
 //! - [`FixHint::ReplaceValue`] → swap the enum value. On a `defaults` row it
 //!   swaps the kind (node name) or a style id; on a `style` block it swaps the
 //!   value of the property child. Row diagnostics are located by span.
+//! - [`FixHint::SetProperty`] → replace the subject's own entry, or add it.
 
 use std::collections::BTreeSet;
 
@@ -23,7 +24,7 @@ use crate::suggest::LiteralValue;
 
 use super::locate::{
     NodePath, Site, Slot, annotation, child_value_site, entry_at, find_node, find_node_by_span,
-    node_at, property_sites, quote, scalar_text, value_text,
+    node_at, parse_value_text, property_sites, quote, scalar_text, value_text,
 };
 use super::mint::{MintedToken, Minter};
 
@@ -54,6 +55,8 @@ pub(super) enum Change {
     Rename(String),
     /// Rename the node (a `defaults` row kind).
     NodeName(String),
+    /// Set the value and its type annotation (replacing any annotation).
+    Value { ty: Option<String>, value: KdlValue },
 }
 
 /// A planned edit plus the record it produces.
@@ -119,6 +122,7 @@ pub(super) fn plan(
                 "style.invalid_value" => plan_style_value(doc, d, &path, property, from, to),
                 _ => plan_value(doc, d, &path, property, from, to),
             },
+            FixHint::SetProperty { property, to } => plan_set_property(doc, d, &path, property, to),
         };
         for fix in planned {
             if taken.insert(fix.site.clone()) {
@@ -365,5 +369,48 @@ fn plan_style_value(
         site,
         change: Change::Text(to.to_owned()),
         record: record(d, property, quote(from), quote(to)),
+    }]
+}
+
+/// Set `property` on the node at `path` to the value text `to`: the node's
+/// own entry when it sets one, else a new entry. A value already equal to
+/// `to` plans nothing.
+fn plan_set_property(
+    doc: &KdlDocument,
+    d: &Diagnostic,
+    path: &[usize],
+    property: &str,
+    to: &str,
+) -> Vec<PlannedFix> {
+    let Some(node) = node_at(doc, path) else {
+        return Vec::new();
+    };
+    let Some((ty, value)) = parse_value_text(to) else {
+        return Vec::new();
+    };
+    let existing = node
+        .entries()
+        .iter()
+        .position(|e| e.name().map(|n| n.value()) == Some(property));
+    let (slot, from) = match existing {
+        Some(index) => {
+            let Some(entry) = node.entries().get(index) else {
+                return Vec::new();
+            };
+            let from = value_text(entry);
+            if annotation(entry) == ty.as_deref() && entry.value() == &value {
+                return Vec::new();
+            }
+            (Slot::Entry(index), from)
+        }
+        None => (Slot::NewProperty(property.to_owned()), "(unset)".to_owned()),
+    };
+    vec![PlannedFix {
+        site: Site {
+            node: path.to_vec(),
+            slot,
+        },
+        change: Change::Value { ty, value },
+        record: record(d, property, from, to.to_owned()),
     }]
 }

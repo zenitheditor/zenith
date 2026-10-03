@@ -61,6 +61,13 @@ impl Affine {
         )
     }
 
+    /// `true` when the map keeps axis-aligned boxes axis-aligned: no
+    /// rotation off a quarter turn, no shear.
+    pub(super) fn is_axis_aligned(self) -> bool {
+        const EPS: f64 = 1e-9;
+        (self.b.abs() < EPS && self.c.abs() < EPS) || (self.a.abs() < EPS && self.d.abs() < EPS)
+    }
+
     /// The local transform a push command opens, or `None` for any other
     /// command.
     fn of_push(cmd: &SceneCommand) -> Option<Affine> {
@@ -117,21 +124,21 @@ impl Affine {
 }
 
 /// A transform stack driven by push / pop commands.
-struct Stack {
+pub(super) struct Stack {
     open: Vec<Affine>,
 }
 
 impl Stack {
-    fn new(base: Affine) -> Self {
+    pub(super) fn new(base: Affine) -> Self {
         Self { open: vec![base] }
     }
 
-    fn top(&self) -> Affine {
+    pub(super) fn top(&self) -> Affine {
         self.open.last().copied().unwrap_or(Affine::IDENTITY)
     }
 
     /// Track `cmd`. With `skip_rotation`, a rotation opens as identity.
-    fn step(&mut self, cmd: &SceneCommand, skip_rotation: bool) {
+    pub(super) fn step(&mut self, cmd: &SceneCommand, skip_rotation: bool) {
         if matches!(cmd, SceneCommand::PopTransform) {
             if self.open.len() > 1 {
                 self.open.pop();

@@ -1,8 +1,8 @@
 //! Write planned fixes into a KDL document.
 
-use kdl::{KdlDocument, KdlIdentifier, KdlValue};
+use kdl::{KdlDocument, KdlEntry, KdlIdentifier, KdlValue};
 
-use super::locate::{entry_at_mut, node_at_mut};
+use super::locate::{Slot, entry_at_mut, node_at_mut};
 use super::mint::insert_tokens;
 use super::plan::{AppliedFix, Change, Plan};
 
@@ -13,6 +13,21 @@ use super::plan::{AppliedFix, Change, Plan};
 pub(super) fn apply(doc: &mut KdlDocument, plan: Plan) -> Vec<AppliedFix> {
     let mut applied = Vec::new();
     for fix in plan.fixes {
+        if let Slot::NewProperty(property) = &fix.site.slot {
+            let Change::Value { ty, value } = fix.change else {
+                continue;
+            };
+            let Some(node) = node_at_mut(doc, &fix.site.node) else {
+                continue;
+            };
+            let mut entry = KdlEntry::new_prop(property.as_str(), value);
+            if let Some(ty) = ty {
+                entry.set_ty(KdlIdentifier::from(ty));
+            }
+            node.push(entry);
+            applied.push(fix.record);
+            continue;
+        }
         if let Change::NodeName(name) = &fix.change {
             let Some(node) = node_at_mut(doc, &fix.site.node) else {
                 continue;
@@ -32,6 +47,15 @@ pub(super) fn apply(doc: &mut KdlDocument, plan: Plan) -> Vec<AppliedFix> {
             }
             Change::Text(text) => entry.set_value(KdlValue::String(text)),
             Change::Rename(name) => entry.set_name(Some(KdlIdentifier::from(name))),
+            Change::Value { ty, value } => match (ty, entry.name().cloned()) {
+                (Some(ty), _) => {
+                    entry.set_value(value);
+                    entry.set_ty(KdlIdentifier::from(ty));
+                }
+                // No annotation: a fresh entry drops the old one.
+                (None, Some(name)) => *entry = KdlEntry::new_prop(name, value),
+                (None, None) => *entry = KdlEntry::new(value),
+            },
             // Handled above: a node-name change has no entry.
             Change::NodeName(_) => continue,
         }

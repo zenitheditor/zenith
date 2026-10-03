@@ -297,6 +297,16 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
         "A text line was force-broken during wrapping to prevent infinite layout.",
     ),
     info(
+        "text.ink_overlap",
+        Severity::Warning,
+        "The glyph ink of two texts (text nodes or shape / connector labels) intersects over more than 4 px²; the message names the overlap and the `y` that clears it, with a `set_property` fix when the text has an authored absolute `y`.",
+    ),
+    info(
+        "text.occluded",
+        Severity::Warning,
+        "A node painted later with an opaque fill or image at full opacity covers more than half of at least one glyph of a text; the message names the covering node and the hidden glyph count.",
+    ),
+    info(
         "text.overflow",
         Severity::Warning,
         "Text content overflows its box and is clipped at the box edge (`overflow=\"clip\"`, the default); the message names the box size that keeps the type scale and the font size that fits.",

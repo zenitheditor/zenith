@@ -35,6 +35,7 @@ mod imports;
 mod intrinsic;
 mod leaf;
 mod line_jumps;
+mod lint;
 mod markdown_resolve;
 mod page_source;
 mod paint;

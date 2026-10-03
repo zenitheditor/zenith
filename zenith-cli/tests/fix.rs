@@ -378,3 +378,59 @@ fn validate_json_carries_fix_hints() {
         "an ambiguous reference carries no fix"
     );
 }
+
+/// Two headlines whose glyph ink collides.
+const OVERLAP_DOC: &str = r##"zenith version=1 {
+  project id="proj.o" name="Overlap"
+  tokens format="zenith-token-v1" {
+    token id="color.ink" type="color" value="#111111"
+    token id="color.paper" type="color" value="#ffffff"
+    token id="size.type" type="dimension" value=(px)32
+  }
+  styles {}
+  document id="doc.o" title="Overlap" {
+    page id="p" w=(px)800 h=(px)600 background=(token)"color.paper" {
+      text id="a" x=(px)40 y=(px)100 w=(px)600 h=(px)50 font-size=(token)"size.type" fill=(token)"color.ink" {
+        span "Overlapping headline"
+      }
+      text id="b" x=(px)40 y=(px)110 w=(px)600 h=(px)50 font-size=(token)"size.type" fill=(token)"color.ink" {
+        span "Overlapping headline"
+      }
+    }
+  }
+}
+"##;
+
+#[test]
+fn fix_applies_the_compile_stage_ink_overlap_move() {
+    let env = Env::new();
+    std::fs::write(env.doc(), OVERLAP_DOC).expect("write doc");
+    let before = env.validate_json();
+    let hint = before["diagnostics"]
+        .as_array()
+        .expect("diagnostics")
+        .iter()
+        .find(|d| d["code"] == "text.ink_overlap")
+        .unwrap_or_else(|| panic!("{before:#}"));
+    assert_eq!(hint["fix"]["kind"], "set_property", "{hint:#}");
+    let to = hint["fix"]["to"].as_str().expect("to").to_owned();
+
+    let report = env.fix_json(true);
+    let applied = report["applied"].as_array().expect("applied");
+    assert!(
+        applied
+            .iter()
+            .any(|f| f["code"] == "text.ink_overlap" && f["subject_id"] == "b" && f["to"] == to),
+        "{report:#}"
+    );
+    assert!(env.read().contains(&format!("y={to}")), "{}", env.read());
+    let after = env.validate_json();
+    assert!(
+        after["diagnostics"]
+            .as_array()
+            .expect("diagnostics")
+            .iter()
+            .all(|d| d["code"] != "text.ink_overlap"),
+        "{after:#}"
+    );
+}

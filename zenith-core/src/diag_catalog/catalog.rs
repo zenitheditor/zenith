@@ -139,6 +139,7 @@ mod tests {
             ("baseline-grid.snap_failed", Severity::Warning),
             ("footnote.body_overlap", Severity::Advisory),
             ("footnote.no_live_area", Severity::Advisory),
+            ("label.overflow", Severity::Warning),
             ("scene.invalid_color", Severity::Advisory),
             ("scene.invalid_import_source", Severity::Advisory),
             ("scene.missing_geometry", Severity::Advisory),
@@ -159,6 +160,8 @@ mod tests {
             ("table.flow_overflow", Severity::Advisory),
             ("text.fit_failed", Severity::Error),
             ("text.forced_break", Severity::Warning),
+            ("text.ink_overlap", Severity::Warning),
+            ("text.occluded", Severity::Warning),
             ("text.overflow", Severity::Warning),
         ];
         for (code, expected_severity) in cases {

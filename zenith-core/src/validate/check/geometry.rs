@@ -14,7 +14,7 @@
 use std::collections::BTreeMap;
 
 use crate::ast::document::{Document, Page};
-use crate::ast::node::subtree_uses_layout;
+use crate::ast::node::{Node, subtree_uses_layout};
 use crate::ast::style::Style;
 use crate::ast::value::{PropertyValue, dim_to_px};
 use crate::color::parse_rgb;
@@ -42,6 +42,38 @@ pub(super) fn page_background_rgb(
         ResolvedValue::Color(hex) => parse_rgb(hex),
         _ => None,
     }
+}
+
+/// Text contrast of `children` drawn on `page`: the compile-stage pass over
+/// expanded content.
+///
+/// The scene engine passes the page content it compiled, with each
+/// `instance` replaced by the subtree it expanded to and the master
+/// projection first. Validation skips that content, because its ids and
+/// positions exist only after expansion. The result judges every `text`
+/// node in `children`; the caller keeps the diagnostics of expanded nodes.
+/// Each keeps the span of its authored component or master node.
+pub fn expanded_text_contrast_checks(
+    page: &Page,
+    children: &[Node],
+    resolved: &BTreeMap<String, ResolvedToken>,
+    style_map: &BTreeMap<&str, &Style>,
+) -> Vec<Diagnostic> {
+    let mut diagnostics = Vec::new();
+    let Some(page_size) = dim_to_px(page.width.value, &page.width.unit)
+        .zip(dim_to_px(page.height.value, &page.height.unit))
+    else {
+        return diagnostics;
+    };
+    check_page_text_contrast(
+        children,
+        page_background_rgb(page, resolved),
+        page_size,
+        resolved,
+        style_map,
+        &mut diagnostics,
+    );
+    diagnostics
 }
 
 /// Run the geometry checks on every page of `doc` that uses auto-layout.

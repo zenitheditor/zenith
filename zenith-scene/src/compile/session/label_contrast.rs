@@ -41,7 +41,7 @@ enum Transform {
 ///
 /// `bleed` is the scene offset of the trim box. `style_map` and `resolved`
 /// are the compile document's.
-pub(super) fn label_contrast(
+pub(in crate::compile) fn label_contrast(
     commands: &[SceneCommand],
     page: &Page,
     bleed: f64,

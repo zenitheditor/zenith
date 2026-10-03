@@ -23,11 +23,17 @@
 //! instances as `<pattern-id>/<index>/<motif-id>`. The first record of an id
 //! wins.
 //!
+//! With a recorder set, each local `instance` also records the lowered
+//! subtree it expanded to (see [`Expansion`]), for the page lint pass.
+//!
 //! - `bounds` — the affine transform stack and paint extents of commands.
+//! - `glyphs` — per-glyph ink of attributed glyph runs.
 //! - `record` — the recorder and the per-node declared box.
 
 mod bounds;
+mod glyphs;
 mod record;
 
+pub(in crate::compile) use glyphs::{TextInk, glyph_inks};
 pub use record::CompiledBox;
-pub(in crate::compile) use record::{BoxRecorder, Compiled, Placed};
+pub(in crate::compile) use record::{BoxRecorder, Compiled, Expansion, Placed};

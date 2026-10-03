@@ -101,6 +101,9 @@ pub enum FixHint {
         exact_match: Option<String>,
         nearest: Option<String>,
     },
+    /// Set `property` to `to`: replace the subject's own entry, or add one
+    /// when the subject does not set it (`y` → `(px)140`).
+    SetProperty { property: String, to: String },
 }
 
 impl Diagnostic {

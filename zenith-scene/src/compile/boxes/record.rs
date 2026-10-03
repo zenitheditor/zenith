@@ -28,10 +28,23 @@ pub struct CompiledBox {
     pub visual: LayoutBox,
 }
 
-/// Collects the final box of every compiled node of one page.
+/// The lowered subtree one `instance` expanded to, as the compile drew it.
+#[derive(Debug, Clone)]
+pub(in crate::compile) struct Expansion {
+    /// The expanded children, ids prefixed with `<instance-id>/`.
+    pub(in crate::compile) children: Vec<Node>,
+    /// The children draw under the instance `w` / `h` fit transform.
+    pub(in crate::compile) scaled: bool,
+    /// The children come from an imported component (their own token scope).
+    pub(in crate::compile) imported: bool,
+}
+
+/// Collects the final box of every compiled node of one page, and the
+/// subtree each `instance` expanded to.
 #[derive(Debug)]
 pub(in crate::compile) struct BoxRecorder {
     boxes: RefCell<BTreeMap<String, CompiledBox>>,
+    expansions: RefCell<BTreeMap<String, Expansion>>,
     /// The transform open where this recorder's command stream starts.
     base: Affine,
 }
@@ -40,6 +53,7 @@ impl Default for BoxRecorder {
     fn default() -> Self {
         Self {
             boxes: RefCell::new(BTreeMap::new()),
+            expansions: RefCell::new(BTreeMap::new()),
             base: Affine::IDENTITY,
         }
     }
@@ -86,11 +100,13 @@ impl BoxRecorder {
     pub(in crate::compile) fn nested(&self, outer: &[SceneCommand]) -> BoxRecorder {
         BoxRecorder {
             boxes: RefCell::new(BTreeMap::new()),
+            expansions: RefCell::new(BTreeMap::new()),
             base: open_transform(self.base, outer),
         }
     }
 
-    /// Move every record of `child` into this recorder under `prefix` + id.
+    /// Move every box record of `child` into this recorder under `prefix` +
+    /// id. The expansions of `child` (pattern motif copies) are dropped.
     pub(in crate::compile) fn absorb(&self, child: BoxRecorder, prefix: &str) {
         let mut boxes = self.boxes.borrow_mut();
         for (id, b) in child.boxes.into_inner() {
@@ -101,6 +117,21 @@ impl BoxRecorder {
     /// The recorded boxes, by id.
     pub(in crate::compile) fn into_boxes(self) -> BTreeMap<String, CompiledBox> {
         self.boxes.into_inner()
+    }
+
+    /// The recorded boxes and instance expansions, by id.
+    pub(in crate::compile) fn into_parts(
+        self,
+    ) -> (BTreeMap<String, CompiledBox>, BTreeMap<String, Expansion>) {
+        (self.boxes.into_inner(), self.expansions.into_inner())
+    }
+
+    /// Record the subtree the instance `id` expanded to (first record wins).
+    pub(in crate::compile) fn expand(&self, id: &str, expansion: Expansion) {
+        self.expansions
+            .borrow_mut()
+            .entry(id.to_owned())
+            .or_insert(expansion);
     }
 
     /// Record the box of one compiled node.
