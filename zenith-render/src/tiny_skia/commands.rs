@@ -7,25 +7,55 @@
 //! dispatcher only as already-consumed markers — they are matched explicitly
 //! (no wildcard over [`SceneCommand`]) and no-op here.
 
-use tiny_skia::{LineCap, LineJoin, StrokeDash, Transform};
+use tiny_skia::{LineCap, LineJoin, Mask, StrokeDash, Transform};
 use zenith_core::{AssetProvider, FontProvider};
 use zenith_scene::{LineCap as IrLineCap, LineJoin as IrLineJoin, SceneCommand};
 
+use super::clip::{draw_clip_mask, intersect_masks};
 use super::draw;
 
 /// Read-only per-command draw context shared by every handler.
 ///
 /// `current_ts` is the active affine transform; `effective_clip` is the top of
 /// the clip stack (already intersected with all enclosing clips); `width` /
-/// `height` are the pixmap dimensions. A `Copy` bundle so handlers take few
-/// arguments without re-deriving any of these per arm — byte-identical to the
-/// prior inline reads.
+/// `height` are the pixmap dimensions; `device_scale` is the root output
+/// scale. A `Copy` bundle so handlers take few arguments without re-deriving
+/// any of these per arm.
 #[derive(Clone, Copy)]
-pub(in crate::tiny_skia) struct DrawCtx {
+pub(in crate::tiny_skia) struct DrawCtx<'a> {
     pub(in crate::tiny_skia) current_ts: Transform,
     pub(in crate::tiny_skia) effective_clip: (f64, f64, f64, f64),
     pub(in crate::tiny_skia) width: u32,
     pub(in crate::tiny_skia) height: u32,
+    /// Root output scale of this render (`1.0` = page pixels). Handlers that
+    /// rasterize an intermediate (SVG assets) size it by this factor so the
+    /// intermediate stays near 1:1 with device pixels.
+    pub(in crate::tiny_skia) device_scale: f64,
+    /// Coverage of the active non-axis-aligned clips (see [`super::clip`]);
+    /// `None` while every active clip is axis-aligned.
+    pub(in crate::tiny_skia) clip_shape: Option<&'a Mask>,
+}
+
+impl DrawCtx<'_> {
+    /// The draw mask for the active clip: the rect clip, intersected with the
+    /// rotated clip shape when one is active. `None` skips the draw;
+    /// `Some(None)` draws unmasked.
+    pub(in crate::tiny_skia) fn clip_mask(&self) -> Option<Option<Mask>> {
+        draw_clip_mask(
+            self.effective_clip,
+            self.width,
+            self.height,
+            self.clip_shape,
+        )
+    }
+
+    /// Restrict a draw-specific `mask` to the rotated clip shape, if any.
+    pub(in crate::tiny_skia) fn restrict(&self, mut mask: Mask) -> Mask {
+        if let Some(shape) = self.clip_shape {
+            intersect_masks(&mut mask, shape);
+        }
+        mask
+    }
 }
 
 /// Dispatch one drawing command to its handler.
@@ -37,7 +67,7 @@ pub(in crate::tiny_skia) struct DrawCtx {
 /// no-op (matched explicitly, never via a wildcard).
 pub(in crate::tiny_skia) fn draw_command(
     target: &mut tiny_skia::Pixmap,
-    ctx: DrawCtx,
+    ctx: DrawCtx<'_>,
     cmd: &SceneCommand,
     fonts: &dyn FontProvider,
     assets: &dyn AssetProvider,

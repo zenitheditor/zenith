@@ -13,7 +13,7 @@ use super::super::commands::{DrawCtx, build_stroke_dash, map_line_cap, map_line_
 use super::super::gradient::gradient_shader;
 use super::super::paths::{
     build_align_mask, build_path_align_mask, build_poly_path, build_rounded_rect_path,
-    build_scene_path, clip_mask, intersect_rects, tiny_skia_fill_rule,
+    build_scene_path, device_bounds, intersect_rects, tiny_skia_fill_rule,
 };
 
 /// Build a tiny-skia fill paint from a scene [`ScenePaint`] over the bounding
@@ -71,7 +71,7 @@ pub(in crate::tiny_skia) fn fill_rect(target: &mut Pixmap, ctx: DrawCtx, cmd: &S
     match paint {
         // ── Solid fill — byte-identical to the pre-Paint behavior ──
         ScenePaint::Solid { color } => {
-            if ctx.current_ts.is_identity() {
+            if ctx.current_ts.is_identity() && ctx.clip_shape.is_none() {
                 // ── Unrotated (identity) path — AA-off axis-aligned fill ──
                 let fill_rect = (*x, *y, x + w, y + h);
                 let effective_clip = ctx.effective_clip;
@@ -110,8 +110,7 @@ pub(in crate::tiny_skia) fn fill_rect(target: &mut Pixmap, ctx: DrawCtx, cmd: &S
             } else {
                 // ── Rotated path: fill the rect as a path under the current
                 // transform, AA-on, masked by the (axis-aligned) clip. ──
-                let effective_clip = ctx.effective_clip;
-                let mask = match clip_mask(effective_clip, ctx.width, ctx.height) {
+                let mask = match ctx.clip_mask() {
                     None => return,
                     Some(m) => m,
                 };
@@ -143,14 +142,19 @@ pub(in crate::tiny_skia) fn fill_rect(target: &mut Pixmap, ctx: DrawCtx, cmd: &S
                 return;
             }
             let effective_clip = ctx.effective_clip;
-            if intersect_rects((*x, *y, x + w, y + h), effective_clip).is_none() {
+            if intersect_rects(
+                device_bounds(ctx.current_ts, (*x, *y, x + w, y + h)),
+                effective_clip,
+            )
+            .is_none()
+            {
                 return;
             }
             let Some(rect) = Rect::from_xywh(*x as f32, *y as f32, *w as f32, *h as f32) else {
                 return;
             };
             let path = PathBuilder::from_rect(rect);
-            let mask = match clip_mask(effective_clip, ctx.width, ctx.height) {
+            let mask = match ctx.clip_mask() {
                 None => return,
                 Some(m) => m,
             };
@@ -202,7 +206,12 @@ pub(in crate::tiny_skia) fn fill_ellipse(target: &mut Pixmap, ctx: DrawCtx, cmd:
     let effective_clip = ctx.effective_clip;
 
     // Early-out: skip if the ellipse bbox is entirely outside the clip.
-    if intersect_rects((ox, oy, ox + ow, oy + oh), effective_clip).is_none() {
+    if intersect_rects(
+        device_bounds(ctx.current_ts, (ox, oy, ox + ow, oy + oh)),
+        effective_clip,
+    )
+    .is_none()
+    {
         return;
     }
 
@@ -219,7 +228,7 @@ pub(in crate::tiny_skia) fn fill_ellipse(target: &mut Pixmap, ctx: DrawCtx, cmd:
 
     // Build clip mask from the effective clip (truncates, not reshapes).
     // AA-on: curved fill, deterministic same-machine.
-    let mask = match clip_mask(effective_clip, ctx.width, ctx.height) {
+    let mask = match ctx.clip_mask() {
         None => return,
         Some(m) => m,
     };
@@ -280,11 +289,14 @@ pub(in crate::tiny_skia) fn stroke_ellipse(target: &mut Pixmap, ctx: DrawCtx, cm
     // the ellipse edge on all sides.
     let half_sw = stroke_width / 2.0;
     if intersect_rects(
-        (
-            ox - half_sw,
-            oy - half_sw,
-            ox + ow + half_sw,
-            oy + oh + half_sw,
+        device_bounds(
+            ctx.current_ts,
+            (
+                ox - half_sw,
+                oy - half_sw,
+                ox + ow + half_sw,
+                oy + oh + half_sw,
+            ),
         ),
         effective_clip,
     )
@@ -302,7 +314,7 @@ pub(in crate::tiny_skia) fn stroke_ellipse(target: &mut Pixmap, ctx: DrawCtx, cm
         return; // degenerate rect: skip
     };
 
-    let mask = match clip_mask(effective_clip, ctx.width, ctx.height) {
+    let mask = match ctx.clip_mask() {
         None => return,
         Some(m) => m,
     };
@@ -364,11 +376,16 @@ pub(in crate::tiny_skia) fn stroke_line(target: &mut Pixmap, ctx: DrawCtx, cmd: 
     let ink_y = y1.min(*y2) - half_sw;
     let ink_x2 = x1.max(*x2) + half_sw;
     let ink_y2 = y1.max(*y2) + half_sw;
-    if intersect_rects((ink_x, ink_y, ink_x2, ink_y2), effective_clip).is_none() {
+    if intersect_rects(
+        device_bounds(ctx.current_ts, (ink_x, ink_y, ink_x2, ink_y2)),
+        effective_clip,
+    )
+    .is_none()
+    {
         return;
     }
 
-    let mask = match clip_mask(effective_clip, ctx.width, ctx.height) {
+    let mask = match ctx.clip_mask() {
         None => return,
         Some(m) => m,
     };
@@ -423,8 +440,7 @@ pub(in crate::tiny_skia) fn fill_polygon(target: &mut Pixmap, ctx: DrawCtx, cmd:
         None => return,
     };
 
-    let effective_clip = ctx.effective_clip;
-    let mask = match clip_mask(effective_clip, ctx.width, ctx.height) {
+    let mask = match ctx.clip_mask() {
         None => return,
         Some(m) => m,
     };
@@ -476,7 +492,7 @@ pub(in crate::tiny_skia) fn stroke_polyline(target: &mut Pixmap, ctx: DrawCtx, c
     };
 
     let effective_clip = ctx.effective_clip;
-    let mask = match clip_mask(effective_clip, ctx.width, ctx.height) {
+    let mask = match ctx.clip_mask() {
         None => return,
         Some(m) => m,
     };
@@ -500,7 +516,8 @@ pub(in crate::tiny_skia) fn stroke_polyline(target: &mut Pixmap, ctx: DrawCtx, c
             ctx.width,
             ctx.height,
             ctx.current_ts,
-        ),
+        )
+        .map(|m| ctx.restrict(m)),
         // Inside/Outside on an open path is meaningless: center.
         StrokeAlign::Inside | StrokeAlign::Outside => None,
     };
@@ -540,8 +557,7 @@ pub(in crate::tiny_skia) fn fill_path(target: &mut Pixmap, ctx: DrawCtx, cmd: &S
         Some(p) => p,
         None => return,
     };
-    let effective_clip = ctx.effective_clip;
-    let mask = match clip_mask(effective_clip, ctx.width, ctx.height) {
+    let mask = match ctx.clip_mask() {
         None => return,
         Some(m) => m,
     };
@@ -587,7 +603,7 @@ pub(in crate::tiny_skia) fn stroke_path(target: &mut Pixmap, ctx: DrawCtx, cmd: 
         None => return,
     };
     let effective_clip = ctx.effective_clip;
-    let mask = match clip_mask(effective_clip, ctx.width, ctx.height) {
+    let mask = match ctx.clip_mask() {
         None => return,
         Some(m) => m,
     };
@@ -604,7 +620,8 @@ pub(in crate::tiny_skia) fn stroke_path(target: &mut Pixmap, ctx: DrawCtx, cmd: 
             ctx.width,
             ctx.height,
             ctx.current_ts,
-        ),
+        )
+        .map(|m| ctx.restrict(m)),
         StrokeAlign::Inside | StrokeAlign::Outside => None,
     };
     let stroke_width_px = if aligned_mask.is_some() {
@@ -669,7 +686,10 @@ pub(in crate::tiny_skia) fn stroke_rect(target: &mut Pixmap, ctx: DrawCtx, cmd: 
     // the rect edge on all sides.
     let half_sw = stroke_width / 2.0;
     if intersect_rects(
-        (x - half_sw, y - half_sw, x + w + half_sw, y + h + half_sw),
+        device_bounds(
+            ctx.current_ts,
+            (x - half_sw, y - half_sw, x + w + half_sw, y + h + half_sw),
+        ),
         effective_clip,
     )
     .is_none()
@@ -682,7 +702,7 @@ pub(in crate::tiny_skia) fn stroke_rect(target: &mut Pixmap, ctx: DrawCtx, cmd: 
     };
     let path = PathBuilder::from_rect(rect);
 
-    let mask = match clip_mask(effective_clip, ctx.width, ctx.height) {
+    let mask = match ctx.clip_mask() {
         None => return,
         Some(m) => m,
     };
@@ -732,7 +752,12 @@ pub(in crate::tiny_skia) fn fill_rounded_rect(
     }
 
     let effective_clip = ctx.effective_clip;
-    if intersect_rects((*x, *y, x + w, y + h), effective_clip).is_none() {
+    if intersect_rects(
+        device_bounds(ctx.current_ts, (*x, *y, x + w, y + h)),
+        effective_clip,
+    )
+    .is_none()
+    {
         return;
     }
 
@@ -744,7 +769,7 @@ pub(in crate::tiny_skia) fn fill_rounded_rect(
         return;
     };
 
-    let mask = match clip_mask(effective_clip, ctx.width, ctx.height) {
+    let mask = match ctx.clip_mask() {
         None => return,
         Some(m) => m,
     };
@@ -800,7 +825,10 @@ pub(in crate::tiny_skia) fn stroke_rounded_rect(
 
     let half_sw = stroke_width / 2.0;
     if intersect_rects(
-        (x - half_sw, y - half_sw, x + w + half_sw, y + h + half_sw),
+        device_bounds(
+            ctx.current_ts,
+            (x - half_sw, y - half_sw, x + w + half_sw, y + h + half_sw),
+        ),
         effective_clip,
     )
     .is_none()
@@ -816,7 +844,7 @@ pub(in crate::tiny_skia) fn stroke_rounded_rect(
         return;
     };
 
-    let mask = match clip_mask(effective_clip, ctx.width, ctx.height) {
+    let mask = match ctx.clip_mask() {
         None => return,
         Some(m) => m,
     };

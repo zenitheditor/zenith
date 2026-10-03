@@ -8,20 +8,24 @@
 //! target pixmap and delegate to [`draw_command`](super::commands::draw_command),
 //! which routes each to a handler in the [`draw`](super::draw) submodules.
 
-use tiny_skia::{FilterQuality, Pixmap, PixmapPaint, Transform};
+use std::rc::Rc;
+
+use tiny_skia::{FilterQuality, Mask, Pixmap, PixmapPaint, Transform};
 use zenith_core::{AssetProvider, FontProvider};
 use zenith_raster::{LinearRgba, blend_pixel, decode_srgb_u8, encode_linear_to_srgb_u8};
 use zenith_scene::{
     BlendMode as IrBlendMode, FilterSpec, MaskSpec, Scene, SceneCommand, ShadowSpec,
 };
 
+use super::clip::push_clip_shape;
 use super::commands::{DrawCtx, draw_command};
 use super::crop::{draw_ink_region, draw_region, ink_bbox};
 use super::encode::{encode_straight_png, premultiplied_to_straight_rgba};
 use super::filter::apply_filters;
 use super::mask::attenuate_by_mask;
-use super::paths::intersect_rects;
-use super::pixels::{f64_to_px, premultiplied_to_straight};
+use super::paths::{device_bounds, intersect_rects};
+use super::pixels::premultiplied_to_straight;
+use super::scale::{scale_filters, scale_mask, scale_shadows, scaled_px};
 use super::shadow::{composite_blur, composite_shadows};
 use crate::backend::{RasterBackend, RasterImage};
 use crate::error::RenderError;
@@ -245,38 +249,42 @@ fn clamp_unit(channel: f32) -> f32 {
     }
 }
 
-fn transform_rect_bounds(ts: Transform, x: f64, y: f64, w: f64, h: f64) -> (f64, f64, f64, f64) {
-    let x1 = x * f64::from(ts.sx) + y * f64::from(ts.kx) + f64::from(ts.tx);
-    let y1 = x * f64::from(ts.ky) + y * f64::from(ts.sy) + f64::from(ts.ty);
-    let x2 = (x + w) * f64::from(ts.sx) + (y + h) * f64::from(ts.kx) + f64::from(ts.tx);
-    let y2 = (x + w) * f64::from(ts.ky) + (y + h) * f64::from(ts.sy) + f64::from(ts.ty);
-    (x1.min(x2), y1.min(y2), x1.max(x2), y1.max(y2))
-}
-
 impl RasterBackend for TinySkiaBackend {
-    fn rasterize(
+    fn rasterize_scaled(
         &self,
         scene: &Scene,
+        scale: f64,
         fonts: &dyn FontProvider,
         assets: &dyn AssetProvider,
     ) -> Result<RasterImage, RenderError> {
-        let width = f64_to_px(scene.width, "width")?;
-        let height = f64_to_px(scene.height, "height")?;
+        // Device size: `max(1, round(page × scale))` per axis (see `scale`).
+        let width = scaled_px(scene.width, scale, "width")?;
+        let height = scaled_px(scene.height, scale, "height")?;
 
         let mut pixmap = Pixmap::new(width, height).ok_or_else(|| {
             RenderError::new(format!("failed to allocate pixmap ({width}×{height})"))
         })?;
         // Background starts fully transparent (0,0,0,0) — the deterministic default.
 
-        // Clip stack: each entry is (x, y, x2, y2) in scene coordinates.
-        // The outermost clip is the page rectangle.
-        let page_clip = (0.0_f64, 0.0_f64, scene.width, scene.height);
+        // Clip stack: each entry is (x, y, x2, y2) in device coordinates.
+        // The outermost clip is the page rectangle at the output scale.
+        let page_clip = (0.0_f64, 0.0_f64, scene.width * scale, scene.height * scale);
         let mut clip_stack: Vec<(f64, f64, f64, f64)> = vec![page_clip];
+        // Parallel to `clip_stack`: the coverage of the active non-axis-aligned
+        // clips (see `clip`). `None` while every active clip is axis-aligned,
+        // so documents without rotated clips draw exactly as before.
+        let mut shape_stack: Vec<Option<Rc<Mask>>> = vec![None];
 
         // Transform stack: the top entry is the current affine transform applied
-        // to every draw. The base entry is identity, so unrotated scenes pass
-        // `Transform::identity()` to every draw call (byte-identical to before).
-        let mut transform_stack: Vec<Transform> = vec![Transform::identity()];
+        // to every draw. The base entry is the output scale. At scale 1 it is
+        // identity, so unrotated scenes pass `Transform::identity()` to every
+        // draw call (byte-identical to an unscaled render).
+        let base_ts = if scale == 1.0 {
+            Transform::identity()
+        } else {
+            Transform::from_scale(scale as f32, scale as f32)
+        };
+        let mut transform_stack: Vec<Transform> = vec![base_ts];
 
         // Lazily-built fontdb for SVG text→path conversion. Initialised at most
         // once per render, only when an SVG asset is actually drawn. Never loads
@@ -301,7 +309,7 @@ impl RasterBackend for TinySkiaBackend {
             // Hoist once per iteration. Push/pop arms mutate the stack and
             // never consume current_ts; draw arms read it and never mutate the
             // stack — so hoisting is behavior-identical to reading in each arm.
-            let current_ts = *transform_stack.last().unwrap_or(&Transform::identity());
+            let current_ts = *transform_stack.last().unwrap_or(&base_ts);
 
             // ── Structural / capture commands first ───────────────────────────
             // These never draw into a target pixmap; they mutate the clip /
@@ -309,13 +317,21 @@ impl RasterBackend for TinySkiaBackend {
             // so the drawing dispatch below is reached only by drawing commands.
             match cmd {
                 SceneCommand::PushClip { x, y, w, h } => {
-                    let new_rect = transform_rect_bounds(current_ts, *x, *y, *w, *h);
+                    let new_rect = device_bounds(current_ts, (*x, *y, x + w, y + h));
                     let current = *clip_stack.last().unwrap_or(&page_clip);
                     // Push the intersection so the stack always represents the
                     // effective clip at the current nesting depth.
                     let intersected =
                         intersect_rects(current, new_rect).unwrap_or((0.0, 0.0, 0.0, 0.0)); // empty → degenerate
                     clip_stack.push(intersected);
+                    let parent = shape_stack.last().and_then(Option::as_ref);
+                    shape_stack.push(push_clip_shape(
+                        parent,
+                        current_ts,
+                        (*x, *y, *w, *h),
+                        width,
+                        height,
+                    ));
                     continue;
                 }
 
@@ -323,6 +339,9 @@ impl RasterBackend for TinySkiaBackend {
                 SceneCommand::PopClip => {
                     if clip_stack.len() > 1 {
                         clip_stack.pop();
+                    }
+                    if shape_stack.len() > 1 {
+                        shape_stack.pop();
                     }
                     continue;
                 }
@@ -364,7 +383,7 @@ impl RasterBackend for TinySkiaBackend {
                     let pm = Pixmap::new(width, height);
                     capture_stack.push(CaptureLayer {
                         pm,
-                        effect: CaptureEffect::Shadow(shadows.clone()),
+                        effect: CaptureEffect::Shadow(scale_shadows(shadows, scale)),
                     });
                     continue;
                 }
@@ -392,7 +411,7 @@ impl RasterBackend for TinySkiaBackend {
                     let pm = Pixmap::new(width, height);
                     capture_stack.push(CaptureLayer {
                         pm,
-                        effect: CaptureEffect::Blur(*radius),
+                        effect: CaptureEffect::Blur(radius * scale),
                     });
                     continue;
                 }
@@ -423,7 +442,7 @@ impl RasterBackend for TinySkiaBackend {
                     };
                     capture_stack.push(CaptureLayer {
                         pm,
-                        effect: CaptureEffect::Filter(filters.clone()),
+                        effect: CaptureEffect::Filter(scale_filters(filters, scale)),
                     });
                     continue;
                 }
@@ -455,7 +474,7 @@ impl RasterBackend for TinySkiaBackend {
                     let pm = Pixmap::new(width, height);
                     capture_stack.push(CaptureLayer {
                         pm,
-                        effect: CaptureEffect::Mask(*mask),
+                        effect: CaptureEffect::Mask(scale_mask(*mask, scale)),
                     });
                     continue;
                 }
@@ -567,6 +586,8 @@ impl RasterBackend for TinySkiaBackend {
                 effective_clip: *clip_stack.last().unwrap_or(&page_clip),
                 width,
                 height,
+                device_scale: scale,
+                clip_shape: shape_stack.last().and_then(Option::as_deref),
             };
             draw_command(target, ctx, cmd, fonts, assets, &mut svg_fontdb);
         }

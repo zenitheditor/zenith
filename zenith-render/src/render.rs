@@ -5,7 +5,7 @@ use zenith_scene::Scene;
 
 use crate::backend::{RasterBackend, RasterImage};
 use crate::error::RenderError;
-use crate::tiny_skia::TinySkiaBackend;
+use crate::tiny_skia::{TinySkiaBackend, scaled_px};
 
 /// Rasterize `scene` and encode the result as PNG bytes.
 ///
@@ -27,9 +27,54 @@ pub fn render_png(
     fonts: &dyn FontProvider,
     assets: &dyn AssetProvider,
 ) -> Result<Vec<u8>, RenderError> {
+    render_png_scaled(scene, 1.0, fonts, assets)
+}
+
+/// Rasterize `scene` at output `scale` and encode the result as PNG bytes.
+///
+/// See [`RasterBackend::rasterize_scaled`] for the scale rules. `scale = 1.0`
+/// is byte-identical to [`render_png`].
+///
+/// # Errors
+///
+/// Returns [`RenderError`] when `scale` is not finite and `> 0`, the scaled
+/// dimensions are invalid, or PNG encoding fails.
+pub fn render_png_scaled(
+    scene: &Scene,
+    scale: f64,
+    fonts: &dyn FontProvider,
+    assets: &dyn AssetProvider,
+) -> Result<Vec<u8>, RenderError> {
     let backend = TinySkiaBackend;
-    let image = backend.rasterize(scene, fonts, assets)?;
+    let image = backend.rasterize_scaled(scene, scale, fonts, assets)?;
     backend.encode_png(&image)
+}
+
+/// Encode a straight-alpha [`RasterImage`] as deterministic PNG bytes.
+///
+/// # Errors
+///
+/// Returns [`RenderError`] when PNG encoding fails.
+pub fn encode_png(image: &RasterImage) -> Result<Vec<u8>, RenderError> {
+    TinySkiaBackend.encode_png(image)
+}
+
+/// Device size `(width, height)` in pixels of a `width × height` page at
+/// output `scale`: `max(1, round(side × scale))` per axis (`f64::round`, half
+/// away from zero).
+///
+/// This is the exact size [`render_image_scaled`] produces, so callers can lay
+/// out a composite before rendering.
+///
+/// # Errors
+///
+/// Returns [`RenderError`] when `scale` is not finite and `> 0`, or either
+/// side is invalid or exceeds the maximum raster dimension.
+pub fn scaled_size(width: f64, height: f64, scale: f64) -> Result<(u32, u32), RenderError> {
+    Ok((
+        scaled_px(width, scale, "width")?,
+        scaled_px(height, scale, "height")?,
+    ))
 }
 
 /// Rasterize two scenes (`left`, `right`), composite them SIDE BY SIDE via
@@ -52,9 +97,30 @@ pub fn render_spread_png(
     fonts: &dyn FontProvider,
     assets: &dyn AssetProvider,
 ) -> Result<Vec<u8>, RenderError> {
+    render_spread_png_scaled(left, right, gutter_px, 1.0, fonts, assets)
+}
+
+/// [`render_spread_png`] with both pages rasterized at output `scale`.
+///
+/// `gutter_px` is in output (device) pixels; the caller scales it. `scale =
+/// 1.0` is byte-identical to [`render_spread_png`].
+///
+/// # Errors
+///
+/// Returns [`RenderError`] when `scale` is invalid, either scene's scaled
+/// dimensions are invalid, the combined width overflows, or PNG encoding
+/// fails.
+pub fn render_spread_png_scaled(
+    left: &Scene,
+    right: &Scene,
+    gutter_px: u32,
+    scale: f64,
+    fonts: &dyn FontProvider,
+    assets: &dyn AssetProvider,
+) -> Result<Vec<u8>, RenderError> {
     let backend = TinySkiaBackend;
-    let left_img = backend.rasterize(left, fonts, assets)?;
-    let right_img = backend.rasterize(right, fonts, assets)?;
+    let left_img = backend.rasterize_scaled(left, scale, fonts, assets)?;
+    let right_img = backend.rasterize_scaled(right, scale, fonts, assets)?;
     let spread = composite_spread(&left_img, &right_img, gutter_px)?;
     backend.encode_png(&spread)
 }
@@ -152,8 +218,25 @@ pub fn render_image(
     fonts: &dyn FontProvider,
     assets: &dyn AssetProvider,
 ) -> Result<RasterImage, RenderError> {
-    let backend = TinySkiaBackend;
-    backend.rasterize(scene, fonts, assets)
+    render_image_scaled(scene, 1.0, fonts, assets)
+}
+
+/// Rasterize `scene` at output `scale` to a [`RasterImage`].
+///
+/// See [`RasterBackend::rasterize_scaled`] for the scale rules. `scale = 1.0`
+/// is byte-identical to [`render_image`].
+///
+/// # Errors
+///
+/// Returns [`RenderError`] when `scale` is not finite and `> 0`, or the
+/// scaled dimensions are invalid.
+pub fn render_image_scaled(
+    scene: &Scene,
+    scale: f64,
+    fonts: &dyn FontProvider,
+    assets: &dyn AssetProvider,
+) -> Result<RasterImage, RenderError> {
+    TinySkiaBackend.rasterize_scaled(scene, scale, fonts, assets)
 }
 
 #[cfg(test)]

@@ -8,7 +8,7 @@ use zenith_core::FontProvider;
 use zenith_scene::SceneCommand;
 
 use super::super::commands::DrawCtx;
-use super::super::paths::{GlyphOutlinePen, clip_mask};
+use super::super::paths::GlyphOutlinePen;
 
 pub(in crate::tiny_skia) fn draw_glyph_run(
     target: &mut Pixmap,
@@ -69,8 +69,7 @@ pub(in crate::tiny_skia) fn draw_glyph_run(
     // Glyph ink is clipped to the effective clip via the mask, so
     // text inside a frame is truncated at the frame edge; deterministic
     // same-machine (pure-software AA, no GPU).
-    let effective_clip = ctx.effective_clip;
-    let mask = match clip_mask(effective_clip, ctx.width, ctx.height) {
+    let mask = match ctx.clip_mask() {
         None => return, // entire run is off-canvas / clip is empty
         Some(m) => m,
     };

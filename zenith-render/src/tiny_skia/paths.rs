@@ -160,6 +160,36 @@ pub(super) fn intersect_rects(
     }
 }
 
+/// Device-space bounds `(x, y, x2, y2)` of the user-space rectangle
+/// `(x, y, x2, y2)` under `ts`.
+///
+/// Maps all four corners, so a rotated rectangle yields its true axis-aligned
+/// bounds. Under the identity transform the result equals the input exactly.
+/// Clip rectangles live in device space, so every cull test against
+/// `effective_clip` maps its user-space ink box through this first.
+pub(super) fn device_bounds(
+    ts: Transform,
+    (x, y, x2, y2): (f64, f64, f64, f64),
+) -> (f64, f64, f64, f64) {
+    let (sx, kx, tx) = (f64::from(ts.sx), f64::from(ts.kx), f64::from(ts.tx));
+    let (ky, sy, ty) = (f64::from(ts.ky), f64::from(ts.sy), f64::from(ts.ty));
+    let map = |px: f64, py: f64| (px * sx + py * kx + tx, px * ky + py * sy + ty);
+    let corners = [map(x, y), map(x2, y), map(x, y2), map(x2, y2)];
+    let mut out = (
+        f64::INFINITY,
+        f64::INFINITY,
+        f64::NEG_INFINITY,
+        f64::NEG_INFINITY,
+    );
+    for (cx, cy) in corners {
+        out.0 = out.0.min(cx);
+        out.1 = out.1.min(cy);
+        out.2 = out.2.max(cx);
+        out.3 = out.3.max(cy);
+    }
+    out
+}
+
 /// Build a `tiny_skia::Path` from a flat `[x0, y0, x1, y1, …]` point list.
 ///
 /// `closed` — when `true` the path is closed after the final vertex (polygon);
@@ -363,5 +393,38 @@ impl ttf_parser::OutlineBuilder for GlyphOutlinePen {
 
     fn close(&mut self) {
         self.builder.close();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn device_bounds_identity_is_exact() {
+        let r = (1.25, -3.5, 10.75, 20.0);
+        assert_eq!(device_bounds(Transform::identity(), r), r);
+    }
+
+    #[test]
+    fn device_bounds_scales() {
+        let r = (10.0, 20.0, 30.0, 40.0);
+        assert_eq!(
+            device_bounds(Transform::from_scale(0.5, 0.5), r),
+            (5.0, 10.0, 15.0, 20.0)
+        );
+    }
+
+    #[test]
+    fn device_bounds_rotated_square_covers_all_corners() {
+        // A 45° rotation of a square about its center: the device bounds must
+        // grow to the diamond's extent, not collapse to a zero-width box.
+        let ts = Transform::from_rotate_at(45.0, 5.0, 5.0);
+        let (x, y, x2, y2) = device_bounds(ts, (0.0, 0.0, 10.0, 10.0));
+        let half_diag = 50.0_f64.sqrt();
+        assert!((x - (5.0 - half_diag)).abs() < 1e-3, "x {x}");
+        assert!((x2 - (5.0 + half_diag)).abs() < 1e-3, "x2 {x2}");
+        assert!((y - (5.0 - half_diag)).abs() < 1e-3, "y {y}");
+        assert!((y2 - (5.0 + half_diag)).abs() < 1e-3, "y2 {y2}");
     }
 }

@@ -37,6 +37,30 @@ pub trait RasterBackend {
         scene: &Scene,
         fonts: &dyn FontProvider,
         assets: &dyn AssetProvider,
+    ) -> Result<RasterImage, RenderError> {
+        self.rasterize_scaled(scene, 1.0, fonts, assets)
+    }
+
+    /// Rasterize a scene at output `scale` (`1.0` = one device pixel per page
+    /// pixel).
+    ///
+    /// The scale applies at raster time as a root transform, never as a
+    /// resample of a full-size image. Each output axis is
+    /// `max(1, round(page × scale))` pixels (`f64::round`, half away from
+    /// zero). Pixel-sized effects (shadow offset and blur, blur radius, mask
+    /// box and feather, noise cell) scale with it. `scale = 1.0` is
+    /// byte-identical to [`RasterBackend::rasterize`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`RenderError`] when `scale` is not finite and `> 0`, or the
+    /// scaled dimensions are invalid.
+    fn rasterize_scaled(
+        &self,
+        scene: &Scene,
+        scale: f64,
+        fonts: &dyn FontProvider,
+        assets: &dyn AssetProvider,
     ) -> Result<RasterImage, RenderError>;
 
     /// Encode a [`RasterImage`] as deterministic PNG bytes.

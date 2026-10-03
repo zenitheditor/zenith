@@ -117,7 +117,9 @@ pub(in crate::tiny_skia) fn draw_image(
             // Rasterize at destination resolution so the
             // downstream bilinear scale is near 1:1 (crisp),
             // preserving the SVG's own aspect ratio.
-            let raster_scale = ((*w / svw).max(*h / svh)).clamp(0.01, 16.0);
+            // A scaled render multiplies by the root output scale so the
+            // intermediate matches device pixels (exact at scale 1).
+            let raster_scale = ((*w / svw).max(*h / svh) * ctx.device_scale).clamp(0.01, 16.0);
             let pw = ((svw * raster_scale).ceil() as u32).max(1);
             let ph = ((svh * raster_scale).ceil() as u32).max(1);
             let Some(mut pm) = Pixmap::new(pw, ph) else {
@@ -178,7 +180,7 @@ pub(in crate::tiny_skia) fn draw_image(
     // clips (box-clip).  clip_mask() handles the full-pixmap
     // fast path (returns Some(None) → no mask allocation) and the
     // sub-page case (returns Some(Some(mask))).
-    let mask = match super::super::paths::clip_mask(ctx.effective_clip, width, height) {
+    let mask = match ctx.clip_mask() {
         None => return, // clip fully off-canvas
         Some(m) => m,
     };
@@ -217,7 +219,7 @@ pub(in crate::tiny_skia) fn draw_image(
                 return;
             };
             m.fill_path(&path, FillRule::Winding, true, current_ts);
-            Some(m)
+            Some(ctx.restrict(m))
         }
     };
     // Prefer the shape mask when present; else the box mask.
