@@ -87,8 +87,15 @@ zenith version=1 {
       stroke (token)"color.base.content"
       stroke-width (token)"border.width"
     }
+    style id="ui.chart" {
+      fill (token)"color.base.content"
+      font-family (token)"font.body"
+      font-size (token)"size.caption"
+      stroke (token)"color.base.300"
+    }
   }
   defaults {
+    chart style="ui.chart"
     connector style="ui.connector" text-style="ui.caption"
     shape style="ui.control" text-style="ui.label"
     text style="ui.body"

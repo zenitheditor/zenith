@@ -3,7 +3,7 @@
 //! `label-colors`, and `slice-colors` children. The common visual/geometry
 //! props are read exactly like `pattern`; the chart-specific props (`kind`,
 //! `title`, `caption`, `legend`, `legend-position`, `legend-layout`,
-//! `legend-align`, `axis-min`, `axis-max`, `axis-style`, `bar-mode`,
+//! `legend-align`, `axis-min`, `axis-max`, `bar-mode`,
 //! `orientation`, `point-placement`, `value-labels`, `value-color`) describe
 //! the chart presentation. Series, categories, label-colors, and slice-colors
 //! children are pure data (not renderable nodes).
@@ -100,8 +100,6 @@ pub(crate) const CHART_KNOWN_PROPS: &[&str] = &[
     "axis_min",
     "axis-max",
     "axis_max",
-    "axis-style",
-    "axis_style",
     "bar-mode",
     "bar_mode",
     "orientation",
@@ -153,8 +151,6 @@ pub(super) fn transform_chart(node: &KdlNode) -> Result<ChartNode, ParseError> {
         optional_f64_prop(node, "axis-min").or_else(|| optional_f64_prop(node, "axis_min"));
     let axis_max =
         optional_f64_prop(node, "axis-max").or_else(|| optional_f64_prop(node, "axis_max"));
-    let axis_style =
-        optional_string_prop_aliased(node, "axis-style", "axis_style").map(str::to_owned);
     let bar_mode = optional_string_prop_aliased(node, "bar-mode", "bar_mode").map(str::to_owned);
     let orientation = optional_string_prop(node, "orientation").map(str::to_owned);
     let point_placement =
@@ -336,7 +332,6 @@ pub(super) fn transform_chart(node: &KdlNode) -> Result<ChartNode, ParseError> {
         legend_align,
         axis_min,
         axis_max,
-        axis_style,
         bar_mode,
         orientation,
         point_placement,

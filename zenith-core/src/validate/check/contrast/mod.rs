@@ -11,11 +11,13 @@
 //! - `ink` — measured glyph ink and the sampling over it.
 //! - `table` — text inside table cells, judged per cell backdrop.
 //! - `label` — measured `shape` / `connector` label ink.
+//! - `chart` — measured chart text ink, judged per role.
 //! - `paint` — `fill` to backdrop paint resolution.
 //! - `props` / `geometry` — property and coverage-geometry helpers.
 //! - `scope` — token scope and fit transform of expanded content.
 //! - `types` — shared value types.
 
+mod chart;
 mod entry;
 mod geometry;
 mod ink;
@@ -28,6 +30,7 @@ mod text;
 mod types;
 mod walk;
 
+pub use chart::ChartTextInk;
 pub use entry::page_contrast_checks;
 pub use ink::{ContrastInks, GlyphInk, InkLine};
 pub use label::LabelInk;

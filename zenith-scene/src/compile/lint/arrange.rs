@@ -19,7 +19,7 @@ use crate::layout::LayoutBox;
 
 use super::align::near_miss;
 use super::connector::crosses_node;
-use super::ledger::{Entry, PageLedger, TextItem};
+use super::ledger::{Entry, PageLedger, TextItem, TextSource};
 use super::paint::Authored;
 use super::spacing::uneven_gaps;
 
@@ -56,7 +56,7 @@ fn sibling_sets(ledger: &PageLedger) -> BTreeMap<Option<usize>, Vec<Sibling<'_>>
     let texts: BTreeMap<usize, &TextItem> = ledger
         .texts
         .iter()
-        .filter(|t| !t.label && t.ink.axis_aligned && !t.ink.glyphs.is_empty())
+        .filter(|t| t.source == TextSource::Node && t.ink.axis_aligned && !t.ink.glyphs.is_empty())
         .map(|t| (t.entry, t))
         .collect();
     let mut sets: BTreeMap<Option<usize>, Vec<Sibling<'_>>> = BTreeMap::new();

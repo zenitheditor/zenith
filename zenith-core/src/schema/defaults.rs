@@ -24,6 +24,18 @@ pub fn attribute_default(kind: &str, name: &str) -> Option<&'static str> {
         ("frame", "clip") => Some("#true; #false when layout is row or column"),
         (k, "position") if BOX_KINDS.contains(&k) => Some("auto"),
         ("text" | "code", "overflow") => Some("clip"),
+        ("chart", "fill") => Some(
+            "text colour: style `fill`, else the ambient `.content` pair, else the best-contrast `.content` token, else black or white",
+        ),
+        ("chart", "stroke") => {
+            Some("axis colour: style `stroke`, else the text colour mixed 50% into the backdrop")
+        }
+        ("chart", "stroke-width") => {
+            Some("axis and gridline width: style `stroke-width`, else (px)1")
+        }
+        ("chart", "style") => Some(
+            "the `defaults` chart row. Keys: font-family, font-size (base px), fill, stroke, stroke-width, shadow",
+        ),
         _ => None,
     }
 }

@@ -4,35 +4,48 @@
 //! legend strip; `emit_legend` pushes colored swatches and label glyph runs
 //! into the command buffer. Both functions are no-ops when no entries are
 //! supplied. Placement, layout, and alignment are controlled via `LegendConfig`.
+//! Every legend measure is a multiple of the chart base size (see [`Metrics`]),
+//! and labels draw at the `legend` role size in the chart ink.
 
-use zenith_core::{Diagnostic, FontStyle};
-use zenith_layout::{ShapeRequest, TextDirection, TextLayoutEngine};
+use zenith_core::{ChartNode, Diagnostic};
 
 use crate::ir::{Color, Paint, SceneCommand};
 
-use super::super::NodeCtx;
-use super::super::text::run_to_scene_glyphs;
+use super::frame::BoxPx;
+use super::role::ChartTextRole;
+use super::text::ChartText;
 
-// ── Constants ─────────────────────────────────────────────────────────────────
+// ── Metrics ───────────────────────────────────────────────────────────────────
 
-/// Left padding inside the legend strip, before the swatch.
-const PAD_L: f64 = 10.0;
-/// Right padding inside the legend strip, after the label.
-const PAD_R: f64 = 10.0;
-/// Swatch square edge length (px).
-const SWATCH: f64 = 11.0;
-/// Gap between the right edge of the swatch and the start of the label.
-const GAP: f64 = 6.0;
-/// Vertical slot height per legend entry.
-const LINE_H: f64 = 18.0;
-/// Font size for legend labels (px).
-const FONT: f32 = 10.0;
-/// Default legend label text color (dark gray).
-const LEGEND_TEXT_COLOR: Color = Color::srgb(60, 60, 60, 255);
-/// Horizontal gap between wrapped entries within a single row.
-const ENTRY_GAP: f64 = 16.0;
-/// Top and bottom padding inside a top/bottom legend band.
-const PAD_V: f64 = 8.0;
+/// Legend measures in px, each a fixed multiple of the chart base size `b`.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct Metrics {
+    /// Left and right padding inside the strip: `1.0 b`.
+    pad: f64,
+    /// Swatch square edge: `1.1 b`.
+    swatch: f64,
+    /// Gap between swatch and label: `0.6 b`.
+    gap: f64,
+    /// Vertical slot per entry: `1.8 b`.
+    line_h: f64,
+    /// Horizontal gap between wrapped entries: `1.6 b`.
+    entry_gap: f64,
+    /// Top and bottom padding inside a band: `0.8 b`.
+    pad_v: f64,
+}
+
+impl Metrics {
+    fn of(base: f64) -> Self {
+        Metrics {
+            pad: base,
+            swatch: base * 1.1,
+            gap: base * 0.6,
+            line_h: base * 1.8,
+            entry_gap: base * 1.6,
+            pad_v: base * 0.8,
+        }
+    }
+}
 
 // ── LegendArea ────────────────────────────────────────────────────────────────
 
@@ -125,46 +138,74 @@ pub(super) struct LegendConfig {
 
 // ── Pure width arithmetic ─────────────────────────────────────────────────────
 
-/// Compute the total legend strip width from the widest label advance.
-///
-/// `width = PAD_L + SWATCH + GAP + max_advance + PAD_R`
-///
-/// This pure helper is separated from the shaping loop so it can be unit-tested
-/// without constructing a `NodeCtx`.
-pub(super) fn legend_width_from_advance(max_advance: f64) -> f64 {
-    PAD_L + SWATCH + GAP + max_advance + PAD_R
+/// Compute the total legend strip width from the widest label advance:
+/// `pad + swatch + gap + max_advance + pad`.
+fn legend_width_from_advance(max_advance: f64, m: Metrics) -> f64 {
+    m.pad + m.swatch + m.gap + max_advance + m.pad
 }
 
-// ── entry_advances ────────────────────────────────────────────────────────────
-
 /// Shape each label and return its advance width (px). Shaping errors yield `0.0`.
-fn entry_advances(entries: &[(String, Color)], cx: NodeCtx<'_>) -> Vec<f64> {
-    let families = [String::from("Noto Sans")];
+fn entry_advances(entries: &[(String, Color)], text: ChartText<'_>) -> Vec<f64> {
     entries
         .iter()
-        .map(|(label, _)| {
-            let req = ShapeRequest {
-                text: label,
-                families: &families,
-                weight: 400,
-                style: FontStyle::Normal,
-                font_size: FONT,
-                direction: TextDirection::Ltr,
-                features: &[],
-                kerning_pairs: &[],
-                letter_spacing_px: 0.0,
-            };
-            match cx.engine.shape_with_fallback(&req, cx.fonts) {
-                Ok(result) => result.runs.iter().map(|r| r.advance_width as f64).sum(),
-                Err(_) => 0.0,
-            }
-        })
+        .map(|(label, _)| text.advance(label, ChartTextRole::Legend))
         .collect()
 }
 
 /// Pixel width that a single entry occupies (swatch + gap + label advance).
-fn entry_content_w(advance: f64) -> f64 {
-    SWATCH + GAP + advance
+fn entry_content_w(advance: f64, m: Metrics) -> f64 {
+    m.swatch + m.gap + advance
+}
+
+// ── legend_split ──────────────────────────────────────────────────────────────
+
+/// Split `content` between the plot and the legend. With no legend (or no
+/// entries) the plot keeps all of `content`. A side strip is capped at 40% of
+/// the width, a band at 50% of the height.
+pub(super) fn legend_split(
+    entries: &[(String, Color)],
+    config: Option<LegendConfig>,
+    content: BoxPx,
+    text: ChartText<'_>,
+) -> (BoxPx, Option<(LegendArea, LegendConfig)>) {
+    let Some(config) = config else {
+        return (content, None);
+    };
+    let (x, y, w, h) = content;
+    let (wr, hr) = legend_reserve(entries, config, w, text);
+    let (w_res, h_res) = if config.position.is_side() {
+        (wr.min(w * 0.4), hr)
+    } else {
+        (wr, hr.min(h * 0.5))
+    };
+    if w_res <= 0.0 && h_res <= 0.0 {
+        return (content, None);
+    }
+    let (plot, area) = match config.position {
+        LegendPosition::Right => ((x, y, w - w_res, h), (x + w - w_res, y, w_res, h)),
+        LegendPosition::Left => ((x + w_res, y, w - w_res, h), (x, y, w_res, h)),
+        LegendPosition::Top => ((x, y + h_res, w, h - h_res), (x, y, w, h_res)),
+        LegendPosition::Bottom => ((x, y, w, h - h_res), (x, y + h - h_res, w, h_res)),
+    };
+    let (ax, ay, aw, ah) = area;
+    let area = LegendArea {
+        x: ax,
+        y: ay,
+        w: aw,
+        h: ah,
+    };
+    (plot, Some((area, config)))
+}
+
+impl LegendConfig {
+    /// The legend config of `chart`, or `None` when `legend` is not `#true`.
+    pub(super) fn of(chart: &ChartNode) -> Option<Self> {
+        (chart.legend == Some(true)).then(|| LegendConfig {
+            position: LegendPosition::from_opt(chart.legend_position.as_deref()),
+            layout: LegendLayout::from_opt(chart.legend_layout.as_deref()),
+            align: LegendAlign::from_opt(chart.legend_align.as_deref()),
+        })
+    }
 }
 
 // ── legend_reserve ────────────────────────────────────────────────────────────
@@ -175,70 +216,55 @@ fn entry_content_w(advance: f64) -> f64 {
 /// - Band (`Top`/`Bottom`): returns `(0.0, band_h)`.
 ///
 /// Returns `(0.0, 0.0)` when `entries` is empty.
-pub(super) fn legend_reserve(
+fn legend_reserve(
     entries: &[(String, Color)],
     config: LegendConfig,
     avail_w: f64,
-    cx: NodeCtx<'_>,
+    text: ChartText<'_>,
 ) -> (f64, f64) {
     if entries.is_empty() {
         return (0.0, 0.0);
     }
+    let m = Metrics::of(text.base());
 
     if config.position.is_side() {
-        let advances = entry_advances(entries, cx);
+        let advances = entry_advances(entries, text);
         let max_advance = advances.into_iter().fold(0.0_f64, f64::max);
-        return (legend_width_from_advance(max_advance), 0.0);
+        return (legend_width_from_advance(max_advance, m), 0.0);
     }
 
     // Top / Bottom band.
     let height = match config.layout {
-        LegendLayout::List => entries.len() as f64 * LINE_H + 2.0 * PAD_V,
+        LegendLayout::List => entries.len() as f64 * m.line_h + 2.0 * m.pad_v,
         LegendLayout::Wrapped => {
-            let advances = entry_advances(entries, cx);
-            let rows = wrapped_row_count(&advances, avail_w);
-            rows as f64 * LINE_H + 2.0 * PAD_V
+            let advances = entry_advances(entries, text);
+            let rows = wrapped_row_count(&advances, avail_w, m);
+            rows as f64 * m.line_h + 2.0 * m.pad_v
         }
     };
     (0.0, height)
 }
 
 /// Count the number of rows needed to wrap `advances` into `avail_w`.
-fn wrapped_row_count(advances: &[f64], avail_w: f64) -> usize {
-    let row_avail = (avail_w - 2.0 * PAD_L).max(1.0);
-    let mut rows: usize = 1;
-    let mut cur: f64 = 0.0;
-
-    for &adv in advances {
-        let cw = entry_content_w(adv);
-        if cur > 0.0 && cur + ENTRY_GAP + cw > row_avail {
-            rows += 1;
-            cur = cw;
-        } else if cur > 0.0 {
-            cur += ENTRY_GAP + cw;
-        } else {
-            cur = cw;
-        }
-    }
-
-    rows.max(1)
+fn wrapped_row_count(advances: &[f64], avail_w: f64, m: Metrics) -> usize {
+    wrapped_rows(advances, avail_w, m).len().max(1)
 }
 
-/// Group entry indices into rows using the same greedy rule as `wrapped_row_count`.
-fn wrapped_rows(advances: &[f64], avail_w: f64) -> Vec<Vec<usize>> {
-    let row_avail = (avail_w - 2.0 * PAD_L).max(1.0);
+/// Group entry indices into rows: greedy left-to-right flow.
+fn wrapped_rows(advances: &[f64], avail_w: f64, m: Metrics) -> Vec<Vec<usize>> {
+    let row_avail = (avail_w - 2.0 * m.pad).max(1.0);
     let mut rows: Vec<Vec<usize>> = Vec::new();
     let mut cur_row: Vec<usize> = Vec::new();
     let mut cur: f64 = 0.0;
 
     for (i, &adv) in advances.iter().enumerate() {
-        let cw = entry_content_w(adv);
-        if cur > 0.0 && cur + ENTRY_GAP + cw > row_avail {
+        let cw = entry_content_w(adv, m);
+        if cur > 0.0 && cur + m.entry_gap + cw > row_avail {
             rows.push(cur_row);
             cur_row = vec![i];
             cur = cw;
         } else if cur > 0.0 {
-            cur += ENTRY_GAP + cw;
+            cur += m.entry_gap + cw;
             cur_row.push(i);
         } else {
             cur = cw;
@@ -259,85 +285,42 @@ fn wrapped_rows(advances: &[f64], avail_w: f64) -> Vec<Vec<usize>> {
 
 // ── draw_entry helper ─────────────────────────────────────────────────────────
 
-/// Shared text context for the legend draw passes — the caller-allocated font
-/// family list plus the node context. Bundled so `draw_entry` stays within the
-/// argument limit without re-allocating `families` per entry.
-#[derive(Clone, Copy)]
-struct DrawCtx<'a> {
-    families: &'a [String],
-    cx: NodeCtx<'a>,
-}
-
-/// Emit one swatch + label glyph run at `(swatch_x, line_top)`.
-fn draw_entry(
+/// One legend entry to draw: its index, label, swatch colour, and slot origin.
+struct Entry<'e> {
+    index: usize,
+    label: &'e str,
+    color: Color,
     swatch_x: f64,
     line_top: f64,
-    label: &str,
-    color: Color,
-    dctx: DrawCtx<'_>,
+}
+
+/// Emit one swatch + label glyph run.
+fn draw_entry(
+    entry: Entry<'_>,
+    text: ChartText<'_>,
+    m: Metrics,
     commands: &mut Vec<SceneCommand>,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
-    let cx = dctx.cx;
-    // Colored swatch square.
-    let swatch_y = line_top + (LINE_H - SWATCH) / 2.0;
+    let swatch_y = entry.line_top + (m.line_h - m.swatch) / 2.0;
     commands.push(SceneCommand::FillRect {
-        x: swatch_x,
+        x: entry.swatch_x,
         y: swatch_y,
-        w: SWATCH,
-        h: SWATCH,
-        paint: Paint::solid(color),
+        w: m.swatch,
+        h: m.swatch,
+        paint: Paint::solid(entry.color),
     });
 
-    // Label glyph run.
-    let req = ShapeRequest {
-        text: label,
-        families: dctx.families,
-        weight: 400,
-        style: FontStyle::Normal,
-        font_size: FONT,
-        direction: TextDirection::Ltr,
-        features: &[],
-        kerning_pairs: &[],
-        letter_spacing_px: 0.0,
-    };
-
-    match cx.engine.shape_with_fallback(&req, cx.fonts) {
-        Err(e) => {
-            diagnostics.push(Diagnostic::advisory(
-                "scene.text_unshaped",
-                format!(
-                    "chart legend label '{}' could not be shaped: {}",
-                    label, e.message
-                ),
-                None,
-                None,
-            ));
-        }
-        Ok(result) => {
-            let ascent: f64 = result.runs.first().map(|r| r.ascent as f64).unwrap_or(8.0);
-            let baseline_y = line_top + LINE_H / 2.0 + ascent * 0.35;
-            let mut text_x = swatch_x + SWATCH + GAP;
-
-            for run in result.runs {
-                let advance = run.advance_width as f64;
-                let glyphs = run_to_scene_glyphs(&run);
-                commands.push(SceneCommand::DrawGlyphRun {
-                    x: text_x,
-                    y: baseline_y,
-                    font_id: run.font_id,
-                    font_size: run.font_size,
-                    color: LEGEND_TEXT_COLOR,
-                    stroke_color: None,
-                    stroke_width: None,
-                    link: None,
-                    selectable: true,
-                    source_node_id: None,
-                    glyphs,
-                });
-                text_x += advance;
-            }
-        }
+    if let Some(shaped) = text.shape(entry.label, ChartTextRole::Legend, diagnostics) {
+        let baseline_y = entry.line_top + m.line_h / 2.0 + shaped.ascent * 0.35;
+        let text_x = entry.swatch_x + m.swatch + m.gap;
+        text.emit(
+            shaped,
+            (text_x, baseline_y),
+            text.look.ink,
+            entry.index,
+            commands,
+        );
     }
 }
 
@@ -370,165 +353,72 @@ pub(super) fn emit_legend(
     entries: &[(String, Color)],
     area: LegendArea,
     config: LegendConfig,
-    cx: NodeCtx<'_>,
+    text: ChartText<'_>,
     commands: &mut Vec<SceneCommand>,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
     if area.w <= 0.0 || area.h <= 0.0 || entries.is_empty() {
         return;
     }
-
+    let m = Metrics::of(text.base());
     let area_bottom = area.y + area.h;
-    let left_edge = area.x + PAD_L;
-    let right_edge = area.x + area.w - PAD_R;
+    let left_edge = area.x + m.pad;
+    let right_edge = area.x + area.w - m.pad;
 
-    if config.position.is_side() {
-        emit_legend_side(entries, area, area_bottom, cx, commands, diagnostics);
-    } else {
-        emit_legend_band(
-            entries,
-            area,
-            config,
-            BandGeom {
-                area_bottom,
-                left_edge,
-                right_edge,
-            },
-            cx,
-            commands,
-            diagnostics,
-        );
-    }
-}
-
-/// Emit a vertical list strip (Left / Right positions).
-fn emit_legend_side(
-    entries: &[(String, Color)],
-    area: LegendArea,
-    area_bottom: f64,
-    cx: NodeCtx<'_>,
-    commands: &mut Vec<SceneCommand>,
-    diagnostics: &mut Vec<Diagnostic>,
-) {
-    let n = entries.len() as f64;
-    let total_h = n * LINE_H;
-    let start_y = (area.y + (area.h - total_h) / 2.0).max(area.y);
-    let swatch_x = area.x + PAD_L;
-    let families = [String::from("Noto Sans")];
-    let dctx = DrawCtx {
-        families: &families,
-        cx,
+    // Rows of entry indices and the left edge of each row's block.
+    let advances = entry_advances(entries, text);
+    let column = |count: usize| -> Vec<Vec<usize>> { (0..count).map(|i| vec![i]).collect() };
+    let rows: Vec<Vec<usize>> = match (config.position.is_side(), config.layout) {
+        (true, _) | (false, LegendLayout::List) => column(entries.len()),
+        (false, LegendLayout::Wrapped) => wrapped_rows(&advances, area.w, m),
     };
+    let total_h = rows.len() as f64 * m.line_h;
+    let start_y = (area.y + (area.h - total_h) / 2.0).max(area.y);
+    // A list block aligns as one column, as wide as its widest entry.
+    let list_w = advances
+        .iter()
+        .map(|&a| entry_content_w(a, m))
+        .fold(0.0_f64, f64::max);
 
-    for (i, (label, color)) in entries.iter().enumerate() {
-        let line_top = start_y + i as f64 * LINE_H;
+    for (row_idx, row) in rows.iter().enumerate() {
+        let line_top = start_y + row_idx as f64 * m.line_h;
         if line_top >= area_bottom {
             break;
         }
-        draw_entry(
-            swatch_x,
-            line_top,
-            label,
-            *color,
-            dctx,
-            commands,
-            diagnostics,
-        );
-    }
-}
-
-/// Geometry derived from `LegendArea` for band layout; bundles three computed
-/// scalars so `emit_legend_band` stays within the 7-arg limit.
-struct BandGeom {
-    area_bottom: f64,
-    left_edge: f64,
-    right_edge: f64,
-}
-
-/// Emit a horizontal band (Top / Bottom positions) in List or Wrapped layout.
-fn emit_legend_band(
-    entries: &[(String, Color)],
-    area: LegendArea,
-    config: LegendConfig,
-    geom: BandGeom,
-    cx: NodeCtx<'_>,
-    commands: &mut Vec<SceneCommand>,
-    diagnostics: &mut Vec<Diagnostic>,
-) {
-    let BandGeom {
-        area_bottom,
-        left_edge,
-        right_edge,
-    } = geom;
-    let advances = entry_advances(entries, cx);
-    let families = [String::from("Noto Sans")];
-    let dctx = DrawCtx {
-        families: &families,
-        cx,
-    };
-
-    match config.layout {
-        LegendLayout::List => {
-            let block_w = advances
-                .iter()
-                .map(|&a| entry_content_w(a))
-                .fold(0.0_f64, f64::max);
-            let total_h = entries.len() as f64 * LINE_H;
-            let start_y = (area.y + (area.h - total_h) / 2.0).max(area.y);
-            let block_x = align_x(config.align, block_w, left_edge, right_edge);
-
-            for (i, (label, color)) in entries.iter().enumerate() {
-                let line_top = start_y + i as f64 * LINE_H;
-                if line_top >= area_bottom {
-                    break;
-                }
-                draw_entry(
-                    block_x,
-                    line_top,
+        let row_w: f64 = row.iter().enumerate().fold(0.0, |acc, (j, &ei)| {
+            let cw = entry_content_w(advances.get(ei).copied().unwrap_or(0.0), m);
+            if j == 0 {
+                acc + cw
+            } else {
+                acc + m.entry_gap + cw
+            }
+        });
+        let mut x = match (config.position.is_side(), config.layout) {
+            (true, _) => left_edge,
+            (false, LegendLayout::List) => align_x(config.align, list_w, left_edge, right_edge),
+            (false, LegendLayout::Wrapped) => align_x(config.align, row_w, left_edge, right_edge),
+        };
+        for (j, &ei) in row.iter().enumerate() {
+            if j > 0 {
+                x += m.entry_gap;
+            }
+            let Some((label, color)) = entries.get(ei) else {
+                continue;
+            };
+            draw_entry(
+                Entry {
+                    index: ei,
                     label,
-                    *color,
-                    dctx,
-                    commands,
-                    diagnostics,
-                );
-            }
-        }
-        LegendLayout::Wrapped => {
-            let rows = wrapped_rows(&advances, area.w);
-            let total_rows_h = rows.len() as f64 * LINE_H;
-            let start_y = (area.y + (area.h - total_rows_h) / 2.0).max(area.y);
-
-            for (row_idx, row_indices) in rows.iter().enumerate() {
-                let line_top = start_y + row_idx as f64 * LINE_H;
-                if line_top >= area_bottom {
-                    break;
-                }
-
-                // Compute this row's total content width.
-                let row_w: f64 = row_indices.iter().enumerate().fold(0.0, |acc, (j, &ei)| {
-                    let cw = entry_content_w(advances.get(ei).copied().unwrap_or(0.0));
-                    if j == 0 {
-                        acc + cw
-                    } else {
-                        acc + ENTRY_GAP + cw
-                    }
-                });
-
-                let row_x0 = align_x(config.align, row_w, left_edge, right_edge);
-                let mut x = row_x0;
-
-                for (j, &ei) in row_indices.iter().enumerate() {
-                    if j > 0 {
-                        x += ENTRY_GAP;
-                    }
-                    let (label, color) = match entries.get(ei) {
-                        Some(e) => e,
-                        None => continue,
-                    };
-                    draw_entry(x, line_top, label, *color, dctx, commands, diagnostics);
-                    x += entry_content_w(advances.get(ei).copied().unwrap_or(0.0));
-                }
-            }
+                    color: *color,
+                    swatch_x: x,
+                    line_top,
+                },
+                text,
+                m,
+                commands,
+                diagnostics,
+            );
+            x += entry_content_w(advances.get(ei).copied().unwrap_or(0.0), m);
         }
     }
 }
@@ -539,13 +429,30 @@ fn emit_legend_band(
 mod tests {
     use super::*;
 
+    /// Metrics at base 10: pad 10, swatch 11, gap 6, line 18, entry gap 16.
+    fn m10() -> Metrics {
+        Metrics::of(10.0)
+    }
+
+    // ── Metrics ───────────────────────────────────────────────────────────────
+
+    #[test]
+    fn metrics_scale_with_the_base() {
+        let m = m10();
+        assert!((m.swatch - 11.0).abs() < 1e-9);
+        assert!((m.line_h - 18.0).abs() < 1e-9);
+        let big = Metrics::of(20.0);
+        assert!((big.line_h - 36.0).abs() < 1e-9);
+        assert!((big.entry_gap - 32.0).abs() < 1e-9);
+    }
+
     // ── legend_width_from_advance ─────────────────────────────────────────────
 
     #[test]
     fn width_from_advance_zero() {
-        // Zero advance → PAD_L + SWATCH + GAP + 0 + PAD_R
-        let expected = PAD_L + SWATCH + GAP + PAD_R;
-        let got = legend_width_from_advance(0.0);
+        let m = m10();
+        let expected = m.pad + m.swatch + m.gap + m.pad;
+        let got = legend_width_from_advance(0.0, m);
         assert!(
             (got - expected).abs() < 1e-9,
             "expected {expected}, got {got}"
@@ -554,9 +461,10 @@ mod tests {
 
     #[test]
     fn width_from_advance_nonzero() {
+        let m = m10();
         let advance = 42.5;
-        let expected = PAD_L + SWATCH + GAP + advance + PAD_R;
-        let got = legend_width_from_advance(advance);
+        let expected = m.pad + m.swatch + m.gap + advance + m.pad;
+        let got = legend_width_from_advance(advance, m);
         assert!(
             (got - expected).abs() < 1e-9,
             "expected {expected}, got {got}"
@@ -637,12 +545,6 @@ mod tests {
         assert_eq!(LegendAlign::from_opt(Some("unknown")), LegendAlign::Center);
     }
 
-    // ── emit_legend (engine-free) ─────────────────────────────────────────────
-    // Engine-dependent shaping tests are omitted: building a NodeCtx requires
-    // a RustybuzzEngine and FontProvider which are not available in unit-test
-    // context. The pure arithmetic is exercised above; integration/conformance
-    // tests cover the full shaping + rendering path.
-
     // ── align_x ──────────────────────────────────────────────────────────────
 
     #[test]
@@ -676,27 +578,22 @@ mod tests {
 
     #[test]
     fn wrapped_row_count_single_row() {
-        // Three small entries that all fit in 200 px.
-        let advances = vec![20.0, 20.0, 20.0];
-        // Each entry_content_w = 11+6+20 = 37; row_avail = (200-2*10).max(1) = 180
-        // 37 + 16+37 + 16+37 = 143 ≤ 180 → one row
-        let rows = wrapped_row_count(&advances, 200.0);
+        // Each entry_content_w = 11+6+20 = 37; row_avail = 200-2*10 = 180.
+        // 37 + 16+37 + 16+37 = 143 ≤ 180 → one row.
+        let rows = wrapped_row_count(&[20.0, 20.0, 20.0], 200.0, m10());
         assert_eq!(rows, 1, "expected 1 row, got {rows}");
     }
 
     #[test]
     fn wrapped_row_count_wraps() {
-        // Very large entries that each need their own row.
-        let advances = vec![200.0, 200.0];
-        // Each entry_content_w = 11+6+200 = 217; row_avail = (100-20).max(1) = 80
-        // first entry: cur=217; second: 217+16+217 > 80 → new row
-        let rows = wrapped_row_count(&advances, 100.0);
+        // Each entry_content_w = 11+6+200 = 217; row_avail = 80 → two rows.
+        let rows = wrapped_row_count(&[200.0, 200.0], 100.0, m10());
         assert_eq!(rows, 2, "expected 2 rows, got {rows}");
     }
 
     #[test]
     fn wrapped_row_count_empty() {
-        let rows = wrapped_row_count(&[], 200.0);
+        let rows = wrapped_row_count(&[], 200.0, m10());
         assert_eq!(rows, 1, "empty advances: expected min-1 row, got {rows}");
     }
 }

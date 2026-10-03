@@ -248,6 +248,7 @@ fn compile_imported_instance(
         md_blocks: cx.md_blocks,
         page_block_styles: &[],
         doc_block_styles: &imported.document.body.block_styles,
+        backdrop: cx.backdrop,
         image_sizes: cx.image_sizes,
         boxes: cx.boxes,
     };

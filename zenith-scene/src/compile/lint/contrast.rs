@@ -23,7 +23,7 @@ use zenith_core::{
 use super::super::boxes::{Expansion, TextInk};
 use super::super::container::synthetic_group;
 use super::super::imports::ImportScopes;
-use super::super::session::label_inks;
+use super::super::session::{chart_inks, label_inks};
 use super::run::LintEnv;
 
 /// The rebuilt page content and what the walks need to judge it.
@@ -64,9 +64,11 @@ pub(super) fn content_contrast(
     texts: &BTreeMap<String, GlyphInk>,
 ) -> Vec<Diagnostic> {
     let labels = label_inks(env.commands, env.bleed, env.shape);
+    let charts = chart_inks(env.commands, env.bleed, env.shape);
     let inks = ContrastInks {
         labels: &labels,
         texts,
+        charts: &charts,
     };
     let judge = |children: &[Node], scopes: &ContentScopes<'_>| {
         page_contrast_checks(

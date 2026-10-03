@@ -16,7 +16,7 @@ use zenith_core::Diagnostic;
 use crate::layout::LayoutBox;
 
 use super::geom::bounds;
-use super::ledger::{Entry, PageLedger};
+use super::ledger::{Entry, PageLedger, TextSource};
 
 /// Ink tolerance in px on each side, matching the overflow check.
 const EPSILON: f64 = 0.5;
@@ -51,7 +51,11 @@ impl Outline {
 /// Every `label.overflow` of the page.
 pub(super) fn label_overflow(ledger: &PageLedger, compiled: &[Diagnostic]) -> Vec<Diagnostic> {
     let mut out = Vec::new();
-    for item in ledger.texts.iter().filter(|t| t.label) {
+    for item in ledger
+        .texts
+        .iter()
+        .filter(|t| t.source == TextSource::Label)
+    {
         let Some(entry) = ledger.entry(item.entry) else {
             continue;
         };

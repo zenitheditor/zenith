@@ -268,7 +268,10 @@ fn lower_node(
         Node::Pattern(n) => {
             apply::pattern(n, &scope.cascade(DefaultsKind::Pattern, n.style.as_deref()))
         }
-        Node::Chart(n) => apply::chart(n, &scope.cascade(DefaultsKind::Chart, n.style.as_deref())),
+        Node::Chart(n) => {
+            let cascade = scope.cascade(DefaultsKind::Chart, n.style.as_deref());
+            apply::chart(n, &cascade, pair, &mut cx.synth);
+        }
         // A local instance on a page points at the component copy lowered
         // for that page and ambient. An imported instance (`source=`) keeps
         // its own document's defaults. Effect and unknown nodes take no

@@ -12,7 +12,7 @@ mod layout;
 mod page;
 mod prep;
 
-pub(in crate::compile) use label_ink::label_inks;
+pub(in crate::compile) use label_ink::{chart_inks, label_inks};
 pub use layout::LayoutStats;
 pub use page::PageCompiler;
 pub use prep::DocumentPrep;

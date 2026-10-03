@@ -676,3 +676,31 @@ fn chart_invalid_orientation_fires_diagnostic() {
         codes(&report)
     );
 }
+
+/// `axis-style` is no chart attribute: the chart style carries the axis
+/// paint, so the attribute is reported as unknown.
+#[test]
+fn chart_axis_style_is_an_unknown_property() {
+    let src = r#"zenith version=1 {
+  project id="proj.as" name="AxisStyle"
+  styles {
+  }
+  document id="doc.as" title="AxisStyle" {
+    page id="page.as" w=(px)800 h=(px)600 {
+      chart id="c.axis" kind="bar" x=(px)0 y=(px)0 w=(px)400 h=(px)300 axis-style="hidden" {
+        series 1.0 2.0 label="S"
+      }
+    }
+  }
+}
+"#;
+    let doc = KdlAdapter
+        .parse(src.as_bytes())
+        .expect("parse must succeed");
+    let report = validate(&doc);
+    assert!(
+        has_code(&report, "node.unknown_property"),
+        "axis-style must be reported as unknown; got: {:?}",
+        codes(&report)
+    );
+}

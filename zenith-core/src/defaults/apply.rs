@@ -19,6 +19,9 @@ use super::scope::{Cascade, MergeExtras, Synth};
 /// attribute of its own. A default for any of them lowers into the node style.
 const STYLE_ONLY_TEXT_KEYS: &[&str] = &["font-weight", "letter-spacing", "shadow", "v-align"];
 
+/// Style keys a `chart` reads through its style with no attribute of its own.
+const CHART_STYLE_ONLY_KEYS: &[&str] = &["font-family", "font-size"];
+
 /// Fill `slot` with the default value of `key` when the node sets neither.
 pub(super) fn put(slot: &mut Option<PropertyValue>, cascade: &Cascade<'_>, key: &str) {
     if slot.is_none()
@@ -146,8 +149,26 @@ pub(super) fn pattern(n: &mut PatternNode, c: &Cascade<'_>) {
     put(&mut n.shadow, c, "shadow");
 }
 
-pub(super) fn chart(n: &mut ChartNode, c: &Cascade<'_>) {
+/// A chart reads `fill` as its text colour, so it takes the ambient content
+/// pair like a text. `stroke` / `stroke-width` paint its axes. `font-family`
+/// and `font-size` are style-only: a default for either lowers into the
+/// node style.
+pub(super) fn chart(
+    n: &mut ChartNode,
+    c: &Cascade<'_>,
+    pair: Option<&PropertyValue>,
+    synth: &mut Synth,
+) {
+    put_text_fill(&mut n.fill, c, pair);
+    put(&mut n.stroke, c, "stroke");
+    put(&mut n.stroke_width, c, "stroke-width");
     put(&mut n.shadow, c, "shadow");
+    if CHART_STYLE_ONLY_KEYS
+        .iter()
+        .any(|key| c.fallback(key).is_some())
+    {
+        n.style = synth.style_for("chart", c, MergeExtras::default());
+    }
 }
 
 pub(super) fn table(n: &mut TableNode, c: &Cascade<'_>) {

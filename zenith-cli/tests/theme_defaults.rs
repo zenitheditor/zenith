@@ -300,7 +300,7 @@ fn apply_keeps_existing_style_and_kind() {
     assert_eq!(out.exit_code, 0, "{}", out.human);
     assert!(!out.added_styles.contains(&"ui.body".to_owned()));
     assert_eq!(out.skipped_styles.len(), 1);
-    assert_eq!(out.added_defaults, ["connector", "shape"]);
+    assert_eq!(out.added_defaults, ["chart", "connector", "shape"]);
     assert_eq!(out.skipped_defaults.len(), 1);
     assert_eq!(out.skipped_defaults[0].id, "text");
     assert!(

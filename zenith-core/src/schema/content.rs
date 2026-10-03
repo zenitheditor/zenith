@@ -214,7 +214,7 @@ pub fn node_content(kind: &str) -> Option<NodeContentDescriptor> {
                 positional string arguments (one per slot; absent = derive index labels at render). \
                 Optional `label-colors` child carries per-slice value-label colors as positional \
                 PropertyValue arguments (e.g. `(token)\"color.x\"`; one per category in order; \
-                absent = use the chart value-color or the white on-fill default). \
+                absent = use the chart value-color, else black or white by contrast with the slice). \
                 Optional `slice-colors` child carries per-slice FILL colors for pie/donut as \
                 positional PropertyValue arguments (e.g. `(token)\"color.x\"`; one per category \
                 in order; absent = use the palette). \
@@ -226,7 +226,18 @@ pub fn node_content(kind: &str) -> Option<NodeContentDescriptor> {
                 (one number per category). This is render-time binding, distinct from `zenith merge`, \
                 which substitutes per-row scalar text/image via `role=\"data.<column>\"` and does not \
                 vary chart series per row. \
-                Emit `categories` then `label-colors` then `slice-colors` before any `series` children.",
+                Emit `categories` then `label-colors` then `slice-colors` before any `series` children. \
+                Chart text: every role scales one base size, the chart style `font-size`. \
+                Axis tick, category, legend, and caption text = base. Title = base × 1.25 at weight 600. \
+                Value labels = base × 0.875. \
+                With no `font-size`, base = clamp(round(min(w, h) × 0.04), 12, 28) px. \
+                Text colour is the chart `fill` (see the attribute default). \
+                A value label on a bar or slice takes black or white by contrast with that fill, \
+                unless `value-color` or `label-color` sets it. \
+                Gridlines are the axis colour mixed 70% into the backdrop. \
+                Margins and legend spacing scale with the base size. \
+                Lint attributes chart text as `chart '<id>' <role> text`; roles: title, caption, axis, \
+                category, legend, value, value-inside.",
             example: concat!(
                 "categories \"Q1\" \"Q2\" \"Q3\" \"Q4\"\n",
                 "label-colors (token)\"color.c1\" (token)\"color.c2\" (token)\"color.c3\" (token)\"color.c4\"\n",

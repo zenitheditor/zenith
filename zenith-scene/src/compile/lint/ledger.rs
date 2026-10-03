@@ -14,6 +14,7 @@ use zenith_core::{Node, Span};
 use crate::layout::LayoutBox;
 
 use super::super::boxes::{CompiledBox, Expansion, TextInk};
+use super::super::chart::{ChartTextRole, parse_chart_source};
 use super::geom::{Coverage, bounds, intersect};
 use super::paint::{Authored, PaintEnv, occluder_of, own_effects};
 
@@ -77,14 +78,27 @@ pub(super) struct Entry {
     pub(super) connector: Option<ConnectorFacts>,
 }
 
-/// The glyph ink of one text node or `shape` / `connector` label.
+/// What drew a [`TextItem`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum TextSource {
+    /// A text-like node (`text`, `code`, `field`, `toc`).
+    Node,
+    /// A `shape` / `connector` label.
+    Label,
+    /// One string of a chart, in the given role.
+    Chart(ChartTextRole),
+}
+
+/// The glyph ink of one text node, `shape` / `connector` label, or chart
+/// string.
 #[derive(Clone, Debug)]
 pub(super) struct TextItem {
-    /// The glyph-run source id (`<owner>/label` for a label).
+    /// The glyph-run source id (`<owner>/label` for a label,
+    /// `<chart>/<role>/<index>` for a chart string).
     pub(super) id: String,
-    /// The text entry, or the owner entry of a label.
+    /// The text entry, or the owner entry of a label or chart string.
     pub(super) entry: usize,
-    pub(super) label: bool,
+    pub(super) source: TextSource,
     pub(super) ink: TextInk,
     /// Union of the glyph ink boxes.
     pub(super) bounds: LayoutBox,
@@ -337,7 +351,8 @@ impl PageLedger {
     }
 
     /// Pair each glyph-run source with its entry: a text-like node by id, a
-    /// label by its owner id. Ink of any other source is dropped.
+    /// label by its owner id, a chart string by its chart id. Ink of any
+    /// other source is dropped.
     fn attach_inks(&mut self, inks: BTreeMap<String, TextInk>) {
         let by_id: BTreeMap<&str, usize> = self
             .entries
@@ -346,31 +361,38 @@ impl PageLedger {
             .map(|(i, e)| (e.id.as_str(), i))
             .collect();
         let mut texts = Vec::new();
-        for (source, ink) in inks {
+        for (id, ink) in inks {
             let Some(b) = bounds(&ink.glyphs) else {
                 continue;
             };
-            let direct = by_id
-                .get(source.as_str())
-                .copied()
-                .filter(|&i| self.is_text_kind(i));
-            let owner = || {
-                source
-                    .strip_suffix("/label")
-                    .and_then(|owner| by_id.get(owner).copied())
-                    .filter(|&i| self.is_label_owner(i))
+            let direct = || {
+                by_id
+                    .get(id.as_str())
+                    .copied()
+                    .filter(|&i| self.is_kind(i, &["text", "code", "field", "toc"]))
+                    .map(|i| (i, TextSource::Node))
             };
-            let (entry, label) = match direct {
-                Some(i) => (i, false),
-                None => match owner() {
-                    Some(i) => (i, true),
-                    None => continue,
-                },
+            let label = || {
+                id.strip_suffix("/label")
+                    .and_then(|owner| by_id.get(owner).copied())
+                    .filter(|&i| self.is_kind(i, &["shape", "connector"]))
+                    .map(|i| (i, TextSource::Label))
+            };
+            let chart = || {
+                let (chart, role, _) = parse_chart_source(&id)?;
+                by_id
+                    .get(chart)
+                    .copied()
+                    .filter(|&i| self.is_kind(i, &["chart"]))
+                    .map(|i| (i, TextSource::Chart(role)))
+            };
+            let Some((entry, source)) = direct().or_else(label).or_else(chart) else {
+                continue;
             };
             texts.push(TextItem {
-                id: source,
+                id,
                 entry,
-                label,
+                source,
                 ink,
                 bounds: b,
             });
@@ -378,16 +400,11 @@ impl PageLedger {
         self.texts = texts;
     }
 
-    fn is_text_kind(&self, index: usize) -> bool {
+    /// Whether the entry at `index` is one of `kinds`.
+    fn is_kind(&self, index: usize, kinds: &[&str]) -> bool {
         self.entries
             .get(index)
-            .is_some_and(|e| matches!(e.kind, "text" | "code" | "field" | "toc"))
-    }
-
-    fn is_label_owner(&self, index: usize) -> bool {
-        self.entries
-            .get(index)
-            .is_some_and(|e| matches!(e.kind, "shape" | "connector"))
+            .is_some_and(|e| kinds.contains(&e.kind))
     }
 
     /// `true` when the entry at `ancestor` contains the entry at `index`.

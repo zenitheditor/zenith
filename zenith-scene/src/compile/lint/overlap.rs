@@ -13,7 +13,7 @@ use zenith_core::{Diagnostic, FixHint};
 use crate::layout::LayoutBox;
 
 use super::geom::{area, covered_fraction, intersect, union};
-use super::ledger::{PageLedger, TextItem};
+use super::ledger::{PageLedger, TextItem, TextSource};
 use super::paint::Authored;
 
 /// Glyph-ink intersection area, in px², above which two texts collide.
@@ -25,20 +25,27 @@ const CLEARANCE: f64 = 12.0;
 /// Glyph area share a later opaque paint must cover to hide the glyph.
 const HIDDEN_SHARE: f64 = 0.5;
 
-/// `true` when the text takes part in the collision checks.
+/// `true` when the text takes part in the collision checks. Chart strings
+/// do not: their layout belongs to the chart.
 fn checked(ledger: &PageLedger, item: &TextItem) -> bool {
     ledger
         .entry(item.entry)
         .is_some_and(|e| e.visible && !e.exempt)
+        && !matches!(item.source, TextSource::Chart(_))
         && item.ink.axis_aligned
         && !item.ink.glyphs.is_empty()
 }
 
 /// How a message names a text: `'title'`, or `shape 'box' label`.
 fn subject(ledger: &PageLedger, item: &TextItem) -> String {
-    match (item.label, ledger.entry(item.entry)) {
-        (true, Some(owner)) => format!("{} '{}' label", owner.kind, owner.id),
-        _ => format!("'{}'", item.id),
+    match (item.source, ledger.entry(item.entry)) {
+        (TextSource::Label, Some(owner)) => format!("{} '{}' label", owner.kind, owner.id),
+        (TextSource::Chart(role), Some(owner)) => {
+            format!("chart '{}' {} text", owner.id, role.as_str())
+        }
+        (TextSource::Node | TextSource::Label | TextSource::Chart(_), _) => {
+            format!("'{}'", item.id)
+        }
     }
 }
 
@@ -142,7 +149,7 @@ fn overlap_diagnostic(
     let shift = (upper_bottom + CLEARANCE - lower.bounds.y).ceil().max(0.0);
     let entry = ledger.entry(lower.entry);
     let target_y = entry
-        .filter(|e| !lower.label && !e.expanded && !e.unmodeled && !e.in_flow)
+        .filter(|e| lower.source == TextSource::Node && !e.expanded && !e.unmodeled && !e.in_flow)
         .and_then(|e| authored.get(&e.id))
         .filter(|f| !f.anchored && !f.in_flow)
         .and_then(|f| f.y_px)

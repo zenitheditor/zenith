@@ -1,72 +1,48 @@
 //! `compile_chart` entry point.
 //!
-//! Resolves geometry, computes the scale and plot area, and emits the axis
-//! frame, series geometry, and labels for axis-bearing chart kinds (`bar`,
-//! `line`, `area`). Sparklines render directly into their bbox with a small
-//! inset and no axes. Pie and donut charts tessellate wedge polygons into the
-//! bbox via `pie::emit_pie` (no axes, no Y scale).
+//! Resolves geometry and the chart look, cuts the title and caption bands
+//! from the chart box, and hands the rest to the kind emitter: `cartesian`
+//! for `bar`, `line`, and `area`, `pie` for `pie` and `donut`. Sparklines
+//! render directly into their bbox with a small inset, no axes, and no text.
 //!
 //! Returns `0.0`: charts are absolute-positioned and do not participate in
 //! flow layout (same contract as `compile_pattern`).
 
 use std::collections::BTreeMap;
 
-use zenith_core::{ChartNode, Diagnostic, FontStyle, ResolvedToken};
-use zenith_layout::{ShapeRequest, TextDirection, TextLayoutEngine};
+use zenith_core::{ChartNode, Diagnostic, ResolvedToken};
 
 use crate::ir::{Color, SceneCommand};
 
 use super::super::NodeCtx;
 use super::super::RenderCtx;
-use super::super::paint::{
-    NodeEffect, emit_node_with_effects, resolve_property_color, resolve_property_shadow,
-};
+use super::super::paint::{NodeEffect, emit_node_with_effects, resolve_property_shadow};
 use super::super::style_prop;
-use super::super::text::run_to_scene_glyphs;
 use super::super::util::{
     AxisTarget, missing_geometry_diag, resolve_anchored_axis, resolve_geometry_px,
     unsupported_unit_diag,
 };
-use super::axis::{AxisColors, emit_axis_lines, emit_gridlines_and_labels};
-use super::bar::{BarMode, CatLabels, emit_bars, emit_category_labels, stacked_max};
-use super::frame::{PlotArea, plot_area};
-use super::hbar::emit_hbar;
-use super::legend::{
-    LegendAlign, LegendArea, LegendConfig, LegendLayout, LegendPosition, emit_legend,
-    legend_reserve,
-};
-use super::line::{emit_area_fill, emit_line_series, line_points};
+use super::cartesian::emit_cartesian;
+use super::frame::{Bands, BoxPx, PlotArea};
+use super::legend::{LegendConfig, emit_legend, legend_split};
+use super::line::{emit_line_series, line_points};
+use super::look::chart_look;
 use super::palette::series_color;
 use super::pie::{emit_pie, resolve_slice_color};
-use super::scale::{LinearScale, data_range, nice_ticks};
-
-// ── Default colors ─────────────────────────────────────────────────────────────
-
-/// Default axis line color (medium gray).
-const DEFAULT_AXIS_COLOR: Color = Color::srgb(120, 120, 120, 255);
-/// Default gridline color (light gray).
-const DEFAULT_GRID_COLOR: Color = Color::srgb(225, 225, 225, 255);
-/// Default tick label color (dark gray).
-const DEFAULT_LABEL_COLOR: Color = Color::srgb(90, 90, 90, 255);
-/// Default title color (near-black).
-pub(super) const DEFAULT_TITLE_COLOR: Color = Color::srgb(40, 40, 40, 255);
+use super::role::ChartTextRole;
+use super::scale::{LinearScale, data_range};
+use super::text::ChartText;
 
 // ── compile_chart ─────────────────────────────────────────────────────────────
 
 /// Compile a `chart` node.
 ///
-/// Axis-bearing kinds (`bar`, `line`, `area`) emit:
-/// - The Y axis and X axis lines (the frame).
-/// - Horizontal gridlines at each Y tick.
-/// - Numeric Y tick labels (shaped text, right-aligned).
-/// - Series geometry (bars / line strokes / area fills).
-/// - Category labels (X axis).
-/// - The title (if present) above the plot area.
-///
-/// Sparklines render directly into their bbox (no axes, no labels, no title).
-/// Pie and donut charts tessellate wedge polygons into the bbox with percentage
-/// labels and an optional title — no axes, no Y scale. Any unknown kind string
-/// emits nothing — see the gate comment for the reasoning.
+/// Axis-bearing kinds (`bar`, `line`, `area`) emit the axis frame, value
+/// gridlines and tick labels, series geometry, and category labels. Pie and
+/// donut charts tessellate wedge polygons with percentage labels. Every kind
+/// but `sparkline` draws the title above and the caption below. Sparklines
+/// render directly into their bbox (no axes, no text). Any unknown kind string
+/// emits nothing.
 ///
 /// A `shadow` (node attribute, else the style's) brackets the whole chart
 /// ink as one unit, like a group. Without a shadow the ink lands verbatim.
@@ -110,22 +86,16 @@ fn compile_chart_ink(
         return 0.0;
     }
 
-    // Axis-bearing kinds proceed past this gate; non-renderable kinds exit
-    // early. Sparkline is handled via its own branch below (after geometry
-    // resolution) because it needs x/y/w/h but NOT the full axis machinery.
+    // Known kinds proceed past this gate; unknown kind strings emit nothing
+    // (validation reports them).
     match chart.kind.as_str() {
         "bar" | "line" | "area" | "sparkline" | "pie" | "donut" => {}
-        // Forward-compat: unknown kind strings emit nothing. We enumerate the
-        // known non-renderable kinds explicitly rather than using a wildcard so
-        // that a newly added known kind causes a compile error at every match
-        // site. (String matches don't trigger exhaustive warnings, but keeping
-        // the set explicit makes the coverage intent clear.)
         _ => return 0.0,
     }
 
     // ── Geometry resolution ──────────────────────────────────────────────────
-    // Mirrors compile_shape (leaf/shape.rs:110-162): require w+h, resolve x/y
-    // with anchor fallback, apply ctx.dx/ctx.dy.
+    // Mirrors compile_shape: require w+h, resolve x/y with anchor fallback,
+    // apply ctx.dx/ctx.dy.
     let (Some(w_dim), Some(h_dim)) = (&chart.w, &chart.h) else {
         diagnostics.push(missing_geometry_diag("chart", &chart.id, chart.source_span));
         return 0.0;
@@ -180,349 +150,28 @@ fn compile_chart_ink(
         return 0.0;
     };
 
-    let x = x_raw + ctx.dx;
-    let y = y_raw + ctx.dy;
+    let chart_box = (x_raw + ctx.dx, y_raw + ctx.dy, w, h);
 
-    // ── Sparkline early branch ───────────────────────────────────────────────
-    // Sparklines render directly into their bbox (small inset, no axes, no
-    // labels, no title). Handled here, after geometry resolution, so x/y/w/h
-    // are available. Returns immediately after emitting.
     if chart.kind.as_str() == "sparkline" {
-        return emit_sparkline(chart, (x, y, w, h), cx, commands, diagnostics);
+        emit_sparkline(chart, chart_box, cx, commands, diagnostics);
+        return 0.0;
     }
 
-    // ── Pie / donut early branch ─────────────────────────────────────────────
-    // Pie and donut charts need no axes, no plot area, and no Y scale. They
-    // tessellate wedge polygons directly from the chart bbox. Handled here,
-    // after geometry resolution, so x/y/w/h are available. Returns immediately.
+    let look = chart_look(chart, (w, h), cx, diagnostics);
+    let text = ChartText {
+        cx,
+        look: &look,
+        chart_id: &chart.id,
+    };
+    let bands = Bands { base: look.base };
+    let content = bands.content(chart_box, chart.title.is_some(), chart.caption.is_some());
+
     if matches!(chart.kind.as_str(), "pie" | "donut") {
-        let is_donut = chart.kind.as_str() == "donut";
-        let legend_on = chart.legend == Some(true);
-
-        let legend_config = LegendConfig {
-            position: LegendPosition::from_opt(chart.legend_position.as_deref()),
-            layout: LegendLayout::from_opt(chart.legend_layout.as_deref()),
-            align: LegendAlign::from_opt(chart.legend_align.as_deref()),
-        };
-
-        let n = chart.series.first().map(|s| s.values.len()).unwrap_or(0);
-
-        let (w_res, h_res) = if legend_on {
-            // Use a temporary diagnostics buffer here so that missing-token
-            // diagnostics for slice-colors are not emitted twice (once for the
-            // reserve measurement and once for the actual legend render below).
-            let mut reserve_diags: Vec<Diagnostic> = Vec::new();
-            let entries = pie_legend_entries(chart, n, cx.resolved, &mut reserve_diags);
-            let (wr, hr) = legend_reserve(&entries, legend_config, w, cx);
-            // Cap side strips to 40% of width; cap bands to 50% of height.
-            let wr_capped = if legend_config.position.is_side() {
-                wr.min(w * 0.4)
-            } else {
-                wr
-            };
-            let hr_capped = if !legend_config.position.is_side() {
-                hr.min(h * 0.5)
-            } else {
-                hr
-            };
-            (wr_capped, hr_capped)
-        } else {
-            (0.0, 0.0)
-        };
-
-        // Derive the pie bbox and legend area from the legend position.
-        let (bbox_x, bbox_y, bbox_w, bbox_h, la_x, la_y, la_w, la_h) =
-            position_layout(x, y, w, h, w_res, h_res, legend_config.position);
-
-        emit_pie(
-            chart,
-            (bbox_x, bbox_y, bbox_w, bbox_h),
-            is_donut,
-            cx,
-            commands,
-            diagnostics,
-        );
-
-        if legend_on && (w_res > 0.0 || h_res > 0.0) {
-            let entries = pie_legend_entries(chart, n, cx.resolved, diagnostics);
-            emit_legend(
-                &entries,
-                LegendArea {
-                    x: la_x,
-                    y: la_y,
-                    w: la_w,
-                    h: la_h,
-                },
-                legend_config,
-                cx,
-                commands,
-                diagnostics,
-            );
-        }
-
-        return 0.0;
-    }
-
-    // ── Axis style "hidden" ──────────────────────────────────────────────────
-    // When axis_style="hidden" the caller explicitly opts out of axes.
-    if chart.axis_style.as_deref() == Some("hidden") {
-        return 0.0;
-    }
-
-    // ── Legend (axis-bearing kinds) ──────────────────────────────────────────
-    // Build the series entries and measure the legend reserve before computing
-    // the plot area so the plot bbox is already reduced when `plot_area` is
-    // called. When `legend_on` is false `(w_res, h_res)` is `(0.0, 0.0)` and
-    // `series_entries` is empty — the existing render path is byte-identical
-    // (same commands, same diagnostics).
-    let legend_on = chart.legend == Some(true);
-    let legend_config = LegendConfig {
-        position: LegendPosition::from_opt(chart.legend_position.as_deref()),
-        layout: LegendLayout::from_opt(chart.legend_layout.as_deref()),
-        align: LegendAlign::from_opt(chart.legend_align.as_deref()),
-    };
-    let series_entries: Vec<(String, Color)> = if legend_on {
-        chart
-            .series
-            .iter()
-            .enumerate()
-            .map(|(s, sr)| {
-                let label = sr
-                    .label
-                    .clone()
-                    .unwrap_or_else(|| format!("Series {}", s + 1));
-                let color = series_color(sr, s, cx.resolved, diagnostics, &chart.id);
-                (label, color)
-            })
-            .collect()
+        emit_round(chart, content, text, commands, diagnostics);
     } else {
-        Vec::new()
-    };
-    let (w_res, h_res) = if legend_on {
-        let (wr, hr) = legend_reserve(&series_entries, legend_config, w, cx);
-        // Cap side strips to 40% of width; cap bands to 50% of height.
-        let wr_capped = if legend_config.position.is_side() {
-            wr.min(w * 0.4)
-        } else {
-            wr
-        };
-        let hr_capped = if !legend_config.position.is_side() {
-            hr.min(h * 0.5)
-        } else {
-            hr
-        };
-        (wr_capped, hr_capped)
-    } else {
-        (0.0, 0.0)
-    };
-
-    // Derive the plot bbox and legend area from the legend position.
-    let (bbox_x, bbox_y, bbox_w, bbox_h, la_x, la_y, la_w, la_h) =
-        position_layout(x, y, w, h, w_res, h_res, legend_config.position);
-
-    // ── Plot area ────────────────────────────────────────────────────────────
-    let has_title = chart.title.is_some();
-    let has_caption = chart.caption.is_some();
-    let plot = plot_area(bbox_x, bbox_y, bbox_w, bbox_h, has_title, has_caption);
-
-    // ── Axis colors ──────────────────────────────────────────────────────────
-    let axis_color = chart
-        .stroke
-        .as_ref()
-        .and_then(|p| resolve_property_color(p, cx.resolved, diagnostics, &chart.id))
-        .unwrap_or(DEFAULT_AXIS_COLOR);
-
-    let colors = AxisColors {
-        axis: axis_color,
-        grid: DEFAULT_GRID_COLOR,
-        label: DEFAULT_LABEL_COLOR,
-    };
-
-    // ── Y scale ──────────────────────────────────────────────────────────────
-    // Build the scale even when there is no data so the empty frame is drawn.
-    let (mut data_lo, mut data_hi) =
-        data_range(&chart.series, chart.axis_min, chart.axis_max).unwrap_or((0.0, 1.0)); // fallback: (0,1) keeps the frame visible
-
-    // Bar charts grow from a zero baseline, so the domain must include 0 — a
-    // bar drawn from a non-zero floor misrepresents magnitude. Honor an explicit
-    // axis_min if the author pinned one; line charts keep their auto-fit range.
-    if chart.kind.as_str() == "bar" && chart.axis_min.is_none() {
-        data_lo = data_lo.min(0.0);
+        emit_cartesian(chart, content, text, commands, diagnostics);
     }
-
-    // Stacked bars reach the per-category SUM, not the max single value, so the
-    // value axis must be sized to the tallest column or the stack overflows the
-    // plot. Honor an explicit axis_max if the author pinned one.
-    if chart.kind.as_str() == "bar"
-        && BarMode::from_opt(chart.bar_mode.as_deref()) == BarMode::Stacked
-        && chart.axis_max.is_none()
-    {
-        data_hi = data_hi.max(stacked_max(chart));
-    }
-
-    // Inverted Y: data_min → pixel bottom, data_max → pixel top.
-    let y_scale = LinearScale {
-        data_min: data_lo,
-        data_max: data_hi,
-        pixel_min: plot.y + plot.h, // bottom of plot area
-        pixel_max: plot.y,          // top of plot area
-    };
-
-    let y_ticks = nice_ticks(&y_scale, 5);
-
-    // ── Emit chart content (kind-specific z-order) ───────────────────────────
-    //
-    // Bar: gridlines → bars → category labels → axis lines.
-    // Line/area: gridlines → (area fills) → line strokes → axis lines → cat labels.
-    match chart.kind.as_str() {
-        "bar" => {
-            // Horizontal bars take a completely separate path: their own plot
-            // rect (left margin sized for category labels, bottom for X numeric
-            // labels), their own X value scale, and independent axis emission.
-            // The outer y_scale/y_ticks are unused by this branch — that is
-            // intentional; line/area/vertical-bar still use them.
-            if chart.orientation.as_deref() == Some("horizontal") {
-                emit_hbar(
-                    chart,
-                    (bbox_x, bbox_y, bbox_w, bbox_h),
-                    colors,
-                    cx,
-                    commands,
-                    diagnostics,
-                );
-            } else {
-                // Vertical bar (orientation None or "vertical") — unchanged.
-                let n_categories = chart
-                    .series
-                    .iter()
-                    .map(|s| s.values.len())
-                    .max()
-                    .unwrap_or(0);
-
-                emit_gridlines_and_labels(
-                    &plot,
-                    &y_ticks,
-                    colors,
-                    &chart.id,
-                    cx,
-                    commands,
-                    diagnostics,
-                );
-                emit_bars(chart, &plot, &y_scale, cx, commands, diagnostics);
-                emit_category_labels(
-                    &chart.categories,
-                    n_categories,
-                    CatLabels {
-                        plot: &plot,
-                        color: colors.label,
-                        slot_center: true,
-                    },
-                    cx,
-                    commands,
-                    diagnostics,
-                );
-                emit_axis_lines(&plot, colors.axis, commands);
-            }
-        }
-        "line" | "area" => {
-            let is_area = chart.kind.as_str() == "area";
-            // Default edge-to-edge (first point on the value axis, last at the
-            // right edge); point-placement="center" insets onto category bands.
-            let slot_center = chart.point_placement.as_deref() == Some("center");
-            let n_categories = chart
-                .series
-                .iter()
-                .map(|s| s.values.len())
-                .max()
-                .unwrap_or(0);
-
-            emit_gridlines_and_labels(
-                &plot,
-                &y_ticks,
-                colors,
-                &chart.id,
-                cx,
-                commands,
-                diagnostics,
-            );
-
-            // Resolve color + points once per series (reused for fill + stroke).
-            let mut series_geom: Vec<(Vec<(f64, f64)>, Color)> =
-                Vec::with_capacity(chart.series.len());
-            for (idx, series) in chart.series.iter().enumerate() {
-                let c = series_color(series, idx, cx.resolved, diagnostics, &chart.id);
-                let pts = line_points(&series.values, &plot, &y_scale, slot_center);
-                series_geom.push((pts, c));
-            }
-
-            // Area fills first (drawn below the line strokes).
-            if is_area {
-                for (pts, c) in &series_geom {
-                    // Area fill: series color at ~25% alpha.
-                    let area_color = Color::srgb(c.r, c.g, c.b, 64);
-                    emit_area_fill(pts, &plot, area_color, commands);
-                }
-            }
-
-            // Line strokes on top of fills.
-            for (pts, c) in &series_geom {
-                emit_line_series(pts, *c, 2.0, commands);
-            }
-
-            emit_axis_lines(&plot, colors.axis, commands);
-
-            if !chart.categories.is_empty() {
-                emit_category_labels(
-                    &chart.categories,
-                    n_categories,
-                    CatLabels {
-                        plot: &plot,
-                        color: colors.label,
-                        slot_center,
-                    },
-                    cx,
-                    commands,
-                    diagnostics,
-                );
-            }
-        }
-        // sparkline is handled in its own early branch above and never reaches here.
-        // pie/donut/unknown are filtered by the gate match and never reach here.
-        _ => {}
-    }
-
-    // ── Legend ───────────────────────────────────────────────────────────────
-    // The legend occupies the area derived from `legend_config.position`. When
-    // `legend_on` is false `(w_res, h_res)` is `(0.0, 0.0)` and this block is
-    // skipped — no commands are emitted and the render path is byte-identical.
-    if legend_on && (w_res > 0.0 || h_res > 0.0) {
-        emit_legend(
-            &series_entries,
-            LegendArea {
-                x: la_x,
-                y: la_y,
-                w: la_w,
-                h: la_h,
-            },
-            legend_config,
-            cx,
-            commands,
-            diagnostics,
-        );
-    }
-
-    // ── Title ────────────────────────────────────────────────────────────────
-    if let Some(title) = &chart.title {
-        emit_title(
-            title,
-            (x, y),
-            DEFAULT_TITLE_COLOR,
-            &chart.id,
-            cx,
-            commands,
-            diagnostics,
-        );
-    }
+    emit_title_and_caption(chart, chart_box, bands, text, commands, diagnostics);
 
     0.0
 }
@@ -534,16 +183,13 @@ fn compile_chart_ink(
 /// Sparklines are compact, axis-free series previews — no gridlines, no tick
 /// labels, no title. One 1.5 px stroke per series, colored by the shared
 /// series-color resolver.
-///
-/// Returns `0.0` (charts are absolute-positioned and do not participate in
-/// flow layout).
 fn emit_sparkline(
     chart: &ChartNode,
-    bbox: (f64, f64, f64, f64),
+    bbox: BoxPx,
     cx: NodeCtx,
     commands: &mut Vec<SceneCommand>,
     diagnostics: &mut Vec<Diagnostic>,
-) -> f64 {
+) {
     const INSET: f64 = 4.0;
     let (x, y, w, h) = bbox;
 
@@ -570,105 +216,59 @@ fn emit_sparkline(
         let pts = line_points(&series.values, &spark_plot, &y_scale, false);
         emit_line_series(&pts, color, 1.5, commands);
     }
-
-    0.0
 }
 
-// ── Title emitter ─────────────────────────────────────────────────────────────
+// ── Pie / donut ───────────────────────────────────────────────────────────────
 
-/// Shape and emit a chart title above the plot area.
-///
-/// The title is placed at the top-left of the chart bbox, vertically just
-/// inside the top margin, using Noto Sans 13 px.
-pub(super) fn emit_title(
-    title: &str,
-    origin: (f64, f64),
-    color: Color,
-    chart_id: &str,
-    cx: NodeCtx,
+/// Emit a pie or donut chart and its legend into `content`.
+fn emit_round(
+    chart: &ChartNode,
+    content: BoxPx,
+    text: ChartText<'_>,
     commands: &mut Vec<SceneCommand>,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
-    let (chart_x, chart_y) = origin;
-    let families = [String::from("Noto Sans")];
-    let req = ShapeRequest {
-        text: title,
-        families: &families,
-        weight: 600,
-        style: FontStyle::Normal,
-        font_size: 13.0,
-        direction: TextDirection::Ltr,
-        features: &[],
-        kerning_pairs: &[],
-        letter_spacing_px: 0.0,
+    let config = LegendConfig::of(chart);
+    let entries = match config {
+        Some(_) => {
+            let n = chart.series.first().map_or(0, |s| s.values.len());
+            pie_legend_entries(chart, n, text.cx.resolved, diagnostics)
+        }
+        None => Vec::new(),
     };
-
-    match cx.engine.shape_with_fallback(&req, cx.fonts) {
-        Err(e) => {
-            diagnostics.push(Diagnostic::advisory(
-                "scene.text_unshaped",
-                format!(
-                    "chart '{}' title could not be shaped: {}",
-                    chart_id, e.message
-                ),
-                None,
-                Some(chart_id.to_owned()),
-            ));
-        }
-        Ok(result) => {
-            // Ascent from first run for baseline offset from top edge.
-            let ascent: f64 = result.runs.first().map(|r| r.ascent as f64).unwrap_or(10.0);
-
-            // Baseline sits `ascent` px below the chart's top edge, with 2 px
-            // of breathing room so it does not clip at the top.
-            let baseline_y = chart_y + ascent + 2.0;
-            let mut label_x = chart_x + 4.0; // left-aligned with a small indent
-
-            for run in result.runs {
-                let advance = run.advance_width as f64;
-                let glyphs = run_to_scene_glyphs(&run);
-                commands.push(SceneCommand::DrawGlyphRun {
-                    x: label_x,
-                    y: baseline_y,
-                    font_id: run.font_id,
-                    font_size: run.font_size,
-                    color,
-                    stroke_color: None,
-                    stroke_width: None,
-                    link: None,
-                    selectable: true,
-                    source_node_id: None,
-                    glyphs,
-                });
-                label_x += advance;
-            }
-        }
+    let (bbox, legend) = legend_split(&entries, config, content, text);
+    let is_donut = chart.kind.as_str() == "donut";
+    emit_pie(chart, bbox, is_donut, text, commands, diagnostics);
+    if let Some((area, config)) = legend {
+        emit_legend(&entries, area, config, text, commands, diagnostics);
     }
 }
 
-// ── position_layout ───────────────────────────────────────────────────────────
+// ── Title and caption ─────────────────────────────────────────────────────────
 
-/// Compute the plot/pie bbox and the legend area from the legend position.
-///
-/// Returns `(bbox_x, bbox_y, bbox_w, bbox_h, legend_x, legend_y, legend_w, legend_h)`.
-///
-/// When `w_res` and `h_res` are both `0.0` (legend off), the bbox equals the
-/// full `(x, y, w, h)` for every position variant — the render output is
-/// byte-identical to the no-legend path.
-fn position_layout(
-    x: f64,
-    y: f64,
-    w: f64,
-    h: f64,
-    w_res: f64,
-    h_res: f64,
-    position: LegendPosition,
-) -> (f64, f64, f64, f64, f64, f64, f64, f64) {
-    match position {
-        LegendPosition::Right => (x, y, w - w_res, h, x + w - w_res, y, w_res, h),
-        LegendPosition::Left => (x + w_res, y, w - w_res, h, x, y, w_res, h),
-        LegendPosition::Top => (x, y + h_res, w, h - h_res, x, y, w, h_res),
-        LegendPosition::Bottom => (x, y, w, h - h_res, x, y + h - h_res, w, h_res),
+/// Emit the title at the top-left of the chart box and the caption at its
+/// bottom-left, each inset by the edge padding.
+fn emit_title_and_caption(
+    chart: &ChartNode,
+    chart_box: BoxPx,
+    bands: Bands,
+    text: ChartText<'_>,
+    commands: &mut Vec<SceneCommand>,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    let (x, y, _, h) = chart_box;
+    let left = x + bands.edge_pad();
+    if let Some(title) = &chart.title
+        && let Some(shaped) = text.shape(title, ChartTextRole::Title, diagnostics)
+    {
+        let baseline = y + bands.title_inset() + shaped.ascent;
+        text.emit(shaped, (left, baseline), text.look.ink, 0, commands);
+    }
+    if let Some(caption) = &chart.caption
+        && let Some(shaped) = text.shape(caption, ChartTextRole::Caption, diagnostics)
+    {
+        let baseline = y + h - bands.caption_inset();
+        text.emit(shaped, (left, baseline), text.look.ink, 0, commands);
     }
 }
 
@@ -681,7 +281,7 @@ fn position_layout(
 /// ordinal string `"1"`, `"2"`, … Slice colors are resolved via the same
 /// `resolve_slice_color` path used by `emit_pie`, so legend swatches always
 /// agree with the slice fills.
-pub(super) fn pie_legend_entries(
+fn pie_legend_entries(
     chart: &ChartNode,
     n: usize,
     resolved: &BTreeMap<String, ResolvedToken>,

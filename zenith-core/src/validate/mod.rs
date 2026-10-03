@@ -25,7 +25,7 @@
 mod check;
 
 pub use check::{
-    ContentScope, ContentScopes, ContrastInks, GlyphInk, InkLine, LabelInk, ScopeFit, ScopeTokens,
-    ValidationReport, apply_policy, layout_geometry_checks, page_contrast_checks, validate,
-    validate_with_policy,
+    ChartTextInk, ContentScope, ContentScopes, ContrastInks, GlyphInk, InkLine, LabelInk, ScopeFit,
+    ScopeTokens, ValidationReport, apply_policy, layout_geometry_checks, page_contrast_checks,
+    validate, validate_with_policy,
 };

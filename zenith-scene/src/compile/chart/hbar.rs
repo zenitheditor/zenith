@@ -5,22 +5,21 @@
 //! from a left value-axis baseline. `emit_hbar` resolves series colors and
 //! pushes `FillRect`, `StrokeLine`, and `DrawGlyphRun` commands.
 //!
-//! The outer `compile_chart` in `entry.rs` handles title and legend for all
-//! chart kinds; `emit_hbar` only draws the plot content (axes + bars + labels).
+//! The outer `compile_chart` handles title, caption, and legend for all chart
+//! kinds; `emit_hbar` only draws the plot content (axes + bars + labels).
 
-use zenith_core::{ChartNode, Diagnostic, FontStyle};
-use zenith_layout::{ShapeRequest, TextDirection, TextLayoutEngine};
+use zenith_core::{ChartNode, Diagnostic};
 
 use crate::ir::{Color, Paint, SceneCommand};
 
-use super::super::NodeCtx;
-use super::super::paint::resolve_property_color;
-use super::super::text::run_to_scene_glyphs;
-use super::axis::{AxisColors, format_tick_label};
-use super::bar::{BarMode, ON_FILL_LABEL_COLOR, VALUE_LABEL_COLOR, ValueLabelMode, stacked_max};
-use super::frame::PlotArea;
+use super::axis::{emit_axis_lines, format_tick_label, line};
+use super::bar::{BarMode, ValueLabelMode, stacked_max};
+use super::bar_emit::{explicit_value_color, value_ink, value_role};
+use super::frame::{Bands, BoxPx, PlotArea, inset};
 use super::palette::series_color;
+use super::role::ChartTextRole;
 use super::scale::{LinearScale, data_range, nice_ticks};
+use super::text::ChartText;
 
 // ── Layout constants ───────────────────────────────────────────────────────────
 
@@ -31,8 +30,10 @@ const CAT_PAD_FRAC: f64 = 0.20;
 /// `sub_h` (applied once between each pair).
 const BAR_GAP_FRAC: f64 = 0.15;
 
-/// Minimum width (px) for a stacked segment to receive a center value label.
-const STACKED_LABEL_MIN_W: f64 = 14.0;
+/// Gap between a bar end and an outside value label: `0.3 b`.
+const VALUE_GAP: f64 = 0.3;
+/// Extra room a value label needs inside its segment: `0.4 b`.
+const INSIDE_ROOM: f64 = 0.4;
 
 // ── HBarRect ──────────────────────────────────────────────────────────────────
 
@@ -55,8 +56,7 @@ pub(super) struct HBarRect {
 /// per series; the inner `Vec` has one entry per category.
 ///
 /// `plot` is the drawable data region. `x_scale` maps data values to horizontal
-/// pixel coordinates (data_min → left, data_max → right). `baseline_px` is
-/// `x_scale.map(0.0).round()` — the x pixel for the zero line.
+/// pixel coordinates (data_min → left, data_max → right).
 ///
 /// Returns an empty `Vec` when `n_categories == 0` or `plot.h <= 0`.
 ///
@@ -173,102 +173,48 @@ pub(super) fn hbar_rects(
     }
 }
 
-// ── HBarCtx ───────────────────────────────────────────────────────────────────
-
-/// Per-chart context shared across the value-label emitter — bundles fields
-/// that would otherwise push the argument count above the project limit.
-#[derive(Clone, Copy)]
-struct HBarCtx<'a> {
-    plot: &'a PlotArea,
-    families: &'a [String],
-    chart_id: &'a str,
-    placement: ValueLabelMode,
-    /// Resolved per-series label color override; `None` → use placement default.
-    explicit: Option<Color>,
-}
-
 // ── emit_hbar ─────────────────────────────────────────────────────────────────
+
+/// The category label of slot `c`: the declared label, else its 1-based index.
+fn category_label(chart: &ChartNode, c: usize) -> String {
+    chart
+        .categories
+        .get(c)
+        .cloned()
+        .unwrap_or_else(|| (c + 1).to_string())
+}
 
 /// Emit a horizontal bar chart into `bbox`.
 ///
-/// Computes its own plot rect and X value scale; does NOT reuse the vertical
-/// `y_scale` / `y_ticks` computed by the outer `compile_chart`.
+/// Computes its own plot rect and X value scale. The left margin fits the
+/// widest category label; the bottom band holds the value tick labels.
 ///
 /// Z-order: gridlines + X tick labels → bars → value labels → category labels
 /// → axis lines.
 pub(in crate::compile) fn emit_hbar(
     chart: &ChartNode,
-    bbox: (f64, f64, f64, f64),
-    colors: AxisColors,
-    cx: NodeCtx,
+    bbox: BoxPx,
+    text: ChartText<'_>,
     commands: &mut Vec<SceneCommand>,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
-    let (bx, by, bw, bh) = bbox;
-    let has_title = chart.title.is_some();
-    let has_caption = chart.caption.is_some();
-
-    // ── Measure category labels to size the left margin ──────────────────────
     let n_categories = chart
         .series
         .iter()
         .map(|s| s.values.len())
         .max()
         .unwrap_or(0);
-
     if n_categories == 0 {
         return;
     }
+    let look = text.look;
+    let bands = Bands { base: text.base() };
 
-    let cat_families = [String::from("Noto Sans")];
-    let mut max_cat_advance = 0.0_f64;
-
-    for c in 0..n_categories {
-        let label: String = chart
-            .categories
-            .get(c)
-            .cloned()
-            .unwrap_or_else(|| (c + 1).to_string());
-
-        if label.is_empty() {
-            continue;
-        }
-
-        let req = ShapeRequest {
-            text: &label,
-            families: &cat_families,
-            weight: 400,
-            style: FontStyle::Normal,
-            font_size: 9.0,
-            direction: TextDirection::Ltr,
-            features: &[],
-            kerning_pairs: &[],
-            letter_spacing_px: 0.0,
-        };
-
-        if let Ok(result) = cx.engine.shape_with_fallback(&req, cx.fonts) {
-            let advance: f64 = result.runs.iter().map(|r| r.advance_width as f64).sum();
-            if advance > max_cat_advance {
-                max_cat_advance = advance;
-            }
-        }
-    }
-
-    // Left margin: measured category label advance + 14 px gap, min 40 px.
-    let left_margin = (max_cat_advance + 14.0).max(40.0);
-
-    // Top/bottom/right margins.
-    let top = if has_title { 24.0 } else { 10.0 };
-    let bottom = 28.0 + if has_caption { 18.0 } else { 0.0 };
-    let right = 18.0; // breathing room for value labels at bar ends
-
-    let plot = PlotArea {
-        x: bx + left_margin,
-        y: by + top,
-        w: (bw - left_margin - right).max(0.0),
-        h: (bh - top - bottom).max(0.0),
-    };
-
+    let max_cat_advance = (0..n_categories)
+        .map(|c| text.advance(&category_label(chart, c), ChartTextRole::Category))
+        .fold(0.0_f64, f64::max);
+    let left = max_cat_advance + bands.label_gap() + bands.edge_pad();
+    let plot = inset(bbox, left, bands.top(), bands.right(), bands.label_band());
     if plot.w <= 0.0 || plot.h <= 0.0 {
         return;
     }
@@ -276,20 +222,15 @@ pub(in crate::compile) fn emit_hbar(
     // ── X value scale (horizontal; data_min → left, data_max → right) ────────
     let (mut data_lo, mut data_hi) =
         data_range(&chart.series, chart.axis_min, chart.axis_max).unwrap_or((0.0, 1.0));
-
     // Horizontal bars also grow from a zero baseline.
     if chart.axis_min.is_none() {
         data_lo = data_lo.min(0.0);
     }
-
     let mode = BarMode::from_opt(chart.bar_mode.as_deref());
     let is_stacked = mode == BarMode::Stacked;
-
     if is_stacked && chart.axis_max.is_none() {
         data_hi = data_hi.max(stacked_max(chart));
     }
-
-    // Non-inverted X scale: data_min → pixel left, data_max → pixel right.
     let x_scale = LinearScale {
         data_min: data_lo,
         data_max: data_hi,
@@ -297,378 +238,158 @@ pub(in crate::compile) fn emit_hbar(
         pixel_max: plot.x + plot.w,
     };
 
-    let x_ticks = nice_ticks(&x_scale, 5);
-
     // ── Gridlines + X tick labels (value axis along bottom) ───────────────────
-    let tick_families = [String::from("Noto Sans")];
-
-    for tick in &x_ticks {
+    let mut tick_index = 0;
+    for tick in &nice_ticks(&x_scale, 5) {
         let eps = 0.5;
         if tick.pixel < plot.x - eps || tick.pixel > plot.x + plot.w + eps {
             continue;
         }
-
-        // Vertical gridline spanning the plot height.
         let tick_px = tick.pixel.round();
-        commands.push(SceneCommand::StrokeLine {
-            x1: tick_px,
-            y1: plot.y,
-            x2: tick_px,
-            y2: plot.y + plot.h,
-            color: colors.grid,
-            stroke_width: 1.0,
-            stroke_dash: None,
-            stroke_gap: None,
-            stroke_linecap: None,
-        });
-
-        // Numeric tick label centered horizontally at tick.pixel, below the plot.
+        commands.push(line(
+            (tick_px, plot.y),
+            (tick_px, plot.y + plot.h),
+            look.grid,
+            look.line_w,
+        ));
         let label = format_tick_label(tick.value);
-        let req = ShapeRequest {
-            text: &label,
-            families: &tick_families,
-            weight: 400,
-            style: FontStyle::Normal,
-            font_size: 9.0,
-            direction: TextDirection::Ltr,
-            features: &[],
-            kerning_pairs: &[],
-            letter_spacing_px: 0.0,
-        };
-
-        match cx.engine.shape_with_fallback(&req, cx.fonts) {
-            Err(e) => {
-                diagnostics.push(Diagnostic::advisory(
-                    "scene.text_unshaped",
-                    format!(
-                        "chart '{}' hbar X tick label '{}' could not be shaped: {}",
-                        chart.id, label, e.message
-                    ),
-                    None,
-                    Some(chart.id.clone()),
-                ));
-            }
-            Ok(result) => {
-                let total_advance: f64 = result.runs.iter().map(|r| r.advance_width as f64).sum();
-                // Baseline: 14 px below the plot bottom (ascent already baked into the constant).
-                let baseline_y = plot.y + plot.h + 14.0;
-                let mut label_x = tick.pixel - total_advance / 2.0;
-
-                for run in result.runs {
-                    let advance = run.advance_width as f64;
-                    let glyphs = run_to_scene_glyphs(&run);
-                    commands.push(SceneCommand::DrawGlyphRun {
-                        x: label_x,
-                        y: baseline_y,
-                        font_id: run.font_id.clone(),
-                        font_size: run.font_size,
-                        color: colors.label,
-                        stroke_color: None,
-                        stroke_width: None,
-                        link: None,
-                        selectable: true,
-                        source_node_id: None,
-                        glyphs,
-                    });
-                    label_x += advance;
-                }
-            }
+        if let Some(shaped) = text.shape(&label, ChartTextRole::Axis, diagnostics) {
+            let baseline = plot.y + plot.h + bands.label_gap() + shaped.ascent;
+            let x = tick.pixel - shaped.advance / 2.0;
+            text.emit(shaped, (x, baseline), look.ink, tick_index, commands);
+            tick_index += 1;
         }
     }
 
     // ── Bars ──────────────────────────────────────────────────────────────────
     let series_values: Vec<&[f64]> = chart.series.iter().map(|s| s.values.as_slice()).collect();
     let rects = hbar_rects(&plot, &x_scale, &series_values, mode);
-
-    if rects.is_empty() {
-        // No data — still emit axis frame.
-        emit_hbar_axis_lines(&plot, colors.axis, commands);
-        return;
-    }
-
     let label_mode = ValueLabelMode::resolve(chart.value_labels.as_deref(), is_stacked);
-    let explicit_label_color = chart
-        .value_color
-        .as_ref()
-        .and_then(|p| resolve_property_color(p, cx.resolved, diagnostics, &chart.id));
 
-    let value_label_families = [String::from("Noto Sans")];
-
-    for s in 0..chart.series.len() {
-        let color = match chart.series.get(s) {
-            Some(series) => series_color(series, s, cx.resolved, diagnostics, &chart.id),
-            None => continue,
-        };
-
+    for (s, series) in chart.series.iter().enumerate() {
+        let color = series_color(series, s, text.cx.resolved, diagnostics, &chart.id);
         let paint = Paint::solid(color);
-
-        // Per-series label color: series.label_color → chart.value_color → default.
-        let label_explicit = chart
-            .series
-            .get(s)
-            .and_then(|sr| sr.label_color.as_ref())
-            .and_then(|p| resolve_property_color(p, cx.resolved, diagnostics, &chart.id))
-            .or(explicit_label_color);
-
-        if let Some(series_rects) = rects.get(s) {
-            for (c, rect) in series_rects.iter().enumerate() {
-                if rect.w < 0.5 || rect.h < 0.5 {
-                    continue;
-                }
-
-                commands.push(SceneCommand::FillRect {
-                    x: rect.x,
-                    y: rect.y,
-                    w: rect.w,
-                    h: rect.h,
-                    paint: paint.clone(),
-                });
-
-                if label_mode == ValueLabelMode::Off {
-                    continue;
-                }
-
-                let value = match chart.series.get(s).and_then(|sr| sr.values.get(c)) {
-                    Some(v) => *v,
-                    None => continue,
-                };
-
-                emit_hbar_value_label(
-                    value,
-                    *rect,
-                    HBarCtx {
-                        plot: &plot,
-                        families: &value_label_families,
-                        chart_id: &chart.id,
-                        placement: label_mode,
-                        explicit: label_explicit,
-                    },
-                    cx,
-                    commands,
-                    diagnostics,
-                );
+        let explicit = explicit_value_color(chart, s, text, diagnostics);
+        let Some(series_rects) = rects.get(s) else {
+            continue;
+        };
+        for (c, rect) in series_rects.iter().enumerate() {
+            if rect.w < 0.5 || rect.h < 0.5 {
+                continue;
             }
+            commands.push(SceneCommand::FillRect {
+                x: rect.x,
+                y: rect.y,
+                w: rect.w,
+                h: rect.h,
+                paint: paint.clone(),
+            });
+            if label_mode == ValueLabelMode::Off {
+                continue;
+            }
+            let Some(value) = series.values.get(c).copied() else {
+                continue;
+            };
+            emit_hbar_value_label(
+                value,
+                *rect,
+                HBarCtx {
+                    plot: &plot,
+                    placement: label_mode,
+                    explicit,
+                    fill: color,
+                    index: s * n_categories + c,
+                },
+                text,
+                commands,
+                diagnostics,
+            );
         }
     }
 
     // ── Category labels (Y axis, right-aligned, centered in band) ─────────────
     let band_h = plot.h / n_categories as f64;
-
     for c in 0..n_categories {
-        let label: String = chart
-            .categories
-            .get(c)
-            .cloned()
-            .unwrap_or_else(|| (c + 1).to_string());
-
+        let label = category_label(chart, c);
         if label.is_empty() {
             continue;
         }
-
-        let req = ShapeRequest {
-            text: &label,
-            families: &cat_families,
-            weight: 400,
-            style: FontStyle::Normal,
-            font_size: 9.0,
-            direction: TextDirection::Ltr,
-            features: &[],
-            kerning_pairs: &[],
-            letter_spacing_px: 0.0,
+        let Some(shaped) = text.shape(&label, ChartTextRole::Category, diagnostics) else {
+            continue;
         };
-
-        match cx.engine.shape_with_fallback(&req, cx.fonts) {
-            Err(e) => {
-                diagnostics.push(Diagnostic::advisory(
-                    "scene.text_unshaped",
-                    format!(
-                        "chart '{}' hbar category label '{}' could not be shaped: {}",
-                        chart.id, label, e.message
-                    ),
-                    None,
-                    Some(chart.id.clone()),
-                ));
-            }
-            Ok(result) => {
-                let total_advance: f64 = result.runs.iter().map(|r| r.advance_width as f64).sum();
-                let ascent: f64 = result.runs.first().map(|r| r.ascent as f64).unwrap_or(7.0);
-
-                let band_top = plot.y + c as f64 * band_h;
-                // Right-align: end 6 px left of the plot left edge.
-                let mut label_x = plot.x - 6.0 - total_advance;
-                // Vertically center within the band (cap-height trick).
-                let baseline_y = band_top + band_h / 2.0 + ascent * 0.35;
-
-                for run in result.runs {
-                    let advance = run.advance_width as f64;
-                    let glyphs = run_to_scene_glyphs(&run);
-                    commands.push(SceneCommand::DrawGlyphRun {
-                        x: label_x,
-                        y: baseline_y,
-                        font_id: run.font_id.clone(),
-                        font_size: run.font_size,
-                        color: colors.label,
-                        stroke_color: None,
-                        stroke_width: None,
-                        link: None,
-                        selectable: true,
-                        source_node_id: None,
-                        glyphs,
-                    });
-                    label_x += advance;
-                }
-            }
-        }
+        let band_top = plot.y + c as f64 * band_h;
+        let x = plot.x - bands.label_gap() - shaped.advance;
+        let baseline = band_top + band_h / 2.0 + shaped.ascent * 0.35;
+        text.emit(shaped, (x, baseline), look.ink, c, commands);
     }
 
     // ── Axis lines (drawn last, on top of bars) ────────────────────────────────
-    emit_hbar_axis_lines(&plot, colors.axis, commands);
-}
-
-// ── emit_hbar_axis_lines ──────────────────────────────────────────────────────
-
-/// Emit the Y (left) and X (bottom) axis lines for a horizontal bar chart.
-///
-/// The Y axis is vertical at `plot.x`; the X axis is horizontal at
-/// `plot.y + plot.h`. Drawn last so they paint over bar edges.
-fn emit_hbar_axis_lines(plot: &PlotArea, axis_color: Color, commands: &mut Vec<SceneCommand>) {
-    if plot.w <= 0.0 || plot.h <= 0.0 {
-        return;
-    }
-
-    // Y (category) axis: left edge, top-to-bottom.
-    commands.push(SceneCommand::StrokeLine {
-        x1: plot.x,
-        y1: plot.y,
-        x2: plot.x,
-        y2: plot.y + plot.h,
-        color: axis_color,
-        stroke_width: 1.0,
-        stroke_dash: None,
-        stroke_gap: None,
-        stroke_linecap: None,
-    });
-
-    // X (value) axis: bottom edge, left-to-right.
-    commands.push(SceneCommand::StrokeLine {
-        x1: plot.x,
-        y1: plot.y + plot.h,
-        x2: plot.x + plot.w,
-        y2: plot.y + plot.h,
-        color: axis_color,
-        stroke_width: 1.0,
-        stroke_dash: None,
-        stroke_gap: None,
-        stroke_linecap: None,
-    });
+    emit_axis_lines(&plot, look, commands);
 }
 
 // ── emit_hbar_value_label ─────────────────────────────────────────────────────
 
+/// Per-bar inputs of a value label, bundled to keep the argument list short.
+#[derive(Clone, Copy)]
+struct HBarCtx<'a> {
+    plot: &'a PlotArea,
+    placement: ValueLabelMode,
+    /// Resolved label-color override.
+    explicit: Option<Color>,
+    /// The bar fill.
+    fill: Color,
+    /// Source-id index: `series × categories + category`.
+    index: usize,
+}
+
 /// Shape and emit a numeric value label for one horizontal bar.
 ///
 /// Placement follows `hc.placement`:
-/// - `Top` (used for grouped): 3 px right of the bar end.
-/// - `Center`: horizontally centered inside the segment; skips segments
-///   narrower than [`STACKED_LABEL_MIN_W`] px.
-/// - `Off` is unreachable here (the caller skips labels when mode is Off)
-///   but is listed to avoid a wildcard over a Zenith enum.
-///
-/// Color: `hc.explicit` wins if set; otherwise `ON_FILL_LABEL_COLOR` (white)
-/// for a centered (on-fill) label, `VALUE_LABEL_COLOR` (dark) for a label
-/// to the right of the bar.
+/// - `Top`: `0.3 b` right of the bar end; tucked inside the bar end when it
+///   passes the plot's right edge.
+/// - `Center`: centered inside the segment; a segment too narrow for the
+///   label gets none.
 fn emit_hbar_value_label(
     value: f64,
     rect: HBarRect,
-    hc: HBarCtx,
-    cx: NodeCtx,
+    hc: HBarCtx<'_>,
+    text: ChartText<'_>,
     commands: &mut Vec<SceneCommand>,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
-    // Skip tiny stacked segments that can't hold a label.
-    if hc.placement == ValueLabelMode::Center && rect.w < STACKED_LABEL_MIN_W {
-        return;
-    }
-
     let label = format_tick_label(value);
-    let req = ShapeRequest {
-        text: &label,
-        families: hc.families,
-        weight: 400,
-        style: FontStyle::Normal,
-        font_size: 9.0,
-        direction: TextDirection::Ltr,
-        features: &[],
-        kerning_pairs: &[],
-        letter_spacing_px: 0.0,
+    let Some(shaped) = text.shape(&label, ChartTextRole::Value, diagnostics) else {
+        return;
     };
-
-    match cx.engine.shape_with_fallback(&req, cx.fonts) {
-        Err(e) => {
-            diagnostics.push(Diagnostic::advisory(
-                "scene.text_unshaped",
-                format!(
-                    "chart '{}' hbar value label '{}' could not be shaped: {}",
-                    hc.chart_id, label, e.message
-                ),
-                None,
-                Some(hc.chart_id.to_owned()),
-            ));
+    let b = text.base();
+    let advance = shaped.advance;
+    let baseline = rect.y + rect.h / 2.0 + shaped.ascent * 0.35;
+    let (x, inside) = match hc.placement {
+        ValueLabelMode::Center => {
+            if rect.w < advance + INSIDE_ROOM * b {
+                return;
+            }
+            (rect.x + rect.w / 2.0 - advance / 2.0, true)
         }
-        Ok(result) => {
-            let total_advance: f64 = result.runs.iter().map(|r| r.advance_width as f64).sum();
-            let ascent: f64 = result.runs.first().map(|r| r.ascent as f64).unwrap_or(7.0);
-
-            // Vertical center within the bar row (same for both placements).
-            let baseline_y = rect.y + rect.h / 2.0 + ascent * 0.35;
-
-            let (label_x_start, on_fill) = match hc.placement {
-                // Center: placed inside the segment, centered horizontally.
-                ValueLabelMode::Center => {
-                    let x = rect.x + rect.w / 2.0 - total_advance / 2.0;
-                    (x, true)
-                }
-                // Top (grouped) / Off (unreachable): 3 px right of the bar end.
-                ValueLabelMode::Top | ValueLabelMode::Off => {
-                    let bar_right = rect.x + rect.w;
-                    // If the label would exceed the plot right edge, tuck it inside.
-                    let x = if bar_right + 3.0 + total_advance <= hc.plot.x + hc.plot.w {
-                        bar_right + 3.0
-                    } else {
-                        bar_right - total_advance - 3.0
-                    };
-                    (x, false)
-                }
-            };
-
-            let color = hc.explicit.unwrap_or(if on_fill {
-                ON_FILL_LABEL_COLOR
+        // Off never reaches here (the caller skips it); it shares the Top arm
+        // so the match stays exhaustive.
+        ValueLabelMode::Top | ValueLabelMode::Off => {
+            let bar_right = rect.x + rect.w;
+            if bar_right + VALUE_GAP * b + advance <= hc.plot.x + hc.plot.w {
+                (bar_right + VALUE_GAP * b, false)
             } else {
-                VALUE_LABEL_COLOR
-            });
-
-            let mut label_x = label_x_start;
-
-            for run in result.runs {
-                let advance = run.advance_width as f64;
-                let glyphs = run_to_scene_glyphs(&run);
-                commands.push(SceneCommand::DrawGlyphRun {
-                    x: label_x,
-                    y: baseline_y,
-                    font_id: run.font_id.clone(),
-                    font_size: run.font_size,
-                    color,
-                    stroke_color: None,
-                    stroke_width: None,
-                    link: None,
-                    selectable: true,
-                    source_node_id: None,
-                    glyphs,
-                });
-                label_x += advance;
+                (bar_right - advance - VALUE_GAP * b, true)
             }
         }
-    }
+    };
+    let color = value_ink(hc.explicit, inside.then_some(hc.fill), text.look);
+    text.emit(
+        shaped.with_role(value_role(inside)),
+        (x, baseline),
+        color,
+        hc.index,
+        commands,
+    );
 }
 
 // ── Unit tests ─────────────────────────────────────────────────────────────────

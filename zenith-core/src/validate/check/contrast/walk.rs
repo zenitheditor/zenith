@@ -8,6 +8,7 @@ use crate::ast::value::PropertyValue;
 use crate::diagnostics::Diagnostic;
 use crate::tokens::ResolvedToken;
 
+use super::chart::check_chart_text;
 use super::geometry::{
     CoverageShape, RectPx, group_offset, local_box, path_fill_region, polygon_region,
 };
@@ -134,6 +135,7 @@ pub(super) fn walk_paint(
                 check_table_text_contrast(t, ctx.page_bg_rgb, ctx.page_size, env, diagnostics);
             }
             Node::Path(p) => push_path_backdrop(node, p, ctx, candidates, env),
+            Node::Chart(c) => check_chart_text(c, ctx, candidates, env, diagnostics),
             Node::Line(_)
             | Node::Code(_)
             | Node::Instance(_)
@@ -141,7 +143,6 @@ pub(super) fn walk_paint(
             | Node::Footnote(_)
             | Node::Toc(_)
             | Node::Pattern(_)
-            | Node::Chart(_)
             | Node::Light(_)
             | Node::Mesh(_)
             | Node::Unknown(_) => {}

@@ -8,6 +8,7 @@ use crate::ir::{Paint, Rect, Scene, SceneCommand};
 use std::collections::BTreeMap;
 
 use super::super::anchor::build_anchor_map;
+use super::super::backdrop::page_backdrop;
 use super::super::boxes::{BoxRecorder, CompiledBox};
 use super::super::container;
 use super::super::crop;
@@ -207,6 +208,7 @@ impl<F: ?Sized + FontProvider> PageCompiler<'_, F> {
             doc_block_styles: &doc.body.block_styles,
             image_sizes: &prep.image_sizes,
             boxes,
+            backdrop: page_backdrop(page.background.as_ref(), resolved),
         };
 
         let root_ctx = root_render_ctx(page, bleed);

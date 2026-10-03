@@ -7,17 +7,16 @@
 use std::collections::BTreeMap;
 use std::f64::consts::PI;
 
-use zenith_core::{ChartNode, Diagnostic, FontStyle, ResolvedToken};
-use zenith_layout::{ShapeRequest, TextDirection, TextLayoutEngine};
+use zenith_core::{ChartNode, Diagnostic, ResolvedToken};
 
 use crate::ir::{Color, FillRule, Paint, SceneCommand};
 
-use super::super::NodeCtx;
 use super::super::paint::resolve_property_color;
-use super::super::text::run_to_scene_glyphs;
-use super::bar::ON_FILL_LABEL_COLOR;
-use super::entry::{DEFAULT_TITLE_COLOR, emit_title};
+use super::frame::{Bands, BoxPx};
+use super::look::black_or_white;
 use super::palette::SERIES_PALETTE;
+use super::role::ChartTextRole;
+use super::text::ChartText;
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -154,88 +153,37 @@ pub(super) fn resolve_slice_color(
 
 // ── Slice-label context ───────────────────────────────────────────────────────
 
-/// Per-slice label context bundled to keep `emit_slice_label` within 7 arguments.
-#[derive(Clone, Copy)]
-struct LabelCtx<'a> {
-    geom: PieGeom,
-    is_donut: bool,
-    families: &'a [String],
-    chart_id: &'a str,
+/// One slice label to draw: its text, angle, colour, and source-id index.
+struct SliceLabel<'l> {
+    text: &'l str,
+    mid_angle: f64,
+    color: Color,
+    index: usize,
 }
 
-/// Shape and emit a percentage label for one pie/donut slice in `label_color`.
-///
-/// The label is centered radially at `label_r` on the midpoint angle of the
-/// slice.
+/// Shape and emit a percentage label for one pie/donut slice, centered
+/// radially on the midpoint angle of the slice (mid-ring for a donut,
+/// 0.6 × radius for a pie).
 fn emit_slice_label(
-    label: &str,
-    mid_angle: f64,
-    label_color: Color,
-    lc: LabelCtx,
-    cx: NodeCtx,
+    label: SliceLabel<'_>,
+    geom: PieGeom,
+    text: ChartText<'_>,
     commands: &mut Vec<SceneCommand>,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
-    let geom = lc.geom;
-    let label_r = if lc.is_donut {
+    let label_r = if geom.r_inner > 0.0 {
         (geom.r_outer + geom.r_inner) / 2.0
     } else {
         geom.r_outer * 0.60
     };
-
-    let lx = geom.cx + label_r * mid_angle.cos();
-    let ly = geom.cy + label_r * mid_angle.sin();
-
-    let req = ShapeRequest {
-        text: label,
-        families: lc.families,
-        weight: 400,
-        style: FontStyle::Normal,
-        font_size: 9.0,
-        direction: TextDirection::Ltr,
-        features: &[],
-        kerning_pairs: &[],
-        letter_spacing_px: 0.0,
+    let lx = geom.cx + label_r * label.mid_angle.cos();
+    let ly = geom.cy + label_r * label.mid_angle.sin();
+    let Some(shaped) = text.shape(label.text, ChartTextRole::ValueInside, diagnostics) else {
+        return;
     };
-
-    match cx.engine.shape_with_fallback(&req, cx.fonts) {
-        Err(e) => {
-            diagnostics.push(Diagnostic::advisory(
-                "scene.text_unshaped",
-                format!(
-                    "chart '{}' pie slice label '{}' could not be shaped: {}",
-                    lc.chart_id, label, e.message
-                ),
-                None,
-                Some(lc.chart_id.to_owned()),
-            ));
-        }
-        Ok(result) => {
-            let total_advance: f64 = result.runs.iter().map(|r| r.advance_width as f64).sum();
-            let ascent: f64 = result.runs.first().map(|r| r.ascent as f64).unwrap_or(7.0);
-            let baseline_y = ly + ascent * 0.35;
-            let mut label_x = lx - total_advance / 2.0;
-
-            for run in result.runs {
-                let advance = run.advance_width as f64;
-                let glyphs = run_to_scene_glyphs(&run);
-                commands.push(SceneCommand::DrawGlyphRun {
-                    x: label_x,
-                    y: baseline_y,
-                    font_id: run.font_id.clone(),
-                    font_size: run.font_size,
-                    color: label_color,
-                    stroke_color: None,
-                    stroke_width: None,
-                    link: None,
-                    selectable: true,
-                    source_node_id: None,
-                    glyphs,
-                });
-                label_x += advance;
-            }
-        }
-    }
+    let baseline = ly + shaped.ascent * 0.35;
+    let x = lx - shaped.advance / 2.0;
+    text.emit(shaped, (x, baseline), label.color, label.index, commands);
 }
 
 // ── emit_pie ──────────────────────────────────────────────────────────────────
@@ -246,25 +194,25 @@ fn emit_slice_label(
 /// `values[i]` and `categories[i]`. Non-positive/non-finite values are skipped.
 /// Slices narrower than 0.15 rad (~8.6°) receive no percentage label.
 ///
-/// Returns `0.0` (charts are absolute-positioned and do not participate in
-/// flow layout).
+/// The title, caption, and legend are drawn by the caller; `bbox` is the
+/// box left for the wedges, inset here by `1.0 b` on the sides and bottom
+/// and by the plot top inset above.
 pub(super) fn emit_pie(
     chart: &ChartNode,
-    bbox: (f64, f64, f64, f64),
+    bbox: BoxPx,
     is_donut: bool,
-    cx: NodeCtx,
+    text: ChartText<'_>,
     commands: &mut Vec<SceneCommand>,
     diagnostics: &mut Vec<Diagnostic>,
-) -> f64 {
+) {
     let (x, y, w, h) = bbox;
-
-    // Reserve space for an optional title above the chart area.
-    let title_h = if chart.title.is_some() { 24.0 } else { 10.0 };
-    let pad = 12.0;
+    let bands = Bands { base: text.base() };
+    let pad = text.base();
+    let top = bands.top();
     let draw_x = x + pad;
-    let draw_y = y + title_h;
+    let draw_y = y + top;
     let draw_w = (w - 2.0 * pad).max(0.0);
-    let draw_h = (h - title_h - pad).max(0.0);
+    let draw_h = (h - top - pad).max(0.0);
 
     let cx_c = draw_x + draw_w / 2.0;
     let cy_c = draw_y + draw_h / 2.0;
@@ -274,25 +222,8 @@ pub(super) fn emit_pie(
     } else {
         0.0
     };
-
-    // Always emit the title even when the drawing area is too small.
-    let emit_chart_title = |commands: &mut Vec<SceneCommand>, diagnostics: &mut Vec<Diagnostic>| {
-        if let Some(title) = &chart.title {
-            emit_title(
-                title,
-                (x, y),
-                DEFAULT_TITLE_COLOR,
-                &chart.id,
-                cx,
-                commands,
-                diagnostics,
-            );
-        }
-    };
-
     if r_outer <= 0.0 {
-        emit_chart_title(commands, diagnostics);
-        return 0.0;
+        return;
     }
 
     let values = chart
@@ -301,10 +232,8 @@ pub(super) fn emit_pie(
         .map(|s| s.values.as_slice())
         .unwrap_or(&[]);
     let angles = slice_angles(values);
-
     if angles.is_empty() {
-        emit_chart_title(commands, diagnostics);
-        return 0.0;
+        return;
     }
 
     // Total of positive finite values — needed for percentage computation.
@@ -317,13 +246,13 @@ pub(super) fn emit_pie(
         r_inner,
     };
     let suppress_labels = chart.value_labels.as_deref() == Some("none");
-    // Chart-level label-color override; falls back to the white on-fill default.
+    let resolved = text.cx.resolved;
+    // Chart-level label-color override; absent, each label takes black or
+    // white by contrast with its slice.
     let chart_label_color = chart
         .value_color
         .as_ref()
-        .and_then(|p| resolve_property_color(p, cx.resolved, diagnostics, &chart.id))
-        .unwrap_or(ON_FILL_LABEL_COLOR);
-    let families = [String::from("Noto Sans")];
+        .and_then(|p| resolve_property_color(p, resolved, diagnostics, &chart.id));
 
     for (i, (a_start, a_end)) in angles.iter().enumerate() {
         let sweep = a_end - a_start;
@@ -332,8 +261,8 @@ pub(super) fn emit_pie(
         }
 
         // Per-slice fill color: resolve from slice_colors if present, else fall
-        // back to the palette so a chart without slice-colors is byte-identical.
-        let fill = resolve_slice_color(chart, i, cx.resolved, diagnostics);
+        // back to the palette.
+        let fill = resolve_slice_color(chart, i, resolved, diagnostics);
         let poly = wedge_polygon(geom, *a_start, *a_end);
         commands.push(SceneCommand::FillPolygon {
             points: poly,
@@ -345,35 +274,27 @@ pub(super) fn emit_pie(
             let value = values.get(i).copied().unwrap_or(0.0);
             let pct = (value / total * 100.0).round() as i64;
             let label = format!("{pct}%");
-            let mid = a_start + sweep / 2.0;
-
-            let lc = LabelCtx {
-                geom,
-                is_donut,
-                families: &families,
-                chart_id: &chart.id,
-            };
             // Per-slice label color overrides the chart-level color when set.
-            let slice_label_color = chart
+            let color = chart
                 .label_colors
                 .get(i)
-                .and_then(|p| resolve_property_color(p, cx.resolved, diagnostics, &chart.id))
-                .unwrap_or(chart_label_color);
+                .and_then(|p| resolve_property_color(p, resolved, diagnostics, &chart.id))
+                .or(chart_label_color)
+                .unwrap_or_else(|| black_or_white(fill));
             emit_slice_label(
-                &label,
-                mid,
-                slice_label_color,
-                lc,
-                cx,
+                SliceLabel {
+                    text: &label,
+                    mid_angle: a_start + sweep / 2.0,
+                    color,
+                    index: i,
+                },
+                geom,
+                text,
                 commands,
                 diagnostics,
             );
         }
     }
-
-    emit_chart_title(commands, diagnostics);
-
-    0.0
 }
 
 // ── Unit tests ────────────────────────────────────────────────────────────────

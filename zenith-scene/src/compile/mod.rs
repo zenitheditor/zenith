@@ -17,6 +17,7 @@
 //! submodule declarations, type aliases, and re-exports.
 
 mod anchor;
+mod backdrop;
 mod boxes;
 mod chain;
 mod chart;

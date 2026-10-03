@@ -9,6 +9,7 @@
 
 use std::collections::BTreeMap;
 
+use super::chart::ChartTextInk;
 use super::geometry::RectPx;
 use super::label::LabelInk;
 use super::text::{collect_backdrop_samples, push_unique_sample};
@@ -51,6 +52,8 @@ pub struct ContrastInks<'a> {
     pub labels: &'a BTreeMap<String, LabelInk>,
     /// `text` glyph ink, by text id. A text with no entry draws no glyph.
     pub texts: &'a BTreeMap<String, GlyphInk>,
+    /// Chart string ink, by chart id.
+    pub charts: &'a BTreeMap<String, Vec<ChartTextInk>>,
 }
 
 /// The backdrops sampled under `points` (page px), and whether any point

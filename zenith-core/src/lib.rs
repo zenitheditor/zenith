@@ -50,8 +50,8 @@ pub use ast::{
     style_enum_values, subtree_uses_layout,
 };
 pub use color::{
-    BlendMode, Cmyk, Color, GradientPaint, GradientStop, cmyk_to_hex, cmyk_to_srgb, contrast_ratio,
-    parse_cmyk, parse_rgb, relative_luminance,
+    BlendMode, Cmyk, Color, GradientPaint, GradientStop, apca_lc, best_text_color, cmyk_to_hex,
+    cmyk_to_srgb, contrast_ratio, parse_cmyk, parse_rgb, relative_luminance,
 };
 pub use data::{DataContext, DataFormat, format_data_value};
 pub use diagnostics::{Diagnostic, DiagnosticExtra, FixHint, Severity};
@@ -72,7 +72,7 @@ pub use tokens::{
 pub use util::hash_unit;
 pub use util::pattern::{PatternLayout, pattern_positions};
 pub use validate::{
-    ContentScope, ContentScopes, ContrastInks, GlyphInk, InkLine, LabelInk, ScopeFit, ScopeTokens,
-    ValidationReport, apply_policy, layout_geometry_checks, page_contrast_checks, validate,
-    validate_with_policy,
+    ChartTextInk, ContentScope, ContentScopes, ContrastInks, GlyphInk, InkLine, LabelInk, ScopeFit,
+    ScopeTokens, ValidationReport, apply_policy, layout_geometry_checks, page_contrast_checks,
+    validate, validate_with_policy,
 };

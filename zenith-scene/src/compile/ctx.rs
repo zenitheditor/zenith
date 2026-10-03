@@ -17,6 +17,8 @@ use std::collections::BTreeMap;
 use zenith_core::{BlockStyle, FontProvider, ResolvedToken, Style};
 use zenith_layout::RustybuzzEngine;
 
+use crate::ir::Color;
+
 use super::ComponentMap;
 use super::anchor::AnchorMap;
 use super::boxes::BoxRecorder;
@@ -67,4 +69,7 @@ pub(in crate::compile) struct NodeCtx<'a> {
     /// Where `compile_node` records each node's final box; `None` outside
     /// [`super::PageCompiler::compiled_boxes`].
     pub(in crate::compile) boxes: Option<&'a BoxRecorder>,
+    /// The solid colour the node draws over (see [`super::backdrop`]): the
+    /// page background, replaced by each enclosing frame or table fill.
+    pub(in crate::compile) backdrop: Color,
 }

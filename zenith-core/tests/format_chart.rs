@@ -7,7 +7,7 @@ use common::*;
 use zenith_core::format::format_document;
 
 /// **Chart parse + format + round-trip (with two series)**: a `chart` with the
-/// chart-specific props (kind/title/caption/legend/axis-min/axis-max/axis-style),
+/// chart-specific props (kind/title/caption/legend/axis-min/axis-max),
 /// geometry, fill, and two `series` children parses into the expected `ChartNode`
 /// (series data intact), formats back out preserving everything, and survives a
 /// format → re-parse round-trip (spans stripped).

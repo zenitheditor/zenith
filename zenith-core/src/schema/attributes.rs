@@ -133,13 +133,13 @@ fn attribute_type_for_kind_inner(kind: &str, name: &str, fallback: &'static str)
         // fill: ColorOrGradient — rect (leaf.rs check_visual_props→shared.rs:804),
         //   ellipse (leaf.rs:218), polygon (special.rs:83), polyline (special.rs:213),
         //   pattern (pattern.rs:101→shared.rs:804).
-        (
-            "rect" | "ellipse" | "polygon" | "polyline" | "path" | "pattern" | "chart" | "frame",
-            "fill",
-        ) => "token ref: color/gradient",
+        ("rect" | "ellipse" | "polygon" | "polyline" | "path" | "pattern" | "frame", "fill") => {
+            "token ref: color/gradient"
+        }
         // fill: Color — text (text.rs:113), shape (shape.rs:108), code (leaf.rs:561).
-        // table fill is also Color (container.rs:304→312).
-        ("text" | "shape" | "code" | "table", "fill") => "token ref: color",
+        // table fill is also Color (container.rs:304→312). A chart fill is
+        // its text colour (zenith-scene compile/chart/look.rs).
+        ("text" | "shape" | "code" | "table" | "chart", "fill") => "token ref: color",
         // stroke: Color on every node kind that has it — verified at:
         //   shared.rs:813 (rect/pattern), leaf.rs:227 (ellipse), leaf.rs:409 (line),
         //   special.rs:92 (polygon), special.rs:222 (polyline),
@@ -206,7 +206,6 @@ fn attribute_type_for_kind_inner(kind: &str, name: &str, fallback: &'static str)
         ("chart", "legend") => "bool",
         ("chart", "caption") => "string",
         ("chart", "axis-min" | "axis-max") => "f64",
-        ("chart", "axis-style") => "string",
         ("chart", "legend-position") => "enum: right|left|top|bottom",
         ("chart", "legend-layout") => "enum: wrapped|list",
         ("chart", "legend-align") => "enum: center|left|right",

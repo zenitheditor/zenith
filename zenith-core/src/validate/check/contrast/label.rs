@@ -6,6 +6,7 @@
 //! glyph ink is sampled. Labels carry no `contrast-bg` hint, so a label over
 //! an unsampled backdrop (image, effect) is skipped.
 
+use crate::ast::Span;
 use crate::ast::node::Node;
 use crate::diagnostics::Diagnostic;
 
@@ -70,6 +71,37 @@ pub(super) fn check_label(
     let Some(ink) = env.inks.and_then(|inks| inks.labels.get(id.as_str())) else {
         return;
     };
+    let Some(sample) = worst_ink_sample(ink, ctx, candidates) else {
+        return;
+    };
+    let weight = font_weight_of(
+        style_property(text_style, "font-weight", env.style_map),
+        env.resolved_tokens,
+    );
+    let threshold = lc_threshold(ink.font_size_px, weight);
+    if sample.lc >= threshold {
+        return;
+    }
+    diagnostics.push(contrast_diagnostic(
+        InkVerdict {
+            subject: &format!("{kind} '{id}' label"),
+            fix: "set a label fill with more contrast through the `text-style` fill or a span `fill`",
+            sample,
+            threshold,
+        },
+        span,
+        id,
+    ));
+}
+
+/// The lowest-contrast sample of `ink` against the backdrop under it, or
+/// `None` when the ink is hidden, sits on an unsampled backdrop, or draws in
+/// no colour.
+pub(super) fn worst_ink_sample(
+    ink: &LabelInk,
+    ctx: PaintCtx<'_>,
+    candidates: &[BackdropCandidate],
+) -> Option<ContrastSample> {
     let ink_box = RectPx {
         x: ink.x,
         y: ink.y,
@@ -89,7 +121,7 @@ pub(super) fn check_label(
     let (samples, indeterminate, hidden) =
         sample_points(points, ctx.clip, candidates, ctx.page_bg_rgb);
     if indeterminate || hidden {
-        return;
+        return None;
     }
     let mut worst: Option<ContrastSample> = None;
     for rgb in &ink.colors {
@@ -99,21 +131,27 @@ pub(super) fn check_label(
             worst = Some(sample);
         }
     }
-    let Some(sample) = worst else {
-        return;
-    };
-    let weight = font_weight_of(
-        style_property(text_style, "font-weight", env.style_map),
-        env.resolved_tokens,
-    );
-    let size = ink.font_size_px;
-    let threshold = lc_threshold(size, weight);
-    if sample.lc >= threshold {
-        return;
-    }
-    let subject = format!("{kind} '{id}' label");
-    let fix = "set a label fill with more contrast through the `text-style` fill or a span `fill`";
-    let diagnostic = if sample.lc < INVISIBLE_LC_FLOOR {
+    worst
+}
+
+/// A failed contrast judgement: who failed, the fix, and the numbers.
+pub(super) struct InkVerdict<'v> {
+    pub(super) subject: &'v str,
+    pub(super) fix: &'v str,
+    pub(super) sample: ContrastSample,
+    pub(super) threshold: f64,
+}
+
+/// `contrast.invisible` (Lc below the floor) or `contrast.low` for a
+/// failed verdict on node `id`.
+pub(super) fn contrast_diagnostic(v: InkVerdict<'_>, span: Option<Span>, id: &str) -> Diagnostic {
+    let InkVerdict {
+        subject,
+        fix,
+        sample,
+        threshold,
+    } = v;
+    if sample.lc < INVISIBLE_LC_FLOOR {
         Diagnostic::warning(
             "contrast.invisible",
             format!(
@@ -121,7 +159,7 @@ pub(super) fn check_label(
                 sample.lc, sample.source, INVISIBLE_LC_FLOOR
             ),
             span,
-            Some(id.clone()),
+            Some(id.to_owned()),
         )
     } else {
         Diagnostic::advisory(
@@ -131,8 +169,7 @@ pub(super) fn check_label(
                 sample.lc, sample.source, threshold
             ),
             span,
-            Some(id.clone()),
+            Some(id.to_owned()),
         )
-    };
-    diagnostics.push(diagnostic);
+    }
 }

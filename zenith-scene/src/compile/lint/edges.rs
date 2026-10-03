@@ -10,7 +10,7 @@ use std::collections::BTreeMap;
 
 use zenith_core::{Diagnostic, FixHint};
 
-use super::ledger::{PageLedger, TextItem};
+use super::ledger::{PageLedger, TextItem, TextSource};
 use super::paint::Authored;
 use super::text_facts::{PageText, TextFacts, fmt_px};
 
@@ -74,7 +74,7 @@ pub(super) fn edge_crowding(
     ledger
         .texts
         .iter()
-        .filter(|t| !t.label)
+        .filter(|t| t.source == TextSource::Node)
         .filter_map(|t| judge(ledger, authored, text, trim, floor, t))
         .collect()
 }

@@ -68,8 +68,8 @@ mod visual;
 // `crate::validate::check::register_id`, so it is re-exported here to keep that
 // path resolving.
 pub use contrast::{
-    ContentScope, ContentScopes, ContrastInks, GlyphInk, InkLine, LabelInk, ScopeFit, ScopeTokens,
-    page_contrast_checks,
+    ChartTextInk, ContentScope, ContentScopes, ContrastInks, GlyphInk, InkLine, LabelInk, ScopeFit,
+    ScopeTokens, page_contrast_checks,
 };
 pub use driver::{validate, validate_with_policy};
 pub use geometry::layout_geometry_checks;

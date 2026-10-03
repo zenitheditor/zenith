@@ -35,6 +35,7 @@ A theme picks no layout. Pick canvas and primitives in `references/by-kind.md` f
 | `ui.button` | primary button shape |
 | `ui.card` | card frame or rect |
 | `ui.connector` | default `connector` (label `ui.caption`) |
+| `ui.chart` | default `chart`: text font, size, and colour, axis stroke |
 
 - `rect`, `frame`, and `ellipse` take no default. Set `style="ui.card"` to opt in.
 - Content pairing: an unset text or label fill takes the `.content` token of the fill under it.

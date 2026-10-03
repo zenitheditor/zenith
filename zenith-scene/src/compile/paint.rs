@@ -14,7 +14,7 @@ use crate::ir::{
 /// CMYK origin when present. Returns `None` only when the resolved value is not
 /// a color or its stored hex is somehow unparseable (which token resolution
 /// already guarantees not to happen).
-fn color_from_resolved(rv: &ResolvedValue) -> Option<Color> {
+pub(super) fn color_from_resolved(rv: &ResolvedValue) -> Option<Color> {
     let hex = rv.as_color_hex()?;
     let mut color = parse_srgb_hex(hex)?;
     if let Some((c, m, y, k)) = rv.cmyk() {

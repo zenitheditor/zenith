@@ -4,6 +4,7 @@ use zenith_core::{Diagnostic, Node};
 
 use crate::ir::SceneCommand;
 
+use super::backdrop::fill_backdrop;
 use super::boxes::Compiled;
 use super::chart::compile_chart;
 use super::container::{compile_frame, compile_group, compile_instance};
@@ -18,6 +19,7 @@ use super::leaf::{
 use super::line_jumps;
 use super::pattern::compile_pattern;
 use super::pipeline::RenderCtx;
+use super::style_prop;
 use super::table::{TableEmitCtx, compile_table};
 use super::text::{TextCompileEnv, compile_code, compile_text, empty_md_blocks};
 use super::toc::resolve_toc_to_text;
@@ -87,6 +89,7 @@ fn compile_kind(
         doc_block_styles,
         image_sizes,
         boxes,
+        backdrop,
     } = cx;
 
     match node {
@@ -150,7 +153,17 @@ fn compile_kind(
             0.0
         }
         Node::Frame(frame) => {
-            compile_frame(frame, cx, commands, diagnostics, connector_strokes, ctx);
+            // The frame fill is the backdrop its children draw over.
+            let fill = frame
+                .fill
+                .as_ref()
+                .or_else(|| style_prop(&frame.style, style_map, "fill"));
+            let opacity = frame.opacity.unwrap_or(1.0) * ctx.opacity;
+            let inner = NodeCtx {
+                backdrop: fill_backdrop(fill, opacity, backdrop, resolved),
+                ..cx
+            };
+            compile_frame(frame, inner, commands, diagnostics, connector_strokes, ctx);
             0.0
         }
         Node::Group(group) => {
@@ -281,6 +294,7 @@ fn compile_kind(
                     field_ctx,
                     image_sizes,
                     boxes,
+                    backdrop,
                 },
                 commands,
                 diagnostics,

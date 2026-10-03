@@ -78,6 +78,10 @@ Each recipe: scaffold → structure → primitives. Syntax comes from `zenith sc
 - Data is a `chart` (`bar`, `line`, `area`, `sparkline`, `pie`, `donut`). Never hand-drawn bars.
 - Grouped or stacked: `bar-mode`. Horizontal: `orientation`. Data binding: `data-ref` + `render --data`.
 - Two series: if `secondary` ≈ `primary` in `zenith tokens`, use `color.primary` + `color.accent`.
+- Chart text: the chart style sets `font-family`, `font-size`, and `fill`. `stroke` colours the axes.
+- Title draws at 1.25 × `font-size`. Value labels draw at 0.875 × `font-size`.
+- No style: text scales with the chart box and contrasts with the fill under it.
+- A theme row `chart style="ui.chart"` styles every chart. Text on a dark frame takes its `.content` colour.
 - KPI tile: column frame of big number, `sparkline` chart, caption.
 
 ## 9. Table / schedule

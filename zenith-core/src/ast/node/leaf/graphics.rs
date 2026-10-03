@@ -135,10 +135,13 @@ pub struct ChartSeries {
 ///
 /// A `chart` declares its data inline via [`series`](ChartNode::series) children
 /// (one child KDL node per series, each with positional f64 arguments) and
-/// paints into its `[x, y, w, h]` bounding box. The node currently renders
-/// nothing; chart rendering is deferred. The series children are pure DATA,
-/// not renderable nodes: id-collection, validation, anchor, and tx passes
-/// treat the chart as a LEAF and never descend into them.
+/// paints into its `[x, y, w, h]` bounding box. The series children are pure
+/// DATA, not renderable nodes: id-collection, validation, anchor, and tx
+/// passes treat the chart as a LEAF and never descend into them.
+///
+/// `fill` is the chart text colour and `stroke` / `stroke_width` paint the
+/// axis lines and gridlines. The chart `style` adds `font-family` and
+/// `font-size` (the base size every text role scales).
 ///
 /// The common visual/geometry fields mirror [`PatternNode`]; the chart-specific
 /// fields (`kind`, `title`, `caption`, `legend`, `axis_*`, `bar_mode`,
@@ -163,8 +166,11 @@ pub struct ChartNode {
     pub radius_br: Option<PropertyValue>,
     pub radius_bl: Option<PropertyValue>,
     pub style: Option<String>,
+    /// Chart text colour.
     pub fill: Option<PropertyValue>,
+    /// Axis line colour.
     pub stroke: Option<PropertyValue>,
+    /// Axis and gridline width.
     pub stroke_width: Option<PropertyValue>,
     pub stroke_alignment: Option<String>,
     /// Dash segment length in pixels; `None` = solid stroke.
@@ -238,8 +244,6 @@ pub struct ChartNode {
     pub axis_min: Option<f64>,
     /// Maximum value for the value axis. `None` = auto-fit to data.
     pub axis_max: Option<f64>,
-    /// Style string for the axis (e.g. `"hidden"`, `"minimal"`); freeform for now.
-    pub axis_style: Option<String>,
     /// Bar layout mode: `"grouped"` (default) | `"stacked"`; freeform,
     /// validated later. Mirrors how `kind` is typed/documented.
     pub bar_mode: Option<String>,
@@ -258,7 +262,8 @@ pub struct ChartNode {
     /// auto-picks a contrasting color.
     pub value_color: Option<PropertyValue>,
     /// Per-slice value-label colors for pie/donut (one per category, in order);
-    /// empty = use the chart `value_color` or the white on-fill default.
+    /// empty = use the chart `value_color`, else black or white by contrast
+    /// with the slice.
     /// Populated from a `label-colors` child node whose positional arguments
     /// are each a `PropertyValue` (e.g. `(token)"color.x"`).
     pub label_colors: Vec<PropertyValue>,

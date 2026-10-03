@@ -9,10 +9,11 @@ use zenith_core::{
 };
 use zenith_layout::RustybuzzEngine;
 
-use crate::ir::{Paint, SceneCommand};
+use crate::ir::{Color, Paint, SceneCommand};
 
 use super::super::ImageSizes;
 use super::super::anchor::AnchorMap;
+use super::super::backdrop::fill_backdrop;
 use super::super::boxes::BoxRecorder;
 use super::super::chain::ChainAssignments;
 use super::super::field::FieldCtx;
@@ -60,6 +61,8 @@ pub(in crate::compile) struct TableEmitCtx<'a> {
     pub(in crate::compile) image_sizes: &'a ImageSizes,
     /// Where cell children record their final boxes, when set.
     pub(in crate::compile) boxes: Option<&'a BoxRecorder>,
+    /// The backdrop the table draws over (see [`super::super::backdrop`]).
+    pub(in crate::compile) backdrop: Color,
 }
 
 impl<'a> TableEmitCtx<'a> {
@@ -95,6 +98,7 @@ impl<'a> TableEmitCtx<'a> {
             doc_block_styles: &[],
             image_sizes: self.image_sizes,
             boxes: self.boxes,
+            backdrop: self.backdrop,
         }
     }
 }
@@ -398,14 +402,7 @@ fn emit_cell_fill(
     diagnostics: &mut Vec<Diagnostic>,
 ) {
     let table = cx.table;
-    let fill_prop: Option<&PropertyValue> = cell.fill.as_ref().or_else(|| {
-        if cell_emit.is_header {
-            table.header_fill.as_ref().or(table.fill.as_ref())
-        } else {
-            table.fill.as_ref()
-        }
-    });
-    if let Some(prop) = fill_prop
+    if let Some(prop) = cell_fill_prop(cell, table, cell_emit.is_header)
         && let Some(mut color) = resolve_property_color(prop, cx.resolved, diagnostics, &table.id)
     {
         color.a = (color.a as f64 * cell_emit.opacity).round() as u8;
@@ -417,6 +414,21 @@ fn emit_cell_fill(
             paint: Paint::solid(color),
         });
     }
+}
+
+/// The fill a cell paints: cell.fill > header_fill (header only) > table.fill.
+fn cell_fill_prop<'t>(
+    cell: &'t zenith_core::TableCell,
+    table: &'t TableNode,
+    is_header: bool,
+) -> Option<&'t PropertyValue> {
+    cell.fill.as_ref().or_else(|| {
+        if is_header {
+            table.header_fill.as_ref().or(table.fill.as_ref())
+        } else {
+            table.fill.as_ref()
+        }
+    })
 }
 
 /// Compile a cell's direct children into the cell content box, clipped to it.
@@ -438,7 +450,15 @@ fn emit_cell_children(
     ctx: RenderCtx,
 ) {
     let table = cx.table;
-    let node_cx = cx.node_ctx();
+    let node_cx = NodeCtx {
+        backdrop: fill_backdrop(
+            cell_fill_prop(cell, table, cell_emit.is_header),
+            cell_emit.opacity,
+            cx.backdrop,
+            cx.resolved,
+        ),
+        ..cx.node_ctx()
+    };
     let pad = cell_emit.pad;
     let opacity = cell_emit.opacity;
     let is_header = cell_emit.is_header;

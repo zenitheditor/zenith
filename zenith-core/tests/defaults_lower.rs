@@ -566,3 +566,35 @@ fn recursive_component_lowering_terminates() {
     };
     assert_eq!(inner.component.as_deref(), Some(copy_id.as_str()));
 }
+
+/// A chart takes the ambient content pair as its text `fill`, the default
+/// style's `stroke` / `stroke-width` as attributes, and the default style
+/// itself for the style-only `font-family` / `font-size`.
+#[test]
+fn chart_takes_pair_fill_stroke_and_style_only_font_keys() {
+    let doc = lowered(&src(
+        PAIR_TOKENS,
+        r#"style id="ui.chart" { fill (token)"c.doc"; font-size (token)"fs.doc"; stroke (token)"c.page"; stroke-width (token)"w.doc" }"#,
+        r#"defaults {
+    chart style="ui.chart"
+  }"#,
+        r#"background=(token)"color.primary""#,
+        r#"chart id="c" kind="bar" x=(px)0 y=(px)0 w=(px)200 h=(px)100 {
+        series 1.0 2.0
+      }
+      chart id="own" kind="bar" x=(px)0 y=(px)0 w=(px)200 h=(px)100 fill=(token)"c.attr" {
+        series 1.0 2.0
+      }"#,
+    ));
+    let Node::Chart(c) = page_node(&doc, "c") else {
+        panic!("chart");
+    };
+    assert_eq!(c.fill, tok("color.primary.content"));
+    assert_eq!(c.stroke, tok("c.page"));
+    assert_eq!(c.stroke_width, tok("w.doc"));
+    assert_eq!(c.style.as_deref(), Some("ui.chart"));
+    let Node::Chart(own) = page_node(&doc, "own") else {
+        panic!("chart");
+    };
+    assert_eq!(own.fill, tok("c.attr"));
+}

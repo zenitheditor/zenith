@@ -25,7 +25,7 @@ pub struct ThemeStyle {
 /// One document `defaults` row.
 #[derive(Debug, Clone, Copy)]
 pub struct ThemeDefault {
-    /// Node kind keyword (`connector`, `shape`, `text`).
+    /// Node kind keyword (`chart`, `connector`, `shape`, `text`).
     pub kind: &'static str,
     /// Default style id for the kind.
     pub style: &'static str,
@@ -92,10 +92,21 @@ theme_styles! {
         ("stroke", "color.base.content"),
         ("stroke-width", "border.width"),
     ],
+    "ui.chart" => [
+        ("fill", "color.base.content"),
+        ("font-family", "font.body"),
+        ("font-size", "size.caption"),
+        ("stroke", "color.base.300"),
+    ],
 }
 
 /// Every document `defaults` row, in canonical (kind) order.
 pub const THEME_DEFAULTS: &[ThemeDefault] = &[
+    ThemeDefault {
+        kind: "chart",
+        style: "ui.chart",
+        text_style: None,
+    },
     ThemeDefault {
         kind: "connector",
         style: "ui.connector",
