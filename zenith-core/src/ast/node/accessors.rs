@@ -4,8 +4,21 @@
 //! its struct. Call sites must not re-match the enum for those fields — use
 //! these methods so a new variant is a compile error in one place only.
 
-use super::Node;
+use super::{LayoutItem, Node};
 use crate::ast::Span;
+use crate::ast::value::PropertyValue;
+
+/// Borrowed geometry of a box node, returned by [`Node::box_view`].
+#[derive(Debug, Clone, Copy)]
+pub struct BoxView<'a> {
+    pub x: Option<&'a PropertyValue>,
+    pub y: Option<&'a PropertyValue>,
+    pub w: Option<&'a PropertyValue>,
+    pub h: Option<&'a PropertyValue>,
+    /// `true` when any `anchor*` attribute is authored.
+    pub anchored: bool,
+    pub layout_item: &'a LayoutItem,
+}
 
 impl Node {
     /// Stable authored id, if any. `Unknown` nodes may omit `id`.
@@ -250,6 +263,206 @@ impl Node {
     /// Id and source span together — the diagnostic address of a node.
     pub fn id_and_span(&self) -> (&str, Option<Span>) {
         (self.id_or_kind(), self.source_span())
+    }
+
+    /// Auto-layout item attributes for the box-node kinds; `None` for kinds
+    /// without an `x`/`y`/`w`/`h` box.
+    pub fn layout_item(&self) -> Option<&LayoutItem> {
+        self.box_view().map(|b| b.layout_item)
+    }
+
+    /// Borrowed box geometry for the box-node kinds; `None` for kinds without
+    /// an `x`/`y`/`w`/`h` box (line, polygon, polyline, path, instance,
+    /// footnote, connector, light, unknown).
+    pub fn box_view(&self) -> Option<BoxView<'_>> {
+        match self {
+            Node::Rect(n) => Some(BoxView {
+                x: n.x.as_ref(),
+                y: n.y.as_ref(),
+                w: n.w.as_ref(),
+                h: n.h.as_ref(),
+                anchored: n.anchor.is_some()
+                    || n.anchor_zone.is_some()
+                    || n.anchor_sibling.is_some()
+                    || n.anchor_edge.is_some()
+                    || n.anchor_gap.is_some()
+                    || n.anchor_parent.is_some(),
+                layout_item: &n.layout_item,
+            }),
+            Node::Ellipse(n) => Some(BoxView {
+                x: n.x.as_ref(),
+                y: n.y.as_ref(),
+                w: n.w.as_ref(),
+                h: n.h.as_ref(),
+                anchored: n.anchor.is_some()
+                    || n.anchor_zone.is_some()
+                    || n.anchor_sibling.is_some()
+                    || n.anchor_edge.is_some()
+                    || n.anchor_gap.is_some()
+                    || n.anchor_parent.is_some(),
+                layout_item: &n.layout_item,
+            }),
+            Node::Text(n) => Some(BoxView {
+                x: n.x.as_ref(),
+                y: n.y.as_ref(),
+                w: n.w.as_ref(),
+                h: n.h.as_ref(),
+                anchored: n.anchor.is_some()
+                    || n.anchor_zone.is_some()
+                    || n.anchor_sibling.is_some()
+                    || n.anchor_edge.is_some()
+                    || n.anchor_gap.is_some()
+                    || n.anchor_parent.is_some(),
+                layout_item: &n.layout_item,
+            }),
+            Node::Code(n) => Some(BoxView {
+                x: n.x.as_ref(),
+                y: n.y.as_ref(),
+                w: n.w.as_ref(),
+                h: n.h.as_ref(),
+                anchored: n.anchor.is_some()
+                    || n.anchor_zone.is_some()
+                    || n.anchor_sibling.is_some()
+                    || n.anchor_edge.is_some()
+                    || n.anchor_gap.is_some()
+                    || n.anchor_parent.is_some(),
+                layout_item: &n.layout_item,
+            }),
+            Node::Frame(n) => Some(BoxView {
+                x: n.x.as_ref(),
+                y: n.y.as_ref(),
+                w: n.w.as_ref(),
+                h: n.h.as_ref(),
+                anchored: n.anchor.is_some()
+                    || n.anchor_zone.is_some()
+                    || n.anchor_sibling.is_some()
+                    || n.anchor_edge.is_some()
+                    || n.anchor_gap.is_some()
+                    || n.anchor_parent.is_some(),
+                layout_item: &n.layout_item,
+            }),
+            Node::Group(n) => Some(BoxView {
+                x: n.x.as_ref(),
+                y: n.y.as_ref(),
+                w: n.w.as_ref(),
+                h: n.h.as_ref(),
+                anchored: n.anchor.is_some()
+                    || n.anchor_zone.is_some()
+                    || n.anchor_sibling.is_some()
+                    || n.anchor_edge.is_some()
+                    || n.anchor_gap.is_some()
+                    || n.anchor_parent.is_some(),
+                layout_item: &n.layout_item,
+            }),
+            Node::Image(n) => Some(BoxView {
+                x: n.x.as_ref(),
+                y: n.y.as_ref(),
+                w: n.w.as_ref(),
+                h: n.h.as_ref(),
+                anchored: n.anchor.is_some()
+                    || n.anchor_zone.is_some()
+                    || n.anchor_sibling.is_some()
+                    || n.anchor_edge.is_some()
+                    || n.anchor_gap.is_some()
+                    || n.anchor_parent.is_some(),
+                layout_item: &n.layout_item,
+            }),
+            Node::Field(n) => Some(BoxView {
+                x: n.x.as_ref(),
+                y: n.y.as_ref(),
+                w: n.w.as_ref(),
+                h: n.h.as_ref(),
+                anchored: n.anchor.is_some()
+                    || n.anchor_zone.is_some()
+                    || n.anchor_sibling.is_some()
+                    || n.anchor_edge.is_some()
+                    || n.anchor_gap.is_some()
+                    || n.anchor_parent.is_some(),
+                layout_item: &n.layout_item,
+            }),
+            Node::Toc(n) => Some(BoxView {
+                x: n.x.as_ref(),
+                y: n.y.as_ref(),
+                w: n.w.as_ref(),
+                h: n.h.as_ref(),
+                anchored: n.anchor.is_some()
+                    || n.anchor_zone.is_some()
+                    || n.anchor_sibling.is_some()
+                    || n.anchor_edge.is_some()
+                    || n.anchor_gap.is_some()
+                    || n.anchor_parent.is_some(),
+                layout_item: &n.layout_item,
+            }),
+            Node::Table(n) => Some(BoxView {
+                x: n.x.as_ref(),
+                y: n.y.as_ref(),
+                w: n.w.as_ref(),
+                h: n.h.as_ref(),
+                anchored: n.anchor.is_some()
+                    || n.anchor_zone.is_some()
+                    || n.anchor_sibling.is_some()
+                    || n.anchor_edge.is_some()
+                    || n.anchor_gap.is_some()
+                    || n.anchor_parent.is_some(),
+                layout_item: &n.layout_item,
+            }),
+            Node::Shape(n) => Some(BoxView {
+                x: n.x.as_ref(),
+                y: n.y.as_ref(),
+                w: n.w.as_ref(),
+                h: n.h.as_ref(),
+                anchored: n.anchor.is_some()
+                    || n.anchor_zone.is_some()
+                    || n.anchor_sibling.is_some()
+                    || n.anchor_edge.is_some()
+                    || n.anchor_gap.is_some()
+                    || n.anchor_parent.is_some(),
+                layout_item: &n.layout_item,
+            }),
+            Node::Pattern(n) => Some(BoxView {
+                x: n.x.as_ref(),
+                y: n.y.as_ref(),
+                w: n.w.as_ref(),
+                h: n.h.as_ref(),
+                anchored: n.anchor.is_some()
+                    || n.anchor_zone.is_some()
+                    || n.anchor_sibling.is_some()
+                    || n.anchor_edge.is_some()
+                    || n.anchor_gap.is_some()
+                    || n.anchor_parent.is_some(),
+                layout_item: &n.layout_item,
+            }),
+            Node::Chart(n) => Some(BoxView {
+                x: n.x.as_ref(),
+                y: n.y.as_ref(),
+                w: n.w.as_ref(),
+                h: n.h.as_ref(),
+                anchored: n.anchor.is_some()
+                    || n.anchor_zone.is_some()
+                    || n.anchor_sibling.is_some()
+                    || n.anchor_edge.is_some()
+                    || n.anchor_gap.is_some()
+                    || n.anchor_parent.is_some(),
+                layout_item: &n.layout_item,
+            }),
+            Node::Mesh(n) => Some(BoxView {
+                x: n.x.as_ref(),
+                y: n.y.as_ref(),
+                w: n.w.as_ref(),
+                h: n.h.as_ref(),
+                anchored: false,
+                layout_item: &n.layout_item,
+            }),
+            Node::Line(_)
+            | Node::Polygon(_)
+            | Node::Polyline(_)
+            | Node::Path(_)
+            | Node::Instance(_)
+            | Node::Footnote(_)
+            | Node::Connector(_)
+            | Node::Light(_)
+            | Node::Unknown(_) => None,
+        }
     }
 
     /// Static KDL kind name for this variant (`"rect"`, `"unknown"`, …).

@@ -14,6 +14,7 @@ use super::helpers::{
     optional_f64_prop, optional_i64_prop, optional_property_value, optional_property_value_aliased,
     optional_string_prop, optional_string_prop_aliased, required_string_prop,
 };
+use super::layout::{optional_box_size, transform_layout_item};
 use super::node::transform_node;
 
 pub(crate) const PATTERN_KNOWN_PROPS: &[&str] = &[
@@ -24,6 +25,11 @@ pub(crate) const PATTERN_KNOWN_PROPS: &[&str] = &[
     "y",
     "w",
     "h",
+    "min-w",
+    "max-w",
+    "min-h",
+    "max-h",
+    "position",
     "radius",
     "radius-tl",
     "radius_tl",
@@ -142,8 +148,9 @@ pub(super) fn transform_pattern(
         role: optional_string_prop(node, "role").map(str::to_owned),
         x: optional_property_value(node, "x"),
         y: optional_property_value(node, "y"),
-        w: optional_property_value(node, "w"),
-        h: optional_property_value(node, "h"),
+        w: optional_box_size(node, "w"),
+        h: optional_box_size(node, "h"),
+        layout_item: transform_layout_item(node),
         radius: optional_property_value(node, "radius"),
         radius_tl,
         radius_tr,

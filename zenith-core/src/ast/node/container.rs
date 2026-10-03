@@ -7,14 +7,16 @@ use crate::ast::Span;
 use crate::ast::value::{Dimension, PropertyValue};
 
 use super::common::{Node, UnknownProperty};
+use super::layout_item::{LayoutContainer, LayoutItem, LayoutKind};
 
-/// A `frame` node — a container that CLIPS its children to its rectangular
-/// bounds and renders them in source order (first child = bottom of z-order).
+/// A `frame` node — a container that clips and (optionally) lays out its
+/// children, rendering them in source order (first child = bottom of z-order).
 ///
-/// Unlike `group`, a frame has **required** geometry (x, y, w, h): these four
-/// dimensions define the clip rectangle. Children are rendered at their
-/// **absolute** page coordinates — frame does NOT translate children (dx/dy
-/// are unchanged). The frame only clips; it has no fill of its own in v0.
+/// An absolute frame (no `layout`) has required geometry (x, y, w, h) that
+/// defines the clip rectangle; children render at their **absolute** page
+/// coordinates — frame does NOT translate children (dx/dy are unchanged). A
+/// `column` / `grid` frame places its children inside its padded content box.
+/// `fill` / `stroke` / `radius` are parsed and validated; they do not render yet.
 ///
 /// Opacity cascades (multiplies) into all descendant node alphas, exactly as
 /// in `GroupNode`.
@@ -27,17 +29,30 @@ pub struct FrameNode {
     pub x: Option<PropertyValue>,
     /// Required: clip-rectangle top edge in page coordinates.
     pub y: Option<PropertyValue>,
-    /// Required: clip-rectangle width.
+    /// Clip-rectangle width (optional on a layout frame placed by its parent).
     pub w: Option<PropertyValue>,
-    /// Required: clip-rectangle height.
+    /// Clip-rectangle height (optional on a layout frame placed by its parent).
     pub h: Option<PropertyValue>,
-    /// Layout algorithm hint ("absolute"/"flow"/"grid"). `"flow"` activates a
-    /// vertical-stack flow layout (uniform `padding` inset + `gap` between
-    /// children, resolved from the frame's style); `"grid"` tiles children
-    /// row-major into a `columns × rows` grid inside the padded content box with
-    /// uniform `gap` gutters; any other value (including `None` and `"absolute"`)
-    /// keeps the clip-only absolute-positioning model.
-    pub layout: Option<String>,
+    /// Layout mode. `column` stacks children top to bottom inside the padded
+    /// content box with `gap` between them; `grid` tiles children row-major into
+    /// a `columns × rows` grid with uniform `gap` gutters; `row` stacks children
+    /// left to right; `None` / `absolute` keeps authored child coordinates.
+    pub layout: Option<LayoutKind>,
+    /// Container attributes (`gap`, `padding*`, `justify`, `align`, `wrap`, …).
+    pub container: LayoutContainer,
+    /// Clip children to the frame box. `None` → clip, except for `row` /
+    /// `column` frames, which default to no clip.
+    pub clip: Option<bool>,
+    /// Background paint drawn under the children (color or gradient token).
+    pub fill: Option<PropertyValue>,
+    /// Border color token drawn around the frame box.
+    pub stroke: Option<PropertyValue>,
+    /// Border width (dimension token).
+    pub stroke_width: Option<PropertyValue>,
+    /// Corner radius of the background and border (dimension token).
+    pub radius: Option<PropertyValue>,
+    /// Item attributes used when this frame is a child of a `row` / `column` frame.
+    pub layout_item: LayoutItem,
     /// Grid column count for `layout="grid"` (ignored otherwise). When the frame
     /// uses grid layout, children tile row-major into `columns` columns; absent →
     /// treated as 1 column. KDL: `columns=2`.
@@ -134,6 +149,8 @@ pub struct GroupNode {
     pub w: Option<PropertyValue>,
     /// Advisory bounding height — NOT used to scale children.
     pub h: Option<PropertyValue>,
+    /// Item attributes used when this node is a child of a `row` / `column` frame.
+    pub layout_item: LayoutItem,
     /// Opacity that cascades (multiplies) into all descendant node alphas.
     pub opacity: Option<f64>,
     /// When `Some(false)` the entire subtree is excluded from the render.
@@ -287,6 +304,8 @@ pub struct TableNode {
     pub w: Option<PropertyValue>,
     /// Required: table box height.
     pub h: Option<PropertyValue>,
+    /// Item attributes used when this node is a child of a `row` / `column` frame.
+    pub layout_item: LayoutItem,
     /// Column declarations, order = left→right.
     pub columns: Vec<TableColumn>,
     /// Row declarations, order = top→bottom.

@@ -269,7 +269,7 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
     info(
         "text.fit_failed",
         Severity::Error,
-        "Text with `overflow: fit` could not be scaled to fit its frame.",
+        "Text with `overflow=\"fit\"` (or `\"autofit\"` at its floor) overflows its box; the message names the box size and font size that fit.",
     ),
     info(
         "text.invalid_format",
@@ -289,7 +289,7 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
     info(
         "text.overflow",
         Severity::Warning,
-        "Text content overflows its containing frame; preserve type scale first and shrink only when intended or constrained.",
+        "Text content overflows its box and is clipped at the box edge (`overflow=\"clip\"`, the default); the message names the box size that keeps the type scale and the font size that fits.",
     ),
     info(
         "text.src_missing",

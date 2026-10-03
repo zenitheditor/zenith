@@ -189,6 +189,22 @@ pub trait TextLayoutEngine {
         req: &ShapeRequest<'_>,
         provider: &dyn FontProvider,
     ) -> Result<FallbackResult, LayoutError>;
+
+    /// The ink box of `glyph_id` in the face `font_id` at `font_size` px (see
+    /// [`crate::GlyphInkBox`]). `None` when the face does not resolve or parse,
+    /// or the glyph paints nothing.
+    ///
+    /// The default parses the face per call. A caching engine overrides it.
+    fn glyph_ink_box(
+        &self,
+        font_id: &str,
+        glyph_id: u16,
+        font_size: f32,
+        provider: &dyn FontProvider,
+    ) -> Option<crate::GlyphInkBox> {
+        let font = provider.by_id(font_id)?;
+        crate::glyph_ink_box(&font.bytes, font.index, glyph_id, font_size)
+    }
 }
 
 #[cfg(test)]

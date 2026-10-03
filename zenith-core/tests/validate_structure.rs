@@ -27,6 +27,7 @@ fn field_node(id: &str, field_type: &str) -> FieldNode {
         x: None,
         y: Some(pxv(80.0)),
         h: Some(pxv(40.0)),
+        layout_item: Default::default(),
         w: None,
         style: None,
         fill: None,
@@ -138,6 +139,7 @@ fn resolved_page_ref_target_does_not_warn() {
         y: Some(pxv(0.0)),
         w: Some(pxv(10.0)),
         h: Some(pxv(10.0)),
+        layout_item: Default::default(),
         radius: None,
         radius_tl: None,
         radius_tr: None,
@@ -611,6 +613,7 @@ fn toc_node_bare(id: &str, match_role: Option<&str>, match_style: Option<&str>) 
         y: Some(pxv(100.0)),
         w: Some(pxv(400.0)),
         h: Some(pxv(200.0)),
+        layout_item: Default::default(),
         style: None,
         fill: None,
         font_family: None,
@@ -745,8 +748,7 @@ mod component_validation {
             !report
                 .diagnostics
                 .iter()
-                .any(|d| d.code == "component.unknown_override_target"
-                    && d.severity == zenith_core::Severity::Error)
+                .any(|d| d.code == "component.unknown_override_target" && d.is_error())
         );
     }
 
@@ -956,8 +958,7 @@ mod import_validation {
             report
                 .diagnostics
                 .iter()
-                .any(|d| d.code == "import.invalid_kind"
-                    && d.severity == zenith_core::Severity::Error),
+                .any(|d| d.code == "import.invalid_kind" && d.is_error()),
             "invalid import kind must be an Error; got {:?}",
             report.diagnostics
         );

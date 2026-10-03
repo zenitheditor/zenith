@@ -95,7 +95,9 @@ pub(in crate::compile) fn empty_md_blocks() -> &'static MdBlockMap {
 /// [`super::chain_member::render_chain_member`]). Bundles the box-relative origin
 /// and the shared scalars threaded into the emit.
 #[derive(Clone, Copy)]
-pub(in crate::compile) struct ChainMemberPlace {
+pub(in crate::compile) struct ChainMemberPlace<'a> {
+    /// Shaping env, read for glyph ink bounds (overflow measurement).
+    pub(in crate::compile) shape: ShapeEnv<'a>,
     pub(in crate::compile) font_size: f32,
     pub(in crate::compile) text_x: f64,
     pub(in crate::compile) text_y: f64,

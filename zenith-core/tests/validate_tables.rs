@@ -44,6 +44,7 @@ fn table_node(
         y: if geometry { Some(pxv(40.0)) } else { None },
         w: if geometry { Some(pxv(400.0)) } else { None },
         h: if geometry { Some(pxv(200.0)) } else { None },
+        layout_item: Default::default(),
         columns,
         rows,
         header_rows: None,

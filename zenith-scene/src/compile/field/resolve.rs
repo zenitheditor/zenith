@@ -199,6 +199,7 @@ pub(in crate::compile) fn resolve_field_to_text(
         y,
         w,
         h,
+        layout_item: Default::default(),
         // A field is always a single line; alignment defaults by field type but
         // an explicit field-level note: fields do not expose `align` in v0, so
         // the per-type default is authoritative.
@@ -301,6 +302,7 @@ mod tests {
             y: None,
             w: None,
             h: None,
+            layout_item: Default::default(),
             style: None,
             fill: None,
             font_family: None,
@@ -459,6 +461,7 @@ mod tests {
             y: None,
             w: None,
             h: None,
+            layout_item: Default::default(),
             style: None,
             fill: None,
             font_family: None,
@@ -492,6 +495,7 @@ mod tests {
             y: None,
             w: None,
             h: None,
+            layout_item: Default::default(),
             style: None,
             fill: None,
             font_family: None,
@@ -605,6 +609,7 @@ mod tests {
             y: None,
             w: None,
             h: None,
+            layout_item: Default::default(),
             style: None,
             fill: None,
             font_family: None,

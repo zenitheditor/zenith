@@ -41,10 +41,7 @@ fn set_opacity_clamped_above_one() {
     // changed and the candidate has Some(1.0) by checking node in candidate.
     // We check the diagnostic list is clean (no errors) and affected is recorded.
     assert!(
-        result
-            .diagnostics
-            .iter()
-            .all(|d| d.severity != Severity::Error),
+        result.diagnostics.iter().all(|d| !d.is_error()),
         "no errors expected; got: {:?}",
         result.diagnostics
     );

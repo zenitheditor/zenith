@@ -27,7 +27,7 @@ const GEOM: &str = "x=(px)0 y=(px)0 w=(px)100 h=(px)40";
 fn error_codes(out: &zenith_core::fix::FixOutcome) -> Vec<String> {
     out.remaining
         .iter()
-        .filter(|d| d.severity == zenith_core::Severity::Error)
+        .filter(|d| d.is_error())
         .map(|d| d.code.clone())
         .collect()
 }

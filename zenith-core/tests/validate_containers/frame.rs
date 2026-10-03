@@ -1,4 +1,5 @@
 use super::*;
+use zenith_core::LayoutKind;
 
 // ── Frame helpers ─────────────────────────────────────────────────────
 
@@ -11,7 +12,14 @@ fn minimal_frame(id: &str, x: f64, y: f64, w: f64, h: f64, children: Vec<Node>) 
         y: Some(pxv(y)),
         w: Some(pxv(w)),
         h: Some(pxv(h)),
+        layout_item: Default::default(),
         layout: None,
+        container: Default::default(),
+        clip: None,
+        fill: None,
+        stroke: None,
+        stroke_width: None,
+        radius: None,
         columns: None,
         rows: None,
         opacity: None,
@@ -53,6 +61,7 @@ fn frame_clean_doc_no_errors() {
         y: Some(pxv(50.0)),
         w: Some(pxv(40.0)),
         h: Some(pxv(40.0)),
+        layout_item: Default::default(),
         radius: None,
         radius_tl: None,
         radius_tr: None,
@@ -127,7 +136,14 @@ fn frame_missing_x_produces_node_missing_geometry() {
                 y: Some(pxv(0.0)),
                 w: Some(pxv(100.0)),
                 h: Some(pxv(100.0)),
+                layout_item: Default::default(),
                 layout: None,
+                container: Default::default(),
+                clip: None,
+                fill: None,
+                stroke: None,
+                stroke_width: None,
+                radius: None,
                 columns: None,
                 rows: None,
                 opacity: None,
@@ -177,7 +193,14 @@ fn frame_missing_h_produces_node_missing_geometry() {
                 y: Some(pxv(0.0)),
                 w: Some(pxv(100.0)),
                 h: None, // missing
+                layout_item: Default::default(),
                 layout: None,
+                container: Default::default(),
+                clip: None,
+                fill: None,
+                stroke: None,
+                stroke_width: None,
+                radius: None,
                 columns: None,
                 rows: None,
                 opacity: None,
@@ -228,6 +251,7 @@ fn frame_child_missing_geometry_surfaces() {
         y: Some(pxv(0.0)),
         w: Some(pxv(50.0)),
         h: Some(pxv(50.0)),
+        layout_item: Default::default(),
         radius: None,
         radius_tl: None,
         radius_tr: None,
@@ -346,21 +370,22 @@ fn frame_child_fully_inside_is_clean() {
     );
 }
 
-/// A flow-frame child with no explicit geometry → no overflow advisory
-/// (node_bbox is None, so the child is naturally skipped).
+/// A column-frame child with no explicit geometry → no overflow advisory
+/// (layout frames skip `frame.child_overflow`).
 #[test]
-fn flow_frame_child_without_geometry_is_skipped() {
+fn column_frame_child_without_geometry_is_skipped() {
     let child_rect = Node::Rect(Box::new(RectNode {
         shadow: None,
         filter: None,
         mask: None,
-        id: "rect.flow".to_owned(),
+        id: "rect.column".to_owned(),
         name: None,
         role: None,
         x: None,
         y: None,
         w: None,
         h: None,
+        layout_item: Default::default(),
         radius: None,
         radius_tl: None,
         radius_tr: None,
@@ -396,15 +421,22 @@ fn flow_frame_child_without_geometry_is_skipped() {
         source_span: None,
         unknown_props: BTreeMap::new(),
     }));
-    let flow_frame = Node::Frame(FrameNode {
-        id: "frame.flow".to_owned(),
+    let column_frame = Node::Frame(FrameNode {
+        id: "frame.column".to_owned(),
         name: None,
         role: None,
         x: Some(pxv(40.0)),
         y: Some(pxv(40.0)),
         w: Some(pxv(120.0)),
         h: Some(pxv(100.0)),
-        layout: Some("flow".to_owned()),
+        layout_item: Default::default(),
+        layout: Some(LayoutKind::Column),
+        container: Default::default(),
+        clip: None,
+        fill: None,
+        stroke: None,
+        stroke_width: None,
+        radius: None,
         columns: None,
         rows: None,
         opacity: None,
@@ -429,12 +461,12 @@ fn flow_frame_child_without_geometry_is_skipped() {
     });
     let doc = doc_with(
         vec![],
-        vec![bounded_page("page.one", 1000.0, 1000.0, vec![flow_frame])],
+        vec![bounded_page("page.one", 1000.0, 1000.0, vec![column_frame])],
     );
     let report = validate(&doc);
     assert!(
         !has_code(&report, "frame.child_overflow"),
-        "flow child without geometry must be skipped; codes: {:?}",
+        "column child without geometry must be skipped; codes: {:?}",
         codes(&report)
     );
 }
@@ -493,7 +525,14 @@ fn frame_unknown_property_errors() {
                 y: Some(pxv(0.0)),
                 w: Some(pxv(100.0)),
                 h: Some(pxv(100.0)),
+                layout_item: Default::default(),
                 layout: None,
+                container: Default::default(),
+                clip: None,
+                fill: None,
+                stroke: None,
+                stroke_width: None,
+                radius: None,
                 columns: None,
                 rows: None,
                 opacity: None,

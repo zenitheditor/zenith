@@ -13,7 +13,7 @@ use super::shared::{
     check_font_features, check_optional_dim, check_spans, check_style_ref, is_valid_blend_mode,
 };
 use super::suggest::{blend_mode_names, check_unknown_props, push_invalid_value};
-use crate::schema::enums::{IMAGE_FITS, TEXT_FORMATS, V_ALIGNS};
+use crate::schema::enums::{IMAGE_FITS, TEXT_FORMATS, TEXT_OVERFLOWS, V_ALIGNS};
 use crate::suggest::{invalid_value_message, replace_value_fix};
 use crate::validate::check::nodes::WalkCtx;
 use crate::validate::check::register_id;
@@ -295,6 +295,22 @@ pub(in crate::validate::check) fn check_text(
                 Some(t.id.clone()),
             )
             .with_fix(replace_value_fix("format", fmt, TEXT_FORMATS)),
+        );
+    }
+
+    // Validate overflow value (an unrecognized value is an Error; the renderer
+    // reads it as the default `clip`).
+    if let Some(ov) = t.overflow.as_deref()
+        && !TEXT_OVERFLOWS.contains(&ov)
+    {
+        push_invalid_value(
+            &format!("text '{}'", t.id),
+            Some(t.id.clone()),
+            "overflow",
+            ov,
+            TEXT_OVERFLOWS,
+            t.source_span,
+            diagnostics,
         );
     }
 

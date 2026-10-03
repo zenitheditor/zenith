@@ -16,8 +16,8 @@ use super::super::chain::ChainAssignments;
 use super::super::paint::resolve_property_color;
 use super::super::style_prop;
 use super::super::text::{
-    MeasureEnv, TextCompileEnv, compile_text, empty_md_blocks, measure_text_wrapped_height,
-    resolve_text_families,
+    LabelHost, MeasureEnv, TextCompileEnv, compile_label_text, empty_md_blocks,
+    measure_text_wrapped_height, resolve_text_families,
 };
 use super::super::util::{
     AxisTarget, missing_geometry_diag, px_prop, resolve_anchored_axis, resolve_geometry_px,
@@ -82,7 +82,7 @@ struct ShapeBg<'a> {
 /// AFTER the background (so the label paints ON TOP of the fill), the owned
 /// label [`ShapeNode::spans`] are rendered as a synthesized [`TextNode`] laid
 /// into the shape's padded content box, REUSING the production
-/// [`compile_text`] path. The label is horizontally aligned by `h_align`
+/// [`compile_label_text`] path. The label is horizontally aligned by `h_align`
 /// (default `center`) and vertically aligned by `v_align` (default `middle`,
 /// via a measured pre-offset like the table cell), and it shares the SAME
 /// `ctx` as the background — so the shape's opacity, rotation, and clip
@@ -249,7 +249,7 @@ pub(in crate::compile) fn compile_shape(
 }
 
 /// Synthesize a [`TextNode`] for the shape's owned label and render it via the
-/// production [`compile_text`] path into the shape's padded content box.
+/// production [`compile_label_text`] path into the shape's padded content box.
 ///
 /// The label inherits the shape's `ctx` (opacity / rotation / clip). Horizontal
 /// alignment maps `h_align` → the text node's `align` (default `center`);
@@ -316,6 +316,7 @@ fn emit_shape_label(
         y: Some(px_prop(content_y)),
         w: Some(px_prop(content_w)),
         h: Some(px_prop(content_h)),
+        layout_item: Default::default(),
         align,
         v_align: None,
         direction: None,
@@ -395,7 +396,7 @@ fn emit_shape_label(
 
     // Emit the label via the production text path. The synth's x/y are ALREADY
     // absolute (the caller resolved `x_raw + ctx.dx`), so the translation must
-    // NOT be applied again — `compile_text` adds `ctx.dx/dy` itself. Zero the
+    // NOT be applied again — `compile_label_text` adds `ctx.dx/dy` itself. Zero the
     // translation while preserving opacity/baseline-grid so the label still
     // cascades correctly. Without this, a shape inside a group/instance has its
     // label double-translated by the container offset.
@@ -404,8 +405,11 @@ fn emit_shape_label(
         dy: 0.0,
         ..ctx
     };
-    let _ = compile_text(
+    // Overflow is reported against the SHAPE (its id and its w/h), since the
+    // label box is derived from the shape box minus padding.
+    let _ = compile_label_text(
         &synth,
+        LabelHost { id: &shape.id, pad },
         TextCompileEnv {
             resolved,
             style_map,

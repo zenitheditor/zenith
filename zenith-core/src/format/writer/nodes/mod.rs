@@ -12,6 +12,7 @@ mod container;
 mod document;
 mod effect;
 mod helpers;
+mod layout;
 mod leaf;
 mod special;
 

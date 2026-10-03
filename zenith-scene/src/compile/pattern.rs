@@ -19,7 +19,7 @@
 use std::collections::BTreeMap;
 
 use zenith_core::{
-    Diagnostic, PatternLayout, PatternNode, ResolvedToken, Severity, dim_to_px, pattern_positions,
+    Diagnostic, PatternLayout, PatternNode, ResolvedToken, dim_to_px, pattern_positions,
 };
 
 use crate::ir::{Paint, SceneCommand};
@@ -79,7 +79,7 @@ pub(in crate::compile) fn compile_pattern(
         &mut Vec::new(),
         probe_ctx,
     );
-    if scratch_diags.iter().any(|d| d.severity == Severity::Error) {
+    if Diagnostic::has_errors(&scratch_diags) {
         diagnostics.extend(scratch_diags);
         return 0.0;
     }

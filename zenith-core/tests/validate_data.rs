@@ -101,11 +101,7 @@ fn validate_data_ref_no_error() {
     let adapter = KdlAdapter;
     let doc = adapter.parse(src.as_bytes()).expect("must parse");
     let report = validate(&doc);
-    let errors: Vec<_> = report
-        .diagnostics
-        .iter()
-        .filter(|d| d.severity == Severity::Error)
-        .collect();
+    let errors: Vec<_> = report.diagnostics.iter().filter(|d| d.is_error()).collect();
     assert!(
         errors.is_empty(),
         "no Error-level diagnostics expected for data ref doc; got: {errors:?}"

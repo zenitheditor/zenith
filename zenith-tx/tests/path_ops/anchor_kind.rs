@@ -99,7 +99,7 @@ fn set_path_anchor_kind_rejects_unrecognized_kind_without_source_change() {
     assert!(
         result.diagnostics.iter().any(|d| {
             d.code == "node.invalid_value"
-                && d.severity == zenith_core::Severity::Error
+                && d.is_error()
                 && d.message.contains("'future'")
                 && d.message.contains("corner, smooth, symmetric")
         }),

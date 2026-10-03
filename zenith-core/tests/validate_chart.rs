@@ -548,7 +548,7 @@ fn chart_invalid_legend_align_fires_diagnostic() {
     );
 }
 
-/// A chart missing geometry (x/y/w/h absent) outside a flow parent fires
+/// A chart missing geometry (x/y/w/h absent) outside a layout parent fires
 /// `node.missing_geometry`, proving that geometry validation runs on chart nodes.
 #[test]
 fn chart_missing_geometry_fires_geometry_diagnostic() {

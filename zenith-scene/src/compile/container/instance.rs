@@ -492,6 +492,7 @@ fn synthetic_group(instance: &InstanceNode, children: Vec<Node>) -> GroupNode {
         y: instance.y.clone().map(PropertyValue::Dimension),
         w: None,
         h: None,
+        layout_item: Default::default(),
         opacity: instance.opacity,
         visible: instance.visible,
         locked: instance.locked,

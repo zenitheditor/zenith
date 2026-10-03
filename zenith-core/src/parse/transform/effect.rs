@@ -10,6 +10,7 @@ use super::helpers::{
     optional_f64_prop, optional_property_value, optional_string_prop, optional_u32_prop,
     required_string_prop,
 };
+use super::layout::{optional_box_size, transform_layout_item};
 
 pub(crate) const LIGHT_KNOWN_PROPS: &[&str] = &[
     "id", "name", "role", "kind", "x", "y", "radius", "color", "opacity", "visible", "locked",
@@ -25,6 +26,11 @@ pub(crate) const MESH_KNOWN_PROPS: &[&str] = &[
     "y",
     "w",
     "h",
+    "min-w",
+    "max-w",
+    "min-h",
+    "max-h",
+    "position",
     "columns",
     "rows",
     "vanishing-x",
@@ -73,8 +79,9 @@ pub(super) fn transform_mesh(node: &KdlNode) -> Result<MeshNode, ParseError> {
         kind: optional_string_prop(node, "kind").map(str::to_owned),
         x: optional_property_value(node, "x"),
         y: optional_property_value(node, "y"),
-        w: optional_property_value(node, "w"),
-        h: optional_property_value(node, "h"),
+        w: optional_box_size(node, "w"),
+        h: optional_box_size(node, "h"),
+        layout_item: transform_layout_item(node),
         columns: optional_u32_prop(node, "columns"),
         rows: optional_u32_prop(node, "rows"),
         vanishing_x: optional_property_value(node, "vanishing-x")

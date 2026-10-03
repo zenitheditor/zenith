@@ -90,10 +90,13 @@ pub(super) fn emit_connector_label(
         y: Some(px_prop(ly)),
         w: Some(px_prop(LABEL_W)),
         h: Some(px_prop(LABEL_H)),
+        layout_item: Default::default(),
         align: Some("center".to_owned()),
         v_align: None,
         direction: None,
-        overflow: None,
+        // The label box is internal (the author sets no w/h), so a long label
+        // paints past it rather than being clipped to an unseen box.
+        overflow: Some("visible".to_owned()),
         overflow_wrap: None,
         style: connector.text_style.clone(),
         fill: None,

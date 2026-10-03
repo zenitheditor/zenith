@@ -15,7 +15,7 @@ use super::shared::{
     is_valid_blend_mode,
 };
 use super::suggest::{blend_mode_names, check_unknown_props, push_invalid_value};
-use crate::schema::enums::STROKE_LINECAPS;
+use crate::schema::enums::{CODE_OVERFLOWS, STROKE_LINECAPS};
 use crate::validate::check::nodes::WalkCtx;
 use crate::validate::check::register_id;
 use crate::validate::check::visual::{VisualExpect, check_visual_prop};
@@ -585,8 +585,23 @@ pub(in crate::validate::check) fn check_code(
         );
     }
 
-    // Visual properties (mirror text; overflow is not enum-validated,
-    // matching how text.overflow is currently handled).
+    // Validate overflow value (an unrecognized value is an Error; the renderer
+    // reads it as the default `clip`).
+    if let Some(ov) = c.overflow.as_deref()
+        && !CODE_OVERFLOWS.contains(&ov)
+    {
+        push_invalid_value(
+            &format!("code '{}'", c.id),
+            Some(c.id.clone()),
+            "overflow",
+            ov,
+            CODE_OVERFLOWS,
+            c.source_span,
+            diagnostics,
+        );
+    }
+
+    // Visual properties (mirror text).
     check_visual_prop(
         &c.id,
         "fill",

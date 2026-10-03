@@ -248,9 +248,49 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
         "`kern-pair` left and right strings must be non-empty.",
     ),
     info(
+        "layout.absolute_unplaced",
+        Severity::Error,
+        "A `position=\"absolute\"` child of a row/column frame has no x/y or anchor.",
+    ),
+    info(
+        "layout.child_overflow",
+        Severity::Advisory,
+        "Laid-out children of a row/column frame extend past its content box.",
+    ),
+    info(
+        "layout.conflicting_size",
+        Severity::Error,
+        "A layout size is contradictory (min above max, wrap or overflow=fit on a hug axis).",
+    ),
+    info(
+        "layout.fill_in_hug_parent",
+        Severity::Advisory,
+        "A `fill` child sits on the hug axis of its parent and resolves to its intrinsic size.",
+    ),
+    info(
+        "layout.inert_attribute",
+        Severity::Advisory,
+        "A layout attribute has no effect where it is set.",
+    ),
+    info(
+        "layout.not_yet_supported",
+        Severity::Error,
+        "A layout feature is parsed but not rendered yet.",
+    ),
+    info(
         "layout.off_canvas",
         Severity::Advisory,
         "A node extends outside the page bounds.",
+    ),
+    info(
+        "layout.position_ignored",
+        Severity::Advisory,
+        "x/y/anchor on an in-flow child of a row/column frame are ignored.",
+    ),
+    info(
+        "layout.unsized_child",
+        Severity::Error,
+        "A laid-out child has no resolvable size on an axis.",
     ),
     info(
         "library.unknown_property",

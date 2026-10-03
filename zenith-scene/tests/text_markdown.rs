@@ -54,10 +54,7 @@ fn markdown_format_parses_inline_marks_into_styled_spans() {
 
     // No compilation errors.
     assert!(
-        result
-            .diagnostics
-            .iter()
-            .all(|d| d.severity != zenith_core::Severity::Error),
+        result.diagnostics.iter().all(|d| !d.is_error()),
         "expected no errors; got: {:?}",
         result.diagnostics
     );
@@ -104,10 +101,7 @@ fn no_format_attribute_renders_literal_asterisks_verbatim() {
 
     // No errors.
     assert!(
-        result
-            .diagnostics
-            .iter()
-            .all(|d| d.severity != zenith_core::Severity::Error),
+        result.diagnostics.iter().all(|d| !d.is_error()),
         "expected no errors; got: {:?}",
         result.diagnostics
     );
@@ -178,10 +172,7 @@ page id="page.mddr" w=(px)400 h=(px)200 {
 
     // No errors.
     assert!(
-        result
-            .diagnostics
-            .iter()
-            .all(|d| d.severity != zenith_core::Severity::Error),
+        result.diagnostics.iter().all(|d| !d.is_error()),
         "expected no errors; got: {:?}",
         result.diagnostics
     );

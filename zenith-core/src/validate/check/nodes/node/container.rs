@@ -7,7 +7,7 @@
 
 use std::collections::BTreeSet;
 
-use crate::ast::node::{FrameNode, GroupNode, TableNode};
+use crate::ast::node::{FrameNode, GroupNode, LayoutKind, TableNode};
 use crate::ast::value::{Dimension, dim_to_px};
 use crate::diagnostics::Diagnostic;
 use crate::schema::enums::{BORDER_COLLAPSES, H_ALIGNS, SYMMETRY_MODES, V_ALIGNS};
@@ -63,6 +63,13 @@ pub(in crate::validate::check) fn check_frame(
         diagnostics,
     );
     let xy_required = geom_required && !anchor_active;
+    // A layout frame without w/h hugs its children; the layout check reports
+    // that, so a missing w/h is not `node.missing_geometry` here.
+    let wh_required = geom_required
+        && !f
+            .layout
+            .as_ref()
+            .is_some_and(LayoutKind::positions_children);
 
     // Frames REQUIRE all four geometry dimensions (unlike groups).
     {
@@ -92,7 +99,7 @@ pub(in crate::validate::check) fn check_frame(
             &f.id,
             "w",
             f.w.as_ref(),
-            geom_required,
+            wh_required,
             f.source_span,
             &mut tokens,
             diagnostics,
@@ -101,7 +108,7 @@ pub(in crate::validate::check) fn check_frame(
             &f.id,
             "h",
             f.h.as_ref(),
-            geom_required,
+            wh_required,
             f.source_span,
             &mut tokens,
             diagnostics,
@@ -113,9 +120,9 @@ pub(in crate::validate::check) fn check_frame(
         &f.id,
         f.source_span,
         VisualProps {
-            fill: None,
-            stroke: None,
-            stroke_width: None,
+            fill: f.fill.as_ref(),
+            stroke: f.stroke.as_ref(),
+            stroke_width: f.stroke_width.as_ref(),
             stroke_dash: None,
             stroke_gap: None,
             stroke_linecap: None,
@@ -127,7 +134,7 @@ pub(in crate::validate::check) fn check_frame(
             border_width: None,
             stroke_outer_width: None,
             blend_mode: f.blend_mode.as_deref(),
-            radius: None,
+            radius: f.radius.as_ref(),
             radius_tl: None,
             radius_tr: None,
             radius_br: None,
@@ -144,7 +151,7 @@ pub(in crate::validate::check) fn check_frame(
 
     // Grid layout advisory: `layout="grid"` without a positive `columns`
     // defaults the scene to a single column. Non-fatal.
-    if f.layout.as_deref() == Some("grid") && f.columns.unwrap_or(0) == 0 {
+    if f.layout == Some(LayoutKind::Grid) && f.columns.unwrap_or(0) == 0 {
         diagnostics.push(Diagnostic::advisory(
             "grid.missing_columns",
             format!(

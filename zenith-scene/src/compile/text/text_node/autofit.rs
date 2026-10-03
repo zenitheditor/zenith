@@ -1,30 +1,29 @@
 //! The public `compile_text` entry and the `overflow="autofit"` shrink-to-fit
-//! search. Both are thin wrappers over [`compile_text_sized`](super::sized::compile_text_sized).
+//! search. Both are thin wrappers over [`compile_text_sized`](super::fit::compile_text_sized).
 
-use zenith_core::{Diagnostic, Dimension, PropertyValue, TextNode, Unit};
+use zenith_core::{Diagnostic, TextNode};
 
 use crate::compile::RenderCtx;
 use crate::compile::text::ctx::TextCompileEnv;
 use crate::compile::text::measure::font_size_px;
+use crate::compile::text::overflow_mode::TextOverflow;
 use crate::compile::util::{resolve_geometry_px, resolve_property_dimension_px};
 use crate::ir::SceneCommand;
 
-use super::sized::compile_text_sized;
+use super::fit::{compile_text_sized, largest_fitting_px, with_font_size};
 
 /// Compile a `text` leaf node.
 ///
 /// This is the public entry point. It is a thin BLACK-BOX wrapper around
-/// [`compile_text_sized`](super::sized::compile_text_sized) (which carries every
+/// [`compile_text_sized`](super::fit::compile_text_sized) (which carries every
 /// layout path verbatim):
 ///
 /// - For any node whose `overflow` is NOT `"autofit"` it is a pure pass-through
-///   — it forwards every argument unchanged to `compile_text_sized`, so the
-///   emitted [`SceneCommand`] stream is BYTE-IDENTICAL to before this attribute
-///   existed (the determinism gate).
-/// - For `overflow="autofit"` it drives `compile_text_sized` at TRIAL font
-///   sizes (into throwaway buffers) to find the LARGEST size in
-///   `[floor, declared]` whose content fits the box height, then performs the
-///   single real emit at that size. See [`compile_text_autofit`].
+///   — it forwards every argument unchanged to `compile_text_sized`.
+/// - For `overflow="autofit"` it lays the node out at TRIAL font sizes (into
+///   throwaway buffers) to find the LARGEST size in `[floor, declared]` whose
+///   content fits the box, then performs the single real emit at that size.
+///   See [`compile_text_autofit`].
 ///
 /// Returns the laid-out content height in pixels (`line_count * line_height`).
 pub(in crate::compile) fn compile_text(
@@ -39,11 +38,12 @@ pub(in crate::compile) fn compile_text(
     // so it never affects layout — it is applied as a post-pass over exactly the
     // commands this node produced. Default (`None`/`Some(true)`) is byte-identical.
     let start = commands.len();
-    let height = if text.overflow.as_deref() != Some("autofit") {
-        // Pass-through: byte-identical command stream for every non-autofit node.
-        compile_text_sized(text, env, commands, diagnostics, ctx)
-    } else {
-        compile_text_autofit(text, env, commands, diagnostics, ctx)
+    let height = match TextOverflow::from_attr(text.overflow.as_deref()) {
+        // Pass-through: one sized compile for every non-autofit node.
+        TextOverflow::Clip | TextOverflow::Visible | TextOverflow::Fit => {
+            compile_text_sized(text, env, commands, diagnostics, ctx)
+        }
+        TextOverflow::Autofit => compile_text_autofit(text, env, commands, diagnostics, ctx),
     };
     if text.selectable == Some(false) {
         crate::compile::text::shape::mark_runs_unselectable(&mut commands[start..]);
@@ -51,30 +51,23 @@ pub(in crate::compile) fn compile_text(
     height
 }
 
-/// PowerPoint-style shrink-to-fit search for an `overflow="autofit"` text node.
+/// PowerPoint-style shrink-to-fit for an `overflow="autofit"` text node.
 ///
-/// Drives [`compile_text_sized`](super::sized::compile_text_sized) at trial
-/// integer-px font sizes (into throwaway command/diagnostic buffers) to find the
-/// LARGEST size in `[floor, declared]` whose content fits the box height, then
-/// performs ONE real emit at that size.
+/// Runs [`largest_fitting_px`](super::fit::largest_fitting_px) over
+/// `[floor, declared]` to find the LARGEST integer-px size whose content fits
+/// the box, then performs ONE real emit at that size.
 ///
 /// - The declared node font size (px) is the search ceiling; `font-size-min`
 ///   (token → dimension) is the floor. When `font-size-min` is absent the floor
 ///   defaults to `(declared * 0.5).max(8.0)`.
 /// - Both `box_w` and `box_h` must resolve; if either is missing autofit cannot
-///   measure, so it falls back to a single `compile_text_sized` call with the
-///   node's `overflow` left as-is (no crash, no silent skip).
-/// - A trial at size `fs` FITS iff its throwaway diagnostics contain NO
-///   `text.fit_failed` whose subject is this node id (the trial sets
-///   `overflow="fit"` so the inner height-overflow check reports exactly that).
-/// - The search is a DOWNWARD linear scan from `declared` to `floor` over
-///   integer px, breaking on the first fit (deterministic: same inputs → same
-///   `fs`).
-/// - If some size fits, the real emit uses that size with `overflow="clip"` so
-///   the fitted text renders clip-safe and emits NO `fit_failed`. If NONE fits
-///   (even at the floor) the real emit uses the floor with `overflow="fit"`, so
-///   the genuine `text.fit_failed` is emitted at the floor (PowerPoint gives up
-///   too).
+///   measure, so it falls back to a single `compile_text_sized` call (no crash,
+///   no silent skip).
+/// - If some size fits, the real emit at that size overflows nothing, so it
+///   emits no clip and no diagnostic. If NONE fits (even at the floor) the real
+///   emit uses the floor and `compile_text_sized` raises `text.fit_failed`,
+///   continuing the same downward scan below the floor to name the
+///   `font-size-min` that fits. Overflow at the floor is never clipped.
 ///
 /// v0 limitation: a span carrying its OWN explicit `font-size` does not scale —
 /// only the node-level font size drives inheriting spans (the typical single-
@@ -87,7 +80,7 @@ fn compile_text_autofit(
     ctx: RenderCtx,
 ) -> f64 {
     // Require both box dimensions to measure fit; otherwise fall back to a
-    // single sized compile with overflow untouched (documented; no crash).
+    // single sized compile (documented; no crash).
     let box_w = resolve_geometry_px(text.w.as_ref(), env.resolved);
     let box_h = resolve_geometry_px(text.h.as_ref(), env.resolved);
     let (Some(_bw), Some(_bh)) = (box_w, box_h) else {
@@ -106,46 +99,9 @@ fn compile_text_autofit(
     let ceil_px = declared.floor().max(1.0) as i64;
     let floor_px = floor.floor().max(1.0).min(declared.floor().max(1.0)) as i64;
 
-    // Build a trial/real clone at size `fs` with the given overflow.
-    let clone_sized = |fs: f64, ov: &str| -> TextNode {
-        let mut t = text.clone();
-        t.font_size = Some(PropertyValue::Dimension(Dimension {
-            value: fs,
-            unit: Unit::Px,
-        }));
-        t.overflow = Some(ov.to_owned());
-        t
-    };
-
-    // Does a trial at `fs` fit? Compile into throwaway buffers under
-    // overflow="fit" and check for a `text.fit_failed` naming THIS node.
-    let fits = |fs: f64| -> bool {
-        let trial = clone_sized(fs, "fit");
-        let mut throwaway_cmds: Vec<SceneCommand> = Vec::new();
-        let mut throwaway_diags: Vec<Diagnostic> = Vec::new();
-        compile_text_sized(&trial, env, &mut throwaway_cmds, &mut throwaway_diags, ctx);
-        !throwaway_diags.iter().any(|d| {
-            d.code == "text.fit_failed" && d.subject_id.as_deref() == Some(text.id.as_str())
-        })
-    };
-
-    // Downward linear scan from the ceiling to the floor; break on first fit.
-    let mut fitted: Option<i64> = None;
-    let mut fs = ceil_px;
-    while fs >= floor_px {
-        if fits(fs as f64) {
-            fitted = Some(fs);
-            break;
-        }
-        fs -= 1;
-    }
-
-    // Real emit: the fitted size clipped-safe, or the floor with overflow="fit"
-    // so the genuine fit_failed surfaces at the floor.
-    let (real_fs, real_ov) = match fitted {
-        Some(fs) => (fs as f64, "clip"),
-        None => (floor_px as f64, "fit"),
-    };
-    let real = clone_sized(real_fs, real_ov);
+    // Real emit: the fitted size, or the floor (where the genuine
+    // `text.fit_failed` surfaces). The mode stays `autofit` on the clone.
+    let real_fs = largest_fitting_px(text, env, ctx, ceil_px, floor_px).unwrap_or(floor_px);
+    let real = with_font_size(text, real_fs as f64);
     compile_text_sized(&real, env, commands, diagnostics, ctx)
 }

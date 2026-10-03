@@ -340,6 +340,7 @@ pub fn validate_with_policy(
                 WalkPos {
                     page_px_bounds: None,
                     in_flow_parent: false,
+                    flow_parent: None,
                     enclosing_frame: None,
                     in_container: false,
                     parent_box_known: false,
@@ -385,6 +386,7 @@ pub fn validate_with_policy(
                 WalkPos {
                     page_px_bounds: None,
                     in_flow_parent: false,
+                    flow_parent: None,
                     enclosing_frame: None,
                     in_container: false,
                     parent_box_known: false,
@@ -786,6 +788,7 @@ pub fn validate_with_policy(
                 WalkPos {
                     page_px_bounds,
                     in_flow_parent: false,
+                    flow_parent: None,
                     enclosing_frame: None,
                     in_container: false,
                     parent_box_known: false,

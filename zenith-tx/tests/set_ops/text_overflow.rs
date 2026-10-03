@@ -119,3 +119,85 @@ fn set_text_overflow_missing_node_rejected() {
         result.diagnostics
     );
 }
+
+fn set_overflow(node_id: &str, overflow: &str) -> zenith_tx::TxResult {
+    let doc = parse(TEXT_CODE_DOC);
+    let tx = Transaction {
+        ops: vec![Op::SetTextOverflow {
+            node_id: node_id.to_owned(),
+            overflow: overflow.to_owned(),
+        }],
+        permissions: Permissions::default(),
+    };
+    run_transaction(&doc, &tx).expect("run_transaction must not error")
+}
+
+#[test]
+fn set_text_overflow_accepts_every_text_mode() {
+    for mode in ["clip", "visible", "fit", "autofit"] {
+        let result = set_overflow("body", mode);
+        assert_eq!(
+            result.status,
+            TxStatus::Accepted,
+            "{mode}: {:?}",
+            result.diagnostics
+        );
+        assert!(
+            result
+                .source_after
+                .contains(&format!("overflow=\"{mode}\"")),
+            "{mode}: {}",
+            result.source_after
+        );
+    }
+}
+
+#[test]
+fn set_text_overflow_on_code_accepts_clip_and_visible_only() {
+    for mode in ["clip", "visible"] {
+        let result = set_overflow("snip", mode);
+        assert_eq!(
+            result.status,
+            TxStatus::Accepted,
+            "{mode}: {:?}",
+            result.diagnostics
+        );
+    }
+    for mode in ["fit", "autofit"] {
+        let result = set_overflow("snip", mode);
+        assert_eq!(
+            result.status,
+            TxStatus::Rejected,
+            "{mode} must be rejected on code"
+        );
+        assert!(
+            result
+                .diagnostics
+                .iter()
+                .any(|d| d.code == "tx.invalid_value"
+                    && d.message.contains(mode)
+                    && d.message.contains("must be one of: clip, visible")),
+            "{mode}: {:?}",
+            result.diagnostics
+        );
+        assert_eq!(result.source_after, result.source_before);
+    }
+}
+
+#[test]
+fn set_text_overflow_schema_names_the_core_lists() {
+    let fields = zenith_tx::schema::op_fields("set_text_overflow").expect("op is described");
+    let ty = fields
+        .iter()
+        .find(|f| f.name == "overflow")
+        .map(|f| f.ty)
+        .expect("overflow field");
+    assert_eq!(
+        ty,
+        format!(
+            "enum: {} (code: {})",
+            zenith_core::schema::enums::TEXT_OVERFLOWS.join("|"),
+            zenith_core::schema::enums::CODE_OVERFLOWS.join("|")
+        )
+    );
+}

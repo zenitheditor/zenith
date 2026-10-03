@@ -3,6 +3,7 @@
 use std::collections::BTreeMap;
 
 use crate::ast::block_style::BlockStyle;
+use crate::ast::node::LayoutItem;
 use crate::ast::value::{Dimension, PropertyValue};
 use crate::ast::{KerningPair, Span};
 use crate::tokens::SyntaxTheme;
@@ -19,6 +20,8 @@ pub struct TextNode {
     pub y: Option<PropertyValue>,
     pub w: Option<PropertyValue>,
     pub h: Option<PropertyValue>,
+    /// Item attributes used when this node is a child of a `row` / `column` frame.
+    pub layout_item: LayoutItem,
     pub align: Option<String>,
     /// Vertical text-block alignment within the box (`top`/`middle`/`bottom`,
     /// default `top` = today's behavior: no y offset applied). When the box
@@ -27,12 +30,26 @@ pub struct TextNode {
     /// (bottom). Unknown values are treated as `top` (byte-identical to absent).
     pub v_align: Option<String>,
     pub direction: Option<String>,
+    /// What happens when the content overflows the `w`×`h` box. Overflow means
+    /// the glyph INK leaves the box vertically (a line box taller than the box
+    /// with ink inside it does not count), or one unbreakable line is wider
+    /// than the box:
+    /// - `"clip"` (default when absent): ink is clipped at the box edge and a
+    ///   `text.overflow` warning names the box size and font size that fit.
+    /// - `"visible"`: ink paints past the box; no diagnostic.
+    /// - `"fit"`: the declared size is kept; overflow is a `text.fit_failed`
+    ///   error.
+    /// - `"autofit"`: the font shrinks to the largest integer px in
+    ///   `[font-size-min, font-size]` that fits; overflow at the floor is a
+    ///   `text.fit_failed` error.
+    ///
+    /// Content that fits renders identically in every mode.
     pub overflow: Option<String>,
     /// Overflow-wrap mode. `Some("break-word")` lets the line packer break an
     /// unbreakable token (a long URL/compound with no space or hyphen point) that
     /// is wider than the line box at a CHARACTER boundary, so it no longer
     /// overflows; a forced break emits an advisory `text.forced_break`. `None` or
-    /// `"normal"` keeps the default (the overlong token overflows/clips,
+    /// `"normal"` keeps the default (the overlong token overflows per `overflow`,
     /// byte-identical to a node without the attribute). KDL:
     /// `overflow-wrap="break-word"`.
     pub overflow_wrap: Option<String>,
@@ -271,6 +288,8 @@ pub struct CodeNode {
     pub y: Option<PropertyValue>,
     pub w: Option<PropertyValue>,
     pub h: Option<PropertyValue>,
+    /// Item attributes used when this node is a child of a `row` / `column` frame.
+    pub layout_item: LayoutItem,
     /// "clip" (default) or "visible"; v0 does not word-wrap.
     pub overflow: Option<String>,
     /// Open string naming the source language; drives built-in syntax

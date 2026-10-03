@@ -7,6 +7,7 @@ use super::fallback::{FallbackSlots, shape_with_fallback_in};
 use super::run::{FaceShapeRequest, shape_run_with_face};
 use crate::engine::{FallbackResult, ShapeRequest, TextLayoutEngine, ZenithGlyphRun};
 use crate::error::LayoutError;
+use crate::ink::{GlyphInkBox, ink_box_with_face};
 
 /// HarfBuzz-port shaping engine backed by `rustybuzz` and `rustybuzz::ttf_parser`.
 ///
@@ -51,6 +52,17 @@ impl TextLayoutEngine for RustybuzzEngine<'_> {
         provider: &dyn FontProvider,
     ) -> Result<FallbackResult, LayoutError> {
         self.shaper.shape_with_fallback(req, provider)
+    }
+
+    fn glyph_ink_box(
+        &self,
+        font_id: &str,
+        glyph_id: u16,
+        font_size: f32,
+        provider: &dyn FontProvider,
+    ) -> Option<GlyphInkBox> {
+        self.shaper
+            .glyph_ink_box(font_id, glyph_id, font_size, provider)
     }
 }
 
@@ -148,6 +160,22 @@ impl TextLayoutEngine for CachedShaper<'_> {
         shape_with_fallback_in(&cache, 0, fallbacks, req)?.ok_or_else(|| {
             LayoutError::new("internal: call-local face store is missing a face".to_owned())
         })
+    }
+
+    fn glyph_ink_box(
+        &self,
+        font_id: &str,
+        glyph_id: u16,
+        font_size: f32,
+        provider: &dyn FontProvider,
+    ) -> Option<GlyphInkBox> {
+        let font = provider.by_id(font_id)?;
+        match self.faces.store().slot_of(&font) {
+            // A stored face: read the cached parse.
+            Some(slot) => ink_box_with_face(self.faces.face(slot)?, glyph_id, font_size),
+            // A face outside the store: parse it for this call only.
+            None => crate::ink::glyph_ink_box(&font.bytes, font.index, glyph_id, font_size),
+        }
     }
 }
 

@@ -133,9 +133,10 @@ fn attribute_type_for_kind_inner(kind: &str, name: &str, fallback: &'static str)
         // fill: ColorOrGradient — rect (leaf.rs check_visual_props→shared.rs:804),
         //   ellipse (leaf.rs:218), polygon (special.rs:83), polyline (special.rs:213),
         //   pattern (pattern.rs:101→shared.rs:804).
-        ("rect" | "ellipse" | "polygon" | "polyline" | "path" | "pattern" | "chart", "fill") => {
-            "token ref: color/gradient"
-        }
+        (
+            "rect" | "ellipse" | "polygon" | "polyline" | "path" | "pattern" | "chart" | "frame",
+            "fill",
+        ) => "token ref: color/gradient",
         // fill: Color — text (text.rs:113), shape (shape.rs:108), code (leaf.rs:561).
         // table fill is also Color (container.rs:304→312).
         ("text" | "shape" | "code" | "table", "fill") => "token ref: color",
@@ -182,11 +183,10 @@ fn attribute_type_for_kind_inner(kind: &str, name: &str, fallback: &'static str)
         }
         ("mesh", "x")
         | ("mesh", "y")
-        | ("mesh", "w")
-        | ("mesh", "h")
         | ("mesh", "vanishing-x")
         | ("mesh", "vanishing-y")
         | ("mesh", "extend") => "dimension literal or token ref: dimension",
+        ("mesh", "w" | "h") => "px literal, token ref: dimension, or enum: hug|fill",
         ("mesh", "rows") | ("mesh", "columns") => "u32 (>0)",
         ("mesh", "stroke-linecap") => "enum: butt|round|square",
         ("path", "stroke-linejoin") => "enum: miter|round|bevel",
@@ -196,6 +196,8 @@ fn attribute_type_for_kind_inner(kind: &str, name: &str, fallback: &'static str)
         // the imported subtree into the instance/page box.
         ("instance", "fit") | ("page", "fit") => "enum: contain|fill|none",
         ("import", "kind") => "enum: zen",
+        // overflow: text supports fit/autofit; code only clips or paints past.
+        ("code", "overflow") => "enum: clip|visible",
         ("token-map", "from") | ("token-map", "to") => "string",
         // chart axis/legend/caption/bar-mode/orientation/legend-position/legend-layout/legend-align: chart-only attributes (validate/check/nodes/node/chart.rs).
         ("chart", "legend") => "bool",
@@ -218,10 +220,18 @@ fn attribute_type_for_kind_inner(kind: &str, name: &str, fallback: &'static str)
         // route: connector-only; values validated at shape.rs:309 as
         //   straight/orthogonal/avoid (avoid is validated; maps to straight today).
         ("connector", "route") => "enum: straight|orthogonal|avoid",
-        // layout: frame-only; AST documents absolute/flow/grid (container.rs:34-39).
-        //   Validator only enforces grid semantics (advisory) but all three values are
-        //   spec'd. Other values fall through to absolute-positioning.
-        ("frame", "layout") => "enum: absolute|flow|grid",
+        // layout / justify / align: frame container attributes (lists in
+        //   `schema::enums`; checked by validate/check/nodes/node/layout.rs).
+        ("frame", "layout") => "enum: absolute|row|column|grid",
+        ("frame", "justify") => "enum: start|center|end|space-between",
+        ("frame", "align") => "enum: start|center|end|stretch",
+        ("frame", "padding-left") => "px literal or token ref: dimension",
+        // w/h on box kinds: a dimension, or a size keyword for auto-layout items.
+        (
+            "rect" | "ellipse" | "text" | "code" | "frame" | "group" | "image" | "field" | "toc"
+            | "table" | "shape" | "pattern" | "chart",
+            "w" | "h",
+        ) => "px literal, token ref: dimension, or enum: hug|fill",
         // All other attributes fall through to the generic arm below.
         _ => attribute_type_generic(name, fallback),
     }
@@ -264,7 +274,11 @@ fn attribute_type_generic(name: &str, fallback: &'static str) -> &'static str {
         "border-width" => "token ref: dimension",
         "font-size" | "font-size-min" => "token ref: dimension",
         "baseline-grid" => "token ref: dimension",
-        "gap" | "cell-padding" | "padding" => "token ref: dimension",
+        "cell-padding" => "token ref: dimension",
+        // Auto-layout geometry: px literals are allowed (not visual props).
+        "gap" | "wrap-gap" | "padding" | "padding-x" | "padding-y" | "padding-top"
+        | "padding-right" | "padding-bottom" => "px literal or token ref: dimension",
+        "min-w" | "max-w" | "min-h" | "max-h" => "px literal or token ref: dimension",
         // src-* image crop coords are px literals (geometry), not token refs.
         "src-x" | "src-y" | "src-w" | "src-h" => "px literal",
         // object-position values are f64 ratios, not token refs.
@@ -301,7 +315,7 @@ fn attribute_type_generic(name: &str, fallback: &'static str) -> &'static str {
         }
         "anchor-edge" => "enum: above|below|before|after",
         "align" => "enum: left|center|right|justify",
-        "overflow" => "enum: clip|visible|scroll",
+        "overflow" => "enum: clip|visible|fit|autofit",
         "blend-mode" => {
             "enum: normal|multiply|screen|overlay|darken|lighten|color-dodge|color-burn|hard-light|soft-light|difference|exclusion|hue|saturation|color|luminosity"
         }
@@ -310,6 +324,9 @@ fn attribute_type_generic(name: &str, fallback: &'static str) -> &'static str {
         "fill-rule" => "enum: nonzero|evenodd",
         "fit" => "enum: contain|cover|stretch|none",
         "clip" => "bool",
+        "wrap" => "bool",
+        "justify" => "enum: start|center|end|space-between",
+        "position" => "enum: auto|absolute",
         "parity" => "enum: recto|verso",
         "page-parity-start" => "enum: recto|verso",
         "page-progression" => "enum: ltr|rtl",
@@ -817,7 +834,7 @@ mod tests {
         );
     }
 
-    /// `layout` on frame must enumerate absolute/flow/grid.
+    /// `layout` on frame must enumerate absolute/row/column/grid.
     ///
     /// Documented in ast/node/container.rs:34-39; grid semantics validated
     /// at validate/check/nodes/node/container.rs:122.
@@ -825,8 +842,8 @@ mod tests {
     fn layout_type_hint_is_frame_specific() {
         assert_eq!(
             attribute_type_for_kind("frame", "layout"),
-            "enum: absolute|flow|grid",
-            "frame.layout must enumerate the three layout modes",
+            "enum: absolute|row|column|grid",
+            "frame.layout must enumerate the four layout modes",
         );
     }
 }

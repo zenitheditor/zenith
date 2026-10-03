@@ -108,6 +108,7 @@ fn minimal_shape(id: &str, kind: Option<&str>, h_align: Option<&str>) -> Node {
         y: Some(pxv(0.0)),
         w: Some(pxv(200.0)),
         h: Some(pxv(120.0)),
+        layout_item: Default::default(),
         kind: kind.map(str::to_owned),
         fill: None,
         stroke: None,

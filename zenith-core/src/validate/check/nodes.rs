@@ -44,6 +44,8 @@ pub(super) struct WalkCtx<'a> {
 pub(super) struct WalkPos {
     pub(super) page_px_bounds: Option<(f64, f64)>,
     pub(super) in_flow_parent: bool,
+    /// Layout mode of the direct parent frame when it positions children.
+    pub(super) flow_parent: Option<node::FlowParent>,
     pub(super) enclosing_frame: Option<(f64, f64, f64, f64)>,
     /// `true` when this node is a direct (or group-nested) child of a
     /// `frame`/`group` — the anchor-parent container context.
@@ -120,9 +122,23 @@ fn walk_node_checks(
         }
     }
 
-    // Direct children of a `layout="flow"` frame have their x/y (and, when
-    // omitted, w/h) supplied by the flow algorithm, so geometry is optional.
+    // Direct children of a `row`/`column`/`grid` frame (and of table cells and
+    // unknown nodes) have their x/y (and, when omitted, w/h) supplied by the
+    // parent, so geometry is optional.
     let geom_required = !pos.in_flow_parent;
+    let layout_site = node::LayoutSite {
+        parent: pos.flow_parent,
+        geom_required,
+    };
+    node::check_layout_item(
+        node,
+        layout_site,
+        &mut node::shared::TokenEnv {
+            referenced: referenced_token_ids,
+            resolved: ctx.resolved_tokens,
+        },
+        diagnostics,
+    );
     // Parent-relative anchor context for this node: whether it sits inside a
     // frame/group container and whether that container's reference box is usable.
     let parent_ctx = AnchorParentCtx {
@@ -371,16 +387,30 @@ fn walk_node_checks(
                 diagnostics,
             );
 
+            node::check_frame_layout(
+                f,
+                layout_site,
+                &mut node::shared::TokenEnv {
+                    referenced: referenced_token_ids,
+                    resolved: ctx.resolved_tokens,
+                },
+                diagnostics,
+            );
+
             // Recurse into children, passing the SAME seen_ids so that
             // nested ids participate in the global uniqueness check. Direct
-            // children of a flow OR grid frame have layout-supplied geometry,
-            // so their own x/y/w/h are optional.
-            let children_in_flow = matches!(f.layout.as_deref(), Some("flow") | Some("grid"));
+            // children of a row/column/grid frame have layout-supplied
+            // geometry, so their own x/y/w/h are optional.
+            let child_flow_parent = node::FlowParent::of_frame(f);
+            let children_in_flow = child_flow_parent.is_some();
 
             // Compute this frame's own px box; children are checked for
             // overflow against it. If any of x/y/w/h is missing or has a bad
             // unit, pass None so no spurious overflow advisory is produced.
+            // A layout frame places its children itself, so authored child
+            // boxes are not checked against it (`frame.child_overflow`).
             let frame_box = match pos.page_px_bounds {
+                Some(_) if children_in_flow => None,
                 Some((page_w, page_h)) => pv_to_dim(f.x.as_ref())
                     .and_then(|d| resolve_axis(d, page_w))
                     .zip(pv_to_dim(f.y.as_ref()).and_then(|d| resolve_axis(d, page_h)))
@@ -403,6 +433,7 @@ fn walk_node_checks(
                     WalkPos {
                         page_px_bounds: pos.page_px_bounds,
                         in_flow_parent: children_in_flow,
+                        flow_parent: child_flow_parent,
                         enclosing_frame: frame_box,
                         // A frame is always an anchor-parent container with a
                         // usable box (its geometry is required + validated).
@@ -447,6 +478,7 @@ fn walk_node_checks(
                     WalkPos {
                         page_px_bounds: pos.page_px_bounds,
                         in_flow_parent: false,
+                        flow_parent: None,
                         enclosing_frame: pos.enclosing_frame,
                         in_container: true,
                         parent_box_known: group_box_known,
@@ -483,6 +515,7 @@ fn walk_node_checks(
                             WalkPos {
                                 page_px_bounds: pos.page_px_bounds,
                                 in_flow_parent: true,
+                                flow_parent: None,
                                 enclosing_frame: pos.enclosing_frame,
                                 // A table cell is NOT an anchor-parent
                                 // container; its children's direct parent is the
@@ -514,6 +547,7 @@ fn walk_node_checks(
                     WalkPos {
                         page_px_bounds: pos.page_px_bounds,
                         in_flow_parent: true,
+                        flow_parent: None,
                         enclosing_frame: pos.enclosing_frame,
                         // An unknown parent is not a known anchor-parent container.
                         in_container: false,

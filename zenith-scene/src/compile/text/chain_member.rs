@@ -17,6 +17,8 @@ use super::super::util::{blend_mode_ir, resolve_geometry_px, rotation_degrees};
 use super::baseline::{baseline_grid_snap_failed_diag, snap_to_baseline_grid};
 use super::ctx::{ChainMemberPlace, EmitStyle};
 use super::emit::emit_lines;
+use super::ink::{BlockOverflow, block_overflow, ink_bounds};
+use super::overflow_mode::{ClipBox, TextOverflow, clip_commands_since, fmt_px};
 
 /// Render a chain member's PRE-ASSIGNED lines into its own box.
 ///
@@ -34,6 +36,7 @@ pub(in crate::compile) fn render_chain_member(
     diagnostics: &mut Vec<Diagnostic>,
 ) -> f64 {
     let ChainMemberPlace {
+        shape,
         font_size,
         text_x,
         text_y,
@@ -79,33 +82,6 @@ pub(in crate::compile) fn render_chain_member(
                 assignment.metrics.line_height,
                 g,
                 text.source_span,
-            ));
-        }
-    }
-
-    // overflow="fit": this member's assigned content must fit its own box. For
-    // a continuation/last member this catches an article that overruns even the
-    // final panel. Mirrors the single-box height-overflow check.
-    if text.overflow.as_deref() == Some("fit")
-        && let Some(box_h) = box_h_opt
-    {
-        const EPSILON: f64 = 0.5;
-        // Sum the per-line heights: a chained markdown flow has heterogeneous line
-        // heights (headings vs body + folded inter-block gaps), so the content
-        // height is the cumulative `height_px`, not `lines × line_height`. For a
-        // uniform chain every `height_px` equals `metrics.line_height`, so this is
-        // identical to the prior formula (byte-identical for non-markdown chains).
-        let content_height = assignment.lines.iter().map(|l| l.height_px).sum::<f64>();
-        if content_height > box_h + EPSILON {
-            diagnostics.push(Diagnostic::error(
-                "text.fit_failed",
-                format!(
-                    "text '{}': chain content does not fit its box (overflow=\"fit\"): \
-                     at {:.0}px font-size it needs ~{:.0}px height in a {:.0}px-tall box",
-                    text.id, font_size as f64, content_height, box_h
-                ),
-                text.source_span,
-                Some(text.id.clone()),
             ));
         }
     }
@@ -207,9 +183,34 @@ pub(in crate::compile) fn render_chain_member(
         &mut draws,
     );
 
+    // Overflow of THIS member's drawn ink against its own box. For a
+    // continuation/last member this catches an article that overruns even the
+    // final panel. `clip` (the default) clips the member at its box edge.
+    let mode = TextOverflow::from_attr(text.overflow.as_deref());
+    let overflow = box_h_opt.and_then(|box_h| {
+        block_overflow(ink_bounds(&draws, shape), text_y, box_h).map(|o| (o, box_h))
+    });
+    if let Some((o, box_h)) = overflow
+        && let Some(d) = chain_overflow_diagnostic(text, mode, o, box_h)
+    {
+        diagnostics.push(d);
+    }
+    let clip = match mode {
+        TextOverflow::Clip => overflow.map(|(_, h)| ClipBox {
+            x: text_x,
+            y: text_y,
+            w: box_w,
+            h,
+        }),
+        TextOverflow::Visible | TextOverflow::Fit | TextOverflow::Autofit => None,
+    };
+
     // Emit the collected glyph draws, bracketed by the winning effect and/or
-    // mask. No effect + no mask → draws appended verbatim (byte-identical).
+    // mask, inside the overflow clip. No effect + no mask + no clip → draws
+    // appended verbatim (byte-identical).
+    let clip_start = commands.len();
     emit_node_with_effects(commands, draws, effect, mask);
+    clip_commands_since(commands, clip_start, clip);
 
     if blend.is_some() {
         commands.push(SceneCommand::PopLayer);
@@ -223,4 +224,58 @@ pub(in crate::compile) fn render_chain_member(
     // chained markdown flow; identical to `lines × line_height` for a uniform
     // chain, so byte-identical flow-advance for non-markdown chains).
     assignment.lines.iter().map(|l| l.height_px).sum::<f64>()
+}
+
+/// The overflow diagnostic for a chain member whose drawn ink leaves its
+/// `box_h` px box. A member keeps the chain source's font size, so the remedies
+/// are a taller box or another continuation box. `visible` overflows on purpose
+/// and yields no diagnostic.
+fn chain_overflow_diagnostic(
+    text: &TextNode,
+    mode: TextOverflow,
+    o: BlockOverflow,
+    box_h: f64,
+) -> Option<Diagnostic> {
+    let chain = text.chain.as_deref().unwrap_or(text.id.as_str());
+    let tail = if o.below {
+        format!(
+            "chain content needs {:.0}px height in a {}px box — set h=(px){:.0}, \
+             or add a continuation box with chain=\"{chain}\"",
+            o.need_h,
+            fmt_px(box_h),
+            o.need_h
+        )
+    } else {
+        format!(
+            "chain content rises {:.0}px above the top of a {}px box — set overflow=\"visible\"",
+            o.rise,
+            fmt_px(box_h)
+        )
+    };
+    let subject = Some(text.id.clone());
+    match mode {
+        TextOverflow::Visible => None,
+        TextOverflow::Clip => Some(Diagnostic::warning(
+            "text.overflow",
+            format!("text '{}': clipped at the box edge: {tail}", text.id),
+            text.source_span,
+            subject,
+        )),
+        TextOverflow::Fit => Some(Diagnostic::error(
+            "text.fit_failed",
+            format!("text '{}': overflow=\"fit\" failed: {tail}", text.id),
+            text.source_span,
+            subject,
+        )),
+        TextOverflow::Autofit => Some(Diagnostic::error(
+            "text.fit_failed",
+            format!(
+                "text '{}': overflow=\"autofit\" failed (a chain member keeps the source \
+                 font size): {tail}",
+                text.id
+            ),
+            text.source_span,
+            subject,
+        )),
+    }
 }

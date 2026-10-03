@@ -6,6 +6,8 @@ use crate::format::writer::{
     write_opt_property_value, write_opt_str,
 };
 
+use super::layout::{write_box_size, write_layout_item};
+
 pub(super) fn write_light(l: &LightNode, out: &mut String, depth: usize) {
     indent(out, depth);
     out.push_str("light id=\"");
@@ -41,8 +43,9 @@ pub(super) fn write_mesh(m: &MeshNode, out: &mut String, depth: usize) {
     write_opt_str(out, "kind", &m.kind);
     write_opt_property_value(out, "x", &m.x);
     write_opt_property_value(out, "y", &m.y);
-    write_opt_property_value(out, "w", &m.w);
-    write_opt_property_value(out, "h", &m.h);
+    write_box_size(out, "w", &m.w, m.layout_item.w_keyword);
+    write_box_size(out, "h", &m.h, m.layout_item.h_keyword);
+    write_layout_item(out, &m.layout_item);
     if let Some(rows) = m.rows {
         out.push_str(" rows=");
         out.push_str(&rows.to_string());

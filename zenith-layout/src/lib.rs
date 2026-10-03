@@ -9,6 +9,7 @@ pub mod engine;
 pub mod error;
 pub mod font_meta;
 pub mod glyph_outline;
+pub mod ink;
 pub mod ot_layout;
 pub mod rustybuzz_engine;
 
@@ -24,6 +25,7 @@ pub use glyph_outline::{
     GlyphRunOutlineRequest, OutlinedGlyph, glyph_outline, glyph_outline_contours,
     glyph_outline_path_node, glyph_outline_path_subpaths, glyph_run_outline,
 };
+pub use ink::{GlyphInkBox, glyph_ink_box};
 pub use ot_layout::{
     FeatureEntry, FeatureList, GLYPH_ALTERNATES_LIMITS, GlyphAlternates, list_glyph_alternates,
     list_layout_features,

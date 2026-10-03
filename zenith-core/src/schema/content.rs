@@ -74,13 +74,20 @@ pub fn node_content(kind: &str) -> Option<NodeContentDescriptor> {
                 scene compile pass. A missing or unreadable file emits a `text.src_missing` \
                 Error diagnostic (same gate as `asset.missing`). The `src` field is retained \
                 on the node so a future editor can write edits back to the original file. \
+                Overflow (`overflow` attribute) means the glyph ink leaves the box vertically, \
+                or one unbreakable line is wider than the box. `clip` (default) clips ink at the box edge and \
+                warns `text.overflow`. `visible` paints past the box silently. `fit` keeps the \
+                size and errors `text.fit_failed`. `autofit` shrinks the font to the largest \
+                integer px in [`font-size-min`, `font-size`] that fits, else errors \
+                `text.fit_failed` at the floor. Both diagnostics name the `h`/`w` that fits at \
+                the declared size and the font size that fits the box. \
                 Threaded text flow (`chain` attribute): all `text` nodes that share the same \
                 `chain=\"id\"` value form one ordered chain (document source order, across pages). \
                 The FIRST member that carries spans or `src` content is the content source; \
                 subsequent members must have EMPTY spans (no `src`, no inline spans) and serve \
                 as overflow boxes. Each member needs explicit `x`/`y`/`w`/`h` geometry. Text \
                 fills box 1, the remainder flows into box 2, etc., across page boundaries. \
-                This is how you resolve a `text.overflow` warning for long-form copy: add \
+                A chain is how you resolve a `text.overflow` warning for long-form copy: add \
                 chained continuation boxes (on the same or new pages) until nothing overflows. \
                 Only the first member's font/style drives the whole chain; per-span overrides \
                 on the source are honored. \
@@ -173,8 +180,14 @@ pub fn node_content(kind: &str) -> Option<NodeContentDescriptor> {
         // ── Generic container kinds ───────────────────────────────────────────
         "frame" => Some(NodeContentDescriptor {
             description: "Arbitrary renderable child nodes (any node kind). \
-                The frame clips its children to its bounding box. \
-                Use layout=\"grid\" with columns/rows attrs for grid layout.",
+                layout=\"absolute\" (default) keeps child x/y and clips to the frame box. \
+                layout=\"column\" stacks children top to bottom inside the padded box, \
+                `gap` apart; children omit x/y and stretch to the content width when they \
+                omit w (no clip unless clip=#true). layout=\"grid\" tiles children into \
+                `columns` × `rows` cells. `gap` and `padding*` take a px literal or a \
+                dimension token. layout=\"row\", wrap, justify, non-stretch align, \
+                w/h=\"hug\"|\"fill\", min/max sizes, position=\"absolute\", and frame \
+                fill/stroke/radius validate as `layout.not_yet_supported`.",
             example: "rect id=\"bg\" x=(px)0 y=(px)0 w=(px)400 h=(px)300 fill=(token)\"color.bg\"",
         }),
         "group" => Some(NodeContentDescriptor {

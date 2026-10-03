@@ -64,10 +64,7 @@ fn multi_block_stacks_with_styled_heading_and_separated_paragraphs() {
     let result = compile(&doc, &default_provider());
 
     assert!(
-        result
-            .diagnostics
-            .iter()
-            .all(|d| d.severity != zenith_core::Severity::Error),
+        result.diagnostics.iter().all(|d| !d.is_error()),
         "expected no errors; got: {:?}",
         result.diagnostics
     );
@@ -134,10 +131,7 @@ fn code_block_emits_background_rect_and_glyphs() {
     let result = compile(&doc, &default_provider());
 
     assert!(
-        result
-            .diagnostics
-            .iter()
-            .all(|d| d.severity != zenith_core::Severity::Error),
+        result.diagnostics.iter().all(|d| !d.is_error()),
         "expected no errors; got: {:?}",
         result.diagnostics
     );
@@ -178,10 +172,7 @@ fn horizontal_rule_emits_rule_fill_rect() {
     let result = compile(&doc, &default_provider());
 
     assert!(
-        result
-            .diagnostics
-            .iter()
-            .all(|d| d.severity != zenith_core::Severity::Error),
+        result.diagnostics.iter().all(|d| !d.is_error()),
         "expected no errors; got: {:?}",
         result.diagnostics
     );
@@ -294,11 +285,11 @@ fn markdown_overflow_tall_box_no_warning() {
     );
 }
 
-/// A markdown node with `overflow="visible"` that exceeds the box height must
-/// STILL emit a `text.overflow` WARNING — visible overflow intentionally draws
-/// beyond the box but the author should still be told content was clipped/excess.
+/// A markdown node with `overflow="visible"` that exceeds the box height draws
+/// beyond the box on purpose: no `text.overflow` warning and no clip bracket,
+/// matching plain text. The default mode clips and warns.
 #[test]
-fn markdown_overflow_visible_still_warns() {
+fn markdown_overflow_visible_is_silent_and_unclipped() {
     let src = r##"zenith version=1 {
   project id="proj.ov3" name="OV3"
   tokens format="zenith-token-v1" {
@@ -323,16 +314,40 @@ fn markdown_overflow_visible_still_warns() {
         .iter()
         .filter(|d| d.code == "text.overflow")
         .collect();
-    assert_eq!(
-        overflow_warns.len(),
-        1,
-        "overflow=\"visible\" markdown node that exceeds box must still emit text.overflow warning; got: {:?}",
+    assert!(
+        overflow_warns.is_empty(),
+        "overflow=\"visible\" markdown must not warn; got: {:?}",
         result.diagnostics
     );
-    assert_eq!(
-        overflow_warns[0].severity,
-        zenith_core::Severity::Warning,
-        "must be Warning, not an error"
+    let has_clip = |r: &CompileResult| {
+        r.scene
+            .commands
+            .iter()
+            .any(|c| matches!(c, SceneCommand::PushClip { x, y, .. } if *x != 0.0 || *y != 0.0))
+    };
+    assert!(
+        !has_clip(&result),
+        "overflow=\"visible\" markdown must not clip"
+    );
+
+    // The default mode clips the stack at the box and warns once.
+    let clipped = compile(
+        &parse(&src.replace(r#" overflow="visible""#, "")),
+        &default_provider(),
+    );
+    assert!(has_clip(&clipped), "default markdown overflow must clip");
+    let warns: Vec<_> = clipped
+        .diagnostics
+        .iter()
+        .filter(|d| d.code == "text.overflow")
+        .collect();
+    assert_eq!(warns.len(), 1, "{:?}", clipped.diagnostics);
+    assert_eq!(warns[0].severity, zenith_core::Severity::Warning);
+    assert!(
+        warns[0].message.contains("clipped at the box edge")
+            && warns[0].message.contains("set h=(px)"),
+        "{}",
+        warns[0].message
     );
 }
 

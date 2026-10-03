@@ -7,6 +7,7 @@
 use std::collections::BTreeMap;
 
 use crate::ast::Span;
+use crate::ast::node::LayoutItem;
 use crate::ast::value::{Dimension, PropertyValue};
 
 use super::common::UnknownProperty;
@@ -51,6 +52,8 @@ pub struct MeshNode {
     pub y: Option<PropertyValue>,
     pub w: Option<PropertyValue>,
     pub h: Option<PropertyValue>,
+    /// Item attributes used when this node is a child of a `row` / `column` frame.
+    pub layout_item: LayoutItem,
     /// Number of cells on the horizontal axis. Emits `columns + 1` vertical lines.
     pub columns: Option<u32>,
     /// Number of cells on the vertical axis. Emits `rows + 1` horizontal lines.

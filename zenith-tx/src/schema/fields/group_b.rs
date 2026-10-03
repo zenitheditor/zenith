@@ -144,7 +144,9 @@ pub(super) fn op_fields(name: &str) -> Option<&'static [OpFieldSchema]> {
                 },
                 OpFieldSchema {
                     name: "overflow",
-                    ty: "enum: fit|clip|visible",
+                    // Must match zenith-core `TEXT_OVERFLOWS` / `CODE_OVERFLOWS`
+                    // (checked by `set_text_overflow_schema_matches_core_enums`).
+                    ty: "enum: clip|visible|fit|autofit (code: clip|visible)",
                     required: true,
                 },
             ];

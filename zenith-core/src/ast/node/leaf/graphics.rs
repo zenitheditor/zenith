@@ -3,6 +3,7 @@
 use std::collections::BTreeMap;
 
 use crate::ast::Span;
+use crate::ast::node::LayoutItem;
 use crate::ast::value::{Dimension, PropertyValue};
 
 use crate::ast::node::common::{Node, UnknownProperty};
@@ -27,6 +28,8 @@ pub struct PatternNode {
     pub y: Option<PropertyValue>,
     pub w: Option<PropertyValue>,
     pub h: Option<PropertyValue>,
+    /// Item attributes used when this node is a child of a `row` / `column` frame.
+    pub layout_item: LayoutItem,
     pub radius: Option<PropertyValue>,
     /// Per-corner radius overrides (top-left, top-right, bottom-right, bottom-left).
     pub radius_tl: Option<PropertyValue>,
@@ -151,6 +154,8 @@ pub struct ChartNode {
     pub y: Option<PropertyValue>,
     pub w: Option<PropertyValue>,
     pub h: Option<PropertyValue>,
+    /// Item attributes used when this node is a child of a `row` / `column` frame.
+    pub layout_item: LayoutItem,
     pub radius: Option<PropertyValue>,
     /// Per-corner radius overrides (top-left, top-right, bottom-right, bottom-left).
     pub radius_tl: Option<PropertyValue>,

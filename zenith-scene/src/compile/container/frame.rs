@@ -1,7 +1,7 @@
 //! `frame` container compilation: clip-only (it does not translate children),
-//! with optional rotation / blend / blur brackets and `flow` / `grid` layout.
+//! with optional rotation / blend / blur brackets and `column` / `grid` layout.
 
-use zenith_core::{Diagnostic, FrameNode, Node, dim_to_px};
+use zenith_core::{Diagnostic, FrameNode, LayoutKind, Node, PropertyValue, dim_to_px};
 
 use crate::ir::SceneCommand;
 
@@ -17,7 +17,7 @@ use super::flow::{node_declared_h, node_declared_w, node_skipped_in_flow, with_f
 use super::wrap::emit_wrapped_container;
 
 /// The already-resolved frame box in page coordinates (pixels), passed to the
-/// `flow`/`grid` layout helpers.
+/// `column`/`grid` layout helpers.
 #[derive(Clone, Copy)]
 struct FrameBox {
     x: f64,
@@ -222,16 +222,22 @@ fn compile_frame_clipped_children(
     connector_strokes: &mut Vec<usize>,
     child_ctx: RenderCtx,
 ) {
-    commands.push(SceneCommand::PushClip {
-        x: fbox.x,
-        y: fbox.y,
-        w: fbox.w,
-        h: fbox.h,
-    });
+    // `clip` defaults on, except for stacking frames (`row` / `column`).
+    let clip = frame
+        .clip
+        .unwrap_or_else(|| !frame.layout.as_ref().is_some_and(LayoutKind::is_stack));
+    if clip {
+        commands.push(SceneCommand::PushClip {
+            x: fbox.x,
+            y: fbox.y,
+            w: fbox.w,
+            h: fbox.h,
+        });
+    }
 
-    match frame.layout.as_deref() {
-        Some("flow") => {
-            compile_frame_flow(
+    match frame.layout.as_ref() {
+        Some(LayoutKind::Column) => {
+            compile_frame_column(
                 frame,
                 fbox,
                 cx,
@@ -241,7 +247,7 @@ fn compile_frame_clipped_children(
                 child_ctx,
             );
         }
-        Some("grid") => {
+        Some(LayoutKind::Grid) => {
             compile_frame_grid(
                 frame,
                 fbox,
@@ -252,7 +258,10 @@ fn compile_frame_clipped_children(
                 child_ctx,
             );
         }
-        _ => {
+        // `row` is rejected by validation (`layout.not_yet_supported`) until the
+        // row algorithm exists; it renders like `absolute` so output stays
+        // deterministic for documents compiled without validation.
+        Some(LayoutKind::Row | LayoutKind::Absolute | LayoutKind::Unknown(_)) | None => {
             for child in &frame.children {
                 compile_node(
                     child,
@@ -266,34 +275,62 @@ fn compile_frame_clipped_children(
         }
     }
 
-    commands.push(SceneCommand::PopClip);
+    if clip {
+        commands.push(SceneCommand::PopClip);
+    }
 }
 
-/// Resolve `padding` and `gap` from a frame's style; both default to `0.0`.
-fn frame_pad_gap(frame: &FrameNode, cx: NodeCtx) -> (f64, f64) {
-    let pad = resolve_property_dimension_px(
+/// Resolved padding of a frame's content box, in px.
+#[derive(Clone, Copy)]
+struct Insets {
+    top: f64,
+    right: f64,
+    bottom: f64,
+    left: f64,
+}
+
+/// Resolve a frame's padding and `gap`.
+///
+/// Padding precedence per side: `padding-<side>` > `padding-x`/`padding-y` >
+/// `padding` > style `padding` > 0. `gap`: attribute > style `gap` > 0.
+fn frame_insets_gap(frame: &FrameNode, cx: NodeCtx) -> (Insets, f64) {
+    let attr_or = |pv: &Option<PropertyValue>, fallback: f64| -> f64 {
+        match pv {
+            Some(p) => resolve_property_dimension_px(Some(p), cx.resolved, fallback),
+            None => fallback,
+        }
+    };
+    let c = &frame.container;
+    let style_pad = resolve_property_dimension_px(
         style_prop(&frame.style, cx.style_map, "padding"),
         cx.resolved,
         0.0,
     );
-    let gap = resolve_property_dimension_px(
+    let style_gap = resolve_property_dimension_px(
         style_prop(&frame.style, cx.style_map, "gap"),
         cx.resolved,
         0.0,
     );
-    (pad, gap)
+    let pad = attr_or(&c.padding, style_pad);
+    let pad_x = attr_or(&c.padding_x, pad);
+    let pad_y = attr_or(&c.padding_y, pad);
+    let insets = Insets {
+        top: attr_or(&c.padding_top, pad_y),
+        right: attr_or(&c.padding_right, pad_x),
+        bottom: attr_or(&c.padding_bottom, pad_y),
+        left: attr_or(&c.padding_left, pad_x),
+    };
+    (insets, attr_or(&c.gap, style_gap))
 }
 
-/// Lay a flow-frame's children out as a vertical stack inside its padded
+/// Lay a column frame's children out as a vertical stack inside its padded
 /// content box, compiling each at the injected absolute coordinates.
 ///
-/// Triggered only when `frame.layout == Some("flow")`. `frame_x`/`frame_y`/
-/// `frame_w` are the already-resolved frame box in page coordinates (the same
-/// values used for the surrounding `PushClip`). Children stack in source order
-/// with `gap` between them; `padding` insets the content box uniformly. Both
-/// `padding` and `gap` are token-only dimension style props on the frame's
-/// style, defaulting to `0.0` when absent.
-fn compile_frame_flow(
+/// Triggered only when `frame.layout == Some(LayoutKind::Column)`. `fbox` is
+/// the already-resolved frame box in page coordinates. Children stack in source
+/// order with `gap` between them inside the content box inset by the frame's
+/// padding (see `frame_insets_gap`).
+fn compile_frame_column(
     frame: &FrameNode,
     fbox: FrameBox,
     cx: NodeCtx,
@@ -308,12 +345,12 @@ fn compile_frame_flow(
         w: frame_w,
         ..
     } = fbox;
-    let (pad, gap) = frame_pad_gap(frame, cx);
+    let (pad, gap) = frame_insets_gap(frame, cx);
 
-    // Content box: uniform padding on all four sides.
-    let content_left = frame_x + pad;
-    let content_top = frame_y + pad;
-    let content_w = (frame_w - 2.0 * pad).max(0.0);
+    // Content box: the frame box inset by the resolved padding.
+    let content_left = frame_x + pad.left;
+    let content_top = frame_y + pad.top;
+    let content_w = (frame_w - (pad.left + pad.right)).max(0.0);
 
     // Lay out children that participate (skip invisible and guide nodes) so a
     // trailing gap is only suppressed relative to the LAST laid-out child.
@@ -360,12 +397,11 @@ fn compile_frame_flow(
 /// Lay a grid-frame's children out into a `columns × rows` grid inside its
 /// padded content box, compiling each at the injected absolute coordinates.
 ///
-/// Triggered only when `frame.layout == Some("grid")`. `frame_x`/`frame_y`/
-/// `frame_w`/`frame_h` are the already-resolved frame box in page coordinates
-/// (the same values used for the surrounding `PushClip`). Participating children
-/// (the same set the flow layout lays out: visible, non-guide) auto-place
-/// row-major into the grid. Both `padding` and `gap` are token-only dimension
-/// style props on the frame's style, defaulting to `0.0` when absent.
+/// Triggered only when `frame.layout == Some(LayoutKind::Grid)`. `fbox` is the
+/// already-resolved frame box in page coordinates. Participating children (the
+/// same set the column layout lays out: visible, non-guide) auto-place
+/// row-major into the grid inside the padded content box (see
+/// `frame_insets_gap`).
 ///
 /// Cell sizing (uniform gutters of `gap`):
 /// - `cols = frame.columns.unwrap_or(1).max(1)`
@@ -374,7 +410,7 @@ fn compile_frame_flow(
 /// - `col_w = ((content_w - (cols-1)*gap) / cols).max(0.0)`
 /// - `row_h = ((content_h - (effective_rows-1)*gap) / effective_rows).max(0.0)`
 ///
-/// Unlike flow, every cell's height is FIXED (`Some(row_h)`) so an image child
+/// Unlike column, every cell's height is FIXED (`Some(row_h)`) so an image child
 /// with `fit="cover"` fills its cell.
 fn compile_frame_grid(
     frame: &FrameNode,
@@ -391,13 +427,13 @@ fn compile_frame_grid(
         w: frame_w,
         h: frame_h,
     } = fbox;
-    let (pad, gap) = frame_pad_gap(frame, cx);
+    let (pad, gap) = frame_insets_gap(frame, cx);
 
-    // Content box: uniform padding on all four sides.
-    let content_left = frame_x + pad;
-    let content_top = frame_y + pad;
-    let content_w = (frame_w - 2.0 * pad).max(0.0);
-    let content_h = (frame_h - 2.0 * pad).max(0.0);
+    // Content box: the frame box inset by the resolved padding.
+    let content_left = frame_x + pad.left;
+    let content_top = frame_y + pad.top;
+    let content_w = (frame_w - (pad.left + pad.right)).max(0.0);
+    let content_h = (frame_h - (pad.top + pad.bottom)).max(0.0);
 
     // Participating children: skip invisible and guide nodes (reuse flow helper).
     let participating: Vec<&Node> = frame

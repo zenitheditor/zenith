@@ -13,6 +13,7 @@
 //! - `pattern`: `pattern` node transform.
 //! - `chart`: `chart` node transform.
 //! - `leaf`/`container`/`special`: the renderable node transforms.
+//! - `layout`: auto-layout item and frame container attributes.
 //! - `unsupported`/`unknown_children`: capture of dropped child nodes (renderable
 //!   nodes and structural blocks respectively).
 
@@ -23,6 +24,7 @@ mod document;
 mod effect;
 mod helpers;
 mod kerning;
+mod layout;
 mod leaf;
 mod node;
 mod page;

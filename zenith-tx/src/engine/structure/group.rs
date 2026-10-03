@@ -202,6 +202,7 @@ pub(in crate::engine) fn apply_group(
         y: None,
         w: None,
         h: None,
+        layout_item: Default::default(),
         opacity: None,
         visible: None,
         locked: None,

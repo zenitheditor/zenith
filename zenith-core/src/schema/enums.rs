@@ -1,7 +1,8 @@
 //! Single source of truth for closed enum value lists.
 //!
 //! Validation checks, `node.invalid_value` messages, and schema type hints
-//! all read these constants so the lists cannot drift apart.
+//! all read these constants so the lists cannot drift apart. The lists other
+//! crates validate against (`overflow`) are public.
 
 /// `stroke-linecap` values.
 pub(crate) const STROKE_LINECAPS: &[&str] = &["butt", "round", "square"];
@@ -23,6 +24,10 @@ pub(crate) const SYMMETRY_MODES: &[&str] = &["radial", "mirror"];
 pub(crate) const BORDER_COLLAPSES: &[&str] = &["separate", "collapse"];
 /// Text `format` values.
 pub(crate) const TEXT_FORMATS: &[&str] = &["markdown", "plain"];
+/// Text `overflow` values (absent reads as `clip`).
+pub const TEXT_OVERFLOWS: &[&str] = &["clip", "visible", "fit", "autofit"];
+/// Code `overflow` values (absent reads as `clip`).
+pub const CODE_OVERFLOWS: &[&str] = &["clip", "visible"];
 /// Image `fit` values.
 pub(crate) const IMAGE_FITS: &[&str] = &["contain", "cover", "stretch", "none"];
 /// Light `kind` values.
@@ -63,6 +68,14 @@ pub(crate) const PAGE_PROGRESSIONS: &[&str] = &["ltr", "rtl"];
 pub(crate) const PAGE_PARITIES: &[&str] = &["recto", "verso"];
 /// Page number format values.
 pub(crate) const PAGE_NUMBER_FORMATS: &[&str] = &["decimal", "lower-roman", "upper-roman"];
+/// Frame `layout` values.
+pub(crate) const LAYOUT_KINDS: &[&str] = &["absolute", "row", "column", "grid"];
+/// Frame `justify` values.
+pub(crate) const LAYOUT_JUSTIFIES: &[&str] = &["start", "center", "end", "space-between"];
+/// Frame `align` values.
+pub(crate) const LAYOUT_ALIGNS: &[&str] = &["start", "center", "end", "stretch"];
+/// Item `position` values.
+pub(crate) const LAYOUT_POSITIONS: &[&str] = &["auto", "absolute"];
 /// Page `line-jumps` style values.
 pub(crate) const LINE_JUMP_STYLES: &[&str] = &["none", "arc", "gap"];
 
@@ -94,6 +107,8 @@ mod tests {
             ("chart", "point-placement", CHART_POINT_PLACEMENTS),
             ("chart", "value-labels", CHART_VALUE_LABELS),
             ("connector", "route", CONNECTOR_ROUTES),
+            ("text", "overflow", TEXT_OVERFLOWS),
+            ("code", "overflow", CODE_OVERFLOWS),
         ];
         for (kind, name, list) in by_kind {
             assert_eq!(
@@ -113,6 +128,7 @@ mod tests {
             ("colorspace", COLORSPACES),
             ("h-align", H_ALIGNS),
             ("v-align", V_ALIGNS),
+            ("overflow", TEXT_OVERFLOWS),
         ];
         for (name, list) in generic {
             assert_eq!(attribute_type(name), hint(list), "{name}");

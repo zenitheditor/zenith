@@ -1,8 +1,8 @@
-//! The sized `text` layout engine (`compile_text_sized`): fast single-line
+//! The sized `text` layout engine (`compile_text_core`): fast single-line
 //! path, tab-leader/chain/markdown branches, span shaping, wrap dispatch, and
 //! effect/mask/blend/rotation brackets. The multi-sub-path WRAP body lives in
-//! [`crate::compile::text::wrap`]; overflow diagnostics live in
-//! [`super::overflow`].
+//! [`crate::compile::text::wrap`]; overflow measurement lives in
+//! [`super::overflow`] and the overflow diagnostics in [`super::fit`].
 
 use std::collections::BTreeSet;
 
@@ -17,9 +17,11 @@ use crate::compile::paint::{
 use crate::compile::style_prop;
 use crate::compile::text::chain_member::render_chain_member;
 use crate::compile::text::ctx::{ChainMemberPlace, ShapeEnv, TabLeaderArgs, TextCompileEnv};
+use crate::compile::text::ink::ink_bounds;
 use crate::compile::text::measure::{
     MeasureEnv, font_size_px, measure_text_wrapped_height, resolve_text_families,
 };
+use crate::compile::text::overflow_mode::{ClipBox, TextOverflow, clip_commands_since};
 use crate::compile::text::resolve_kerning_pairs;
 use crate::compile::text::shape::{
     CODE_BG, CODE_MONO_FAMILY, LINK_COLOR, ResolvedSpan, emit_glyph_missing,
@@ -33,22 +35,28 @@ use crate::compile::util::{
 };
 use crate::ir::{Color, Paint, SceneCommand};
 
-use super::overflow::{OverflowCheck, check_text_overflow};
+use super::overflow::{OverflowCheck, SizedOutcome, measure_overflow};
 
-/// Compile a `text` leaf node at its resolved font size (the unchanged layout
-/// engine: wrap/fast/drop-cap/runaround/chain paths + overflow handling).
+/// Compile a `text` leaf node at its resolved font size (the layout engine:
+/// wrap/fast/drop-cap/runaround/chain paths + the overflow clip bracket).
 ///
-/// Returns the laid-out content height in pixels (`line_count * line_height`),
-/// which the flow-layout path in [`crate::compile::container`] uses to advance
-/// its vertical cursor past a text child that declares no explicit `h`. Early
-/// returns (invisible, missing/bad geometry, empty spans) yield `0.0`.
-pub(in crate::compile) fn compile_text_sized(
+/// Pushes NO overflow diagnostic: the measured overflow rides back in
+/// [`SizedOutcome::overflow`] so the autofit search can probe sizes without
+/// recursing into its own diagnostics. [`super::fit::compile_text_sized`] adds
+/// the diagnostics.
+///
+/// `SizedOutcome::height` is the laid-out content height in pixels
+/// (`line_count * line_height`), which the flow-layout path in
+/// [`crate::compile::container`] uses to advance its vertical cursor past a text
+/// child that declares no explicit `h`. Early returns (invisible, missing/bad
+/// geometry, empty spans) yield `0.0`.
+pub(super) fn compile_text_core(
     text: &TextNode,
     env: TextCompileEnv,
     commands: &mut Vec<SceneCommand>,
     diagnostics: &mut Vec<Diagnostic>,
     ctx: RenderCtx,
-) -> f64 {
+) -> SizedOutcome {
     let resolved = env.resolved;
     let style_map = env.style_map;
     let fonts = env.fonts;
@@ -60,7 +68,7 @@ pub(in crate::compile) fn compile_text_sized(
 
     // Skip invisible text nodes.
     if text.visible == Some(false) {
-        return 0.0;
+        return SizedOutcome::plain(0.0);
     }
 
     // Anchor-derived (x, y): look up the pre-pass map when x or y is absent.
@@ -76,7 +84,7 @@ pub(in crate::compile) fn compile_text_sized(
                     "x",
                     text.source_span,
                 ));
-                return 0.0;
+                return SizedOutcome::plain(0.0);
             };
             v
         }
@@ -93,7 +101,7 @@ pub(in crate::compile) fn compile_text_sized(
                     text.source_span,
                     Some(text.id.clone()),
                 ));
-                return 0.0;
+                return SizedOutcome::plain(0.0);
             }
         }
     };
@@ -108,7 +116,7 @@ pub(in crate::compile) fn compile_text_sized(
                     "y",
                     text.source_span,
                 ));
-                return 0.0;
+                return SizedOutcome::plain(0.0);
             };
             v
         }
@@ -125,14 +133,16 @@ pub(in crate::compile) fn compile_text_sized(
                     text.source_span,
                     Some(text.id.clone()),
                 ));
-                return 0.0;
+                return SizedOutcome::plain(0.0);
             }
         }
     };
 
-    // Apply group translation offset.
+    // Apply group translation offset. `box_y` is the box top; `text_y` is the
+    // first line's top, moved down by a `v-align` offset below.
     let text_x = text_x_raw + ctx.dx;
-    let mut text_y = text_y_raw + ctx.dy;
+    let box_y = text_y_raw + ctx.dy;
+    let mut text_y = box_y;
 
     // Resolve glyph stroke early (before chain early-return) so it can be
     // threaded to render_chain_member as well. Both fields are None when the
@@ -157,10 +167,11 @@ pub(in crate::compile) fn compile_text_sized(
         && let Some(assignment) = chains.get(&text.id)
     {
         let fs = font_size_px(text, resolved, style_map);
-        return render_chain_member(
+        return SizedOutcome::plain(render_chain_member(
             text,
             assignment,
             ChainMemberPlace {
+                shape: ShapeEnv { engine, fonts },
                 font_size: fs,
                 text_x,
                 text_y,
@@ -170,7 +181,7 @@ pub(in crate::compile) fn compile_text_sized(
             resolved,
             commands,
             diagnostics,
-        );
+        ));
     }
 
     // ── Markdown block-layout branch ─────────────────────────────────────
@@ -184,19 +195,21 @@ pub(in crate::compile) fn compile_text_sized(
     if text.chain.is_none()
         && let Some(blocks) = env.md_blocks.get(&text.id)
     {
-        return crate::compile::text::markdown_block::compile_markdown_blocks(
-            text,
-            blocks,
-            env,
-            commands,
-            diagnostics,
-            ctx,
+        return SizedOutcome::plain(
+            crate::compile::text::markdown_block::compile_markdown_blocks(
+                text,
+                blocks,
+                env,
+                commands,
+                diagnostics,
+                ctx,
+            ),
         );
     }
 
     // Skip silently if every span is empty (nothing to draw).
     if text.spans.iter().all(|s| s.text.is_empty()) {
-        return 0.0;
+        return SizedOutcome::plain(0.0);
     }
 
     // ── Footnote inline markers ───────────────────────────────────────────
@@ -380,9 +393,9 @@ pub(in crate::compile) fn compile_text_sized(
                 diagnostics,
             );
             commands.push(SceneCommand::PopLayer);
-            return h;
+            return SizedOutcome::plain(h);
         }
-        return compile_tab_leader(
+        return SizedOutcome::plain(compile_tab_leader(
             text,
             leader,
             &families,
@@ -403,7 +416,7 @@ pub(in crate::compile) fn compile_text_sized(
             },
             commands,
             diagnostics,
-        );
+        ));
     }
 
     // Shape EACH span as its own run, positioning runs left-to-right.
@@ -636,10 +649,10 @@ pub(in crate::compile) fn compile_text_sized(
     // Resolve the node's box height for rotation center and fit-check.
     let box_h_opt: Option<f64> = resolve_geometry_px(text.h.as_ref(), resolved);
 
-    // ── overflow="fit" pre-measurement ───────────────────────────────
+    // ── Line height ──────────────────────────────────────────────────
     // Extract line_height from the first successfully shaped span (shared
-    // across all spans because font + size are fixed). Used by the fit
-    // check after both emit paths.
+    // across all spans because font + size are fixed). Drives the laid-out
+    // content height returned for flow layout.
     let first_line_height: f64 = shaped_spans
         .first()
         .map(|s| s.run.line_height as f64)
@@ -675,13 +688,14 @@ pub(in crate::compile) fn compile_text_sized(
         None => has_mandatory_break,
     };
 
-    // Rotation bracket: only when both w and h are present (safe pivot).
+    // Rotation bracket: only when both w and h are present (safe pivot at the
+    // BOX center, independent of any v-align offset of the lines).
     // Unrotated text (or text with no box) emits no PushTransform → byte-identical.
     let rot = rotation_degrees(text.rotate.as_ref());
     let text_rot = rot
         .zip(box_w_opt)
         .zip(box_h_opt)
-        .map(|((a, bw), bh)| (a, text_x + bw / 2.0, text_y + bh / 2.0));
+        .map(|((a, bw), bh)| (a, text_x + bw / 2.0, box_y + bh / 2.0));
     if let Some((angle, cx, cy)) = text_rot {
         commands.push(SceneCommand::PushTransform {
             angle_deg: angle,
@@ -733,7 +747,7 @@ pub(in crate::compile) fn compile_text_sized(
     let mask = text.mask.as_ref().and_then(|p| {
         let mask_w = box_w_opt.unwrap_or(total_advance);
         let mask_h = box_h_opt.unwrap_or(first_line_height);
-        resolve_property_mask(p, resolved, (text_x, text_y, mask_w, mask_h))
+        resolve_property_mask(p, resolved, (text_x, box_y, mask_w, mask_h))
     });
 
     // Mark where the node's glyph draws begin in `commands`; they are split off
@@ -742,7 +756,7 @@ pub(in crate::compile) fn compile_text_sized(
     let draw_start = commands.len();
 
     // Tracks actual line count after emit; set by whichever path runs.
-    // Used solely by the overflow="fit" check below.
+    // Used by the overflow measurement and the content-height return.
     let mut fit_line_count: usize = 1;
 
     if !needs_wrap {
@@ -926,25 +940,44 @@ pub(in crate::compile) fn compile_text_sized(
         );
     }
 
-    check_text_overflow(
-        OverflowCheck {
-            text,
-            box_w_opt,
-            box_h_opt,
-            fit_line_count,
-            first_line_height,
-            needs_wrap,
-            total_advance,
-            font_size,
-        },
-        diagnostics,
-    );
+    // Ink of the node's draws (measured only against a complete box).
+    let ink = if box_w_opt.is_some() && box_h_opt.is_some() {
+        commands
+            .get(draw_start..)
+            .and_then(|draws| ink_bounds(draws, ShapeEnv { engine, fonts }))
+    } else {
+        None
+    };
+    let overflow = measure_overflow(OverflowCheck {
+        box_w_opt,
+        box_h_opt,
+        box_y,
+        ink,
+        fit_line_count,
+        needs_wrap,
+        total_advance,
+        font_size,
+    });
+
+    // Overflow clip: in `clip` mode (the default) overflowing content is clipped
+    // at the box edge. Content that fits emits no bracket (byte-identical).
+    let clip = match TextOverflow::from_attr(text.overflow.as_deref()) {
+        TextOverflow::Clip => overflow.map(|f| ClipBox {
+            x: text_x,
+            y: box_y,
+            w: f.box_w,
+            h: f.box_h,
+        }),
+        TextOverflow::Visible | TextOverflow::Fit | TextOverflow::Autofit => None,
+    };
 
     // Split off the node's glyph draws (appended since `draw_start`) and
-    // re-emit them through the effect/mask helper. No effect + no mask → the
-    // draws are appended back verbatim in the same order (byte-identical).
+    // re-emit them through the effect/mask helper, inside the clip bracket. No
+    // effect + no mask + no clip → the draws are appended back verbatim in the
+    // same order (byte-identical).
     let draws = commands.split_off(draw_start);
     emit_node_with_effects(commands, draws, effect, mask);
+    clip_commands_since(commands, draw_start, clip);
 
     if blend.is_some() {
         commands.push(SceneCommand::PopLayer);
@@ -956,7 +989,10 @@ pub(in crate::compile) fn compile_text_sized(
 
     // Laid-out content height: line count (1 on the fast path, the wrapped
     // line count otherwise) times the shared per-line height. Reuses exactly
-    // the quantities the overflow="fit" check measures above, so flow-layout
+    // the quantities the overflow measurement uses above, so flow-layout
     // advance and fit-detection agree by construction.
-    fit_line_count as f64 * first_line_height
+    SizedOutcome {
+        height: fit_line_count as f64 * first_line_height,
+        overflow,
+    }
 }

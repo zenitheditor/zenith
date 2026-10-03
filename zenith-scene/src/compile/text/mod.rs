@@ -15,6 +15,8 @@
 //! - [`tableader`] — tab-leader (table-of-contents) rendering.
 //! - [`measure`] — natural-width / wrapped-height measurement.
 //! - [`chain_member`] — threaded-text chain member rendering.
+//! - [`ink`] — ink bounds of drawn text and the block-axis overflow they imply.
+//! - [`overflow_mode`] — the parsed `overflow` mode + the shared box-clip bracket.
 //! - [`wrap`] — the single-box wrap path (drop-cap / runaround / plain).
 //! - [`text_node`] — the `compile_text` entry + sized layout engine.
 //! - [`code_node`] — the `compile_code` entry.
@@ -27,9 +29,11 @@ mod ctx;
 mod dropcap;
 mod emit;
 mod hyphen;
+mod ink;
 mod kerning;
 mod markdown_block;
 mod measure;
+mod overflow_mode;
 mod pack;
 mod shape;
 mod tableader;
@@ -55,4 +59,4 @@ pub(in crate::compile) use shape::{
     resolve_letter_spacing, resolve_span_font_feature_set, resolve_vertical_align,
     run_to_scene_glyphs, shape_words,
 };
-pub(in crate::compile) use text_node::compile_text;
+pub(in crate::compile) use text_node::{LabelHost, compile_label_text, compile_text};

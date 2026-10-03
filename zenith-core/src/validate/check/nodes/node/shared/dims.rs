@@ -18,10 +18,9 @@ pub(in crate::validate::check) struct TokenEnv<'a> {
     pub(in crate::validate::check) resolved: &'a BTreeMap<String, ResolvedToken>,
 }
 
-/// - absent AND `required` (e.g. a non-flow-positioned leaf) → `node.missing_geometry` (Error).
-/// - absent AND NOT `required` (e.g. a direct child of a `layout="flow"`
-///   frame, whose position/size is supplied by the flow algorithm) → no
-///   diagnostic.
+/// - absent AND `required` (e.g. a leaf outside a layout frame) → `node.missing_geometry` (Error).
+/// - absent AND NOT `required` (e.g. a direct child of a `layout="column"`
+///   frame, whose position/size is supplied by the layout) → no diagnostic.
 /// - present but `Unit::Unknown` → `node.invalid_geometry` (Error) regardless
 ///   of `required`.
 ///

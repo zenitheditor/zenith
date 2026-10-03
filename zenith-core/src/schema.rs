@@ -16,12 +16,13 @@
 //!
 //! Submodules: `kinds` (node-kind list/summaries/examples), `content`
 //! (child-content descriptors), `attributes` (attribute name lists + type
-//! hints), `tokens` (token-type schema), `surfaces` (variant/diagnostics
-//! surfaces).
+//! hints), `defaults` (attribute default values), `tokens` (token-type
+//! schema), `surfaces` (variant/diagnostics surfaces).
 
 mod attributes;
 mod content;
-pub(crate) mod enums;
+mod defaults;
+pub mod enums;
 mod kinds;
 mod surfaces;
 mod tokens;
@@ -31,6 +32,7 @@ pub use attributes::{
     document_summary, node_attributes, page_attributes, page_summary,
 };
 pub use content::{NodeContentDescriptor, node_content};
+pub use defaults::attribute_default;
 pub use kinds::{node_example, node_kinds, node_summary};
 pub use surfaces::{
     PortsDescriptor, VariantDescriptor, diagnostic_codes, diagnostics_summary, diagnostics_verbs,

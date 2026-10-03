@@ -12,6 +12,7 @@ use crate::format::writer::{
 };
 
 use super::helpers::write_span;
+use super::layout::{write_box_size, write_layout_item};
 use super::write_children_block;
 
 pub(super) fn write_shape(s: &ShapeNode, out: &mut String, depth: usize) {
@@ -35,8 +36,9 @@ pub(super) fn write_shape(s: &ShapeNode, out: &mut String, depth: usize) {
     write_opt_bool(out, "anchor-parent", &s.anchor_parent);
     write_opt_property_value(out, "x", &s.x);
     write_opt_property_value(out, "y", &s.y);
-    write_opt_property_value(out, "w", &s.w);
-    write_opt_property_value(out, "h", &s.h);
+    write_box_size(out, "w", &s.w, s.layout_item.w_keyword);
+    write_box_size(out, "h", &s.h, s.layout_item.h_keyword);
+    write_layout_item(out, &s.layout_item);
     write_opt_str(out, "kind", &s.kind);
     write_opt_property_value(out, "fill", &s.fill);
     write_opt_property_value(out, "stroke", &s.stroke);
@@ -149,8 +151,9 @@ pub(super) fn write_field(f: &FieldNode, out: &mut String, depth: usize) {
     write_opt_str(out, "target", &f.target);
     write_opt_property_value(out, "x", &f.x);
     write_opt_property_value(out, "y", &f.y);
-    write_opt_property_value(out, "w", &f.w);
-    write_opt_property_value(out, "h", &f.h);
+    write_box_size(out, "w", &f.w, f.layout_item.w_keyword);
+    write_box_size(out, "h", &f.h, f.layout_item.h_keyword);
+    write_layout_item(out, &f.layout_item);
     write_opt_property_value(out, "fill", &f.fill);
     write_opt_property_value(out, "font-family", &f.font_family);
     write_opt_property_value(out, "font-size", &f.font_size);
@@ -195,8 +198,9 @@ pub(super) fn write_toc(t: &TocNode, out: &mut String, depth: usize) {
     write_opt_str(out, "folio-style", &t.folio_style);
     write_opt_property_value(out, "x", &t.x);
     write_opt_property_value(out, "y", &t.y);
-    write_opt_property_value(out, "w", &t.w);
-    write_opt_property_value(out, "h", &t.h);
+    write_box_size(out, "w", &t.w, t.layout_item.w_keyword);
+    write_box_size(out, "h", &t.h, t.layout_item.h_keyword);
+    write_layout_item(out, &t.layout_item);
     write_opt_property_value(out, "fill", &t.fill);
     write_opt_property_value(out, "font-family", &t.font_family);
     write_opt_property_value(out, "font-size", &t.font_size);

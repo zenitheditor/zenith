@@ -13,6 +13,7 @@ mod chart;
 mod container;
 mod effect;
 mod kerning;
+mod layout;
 mod leaf;
 mod pattern;
 mod shape;
@@ -22,6 +23,9 @@ mod text;
 pub(in crate::validate::check) use chart::check_chart;
 pub(in crate::validate::check) use container::{check_frame, check_group, check_table};
 pub(in crate::validate::check) use effect::{check_light, check_mesh};
+pub(in crate::validate::check) use layout::{
+    FlowParent, LayoutSite, check_frame_layout, check_layout_item,
+};
 pub(in crate::validate::check) use leaf::{check_code, check_ellipse, check_line, check_rect};
 pub(in crate::validate::check) use pattern::check_pattern;
 pub(in crate::validate::check) use shape::{check_connector, check_shape, check_unknown};

@@ -154,13 +154,17 @@ pub(in crate::validate::check) fn check_shape(
         resolved_tokens,
         diagnostics,
     );
-    check_visual_prop(
+    // `padding` is geometry: a px literal or a dimension token.
+    check_optional_dim(
         &s.id,
         "padding",
         s.padding.as_ref(),
-        VisualExpect::Dimension,
-        referenced_token_ids,
-        resolved_tokens,
+        false,
+        s.source_span,
+        &mut TokenEnv {
+            referenced: referenced_token_ids,
+            resolved: resolved_tokens,
+        },
         diagnostics,
     );
 

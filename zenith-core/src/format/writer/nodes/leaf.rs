@@ -18,6 +18,7 @@ use super::helpers::{
     write_block_style, write_kerning_pairs, write_path_anchors, write_path_subpaths, write_points,
     write_span,
 };
+use super::layout::{write_box_size, write_layout_item};
 use super::write_node;
 
 pub(super) fn write_rect(r: &RectNode, out: &mut String, depth: usize) {
@@ -39,8 +40,9 @@ pub(super) fn write_rect(r: &RectNode, out: &mut String, depth: usize) {
     write_opt_bool(out, "anchor-parent", &r.anchor_parent);
     write_opt_property_value(out, "x", &r.x);
     write_opt_property_value(out, "y", &r.y);
-    write_opt_property_value(out, "w", &r.w);
-    write_opt_property_value(out, "h", &r.h);
+    write_box_size(out, "w", &r.w, r.layout_item.w_keyword);
+    write_box_size(out, "h", &r.h, r.layout_item.h_keyword);
+    write_layout_item(out, &r.layout_item);
     write_opt_property_value(out, "radius", &r.radius);
     write_opt_property_value(out, "radius-tl", &r.radius_tl);
     write_opt_property_value(out, "radius-tr", &r.radius_tr);
@@ -107,8 +109,9 @@ pub(super) fn write_image(i: &ImageNode, out: &mut String, depth: usize) {
     out.push('"');
     write_opt_property_value(out, "x", &i.x);
     write_opt_property_value(out, "y", &i.y);
-    write_opt_property_value(out, "w", &i.w);
-    write_opt_property_value(out, "h", &i.h);
+    write_box_size(out, "w", &i.w, i.layout_item.w_keyword);
+    write_box_size(out, "h", &i.h, i.layout_item.h_keyword);
+    write_layout_item(out, &i.layout_item);
     write_opt_dimension(out, "src-x", &i.src_x);
     write_opt_dimension(out, "src-y", &i.src_y);
     write_opt_dimension(out, "src-w", &i.src_w);
@@ -163,8 +166,9 @@ pub(super) fn write_ellipse(e: &EllipseNode, out: &mut String, depth: usize) {
     write_opt_bool(out, "anchor-parent", &e.anchor_parent);
     write_opt_property_value(out, "x", &e.x);
     write_opt_property_value(out, "y", &e.y);
-    write_opt_property_value(out, "w", &e.w);
-    write_opt_property_value(out, "h", &e.h);
+    write_box_size(out, "w", &e.w, e.layout_item.w_keyword);
+    write_box_size(out, "h", &e.h, e.layout_item.h_keyword);
+    write_layout_item(out, &e.layout_item);
     write_opt_property_value(out, "rx", &e.rx);
     write_opt_property_value(out, "ry", &e.ry);
     write_opt_property_value(out, "fill", &e.fill);
@@ -251,8 +255,9 @@ pub(super) fn write_text(t: &TextNode, out: &mut String, depth: usize) {
     write_opt_bool(out, "anchor-parent", &t.anchor_parent);
     write_opt_property_value(out, "x", &t.x);
     write_opt_property_value(out, "y", &t.y);
-    write_opt_property_value(out, "w", &t.w);
-    write_opt_property_value(out, "h", &t.h);
+    write_box_size(out, "w", &t.w, t.layout_item.w_keyword);
+    write_box_size(out, "h", &t.h, t.layout_item.h_keyword);
+    write_layout_item(out, &t.layout_item);
     write_opt_str(out, "align", &t.align);
     write_opt_str(out, "v-align", &t.v_align);
     write_opt_str(out, "direction", &t.direction);
@@ -341,8 +346,9 @@ pub(super) fn write_code(c: &CodeNode, out: &mut String, depth: usize) {
     write_opt_bool(out, "anchor-parent", &c.anchor_parent);
     write_opt_property_value(out, "x", &c.x);
     write_opt_property_value(out, "y", &c.y);
-    write_opt_property_value(out, "w", &c.w);
-    write_opt_property_value(out, "h", &c.h);
+    write_box_size(out, "w", &c.w, c.layout_item.w_keyword);
+    write_box_size(out, "h", &c.h, c.layout_item.h_keyword);
+    write_layout_item(out, &c.layout_item);
     write_opt_str(out, "overflow", &c.overflow);
     write_opt_str(out, "language", &c.language);
     write_opt_bool(out, "line-numbers", &c.line_numbers);
@@ -527,8 +533,9 @@ pub(super) fn write_pattern(p: &PatternNode, out: &mut String, depth: usize) {
     write_opt_bool(out, "anchor-parent", &p.anchor_parent);
     write_opt_property_value(out, "x", &p.x);
     write_opt_property_value(out, "y", &p.y);
-    write_opt_property_value(out, "w", &p.w);
-    write_opt_property_value(out, "h", &p.h);
+    write_box_size(out, "w", &p.w, p.layout_item.w_keyword);
+    write_box_size(out, "h", &p.h, p.layout_item.h_keyword);
+    write_layout_item(out, &p.layout_item);
     if let Some(n) = p.seed {
         let _ = write!(out, " seed={n}");
     }
@@ -606,8 +613,9 @@ pub(super) fn write_chart(c: &ChartNode, out: &mut String, depth: usize) {
     write_opt_bool(out, "anchor-parent", &c.anchor_parent);
     write_opt_property_value(out, "x", &c.x);
     write_opt_property_value(out, "y", &c.y);
-    write_opt_property_value(out, "w", &c.w);
-    write_opt_property_value(out, "h", &c.h);
+    write_box_size(out, "w", &c.w, c.layout_item.w_keyword);
+    write_box_size(out, "h", &c.h, c.layout_item.h_keyword);
+    write_layout_item(out, &c.layout_item);
     write_opt_str(out, "title", &c.title);
     write_opt_str(out, "caption", &c.caption);
     write_opt_bool(out, "legend", &c.legend);

@@ -190,6 +190,7 @@ fn rect_missing_w_produces_node_missing_geometry() {
                 y: Some(pxv(0.0)),
                 w: None, // missing
                 h: Some(pxv(100.0)),
+                layout_item: Default::default(),
                 radius: None,
                 radius_tl: None,
                 radius_tr: None,
@@ -329,6 +330,7 @@ fn font_weight_with_missing_token_ref_produces_unknown_reference() {
         y: Some(pxv(0.0)),
         w: Some(pxv(200.0)),
         h: Some(pxv(40.0)),
+        layout_item: Default::default(),
         align: None,
         v_align: None,
         direction: None,
@@ -842,6 +844,7 @@ fn unknown_property_on_rect_produces_error() {
                 y: Some(pxv(0.0)),
                 w: Some(pxv(50.0)),
                 h: Some(pxv(50.0)),
+                layout_item: Default::default(),
                 radius: None,
                 radius_tl: None,
                 radius_tr: None,

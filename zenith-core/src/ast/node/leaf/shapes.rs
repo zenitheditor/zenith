@@ -3,6 +3,7 @@
 use std::collections::BTreeMap;
 
 use crate::ast::Span;
+use crate::ast::node::LayoutItem;
 use crate::ast::value::{Dimension, PropertyValue};
 
 use crate::ast::node::common::{ObjectPosition, UnknownProperty};
@@ -24,6 +25,8 @@ pub struct ImageNode {
     pub y: Option<PropertyValue>,
     pub w: Option<PropertyValue>,
     pub h: Option<PropertyValue>,
+    /// Item attributes used when this node is a child of a `row` / `column` frame.
+    pub layout_item: LayoutItem,
     /// Optional source-sub-rectangle: left edge within the source image (pixels).
     /// All four src-* fields must be present together; partial presence is a hard
     /// error (`image.partial_src_rect`). Absent ⇒ the full source image is used.
@@ -109,6 +112,8 @@ pub struct RectNode {
     pub y: Option<PropertyValue>,
     pub w: Option<PropertyValue>,
     pub h: Option<PropertyValue>,
+    /// Item attributes used when this node is a child of a `row` / `column` frame.
+    pub layout_item: LayoutItem,
     pub radius: Option<PropertyValue>,
     /// Per-corner radius overrides (top-left, top-right, bottom-right, bottom-left).
     /// When `Some`, the value overrides the uniform `radius` for that corner only.
@@ -250,6 +255,8 @@ pub struct EllipseNode {
     pub y: Option<PropertyValue>,
     pub w: Option<PropertyValue>,
     pub h: Option<PropertyValue>,
+    /// Item attributes used when this node is a child of a `row` / `column` frame.
+    pub layout_item: LayoutItem,
     /// Explicit x-radius override (half-width of the ellipse). When absent, the
     /// ellipse is inscribed in the bounding box (w/2). Backward-compatible: None
     /// leaves all existing ellipses byte-identical.

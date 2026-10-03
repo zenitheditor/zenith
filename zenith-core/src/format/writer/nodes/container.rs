@@ -10,14 +10,16 @@ use crate::format::writer::{
     write_opt_f64, write_opt_property_value, write_opt_str, write_opt_str_escaped,
 };
 
+use super::layout::{write_box_size, write_layout_container, write_layout_item};
 use super::write_children_block;
 
 pub(super) fn write_frame(f: &FrameNode, out: &mut String, depth: usize) {
     indent(out, depth);
     out.push_str("frame");
 
-    // Canonical property order: id, name, role, anchor, anchor-zone, x, y, w, h, layout, columns,
-    // rows, opacity, visible, locked, rotate, blend-mode, shadow, filter, mask,
+    // Canonical property order: id, name, role, anchor*, x, y, w, h, item attrs,
+    // layout, container attrs, columns, rows, clip, fill, stroke, stroke-width,
+    // radius, opacity, visible, locked, rotate, blend-mode, shadow, filter, mask,
     // blur, style, then unknown props (sorted).
     out.push_str(" id=\"");
     out.push_str(&f.id);
@@ -32,15 +34,23 @@ pub(super) fn write_frame(f: &FrameNode, out: &mut String, depth: usize) {
     write_opt_bool(out, "anchor-parent", &f.anchor_parent);
     write_opt_property_value(out, "x", &f.x);
     write_opt_property_value(out, "y", &f.y);
-    write_opt_property_value(out, "w", &f.w);
-    write_opt_property_value(out, "h", &f.h);
-    write_opt_str(out, "layout", &f.layout);
+    write_box_size(out, "w", &f.w, f.layout_item.w_keyword);
+    write_box_size(out, "h", &f.h, f.layout_item.h_keyword);
+    write_layout_item(out, &f.layout_item);
+    let layout = f.layout.as_ref().map(|l| l.as_str().to_owned());
+    write_opt_str_escaped(out, "layout", &layout);
+    write_layout_container(out, &f.container);
     if let Some(n) = f.columns {
         let _ = write!(out, " columns={n}");
     }
     if let Some(n) = f.rows {
         let _ = write!(out, " rows={n}");
     }
+    write_opt_bool(out, "clip", &f.clip);
+    write_opt_property_value(out, "fill", &f.fill);
+    write_opt_property_value(out, "stroke", &f.stroke);
+    write_opt_property_value(out, "stroke-width", &f.stroke_width);
+    write_opt_property_value(out, "radius", &f.radius);
     write_opt_f64(out, "opacity", &f.opacity);
     write_opt_bool(out, "visible", &f.visible);
     write_opt_bool(out, "locked", &f.locked);
@@ -87,8 +97,9 @@ pub(super) fn write_group(g: &GroupNode, out: &mut String, depth: usize) {
     write_opt_bool(out, "anchor-parent", &g.anchor_parent);
     write_opt_property_value(out, "x", &g.x);
     write_opt_property_value(out, "y", &g.y);
-    write_opt_property_value(out, "w", &g.w);
-    write_opt_property_value(out, "h", &g.h);
+    write_box_size(out, "w", &g.w, g.layout_item.w_keyword);
+    write_box_size(out, "h", &g.h, g.layout_item.h_keyword);
+    write_layout_item(out, &g.layout_item);
     write_opt_f64(out, "opacity", &g.opacity);
     write_opt_bool(out, "visible", &g.visible);
     write_opt_bool(out, "locked", &g.locked);
@@ -180,8 +191,9 @@ pub(super) fn write_table(t: &TableNode, out: &mut String, depth: usize) {
     write_opt_bool(out, "anchor-parent", &t.anchor_parent);
     write_opt_property_value(out, "x", &t.x);
     write_opt_property_value(out, "y", &t.y);
-    write_opt_property_value(out, "w", &t.w);
-    write_opt_property_value(out, "h", &t.h);
+    write_box_size(out, "w", &t.w, t.layout_item.w_keyword);
+    write_box_size(out, "h", &t.h, t.layout_item.h_keyword);
+    write_layout_item(out, &t.layout_item);
     if let Some(n) = t.header_rows {
         let _ = write!(out, " header-rows={n}");
     }

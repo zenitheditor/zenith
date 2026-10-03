@@ -711,6 +711,7 @@ fn image_at(id: &str, x: f64, y: f64, w: f64, h: f64) -> Node {
         y: Some(pxv(y)),
         w: Some(pxv(w)),
         h: Some(pxv(h)),
+        layout_item: Default::default(),
         src_x: None,
         src_y: None,
         src_w: None,

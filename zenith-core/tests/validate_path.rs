@@ -41,10 +41,7 @@ fn valid_path_with_handles_has_no_validation_errors() {
     let report = validate(&doc);
 
     assert!(
-        report
-            .diagnostics
-            .iter()
-            .all(|d| d.severity != Severity::Error),
+        report.diagnostics.iter().all(|d| !d.is_error()),
         "expected no validation errors; got {:?}",
         report.diagnostics
     );
@@ -135,10 +132,7 @@ fn compound_path_subpaths_validate_per_contour() {
     let report = validate(&doc);
 
     assert!(
-        report
-            .diagnostics
-            .iter()
-            .all(|d| d.severity != Severity::Error),
+        report.diagnostics.iter().all(|d| !d.is_error()),
         "expected no validation errors; got {:?}",
         report.diagnostics
     );

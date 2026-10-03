@@ -2,6 +2,7 @@
 //! text-align, text-direction, find-replace-text, and text-replacement setters,
 //! plus the property accessors they use.
 
+use zenith_core::schema::enums::{CODE_OVERFLOWS, TEXT_OVERFLOWS};
 use zenith_core::{
     Diagnostic, Document, Node, PropertyValue, TextNode, TextSpan, canonicalize_style_key,
 };
@@ -142,17 +143,17 @@ fn node_opacity_mut(node: &mut Node) -> Option<&mut Option<f64>> {
     }
 }
 
-// ── Valid overflow values ─────────────────────────────────────────────────────
+// ── Overflow slots ────────────────────────────────────────────────────────────
 
-const VALID_OVERFLOWS: &[&str] = &["fit", "clip", "visible"];
-
-/// Return a mutable reference to the `overflow` field of a node, or `None` for
-/// variants that do not carry an `overflow` property. Only `Text` and `Code`
-/// have one.
-fn node_overflow_mut(node: &mut Node) -> Option<&mut Option<String>> {
+/// Return a mutable reference to the `overflow` field of a node plus the
+/// values that kind accepts, or `None` for variants that do not carry an
+/// `overflow` property. Only `Text` (`clip|visible|fit|autofit`) and `Code`
+/// (`clip|visible`) have one. The lists are zenith-core's schema enums, the
+/// same lists the validator enforces.
+fn node_overflow_mut(node: &mut Node) -> Option<(&mut Option<String>, &'static [&'static str])> {
     match node {
-        Node::Text(n) => Some(&mut n.overflow),
-        Node::Code(n) => Some(&mut n.overflow),
+        Node::Text(n) => Some((&mut n.overflow, TEXT_OVERFLOWS)),
+        Node::Code(n) => Some((&mut n.overflow, CODE_OVERFLOWS)),
         Node::Rect(_)
         | Node::Ellipse(_)
         | Node::Line(_)
@@ -239,21 +240,6 @@ pub(super) fn apply_set_text_overflow(
     diagnostics: &mut Vec<Diagnostic>,
     affected: &mut Vec<String>,
 ) {
-    // Validate overflow value before touching the tree.
-    if !VALID_OVERFLOWS.contains(&overflow) {
-        diagnostics.push(Diagnostic::error(
-            "tx.invalid_value",
-            format!(
-                "invalid overflow value {:?}; must be one of: {}",
-                overflow,
-                VALID_OVERFLOWS.join(", ")
-            ),
-            None,
-            Some(node_id.to_owned()),
-        ));
-        return;
-    }
-
     match find_node_any_mut(doc, node_id) {
         None => {
             diagnostics.push(Diagnostic::error(
@@ -268,7 +254,21 @@ pub(super) fn apply_set_text_overflow(
             // `node` after this binding — the mutable borrow below is fine.
             let kind = node.kind_str();
             match node_overflow_mut(node) {
-                Some(slot) => {
+                Some((_, allowed)) if !allowed.contains(&overflow) => {
+                    diagnostics.push(Diagnostic::error(
+                        "tx.invalid_value",
+                        format!(
+                            "invalid overflow value {:?} for {} {:?}; must be one of: {}",
+                            overflow,
+                            kind,
+                            node_id,
+                            allowed.join(", ")
+                        ),
+                        None,
+                        Some(node_id.to_owned()),
+                    ));
+                }
+                Some((slot, _)) => {
                     *slot = Some(overflow.to_owned());
                     record_affected(node_id, affected);
                 }

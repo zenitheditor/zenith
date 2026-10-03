@@ -62,10 +62,7 @@ fn chained_markdown_flows_blocks_heading_then_paragraphs() {
     let cmds = &result.scene.commands;
 
     assert!(
-        result
-            .diagnostics
-            .iter()
-            .all(|d| d.severity != zenith_core::Severity::Error),
+        result.diagnostics.iter().all(|d| !d.is_error()),
         "expected no errors; got: {:?}",
         result.diagnostics
     );
@@ -229,10 +226,7 @@ fn chained_markdown_indent_codebg_and_hr_flow() {
     let cmds = &result.scene.commands;
 
     assert!(
-        result
-            .diagnostics
-            .iter()
-            .all(|d| d.severity != zenith_core::Severity::Error),
+        result.diagnostics.iter().all(|d| !d.is_error()),
         "expected no errors; got: {:?}",
         result.diagnostics
     );

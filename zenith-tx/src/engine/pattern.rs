@@ -148,6 +148,7 @@ pub(super) fn apply_detach_pattern(
         y: p.y.clone(),
         w: p.w.clone(),
         h: p.h.clone(),
+        layout_item: p.layout_item.clone(),
         opacity: None,
         visible: None,
         locked: None,

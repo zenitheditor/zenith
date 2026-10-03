@@ -199,7 +199,7 @@ page id="page.grid3" w=(px)400 h=(px)400 {
     assert_eq!((x2, y2), (0.0, 150.0));
 }
 
-/// A non-grid frame (absolute and flow) emits the identical command stream
+/// A non-grid frame (absolute and column) emits the identical command stream
 /// regardless of the grid fields existing on the AST — default-off identity.
 #[test]
 fn non_grid_frame_byte_identical() {
@@ -223,8 +223,8 @@ page id="page.grid4" w=(px)200 h=(px)200 {
     // The child kept its own absolute coords (no grid injection).
     assert_eq!(fill_rects(&abs), vec![(50.0, 60.0, 40.0, 30.0)]);
 
-    // Flow frame: still stacks vertically, unaffected by grid code.
-    let flow_src = r##"zenith version=1 {
+    // Column frame: still stacks vertically, unaffected by grid code.
+    let col_src = r##"zenith version=1 {
   project id="proj.grid5" name="Grid5"
   tokens format="zenith-token-v1" {
 token id="color.k" type="color" value="#000000"
@@ -232,7 +232,7 @@ token id="color.k" type="color" value="#000000"
   styles {}
   document id="doc.grid5" title="Grid5" {
 page id="page.grid5" w=(px)200 h=(px)200 {
-  frame id="frame.flow" x=(px)0 y=(px)0 w=(px)160 h=(px)160 layout="flow" {
+  frame id="frame.col" x=(px)0 y=(px)0 w=(px)160 h=(px)160 layout="column" clip=#true {
     rect id="rect.a" h=(px)30 fill=(token)"color.k"
     rect id="rect.b" h=(px)30 fill=(token)"color.k"
   }
@@ -240,10 +240,10 @@ page id="page.grid5" w=(px)200 h=(px)200 {
   }
 }
 "##;
-    let flow = compile(&parse(flow_src), &default_provider());
-    let rects = fill_rects(&flow);
+    let col = compile(&parse(col_src), &default_provider());
+    let rects = fill_rects(&col);
     assert_eq!(rects.len(), 2);
-    // Stacked (flow), NOT side-by-side (grid would tile horizontally).
-    assert_eq!(rects[0].0, rects[1].0, "flow children share x (stacked)");
-    assert!(rects[1].1 > rects[0].1, "flow child2 below child1");
+    // Stacked (column), NOT side-by-side (grid would tile horizontally).
+    assert_eq!(rects[0].0, rects[1].0, "column children share x (stacked)");
+    assert!(rects[1].1 > rects[0].1, "column child2 below child1");
 }

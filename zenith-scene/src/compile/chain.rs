@@ -29,9 +29,9 @@
 //!   resolved style (+ per-span overrides). Each box re-wraps to its OWN width,
 //!   so line height is uniform across the chain even when boxes differ in width.
 //! - **Geometry source.** A chain member must carry explicit `x`/`y`/`w`/`h`
-//!   geometry resolvable to pixels. The pre-pass runs before the flow-layout
-//!   geometry injection in [`super::container`], so combining `layout="flow"`
-//!   box injection WITH `chain` is a documented follow-up — a flow-injected
+//!   geometry resolvable to pixels. The pre-pass runs before the column/grid
+//!   geometry injection in [`super::container`], so combining `layout="column"`
+//!   box injection WITH `chain` is a documented follow-up — a layout-injected
 //!   member has no explicit box at pre-pass time and is skipped from the chain.
 //! - **Opacity cascade.** The pre-pass shapes colors at opacity 1.0 (no group/
 //!   frame opacity cascade), so placing chain members under an opacity-cascading

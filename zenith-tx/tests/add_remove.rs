@@ -1,6 +1,5 @@
 mod common;
 use common::*;
-use zenith_core::Severity;
 use zenith_tx::op::{OpPathAnchor, OpPathSubpath};
 use zenith_tx::{Op, OpSpan, Permissions, Position, Transaction, TxStatus, run_transaction};
 

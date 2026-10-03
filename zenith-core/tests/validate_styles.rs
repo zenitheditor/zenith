@@ -308,6 +308,7 @@ fn minimal_code(id: &str, fill: Option<PropertyValue>) -> Node {
         y: Some(pxv(0.0)),
         w: Some(pxv(200.0)),
         h: Some(pxv(80.0)),
+        layout_item: Default::default(),
         overflow: None,
         language: None,
         line_numbers: None,

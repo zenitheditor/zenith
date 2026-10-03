@@ -81,7 +81,7 @@ pub(super) fn finish_candidate(
     let report = validate(&candidate);
     diagnostics.extend(report.diagnostics);
 
-    let has_errors = diagnostics.iter().any(|d| d.severity == Severity::Error);
+    let has_errors = Diagnostic::has_errors(&diagnostics);
     let has_warnings = diagnostics.iter().any(|d| d.severity == Severity::Warning);
 
     let (status, source_after) = if has_errors {

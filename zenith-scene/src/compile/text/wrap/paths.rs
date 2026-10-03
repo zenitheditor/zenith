@@ -670,8 +670,7 @@ fn emit_plain_wrap(
     };
 
     // One advisory per node when a forced character-boundary break
-    // occurred (break-word split an overlong token). Mirrors the
-    // `text.overflow` warning construction in this file.
+    // occurred (break-word split an overlong token).
     if forced_break {
         diagnostics.push(Diagnostic::warning(
             "text.forced_break",
@@ -685,7 +684,7 @@ fn emit_plain_wrap(
         ));
     }
 
-    // Record the actual line count for the overflow="fit" check below.
+    // Record the actual line count for the caller's overflow measurement.
     let fit_line_count = lines.len();
 
     // Emit the bullet marker BEFORE the text runs (drawn first → below the

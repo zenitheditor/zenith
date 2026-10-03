@@ -7,7 +7,7 @@
 //! Callers should [`check_text_outline_source`] **before** compiling pages so
 //! wrong-kind / missing-id targets short-circuit without paying compile cost.
 
-use zenith_core::{Diagnostic, Document, Node, PathNode, PropertyValue, Severity};
+use zenith_core::{Diagnostic, Document, Node, PathNode, PropertyValue};
 
 use super::{find_node_shared, finish_candidate, format_source, record_affected};
 use crate::result::{TxError, TxResult};
@@ -82,7 +82,7 @@ pub fn apply_text_outline_paths(
     if paths.is_empty() {
         let conversion_failed = diagnostics
             .iter()
-            .any(|d| d.severity == Severity::Error && d.code == SCENE_TEXT_OUTLINE_FAILED);
+            .any(|d| d.is_error() && d.code == SCENE_TEXT_OUTLINE_FAILED);
         if !conversion_failed {
             diagnostics.push(Diagnostic::error(
                 "tx.no_text_outlines",

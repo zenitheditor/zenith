@@ -5,6 +5,7 @@
 use std::collections::BTreeMap;
 
 use crate::ast::Span;
+use crate::ast::node::LayoutItem;
 use crate::ast::value::{Dimension, PropertyValue};
 
 use super::common::{Node, TextSpan, UnknownProperty};
@@ -26,6 +27,8 @@ pub struct ShapeNode {
     pub y: Option<PropertyValue>,
     pub w: Option<PropertyValue>,
     pub h: Option<PropertyValue>,
+    /// Item attributes used when this node is a child of a `row` / `column` frame.
+    pub layout_item: LayoutItem,
     /// Shape kind string (`process`/`decision`/`terminator`/`ellipse`).
     /// Validated, not enum-typed, so unknown values survive for forward-compat.
     /// Absent or unrecognized is treated as `"process"` at compile time.
@@ -300,6 +303,8 @@ pub struct FieldNode {
     pub y: Option<PropertyValue>,
     pub w: Option<PropertyValue>,
     pub h: Option<PropertyValue>,
+    /// Item attributes used when this node is a child of a `row` / `column` frame.
+    pub layout_item: LayoutItem,
     pub style: Option<String>,
     pub fill: Option<PropertyValue>,
     pub font_family: Option<PropertyValue>,
@@ -403,6 +408,8 @@ pub struct TocNode {
     pub y: Option<PropertyValue>,
     pub w: Option<PropertyValue>,
     pub h: Option<PropertyValue>,
+    /// Item attributes used when this node is a child of a `row` / `column` frame.
+    pub layout_item: LayoutItem,
     pub style: Option<String>,
     pub fill: Option<PropertyValue>,
     pub font_family: Option<PropertyValue>,

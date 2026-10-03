@@ -114,6 +114,7 @@ fn synth_footnote_text(fnote: &FootnoteNode, marker: &str, x: f64, y: f64, w: f6
         y: Some(px_prop(y)),
         w: Some(px_prop(w)),
         h: None,
+        layout_item: Default::default(),
         align: Some("start".to_owned()),
         v_align: None,
         direction: None,

@@ -252,7 +252,7 @@ fn override_unknown_property_is_error() {
     let is_error = report
         .diagnostics
         .iter()
-        .any(|d| d.code == "variant.override_unknown_property" && d.severity == Severity::Error);
+        .any(|d| d.code == "variant.override_unknown_property" && d.is_error());
     assert!(
         is_error,
         "variant.override_unknown_property must be Error severity; got {:?}",

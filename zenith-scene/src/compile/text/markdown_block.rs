@@ -42,8 +42,10 @@ use crate::ir::{Color, Paint, SceneCommand};
 
 use super::super::RenderCtx;
 use super::super::util::{resolve_geometry_px, resolve_property_dimension_px};
-use super::ctx::{TextCompileEnv, empty_md_blocks};
+use super::ctx::{ShapeEnv, TextCompileEnv, empty_md_blocks};
+use super::ink::{BlockOverflow, block_overflow, ink_bounds};
 use super::measure::font_size_px;
+use super::overflow_mode::{ClipBox, TextOverflow, clip_commands_since, fmt_px};
 use super::shape::CODE_MONO_FAMILY;
 use super::text_node::compile_text_sized;
 
@@ -408,6 +410,8 @@ pub(in crate::compile) fn compile_markdown_blocks(
     // Absolute origin of the block stack (group translation handled by the synth
     // compile via `ctx`, so the synth node geometry stays in authored space).
     let mut y_cursor = box_y;
+    // First command of the block stack (the overflow clip wraps from here).
+    let stack_start = commands.len();
 
     for (i, block) in blocks.iter().enumerate() {
         let role = block_role(block);
@@ -503,31 +507,102 @@ pub(in crate::compile) fn compile_markdown_blocks(
     // Total consumed height (matches `compile_text_sized`'s f64 height return).
     let total_height = (y_cursor - box_y).max(0.0);
 
-    // ── Overflow warning ─────────────────────────────────────────────────────
-    // When the stacked blocks are taller than the declared box, emit a warning
-    // so the author knows to enlarge the box, reduce sizing, or chain a
-    // continuation box. This fires regardless of the node's `overflow` value
-    // (including `overflow="visible"`) — the markdown path always warns on
-    // excess height. When `h` is absent there is no box constraint to check.
-    if let Some(box_h) = resolve_geometry_px(text.h.as_ref(), env.resolved) {
-        const EPSILON: f64 = 0.5;
-        if total_height > box_h + EPSILON {
-            let delta = total_height - box_h;
-            diagnostics.push(Diagnostic::warning(
-                "text.overflow",
-                format!(
-                    "text '{}': markdown content ({:.0}px) exceeds the box height ({:.0}px) \
-                     by {:.0}px; enlarge the box height, reduce font-size/spacing, \
-                     or add a chained continuation box (chain=\"{}\") on another page",
-                    text.id, total_height, box_h, delta, text.id
-                ),
-                text.source_span,
-                Some(text.id.clone()),
-            ));
+    // ── Overflow ─────────────────────────────────────────────────────────────
+    // When the stacked blocks' ink leaves the declared box, the node's
+    // `overflow` mode applies: `clip` (the default) clips the stack at the box
+    // edge and warns, `visible` paints past the box silently, `fit`/`autofit`
+    // raise `text.fit_failed` (markdown blocks keep their sizes, so autofit
+    // cannot shrink them). When `h` is absent there is no box to overflow.
+    let shape = ShapeEnv {
+        engine: env.engine,
+        fonts: env.fonts,
+    };
+    if let Some(box_h) = resolve_geometry_px(text.h.as_ref(), env.resolved)
+        && let Some(o) = block_overflow(
+            commands
+                .get(stack_start..)
+                .and_then(|stack| ink_bounds(stack, shape)),
+            box_y + ctx.dy,
+            box_h,
+        )
+    {
+        let mode = TextOverflow::from_attr(text.overflow.as_deref());
+        let clip = match mode {
+            TextOverflow::Clip => box_w.map(|w| ClipBox {
+                x: box_x + ctx.dx,
+                y: box_y + ctx.dy,
+                w,
+                h: box_h,
+            }),
+            TextOverflow::Visible | TextOverflow::Fit | TextOverflow::Autofit => None,
+        };
+        if let Some(d) = markdown_overflow_diagnostic(text, mode, o, box_h, clip.is_some()) {
+            diagnostics.push(d);
         }
+        clip_commands_since(commands, stack_start, clip);
     }
 
     total_height
+}
+
+/// The overflow diagnostic for a markdown stack whose drawn ink leaves its
+/// `box_h` px box. `clipped` is `true` when the clip bracket was emitted (a
+/// `clip`-mode box with a width). `visible` yields no diagnostic.
+fn markdown_overflow_diagnostic(
+    text: &TextNode,
+    mode: TextOverflow,
+    o: BlockOverflow,
+    box_h: f64,
+    clipped: bool,
+) -> Option<Diagnostic> {
+    let tail = if o.below {
+        format!(
+            "markdown content needs {:.0}px height in a {}px box — set h=(px){:.0}, \
+             reduce block font-size/spacing, or add a continuation box with chain=\"{}\"",
+            o.need_h,
+            fmt_px(box_h),
+            o.need_h,
+            text.id
+        )
+    } else {
+        format!(
+            "markdown content rises {:.0}px above the top of a {}px box — set overflow=\"visible\"",
+            o.rise,
+            fmt_px(box_h)
+        )
+    };
+    let subject = Some(text.id.clone());
+    match mode {
+        TextOverflow::Visible => None,
+        TextOverflow::Clip => {
+            let what = if clipped {
+                "clipped at the box edge"
+            } else {
+                "overflows its box (no w to clip to)"
+            };
+            Some(Diagnostic::warning(
+                "text.overflow",
+                format!("text '{}': {what}: {tail}", text.id),
+                text.source_span,
+                subject,
+            ))
+        }
+        TextOverflow::Fit => Some(Diagnostic::error(
+            "text.fit_failed",
+            format!("text '{}': overflow=\"fit\" failed: {tail}", text.id),
+            text.source_span,
+            subject,
+        )),
+        TextOverflow::Autofit => Some(Diagnostic::error(
+            "text.fit_failed",
+            format!(
+                "text '{}': overflow=\"autofit\" failed (markdown blocks keep their sizes): {tail}",
+                text.id
+            ),
+            text.source_span,
+            subject,
+        )),
+    }
 }
 
 /// A plain literal span carrying `text` and no styling.
