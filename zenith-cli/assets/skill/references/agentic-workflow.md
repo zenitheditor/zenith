@@ -1,143 +1,86 @@
-# Agentic visual workflow
+# Agentic workflow — candidates, history, MCP
 
-Take a vague brief to a finished, auditable design without polluting the final file.
+Takes a vague brief to a finished, auditable design. The `.zen` holds only final content.
 
-The `.zen` holds ONLY final content. Process state — scratch candidates, their lifecycle, history
-— lives in the app-managed store keyed by the document's `doc-id`, reachable through the
-`zenith workspace` commands. You never hand-edit it.
-
-> Op fields: `zenith schema op <name>`, `zenith tx --help`.
-> Attributes: `zenith schema node <kind>` / `zenith schema page`.
-> Store commands: `zenith workspace --help`.
+Process state (candidates, lifecycle, history) lives in the workspace store, keyed by `doc-id`. Never hand-edit it. Flags: `zenith workspace --help`.
 
 ## 1. Plan for addressability
 
-Start a fresh document with `zenith new doc.zen --name "…"` (a minimal valid scaffold with a
-`doc-id`), adding `--theme <name>` when no project brand exists (`references/themes.md`), or open
-any existing `.zen` — identity and the workspace store attach transparently on the first edit, so
-`zenith workspace scratch new` works immediately with no prior `tx`. Keep the brief out of the
-deliverable page: a short `note` / `role="guide"` node is fine for intent; process state (scratch
-candidates, lifecycle) lives only in the workspace store — never hand-edit it into the `.zen`.
+- Start with `zenith new <doc> --theme <name>`. Identity and the store attach on the first edit.
+- Give every node a stable `id`. Each edit is then one precise `tx` op.
+- Give each layer group a `semantic-role`, plus optional `layer-priority` / `intensity`.
+- Write acceptance criteria (e.g. title contrast `Lc` ≥ 60). Check them with `validate` and the render.
+- Keep the brief off the deliverable page. A short `role="guide"` note is fine.
 
-- Give every node a stable `id` so each edit is a precise transaction.
-- Give each layer group a `semantic-role` (+ optional `layer-priority`/`intensity`) so layers stay
-  addressable: `group id="bg.grunge" semantic-role="background" layer-priority=0`.
-- Write down acceptance criteria (e.g. "title contrast ≥ Lc 60 APCA") and check them with
-  `zenith validate` and the render — these are your gate, not decoration.
+## 2. Generate candidates
 
-## 2. Generate candidates from one plan
+Edit the document to one take. Then snapshot it with `zenith workspace scratch new <doc>`.
 
-Edit the document to a take, then snapshot it into the store as a scratch candidate. Each
-candidate is a content-addressed `.zen` snapshot — it never lives in the deliverable.
+- `--page <id>` limits the snapshot to one page (default `*`).
+- `--status`, `--notes`, `--workspace-role`, `--cleanup-policy`, `--promotion-target` record intent.
+- Keep all takes on the same tokens. A palette change is then one edit.
 
-```bash
-zenith workspace scratch new doc.zen --page page.hero --status draft \
-  --notes "take A: dark, product-forward" --workspace-role scratch --cleanup-policy delete
-```
+## 3. Check each take
 
-- `--page <id>` is the page this candidate captures (default `*` = whole document).
-- Repeat for each take. `--promotion-target` records where it is meant to land.
-- Keep all takes on the same tokens so a palette change is one edit.
+1. `zenith validate <doc> --json`. With no Errors this also reports overflow, contrast, and lint.
+2. `zenith fix <doc> --apply` for machine-fixable diagnostics.
+3. `zenith render <doc> --contact-sheet <png> --scale 0.5 --json`. Open the PNG.
+4. Revise nodes by id with `tx`. Re-snapshot.
 
-## 3. Render-preview and self-critique
+Critique method: `references/design-critique.md`.
 
-```bash
-zenith validate doc.zen --json              # hard diagnostics must be empty
-zenith render doc.zen --all-pages preview/  # one PNG per page
-```
+## 4. Select and promote
 
-- Treat every Error as blocking.
-- Look at the PNGs: headline legible over the motif? product safe area clear? texture too noisy?
-  Revise nodes by id, re-snapshot.
-- For a structured, style-neutral critique (composition, balance, consistency, noise, semantic
-  accuracy) and how to turn `zenith inspect --json` geometry+role into alignment/spacing/consistency
-  verdicts, see `design-critique.md`.
+| Step | Command |
+| --- | --- |
+| List | `zenith workspace scratch list <doc>` |
+| Detail | `zenith workspace scratch show <doc> <cand>` |
+| Set status | `zenith workspace candidate <doc> <cand> selected` (or `rejected`) |
+| Promote | `zenith workspace promote <doc> <cand> --into <page-id>` |
+| Clean up | `zenith workspace finalize <doc>` |
 
-## 4. Review and set lifecycle
+- Only a `selected` candidate promotes.
+- Promote deep-copies the candidate page into the target page. Ids get a suffix (default `.promoted`, or `--id-suffix`).
+- Promote validates, writes in place, and records a version.
+- `finalize` removes candidates that are `rejected` with cleanup policy `delete`.
+- After promote, run `validate` and `render` on the deliverable.
 
-```bash
-zenith workspace scratch list doc.zen            # enumerate candidates (cand0, cand1, …)
-zenith workspace scratch show doc.zen cand0      # detail for one (add --json)
-zenith workspace candidate doc.zen cand0 selected   # or: rejected
-```
+## 5. History and portability
 
-Lifecycle is `draft → selected | rejected`. Only a `selected` candidate can be promoted.
+| Need | Command |
+| --- | --- |
+| Versions | `zenith history <doc>` |
+| Checkpoint | `zenith version <doc> "<name>"` |
+| Step back / forward | `zenith undo <doc>` · `zenith redo <doc>` |
+| Restore | `zenith restore <doc> <rev>` |
+| Capture a hand edit | `zenith sync <doc>` |
+| Move the store | `zenith workspace bundle <doc> --out <file>` · `zenith workspace unbundle <file>` |
 
-## 5. Promote the chosen candidate
+Name a checkpoint before risky steps such as promotion.
 
-```bash
-zenith workspace promote doc.zen cand0 --into page.export
-# keep cloned ids unique with a custom suffix:
-zenith workspace promote doc.zen cand0 --into page.export --id-suffix .v2
-```
+## 6. MCP
 
-Fetches the candidate's stored snapshot, deep-copies its source page into the target page
-(suffixing all ids, default `.promoted`), validates, writes the document back in place, and records
-the promote in version history. Then `validate` + `render` the deliverable.
+Prefer the CLI when it can run. Use `zenith mcp` for remote, CI, sandboxed, or hosted agents.
 
-## 6. Finalize and clean up
+- Every tool takes `doc` as a path or the 26-char `doc-id`.
+- Large and binary results come back as resource links. Read them with `resources/read`.
+- Transport is stdio. `zenith mcp --http <ADDR>` serves Streamable-HTTP (needs the `http` build feature).
+- History commands (`history`, `undo`, `redo`, `version`, `restore`, `sync`) are CLI-only.
 
-```bash
-zenith workspace finalize doc.zen            # add --json for a machine-readable report
-```
+| CLI | MCP tool |
+| --- | --- |
+| `schema` | `zenith_schema` |
+| `tx` | `zenith_tx` |
+| `validate` | `zenith_validate` |
+| `fix` | `zenith_fix` (`apply`) |
+| `render` | `zenith_render` (`scale`, `contact_sheet`) |
+| `inspect` / `tokens` / `fmt` / `fonts` | `zenith_inspect` / `zenith_tokens` / `zenith_fmt` / `zenith_fonts` |
+| `workspace scratch` / `candidate` / `promote` | `zenith_workspace_scratch` / `zenith_workspace_candidate` / `zenith_workspace_promote` |
+| `workspace finalize` / `bundle` / `unbundle` | `zenith_workspace_finalize` |
+| `merge` / `theme new` | `zenith_merge` / `zenith_theme_new` |
 
-Removes candidates with `status = rejected` and `cleanup-policy = delete` from the scratch index
-(snapshot objects are left for a future GC pass); all other candidates are preserved. Then check
-`zenith tokens doc.zen` for unused-token advisories; final source must validate + render clean.
+## Not implemented
 
-## 7. History and portability
-
-```bash
-zenith history doc.zen                      # list versions
-zenith version doc.zen "v1-pre-promote"     # name a checkpoint
-zenith undo doc.zen  /  zenith redo doc.zen
-zenith restore doc.zen <rev>                # <rev> grammar: zenith restore --help
-zenith sync doc.zen                         # capture an external/hand edit
-zenith workspace bundle doc.zen --out doc.zenithbundle   # pack the whole store (history + scratch)
-zenith workspace unbundle doc.zenithbundle               # restore it on another machine/clone
-```
-
-Name a checkpoint before risky steps (e.g. promotion). The `doc-id` in the `.zen` is the key that
-reattaches a bundle to its file.
-
-## 8. Later semantic edits
-
-Stable ids + tokens + `semantic-role` groups make edits precise transactions:
-
-- "Reduce the grunge" → `set_opacity` on `bg.grunge`.
-- "Stronger glow" → update the shadow token it references.
-- "Remove honeycomb near the headline" → delete/clip nodes in `bg.honeycomb`.
-
-## Running this loop over MCP (when the CLI isn't available)
-
-Prefer the `zenith` CLI whenever your environment can run it — it is the primary, fastest surface.
-When a local binary is not suitable (remote, CI, sandboxed, hosted agents), the same loop runs over
-the **`zenith mcp`** server, which exposes the command surface as MCP tools. It is a first-class
-surface, not a thin wrapper: results are trimmed structured JSON, schema detail is fetched on demand,
-and large/binary artifacts come back as **resource links** (read them with `resources/read`).
-
-Every tool takes a `doc` argument that is either a path **or** the 26-char `doc-id` — so after the
-first call (which attaches identity) you can address the document by id and stop passing paths.
-
-| CLI step                                            | MCP tool                                                                 |
-| --------------------------------------------------- | ------------------------------------------------------------------------ |
-| `zenith schema node/op …` (learn syntax on demand)  | `zenith_schema` `{surface, name}`                                        |
-| `zenith tx` (typed edit, dry-run by default)        | `zenith_tx` `{doc, transaction, apply?, diff?}`                          |
-| `zenith validate`                                   | `zenith_validate` `{doc, severity?}` → `{valid, error_count, …}`         |
-| `zenith render`                                     | `zenith_render` `{doc, format}` → a resource link (never raw bytes)      |
-| `zenith inspect` / `tokens` / `fmt`                 | `zenith_inspect` / `zenith_tokens` / `zenith_fmt`                        |
-| `zenith workspace scratch new/list/show`            | `zenith_workspace_scratch` `{doc, op:"new"\|"list"\|"show", …}`          |
-| `zenith workspace candidate`                        | `zenith_workspace_candidate` `{doc, candidate_id, status}`               |
-| `zenith workspace promote`                          | `zenith_workspace_promote` `{doc, candidate_id, target_page}`            |
-| `zenith workspace finalize` / `bundle` / `unbundle` | `zenith_workspace_finalize` `{doc, op:"finalize"\|"bundle"\|"unbundle"}` |
-| `zenith merge` / `theme new`                        | `zenith_merge` / `zenith_theme_new`                                      |
-
-Transport: stdio by default; `zenith mcp --http <ADDR>` serves native Streamable-HTTP (binary built
-with the `http` feature). History navigation (`history`/`undo`/`redo`/`version`/`restore`/`sync`) is
-CLI-only for now — use the CLI when you need it.
-
-## Not implemented (don't assume these)
-
-Brush/stamp definitions; an automated critique report (self-critique by reading the render, step 3);
-recording an agent-run/preview log via the CLI (the store has the schema, but no command writes to
-it yet).
+- Brush and stamp definitions.
+- An automated critique report. Critique by reading the render.
+- A command that writes agent-run or preview logs.

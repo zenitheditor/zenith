@@ -140,7 +140,7 @@ zenith validate doc.zen --json            # confirm no hard diagnostics
 ```
 
 After detaching, each instance node is individually editable (`set_fill`, `set_geometry`,
-`delete_node`, etc.). The `recipes` provenance block is the right place to record what seed and
+`remove_node`, etc.). The `recipes` provenance block is the right place to record what seed and
 params drove the original pattern if you want to reproduce it later.
 
 ### Error codes

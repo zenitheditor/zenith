@@ -11,8 +11,7 @@ Validate the Zenith document at: **$ARGUMENTS** (if empty, find the relevant `.z
 Run `zenith validate <file> --json` and report:
 
 - Pass/fail and the count of Error / Warning / Advisory diagnostics.
-- For each hard (Error) diagnostic: the code, the offending node id, and a concrete fix.
+- For each Error: the code, the node id, and a concrete fix.
+- Which diagnostics `zenith fix <file>` (dry-run) resolves.
 
-Treat every Error as blocking. If asked, apply the fixes at the source (tokenize literals, fix
-overflow/contrast, resolve missing assets/tokens), then re-validate. Do not finalize while hard
-diagnostics remain.
+Every Error blocks. If asked to fix, run `zenith fix <file> --apply`, fix the rest at the source, then re-validate.

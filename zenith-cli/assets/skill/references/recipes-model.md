@@ -52,10 +52,10 @@ it to see which recipes a document declares and which nodes each expanded into.
 
 Manage recipes with typed `tx` ops (dry-run by default; `--apply` to write):
 
-- `CreateRecipe` — `{ id, kind, seed?, generator?, bounds?, detached? }`
-- `UpdateRecipe` — change scalar fields; `params`/`palette`/`expanded` are preserved. Re-parameterize
-  by updating `seed`/`generator`/params, then regenerate. **Detach** = `UpdateRecipe { detached: true }`.
-- `DeleteRecipe` — remove the record.
+- `create_recipe` creates a record. Fields: `zenith schema op create_recipe`.
+- `update_recipe` replaces scalar fields. It keeps `params`, `palette`, and `expanded`.
+- Detach a recipe with `update_recipe` and `"detached": true`.
+- `delete_recipe` removes the record.
 
 Errors mirror token ops: `tx.duplicate_id`, `tx.unknown_recipe`.
 

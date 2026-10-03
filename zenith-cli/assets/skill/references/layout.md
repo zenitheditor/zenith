@@ -1,135 +1,74 @@
-# Layout — pages, anchors, frames, spreads
+# Layout — auto-layout, anchors, frames, pages
 
-> For the full attribute list and types for any node kind, run `zenith schema node <kind>` (e.g.
-> `zenith schema node page`, `zenith schema node frame`). This reference covers the semantic
-> rules, anchor precedence, and gotchas that the schema does not convey.
+Attributes and types: `zenith schema node frame`, `zenith schema page`. This file covers choice and gotchas.
 
-## Pages
+## Pick the placement tool
 
-```kdl
-document id="doc.social" title="Social" {
-  page id="page.sq" w=(px)1080 h=(px)1080 background=(token)"color.bg" {
-    # nodes…
-  }
-}
-```
+| Content | Tool |
+| --- | --- |
+| Stack, row, list, card, chip, button row, tile grid | layout `frame` |
+| Logo, CTA, page number, badge pinned to an edge | `anchor` |
+| Top-level block on the page | `x`/`y` on the outer frame, or `anchor` |
+| Free decoration (glow, blob, motif) | `x`/`y` plus `role="decoration"` |
 
-- `w` / `h` set the canvas in px; `background` takes a color **or** gradient token.
-- A document can hold multiple pages (deck slides, book pages, size variants). Render one with
-  `--page N`, all with `--all-pages <dir>`, or a facing-page `--spread A-B`.
+Never compute sibling coordinates by hand where a layout frame fits. Hand math drifts 1-3 px and breaks on copy edits.
 
-## Coordinates vs anchors
+## Layout frames
 
-Nodes take explicit `x y w h`. Instead of hand-computing position, set `anchor` to a nine-point
-name and let it resolve to deterministic geometry (identical bytes to the hand-placed version).
-An explicitly-authored `x` or `y` always wins over the anchor-derived value **per axis**, and the
-node's `w`/`h` must be present (px) for derivation.
+`frame layout="row|column|grid"` places and sizes its children.
 
-Nine-point names:
-`top-left top-center top-right center-left center center-right bottom-left bottom-center bottom-right`.
+- **Container** — `gap`, `padding*`, `justify`, `align`, `wrap=#true` + `wrap-gap`. Grid takes `columns` / `rows`.
+- **Child size** — per axis: fixed, `"hug"` (content), or `"fill"` (share of free space). `min-*` / `max-*` clamp it.
+- **Omitted size** — main axis hugs. Cross axis fills under `align="stretch"`.
+- **Frame size** — a layout frame without `w`/`h` hugs its children. Give the outer frame a `w` so text wraps.
+- **Text** — omit `h` on text inside a layout frame. The compile measures it.
+- **Out of flow** — `position="absolute"` places a child by `x`/`y` from the frame's top-left.
+- **Clipping** — row and column frames clip only with `clip=#true`. `layout="absolute"` (default) clips.
+- **Anchored layout frame** — measures first, then anchors at its measured size.
 
-```kdl
-rect id="logo" w=(px)160 h=(px)60 fill=(token)"color.brand" anchor="top-left"
-text id="cta"  w=(px)300 h=(px)80  anchor="bottom-right" font-size=(token)"size.body" { span "Buy now" }
-```
+A card is a column frame. A chip row is a wrapping row frame of `w="hug"` row frames.
 
-### Reference frame: page, safe-zone, parent, or sibling
+Editing:
 
-The nine-point name says *which corner*; a second attribute chooses *what it's relative to*.
-Default is the page. Precedence when more than one is present: **zone > sibling > parent > page**.
+- `set_layout` sets or clears container and child fields (`zenith schema op set_layout`).
+- `tx` rejects `x`/`y` on an in-flow child with `tx.layout_managed`.
+- To move an in-flow child, reorder it. Or set `position="absolute"` plus `x`/`y` in one tx.
+- `zenith inspect <file> --json` reports each node's final `box` after layout and anchors.
+- `inspect` adds `rotate` and the painted `bounds` when they differ from `box`.
 
-- **Page** (default) — `anchor="bottom-right"` → relative to the page box.
-- **Safe-zone** — declare a `safe-zone` in the page, then anchor into it:
-  ```kdl
-  page id="page.main" w=(px)1080 h=(px)1080 {
-    safe-zone id="sz.body" type="required" x=(px)80 y=(px)80 w=(px)920 h=(px)920
-    text id="cta" w=(px)300 h=(px)80 anchor="bottom-right" anchor-zone="sz.body" { span "Buy now" }
-  }
-  ```
-  Keeps content off the bleed/margins — anchor relative to the safe area, not the page edge.
-  **Decorative chrome** (1–8px brand bars flush to the page edge) may emit
-  `safe_zone.violation` while copy stays inside the zone — that advisory is expected; do not
-  move the CTA out of the safe area to silence it. Suppress only when intentional
-  (`diagnostics { allow "safe_zone.violation" }` or CLI `--allow`).
-- **Parent container** — `anchor-parent=#true` anchors within the node's direct `frame`/`group`
-  box instead of the page (e.g. a label pinned to the corner of its card).
-- **Sibling** — `anchor-sibling="<id>"` anchors relative to a sibling node's box in the same
-  container (e.g. a badge clinging to the top-right of a logo). The sibling must be an
-  anchor-bearing node with known `w`/`h`; cycles are rejected (`anchor.cycle`).
+## Anchors
 
-All four resolve to explicit, deterministic geometry at compile time (absent anchor = byte-identical
-to hand-placed coords). Use them for logos, page numbers, captions, badges, and CTAs so they stay
-correctly placed across size variants (see `references/variants.md`).
+`anchor` takes a nine-point name: `top-left` … `bottom-right`. It resolves to plain geometry at compile time.
 
-### Adjacent-edge placement (`anchor-edge`, `anchor-gap`)
+- Explicit `x` or `y` wins over the anchor per axis.
+- Without a layout frame, the node needs `w`/`h` in px.
+- Reference box precedence: `anchor-zone` > `anchor-sibling` > `anchor-parent=#true` > page.
+- `anchor-zone="<id>"` anchors inside a page `safe-zone`. Keep copy and CTAs there.
+- `anchor-sibling="<id>"` anchors to a sibling's box. Cycles error with `anchor.cycle`.
 
-When you want a node placed **outside** a sibling — stacked above, below, before (left), or after
-(right) — add `anchor-edge` alongside `anchor-sibling`. Unlike the nine-point `anchor` (which
-positions a node *inside* the sibling's box), `anchor-edge` places the node flush against the
-named edge:
+`anchor-edge` with `anchor-sibling` places the node outside the sibling, `anchor-gap` px away:
 
-| `anchor-edge` | Main-axis position | Cross-axis default |
-|---|---|---|
-| `below` | `sib_y + sib_h + gap` | left-aligned with sibling (`sib_x`) |
-| `above` | `sib_y − gap − node_h` | left-aligned with sibling (`sib_x`) |
-| `after` | `sib_x + sib_w + gap` | top-aligned with sibling (`sib_y`) |
-| `before` | `sib_x − gap − node_w` | top-aligned with sibling (`sib_y`) |
+| `anchor-edge` | Position | Cross-axis default |
+| --- | --- | --- |
+| `below` / `above` | under / over the sibling | left edge. The `anchor` horizontal part overrides it. |
+| `after` / `before` | right / left of the sibling | top edge. The `anchor` vertical part overrides it. |
 
-`anchor-gap=(px)N` inserts a pixel gap between the sibling's edge and the node (default 0).
+Thin brand bars flush to the page edge emit `safe_zone.violation`. That advisory is expected for chrome. Do not move copy out of the safe zone to clear it.
 
-**Cross-axis alignment** is controlled by the nine-point `anchor` value — only the relevant
-component is used:
+## Frames and groups
 
-- For `above`/`below`: the *horizontal* component (`top-left`/`top-center`/`top-right` etc.)
-  left-, center-, or right-aligns the node relative to the sibling's width.
-- For `before`/`after`: the *vertical* component top-, center-, or bottom-aligns relative to the
-  sibling's height.
-- When `anchor` is absent, the cross-axis defaults to the leading edge (left for `above`/`below`;
-  top for `before`/`after`).
+- `frame` with the default `layout="absolute"` clips its children. Use it for image windows.
+- `group` bundles nodes without clipping. A motif then moves, dims, or deletes in one op.
+- Opacity and transforms cascade through groups and frames.
+- `protected-region` children of a group mark text-free areas. They do not render.
+- `line` draws rules and dividers.
 
-When `anchor-edge` is present, `anchor` and explicit `x`/`y` are both optional — `anchor-edge`
-derives the full position without them. Explicit `x` or `y` still win per-axis over any
-anchor-derived value.
+## Pages and sizes
 
-```kdl
-// Stack a caption card directly below a title, centered, with an 8 px gap.
-text id="title" x=(px)40 y=(px)30 w=(px)320 h=(px)48 font-size=(token)"size.heading" { span "Launch" }
-rect id="card" anchor-sibling="title" anchor-edge="below" anchor-gap=(px)8 anchor="top-center"
-     w=(px)240 h=(px)120 fill=(token)"color.card" radius=(token)"size.radius"
-```
+- A document holds many pages. Render one with `--page N`, or all with `--contact-sheet`.
+- One design at many sizes: a `variants` block plus `zenith variant` (`references/variants.md`).
+- Anchored nodes reflow per size. Free-coordinate decoration needs per-variant overrides.
 
-**Diagnostics:**
+## Check
 
-- `anchor.edge_without_sibling` (Warning) — `anchor-edge` is set but `anchor-sibling` is absent;
-  the placement has no effect.
-- `anchor.unknown_edge` (Error) — the `anchor-edge` value is not one of `above below before after`.
-- `anchor.gap_invalid_unit` (Warning) — `anchor-gap` unit cannot be resolved to px.
-
-## Frames (clipping) and groups
-
-- `frame id x y w h { … }` clips its children to its box — use it for image windows, cards,
-  and any "nothing escapes this region" layout. Run `zenith schema node frame` for attributes.
-- `group id { … }` bundles nodes logically (no clip) so a whole motif moves/dims/deletes as a
-  unit. Opacity and transforms cascade through groups/frames. Run `zenith schema node group`.
-- A group may declare `protected-region id x y w h` children — advisory, non-rendering text-safe
-  rectangles (the group-level analogue of a page `safe-zone`). They emit nothing; agents/external
-  tools consult them to avoid placing text over reserved areas (UI chrome, logos). Optional `label`.
-
-## Dividers and rules
-
-`line x1 y1 x2 y2 stroke=(token) stroke-width=(token)` for separators/rules.
-Run `zenith schema node line` for the full attribute list.
-
-## Multi-size variants
-
-For square/story/banner from one design, **declare a `variants` block and run `zenith variant`**
-— a deterministic regeneration model (see `references/variants.md`). It
-expands one canonical page into N named target sizes, with per-variant `override`s and automatic
-token propagation. Anchored nodes reflow to each size; reposition free-coordinate decorative nodes
-via overrides. (This is size/format variation — for varying *content* across data rows, that's
-`zenith merge`; see `references/variants.md`.)
-
-## Always verify
-
-Anchors, frames, and clipping interact; render (`--all-pages` for a contact sheet) and look
-before finalizing, and `zenith validate` to catch off-canvas / overflow.
+Run `zenith validate <file> --json` for overflow and off-canvas nodes. Then render `--contact-sheet <png> --scale 0.5` and look.

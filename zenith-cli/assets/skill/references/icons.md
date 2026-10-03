@@ -1,169 +1,76 @@
 # Icons
 
-Zenith embeds the full Lucide set (~1745 icons) as `@zenith/icons-lucide`. Icons
-materialize as **editable native `path` nodes** — not images — so they take tokens,
-overrides, and transactions like any other geometry.
+`@zenith/icons-lucide` embeds the Lucide set (~1745 icons). An icon materializes as editable native `path` nodes inside an `instance`. Attributes: `zenith schema node instance`.
 
-For which document kinds should pull icons (architecture, feature lists, etc.), see
-`references/by-kind.md`. Other packs: `@zenith/flowchart`, `@zenith/filters`, `@zenith/masks`
-via `zenith library list`.
+## Find the icon
 
-This file is judgment and recipes. For attributes and valid values, ask the CLI:
-`zenith schema node instance`, `zenith schema node text`. For which icons exist:
-`zenith library search`.
+- Search, never guess: `zenith library search <term>` (`--category`, `--kind`, `--limit`).
+- Names differ from other sets: `sync` is `refresh-cw`, `home` is `house`.
+- Ranking: name match beats alias match beats tag match. The top hit is usually right.
+- Every query term must match. An empty two-word result means one word is wrong.
+- Detail and path count: `zenith library show @zenith/icons-lucide#<name>`.
+- No sensible hit after two tries means the concept is abstract. Use text.
 
-## Find the icon — never guess, never enumerate
+## When to use an icon
 
-Assume the icon exists and search for it. Do not hard-code icon-name lists; do not
-assume a name from another icon set (`sync` is `refresh-cw` here; `home` is `house`).
+Use an icon for a concrete thing: device, cloud, server, database, file, lock, user, action.
 
-```bash
-zenith library search sync                          # → refresh-cw (matched on its alias)
-zenith library search arrow --category navigation   # narrow by category
-zenith library search cloud --kind component --limit 5
-zenith library show @zenith/icons-lucide#lock-keyhole
-```
+Skip the icon when:
 
-Search is **ranked**: an icon *named* for your query beats one *aliased* to it, which
-beats one merely *tagged* with it. The top hit is usually right. Every query term must
-match, so a two-word query that returns nothing means one of the words is wrong.
+- The concept is abstract ("synergy", "Q3"). An arbitrary icon asserts a false meaning.
+- The item is a paragraph. Icons pair with short phrases.
+- The region already holds about 7 varied icons. More become texture.
 
-If nothing sensible matches after a couple of tries, that is a signal the concept is
-abstract — **use text, not a decorative icon**.
+## Lists
 
-## Use an icon where a real thing is being named
+Give each row naming a distinct thing its own icon. Use a plain bullet instead when:
 
-Use icons for concrete referents: devices, clouds, servers, databases, files, folders,
-locks, keys, networks, users, actions (search, settings, upload). Do not draw a generic
-labeled box when the thing itself has an icon.
+- The same icon repeats down every row.
+- Items run longer than one line.
+- Order matters. Use `format="markdown"` with `1.`.
+- No one-word icon fits the item.
 
-Do **not** reach for an icon when:
+Mixed lists are fine. Keep the label edges aligned (a column frame does this).
 
-- The concept is abstract and the icon would be arbitrary decoration ("synergy", "Q3",
-  "strategy"). An arbitrary icon is worse than none: it asserts a meaning that isn't there.
-- The item is a paragraph rather than a label. Icons pair with short phrases; beside a
-  three-line block they read as bullets pretending to be meaningful.
-- The design is dense with icons already. Past roughly 7 varied icons in one region,
-  they stop being landmarks and become texture.
+## After `library add`
 
-## Lists: icons by default, bullets on purpose
+`library add` places the instance on a page at `--at X,Y`. Then:
 
-A list of items that each name a **distinct thing or capability** should carry an icon
-per row — the icon is the fastest way to scan it. Reach for a plain bullet deliberately,
-not by default.
+1. **Move** — `reparent` it into a layout frame, or keep it absolute.
+2. **Size** — `set_geometry` with `w`/`h` (raw px). Without them it draws at 24 px.
+3. **Recolor** — before the first render on dark themes (below).
 
-Use a **plain bullet** (`text bullet="•" bullet-gap=(px)12`, or `format="markdown"` with
-`- item`) when:
+`rotate` does not apply to instances.
 
-- **The same icon would repeat down every row.** A repeated icon is a bullet in costume;
-  use a real bullet. Icons must differentiate rows, or they carry no information.
-- **Items are long or prose-like** — more than about one line each.
-- **The list is ordered or sequential** — use numbers (`format="markdown"` with `1.`),
-  because an icon cannot express position.
-- **You cannot name the icon in one word tied to that item.** If choosing it takes
-  argument, the reader will not decode it either.
+## Icon rows
 
-Mixed lists are fine: give icons to the rows that have real referents and leave the rest
-plain — but keep the left edge of the labels aligned across all rows.
+- Put the icon and its label in a row frame with `align="center"` and a `gap`.
+- Size the icon near the label's line height (e.g. 20 px for 16 px text).
+- `fit` defaults to `contain`.
+- A list of icon rows is a column frame of those row frames.
 
-## After `library add` — size + recolor before first render
+## Recolor
 
-```bash
-zenith library add @zenith/icons-lucide#database --into doc.zen --page page.1 --at 120,200 --id icon.db
-zenith library show @zenith/icons-lucide#database   # path count for overrides
-```
+Lucide strokes default to `lib.icons.stroke` ≈ `#111827`. That is invisible on `pine`, `ember`, `harbor`, and `sunset`.
 
-### Resize the instance (`set_geometry` or source)
+| Path | When | How |
+| --- | --- | --- |
+| Shared token | One ink for every icon | `update_token_value` on `lib.icons.stroke` |
+| Per path | Multi-color or per-icon ink | `override` every path `icon.0` … `icon.N-1` with a color token |
 
-`library add --at X,Y` places the instance; it does **not** set a display box. Prefer tx:
+## Gotchas
 
-```json
-{"ops":[{"op":"set_geometry","node":"icon.db","x":120,"y":200,"w":40,"h":48}]}
-```
+- **Every path** — `N` varies (`zap` 1, `lock-keyhole` 3, some 10+). A partial override validates clean and looks broken.
+- **Stroke scales with the box** — a 2 px stroke becomes 8 px at 96 px. Override `stroke-width` per path.
+- **Tokens vs px** — stroke and fill take tokens. Instance `w`/`h` take raw px.
 
-Or edit the node in the `.zen` with **raw px** `w`/`h`:
+## Your own icon set
 
-```kdl
-instance id="icon.db" component="lib.zenith.icons-lucide.database" \
-    x=(px)120 y=(px)200 w=(px)40 h=(px)40 { … }
-```
+- A directory of `*.svg` under `<project>/libraries/<name>/` is a pack. Each file is one icon.
+- Address an icon as `@local/<name>#<stem>`.
+- An optional `library.kdl` declares `id`, `version`, `license`, and per-icon `aliases`, `tags`, `categories`.
+- `zenith library list <project>` and `zenith library search <term> <project>` include it.
 
-Geometry stays raw px (not `(token)"size.icon"`). Visuals (stroke/fill) stay tokens.
-Without `w`/`h` the icon draws at natural ~24px. `rotate` is not supported on instances.
+## Look
 
-### Dark themes: default stroke is near-black
-
-Lucide ships `lib.icons.stroke` ≈ `#111827`. On dark themes (`pine`, `ember`, `harbor`,
-`sunset`, …) that is **invisible** until you recolor. Do this **before** the first PNG:
-
-**Fast path (most Lucide icons share one stroke token):**
-
-```bash
-# after add, tokens include lib.icons.stroke — point it at a theme role
-zenith tx doc.zen recolor.json --apply
-# {"ops":[{"op":"update_token_value","id":"lib.icons.stroke","value":"#00d390"}]}
-# use a theme hex from `zenith tokens` (e.g. color.primary's value), or add a color token
-# and override paths to (token)"color.primary" instead.
-```
-
-**Explicit path (always correct when you need multi-color or per-icon ink):** override
-**every** path `icon.0 … icon.N-1` to `(token)"color.primary"` (or accent). Get `N` from
-`library show`. Multi-path icons left half-default look "broken" but still validate clean.
-
-## The icon-row recipe
-
-Icons are 24×24 at natural size. Give the instance a `w`/`h` box and it scales into it;
-`fit` defaults to `contain` (uniform, centered). Without `w`/`h` it renders at 24px.
-
-An icon reads best at roughly the text's line height, with the label's left edge on a
-consistent gutter. This renders correctly (16px text on a 28px line, 20px icon, 12px gap):
-
-```kdl
-instance id="row.icon" component="lib.zenith.icons-lucide.shield-check" \
-    x=(px)40 y=(px)44 w=(px)20 h=(px)20 {
-  override ref="icon.0" stroke=(token)"color.accent"
-  override ref="icon.1" stroke=(token)"color.accent"
-}
-text id="row.label" x=(px)72 y=(px)40 w=(px)400 h=(px)28 \
-    font-size=(token)"size.body" fill=(token)"color.fg" { span "Signed, reproducible builds" }
-```
-
-Vertically center the icon against the text box: `icon.y = text.y + (line_height - icon_h) / 2`.
-
-## Three gotchas that will bite you
-
-1. **Recoloring means overriding EVERY path** (or updating the shared `lib.icons.stroke`
-   token when every path already references it). An icon is `icon.0 … icon.N-1`, and `N`
-   varies: `zap` has 1 path, `lock-keyhole` has 3, some icons have 10+. Partial overrides
-   render, validate clean, and look broken. Get the count from:
-
-   ```bash
-   zenith library show @zenith/icons-lucide#lock-keyhole   # → nodes : path(3)
-   ```
-
-2. **`stroke-width` scales with the box.** A 2px stroke in a 24px icon becomes 8px at
-   96px. Blow an icon up and it turns into a fat cartoon. Override `stroke-width` on each
-   path to hold the optical weight you want.
-
-3. **Visual properties must be tokens; instance geometry is raw px.** `font-size=(px)16` is
-   an Error (`token.raw_visual_literal`). Color/stroke use `(token)"…"`. Instance `w`/`h`
-   stay `(px)N` — do not expect a size token on the instance box.
-
-## Bring your own icon set
-
-A directory of `*.svg` under `<project>/libraries/<name>/` is a pack — nothing to author.
-Each file is one icon, id = file stem, addressed `@local/<name>#<stem>`, converted to
-native paths on demand exactly like the bundled set. Add an optional `library.kdl` beside
-the icons to declare `id`/`version`/`license` and per-icon `aliases`, `tags`, and
-`categories` so search can find them by more than filename.
-
-```bash
-zenith library list <project>              # your set appears alongside the presets
-zenith library search rocket <project>
-```
-
-## Always look
-
-Icons are the easiest thing to get subtly wrong — misaligned by 2px, one path left
-unrecolored, an icon whose meaning does not survive contact with its label. Render the
-page and **open the PNG**. A clean `zenith validate` cannot see any of it.
+Validate cannot see a 2 px misalignment, an unrecolored path, or a misleading icon. Open the PNG.

@@ -1,110 +1,94 @@
-# Diagnostic policy
+# Diagnostics — fix loop, lint, policy
 
-Controls which diagnostic codes are reported, suppressed, or elevated — without changing
-rendered pixels. Integrity Errors (structural corruption, referential failures) are immutable;
-policy cannot suppress them.
+Codes, severities, and summaries: `zenith schema diagnostics`. The full catalog with Errors: add `--json`.
 
-Discover all governable codes with:
+## Where diagnostics come from
 
-```bash
-zenith schema diagnostics
-```
+- `zenith validate <file> --json` checks the source.
+- With no Errors, `validate` also compiles every page. That adds overflow, contrast, and lint.
+- `zenith render <file> … --json` always prints JSON with every diagnostic.
+- `render` `status` is `ok` or `blocked`. Blocked means Errors remain and nothing is written.
+- One `validate --json` round shows everything. Never render to discover problems.
 
-## Policy sources (highest precedence wins)
+## `zenith fix`
 
-1. **CLI flags** — `--allow`, `--warn`, `--deny` on `validate` and `render` (repeatable)
-2. **In-file block** — `diagnostics { … }` at the document root
-3. **Local config** — `./.zenith.kdl` (walked up from the document directory)
-4. **Global config** — `~/.config/zenith/config.kdl`
+`zenith fix <file>` previews fixes and a source diff. `--apply` writes. Fix table: `zenith fix --help`.
 
-When the same code appears in more than one source, the highest-precedence source wins.
+- A machine-fixable diagnostic carries a structured `fix` object in `validate --json`.
+- Raw visual literals become the same-value token, else a minted one (`color.custom.<hex>`, `size.<n>`, …).
+- Re-point a minted color to a theme role when one fits.
+- Typo'd property names, token ids, and enum values become their unique did-you-mean.
+- Compile-stage fixes apply too. `text.ink_overlap` moves the text's authored `y`.
+- The rest stays in `remaining`. Fix it by hand, then re-run `validate --json`.
 
-## In-file diagnostics block
+Author freely, then run `fix --apply` once. Never hand-tokenize literals one at a time.
 
-Placed at the document root, alongside `tokens` and `recipes`. It ships inside the `.zen` so
-it is visible, diffable, and auditable:
+## Text overflow
 
-```kdl
-diagnostics {
-  allow "token.unused"
-  deny  "font.local"
-  warn  "layout.off_canvas"
-}
-```
+Text `overflow` sets what happens when glyph ink leaves the box. The check measures ink, not line boxes.
 
-- `allow <code>` — suppress an advisory or warning; it is not reported.
-- `deny <code>` — elevate to a blocking Error (CI gate).
-- `warn <code>` — force to Warning even if the engine would normally emit an advisory.
+| `overflow` | Behavior |
+| --- | --- |
+| `clip` (default) | Clips at the box edge. Warns `text.overflow`. |
+| `visible` | Paints past the box. No diagnostic. |
+| `fit` | Keeps the size. Errors `text.fit_failed`. |
+| `autofit` | Shrinks within [`font-size-min`, `font-size`]. Errors `text.fit_failed` at the floor. |
 
-## Config files (KDL)
+- The message names the `h` that fits at the declared size and the font size that fits.
+- Set that `h` first. Shrink type only on purpose, and report it.
+- In a layout frame, omit `h`. The compile measures the text.
+- `label.overflow` is the shape-label case: ink crosses an ellipse, diamond, or pill outline.
 
-Same `diagnostics { … }` block in `.zenith.kdl` (project-local, walked up) or
-`~/.config/zenith/config.kdl` (user-global). Use the local config for project defaults shared
-across documents; use the global config for personal preferences:
+## Compile-stage lint
 
-```kdl
-// .zenith.kdl
-diagnostics {
-  deny "font.local"
-}
-```
+| Code | Catches |
+| --- | --- |
+| `text.ink_overlap` | Glyph ink of two texts or labels intersects |
+| `text.occluded` | A later opaque node hides over half of a glyph |
+| `label.overflow` | Shape label ink crosses the shape outline |
+| `align.near_miss` | An edge, center, or baseline sits 0.75-3 px off a shared value |
+| `spacing.uneven_gap` | Three or more siblings have nearly equal gaps |
+| `connector.crosses_node` | A connector route runs through an unconnected node |
+| `text.edge_crowding` | Glyph ink sits too close to the trim edge |
+| `text.too_small` | Font size is below the page-relative floor |
+| `type.near_duplicate_size` | Two font sizes in one group or frame are within 1 px or 8% |
 
-## CLI flags
+- `align.near_miss` and `spacing.uneven_gap` come from hand-placed siblings. Move them into a layout frame.
+- `role="decoration"` or `role="background"` exempts a node and its subtree from overlap, occlusion, and crossing lint.
+- Use those roles for intentional overlap: glows, watermarks, background type.
 
-```bash
-zenith validate doc.zen --deny layout.off_canvas --allow token.unused
-zenith render   doc.zen --png out.png --deny font.local
-```
+## Contrast
 
-Flags are repeatable: `--deny font.local --deny layout.off_canvas`. Note `font.local` is raised
-while rendering (font resolution happens at render time), so gate it on `render`, not `validate`.
+The check judges text against the paint behind its glyphs, with APCA `Lc`.
 
-## Local fonts and CI determinism
+| Code | Severity | Meaning |
+| --- | --- | --- |
+| `contrast.invisible` | warning | `\|Lc\|` < 15. A real defect, even when `valid` is `true`. |
+| `contrast.low` | advisory | Legible but under threshold. Often deliberate. |
+| `contrast.indeterminate_backdrop` | advisory | Backdrop is an image, path, filter, or blended fill. |
 
-A `fontFamily` token that names a local/system font (not a Bundled family) resolves on the
-current machine but emits a `font.local` advisory: rendering is not deterministic across
-machines. For reproducible output:
+- For an indeterminate backdrop, set `contrast-bg=(token)"<color>"` to the color the viewer sees.
+- `color.base.200` and `color.base.300` are surfaces. Text on `color.base.100` uses `color.base.content`.
 
-- Use a Bundled family (`zenith fonts` lists them under "Bundled").
-- Or declare the font as a project `font` asset (bundled with the document).
-- Or guarantee the target OS has the font installed.
+## Policy
 
-For CI, add `deny "font.local"` to `.zenith.kdl` (or pass `--deny font.local` to `render`)
-so a local-font slip becomes a hard error at render time.
+Policy changes reporting only. Rendered output never changes. Error codes are immutable.
 
-## Text legibility (contrast)
+| Verb | Effect |
+| --- | --- |
+| `allow "<code>" ["<subject-id>" …]` | Suppress the code, optionally for listed subjects only |
+| `warn "<code>"` | Force Warning |
+| `deny "<code>"` | Elevate to a blocking Error (CI gate) |
 
-Zenith judges a text node against the colour actually painted **behind the glyphs** — the
-topmost covering fill resolved by geometry and paint order, not the page background. The metric
-is APCA `Lc` (WCAG 3 draft). Three governable codes, all reported by `zenith validate`:
+Sources, last wins:
 
-- `contrast.invisible` (warning) — `|Lc| < 15`: the text is effectively the same colour as its
-  backdrop. This is a real defect (dark monogram on a navy disc). **Do not ignore it**, and note
-  it is a *warning*, so a clean `--json` `"valid": true` does not mean the text is legible.
-- `contrast.low` (advisory) — sub-threshold but legible (`Lc` under 60, or 45 for large/bold
-  text). Often intentional brand contrast; suppress with `allow "contrast.low"` when deliberate.
-- `contrast.indeterminate_backdrop` (advisory) — the backdrop cannot be sampled at validate time
-  (an `image`, a `path` fill, a full-bleed **filter/noise/grain** layer, or a rotated / masked /
-  blurred / non-normal-blended fill), or an anchored text node has no resolvable extent. The
-  validator refuses to guess.
+1. `~/.config/zenith/config.kdl`
+2. `./.zenith.kdl` (walked up from the document)
+3. In-file `diagnostics { … }` block at the document root
+4. `--allow` / `--warn` / `--deny` on `validate` and `render` (repeatable)
 
-Resolve an indeterminate backdrop by telling the validator what the viewer sees:
+## Fonts and CI
 
-```kdl
-text id="badge.label" contrast-bg=(token)"color.brand.navy" fill=(token)"color.ink" { span "FS" }
-// story/hero over grain or photo — name the effective solid:
-text id="hero.title" contrast-bg=(token)"color.base.100" fill=(token)"color.base.content" { span "Title" }
-```
-
-`contrast-bg` takes precedence over the detected backdrop (`zenith schema node text`). For CI,
-`deny "contrast.invisible"` turns invisible text into a hard failure.
-
-**Muted chrome on dark themes:** `color.base.200` / `color.base.300` are **surfaces**, not body
-ink. Page numbers and captions on `color.base.100` should use `color.base.content` (optionally
-with `opacity`) — otherwise you often get `contrast.invisible` while `valid: true`.
-
-## Policy only changes reporting
-
-Adding `allow` or `deny` does not change the rendered output in any way. The engine compiles
-and renders the document identically; policy controls only which diagnostics appear in the
-report.
+- A non-bundled `fontFamily` emits `font.local`. That render is not deterministic across machines.
+- Use a Bundled family (`zenith fonts`), or declare the font as a project `font` asset.
+- `font.local` is raised at render time. Gate it with `render --deny font.local`, not `validate`.

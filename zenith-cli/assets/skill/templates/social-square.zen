@@ -1,24 +1,49 @@
-// Starter layout only. Prefer `zenith new doc.zen --theme <name>` (or a project brand kit)
-// so tokens match a real dialect — then copy structure, not these ad-hoc color ids.
+// Social square starter: bespoke tokens, styles, defaults, and a column layout frame.
+// With a theme, run `zenith new <doc> --theme <name>` and copy only the page body.
 zenith version=1 {
   project id="proj.social" name="Social Square Starter"
   tokens format="zenith-token-v1" {
     token id="color.bg" type="color" value="#0b1020"
-    token id="color.ink" type="color" value="#f8fafc"
+    token id="color.bg.content" type="color" value="#f8fafc"
     token id="color.brand" type="color" value="#e11d48"
-    token id="font.heading" type="fontFamily" value="Noto Sans"
+    token id="color.brand.content" type="color" value="#fff1f2"
+    token id="font.body" type="fontFamily" value="Noto Sans"
     token id="size.h1" type="dimension" value=(px)84
     token id="size.body" type="dimension" value=(px)34
+    token id="radius.field" type="dimension" value=(px)12
+    token id="space.lg" type="dimension" value=(px)40
   }
-  styles {}
+  styles {
+    style id="ui.body" {
+      font-family (token)"font.body"
+      font-size (token)"size.body"
+    }
+    style id="ui.h1" {
+      font-family (token)"font.body"
+      font-size (token)"size.h1"
+    }
+    style id="ui.button" {
+      fill (token)"color.brand"
+      radius (token)"radius.field"
+    }
+  }
+  defaults {
+    shape style="ui.button" text-style="ui.body"
+    text style="ui.body"
+  }
   document id="doc.social" title="Social Square Starter" {
     page id="page.main" w=(px)1080 h=(px)1080 background=(token)"color.bg" {
-      rect id="accent.bar" x=(px)96 y=(px)160 w=(px)160 h=(px)16 fill=(token)"color.brand"
-      text id="hero.title" x=(px)96 y=(px)220 w=(px)888 h=(px)420 fill=(token)"color.ink" font-family=(token)"font.heading" font-size=(token)"size.h1" {
-        span "Replace this headline"
-      }
-      text id="cta.note" x=(px)96 y=(px)900 w=(px)888 h=(px)80 fill=(token)"color.ink" font-family=(token)"font.heading" font-size=(token)"size.body" {
-        span "yourdomain.com"
+      frame id="hero" x=(px)96 y=(px)160 w=(px)888 layout="column" gap=(token)"space.lg" {
+        rect id="hero.accent" w=(px)160 h=(px)16 fill=(token)"color.brand"
+        text id="hero.title" style="ui.h1" {
+          span "Replace this headline"
+        }
+        text id="hero.sub" {
+          span "One short supporting line."
+        }
+        shape id="hero.cta" kind="process" w=(px)320 h=(px)88 {
+          span "Get started"
+        }
       }
     }
   }

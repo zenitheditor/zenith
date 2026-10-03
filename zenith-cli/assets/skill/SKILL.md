@@ -1,6 +1,6 @@
 ---
 name: zenith
-description: "Author, edit, and render deterministic .zen design documents (posters, decks/slides, social graphics, flyers, books, magazines, diagrams, ads) with the zenith CLI. Use when the task is to create or change a visual design as structured, editable, version-controllable source — not a flat AI image. Covers: design tokens & color (sRGB + CMYK), gradients, typography, layout & anchors, frames/groups, images, visual recipes & procedural backgrounds, transactions (typed edits), variants/mail-merge, PNG/PDF rendering, validation, brand kits, and the agentic author->validate->render->inspect->edit loop. Triggers: design, poster, deck, slide, social graphic, flyer, brochure, banner, diagram, flowchart, chart, bar chart, line chart, pie chart, donut chart, data visualization, graph, legend, .zen, zenith, brand kit, render to PNG/PDF."
+description: "Author, edit, and render deterministic .zen design documents (posters, decks/slides, social graphics, flyers, books, magazines, diagrams, ads) with the zenith CLI. Use when the task is to create or change a visual design as structured, editable, version-controllable source — not a flat AI image. Covers: themes with ui.* styles and defaults, auto-layout frames (row/column/grid, hug/fill), design tokens & color (sRGB + CMYK), typography and text fit, anchors, images, recipes & procedural backgrounds, transactions (typed edits), `zenith fix` auto-repair, layout/overlap lint, variants/mail-merge, PNG/PDF/contact-sheet rendering, brand kits, and the agent loop new --theme -> validate --json -> fix -> render --contact-sheet -> tx. Triggers: design, poster, deck, slide, social graphic, flyer, brochure, banner, diagram, flowchart, chart, bar chart, line chart, pie chart, donut chart, data visualization, graph, legend, .zen, zenith, brand kit, render to PNG/PDF."
 allowed-tools:
   - Bash(zenith:*)
   - Read
@@ -13,167 +13,108 @@ allowed-tools:
 # Zenith
 
 Plain-text `.zen` source (KDL) → validate → render to pixel-exact PNG or print PDF.
-Editable, addressable, deterministic. Drive it with the `zenith` CLI — not an image model.
+Drive it with the `zenith` CLI, not an image model.
 
-**Use** for posters, decks, social, flyers, diagrams, charts, ads, variants — source you can
-diff and re-render. **Don't use** for photographic *pictures* (generate elsewhere, place as
-`image`), pure code tasks, or in-place raster editing.
+- **Use** for posters, decks, social, flyers, diagrams, charts, ads, and variants.
+- **Do not use** for photos (place them as `image`), pure code tasks, or raster editing.
 
 ## CLI is the source of truth
 
-Do **not** invent attribute names or op fields:
+This skill is judgment and routing. Syntax lives in the CLI. Never invent attribute names or op fields.
 
-```bash
-zenith --version                  # missing? https://github.com/zenitheditor/zenith#install
-zenith --help · zenith <cmd> --help
-zenith schema nodes | ops | tokens
-zenith schema node <kind> · zenith schema op <name> · zenith schema token <type>
-zenith validate <file> --json
-zenith inspect <file> --json      # geometry + role facts for critique
-zenith inspect path <file> <id> --json   # path topology + extrema bounds (+ --craft)
-zenith tokens <file>              # palette/type already on the document
-zenith library list               # every embedded + project pack
-zenith fonts                      # Bundled (portable) vs Local
-zenith fonts features "Noto Sans" --json # OT feature tags for a face
-zenith fonts alternates "Noto Sans" --char A --json
-```
+| Need | Run |
+| --- | --- |
+| Node attributes | `zenith schema nodes` · `zenith schema node <kind>` |
+| Transaction ops | `zenith schema ops` · `zenith schema op <name>` |
+| Token types, document tokens | `zenith schema token <type>` · `zenith tokens <file>` |
+| Styles, defaults | `zenith schema style` · `zenith schema defaults` |
+| Diagnostic codes | `zenith schema diagnostics` |
+| Command flags | `zenith <cmd> --help` |
+| Packs, fonts | `zenith library list` · `zenith fonts` |
 
-If `zenith` is missing, give the one-line installer from the repo README — do not fake a workflow.
-This skill is **judgment + routing**. Syntax lives in `zenith schema`.
+If `zenith --version` fails, give the installer from https://github.com/zenitheditor/zenith#install. Never fake a workflow.
 
-## Core loop
+## Core loop (fastest path)
 
-1. **Match the brief** → canvas + primitives (`By brief` below; details in `references/by-kind.md`).
-2. **Tokens first.** Project brand (`.zenith/brand.md` / `libraries/*.zen`) → else
-   `zenith new <path> --theme <name>`. Only invent a palette when neither fits.
-3. **Author.** Scaffold with `zenith new` (don't hand-write the outer skeleton). Prefer
-   `zenith tx` for later edits (dry-run by default). KDL: one node per line (or `\`);
-   booleans `#true` / `#false`.
-4. **Validate.** `zenith validate <file> --json` after every change. Never finalize with Errors.
-5. **Render and look.** `zenith render <file> --png out.png` (or `--all-pages` / `--pdf`), then
-   **open the PNG**. Clean validate ≠ good design. Critique:
-   `references/design-critique.md` + `inspect --json`.
-6. **Report** briefly: ids/tokens changed, validate result, output path.
+1. **Scaffold.** `zenith new <path> --theme <name>` plus canvas flags. If `.zenith/brand.md` exists in or above the directory, use its tokens (`references/brand.md`). Invent a palette only when the brand and every theme fail the brief.
+2. **Author with layout and defaults.**
+   - Stacks, rows, cards, chips, and lists go in `frame layout="row|column|grid"`. Do not compute child x/y by hand.
+   - A themed document styles bare `text`, `shape`, and `connector` through its `defaults` block. Omit font, fill, and radius attributes.
+   - Set `style="ui.h1"`, `"ui.card"`, `"ui.button"`, and so on for a role.
+3. **Validate.** `zenith validate <file> --json`. With no Errors it also compiles every page and reports overflow, contrast, and lint.
+4. **Fix.** `zenith fix <file>` previews the diff. `zenith fix <file> --apply` writes it. Fix what remains by hand.
+5. **Preview.** `zenith render <file> --contact-sheet <png> --scale 0.5 --json`. Open the PNG. `status: blocked` means Errors remain.
+6. **Iterate** with `zenith tx <file> <tx.json>` (dry-run, then `--apply`). `zenith inspect <file> --json` gives each node's final `box`.
+7. **Finish.** Render full scale (`--png`, `--all-pages`, or `--pdf`). Report the changed ids, the validate result, and the output path.
 
-`zenith fmt <file>` is idempotent. After placing siblings, prefer layout ops over eyeballing:
-`align_nodes`, `distribute_nodes`, `align_to_edge` (`zenith schema op <name>`).
+A clean validate does not mean a good design. Critique the PNG with `references/design-critique.md`.
 
 ### Token dialects (one per document)
 
 | Source | When | Ids |
 | --- | --- | --- |
-| **Theme** | No project brand | `color.primary`, `color.base.100`, `color.base.content`, `radius.box`, `size.h1`, … → `references/themes.md` |
-| **Project brand** | `.zenith/brand.md` + kit | Project roles (often `color.brand` / `color.ink`) → `references/brand.md` |
-| **Bespoke** | Explicit one-off look | Still tokenize; stable role ids |
+| Theme | No project brand | `color.primary`, `color.base.100`, `radius.box`, `size.h1`, `ui.*` styles → `references/themes.md` |
+| Project brand | `.zenith/brand.md` and a kit exist | Project roles, often `color.brand` / `color.ink` → `references/brand.md` |
+| Bespoke | Explicit one-off look | Still tokenized, with stable role ids |
 
-Do not mix theme-contract ids and brand ids without a deliberate map. After scaffold:
-`zenith tokens <doc>` and use **only** those ids (plus any you add).
+Never mix theme ids and brand ids without a deliberate map. After scaffolding, use only the ids `zenith tokens <doc>` lists, plus any you add.
 
 ## By brief — pick tools first
 
-Read `references/by-kind.md` for the full recipe of the matching row. Always:
+Read the matching section of `references/by-kind.md` before authoring new work.
 
-```bash
-zenith new <path> --theme <name> [canvas flags…]   # or brand tokens
-zenith tokens <path>                               # use these
-zenith library list                                # packs available now
-```
-
-| Brief smells like… | Scaffold | Core tools (use these, not fakes) |
+| Brief | Scaffold flags | Core tools |
 | --- | --- | --- |
-| Social square | default 1080² | `text` + accent `rect` + CTA **`shape`** + optional icon |
-| Story / reel | `--width 1080 --height 1920` | same; safe-zone; strong hierarchy |
-| Banner / header | e.g. `--width 1600 --height 400` | horizontal lockup; anchors for logo/CTA |
-| Poster / flyer | `--format a4` / `tabloid` / custom | hierarchy; optional `pattern`/`light` depth |
-| Deck / slides | `--format letter --landscape --pages N` | one idea/page; `role`s; contact-sheet render |
-| Flow / process | any size | **`shape` + `connector`** or `@zenith/flowchart#process\|decision\|terminator` |
-| Architecture / product map | any | `zenith library search` icons + `connector` (+ ports) |
-| Numbers / KPIs | any | **`chart`** (bar/line/area/pie/donut/sparkline) — not hand-drawn bars |
-| Table / schedule | any | **`table`** |
-| Long article / report | `--format a4` + pages | `text` `format="markdown"` / `src=` / `chain`; `footnote`/`toc`/`code` |
-| Photo + type | any | `asset import` + `image` + **`@zenith/masks`** / **`@zenith/filters`** |
-| Fancy background | any | `pattern`, `mesh`, `light`, gradient/noise tokens — see polish |
-| Many sizes | one master + anchors | **`zenith variant`** |
-| Many rows / people | template + CSV | **`zenith merge`** (`role="data.<col>"`) |
-| Brand hexes only | — | **`zenith theme new`** then `theme apply` |
+| Social / story / banner | default 1080² · `--width 1080 --height 1920` · `--width 1600 --height 400` | column or row frame, CTA `shape style="ui.button"`, anchors |
+| Poster / flyer | `--format a4` / `tabloid` | hierarchy, one depth motif |
+| Deck / slides | `--format letter --landscape --pages N` | master chrome, one idea per page, contact sheet |
+| Flow / architecture | any | `shape` + `connector`, `@zenith/flowchart`, Lucide icons |
+| Numbers / tables | any | `chart`, `table` |
+| Long article / report | `--format a4 --pages N` | `text format="markdown"`, `src=`, `chain` |
+| Photo + type | any | `zenith asset import` + `image` + `@zenith/masks` / `@zenith/filters` |
+| Many sizes / many rows | one master / template + CSV | `zenith variant` / `zenith merge` |
+| Brand hexes only | — | `zenith theme new`, then `zenith theme apply` |
 
-**Canvas cheatsheet:** square `1080²` (default) · story `1080×1920` · landscape banner custom ·
-print `--format a4|a3|letter|tabloid` · deck `--format letter --landscape --pages N` ·
-`zenith new --help` for full list.
-
-## Built-in packs (don't rebuild these)
-
-Run `zenith library list` for the live catalog. Embedded presets:
-
-| Pack | Use for | Add |
-| --- | --- | --- |
-| `@zenith/theme.*` (10) | Full token contract | `zenith new --theme <name>` or `theme apply` |
-| `@zenith/icons-lucide` | Devices, cloud, lock, UI affordances (~1745) | `library search` → `library add …#icon --into doc --page id --at X,Y` |
-| `@zenith/flowchart` | process / decision / terminator components | `library add @zenith/flowchart#decision --into … --page … --at X,Y` |
-| `@zenith/filters` | Photo/grade looks (duotone, noir, vintage, …) | `library add @zenith/filters#duotone-gold --into doc` then `filter=(token)"…"` |
-| `@zenith/masks` | Vignette, spotlight, soft card/portrait clips | `library add @zenith/masks#vignette --into doc` then `mask=(token)"…"` |
-| `@zenith/brand-kit` | Re-skin actions | `library list` / apply via `tx` or brand workflow |
-
-Icons judgment: `references/icons.md`. Never invent decorative icons for abstract concepts.
+**Built-in packs** (never rebuild these): `@zenith/theme.*`, `@zenith/icons-lucide`, `@zenith/flowchart`,
+`@zenith/filters`, `@zenith/masks`, `@zenith/brand-kit`. Search with `zenith library search`. Add with
+`zenith library add <pack>#<item> --into <doc>`. Add only what you apply.
 
 ## Non-negotiables
 
-- **Stable ids** — `hero.title`, `cta.button`. No anonymous node soup.
-- **Tokenize visuals** — fill/font/size/stroke/shadow via `(token)"id"`. Geometry `x y w h` may be raw px. Values: `(px)28`, weight `700`, `"#hex"` — not CSS strings. **`create_token`** supports scalars plus structured **`shadow`** (`layers`), **`filter`** (`filter_ops`), **`gradient`** (`stops` + `angle`/`radial`), **`mask`** (`shape`/`feather`/`radius`) — see `zenith schema op create_token`. Pack filters/masks also via `library add`.
-- **Shared chrome** — decks/books: `create_master` + `add_node` into the master + `set_page_master` on each page (not copy-paste footers).
-- **Labeled box → `shape`** with `text-style` pointing at a style that uses the readable ink
-  (theme: `color.primary.content` on `color.primary` fill). Not `rect` + floating `text`.
-  Create styles with **`create_style`** / **`set_style_property`** (`zenith schema style`,
-  `zenith schema op create_style`) — or hand-author `styles { }` then `zenith sync`.
-- **Right primitive** — flow: `shape`+`connector`; data: `chart`/`table`; things: Lucide icons;
-  prose: `text` (+ markdown/`src`/`chain`).
-- **Type box ≥ type size** — theme `size.h1` is 64px → give the text node **h ≈ 90+** (body 28 →
-  h ≈ 40+). First overflow fix is **grow the box**, not shrink the token.
-- **Muted text on dark themes** — captions/page numbers use `color.base.content` (optionally lower
-  `opacity`), never a dark surface token like `color.base.300` as fill on `color.base.100`.
-- **Icons on dark themes** — Lucide defaults to near-black stroke. After `library add`, recolor
-  **before** first render (shared `lib.icons.stroke` or every `icon.N` path). Resize with
-  `set_geometry` on the instance (`w`/`h`/`x`/`y`) or source. See `references/icons.md`.
-- **Overflow preserves type** — enlarge/reflow/`chain` before shrink/`autofit`; report if you shrink.
-- **Group motifs** — `group`/`frame` with stable id for one-op move/dim/delete.
-- **Assets external** — `zenith asset import` + `image`; never bake layout into a flat picture.
-- **Align with ops** — `align_nodes` / `distribute_nodes` / `align_to_edge` after rough placement.
-- **Only add packs you use** — unused filter/mask tokens leave advisories; strip or apply them.
-- **Look at the PNG** — schema for syntax; eyes for judgment.
+- **Stable ids** — `hero.title`, `cta.button`. No anonymous nodes.
+- **Tokens for visuals** — fill, font, size, stroke, and shadow reference tokens. Geometry can be raw px.
+- **`zenith fix` mints tokens** — it turns a raw literal into `color.custom.<hex>` or `size.<n>`. Re-point a minted token to a theme role when one fits.
+- **Layout over coordinates** — x/y belong only on top-level blocks, `position="absolute"` children, and free decoration. `tx` rejects x/y on an in-flow child (`tx.layout_managed`). Change flow with `set_layout`, or reorder.
+- **Labeled box → `shape`** — never `rect` + floating `text`. The label ink pairs with the fill (`X` → `X.content`).
+- **Text fits its box** — omit `h` on text in a layout frame. On an absolute text, the overflow message names the `h` and font size that fit. Grow the box before shrinking type. Report any shrink.
+- **Muted text on dark themes** — captions use `color.base.content` (optional `opacity`), never `color.base.300`.
+- **Icons on dark themes** — recolor Lucide strokes before the first render (`references/icons.md`).
+- **Intentional overlap** — set `role="decoration"` or `role="background"`. The node then leaves overlap, occlusion, and crossing lint.
+- **Shared chrome** — decks and books use `create_master` + `set_page_master`, never copied footers.
+- **Right primitive** — flow: `shape` + `connector`. Data: `chart` / `table`. Things: Lucide icons. Prose: `text`.
+- **Assets external** — `zenith asset import` + `image`. Never bake layout into a flat picture.
+- **Look at the PNG** — schema for syntax, eyes for judgment.
 
-### Optional polish (after structure works)
-
-Depth without clutter: `pattern` (grid/scatter) · `mesh` · `light` · gradient/`shadow` tokens ·
-`@zenith/filters` · `@zenith/masks` · noise filter (`zenith schema token filter`).
-One strong motif beats five competing effects. Pattern details: `references/pattern.md`.
+Polish after structure works. Pick one motif: `pattern`, `mesh`, `light`, gradient, or noise.
 
 ## Routing (load on demand)
 
 | Need | Open / run |
 | --- | --- |
-| **Document-type recipes** (start here for new work) | `references/by-kind.md` |
-| Layout, anchors, safe zones, frames | `references/layout.md` |
-| Themes catalog / apply / `theme new` | `references/themes.md` |
-| Brand kit / `.zenith/brand.md` | `references/brand.md` · `templates/brand.md` |
-| Icons craft | `references/icons.md` · `library search` |
-| Design critique | `references/design-critique.md` · `inspect --json` |
-| Multi-candidate / MCP | `references/agentic-workflow.md` |
+| Document-type recipes (start here for new work) | `references/by-kind.md` |
+| Auto-layout, anchors, safe zones, frames | `references/layout.md` |
+| Themes, `ui.*` styles, defaults, `theme new` | `references/themes.md` |
+| Diagnostics, `zenith fix`, lint codes, policy, contrast, fonts | `references/diagnostics.md` |
+| Design critique with `inspect --json` | `references/design-critique.md` |
+| Brand kit / `.zenith/brand.md` | `references/brand.md` · `templates/brand.md` · `templates/brand-kit.zen` |
+| Icons craft | `references/icons.md` |
+| Multi-candidate workflow, history, MCP | `references/agentic-workflow.md` |
 | Size variants vs mail-merge | `references/variants.md` |
-| Styles block / create_style | `zenith schema style` · `zenith schema op create_style` |
-| Diagnostics, contrast, fonts | `references/diagnostics.md` |
-| Pattern / detach | `references/pattern.md` |
+| Pattern node, `detach_pattern` | `references/pattern.md` |
 | Recipe provenance block | `references/recipes-model.md` |
-| Bug/feature report | `references/reporting-issues.md` |
-| Any node/op/flag syntax | `zenith schema …` · `zenith <cmd> --help` |
-| Path craft / logo outlines | `zenith schema node path` · `zenith inspect path <doc> <id> --json` · `zenith outline-text --help` · `zenith perceive --help` |
-| Font OT features / alternates | `zenith fonts features <family|file> --json` · `zenith fonts alternates … --char A --json` |
-| Live import of another `.zen` | `zenith schema node instance` · `page` · `zenith imports list` · `zenith imports materialize` |
+| Bug or feature report | `references/reporting-issues.md` |
+| Path craft, logo outlines | `zenith inspect path <doc> <id> --json` · `zenith outline-text --help` · `zenith perceive --help` |
+| Font OT features, alternates | `zenith fonts features <family> --json` · `zenith fonts alternates <family> --char A --json` |
+| Live import of another `.zen` | `zenith schema node instance` · `zenith imports --help` |
 
-**Two "variant" tools:** `zenith variant` = size/format; `zenith merge` = content rows.
-
-## Project config
-
-1. `.zenith/brand.md` exists (walk up) → read and conform.
-2. Else `zenith new <path> --theme <name>` (or later `theme apply`).
-3. Prefer `imports` + `instance`/`page source=…` over copying shared lockups.
-4. Invent a palette only when brand and themes both fail the brief.
+`zenith variant` varies size. `zenith merge` varies content rows. Prefer `imports` + `instance` over copying shared lockups.
