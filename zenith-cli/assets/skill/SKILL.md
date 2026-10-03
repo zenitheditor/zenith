@@ -45,6 +45,8 @@ If `zenith --version` fails, give the installer from https://github.com/zenithed
 4. **Fix.** `zenith fix <file>` previews the diff. `zenith fix <file> --apply` writes it. Fix what remains by hand.
 5. **Preview.** `zenith render <file> --contact-sheet <png> --scale 0.5 --json`. Open the PNG. `status: blocked` means Errors remain.
 6. **Iterate** with `zenith tx <file> <tx.json>` (dry-run, then `--apply`). `zenith inspect <file> --json` gives each node's final `box`.
+   - The dry-run prints the source diff and every moved or resized box. Check them before `--apply`.
+   - `tx --apply` rewrites the file in canonical form. Re-read it before text edits.
 7. **Finish.** Render full scale (`--png`, `--all-pages`, or `--pdf`). Report the changed ids, the validate result, and the output path.
 
 A clean validate does not mean a good design. Critique the PNG with `references/design-critique.md`.

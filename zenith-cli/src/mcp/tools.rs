@@ -106,8 +106,9 @@ reference tokens, so this reveals the palette/type/spacing a document exposes.",
         Tool {
             name: "zenith_tx",
             description: "Apply a typed transaction (JSON edit script) to a document. Dry-run by \
-default (returns status + affected ids); set apply=true to write. Set diff=true to also get the \
-resulting (after) source as a resource link. Enforces id-uniqueness and referential integrity. \
+default (returns status, affected ids, source_diff, and boxes: the moved/resized node boxes); set \
+apply=true to write. Set diff=true to also get the resulting (after) source as a resource link, and \
+source_diff and boxes with apply=true. Enforces id-uniqueness and referential integrity. \
 Use zenith_schema op to learn an op's shape.",
             schema: json!({
                 "type": "object",
@@ -118,7 +119,7 @@ Use zenith_schema op to learn an op's shape.",
                         "type": ["object", "string", "array"]
                     },
                     "apply": { "type": "boolean", "description": "Write the result to disk." },
-                    "diff": { "type": "boolean", "description": "Return a resource link to the before→after diff." }
+                    "diff": { "type": "boolean", "description": "Return a resource link to the after source; with apply, also return source_diff and boxes." }
                 },
                 "required": ["doc", "transaction"]
             }),

@@ -242,6 +242,14 @@ pub struct TxOutputJson {
     pub affected: Vec<String>,
     pub diagnostics: Vec<DiagnosticJson>,
     pub changed: bool,
+    /// Unified diff of the canonical source before and after. Present on a
+    /// dry-run, or with `--apply --diff`, when the source changed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_diff: Option<String>,
+    /// Nodes whose compiled page box changed, sorted by id. Present with
+    /// `source_diff`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub boxes: Option<Vec<crate::commands::tx::BoxDelta>>,
 }
 
 /// One skipped-token entry in the `zenith theme apply --json` extras.

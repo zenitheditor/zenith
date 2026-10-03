@@ -1,20 +1,21 @@
-//! Pure logic for `zenith tx`.
+//! Pure logic for `zenith tx` and `zenith outline-text`.
 //!
-//! The public entry point [`run`] operates entirely on in-memory source text;
-//! the caller is responsible for all filesystem I/O and for deciding whether to
-//! persist `source_after` (the `--apply` flag lives in `lib.rs`, not here).
+//! The entry points operate on in-memory source text. The caller does all
+//! filesystem I/O and decides whether to persist `source_after` (the
+//! `--apply` flag lives in the dispatcher, not here).
 
 use std::path::Path;
-use zenith_core::{KdlAdapter, KdlSource};
 
+use zenith_core::fix::unified_diff;
+use zenith_core::{Document, KdlAdapter, KdlSource, Severity};
 use zenith_scene::collect_text_outline_paths;
 use zenith_tx::{
-    TextOutlineRequest, Transaction, TxResult, TxStatus, apply_text_outline_paths,
+    Op, TextOutlineRequest, Transaction, TxResult, TxStatus, apply_text_outline_paths,
     check_text_outline_source, reject_text_outline, run_transaction,
 };
 
-use crate::commands::serialize_pretty;
-use crate::json_types::{self, DiagnosticJson, TxOutputJson};
+use super::boxes::{BoxSides, box_deltas, page_box_warnings, page_boxes};
+use super::render::{TxView, render_human, render_json};
 
 // ── Error type ────────────────────────────────────────────────────────────────
 
@@ -45,10 +46,23 @@ pub struct TxOutcome {
     pub exit_code: u8,
 }
 
-// ── Public entry point ────────────────────────────────────────────────────────
+/// What the compiled review of a tx run needs from the caller.
+#[derive(Debug, Clone, Copy)]
+pub struct TxCtx<'a> {
+    /// The document's directory: project fonts, text sources, imports, and
+    /// image assets, as on render.
+    pub project_dir: Option<&'a Path>,
+    /// The file name in the diff headers.
+    pub label: &'a str,
+    /// Print the source diff and the box delta. A dry-run sets it always;
+    /// `--apply` sets it only with `--diff`.
+    pub show_diff: bool,
+}
+
+// ── Public entry points ───────────────────────────────────────────────────────
 
 /// Parse the document source and transaction JSON, run the transaction engine,
-/// and return a [`TxOutcome`].
+/// and return a [`TxOutcome`]. AST only: no compile, no diff, no box delta.
 ///
 /// Returns `Err(TxCmdErr { exit_code: 2 })` if either the document or the
 /// transaction JSON fails to parse.  A *rejected* transaction is **not** an
@@ -56,54 +70,49 @@ pub struct TxOutcome {
 ///
 /// This function never touches the filesystem.
 pub fn run(doc_src: &str, tx_json: &str) -> Result<TxOutcome, TxCmdErr> {
-    // Parse document ─────────────────────────────────────────────────────────
-    let doc = KdlAdapter.parse(doc_src.as_bytes()).map_err(|e| TxCmdErr {
-        message: format!("error[parse.error]: {}", e.message),
-        exit_code: 2,
-    })?;
+    run_inner(doc_src, tx_json, None)
+}
 
-    // Parse transaction ──────────────────────────────────────────────────────
+/// [`run`], then compile the document before and after the transaction.
+///
+/// Adds `tx.page_box_changed` warnings for reparent / group / ungroup
+/// subjects whose page box changed, and, when `ctx.show_diff` is set, the
+/// source diff and the box delta. The compile runs only when the result is
+/// not Rejected and the source changed. It reads project files under
+/// `ctx.project_dir`.
+pub fn run_with(doc_src: &str, tx_json: &str, ctx: &TxCtx<'_>) -> Result<TxOutcome, TxCmdErr> {
+    run_inner(doc_src, tx_json, Some(ctx))
+}
+
+fn run_inner(doc_src: &str, tx_json: &str, ctx: Option<&TxCtx<'_>>) -> Result<TxOutcome, TxCmdErr> {
+    let doc = parse_doc(doc_src)?;
+
     let tx = Transaction::from_json(tx_json).map_err(|e| TxCmdErr {
         message: format!("error[tx.parse]: {}", e.message),
         exit_code: 2,
     })?;
 
-    // Run engine ─────────────────────────────────────────────────────────────
-    let result = run_transaction(&doc, &tx).map_err(|e| TxCmdErr {
-        message: format!("error[tx.engine]: {}", e.message),
-        exit_code: 2,
-    })?;
-
-    let exit_code = status_exit_code(&result.status);
-    let human = render_human(&result);
-    let json_str = render_json(&result);
-
-    Ok(TxOutcome {
-        result,
-        human,
-        json_str,
-        exit_code,
-    })
+    let result = run_transaction(&doc, &tx).map_err(engine_err)?;
+    Ok(finish(&doc, &tx.ops, result, ctx))
 }
 
 /// Parse the document source, build the render-path font provider, materialize
 /// a text/code node into outlines, and return a standard tx outcome.
 pub fn run_outline_text(
     doc_src: &str,
-    project_dir: Option<&Path>,
+    ctx: &TxCtx<'_>,
     node: &str,
     id_prefix: &str,
     locked: bool,
 ) -> Result<TxOutcome, TxCmdErr> {
-    let doc = KdlAdapter.parse(doc_src.as_bytes()).map_err(|e| TxCmdErr {
-        message: format!("error[parse.error]: {}", e.message),
-        exit_code: 2,
-    })?;
+    let doc = parse_doc(doc_src)?;
 
     let fonts =
-        super::render::build_font_provider(&doc, project_dir, locked).map_err(|e| TxCmdErr {
-            message: e.message,
-            exit_code: e.exit_code,
+        super::super::render::build_font_provider(&doc, ctx.project_dir, locked).map_err(|e| {
+            TxCmdErr {
+                message: e.message,
+                exit_code: e.exit_code,
+            }
         })?;
 
     // Validate source before multi-page compile (parity with pre-split short-circuit).
@@ -121,89 +130,76 @@ pub fn run_outline_text(
             )
         }
     }
-    .map_err(|e| TxCmdErr {
+    .map_err(engine_err)?;
+
+    Ok(finish(&doc, &[], result, Some(ctx)))
+}
+
+// ── Shared tail ───────────────────────────────────────────────────────────────
+
+fn parse_doc(doc_src: &str) -> Result<Document, TxCmdErr> {
+    KdlAdapter.parse(doc_src.as_bytes()).map_err(|e| TxCmdErr {
+        message: format!("error[parse.error]: {}", e.message),
+        exit_code: 2,
+    })
+}
+
+fn engine_err(e: zenith_tx::TxError) -> TxCmdErr {
+    TxCmdErr {
         message: format!("error[tx.engine]: {}", e.message),
         exit_code: 2,
-    })?;
+    }
+}
+
+/// Add the compiled review when `ctx` is set, recompute the status, and
+/// render both outputs.
+fn finish(doc: &Document, ops: &[Op], mut result: TxResult, ctx: Option<&TxCtx<'_>>) -> TxOutcome {
+    let mut view = TxView::default();
+    let changed = result.source_before != result.source_after;
+    if let Some(ctx) = ctx
+        && result.status != TxStatus::Rejected
+        && changed
+    {
+        if ctx.show_diff {
+            view.source_diff = Some(unified_diff(
+                ctx.label,
+                &result.source_before,
+                &result.source_after,
+            ));
+        }
+        // `source_after` is canonical output, so it parses. A parse error
+        // leaves the box delta out.
+        if let Ok(after) = KdlAdapter.parse(result.source_after.as_bytes()) {
+            let before_boxes = page_boxes(doc, ctx.project_dir);
+            let after_boxes = page_boxes(&after, ctx.project_dir);
+            let sides = BoxSides {
+                before: &before_boxes,
+                after: &after_boxes,
+            };
+            page_box_warnings(ops, doc, &after, &sides, &mut result.diagnostics);
+            if ctx.show_diff {
+                view.boxes = Some(box_deltas(&before_boxes, &after_boxes));
+            }
+        }
+        if result.status == TxStatus::Accepted
+            && result
+                .diagnostics
+                .iter()
+                .any(|d| d.severity == Severity::Warning)
+        {
+            result.status = TxStatus::AcceptedWithWarnings;
+        }
+    }
 
     let exit_code = status_exit_code(&result.status);
-    let human = render_human(&result);
-    let json_str = render_json(&result);
-
-    Ok(TxOutcome {
+    let human = render_human(&result, &view);
+    let json_str = render_json(&result, view);
+    TxOutcome {
         result,
         human,
         json_str,
         exit_code,
-    })
-}
-
-// ── Output renderers ──────────────────────────────────────────────────────────
-
-/// Render a human-readable summary of the transaction result.
-pub fn render_human(result: &TxResult) -> String {
-    let status_label = match result.status {
-        TxStatus::Accepted => "accepted",
-        TxStatus::AcceptedWithWarnings => "accepted (with warnings)",
-        TxStatus::Rejected => "rejected",
-    };
-
-    let changed = result.source_before != result.source_after;
-
-    let mut out = String::new();
-    out.push_str(&format!("status: {}\n", status_label));
-    out.push_str(&format!("changed: {}\n", changed));
-
-    if result.affected_node_ids.is_empty() {
-        out.push_str("affected: (none)\n");
-    } else {
-        out.push_str(&format!(
-            "affected: {}\n",
-            result.affected_node_ids.join(", ")
-        ));
     }
-
-    if result.diagnostics.is_empty() {
-        out.push_str("diagnostics: (none)");
-    } else {
-        out.push_str("diagnostics:");
-        for d in &result.diagnostics {
-            let sev = json_types::severity_str(&d.severity);
-            let subject = d
-                .subject_id
-                .as_deref()
-                .map(|s| format!(" ({})", s))
-                .unwrap_or_default();
-            out.push_str(&format!(
-                "\n  {}[{}]{}: {}",
-                sev, d.code, subject, d.message
-            ));
-        }
-    }
-
-    out
-}
-
-/// Render a JSON summary of the transaction result.
-fn render_json(result: &TxResult) -> String {
-    let changed = result.source_before != result.source_after;
-    let status = match result.status {
-        TxStatus::Accepted => "accepted",
-        TxStatus::AcceptedWithWarnings => "accepted_with_warnings",
-        TxStatus::Rejected => "rejected",
-    };
-    let out = TxOutputJson {
-        schema: "zenith-tx-v1",
-        status: status.to_owned(),
-        affected: result.affected_node_ids.clone(),
-        diagnostics: result
-            .diagnostics
-            .iter()
-            .map(DiagnosticJson::from)
-            .collect(),
-        changed,
-    };
-    serialize_pretty(&out)
 }
 
 // ── Exit-code helper ──────────────────────────────────────────────────────────
@@ -211,7 +207,7 @@ fn render_json(result: &TxResult) -> String {
 /// Map a `TxStatus` to an exit code.
 ///
 /// `Accepted` and `AcceptedWithWarnings` → 0.  `Rejected` → 1.
-fn status_exit_code(status: &TxStatus) -> u8 {
+pub fn status_exit_code(status: &TxStatus) -> u8 {
     match status {
         TxStatus::Accepted | TxStatus::AcceptedWithWarnings => 0,
         TxStatus::Rejected => 1,
@@ -238,6 +234,12 @@ mod tests {
     }
   }
 }"##;
+
+    const CTX: TxCtx<'static> = TxCtx {
+        project_dir: None,
+        label: "doc.zen",
+        show_diff: true,
+    };
 
     // ── 1. Valid set_text_align → Accepted, changed, exit 0 ──────────────────
 
@@ -330,6 +332,37 @@ mod tests {
         );
     }
 
+    // ── 7. AST-only run has no diff; run_with adds it ────────────────────────
+
+    #[test]
+    fn run_has_no_review_and_run_with_has_one() {
+        let tx_json = r#"{"ops":[{"op":"set_text_align","node":"lbl.tx","align":"center"}]}"#;
+        let plain = run(SMALL_DOC, tx_json).expect("should succeed");
+        assert!(
+            !plain.json_str.contains("source_diff"),
+            "{}",
+            plain.json_str
+        );
+        assert!(!plain.json_str.contains("\"boxes\""), "{}", plain.json_str);
+
+        let with = run_with(SMALL_DOC, tx_json, &CTX).expect("should succeed");
+        assert!(with.human.contains("--- a/doc.zen"), "{}", with.human);
+        assert!(
+            with.json_str.contains("\"source_diff\""),
+            "{}",
+            with.json_str
+        );
+        assert!(with.json_str.contains("\"boxes\""), "{}", with.json_str);
+    }
+
+    #[test]
+    fn rejected_run_with_has_no_review() {
+        let tx_json = r#"{"ops":[{"op":"set_text_align","node":"nope","align":"center"}]}"#;
+        let out = run_with(SMALL_DOC, tx_json, &CTX).expect("should succeed");
+        assert_eq!(out.exit_code, 1);
+        assert!(!out.json_str.contains("source_diff"), "{}", out.json_str);
+    }
+
     #[test]
     fn outline_text_outputs_standard_tx_summary() {
         let src = r##"zenith version=1 {
@@ -347,7 +380,7 @@ mod tests {
     }
   }
 }"##;
-        let outcome = run_outline_text(src, None, "lbl.tx", "lbl.outline", false)
+        let outcome = run_outline_text(src, &CTX, "lbl.tx", "lbl.outline", false)
             .expect("outline text should run");
 
         assert_eq!(outcome.result.status, TxStatus::Accepted);
@@ -358,6 +391,11 @@ mod tests {
                 .result
                 .source_after
                 .contains("path id=\"lbl.outline-0\"")
+        );
+        assert!(
+            outcome.human.contains("added lbl.outline-0"),
+            "{}",
+            outcome.human
         );
     }
 }

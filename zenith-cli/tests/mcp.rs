@@ -372,6 +372,25 @@ fn tx_dry_run_returns_status_without_source() {
 }
 
 #[test]
+fn tx_returns_its_diagnostics() {
+    let dir = write_doc();
+    let path = dir.path().join("d.zen");
+    let tx = json!({ "ops": [ { "op": "set_fill", "node": "r.missing", "fill": "color.bg" } ] });
+    let resp = tool_call(
+        "zenith_tx",
+        json!({ "doc": path.to_str().unwrap(), "transaction": tx }),
+    );
+    let s = structured(&resp);
+    let diags = s["diagnostics"].as_array().expect("diagnostics array");
+    assert!(
+        diags
+            .iter()
+            .any(|d| d["code"] == "tx.unknown_node" && d["severity"] == "error"),
+        "{s}"
+    );
+}
+
+#[test]
 fn theme_new_returns_source() {
     let resp = tool_call(
         "zenith_theme_new",

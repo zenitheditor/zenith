@@ -176,7 +176,13 @@ fn run_tx(args: &Value) -> Result<Value, String> {
         Some(v) => serde_json::to_string(v).map_err(|e| e.to_string())?,
         None => return Err("missing 'transaction'".into()),
     };
-    let outcome = commands::tx::run(&src, &tx_json).map_err(|e| e.message)?;
+    let label = loc.path.display().to_string();
+    let ctx = commands::tx::TxCtx {
+        project_dir: loc.path.parent(),
+        label: &label,
+        show_diff: !flag(args, "apply") || flag(args, "diff"),
+    };
+    let outcome = commands::tx::run_with(&src, &tx_json, &ctx).map_err(|e| e.message)?;
 
     // The bytes on disk after an apply; history can stamp a `doc-id` into them.
     let mut after_bytes = outcome.result.source_after.clone().into_bytes();
@@ -200,7 +206,15 @@ fn run_tx(args: &Value) -> Result<Value, String> {
         "changed": parsed.get("changed").and_then(Value::as_bool).unwrap_or(false),
         "affected": parsed.get("affected").cloned().unwrap_or(json!([])),
         "error_count": count_severity(&diags, "error"),
+        "warning_count": count_severity(&diags, "warning"),
+        // Transaction diagnostics describe this edit, so they always return.
+        "diagnostics": diags.iter().map(trim_diagnostic).collect::<Vec<_>>(),
     });
+    for key in ["source_diff", "boxes"] {
+        if let Some(v) = parsed.get(key).filter(|v| !v.is_null()) {
+            insert(&mut out, key, v.clone());
+        }
+    }
     if flag(args, "diff") {
         let link = match loc.doc_id.as_deref() {
             Some(id) => store_link(id, &after_bytes, "zen", "tx-after")?,
@@ -561,6 +575,7 @@ fn write_preview(doc_id: &str, page: usize, ext: &str, bytes: &[u8]) {
 fn trim_diagnostic(d: &Value) -> Value {
     let mut out = json!({
         "code": d.get("code").cloned().unwrap_or(Value::Null),
+        "severity": d.get("severity").cloned().unwrap_or(Value::Null),
         "message": d.get("message").cloned().unwrap_or(Value::Null),
     });
     if let Some(s) = d.get("subject_id").filter(|v| !v.is_null()) {

@@ -9,11 +9,10 @@ use zenith_producers::{
     AssetProducer, FileImportProducer, FileImportProvenance, ProduceRequest, ProducedAsset,
     Provenance, ZpxBakeProducer,
 };
-use zenith_tx::{
-    AddAssetMetadata, Op, Permissions, Transaction, TxResult, TxStatus, run_transaction,
-};
+use zenith_tx::{AddAssetMetadata, Op, Permissions, Transaction, TxResult, run_transaction};
 
 use crate::commands::serialize_pretty;
+use crate::commands::tx::{status_exit_code, status_json, status_label};
 use crate::json_types::DiagnosticJson;
 
 #[derive(Debug)]
@@ -244,29 +243,6 @@ fn render_json(
             .collect(),
     };
     serialize_pretty(&out)
-}
-
-fn status_exit_code(status: &TxStatus) -> u8 {
-    match status {
-        TxStatus::Accepted | TxStatus::AcceptedWithWarnings => 0,
-        TxStatus::Rejected => 1,
-    }
-}
-
-fn status_label(status: &TxStatus) -> &'static str {
-    match status {
-        TxStatus::Accepted => "accepted",
-        TxStatus::AcceptedWithWarnings => "accepted (with warnings)",
-        TxStatus::Rejected => "rejected",
-    }
-}
-
-fn status_json(status: &TxStatus) -> &'static str {
-    match status {
-        TxStatus::Accepted => "accepted",
-        TxStatus::AcceptedWithWarnings => "accepted_with_warnings",
-        TxStatus::Rejected => "rejected",
-    }
 }
 
 #[derive(Debug, Serialize)]

@@ -22,7 +22,13 @@ pub(super) fn dispatch_tx(args: TxArgs) -> ExitCode {
         Ok(s) => s,
         Err(e) => return e.emit(json),
     };
-    let outcome = match commands::tx::run(&doc_src, &tx_json) {
+    let label = args.path.display().to_string();
+    let ctx = commands::tx::TxCtx {
+        project_dir: args.path.parent(),
+        label: &label,
+        show_diff: !args.apply || args.diff,
+    };
+    let outcome = match commands::tx::run_with(&doc_src, &tx_json, &ctx) {
         Ok(o) => o,
         Err(e) => return CliError::new("tx.failed", e.message, e.exit_code).emit(json),
     };
@@ -46,9 +52,15 @@ pub(super) fn dispatch_outline_text(args: OutlineTextArgs) -> ExitCode {
         Ok(s) => s,
         Err(e) => return e.emit(json),
     };
+    let label = args.path.display().to_string();
+    let ctx = commands::tx::TxCtx {
+        project_dir: args.path.parent(),
+        label: &label,
+        show_diff: !args.apply || args.diff,
+    };
     let outcome = match commands::tx::run_outline_text(
         &doc_src,
-        args.path.parent(),
+        &ctx,
         &args.node,
         &args.id_prefix,
         args.locked,
