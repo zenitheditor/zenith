@@ -1,10 +1,12 @@
-//! `frame` container compilation: clip-only (it does not translate children),
-//! with optional rotation / blend / blur brackets and `column` / `grid` layout.
+//! `frame` container compilation: box paint (fill, stroke, radius) under the
+//! children, an optional clip, rotation / blend / effect brackets, and
+//! `column` / `grid` layout. A frame does not translate its children.
 
 use zenith_core::{Diagnostic, FrameNode, LayoutKind, Node, PropertyValue, dim_to_px};
 
 use crate::ir::SceneCommand;
 
+use super::super::leaf::BoxGeom;
 use super::super::paint::{
     NodeEffect, resolve_property_filter, resolve_property_mask, resolve_property_shadow,
 };
@@ -14,16 +16,25 @@ use super::super::util::{
 };
 use super::super::{NodeCtx, RenderCtx, compile_node, style_prop};
 use super::flow::{node_declared_h, node_declared_w, node_skipped_in_flow, with_flow_box};
+use super::frame_paint::{frame_clip_command, frame_radius, push_frame_paint};
 use super::wrap::emit_wrapped_container;
 
-/// The already-resolved frame box in page coordinates (pixels), passed to the
-/// `column`/`grid` layout helpers.
+/// The already-resolved frame box in page coordinates (pixels), before the
+/// inherited `dx` / `dy` offset, passed to the `column`/`grid` layout helpers.
 #[derive(Clone, Copy)]
 struct FrameBox {
     x: f64,
     y: f64,
     w: f64,
     h: f64,
+}
+
+/// What the frame body draws besides its children: the painted and clipped
+/// box (offset by the inherited `dx` / `dy`) and whether the clip is on.
+#[derive(Clone, Copy)]
+struct FrameShell {
+    geom: BoxGeom,
+    clip: bool,
 }
 
 // NOTE: compile_frame → compile_node → compile_frame recursion has no depth
@@ -96,9 +107,8 @@ pub(in crate::compile) fn compile_frame(
         return;
     };
 
-    // Rotation bracket — outermost, wrapping PushClip + children + PopClip.
-    // v0 limitation: the clip rectangle below stays axis-aligned even when the
-    // frame is rotated; rotated children may extend past the axis-aligned clip.
+    // Rotation bracket — outermost, wrapping paint + clip + children. The clip
+    // sits under the rotation, so it rotates with the frame.
     let frame_rot = rotation_degrees(frame.rotate.as_ref());
     if let Some(angle) = frame_rot {
         let cx_pivot = ctx.dx + frame_x + frame_w / 2.0;
@@ -110,12 +120,11 @@ pub(in crate::compile) fn compile_frame(
         });
     }
 
-    // Blend-mode layer (inside the rotation, around the clip + children). When a
-    // non-normal blend is active the children render into an offscreen layer that
-    // composites back with the frame's opacity cascade; the children therefore
-    // inherit `ctx.opacity` UNMULTIPLIED (the layer carries the frame opacity so
-    // it is not double-counted). With no blend the cascade is unchanged and the
-    // command stream is byte-identical.
+    // Blend-mode layer (inside the rotation, around paint + clip + children).
+    // With a non-normal blend the frame draws into an offscreen layer that
+    // composites back with the full opacity cascade, so the content inside the
+    // layer draws at opacity 1 (the cascade applies once, at PopLayer). With no
+    // blend the cascade multiplies into the content as before.
     let frame_opacity = frame.opacity.unwrap_or(1.0).clamp(0.0, 1.0);
     let blend = blend_mode_ir(frame.blend_mode.as_deref());
     let child_opacity = match blend {
@@ -124,14 +133,15 @@ pub(in crate::compile) fn compile_frame(
                 opacity: ctx.opacity * frame_opacity,
                 blend_mode: Some(blend_mode),
             });
-            ctx.opacity
+            1.0
         }
         None => ctx.opacity * frame_opacity,
     };
 
-    // Attached visual effect (inside blend, wrapping clip+children). The entire
-    // frame ink (clipped composited children) is affected as one unit. Precedence
-    // matches leaf nodes: blur > shadow > filter.
+    // Attached visual effect (inside blend, wrapping paint + clip + children).
+    // The entire frame ink (box paint plus clipped children) is affected as one
+    // unit: a shadow follows the painted box and the children together.
+    // Precedence matches leaf nodes: blur > shadow > filter.
     let blur_sigma = frame
         .blur
         .as_ref()
@@ -152,10 +162,21 @@ pub(in crate::compile) fn compile_frame(
             .and_then(|p| resolve_property_filter(p, cx.resolved, &frame.id))
             .map(NodeEffect::Filter)
     };
-    let mask = frame
-        .mask
-        .as_ref()
-        .and_then(|p| resolve_property_mask(p, cx.resolved, (frame_x, frame_y, frame_w, frame_h)));
+    let shell = FrameShell {
+        geom: BoxGeom {
+            x: ctx.dx + frame_x,
+            y: ctx.dy + frame_y,
+            w: frame_w,
+            h: frame_h,
+            radius: frame_radius(frame, cx),
+            radii: None,
+        },
+        clip: frame.clips(),
+    };
+    let mask = frame.mask.as_ref().and_then(|p| {
+        let g = shell.geom;
+        resolve_property_mask(p, cx.resolved, (g.x, g.y, g.w, g.h))
+    });
 
     let child_ctx = RenderCtx {
         opacity: child_opacity,
@@ -172,9 +193,9 @@ pub(in crate::compile) fn compile_frame(
         h: frame_h,
     };
     if effect.is_none() && mask.is_none() {
-        compile_frame_clipped_children(
+        compile_frame_body(
             frame,
-            fbox,
+            (fbox, shell),
             cx,
             commands,
             diagnostics,
@@ -184,9 +205,9 @@ pub(in crate::compile) fn compile_frame(
     } else {
         let mut draws = Vec::new();
         let mut local_connector_strokes = Vec::new();
-        compile_frame_clipped_children(
+        compile_frame_body(
             frame,
-            fbox,
+            (fbox, shell),
             cx,
             &mut draws,
             diagnostics,
@@ -210,29 +231,29 @@ pub(in crate::compile) fn compile_frame(
     if frame_rot.is_some() {
         commands.push(SceneCommand::PopTransform);
     }
-    // Frame emits no fill of its own in v0.
 }
 
-fn compile_frame_clipped_children(
+/// Emit the frame box paint (unclipped, under the children), then the clip
+/// bracket around the children. The paint uses the children's opacity.
+fn compile_frame_body(
     frame: &FrameNode,
-    fbox: FrameBox,
+    (fbox, shell): (FrameBox, FrameShell),
     cx: NodeCtx,
     commands: &mut Vec<SceneCommand>,
     diagnostics: &mut Vec<Diagnostic>,
     connector_strokes: &mut Vec<usize>,
     child_ctx: RenderCtx,
 ) {
-    // `clip` defaults on, except for stacking frames (`row` / `column`).
-    let clip = frame
-        .clip
-        .unwrap_or_else(|| !frame.layout.as_ref().is_some_and(LayoutKind::is_stack));
-    if clip {
-        commands.push(SceneCommand::PushClip {
-            x: fbox.x,
-            y: fbox.y,
-            w: fbox.w,
-            h: fbox.h,
-        });
+    push_frame_paint(
+        frame,
+        shell.geom,
+        cx,
+        child_ctx.opacity,
+        commands,
+        diagnostics,
+    );
+    if shell.clip {
+        commands.push(frame_clip_command(shell.geom));
     }
 
     match frame.layout.as_ref() {
@@ -275,7 +296,7 @@ fn compile_frame_clipped_children(
         }
     }
 
-    if clip {
+    if shell.clip {
         commands.push(SceneCommand::PopClip);
     }
 }

@@ -542,15 +542,5 @@ fn check_frame_gates(
             gated.push("hug size (missing w/h)");
         }
     }
-    for (name, set) in [
-        ("fill", f.fill.is_some()),
-        ("stroke", f.stroke.is_some()),
-        ("stroke-width", f.stroke_width.is_some()),
-        ("radius", f.radius.is_some()),
-    ] {
-        if set {
-            gated.push(name);
-        }
-    }
     push_not_yet_supported("frame", &f.id, &gated, f.source_span, diagnostics);
 }

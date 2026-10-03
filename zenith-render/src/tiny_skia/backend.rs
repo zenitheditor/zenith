@@ -17,7 +17,7 @@ use zenith_scene::{
     BlendMode as IrBlendMode, FilterSpec, MaskSpec, Scene, SceneCommand, ShadowSpec,
 };
 
-use super::clip::push_clip_shape;
+use super::clip::{push_clip_shape, push_rounded_clip_shape};
 use super::commands::{DrawCtx, draw_command};
 use super::crop::{draw_ink_region, draw_region, ink_bbox};
 use super::encode::{encode_straight_png, premultiplied_to_straight_rgba};
@@ -329,6 +329,26 @@ impl RasterBackend for TinySkiaBackend {
                         parent,
                         current_ts,
                         (*x, *y, *w, *h),
+                        width,
+                        height,
+                    ));
+                    continue;
+                }
+
+                // Same rect part as `PushClip`; the shape part adds the AA
+                // rounded path under the current transform.
+                SceneCommand::PushClipRoundedRect { x, y, w, h, radius } => {
+                    let new_rect = device_bounds(current_ts, (*x, *y, x + w, y + h));
+                    let current = *clip_stack.last().unwrap_or(&page_clip);
+                    let intersected =
+                        intersect_rects(current, new_rect).unwrap_or((0.0, 0.0, 0.0, 0.0));
+                    clip_stack.push(intersected);
+                    let parent = shape_stack.last().and_then(Option::as_ref);
+                    shape_stack.push(push_rounded_clip_shape(
+                        parent,
+                        current_ts,
+                        (*x, *y, *w, *h),
+                        *radius,
                         width,
                         height,
                     ));

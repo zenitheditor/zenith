@@ -102,6 +102,7 @@ fn fill_rects(result: &zenith_scene::CompileResult) -> Vec<FillRectSummary> {
             | SceneCommand::DrawSvgAsset { .. }
             | SceneCommand::DrawGlyphRun { .. }
             | SceneCommand::PushClip { .. }
+            | SceneCommand::PushClipRoundedRect { .. }
             | SceneCommand::PopClip
             | SceneCommand::PushLayer { .. }
             | SceneCommand::PopLayer
@@ -188,6 +189,7 @@ fn image_asset_ids(result: &zenith_scene::CompileResult) -> Vec<&str> {
             | SceneCommand::DrawSvgAsset { .. }
             | SceneCommand::DrawGlyphRun { .. }
             | SceneCommand::PushClip { .. }
+            | SceneCommand::PushClipRoundedRect { .. }
             | SceneCommand::PopClip
             | SceneCommand::PushLayer { .. }
             | SceneCommand::PopLayer

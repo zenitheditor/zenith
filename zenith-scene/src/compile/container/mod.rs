@@ -1,5 +1,5 @@
-//! Container-node compilation: `frame` (clip-only) and `group` (translate +
-//! opacity cascade), plus `instance` expansion and the bounding-box helpers used
+//! Container-node compilation: `frame` (paint + clip, no translation) and
+//! `group` (translate + opacity cascade), plus `instance` expansion and the bounding-box helpers used
 //! to determine a group's rotation pivot.
 //!
 //! This module-root is wiring only: it declares the concern-grouped submodules
@@ -9,6 +9,7 @@
 
 mod flow;
 mod frame;
+mod frame_paint;
 mod group;
 mod instance;
 mod wrap;

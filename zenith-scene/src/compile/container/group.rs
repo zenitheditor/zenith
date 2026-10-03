@@ -33,13 +33,13 @@ pub(in crate::compile) fn compile_group(
     }
 
     // Cascade opacity: multiply the group's own opacity into the inherited ctx.
-    // With a non-normal blend the group's opacity instead rides the PushLayer
-    // (emitted after the rotation push below) and children inherit `ctx.opacity`
-    // unmultiplied, so opacity is applied exactly once. No-blend path unchanged.
+    // With a non-normal blend the full cascade instead rides the PushLayer
+    // (emitted after the rotation push below) and children draw into the layer
+    // at opacity 1, so the cascade applies exactly once. No-blend path unchanged.
     let group_opacity = group.opacity.unwrap_or(1.0).clamp(0.0, 1.0);
     let blend = blend_mode_ir(group.blend_mode.as_deref());
     let child_opacity = match blend {
-        Some(_) => ctx.opacity,
+        Some(_) => 1.0,
         None => ctx.opacity * group_opacity,
     };
 

@@ -16,7 +16,8 @@ use super::layout_item::{LayoutContainer, LayoutItem, LayoutKind};
 /// defines the clip rectangle; children render at their **absolute** page
 /// coordinates — frame does NOT translate children (dx/dy are unchanged). A
 /// `column` / `grid` frame places its children inside its padded content box.
-/// `fill` / `stroke` / `radius` are parsed and validated; they do not render yet.
+/// `fill` / `stroke` / `radius` paint the frame box under its children, and a
+/// clipping frame with a radius clips to the rounded box.
 ///
 /// Opacity cascades (multiplies) into all descendant node alphas, exactly as
 /// in `GroupNode`.
@@ -108,6 +109,15 @@ pub struct FrameNode {
     pub source_span: Option<Span>,
     /// Unknown properties preserved for forward-compat.
     pub unknown_props: BTreeMap<String, UnknownProperty>,
+}
+
+impl FrameNode {
+    /// True when the frame clips its children. `clip` defaults on, except for
+    /// stacking frames (`row` / `column`).
+    pub fn clips(&self) -> bool {
+        self.clip
+            .unwrap_or_else(|| !self.layout.as_ref().is_some_and(LayoutKind::is_stack))
+    }
 }
 
 /// A named text-safe rectangle declared on a [`GroupNode`] as a

@@ -278,6 +278,7 @@ fn prefix_imported_command_refs(commands: &mut [SceneCommand], prefixes: Importe
             | SceneCommand::StrokePath { .. }
             | SceneCommand::DrawGlyphRun { .. }
             | SceneCommand::PushClip { .. }
+            | SceneCommand::PushClipRoundedRect { .. }
             | SceneCommand::PopClip
             | SceneCommand::PushLayer { .. }
             | SceneCommand::PopLayer

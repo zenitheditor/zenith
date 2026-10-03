@@ -136,6 +136,7 @@ fn effect_bracket(cmd: &SceneCommand) -> EffectBracket {
         | SceneCommand::DrawSvgAsset { .. }
         | SceneCommand::DrawGlyphRun { .. }
         | SceneCommand::PushClip { .. }
+        | SceneCommand::PushClipRoundedRect { .. }
         | SceneCommand::PopClip
         | SceneCommand::PushLayer { .. }
         | SceneCommand::PopLayer
@@ -641,6 +642,18 @@ pub(in crate::pdf) fn emit_command(
         SceneCommand::PushClip { x, y, w, h } => {
             content.save_state();
             content.rect(*x as f32, *y as f32, *w as f32, *h as f32);
+            content.clip_nonzero();
+            content.end_path();
+        }
+        // Rounded clip: the same q/Q nesting with the rounded path as `W n`.
+        SceneCommand::PushClipRoundedRect { x, y, w, h, radius } => {
+            content.save_state();
+            if *w > 0.0 && *h > 0.0 {
+                rounded_rect_path(content, *x, *y, *w, *h, [*radius; 4]);
+            } else {
+                // A degenerate box still needs a path before `W n`.
+                content.rect(*x as f32, *y as f32, *w as f32, *h as f32);
+            }
             content.clip_nonzero();
             content.end_path();
         }

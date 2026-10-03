@@ -639,3 +639,97 @@ fn anchored_boxless_text_hint_suppresses_indeterminate() {
         codes(&report)
     );
 }
+
+// ── Frame fill as a backdrop ────────────────────────────────────────────
+
+/// A frame at (100,100,300,200) with `fill` set, holding `children`.
+fn filled_frame(fill_token: &str, children: Vec<Node>) -> Node {
+    let Node::Frame(mut frame) = frame_clip("frame", 100.0, 100.0, 300.0, 200.0, children) else {
+        unreachable!("frame_clip returns Node::Frame");
+    };
+    frame.fill = Some(PropertyValue::TokenRef(fill_token.to_owned()));
+    Node::Frame(frame)
+}
+
+#[test]
+fn frame_fill_is_a_backdrop_for_its_text() {
+    let doc = doc_with(
+        base_contrast_tokens(),
+        vec![page_with_bg(
+            "page.one",
+            "color.page",
+            vec![filled_frame(
+                "color.backdrop",
+                vec![text_at("mono", "color.text", 150.0, 150.0, 80.0, 30.0)],
+            )],
+        )],
+    );
+    let report = validate(&doc);
+    assert!(
+        has_code(&report, "contrast.invisible"),
+        "black text on the navy frame fill must flag invisible; codes: {:?}",
+        codes(&report)
+    );
+}
+
+#[test]
+fn frame_child_paints_over_frame_fill() {
+    // The white child rect paints after the navy frame fill, so the black text
+    // sits on white and passes.
+    let mut tokens = base_contrast_tokens();
+    tokens.push(color_token_hex("color.card", "#ffffff"));
+    let doc = doc_with(
+        tokens,
+        vec![page_with_bg(
+            "page.one",
+            "color.page",
+            vec![filled_frame(
+                "color.backdrop",
+                vec![
+                    rect_backdrop_at("card", "color.card", 120.0, 120.0, 200.0, 100.0),
+                    text_at("mono", "color.text", 150.0, 150.0, 80.0, 30.0),
+                ],
+            )],
+        )],
+    );
+    let report = validate(&doc);
+    assert!(
+        !has_code(&report, "contrast.invisible") && !has_code(&report, "contrast.low"),
+        "text on the white child card must pass; codes: {:?}",
+        codes(&report)
+    );
+}
+
+#[test]
+fn unclipped_frame_does_not_clip_text_sampling() {
+    // clip=#false: text outside the frame box still renders over the navy
+    // page-level rect, so it must be sampled and flagged.
+    let Node::Frame(mut frame) = frame_clip(
+        "frame",
+        100.0,
+        100.0,
+        100.0,
+        100.0,
+        vec![text_at("mono", "color.text", 450.0, 450.0, 80.0, 30.0)],
+    ) else {
+        unreachable!("frame_clip returns Node::Frame");
+    };
+    frame.clip = Some(false);
+    let doc = doc_with(
+        base_contrast_tokens(),
+        vec![page_with_bg(
+            "page.one",
+            "color.page",
+            vec![
+                rect_backdrop_at("backdrop", "color.backdrop", 400.0, 400.0, 200.0, 200.0),
+                Node::Frame(frame),
+            ],
+        )],
+    );
+    let report = validate(&doc);
+    assert!(
+        has_code(&report, "contrast.invisible"),
+        "text outside an unclipped frame must be sampled; codes: {:?}",
+        codes(&report)
+    );
+}

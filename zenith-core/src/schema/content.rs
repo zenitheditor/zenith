@@ -185,9 +185,11 @@ pub fn node_content(kind: &str) -> Option<NodeContentDescriptor> {
                 `gap` apart; children omit x/y and stretch to the content width when they \
                 omit w (no clip unless clip=#true). layout=\"grid\" tiles children into \
                 `columns` × `rows` cells. `gap` and `padding*` take a px literal or a \
-                dimension token. layout=\"row\", wrap, justify, non-stretch align, \
-                w/h=\"hug\"|\"fill\", min/max sizes, position=\"absolute\", and frame \
-                fill/stroke/radius validate as `layout.not_yet_supported`.",
+                dimension token. Frame fill/stroke/stroke-width/radius paint the box \
+                under the children; a clipping frame with a radius clips to the \
+                rounded box. layout=\"row\", wrap, justify, non-stretch align, \
+                w/h=\"hug\"|\"fill\", min/max sizes, and position=\"absolute\" \
+                validate as `layout.not_yet_supported`.",
             example: "rect id=\"bg\" x=(px)0 y=(px)0 w=(px)400 h=(px)300 fill=(token)\"color.bg\"",
         }),
         "group" => Some(NodeContentDescriptor {

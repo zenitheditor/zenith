@@ -8,15 +8,18 @@
 //!   page-sized coverage mask: the AA quad of each non-axis-aligned clip,
 //!   multiplied together.
 //!
+//! A rounded clip (`PushClipRoundedRect`) always adds its AA rounded path to
+//! `shape`, whatever the transform.
+//!
 //! A draw clips to `rect`, then to `shape` when present. With no rotated clip
 //! active `shape` is `None` and every draw is byte-identical to the rect-only
 //! clip path.
 
 use std::rc::Rc;
 
-use tiny_skia::{FillRule, Mask, PathBuilder, Rect, Transform};
+use tiny_skia::{FillRule, Mask, Path, PathBuilder, Rect, Transform};
 
-use super::paths::clip_mask;
+use super::paths::{build_rounded_rect_path, clip_mask};
 
 /// True when `ts` maps rectangles to axis-aligned rectangles (scale and
 /// translate only, no rotation or skew).
@@ -40,15 +43,45 @@ pub(super) fn push_clip_shape(
     if is_axis_aligned(ts) {
         return parent.cloned();
     }
-    let mut quad = Mask::new(width, height)?;
-    if let Some(rect) = Rect::from_xywh(x as f32, y as f32, w as f32, h as f32) {
-        let path = PathBuilder::from_rect(rect);
-        quad.fill_path(&path, FillRule::Winding, true, ts);
+    let path = Rect::from_xywh(x as f32, y as f32, w as f32, h as f32).map(PathBuilder::from_rect);
+    shape_mask(parent, path.as_ref(), ts, width, height)
+}
+
+/// The clip shape after pushing the user-space rounded rect `(x, y, w, h)`
+/// with corner `radius` under `ts`.
+///
+/// Always builds a mask, since the corners are not rectangular under any
+/// transform. Same contract as [`push_clip_shape`] otherwise.
+pub(super) fn push_rounded_clip_shape(
+    parent: Option<&Rc<Mask>>,
+    ts: Transform,
+    (x, y, w, h): (f64, f64, f64, f64),
+    radius: f64,
+    width: u32,
+    height: u32,
+) -> Option<Rc<Mask>> {
+    let r = radius as f32;
+    let path = build_rounded_rect_path(x as f32, y as f32, w as f32, h as f32, [r; 4]);
+    shape_mask(parent, path.as_ref(), ts, width, height)
+}
+
+/// Fill `path` under `ts` (anti-aliased) into a page-sized mask and multiply
+/// it with `parent`. A missing path yields an all-zero mask.
+fn shape_mask(
+    parent: Option<&Rc<Mask>>,
+    path: Option<&Path>,
+    ts: Transform,
+    width: u32,
+    height: u32,
+) -> Option<Rc<Mask>> {
+    let mut mask = Mask::new(width, height)?;
+    if let Some(path) = path {
+        mask.fill_path(path, FillRule::Winding, true, ts);
     }
     if let Some(parent) = parent {
-        intersect_masks(&mut quad, parent);
+        intersect_masks(&mut mask, parent);
     }
-    Some(Rc::new(quad))
+    Some(Rc::new(mask))
 }
 
 /// Multiply `dst` by `other` per pixel: `(a × b + 127) / 255`.

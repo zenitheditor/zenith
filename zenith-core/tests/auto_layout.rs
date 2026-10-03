@@ -411,9 +411,6 @@ fn gated_container_features_are_not_yet_supported() {
         r#"layout="column" wrap=#true"#,
         r#"layout="column" justify="center""#,
         r#"layout="column" align="end""#,
-        r#"layout="column" fill=(token)"color.k""#,
-        r#"stroke=(token)"color.k""#,
-        r#"radius=(token)"space.s""#,
     ] {
         let report = check(&format!(
             r#"      frame id="f" x=(px)0 y=(px)0 w=(px)200 h=(px)200 {attrs} {{
@@ -424,6 +421,28 @@ fn gated_container_features_are_not_yet_supported() {
         assert_eq!(d.len(), 1, "{attrs}: {:?}", report.diagnostics);
         assert_eq!(d[0].severity, Severity::Error);
         assert_eq!(d[0].subject_id.as_deref(), Some("f"));
+    }
+}
+
+#[test]
+fn frame_paint_attributes_are_supported() {
+    for attrs in [
+        r#"fill=(token)"color.k""#,
+        r#"layout="column" fill=(token)"color.k""#,
+        r#"stroke=(token)"color.k" stroke-width=(token)"space.s""#,
+        r#"radius=(token)"space.s""#,
+    ] {
+        let report = check(&format!(
+            r#"      frame id="f" x=(px)0 y=(px)0 w=(px)200 h=(px)200 {attrs} {{
+        rect id="r" h=(px)20 x=(px)0 y=(px)0 w=(px)10 fill=(token)"color.k"
+      }}"#
+        ));
+        assert!(
+            !has(&report, "layout.not_yet_supported"),
+            "{attrs}: {:?}",
+            report.diagnostics
+        );
+        assert!(errors(&report).is_empty(), "{attrs}: {:?}", errors(&report));
     }
 }
 

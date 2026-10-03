@@ -4,7 +4,7 @@
 
 use std::collections::BTreeMap;
 
-use crate::ast::node::{Node, RectNode, TextNode};
+use crate::ast::node::{FrameNode, Node, RectNode, TextNode};
 use crate::ast::style::Style;
 use crate::ast::value::{Dimension, PropertyValue, dim_to_px};
 use crate::color::parse_rgb;
@@ -118,17 +118,68 @@ pub(super) fn container_is_unmodeled(node: &Node) -> bool {
 }
 
 /// Build the coverage shape for a `rect` backdrop: a plain rectangle, or a
-/// rounded rectangle when any (per-corner) radius is set. Radii are resolved to
-/// pixels and clamped to the box half-extents so corner arcs never overlap.
+/// rounded rectangle when any (per-corner) radius is set.
 pub(super) fn rect_coverage_shape(
     rect: &RectNode,
     page_size: (f64, f64),
     resolved_tokens: &BTreeMap<String, ResolvedToken>,
 ) -> CoverageShape {
+    box_coverage_shape(
+        BoxRadii {
+            w: rect.w.as_ref(),
+            h: rect.h.as_ref(),
+            uniform: rect.radius.as_ref(),
+            corners: [
+                rect.radius_tl.as_ref(),
+                rect.radius_tr.as_ref(),
+                rect.radius_br.as_ref(),
+                rect.radius_bl.as_ref(),
+            ],
+        },
+        page_size,
+        resolved_tokens,
+    )
+}
+
+/// Build the coverage shape for a `frame` fill: a rounded rectangle when the
+/// frame `radius` is set, else a plain rectangle.
+pub(super) fn frame_coverage_shape(
+    frame: &FrameNode,
+    page_size: (f64, f64),
+    resolved_tokens: &BTreeMap<String, ResolvedToken>,
+) -> CoverageShape {
+    box_coverage_shape(
+        BoxRadii {
+            w: frame.w.as_ref(),
+            h: frame.h.as_ref(),
+            uniform: frame.radius.as_ref(),
+            corners: [None; 4],
+        },
+        page_size,
+        resolved_tokens,
+    )
+}
+
+/// The size and radius attributes of a box backdrop.
+struct BoxRadii<'a> {
+    w: Option<&'a PropertyValue>,
+    h: Option<&'a PropertyValue>,
+    uniform: Option<&'a PropertyValue>,
+    /// Per-corner overrides `[tl, tr, br, bl]`.
+    corners: [Option<&'a PropertyValue>; 4],
+}
+
+/// Radii resolve to pixels and clamp to the box half-extents, so corner arcs
+/// never overlap.
+fn box_coverage_shape(
+    b: BoxRadii<'_>,
+    page_size: (f64, f64),
+    resolved_tokens: &BTreeMap<String, ResolvedToken>,
+) -> CoverageShape {
     let (page_w, page_h) = page_size;
     let (Some(w), Some(h)) = (
-        resolve_axis_px(rect.w.as_ref(), page_w, resolved_tokens),
-        resolve_axis_px(rect.h.as_ref(), page_h, resolved_tokens),
+        resolve_axis_px(b.w, page_w, resolved_tokens),
+        resolve_axis_px(b.h, page_h, resolved_tokens),
     ) else {
         return CoverageShape::Rect;
     };
@@ -136,16 +187,12 @@ pub(super) fn rect_coverage_shape(
         return CoverageShape::Rect;
     }
     let limit = (w.min(h)) / 2.0;
-    let uniform = rect.radius.as_ref();
     let corner = |override_value: Option<&PropertyValue>| -> f64 {
-        resolve_axis_px(override_value.or(uniform), limit, resolved_tokens)
+        resolve_axis_px(override_value.or(b.uniform), limit, resolved_tokens)
             .unwrap_or(0.0)
             .clamp(0.0, limit)
     };
-    let tl = corner(rect.radius_tl.as_ref());
-    let tr = corner(rect.radius_tr.as_ref());
-    let br = corner(rect.radius_br.as_ref());
-    let bl = corner(rect.radius_bl.as_ref());
+    let [tl, tr, br, bl] = b.corners.map(corner);
     if tl <= 0.0 && tr <= 0.0 && br <= 0.0 && bl <= 0.0 {
         CoverageShape::Rect
     } else {

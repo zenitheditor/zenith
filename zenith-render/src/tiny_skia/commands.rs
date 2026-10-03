@@ -104,6 +104,7 @@ pub(in crate::tiny_skia) fn draw_command(
         // exhaustive over `SceneCommand`; reaching them is impossible, and a
         // no-op is the safe identity.
         SceneCommand::PushClip { .. }
+        | SceneCommand::PushClipRoundedRect { .. }
         | SceneCommand::PopClip
         | SceneCommand::PushLayer { .. }
         | SceneCommand::PopLayer

@@ -311,7 +311,17 @@ pub enum SceneCommand {
     // ── Clip / layer stack ────────────────────────────────────────────────
     /// Push an axis-aligned clip rectangle onto the clip stack.
     PushClip { x: f64, y: f64, w: f64, h: f64 },
-    /// Pop the most-recently pushed clip rectangle.
+    /// Push a rounded-rectangle clip with one corner `radius` onto the clip
+    /// stack. `PopClip` pops it. Backends clamp `radius` to `min(w, h) / 2`.
+    /// Compilers emit `PushClip` instead when the radius is 0.
+    PushClipRoundedRect {
+        x: f64,
+        y: f64,
+        w: f64,
+        h: f64,
+        radius: f64,
+    },
+    /// Pop the most-recently pushed clip (`PushClip` or `PushClipRoundedRect`).
     PopClip,
     /// Push a compositing layer (for opacity, blend, mask).
     ///

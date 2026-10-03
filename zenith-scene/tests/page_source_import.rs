@@ -89,6 +89,7 @@ fn solid_fill_colors(result: &zenith_scene::CompileResult) -> Vec<(u8, u8, u8)> 
             | SceneCommand::DrawSvgAsset { .. }
             | SceneCommand::DrawGlyphRun { .. }
             | SceneCommand::PushClip { .. }
+            | SceneCommand::PushClipRoundedRect { .. }
             | SceneCommand::PopClip
             | SceneCommand::PushLayer { .. }
             | SceneCommand::PopLayer
@@ -130,6 +131,7 @@ fn scale_translate_commands(result: &zenith_scene::CompileResult) -> Vec<(f64, f
             | SceneCommand::DrawSvgAsset { .. }
             | SceneCommand::DrawGlyphRun { .. }
             | SceneCommand::PushClip { .. }
+            | SceneCommand::PushClipRoundedRect { .. }
             | SceneCommand::PopClip
             | SceneCommand::PushLayer { .. }
             | SceneCommand::PopLayer
@@ -169,6 +171,7 @@ fn image_asset_ids(result: &zenith_scene::CompileResult) -> Vec<&str> {
             | SceneCommand::DrawSvgAsset { .. }
             | SceneCommand::DrawGlyphRun { .. }
             | SceneCommand::PushClip { .. }
+            | SceneCommand::PushClipRoundedRect { .. }
             | SceneCommand::PopClip
             | SceneCommand::PushLayer { .. }
             | SceneCommand::PopLayer

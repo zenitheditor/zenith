@@ -18,6 +18,7 @@ use super::super::util::{
     AxisTarget, blend_mode_ir, missing_geometry_diag, resolve_anchored_axis, resolve_geometry_px,
     resolve_property_dimension_px, rotation_degrees, unsupported_unit_diag,
 };
+use super::box_paint::{BoxGeom, BoxPaintEnv, BoxStroke, push_box_fill, push_box_stroke};
 use super::common::resolve_dash_params;
 
 /// Read-only environment references shared by both `compile_rect` and
@@ -157,9 +158,6 @@ pub(in crate::compile) fn compile_rect(
         None
     };
 
-    // A rect is "rounded" when the uniform radius or any per-corner override > 0.
-    let is_rounded = radius > 0.0 || radii.as_ref().is_some_and(|a| a.iter().any(|&v| v > 0.0));
-
     // Rotation bracket (outermost). PushTransform is only emitted when
     // rotate is non-zero; unrotated rects are byte-identical to before.
     let rot = rotation_degrees(rect.rotate.as_ref());
@@ -222,46 +220,25 @@ pub(in crate::compile) fn compile_rect(
     // FILL (emitted first, under the stroke) — node-local prop overrides
     // style cascade. Any `(data)` ref was already substituted to a `Literal` by
     // the document pre-pass, so the paint pipeline only sees plain values here.
+    let geom = BoxGeom {
+        x,
+        y,
+        w,
+        h,
+        radius,
+        radii,
+    };
+    let paint_env = BoxPaintEnv {
+        resolved,
+        node_id: &rect.id,
+        color_op,
+    };
     let fill_prop = rect
         .fill
         .as_ref()
         .or_else(|| style_prop(&rect.style, style_map, "fill"));
     if let Some(fill_prop) = fill_prop {
-        if let Some(mut gradient) = resolve_property_gradient(fill_prop, resolved, &rect.id) {
-            apply_gradient_opacity(&mut gradient, color_op, 1.0);
-            let paint = Paint::Gradient(gradient);
-            if is_rounded {
-                draws.push(SceneCommand::FillRoundedRect {
-                    x,
-                    y,
-                    w,
-                    h,
-                    radius,
-                    radii,
-                    paint,
-                });
-            } else {
-                draws.push(SceneCommand::FillRect { x, y, w, h, paint });
-            }
-        } else if let Some(mut color) =
-            resolve_property_color(fill_prop, resolved, diagnostics, &rect.id)
-        {
-            color.a = (color.a as f64 * color_op).round() as u8;
-            let paint = Paint::solid(color);
-            if is_rounded {
-                draws.push(SceneCommand::FillRoundedRect {
-                    x,
-                    y,
-                    w,
-                    h,
-                    radius,
-                    radii,
-                    paint,
-                });
-            } else {
-                draws.push(SceneCommand::FillRect { x, y, w, h, paint });
-            }
-        }
+        push_box_fill(&mut draws, geom, fill_prop, paint_env, diagnostics);
     }
 
     // STROKE (emitted on top of the fill) — node-local prop overrides
@@ -270,106 +247,26 @@ pub(in crate::compile) fn compile_rect(
         .stroke
         .as_ref()
         .or_else(|| style_prop(&rect.style, style_map, "stroke"));
-    if let Some(stroke_prop) = stroke_prop
-        && let Some(mut color) =
-            resolve_property_color(stroke_prop, resolved, diagnostics, &rect.id)
-    {
-        color.a = (color.a as f64 * color_op).round() as u8;
+    if let Some(stroke_prop) = stroke_prop {
         let sw = rect
             .stroke_width
-            .clone()
-            .or_else(|| style_prop(&rect.style, style_map, "stroke-width").cloned());
-        let stroke_width = resolve_property_dimension_px(sw.as_ref(), resolved, 1.0);
-
-        // Resolve dashed stroke parameters.
-        let (stroke_dash, stroke_gap, stroke_linecap) = resolve_dash_params(
+            .as_ref()
+            .or_else(|| style_prop(&rect.style, style_map, "stroke-width"));
+        let (dash, gap, linecap) = resolve_dash_params(
             rect.stroke_dash.as_ref(),
             rect.stroke_gap.as_ref(),
             rect.stroke_linecap.as_deref(),
             resolved,
         );
-
-        // Stroke alignment offsets the stroke path relative to the box
-        // edge by half the stroke width. `center` (default) straddles the
-        // edge; `inside`/`outside` shift the whole stroked rectangle in or
-        // out. The fill geometry above is unaffected.
-        let half = stroke_width / 2.0;
-
-        // Helper: adjust a single corner radius for stroke alignment. A
-        // corner with radius 0 stays sharp (no adjustment).
-        let adjust_inside = |v: f64| if v > 0.0 { (v - half).max(0.0) } else { 0.0 };
-        let adjust_outside = |v: f64| if v > 0.0 { v + half } else { 0.0 };
-
-        let (sx, sy, sw_geom, sh_geom, sradius, sradii) = match rect.stroke_alignment.as_deref() {
-            Some("inside") => (
-                x + half,
-                y + half,
-                w - stroke_width,
-                h - stroke_width,
-                adjust_inside(radius),
-                radii.map(|[tl, tr, br, bl]| {
-                    [
-                        adjust_inside(tl),
-                        adjust_inside(tr),
-                        adjust_inside(br),
-                        adjust_inside(bl),
-                    ]
-                }),
-            ),
-            Some("outside") => (
-                x - half,
-                y - half,
-                w + stroke_width,
-                h + stroke_width,
-                adjust_outside(radius),
-                radii.map(|[tl, tr, br, bl]| {
-                    [
-                        adjust_outside(tl),
-                        adjust_outside(tr),
-                        adjust_outside(br),
-                        adjust_outside(bl),
-                    ]
-                }),
-            ),
-            // "center" (default) and any unrecognized value.
-            _ => (x, y, w, h, radius, radii),
+        let stroke = BoxStroke {
+            color: stroke_prop,
+            width: resolve_property_dimension_px(sw, resolved, 1.0),
+            dash,
+            gap,
+            linecap,
+            alignment: rect.stroke_alignment.as_deref(),
         };
-
-        // Whether the stroked shape is still rounded after alignment.
-        let stroke_is_rounded =
-            sradius > 0.0 || sradii.as_ref().is_some_and(|a| a.iter().any(|&v| v > 0.0));
-
-        // An inside-aligned stroke can shrink the box to nothing; skip
-        // rather than emit a degenerate rectangle.
-        if sw_geom > 0.0 && sh_geom > 0.0 {
-            if stroke_is_rounded {
-                draws.push(SceneCommand::StrokeRoundedRect {
-                    x: sx,
-                    y: sy,
-                    w: sw_geom,
-                    h: sh_geom,
-                    radius: sradius,
-                    radii: sradii,
-                    color,
-                    stroke_width,
-                    stroke_dash,
-                    stroke_gap,
-                    stroke_linecap,
-                });
-            } else {
-                draws.push(SceneCommand::StrokeRect {
-                    x: sx,
-                    y: sy,
-                    w: sw_geom,
-                    h: sh_geom,
-                    color,
-                    stroke_width,
-                    stroke_dash,
-                    stroke_gap,
-                    stroke_linecap,
-                });
-            }
-        }
+        push_box_stroke(&mut draws, geom, stroke, paint_env, diagnostics);
     }
 
     // Emit the collected draws into `commands`, bracketed by the winning effect
@@ -392,7 +289,7 @@ pub(in crate::compile) fn compile_rect(
         let ogw = w + ow;
         let ogh = h + ow;
         if ogw > 0.0 && ogh > 0.0 {
-            if is_rounded {
+            if geom.is_rounded() {
                 // Expand corner radii outward by half the outer stroke width.
                 // A corner with radius 0 stays sharp (no outset).
                 let outer_expand = |v: f64| if v > 0.0 { v + half } else { 0.0 };

@@ -713,3 +713,47 @@ fn textless_scene_identical_under_subset_options() {
         "a textless scene must embed no fonts"
     );
 }
+
+/// A page with one clip command around a red fill.
+fn clipped_fill_scene(clip: SceneCommand) -> Scene {
+    let mut scene = Scene::new(100.0, 100.0);
+    scene.commands.push(clip);
+    scene.commands.push(SceneCommand::FillRect {
+        x: 0.0,
+        y: 0.0,
+        w: 100.0,
+        h: 100.0,
+        paint: Paint::solid(Color::srgb(255, 0, 0, 255)),
+    });
+    scene.commands.push(SceneCommand::PopClip);
+    scene
+}
+
+#[test]
+fn rounded_clip_emits_curved_clip_path() {
+    let bytes = render(&clipped_fill_scene(SceneCommand::PushClipRoundedRect {
+        x: 20.0,
+        y: 20.0,
+        w: 60.0,
+        h: 60.0,
+        radius: 10.0,
+    }));
+    let text = String::from_utf8_lossy(&bytes);
+    // Start of the top edge, then a corner arc, closed and installed as `W n`.
+    assert!(text.contains("30 20 m"), "rounded path start");
+    assert!(text.contains(" c\n"), "corner arcs use `c`");
+    assert!(text.contains("h\nW\nn"), "rounded clip installs `W n`");
+    assert!(!text.contains("20 20 60 60 re"), "no square clip");
+}
+
+#[test]
+fn rect_clip_still_emits_re_clip() {
+    let bytes = render(&clipped_fill_scene(SceneCommand::PushClip {
+        x: 20.0,
+        y: 20.0,
+        w: 60.0,
+        h: 60.0,
+    }));
+    let text = String::from_utf8_lossy(&bytes);
+    assert!(text.contains("20 20 60 60 re\nW\nn"), "rect clip");
+}

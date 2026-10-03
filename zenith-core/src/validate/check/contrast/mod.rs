@@ -24,9 +24,9 @@ use geometry::{
     text_box,
 };
 use props::{
-    candidate_has_effect, clip_bounds, container_is_unmodeled, leaf_rotation, node_rotate_deg,
-    rect_coverage_shape, resolve_color_property, resolve_font_size, resolve_font_weight,
-    style_property,
+    candidate_has_effect, clip_bounds, container_is_unmodeled, frame_coverage_shape, leaf_rotation,
+    node_rotate_deg, rect_coverage_shape, resolve_color_property, resolve_font_size,
+    resolve_font_weight, style_property,
 };
 
 /// Below this APCA magnitude the text is effectively painted into its backdrop,
@@ -158,14 +158,26 @@ fn walk_paint(
             Node::Polygon(poly) => push_polygon_backdrop(node, poly, ctx, candidates, env),
             Node::Polyline(poly) => push_polyline_backdrop(node, poly, ctx, candidates, env),
             Node::Frame(f) => {
+                let clips = f.clips();
                 let frame_box = absolute_box(node, ctx, env.resolved_tokens);
-                let frame_clip = frame_box.and_then(|b| clip_bounds(ctx.clip, b));
-                let no_fill: Option<PropertyValue> = None;
+                let frame_clip = match frame_box {
+                    // A frame clipped out entirely hides its children: an
+                    // empty clip keeps them out of sampling.
+                    Some(b) if clips => clip_bounds(ctx.clip, b).or(Some(RectPx {
+                        x: b.x,
+                        y: b.y,
+                        w: 0.0,
+                        h: 0.0,
+                    })),
+                    Some(_) | None => ctx.clip,
+                };
+                // The frame fill paints under its children, so it is a backdrop
+                // before any child candidate.
                 push_backdrop(
                     node,
-                    &no_fill,
+                    &f.fill,
                     &f.style,
-                    CoverageShape::Rect,
+                    frame_coverage_shape(f, ctx.page_size, env.resolved_tokens),
                     ctx,
                     candidates,
                     env,
