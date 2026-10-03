@@ -46,6 +46,7 @@ pub mod text_outline;
 pub use compile::{
     CompileResult, CompiledBox, DocumentPrep, ImportGraph, ImportedDocument, LayoutStats,
     PageCompiler, compile, compile_page, compile_page_with_imports, layout_boxes,
+    sizes_read_as_one, text_size_floor_px,
 };
 pub use construction_overlay::append_construction_overlay;
 pub use ir::{

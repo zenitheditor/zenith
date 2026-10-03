@@ -22,10 +22,16 @@ const FLOOR_SHARE: f64 = 0.009;
 /// Rounding slack of a size drawn at exactly the floor.
 const EPSILON: f64 = 0.01;
 
+/// The `text.too_small` floor, in whole px, for a `page_w`×`page_h` px page:
+/// `max(9px, 0.9% of the shorter side)`, rounded up.
+pub fn text_size_floor_px(page_w: f64, page_h: f64) -> f64 {
+    (page_w.min(page_h) * FLOOR_SHARE).max(MIN_FLOOR).ceil()
+}
+
 /// Every `text.too_small` of the page. `page` is the page size in px. A
 /// chart reports each text role once, at its smallest drawn size.
 pub(super) fn too_small(ledger: &PageLedger, text: &PageText, page: (f64, f64)) -> Vec<Diagnostic> {
-    let floor = (page.0.min(page.1) * FLOOR_SHARE).max(MIN_FLOOR).ceil();
+    let floor = text_size_floor_px(page.0, page.1);
     let mut chart_seen: BTreeSet<(usize, ChartTextRole)> = BTreeSet::new();
     let mut items: Vec<&TextItem> = ledger.texts.iter().collect();
     // Smallest first, so the kept chart item per role is its smallest.

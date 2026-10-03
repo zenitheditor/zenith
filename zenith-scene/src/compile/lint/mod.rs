@@ -37,3 +37,5 @@ mod type_scale;
 
 pub(in crate::compile) use paint::PaintEnv;
 pub(in crate::compile) use run::{LintEnv, lint_page};
+pub use small_text::text_size_floor_px;
+pub use type_scale::sizes_read_as_one;

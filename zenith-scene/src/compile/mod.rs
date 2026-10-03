@@ -63,6 +63,7 @@ pub(in crate::compile) use dispatch::compile_node;
 pub use entry::{compile, compile_page, compile_page_with_imports, layout_boxes};
 pub use imports::{ImportGraph, ImportedDocument};
 pub(crate) use intrinsic::{ImageSizes, IntrinsicEnv, ProbeAt, ProbeHints};
+pub use lint::{sizes_read_as_one, text_size_floor_px};
 pub use pipeline::CompileResult;
 pub(in crate::compile) use pipeline::{RenderCtx, compile_page_inner};
 pub(crate) use pipeline::{style_enum, style_h_align, style_prop};
