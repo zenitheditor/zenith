@@ -14,6 +14,7 @@ use super::super::paint::{
     resolve_property_shadow,
 };
 use super::super::util::{blend_mode_ir, resolve_geometry_px, rotation_degrees};
+use super::super::{style_enum, style_prop};
 use super::baseline::{baseline_grid_snap_failed_diag, snap_to_baseline_grid};
 use super::ctx::{ChainMemberPlace, EmitStyle};
 use super::emit::emit_lines;
@@ -43,6 +44,7 @@ pub(in crate::compile) fn render_chain_member(
         text_y,
         baseline_grid,
         glyph_stroke,
+        style_map,
     } = place;
 
     // Box width is required to position lines; height/align are optional.
@@ -51,7 +53,11 @@ pub(in crate::compile) fn render_chain_member(
         None => return 0.0,
     };
     let box_h_opt: Option<f64> = resolve_geometry_px(text.h.as_ref(), resolved);
-    let align = text.align.as_deref().unwrap_or("start");
+    let align = text
+        .align
+        .as_ref()
+        .or_else(|| style_enum(&text.style, style_map, "align"))
+        .map_or("start", String::as_str);
     let deco_thickness = (font_size as f64 / 14.0).max(1.0);
 
     // ── Baseline-grid snap (chain member) ────────────────────────────────
@@ -131,6 +137,7 @@ pub(in crate::compile) fn render_chain_member(
     } else if let Some(shadows) = text
         .shadow
         .as_ref()
+        .or_else(|| style_prop(&text.style, style_map, "shadow"))
         .and_then(|p| resolve_property_shadow(p, resolved, &text.id))
     {
         Some(NodeEffect::Shadow(shadows))

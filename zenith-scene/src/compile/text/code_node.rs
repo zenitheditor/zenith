@@ -41,30 +41,40 @@ struct GutterMetrics {
     number_color: Color,
 }
 
+/// The laid-out content size of a `code` node, in px.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub(in crate::compile) struct CodeExtent {
+    /// Gutter width plus the advance width of the widest line.
+    pub(in crate::compile) width: f64,
+    /// `line_count * line_height`, counting lines up to the last inked one.
+    pub(in crate::compile) height: f64,
+}
+
 /// Compile a `code` leaf node.
 ///
-/// Returns the laid-out content height in pixels (`line_count * line_height`,
-/// where `line_count` counts every physical source line including blanks),
-/// which the auto-layout measure pass reads as the hug height of a code child
-/// without an explicit `h`. Early returns (invisible, missing/bad geometry)
-/// yield `0.0`.
+/// Returns the laid-out content size. The auto-layout measure pass reads it
+/// as the hug size of a code child without an explicit `w` / `h`: the width
+/// is the line-number gutter plus the advance width of the widest line (the
+/// same advance metric a text node's natural width uses), and the height is
+/// `line_count * line_height`. Early returns (invisible, missing/bad
+/// geometry) yield zero.
 pub(in crate::compile) fn compile_code(
     code: &CodeNode,
     env: TextCompileEnv,
     commands: &mut Vec<SceneCommand>,
     diagnostics: &mut Vec<Diagnostic>,
     ctx: RenderCtx,
-) -> f64 {
+) -> CodeExtent {
     // Emit, then downgrade this node's glyph runs to outlines when the node opts
     // out of selectable text. Purely a PDF render concern, applied as a post-pass
     // over exactly the commands this node produced (see `compile_text`). Default
     // (`None`/`Some(true)`) is byte-identical.
     let start = commands.len();
-    let height = compile_code_impl(code, env, commands, diagnostics, ctx);
+    let extent = compile_code_impl(code, env, commands, diagnostics, ctx);
     if code.selectable == Some(false) {
         super::shape::mark_runs_unselectable(&mut commands[start..]);
     }
-    height
+    extent
 }
 
 fn compile_code_impl(
@@ -73,7 +83,7 @@ fn compile_code_impl(
     commands: &mut Vec<SceneCommand>,
     diagnostics: &mut Vec<Diagnostic>,
     ctx: RenderCtx,
-) -> f64 {
+) -> CodeExtent {
     let resolved = env.resolved;
     let style_map = env.style_map;
     let fonts = env.fonts;
@@ -82,7 +92,7 @@ fn compile_code_impl(
 
     // Skip invisible code nodes.
     if code.visible == Some(false) {
-        return 0.0;
+        return CodeExtent::default();
     }
 
     // Width/height are OPTIONAL; they bound the clip rectangle when
@@ -105,7 +115,7 @@ fn compile_code_impl(
                     "x",
                     code.source_span,
                 ));
-                return 0.0;
+                return CodeExtent::default();
             };
             v
         }
@@ -122,7 +132,7 @@ fn compile_code_impl(
                     code.source_span,
                     Some(code.id.clone()),
                 ));
-                return 0.0;
+                return CodeExtent::default();
             }
         }
     };
@@ -137,7 +147,7 @@ fn compile_code_impl(
                     "y",
                     code.source_span,
                 ));
-                return 0.0;
+                return CodeExtent::default();
             };
             v
         }
@@ -154,7 +164,7 @@ fn compile_code_impl(
                     code.source_span,
                     Some(code.id.clone()),
                 ));
-                return 0.0;
+                return CodeExtent::default();
             }
         }
     };
@@ -382,10 +392,13 @@ fn compile_code_impl(
 
     // Shift the code-text x-origin right by the gutter width so that
     // gutter and code-text occupy non-overlapping horizontal bands.
+    let gutter_width = gutter.as_ref().map_or(0.0, |g| g.gutter_width);
     let code_x = match &gutter {
         Some(g) => code_x + g.gutter_width,
         None => code_x,
     };
+    // Advance width of the widest shaped line.
+    let mut widest_line: f64 = 0.0;
 
     // Multi-line emission: each physical line becomes its own glyph run,
     // stacked by `line_height`. Blank lines emit no run but the index `i`
@@ -541,6 +554,7 @@ fn compile_code_impl(
                     });
                     x_cursor += advance;
                 }
+                widest_line = widest_line.max(x_cursor - code_x);
             }
         } else {
             // ── Plain path (no highlighting): single run per line ──────
@@ -573,6 +587,7 @@ fn compile_code_impl(
                     if measured_line_height == 0.0 {
                         measured_line_height = run.line_height as f64;
                     }
+                    widest_line = widest_line.max(run.advance_width as f64);
                     let baseline_y =
                         code_y + run.ascent as f64 + (i as f64) * run.line_height as f64;
                     let glyphs = run_to_scene_glyphs(&run);
@@ -606,8 +621,12 @@ fn compile_code_impl(
     // Laid-out content height: number of lines spanned (index of the last
     // ink-bearing line + 1, so trailing blank lines do not inflate the box)
     // times the shared per-line height. Zero when nothing was shaped.
-    match last_inked_line {
+    let height = match last_inked_line {
         Some(last) => (last + 1) as f64 * measured_line_height,
         None => 0.0,
+    };
+    CodeExtent {
+        width: gutter_width + widest_line,
+        height,
     }
 }

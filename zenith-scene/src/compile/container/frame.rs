@@ -14,7 +14,7 @@ use super::super::paint::{
 use super::super::util::{
     blend_mode_ir, resolve_geometry_px, rotation_degrees, unsupported_unit_diag,
 };
-use super::super::{NodeCtx, RenderCtx, compile_node};
+use super::super::{NodeCtx, RenderCtx, compile_node, style_prop};
 use super::frame_paint::{frame_clip_command, frame_radius, push_frame_paint};
 use super::wrap::emit_wrapped_container;
 
@@ -141,6 +141,7 @@ pub(in crate::compile) fn compile_frame(
     } else if let Some(shadows) = frame
         .shadow
         .as_ref()
+        .or_else(|| style_prop(&frame.style, cx.style_map, "shadow"))
         .and_then(|p| resolve_property_shadow(p, cx.resolved, &frame.id))
     {
         Some(NodeEffect::Shadow(shadows))
@@ -173,6 +174,7 @@ pub(in crate::compile) fn compile_frame(
         dy: ctx.dy, // clip-only: no translation
         // Page baseline grid cascades unchanged so all text shares one grid.
         baseline_grid: ctx.baseline_grid,
+        page_origin: ctx.page_origin,
     };
 
     if effect.is_none() && mask.is_none() {

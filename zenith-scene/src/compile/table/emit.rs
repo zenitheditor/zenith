@@ -11,6 +11,7 @@ use zenith_layout::RustybuzzEngine;
 
 use crate::ir::{Paint, SceneCommand};
 
+use super::super::ImageSizes;
 use super::super::anchor::AnchorMap;
 use super::super::chain::ChainAssignments;
 use super::super::field::FieldCtx;
@@ -19,7 +20,7 @@ use super::super::paint::resolve_property_color;
 use super::super::table_flow::TableFlowAssignments;
 use super::super::text::{MeasureEnv, empty_md_blocks, measure_text_wrapped_height};
 use super::super::util::{resolve_geometry_px, resolve_property_dimension_px};
-use super::super::{ComponentMap, NodeCtx, RenderCtx, compile_node};
+use super::super::{ComponentMap, NodeCtx, RenderCtx, compile_node, style_enum, style_h_align};
 
 use super::collapse::{EdgeKey, EdgeStyle, accumulate_cell_edges, resolve_border_width};
 use super::layout::{
@@ -54,6 +55,8 @@ pub(in crate::compile) struct TableEmitCtx<'a> {
     pub(in crate::compile) anchors: &'a AnchorMap,
     /// Per-page field context (page index, live area, footnote markers, …).
     pub(in crate::compile) field_ctx: &'a FieldCtx<'a>,
+    /// Intrinsic pixel size of each image / SVG asset, for auto-layout.
+    pub(in crate::compile) image_sizes: &'a ImageSizes,
 }
 
 impl<'a> TableEmitCtx<'a> {
@@ -87,6 +90,7 @@ impl<'a> TableEmitCtx<'a> {
             md_blocks: empty_md_blocks(),
             page_block_styles: &[],
             doc_block_styles: &[],
+            image_sizes: self.image_sizes,
         }
     }
 }
@@ -447,11 +451,13 @@ fn emit_cell_children(
         .h_align
         .as_deref()
         .or(table.h_align.as_deref())
+        .or_else(|| style_h_align(&table.style, cx.style_map))
         .unwrap_or("start");
     let v_align = cell
         .v_align
         .as_deref()
         .or(table.v_align.as_deref())
+        .or_else(|| style_enum(&table.style, cx.style_map, "v-align").map(String::as_str))
         .unwrap_or("top");
 
     // Clip cell content to the content box, then compile each child with a
@@ -475,15 +481,13 @@ fn emit_cell_children(
             let wrap_w = child_declared_box(child, cx.resolved)
                 .0
                 .unwrap_or(content_w);
-            // Effective text align: author `align` else the cell/table h-align
-            // mapped to a text align value.
+            // Effective text align: author `align`, else the text style's
+            // `align`, else the cell/table h-align mapped to a text align value.
             let h_align_text = match h_align {
                 "center" => "center",
                 "end" => "end",
                 _ => "start",
             };
-            let eff_align: &str = t.align.as_deref().unwrap_or(h_align_text);
-
             // Build the effective styled text (header-style injection via the
             // shared helper so measurement and rendering always agree).
             let eff_hs = if is_header {
@@ -492,6 +496,12 @@ fn emit_cell_children(
                 None
             };
             let styled = header_styled_text(t, eff_hs);
+            // The text's own style `align` beats the cell/table default.
+            let eff_align: &str = t
+                .align
+                .as_ref()
+                .or_else(|| style_enum(&styled.style, cx.style_map, "align"))
+                .map_or(h_align_text, String::as_str);
 
             // Measure wrapped natural height at the effective wrap width.
             let families = cached_families(
@@ -534,6 +544,7 @@ fn emit_cell_children(
                 dx: content_x,
                 dy: content_y + v_offset,
                 baseline_grid: ctx.baseline_grid,
+                page_origin: ctx.page_origin,
             };
             let _ = compile_node(
                 &effective_child,
@@ -563,6 +574,7 @@ fn emit_cell_children(
             dx: content_x + dx_align,
             dy: content_y + dy_align,
             baseline_grid: ctx.baseline_grid,
+            page_origin: ctx.page_origin,
         };
         let _ = compile_node(
             child,

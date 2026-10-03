@@ -2,7 +2,7 @@
 //!
 //! Validation checks, `node.invalid_value` messages, and schema type hints
 //! all read these constants so the lists cannot drift apart. The lists other
-//! crates validate against (`overflow`) are public.
+//! crates validate against (`overflow`, `align`, `v-align`) are public.
 
 /// `stroke-linecap` values.
 pub(crate) const STROKE_LINECAPS: &[&str] = &["butt", "round", "square"];
@@ -12,10 +12,12 @@ pub(crate) const STROKE_LINEJOINS: &[&str] = &["miter", "round", "bevel"];
 pub(crate) const STROKE_ALIGNS: &[&str] = &["inside", "center", "outside"];
 /// `fill-rule` values.
 pub(crate) const FILL_RULES: &[&str] = &["nonzero", "evenodd"];
-/// `h-align` values.
-pub(crate) const H_ALIGNS: &[&str] = &["start", "center", "end"];
-/// `v-align` values.
-pub(crate) const V_ALIGNS: &[&str] = &["top", "middle", "bottom"];
+/// `h-align` values (shape, table, cell).
+pub const H_ALIGNS: &[&str] = &["start", "center", "end"];
+/// `v-align` values (also the style `v-align` key).
+pub const V_ALIGNS: &[&str] = &["top", "middle", "bottom"];
+/// Text `align` values (also the style `align` key).
+pub const TEXT_ALIGNS: &[&str] = &["start", "center", "end", "justify"];
 /// Path point `kind` values.
 pub(crate) const PATH_POINT_KINDS: &[&str] = &["corner", "smooth", "symmetric"];
 /// Group `symmetry` mode values.
@@ -129,6 +131,7 @@ mod tests {
             ("h-align", H_ALIGNS),
             ("v-align", V_ALIGNS),
             ("overflow", TEXT_OVERFLOWS),
+            ("align", TEXT_ALIGNS),
         ];
         for (name, list) in generic {
             assert_eq!(attribute_type(name), hint(list), "{name}");

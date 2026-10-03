@@ -7,7 +7,7 @@ use zenith_scene::{DocumentPrep, PageCompiler};
 
 use crate::commands::composition_imports::LoadedImportGraph;
 
-use super::assets::build_font_provider_with_imports;
+use super::assets::{build_font_provider_with_imports, read_image_sizes};
 use super::pages::map_pages;
 use super::pipeline::govern_compile_diagnostics;
 use super::text_source::resolve_text_sources;
@@ -37,7 +37,8 @@ pub(crate) fn compile_check_diagnostics(
         }
     };
     let scene_imports = imports.to_scene_graph();
-    let prep = DocumentPrep::new(&doc, None, Some(&scene_imports));
+    let prep = DocumentPrep::new(&doc, None, Some(&scene_imports))
+        .with_image_sizes(read_image_sizes(&doc, project_dir, imports));
     let compiler = PageCompiler::new(&prep, &fonts);
     let mut compiled = compiler.document_diagnostics();
     let pages = map_pages(doc.body.pages.len(), |page_index| {

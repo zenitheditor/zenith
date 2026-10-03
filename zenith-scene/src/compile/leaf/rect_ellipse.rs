@@ -196,6 +196,7 @@ pub(in crate::compile) fn compile_rect(
     } else if let Some(shadows) = rect
         .shadow
         .as_ref()
+        .or_else(|| style_prop(&rect.style, style_map, "shadow"))
         .and_then(|p| resolve_property_shadow(p, resolved, &rect.id))
     {
         Some(NodeEffect::Shadow(shadows))
@@ -517,6 +518,7 @@ pub(in crate::compile) fn compile_ellipse(
     } else if let Some(shadows) = ellipse
         .shadow
         .as_ref()
+        .or_else(|| style_prop(&ellipse.style, style_map, "shadow"))
         .and_then(|p| resolve_property_shadow(p, resolved, &ellipse.id))
     {
         Some(NodeEffect::Shadow(shadows))

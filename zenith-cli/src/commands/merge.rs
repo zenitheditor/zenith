@@ -11,13 +11,13 @@ use std::path::Path;
 
 use zenith_core::{AssetKind, BytesAssetProvider, KdlAdapter, KdlSource};
 use zenith_render::render_png;
-use zenith_scene::compile_page;
+use zenith_scene::{DocumentPrep, PageCompiler};
 use zenith_tx::{AddAssetMetadata, Op, OpSpan, Transaction, TxStatus, run_transaction};
 
 use crate::json_types::{DiagnosticJson, MergeOutput, MergeRowResult};
 
 use crate::commands::render::{
-    build_asset_provider, build_font_provider, collect_missing_asset_diagnostics,
+    build_asset_provider, build_font_provider, collect_missing_asset_diagnostics, image_sizes,
     resolve_text_sources,
 };
 
@@ -649,8 +649,15 @@ pub fn run(
         let mut page_failures: Vec<String> = Vec::new();
         let mut page_pngs: Vec<(String, Vec<u8>)> = Vec::new();
 
+        let row_provider = row_assets.as_ref().unwrap_or(&template_assets);
+        let prep = DocumentPrep::new(&row_doc, None, None).with_image_sizes(image_sizes(
+            &row_doc,
+            None,
+            row_provider,
+        ));
+        let compiler = PageCompiler::new(&prep, &fonts);
         for (page_index, page_fname) in page_filenames.iter().enumerate() {
-            let compile_result = compile_page(&row_doc, &fonts, page_index, None);
+            let compile_result = compiler.compile_page(page_index);
 
             // Block on Error-severity compile diagnostics.
             let hard_diags: Vec<String> = compile_result
@@ -669,10 +676,7 @@ pub fn run(
             }
 
             // Render to PNG bytes, using row-scoped assets when image bindings exist.
-            let png_result = match &row_assets {
-                Some(ra) => render_png(&compile_result.scene, &fonts, ra),
-                None => render_png(&compile_result.scene, &fonts, &template_assets),
-            };
+            let png_result = render_png(&compile_result.scene, &fonts, row_provider);
             match png_result {
                 Ok(bytes) => {
                     page_pngs.push((page_fname.clone(), bytes));

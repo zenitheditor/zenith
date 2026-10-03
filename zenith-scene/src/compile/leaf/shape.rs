@@ -11,8 +11,9 @@ use crate::ir::{FillRule, Paint, SceneCommand, StrokeAlign};
 use super::super::RenderCtx;
 use super::super::anchor::AnchorMap;
 use super::super::chain::ChainAssignments;
-use super::super::paint::resolve_property_color;
-use super::super::style_prop;
+use super::super::paint::{
+    NodeEffect, emit_node_with_effects, resolve_property_color, resolve_property_shadow,
+};
 use super::super::text::{
     LabelHost, MeasureEnv, TextCompileEnv, compile_label_text, empty_md_blocks,
     measure_text_wrapped_height, resolve_text_families,
@@ -21,6 +22,7 @@ use super::super::util::{
     AxisTarget, missing_geometry_diag, px_prop, resolve_anchored_axis, resolve_geometry_px,
     resolve_property_dimension_px, rotation_degrees, unsupported_unit_diag,
 };
+use super::super::{style_enum, style_h_align, style_prop};
 use super::shape_label::label_text_node;
 
 /// Read-only borrow + scalar context for [`compile_shape`] and its label
@@ -213,17 +215,21 @@ pub(in crate::compile) fn compile_shape(
         });
     }
 
-    // Background primitive by kind (default "process").
+    // Background primitive by kind (default "process"), collected so a
+    // `shadow` (node attribute, else the style's) brackets the body only. The
+    // label below draws crisp on top. Without a shadow the body commands land
+    // verbatim.
+    let mut body: Vec<SceneCommand> = Vec::new();
     match shape.kind.as_deref() {
         Some("ellipse") => {
-            emit_shape_ellipse(shape, resolved, diagnostics, commands, bg);
+            emit_shape_ellipse(shape, resolved, diagnostics, &mut body, bg);
         }
         Some("decision") => {
-            emit_shape_decision(shape, resolved, diagnostics, commands, bg);
+            emit_shape_decision(shape, resolved, diagnostics, &mut body, bg);
         }
         Some("terminator") => {
             // Pill: corner radius = h/2.
-            emit_shape_rounded_rect(shape, resolved, diagnostics, commands, h / 2.0, bg);
+            emit_shape_rounded_rect(shape, resolved, diagnostics, &mut body, h / 2.0, bg);
         }
         // "process" (default) and any unrecognized value: rounded rect using
         // `radius` (0 → plain rect).
@@ -233,9 +239,16 @@ pub(in crate::compile) fn compile_shape(
                 .clone()
                 .or_else(|| style_prop(&shape.style, style_map, "radius").cloned());
             let radius = resolve_property_dimension_px(radius_prop.as_ref(), resolved, 0.0);
-            emit_shape_rounded_rect(shape, resolved, diagnostics, commands, radius, bg);
+            emit_shape_rounded_rect(shape, resolved, diagnostics, &mut body, radius, bg);
         }
     }
+    let effect = shape
+        .shadow
+        .as_ref()
+        .or_else(|| style_prop(&shape.style, style_map, "shadow"))
+        .and_then(|p| resolve_property_shadow(p, resolved, &shape.id))
+        .map(NodeEffect::Shadow);
+    emit_node_with_effects(commands, body, effect, None);
 
     // OWNED LABEL (painted ON TOP of the background). Emitted INSIDE the
     // rotation bracket so the label rotates with the shape, and using the SAME
@@ -299,6 +312,16 @@ fn emit_shape_label(
 
     // Synthesize the label as a fresh TextNode laid into the content box.
     let mut synth = label_text_node(shape, (content_x, content_y, content_w, content_h));
+    // Horizontal alignment: the shape's `h-align`, else the label
+    // `text-style`'s `align`, else the shape style's `align` (start/center/end
+    // only), else the label default (center).
+    if shape.h_align.is_none()
+        && let Some(align) = style_enum(&shape.text_style, style_map, "align")
+            .map(String::as_str)
+            .or_else(|| style_h_align(&shape.style, style_map))
+    {
+        synth.align = Some(align.to_owned());
+    }
 
     // VERTICAL ALIGNMENT: TextNode has no native v-align, so pre-offset `y` by
     // the measured wrapped height (same approach as the table cell). Default is
@@ -317,7 +340,12 @@ fn emit_shape_label(
         diagnostics,
     )
     .unwrap_or(0.0);
-    let v_offset = match shape.v_align.as_deref() {
+    let v_align = shape
+        .v_align
+        .as_ref()
+        .or_else(|| style_enum(&shape.style, style_map, "v-align"))
+        .map(String::as_str);
+    let v_offset = match v_align {
         Some("top") => 0.0,
         Some("bottom") => (content_h - wrapped_h).max(0.0),
         // "middle", any unrecognized value, and absent center vertically.

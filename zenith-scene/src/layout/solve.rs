@@ -6,8 +6,8 @@ use zenith_core::{FrameNode, Node, PropertyValue};
 use super::diag::{Sink, conflicting_min_max};
 use super::measure::Engine;
 use super::model::{
-    Align, Avail, Axis, AxisSpec, ChildRole, FrameSpec, Mode, Sizing, axis_sizing, child_role,
-    px_of,
+    Align, Avail, Axis, AxisSpec, ChildRole, FrameSpec, ItemView, Mode, Sizing, axis_sizing,
+    child_role, px_of,
 };
 use super::stack::{StackCx, column, row};
 
@@ -44,18 +44,36 @@ pub(super) struct Item<'n> {
     pub(super) h: AxisSpec,
 }
 
-/// Solve `frame` placed with its top-left at `origin` and offered `aw` × `ah`.
+/// Where a frame is solved: its top-left, and the render translation of its
+/// list when `origin` is its final position (`None` while measuring at an
+/// unknown position).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(super) struct At {
+    pub(super) origin: (f64, f64),
+    pub(super) dev: Option<(f64, f64)>,
+}
+
+impl At {
+    /// A measuring solve at an unknown position.
+    pub(super) const UNPLACED: At = At {
+        origin: (0.0, 0.0),
+        dev: None,
+    };
+}
+
+/// Solve `frame` placed at `at` and offered `aw` × `ah`.
 ///
 /// A fixed axis keeps its size. A hugging axis takes the content size plus
 /// the padding. Diagnostics go to `sink`.
 pub(super) fn solve(
     engine: Engine<'_>,
     frame: &FrameNode,
-    origin: (f64, f64),
+    at: At,
     aw: Avail,
     ah: Avail,
     sink: &mut Sink<'_>,
 ) -> Solution {
+    let origin = at.origin;
     let Some(mode) = Mode::of(frame) else {
         let (w, h) = engine.extents(&frame.children);
         return Solution {
@@ -74,6 +92,7 @@ pub(super) fn solve(
         inner_w: aw.inset(ins.left + ins.right),
         inner_h: ah.inset(ins.top + ins.bottom),
         content: (origin.0 + ins.left, origin.1 + ins.top),
+        dev: at.dev,
     };
     let items = flow_items(engine, frame, &spec, sink);
     let (used_w, used_h, slots) = match mode {
@@ -102,27 +121,17 @@ fn flow_items<'n>(
         if child_role(node) != ChildRole::Flow {
             continue;
         }
-        let Some(view) = node.box_view() else {
+        let Some(view) = ItemView::of(node, engine.resolved()) else {
             continue;
         };
-        let li = view.layout_item;
+        let li = view.item;
         let w = AxisSpec {
-            sizing: axis_sizing(
-                px_of(view.w, engine.resolved()),
-                li.w_keyword,
-                row_main,
-                stretch,
-            ),
+            sizing: axis_sizing(view.w, li.w_keyword, row_main, stretch),
             min: 0.0,
             max: f64::INFINITY,
         };
         let h = AxisSpec {
-            sizing: axis_sizing(
-                px_of(view.h, engine.resolved()),
-                li.h_keyword,
-                !row_main,
-                stretch,
-            ),
+            sizing: axis_sizing(view.h, li.h_keyword, !row_main, stretch),
             min: 0.0,
             max: f64::INFINITY,
         };

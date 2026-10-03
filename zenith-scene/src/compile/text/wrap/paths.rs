@@ -25,11 +25,12 @@ use crate::compile::text::shape::{
 };
 use crate::ir::{Color, SceneCommand};
 
-use super::types::{WrapEnv, WrapGeom};
+use super::types::{WrapEnv, WrapGeom, WrapOutcome};
 
 /// Run the single-box WRAP path: convert the resolved spans to word tokens, pick
 /// the drop-cap / runaround / plain-wrap sub-path, emit the glyph draws into
-/// `commands`, and return the laid-out line count for the overflow checks.
+/// `commands`, and return the laid-out line count for the overflow checks
+/// (plus the grid-snapped content height, when a baseline grid applies).
 pub(in crate::compile) fn emit_wrap_path(
     text: &TextNode,
     mut resolved_spans: Vec<ResolvedSpan>,
@@ -38,7 +39,7 @@ pub(in crate::compile) fn emit_wrap_path(
     geom: WrapGeom,
     commands: &mut Vec<SceneCommand>,
     diagnostics: &mut Vec<Diagnostic>,
-) -> usize {
+) -> WrapOutcome {
     let WrapEnv {
         env,
         resolved,
@@ -109,6 +110,7 @@ pub(in crate::compile) fn emit_wrap_path(
     // = `text_y` and `emit_metrics` = `metrics` (byte-identical to before).
     let mut emit_text_y = text_y;
     let mut emit_metrics = metrics;
+    let mut snapped = false;
     if let Some(g) = ctx.baseline_grid
         && g.is_finite()
         && g > 0.0
@@ -118,6 +120,7 @@ pub(in crate::compile) fn emit_wrap_path(
             snap_to_baseline_grid(text_y, metrics.ascent, metrics.line_height, g);
         emit_text_y = snapped_text_y;
         emit_metrics.line_height = effective_line_height;
+        snapped = true;
         // Advisory: a single line is taller than one grid cell, so leading
         // grows to a multiple of `g`. Emit ONCE per node (not per line).
         if metrics.line_height > g {
@@ -131,7 +134,8 @@ pub(in crate::compile) fn emit_wrap_path(
     }
 
     // ── Text-runaround exclusion resolution ──────────────────────────
-    // Resolve `text-exclusion` against this page's node boxes using the
+    // Resolve `text-exclusion` against this page's node boxes (moved into
+    // render space by the page origin) using the
     // EFFECTIVE (post-baseline-snap) `emit_text_y` and line height, so the
     // band geometry composes with the baseline grid. An id naming no node box
     // → advisory + NO exclusion (uniform path, byte-identical). A drop cap
@@ -144,7 +148,11 @@ pub(in crate::compile) fn emit_wrap_path(
             // Drop cap + runaround is a documented v0 follow-up: skip the
             // exclusion and keep the existing drop-cap path.
             Some(_) if dropcap_initial.is_some() => None,
-            Some(rect) => Some(*rect),
+            // Node boxes are page space; the text origin is render space
+            // (page space plus the bleed offset).
+            Some(&(ex, ey, ew, eh)) => {
+                Some((ex + ctx.page_origin.0, ey + ctx.page_origin.1, ew, eh))
+            }
             None => {
                 diagnostics.push(Diagnostic::warning(
                     "text-exclusion.unresolved_ref",
@@ -166,7 +174,7 @@ pub(in crate::compile) fn emit_wrap_path(
         shape_drop_cap(init, families, base_weight, cap_size, *n, engine, fonts)
     });
 
-    if let Some(cap) = &dropcap {
+    let lines = if let Some(cap) = &dropcap {
         emit_drop_cap(EmitDropCap {
             cap,
             tokens,
@@ -229,6 +237,11 @@ pub(in crate::compile) fn emit_wrap_path(
             commands,
             diagnostics,
         )
+    };
+    WrapOutcome {
+        lines,
+        grid_height: snapped
+            .then_some((emit_text_y - text_y) + lines as f64 * emit_metrics.line_height),
     }
 }
 

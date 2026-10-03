@@ -369,6 +369,7 @@ mod tests {
             construction: zenith_core::ConstructionBlock::default(),
             ports: Vec::new(),
             block_styles: Vec::new(),
+            defaults: Default::default(),
             children,
             source_span: None,
         }

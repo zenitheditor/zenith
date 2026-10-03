@@ -146,6 +146,7 @@ pub fn materialize(
         y: Some(px(at_y)),
         w: None,
         h: None,
+        layout_item: zenith_core::LayoutItem::default(),
         fit: None,
         opacity: None,
         visible: None,

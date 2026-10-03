@@ -39,6 +39,7 @@ fn doc_with_styles(tokens: Vec<Token>, styles: Vec<Style>, pages: Vec<Page>) -> 
             styles,
             source_span: None,
         },
+        defaults: Default::default(),
         components: Vec::new(),
         masters: Vec::new(),
         sections: Vec::new(),

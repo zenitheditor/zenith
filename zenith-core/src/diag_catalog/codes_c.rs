@@ -227,6 +227,16 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
         "Shape `kind` is not a recognized preset shape.",
     ),
     info(
+        "style.align_unsupported",
+        Severity::Warning,
+        "A shape or table takes a style `align` value its `h-align` does not accept.",
+    ),
+    info(
+        "style.invalid_value",
+        Severity::Error,
+        "An enum-valued style key (`align`, `v-align`) holds a value outside its list.",
+    ),
+    info(
         "style.unknown_property",
         Severity::Error,
         "A style block carries an unrecognized property.",

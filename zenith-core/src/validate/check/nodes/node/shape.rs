@@ -17,7 +17,7 @@ use crate::suggest::{invalid_value_message, replace_value_fix};
 
 use super::shared::{
     AnchorParentCtx, AnchorProps, TokenEnv, check_anchor, check_optional_dim, check_spans,
-    check_style_ref,
+    check_style_h_align, check_style_ref,
 };
 use super::suggest::check_unknown_props;
 use crate::validate::check::nodes::WalkCtx;
@@ -44,6 +44,22 @@ pub(in crate::validate::check) fn check_shape(
         &s.id,
         s.style.as_deref(),
         declared_style_ids,
+        s.source_span,
+        diagnostics,
+    );
+    // The label `text-style`'s `align` outranks the shape style's `align`, so
+    // a `justify` on the shape style is only ignored when neither is set.
+    let label_align = s
+        .text_style
+        .as_deref()
+        .and_then(|id| ctx.style_map.get(id))
+        .and_then(|st| st.properties.get("align"))
+        .map(|_| "text-style");
+    check_style_h_align(
+        ("shape", &s.id),
+        s.h_align.as_deref().or(label_align),
+        s.style.as_deref(),
+        ctx.style_map,
         s.source_span,
         diagnostics,
     );
@@ -150,6 +166,15 @@ pub(in crate::validate::check) fn check_shape(
         "radius",
         s.radius.as_ref(),
         VisualExpect::Dimension,
+        referenced_token_ids,
+        resolved_tokens,
+        diagnostics,
+    );
+    check_visual_prop(
+        &s.id,
+        "shadow",
+        s.shadow.as_ref(),
+        VisualExpect::Shadow,
         referenced_token_ids,
         resolved_tokens,
         diagnostics,

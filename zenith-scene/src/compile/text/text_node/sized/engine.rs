@@ -7,7 +7,6 @@ use zenith_layout::TextDirection;
 
 use crate::compile::RenderCtx;
 use crate::compile::paint::{emit_node_with_effects, resolve_property_mask};
-use crate::compile::style_prop;
 use crate::compile::text::chain_member::render_chain_member;
 use crate::compile::text::ctx::{ChainMemberPlace, ShapeEnv, TextCompileEnv};
 use crate::compile::text::ink::ink_bounds;
@@ -17,6 +16,7 @@ use crate::compile::text::overflow_mode::{ClipBox, TextOverflow, clip_commands_s
 use crate::compile::text::resolve_kerning_pairs;
 use crate::compile::text::shape::{resolve_font_feature_set, resolve_letter_spacing};
 use crate::compile::util::{blend_mode_ir, resolve_geometry_px, rotation_degrees};
+use crate::compile::{style_enum, style_prop};
 use crate::ir::SceneCommand;
 
 use super::super::overflow::{OverflowCheck, SizedOutcome, measure_overflow};
@@ -38,7 +38,8 @@ use super::wrapped::emit_wrapped;
 /// adds the diagnostics.
 ///
 /// `SizedOutcome::height` is the laid-out content height in pixels
-/// (`line_count * line_height`), which the auto-layout measure pass reads as
+/// (`line_count * line_height`; under a baseline grid, the snap offset plus
+/// `line_count` snapped advances), which the auto-layout measure pass reads as
 /// the hug height of a text child without an explicit `h`. Early returns
 /// (invisible, missing/bad geometry, empty spans) yield `0.0`.
 pub(in crate::compile::text::text_node) fn compile_text_core(
@@ -84,6 +85,7 @@ pub(in crate::compile::text::text_node) fn compile_text_core(
                 text_y,
                 baseline_grid: ctx.baseline_grid,
                 glyph_stroke,
+                style_map: env.style_map,
             },
             env.resolved,
             commands,
@@ -180,7 +182,11 @@ pub(in crate::compile::text::text_node) fn compile_text_core(
         text_y,
         box_w: box_w_opt,
         box_h: box_h_opt,
-        align: text.align.as_deref().unwrap_or("start"),
+        align: text
+            .align
+            .as_ref()
+            .or_else(|| style_enum(&text.style, env.style_map, "align"))
+            .map_or("start", String::as_str),
         deco_thickness: (font_size as f64 / 14.0).max(1.0),
     };
 
@@ -221,7 +227,7 @@ pub(in crate::compile::text::text_node) fn compile_text_core(
 
     // The effect and mask bracket the node's glyph draws. The draws go into
     // `commands` first, then are split off at `draw_start` and re-emitted.
-    let effect = resolve_effect(text, env.resolved, has_spans);
+    let effect = resolve_effect(text, env, has_spans);
     let mask = text.mask.as_ref().and_then(|p| {
         let mask_w = box_w_opt.unwrap_or(total_advance);
         let mask_h = box_h_opt.unwrap_or(first_line_height);
@@ -229,11 +235,12 @@ pub(in crate::compile::text::text_node) fn compile_text_core(
     });
     let draw_start = commands.len();
 
-    let fit_line_count = if needs_wrap {
-        emit_wrapped(&style, layout, &shaped, commands, diagnostics)
+    let (fit_line_count, grid_height) = if needs_wrap {
+        let wrapped = emit_wrapped(&style, layout, &shaped, commands, diagnostics);
+        (wrapped.lines, wrapped.grid_height)
     } else {
         emit_single_line(&style, layout, shaped, commands);
-        1
+        (1, None)
     };
 
     // Ink of the node's draws (measured only against a complete box).
@@ -281,8 +288,10 @@ pub(in crate::compile::text::text_node) fn compile_text_core(
 
     // Line count times the shared line height. It reuses the quantities the
     // overflow measurement uses, so flow advance and fit detection agree.
+    // Under a baseline grid the lines draw at the snapped offset and advance,
+    // so the height is the snapped extent (what a hugging box must hold).
     SizedOutcome {
-        height: fit_line_count as f64 * first_line_height,
+        height: grid_height.unwrap_or(fit_line_count as f64 * first_line_height),
         overflow,
     }
 }

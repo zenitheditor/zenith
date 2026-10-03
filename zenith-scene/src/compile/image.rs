@@ -2,11 +2,10 @@
 
 use std::collections::BTreeMap;
 
-use zenith_core::{Diagnostic, ImageNode, ObjectPosition, ResolvedToken, dim_to_px};
+use zenith_core::{Diagnostic, ImageNode, ObjectPosition, ResolvedToken, Style, dim_to_px};
 
 use crate::ir::{FitMode, ImageClip, SceneCommand, SrcRect, SvgStyle};
 
-use super::RenderCtx;
 use super::anchor::AnchorMap;
 use super::paint::{
     NodeEffect, emit_node_with_effects, resolve_property_color, resolve_property_filter,
@@ -16,6 +15,7 @@ use super::util::{
     blend_mode_ir, resolve_geometry_px, resolve_property_dimension_px, rotation_degrees,
     unsupported_unit_diag,
 };
+use super::{RenderCtx, style_prop};
 
 /// Compile an `image` leaf node.
 ///
@@ -28,6 +28,7 @@ use super::util::{
 pub(super) fn compile_image(
     image: &ImageNode,
     resolved: &BTreeMap<String, ResolvedToken>,
+    style_map: &BTreeMap<&str, &Style>,
     commands: &mut Vec<SceneCommand>,
     diagnostics: &mut Vec<Diagnostic>,
     anchors: &AnchorMap,
@@ -210,6 +211,7 @@ pub(super) fn compile_image(
     } else if let Some(shadows) = image
         .shadow
         .as_ref()
+        .or_else(|| style_prop(&image.style, style_map, "shadow"))
         .and_then(|p| resolve_property_shadow(p, resolved, &image.id))
     {
         Some(NodeEffect::Shadow(shadows))

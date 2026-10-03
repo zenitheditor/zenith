@@ -417,44 +417,97 @@ fn container_features_validate_clean() {
         rect id="r" h=(px)20 w=(px)10 fill=(token)"color.k"
       }}"#
         ));
-        assert!(
-            !has(&report, "layout.not_yet_supported"),
-            "{attrs}: {:?}",
-            report.diagnostics
-        );
         assert!(errors(&report).is_empty(), "{attrs}: {:?}", errors(&report));
     }
 }
 
-#[test]
-fn instance_in_layout_frame_is_not_yet_supported() {
-    let src = r##"zenith version=1 {
+fn instance_doc(instance: &str) -> String {
+    format!(
+        r##"zenith version=1 {{
   project id="proj.al" name="AL"
-  tokens format="zenith-token-v1" {
+  tokens format="zenith-token-v1" {{
     token id="color.k" type="color" value="#000000"
-  }
-  styles {
-  }
-  components {
-    component id="comp.c" {
+  }}
+  styles {{
+  }}
+  components {{
+    component id="comp.c" {{
       rect id="r" x=(px)0 y=(px)0 w=(px)10 h=(px)10 fill=(token)"color.k"
-    }
-  }
-  document id="doc.al" title="AL" {
-    page id="p" w=(px)800 h=(px)800 {
-      frame id="f" x=(px)0 y=(px)0 w=(px)200 h=(px)200 layout="row" {
-        instance id="i" component="comp.c"
-      }
-    }
-  }
+    }}
+  }}
+  document id="doc.al" title="AL" {{
+    page id="p" w=(px)800 h=(px)800 {{
+      frame id="f" x=(px)0 y=(px)0 w=(px)200 h=(px)200 layout="row" {{
+        {instance}
+      }}
+    }}
+  }}
+}}
+"##
+    )
 }
-"##;
-    let report = validate(&parse(src));
-    let d = diags(&report, "layout.not_yet_supported");
-    assert_eq!(d.len(), 1, "{:?}", report.diagnostics);
-    assert_eq!(d[0].severity, Severity::Error);
-    assert_eq!(d[0].subject_id.as_deref(), Some("i"));
-    assert!(d[0].message.contains("row frame"), "{}", d[0].message);
+
+#[test]
+fn instance_in_layout_frame_validates_clean() {
+    for instance in [
+        r#"instance id="i" component="comp.c""#,
+        r#"instance id="i" component="comp.c" w="fill" min-w=(px)20 max-h=(px)40"#,
+        r#"instance id="i" component="comp.c" w=(px)30 h="hug""#,
+        r#"instance id="i" component="comp.c" x=(px)5 y=(px)5 position="absolute""#,
+    ] {
+        let report = validate(&parse(&instance_doc(instance)));
+        assert!(
+            errors(&report).is_empty(),
+            "{instance}: {:?}",
+            errors(&report)
+        );
+        assert!(
+            !has(&report, "layout.position_ignored"),
+            "{instance}: {:?}",
+            report.diagnostics
+        );
+    }
+}
+
+#[test]
+fn instance_item_attributes_parse_and_format() {
+    let doc = parse(&instance_doc(
+        r#"instance id="i" component="comp.c" w="fill" h=(px)30 min-w=(px)20 position="auto""#,
+    ));
+    let Some(zenith_core::Node::Frame(f)) = doc.body.pages[0].children.first() else {
+        panic!("frame");
+    };
+    let Some(zenith_core::Node::Instance(i)) = f.children.first() else {
+        panic!("instance");
+    };
+    assert_eq!(
+        i.layout_item.w_keyword,
+        Some(zenith_core::SizeKeyword::Fill)
+    );
+    assert!(i.w.is_none());
+    assert!(i.h.is_some());
+    assert!(i.layout_item.min_w.is_some());
+    let text = String::from_utf8(format_document(&doc).expect("format")).expect("utf8");
+    assert!(
+        text.contains(
+            r#"instance id="i" component="comp.c" w="fill" h=(px)30 min-w=(px)20 position="auto""#
+        ),
+        "{text}"
+    );
+    let again = String::from_utf8(format_document(&parse(&text)).expect("format")).expect("utf8");
+    assert_eq!(text, again);
+}
+
+#[test]
+fn instance_position_ignored_in_flow() {
+    let report = validate(&parse(&instance_doc(
+        r#"instance id="i" component="comp.c" x=(px)5 y=(px)5"#,
+    )));
+    assert!(
+        has(&report, "layout.position_ignored"),
+        "{:?}",
+        report.diagnostics
+    );
 }
 
 #[test]
@@ -470,11 +523,6 @@ fn frame_paint_attributes_are_supported() {
         rect id="r" h=(px)20 x=(px)0 y=(px)0 w=(px)10 fill=(token)"color.k"
       }}"#
         ));
-        assert!(
-            !has(&report, "layout.not_yet_supported"),
-            "{attrs}: {:?}",
-            report.diagnostics
-        );
         assert!(errors(&report).is_empty(), "{attrs}: {:?}", errors(&report));
     }
 }
@@ -485,11 +533,6 @@ fn defaults_spelled_out_are_supported() {
         r#"      frame id="f" x=(px)0 y=(px)0 w=(px)200 h=(px)200 layout="column" justify="start" align="stretch" wrap=#false {
         rect id="r" h=(px)20 position="auto" fill=(token)"color.k"
       }"#,
-    );
-    assert!(
-        !has(&report, "layout.not_yet_supported"),
-        "{:?}",
-        report.diagnostics
     );
     assert!(errors(&report).is_empty(), "{:?}", errors(&report));
 }
@@ -508,7 +551,7 @@ fn item_features_validate_clean() {
       }}"#
         ));
         assert!(
-            !has(&report, "layout.not_yet_supported"),
+            !has(&report, "layout.inert_attribute"),
             "{attrs}: {:?}",
             report.diagnostics
         );
@@ -728,9 +771,9 @@ fn layout_codes_are_catalogued() {
         ("layout.position_ignored", Severity::Advisory),
         ("layout.absolute_unplaced", Severity::Error),
         ("layout.inert_attribute", Severity::Advisory),
-        ("layout.not_yet_supported", Severity::Error),
     ] {
         let info = zenith_core::diag_catalog::lookup(code).unwrap_or_else(|| panic!("{code}"));
         assert_eq!(info.severity, severity, "{code}");
     }
+    assert!(zenith_core::diag_catalog::lookup("layout.not_yet_supported").is_none());
 }

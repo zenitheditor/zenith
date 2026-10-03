@@ -13,4 +13,4 @@ mod types;
 mod tests;
 
 pub(in crate::compile) use paths::emit_wrap_path;
-pub(in crate::compile) use types::{WrapEnv, WrapGeom};
+pub(in crate::compile) use types::{WrapEnv, WrapGeom, WrapOutcome};

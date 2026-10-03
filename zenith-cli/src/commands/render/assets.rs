@@ -8,7 +8,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use zenith_core::{
     AssetKind, BytesAssetProvider, BytesFontProvider, Diagnostic, Document, FontProvider,
     FontSource, FontStyle, ImageNode, Node, TokenLiteral, TokenType, TokenValue, default_provider,
-    dim_to_px,
+    dim_to_px, subtree_uses_layout,
 };
 
 use crate::commands::fonts::{font_index_path, os_font_dirs};
@@ -274,6 +274,74 @@ pub(crate) fn build_asset_provider_with_imports(
         )?;
     }
     Ok(provider)
+}
+
+/// The pixel size of every image / SVG asset `assets` holds, by the id an
+/// `image` node references (host ids, then `import-id/asset-id`), for
+/// auto-layout image hug sizing. Empty when no page, component, master, or
+/// imported document holds a layout frame, the only reader of the sizes.
+pub(crate) fn image_sizes(
+    doc: &Document,
+    imports: Option<&LoadedImportGraph>,
+    assets: &BytesAssetProvider,
+) -> BTreeMap<String, (f64, f64)> {
+    if !document_uses_layout(doc, imports) {
+        return BTreeMap::new();
+    }
+    let visual = |kind: &AssetKind| matches!(kind, AssetKind::Image | AssetKind::Svg);
+    let mut ids: Vec<String> = doc
+        .assets
+        .assets
+        .iter()
+        .filter(|d| visual(&d.kind))
+        .map(|d| d.id.clone())
+        .collect();
+    for (import_id, imported, _) in imports.into_iter().flat_map(|g| g.documents_with_dirs()) {
+        ids.extend(
+            imported
+                .assets
+                .assets
+                .iter()
+                .filter(|d| visual(&d.kind))
+                .map(|d| format!("{import_id}/{}", d.id)),
+        );
+    }
+    zenith_render::asset_intrinsic_sizes(assets, ids.iter().map(String::as_str))
+}
+
+/// `true` when `doc` or any imported document holds an auto-layout frame in a
+/// page, a component, or a master. Components and masters lower when they
+/// expand, so a layout frame there needs image sizes on any page.
+fn document_uses_layout(doc: &Document, imports: Option<&LoadedImportGraph>) -> bool {
+    let uses = |d: &Document| {
+        d.body
+            .pages
+            .iter()
+            .any(|p| subtree_uses_layout(&p.children))
+            || d.components
+                .iter()
+                .any(|c| subtree_uses_layout(&c.children))
+            || d.masters.iter().any(|m| subtree_uses_layout(&m.children))
+    };
+    uses(doc) || imports.is_some_and(|g| g.documents_with_dirs().any(|(_, d, _)| uses(d)))
+}
+
+/// [`image_sizes`] for a caller that holds no asset provider: reads the
+/// image / SVG assets from `project_dir` (no sha256 check). Empty when
+/// `project_dir` is `None`, no layout frame exists anywhere, or the document
+/// declares no such asset.
+pub(crate) fn read_image_sizes(
+    doc: &Document,
+    project_dir: Option<&Path>,
+    imports: &LoadedImportGraph,
+) -> BTreeMap<String, (f64, f64)> {
+    let Some(dir) = project_dir.filter(|_| document_uses_layout(doc, Some(imports))) else {
+        return BTreeMap::new();
+    };
+    match build_asset_provider_with_imports(doc, dir, imports, false) {
+        Ok(assets) => image_sizes(doc, Some(imports), &assets),
+        Err(_) => BTreeMap::new(),
+    }
 }
 
 fn register_document_assets(

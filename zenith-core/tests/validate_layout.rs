@@ -495,6 +495,7 @@ fn page_with_folds(id: &str, w: f64, h: f64, folds: Vec<Fold>, children: Vec<Nod
         construction: ConstructionBlock::default(),
         ports: Vec::new(),
         block_styles: Vec::new(),
+        defaults: Default::default(),
         children,
         source_span: None,
     }
@@ -681,6 +682,7 @@ fn page_with_zones(
         construction: zenith_core::ConstructionBlock::default(),
         ports: Vec::new(),
         block_styles: Vec::new(),
+        defaults: Default::default(),
         children,
         source_span: None,
     }

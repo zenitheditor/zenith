@@ -971,8 +971,8 @@ fn overview_mentions_brand_surface() {
         "overview must mention 'zenith schema block'; got:\n{text}"
     );
     assert!(
-        text.contains("8 non-node surfaces"),
-        "overview must count 8 non-node surfaces after adding ports; got:\n{text}"
+        text.contains("10 non-node surfaces"),
+        "overview must count 10 non-node surfaces (style + defaults included); got:\n{text}"
     );
     assert!(
         text.contains("zenith schema ports"),

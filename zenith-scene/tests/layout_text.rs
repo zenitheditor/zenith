@@ -103,3 +103,35 @@ fn text_fill_width_then_height_at_that_width() {
     assert_eq!((x, w), (250.0, 150.0));
     assert!(h > 30.0, "wrapped at 150px: {h}");
 }
+
+#[test]
+fn hugging_code_width_is_the_widest_line_advance() {
+    let src = r##"zenith version=1 {
+  project id="proj.lt" name="LT"
+  tokens format="zenith-token-v1" {
+    token id="color.k" type="color" value="#000000"
+    token id="font.mono" type="fontFamily" value="Noto Sans Mono"
+  }
+  styles {}
+  document id="doc.lt" title="LT" {
+    page id="p" w=(px)800 h=(px)600 {
+      frame id="f" x=(px)0 y=(px)0 layout="column" align="start" {
+        code id="c" fill=(token)"color.k" {
+          content "fn a() {}\nlet widest_line = 1;\nx"
+        }
+        text id="t" font-family=(token)"font.mono" font-size=(px)14 fill=(token)"color.k" {
+          span "let widest_line = 1;"
+        }
+      }
+    }
+  }
+}
+"##;
+    let m = layout_boxes(&parse(src), 0, &default_provider());
+    let code = m.get("c").expect("code box");
+    let text = m.get("t").expect("text box");
+    // Both use the advance width of the same shaped line (f32 run advance
+    // vs summed glyph advances).
+    assert!((code.w - text.w).abs() < 1e-3, "{} vs {}", code.w, text.w);
+    assert!(code.w > 100.0, "{}", code.w);
+}

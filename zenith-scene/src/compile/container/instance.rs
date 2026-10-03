@@ -6,7 +6,8 @@
 use std::collections::BTreeMap;
 
 use zenith_core::{
-    Diagnostic, Dimension, GroupNode, InstanceNode, Node, Override, PropertyValue, ResolvedToken,
+    ComponentDef, Diagnostic, Dimension, GroupNode, InstanceNode, Node, Override, PropertyValue,
+    ResolvedToken,
 };
 
 use crate::ir::SceneCommand;
@@ -78,13 +79,13 @@ pub(in crate::compile) fn compile_instance(
 
     // Clone the component subtree (the stored definition is never mutated),
     // apply overrides against LOCAL ids, then prefix ids with the instance id.
-    let mut children = component.children.clone();
-    for ov in &instance.overrides {
-        apply_override(&mut children, ov);
-    }
-    let prefix = format!("{}/", instance.id);
-    prefix_ids_in_children(&mut children, &prefix);
-    lower_expanded(&mut children, cx, diagnostics);
+    let mut children = expand_local(component, instance);
+    lower_expanded(
+        &mut children,
+        cx,
+        expansion_ctx(instance, cx.resolved, ctx),
+        diagnostics,
+    );
 
     // Resolve `w`/`h`/`fit`. With a positive box the component subtree is scaled
     // into it (an icon component is all `path` nodes, whose extent is its
@@ -102,6 +103,7 @@ pub(in crate::compile) fn compile_instance(
                 dx: 0.0,
                 dy: 0.0,
                 baseline_grid: ctx.baseline_grid,
+                page_origin: ctx.page_origin,
             };
             if is_identity_transform(sx, sy, tx, ty) {
                 compile_group(
@@ -222,14 +224,7 @@ fn compile_imported_instance(
         return;
     };
 
-    let mut children = component.children.clone();
-    for ov in &instance.overrides {
-        let override_value = remap_import_override(ov, cx);
-        apply_override(&mut children, &override_value);
-    }
-    prefix_imported_asset_refs(&mut children, import_id);
-    let prefix = format!("{}/", instance.id);
-    prefix_ids_in_children(&mut children, &prefix);
+    let mut children = expand_imported(component, instance, import_id, cx.resolved);
 
     // Route the imported subtree's font resolution through a namespaced wrapper:
     // its text requests plain family names, which resolve to the import's own
@@ -250,10 +245,16 @@ fn compile_imported_instance(
         md_blocks: cx.md_blocks,
         page_block_styles: &[],
         doc_block_styles: &imported.document.body.block_styles,
+        image_sizes: cx.image_sizes,
     };
 
     let mut imported_diagnostics: Vec<Diagnostic> = Vec::new();
-    lower_expanded(&mut children, imported_cx, &mut imported_diagnostics);
+    lower_expanded(
+        &mut children,
+        imported_cx,
+        expansion_ctx(instance, cx.resolved, ctx),
+        &mut imported_diagnostics,
+    );
 
     // Resolve the instance `w`/`h`/`fit` against the HOST token scope. When both
     // dimensions resolve to a positive px box, the imported subtree is scaled to
@@ -281,6 +282,7 @@ fn compile_imported_instance(
                 dx: 0.0,
                 dy: 0.0,
                 baseline_grid: ctx.baseline_grid,
+                page_origin: ctx.page_origin,
             };
             if is_identity_transform(sx, sy, tx, ty) {
                 compile_group(
@@ -318,6 +320,56 @@ fn compile_imported_instance(
     }
     stamp_import(&mut imported_diagnostics, import_id);
     diagnostics.append(&mut imported_diagnostics);
+}
+
+/// The component subtree a local `instance` expands to: a clone of the
+/// component's children with the overrides applied to LOCAL ids, then every id
+/// prefixed with `<instance-id>/`.
+pub(in crate::compile) fn expand_local(
+    component: &ComponentDef,
+    instance: &InstanceNode,
+) -> Vec<Node> {
+    let mut children = component.children.clone();
+    for ov in &instance.overrides {
+        apply_override(&mut children, ov);
+    }
+    let prefix = format!("{}/", instance.id);
+    prefix_ids_in_children(&mut children, &prefix);
+    children
+}
+
+/// The component subtree an imported `instance` expands to: overrides with
+/// host color tokens remapped to literals (`host_resolved`), image asset refs
+/// prefixed with `<import-id>/`, then ids prefixed with `<instance-id>/`.
+pub(in crate::compile) fn expand_imported(
+    component: &ComponentDef,
+    instance: &InstanceNode,
+    import_id: &str,
+    host_resolved: &BTreeMap<String, ResolvedToken>,
+) -> Vec<Node> {
+    let mut children = component.children.clone();
+    for ov in &instance.overrides {
+        let override_value = remap_import_override(ov, host_resolved);
+        apply_override(&mut children, &override_value);
+    }
+    prefix_imported_asset_refs(&mut children, import_id);
+    let prefix = format!("{}/", instance.id);
+    prefix_ids_in_children(&mut children, &prefix);
+    children
+}
+
+/// The render context the expanded children compile under on the translate
+/// path: `ctx` moved by the instance's `x` / `y` (resolved in the host scope).
+fn expansion_ctx(
+    instance: &InstanceNode,
+    host_resolved: &BTreeMap<String, ResolvedToken>,
+    ctx: RenderCtx,
+) -> RenderCtx {
+    RenderCtx {
+        dx: ctx.dx + instance_dim_px(instance.x.as_ref(), host_resolved).unwrap_or(0.0),
+        dy: ctx.dy + instance_dim_px(instance.y.as_ref(), host_resolved).unwrap_or(0.0),
+        ..ctx
+    }
 }
 
 /// The scaling decision for an imported instance carrying `w`/`h`/`fit`.
@@ -469,18 +521,21 @@ fn prefix_imported_asset_refs(nodes: &mut [Node], import_id: &str) {
     }
 }
 
-fn remap_import_override(ov: &Override, cx: NodeCtx) -> Override {
+fn remap_import_override(ov: &Override, resolved: &BTreeMap<String, ResolvedToken>) -> Override {
     let mut remapped = ov.clone();
-    remap_color_override(&mut remapped.fill, cx);
-    remap_color_override(&mut remapped.stroke, cx);
-    remap_color_override(&mut remapped.svg_stroke, cx);
-    remap_color_override(&mut remapped.svg_fill, cx);
+    remap_color_override(&mut remapped.fill, resolved);
+    remap_color_override(&mut remapped.stroke, resolved);
+    remap_color_override(&mut remapped.svg_stroke, resolved);
+    remap_color_override(&mut remapped.svg_fill, resolved);
     remapped
 }
 
-fn remap_color_override(prop: &mut Option<PropertyValue>, cx: NodeCtx) {
+fn remap_color_override(
+    prop: &mut Option<PropertyValue>,
+    resolved: &BTreeMap<String, ResolvedToken>,
+) {
     if let Some(PropertyValue::TokenRef(token_id)) = prop
-        && let Some(token) = cx.resolved.get(token_id)
+        && let Some(token) = resolved.get(token_id)
         && let Some(hex) = token.value.as_color_hex()
     {
         *prop = Some(PropertyValue::Literal(hex.to_owned()));

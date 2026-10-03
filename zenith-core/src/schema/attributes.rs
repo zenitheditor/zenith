@@ -232,6 +232,8 @@ fn attribute_type_for_kind_inner(kind: &str, name: &str, fallback: &'static str)
             | "table" | "shape" | "pattern" | "chart",
             "w" | "h",
         ) => "px literal, token ref: dimension, or enum: hug|fill",
+        // An instance box is a raw dimension (no token ref), or a size keyword.
+        ("instance", "w" | "h") => "dimension literal or enum: hug|fill",
         // All other attributes fall through to the generic arm below.
         _ => attribute_type_generic(name, fallback),
     }
@@ -314,7 +316,7 @@ fn attribute_type_generic(name: &str, fallback: &'static str) -> &'static str {
             "enum: top-left|top-center|top-right|center-left|center|center-right|bottom-left|bottom-center|bottom-right"
         }
         "anchor-edge" => "enum: above|below|before|after",
-        "align" => "enum: left|center|right|justify",
+        "align" => "enum: start|center|end|justify",
         "overflow" => "enum: clip|visible|fit|autofit",
         "blend-mode" => {
             "enum: normal|multiply|screen|overlay|darken|lighten|color-dodge|color-burn|hard-light|soft-light|difference|exclusion|hue|saturation|color|luminosity"

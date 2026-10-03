@@ -45,12 +45,11 @@ mod wrap;
 // ── Public surface re-exported for sibling `compile` modules ────────────────
 
 pub(in crate::compile) use chain_blocks::{BlockStyleEnv, ChainSourceShape, shape_source_blocks};
-pub(in crate::compile) use code_node::compile_code;
+pub(in crate::compile) use code_node::{CodeExtent, compile_code};
 pub(in crate::compile) use ctx::{NodeShape, ShapeEnv, TextCompileEnv, empty_md_blocks};
 pub(in crate::compile) use hyphen::{
     HyphenationContext, en_us_hyphenator, flatten_lines_to_tokens,
 };
-pub(in crate::compile) use ink::ink_bounds;
 pub(in crate::compile) use kerning::resolve_kerning_pairs;
 pub(in crate::compile) use measure::{
     MeasureEnv, measure_text_natural, measure_text_wrapped_height, resolve_text_families,

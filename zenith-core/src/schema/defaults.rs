@@ -4,7 +4,7 @@
 /// Box-node kinds that carry the auto-layout item attributes.
 const BOX_KINDS: &[&str] = &[
     "rect", "ellipse", "text", "code", "frame", "group", "image", "field", "toc", "table", "shape",
-    "pattern", "chart", "mesh",
+    "pattern", "chart", "mesh", "instance",
 ];
 
 /// Return the default of attribute `name` on node kind `kind`, as the value an

@@ -5,6 +5,7 @@
 
 use std::collections::BTreeMap;
 
+use zenith_core::schema::enums::H_ALIGNS;
 use zenith_core::{DataContext, Diagnostic, Document, FontProvider, PropertyValue, Style};
 
 use crate::ir::Scene;
@@ -35,6 +36,10 @@ pub(in crate::compile) struct RenderCtx {
     /// skipped, byte-identical to before). Cascades unchanged to every child
     /// context so all text on the page shares one grid.
     pub(super) baseline_grid: Option<f64>,
+    /// Render position of page coordinate `(0, 0)`: the print-bleed offset
+    /// (`(0, 0)` without bleed). Cascades unchanged. Page-space geometry that
+    /// skips `dx` / `dy` (the runaround boxes) moves by it into render space.
+    pub(super) page_origin: (f64, f64),
 }
 
 impl RenderCtx {
@@ -44,6 +49,7 @@ impl RenderCtx {
             dx: 0.0,
             dy: 0.0,
             baseline_grid: None,
+            page_origin: (0.0, 0.0),
         }
     }
 
@@ -57,6 +63,7 @@ impl RenderCtx {
             dx: 0.0,
             dy: 0.0,
             baseline_grid: None,
+            page_origin: (0.0, 0.0),
         }
     }
 
@@ -69,6 +76,7 @@ impl RenderCtx {
             dx,
             dy,
             baseline_grid: None,
+            page_origin: (dx, dy),
         }
     }
 }
@@ -98,6 +106,35 @@ pub(crate) fn style_prop<'a>(
 ) -> Option<&'a PropertyValue> {
     let sid = style_ref.as_deref()?;
     style_map.get(sid)?.properties.get(key)
+}
+
+/// Look up an enum-valued style key (`align`, `v-align`).
+///
+/// Returns the literal value, or `None` when [`style_prop`] finds nothing or
+/// the value is not a plain literal (validation rejects that form).
+pub(crate) fn style_enum<'a>(
+    style_ref: &Option<String>,
+    style_map: &'a BTreeMap<&str, &Style>,
+    key: &str,
+) -> Option<&'a String> {
+    match style_prop(style_ref, style_map, key)? {
+        PropertyValue::Literal(value) => Some(value),
+        PropertyValue::TokenRef(_) | PropertyValue::Dimension(_) | PropertyValue::DataRef(_) => {
+            None
+        }
+    }
+}
+
+/// The style `align` value as an `h-align` (shape, table): `None` unless the
+/// value is one of [`H_ALIGNS`]. `justify` is not an `h-align`; validation
+/// reports it as `style.align_unsupported`.
+pub(crate) fn style_h_align<'a>(
+    style_ref: &Option<String>,
+    style_map: &'a BTreeMap<&str, &Style>,
+) -> Option<&'a str> {
+    style_enum(style_ref, style_map, "align")
+        .map(String::as_str)
+        .filter(|v| H_ALIGNS.contains(v))
 }
 
 // ── Entry point ───────────────────────────────────────────────────────────────

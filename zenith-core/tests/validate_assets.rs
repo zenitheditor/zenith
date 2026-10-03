@@ -42,6 +42,7 @@ fn doc_with_assets(assets: Vec<AssetDecl>) -> Document {
             tokens: vec![],
         },
         styles: StyleBlock::default(),
+        defaults: Default::default(),
         components: Vec::new(),
         masters: Vec::new(),
         sections: Vec::new(),

@@ -152,3 +152,65 @@ fn runaround_unresolved_ref_emits_advisory_and_renders_uniform() {
         "an unresolved exclusion must render the uniform stream (byte-identical)"
     );
 }
+
+/// Runaround source with an exclusion rect at a fixed page position, on a
+/// page with `bleed_attr`.
+fn bleed_runaround_src(bleed_attr: &str, layout: bool) -> String {
+    let body = if layout {
+        r#"frame id="f" x=(px)0 y=(px)0 w=(px)400 layout="column" {
+        rect id="spacer" h=(px)40 fill=(token)"color.k"
+        text id="body" font-size=(px)20 text-exclusion="ex" fill=(token)"color.k" {
+          span "The quick brown fox jumps over the lazy dog and then keeps running far beyond the box edge to force wrapping across many lines of body text here"
+        }
+      }"#
+    } else {
+        r#"text id="body" x=(px)0 y=(px)40 w=(px)400 h=(px)560 font-size=(px)20 text-exclusion="ex" fill=(token)"color.k" {
+        span "The quick brown fox jumps over the lazy dog and then keeps running far beyond the box edge to force wrapping across many lines of body text here"
+      }"#
+    };
+    format!(
+        r##"zenith version=1 {{
+  project id="proj.rb" name="RB"
+  tokens format="zenith-token-v1" {{
+    token id="color.k" type="color" value="#000000"
+  }}
+  styles {{}}
+  document id="doc.rb" title="RB" {{
+    page id="page.rb" w=(px)600 h=(px)700{bleed_attr} {{
+      rect id="ex" x=(px)0 y=(px)90 w=(px)250 h=(px)100 fill=(token)"color.k"
+      {body}
+    }}
+  }}
+}}
+"##
+    )
+}
+
+/// Glyph run origins of `body`, shifted back by `shift`.
+fn body_runs(src: &str, shift: f64) -> Vec<(f64, f64)> {
+    let result = compile(&parse(src), &default_provider());
+    result
+        .scene
+        .commands
+        .iter()
+        .filter_map(|c| match c {
+            SceneCommand::DrawGlyphRun {
+                x,
+                y,
+                source_node_id,
+                ..
+            } if source_node_id.as_deref() == Some("body") => Some((x - shift, y - shift)),
+            _ => None,
+        })
+        .collect()
+}
+
+#[test]
+fn runaround_wraps_the_same_on_a_bleed_page() {
+    for layout in [false, true] {
+        let plain = body_runs(&bleed_runaround_src("", layout), 0.0);
+        let bled = body_runs(&bleed_runaround_src(" bleed=(px)30", layout), 30.0);
+        assert!(plain.len() > 3, "{plain:?}");
+        assert_eq!(plain, bled, "layout={layout}");
+    }
+}

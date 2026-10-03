@@ -2,9 +2,11 @@
 //! `w`/`h`, the item attributes, and the `frame` container attributes.
 
 use crate::ast::node::{LayoutContainer, LayoutItem, SizeKeyword};
-use crate::ast::value::PropertyValue;
+use crate::ast::value::{Dimension, PropertyValue};
 
-use crate::format::writer::{write_opt_bool, write_opt_property_value, write_opt_str_escaped};
+use crate::format::writer::{
+    write_opt_bool, write_opt_dimension, write_opt_property_value, write_opt_str_escaped,
+};
 
 /// Emit `w`/`h`: the keyword (`w="hug"`) when set, else the dimension value.
 pub(super) fn write_box_size(
@@ -14,15 +16,30 @@ pub(super) fn write_box_size(
     keyword: Option<SizeKeyword>,
 ) {
     match keyword {
-        Some(k) => {
-            out.push(' ');
-            out.push_str(key);
-            out.push_str("=\"");
-            out.push_str(k.as_str());
-            out.push('"');
-        }
+        Some(k) => write_keyword(out, key, k),
         None => write_opt_property_value(out, key, value),
     }
+}
+
+/// Emit an `instance` `w`/`h`: the keyword when set, else the dimension.
+pub(super) fn write_box_dimension(
+    out: &mut String,
+    key: &str,
+    value: &Option<Dimension>,
+    keyword: Option<SizeKeyword>,
+) {
+    match keyword {
+        Some(k) => write_keyword(out, key, k),
+        None => write_opt_dimension(out, key, value),
+    }
+}
+
+fn write_keyword(out: &mut String, key: &str, k: SizeKeyword) {
+    out.push(' ');
+    out.push_str(key);
+    out.push_str("=\"");
+    out.push_str(k.as_str());
+    out.push('"');
 }
 
 /// Emit the item attributes in canonical order: `min-w`, `max-w`, `min-h`,

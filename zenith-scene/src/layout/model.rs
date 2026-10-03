@@ -4,8 +4,8 @@
 use std::collections::BTreeMap;
 
 use zenith_core::{
-    FrameNode, LayoutAlign, LayoutJustify, LayoutKind, LayoutPosition, Node, PropertyValue,
-    ResolvedToken, SizeKeyword, Style,
+    Dimension, FrameNode, LayoutAlign, LayoutItem, LayoutJustify, LayoutKind, LayoutPosition, Node,
+    PropertyValue, ResolvedToken, SizeKeyword, Style, dim_to_px,
 };
 
 use crate::compile::{resolve_geometry_px, resolve_property_dimension_px, style_prop};
@@ -232,8 +232,8 @@ pub(super) enum ChildRole {
     Flow,
     /// Out of flow: its x/y (or points) count from the frame's top-left.
     Absolute,
-    /// Left as authored: guides, hidden nodes, instances, connectors,
-    /// footnotes, and unknown kinds.
+    /// Left as authored: guides, hidden nodes, connectors, footnotes, and
+    /// unknown kinds.
     Untouched,
 }
 
@@ -242,8 +242,8 @@ pub(super) fn child_role(node: &Node) -> ChildRole {
     if node.role() == Some("guide") || node.visible() == Some(false) {
         return ChildRole::Untouched;
     }
-    if let Some(view) = node.box_view() {
-        return match view.layout_item.position {
+    if let Some(item) = node.layout_item() {
+        return match item.position {
             Some(LayoutPosition::Absolute) => ChildRole::Absolute,
             Some(LayoutPosition::Auto | LayoutPosition::Unknown(_)) | None => ChildRole::Flow,
         };
@@ -252,9 +252,9 @@ pub(super) fn child_role(node: &Node) -> ChildRole {
         Node::Line(_) | Node::Polygon(_) | Node::Polyline(_) | Node::Path(_) | Node::Light(_) => {
             ChildRole::Absolute
         }
-        Node::Instance(_) | Node::Footnote(_) | Node::Connector(_) | Node::Unknown(_) => {
-            ChildRole::Untouched
-        }
+        Node::Footnote(_) | Node::Connector(_) | Node::Unknown(_) => ChildRole::Untouched,
+        // Instances carry a layout item and returned above.
+        Node::Instance(_) => ChildRole::Flow,
         // Box kinds returned above.
         Node::Rect(_)
         | Node::Ellipse(_)
@@ -271,6 +271,39 @@ pub(super) fn child_role(node: &Node) -> ChildRole {
         | Node::Chart(_)
         | Node::Mesh(_) => ChildRole::Flow,
     }
+}
+
+/// The sizing inputs of a flow child: its fixed `w` / `h` in px and its
+/// item attributes. Box nodes and `instance` have one.
+#[derive(Clone, Copy)]
+pub(super) struct ItemView<'n> {
+    pub(super) w: Option<f64>,
+    pub(super) h: Option<f64>,
+    pub(super) item: &'n LayoutItem,
+}
+
+impl<'n> ItemView<'n> {
+    /// The item view of `node`, or `None` for a kind without one.
+    pub(super) fn of(node: &'n Node, resolved: &BTreeMap<String, ResolvedToken>) -> Option<Self> {
+        if let Node::Instance(i) = node {
+            return Some(Self {
+                w: dim_px(&i.w),
+                h: dim_px(&i.h),
+                item: &i.layout_item,
+            });
+        }
+        let view = node.box_view()?;
+        Some(Self {
+            w: px_of(view.w, resolved),
+            h: px_of(view.h, resolved),
+            item: view.layout_item,
+        })
+    }
+}
+
+/// The px value of a raw dimension (instance and point geometry).
+pub(super) fn dim_px(d: &Option<Dimension>) -> Option<f64> {
+    d.as_ref().and_then(|d| dim_to_px(d.value, &d.unit))
 }
 
 /// A px value of a geometry property, when it resolves.

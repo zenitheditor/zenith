@@ -7,11 +7,13 @@
 //! Wiring only: the submodules carry the surface logic.
 //! - `listings`: the node/op/token catalog listing surfaces.
 //! - `surfaces`: the page/asset/document, variant, and diagnostics surfaces.
-//! - `brand`: the brand-kit and markdown-block surfaces.
+//! - `brand`: the brand-kit, markdown-block, and style surfaces.
+//! - `defaults`: the per-kind default-style block surface.
 //! - `common`: the shared attribute-table formatter.
 
 mod brand;
 mod common;
+mod defaults;
 mod listings;
 mod surfaces;
 
@@ -19,5 +21,6 @@ mod surfaces;
 mod tests;
 
 pub use brand::{block, brand, style};
+pub use defaults::defaults;
 pub use listings::{node_detail, nodes, op_detail, ops, overview, token_detail, tokens};
 pub use surfaces::{asset, diagnostics, document, page, ports, variant};

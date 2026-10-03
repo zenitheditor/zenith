@@ -77,14 +77,7 @@ impl<F: ?Sized + FontProvider> PageCompiler<'_, F> {
             return empty_result(diagnostics);
         };
 
-        // Print bleed. An absent, unresolvable, or non-positive bleed is 0,
-        // which is the no-bleed path.
-        let bleed = page
-            .bleed
-            .as_ref()
-            .and_then(|d| dim_to_px(d.value, &d.unit))
-            .filter(|&px| px > 0.0)
-            .unwrap_or(0.0);
+        let bleed = page_bleed(page);
         let media_w = page_w + 2.0 * bleed;
         let media_h = page_h + 2.0 * bleed;
 
@@ -131,7 +124,8 @@ impl<F: ?Sized + FontProvider> PageCompiler<'_, F> {
         );
         let footnote_markers = footnote::collect_footnote_markers(page);
         let import_scopes = &prep.import_scopes;
-        let node_boxes = build_node_boxes(page, resolved, &self.component_map, import_scopes);
+        let node_boxes =
+            build_node_boxes(&page.children, resolved, &self.component_map, import_scopes);
         let connector_targets = build_connector_targets(
             page,
             &node_boxes,
@@ -181,6 +175,7 @@ impl<F: ?Sized + FontProvider> PageCompiler<'_, F> {
             md_blocks: &prep.md_blocks,
             page_block_styles: &page.block_styles,
             doc_block_styles: &doc.body.block_styles,
+            image_sizes: &prep.image_sizes,
         };
 
         let root_ctx = root_render_ctx(page, bleed);
@@ -198,7 +193,7 @@ impl<F: ?Sized + FontProvider> PageCompiler<'_, F> {
             let prefix = format!("{}/", page.id);
             container::prefix_ids_in_children(&mut projected, &prefix);
             // Masters lower per page: a field measures against this page.
-            lower_expanded(&mut projected, node_cx, &mut diagnostics);
+            lower_expanded(&mut projected, node_cx, root_ctx, &mut diagnostics);
             for node in &projected {
                 compile_node(
                     node,
@@ -369,9 +364,19 @@ fn empty_result(diagnostics: Vec<Diagnostic>) -> CompileResult {
     }
 }
 
+/// The page's print bleed in px. An absent, unresolvable, or non-positive
+/// bleed is 0, which is the no-bleed path.
+pub(super) fn page_bleed(page: &Page) -> f64 {
+    page.bleed
+        .as_ref()
+        .and_then(|d| dim_to_px(d.value, &d.unit))
+        .filter(|&px| px > 0.0)
+        .unwrap_or(0.0)
+}
+
 /// Root render context: shifted into the trim box under a bleed, with the
 /// page baseline grid when it resolves to a positive pixel pitch.
-fn root_render_ctx(page: &Page, bleed: f64) -> RenderCtx {
+pub(super) fn root_render_ctx(page: &Page, bleed: f64) -> RenderCtx {
     let mut root_ctx = if bleed > 0.0 {
         RenderCtx::root_offset(bleed, bleed)
     } else {

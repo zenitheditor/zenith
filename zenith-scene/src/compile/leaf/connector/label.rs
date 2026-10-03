@@ -7,12 +7,12 @@ use zenith_core::{ConnectorNode, Diagnostic, TextNode};
 
 use crate::ir::SceneCommand;
 
-use super::super::super::RenderCtx;
 use super::super::super::text::{
     MeasureEnv, TextCompileEnv, compile_text, empty_md_blocks, measure_text_wrapped_height,
     resolve_text_families,
 };
 use super::super::super::util::px_prop;
+use super::super::super::{RenderCtx, style_enum};
 use super::compile::ConnectorEnv;
 use super::route::polyline_midpoint;
 
@@ -91,7 +91,12 @@ pub(super) fn emit_connector_label(
         w: Some(px_prop(LABEL_W)),
         h: Some(px_prop(LABEL_H)),
         layout_item: Default::default(),
-        align: Some("center".to_owned()),
+        // The label `text-style`'s `align`, else centered.
+        align: Some(
+            style_enum(&connector.text_style, style_map, "align")
+                .map_or("center", String::as_str)
+                .to_owned(),
+        ),
         v_align: None,
         direction: None,
         // The label box is internal (the author sets no w/h), so a long label

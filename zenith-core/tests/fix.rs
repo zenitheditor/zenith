@@ -301,3 +301,158 @@ fn validation_carries_structured_fix_hints() {
         })
     );
 }
+
+// ── defaults rows and style property children ────────────────────────────────
+
+/// A document with `styles_body` in `styles`, `top` after `styles`, and
+/// `page_top` at the page body start.
+fn row_doc(styles_body: &str, top: &str, page_top: &str) -> String {
+    format!(
+        r##"zenith version=1 {{
+  tokens format="zenith-token-v1" {{
+    token id="color.ink" type="color" value="#111111"
+  }}
+  styles {{
+    style id="body" {{
+      fill (token)"color.ink"
+    }}
+    style id="box" {{
+      fill (token)"color.ink"
+    }}
+{styles_body}
+  }}
+{top}
+  document id="doc.f" {{
+    page id="page.f" w=(px)800 h=(px)600 {{
+{page_top}
+      rect id="r" {GEOM} fill=(token)"color.ink" style="body"
+    }}
+  }}
+}}
+"##
+    )
+}
+
+fn assert_idempotent(out: &zenith_core::fix::FixOutcome) {
+    let again = fix_source(&out.source_after).expect("reparse");
+    assert!(
+        !again.changed(),
+        "second fix changed:\n{}",
+        again.source_after
+    );
+    assert!(again.applied.is_empty());
+}
+
+#[test]
+fn defaults_unknown_kind_is_renamed() {
+    let src = row_doc(
+        "",
+        "  defaults {\n    txet style=\"body\"\n    rect style=\"box\"\n  }",
+        "",
+    );
+    let out = fix_source(&src).expect("fix");
+    assert!(out.changed());
+    assert!(
+        out.source_after
+            .contains("  defaults {\n    rect style=\"box\"\n    text style=\"body\"\n  }\n"),
+        "{}",
+        out.source_after
+    );
+    let fix = out
+        .applied
+        .iter()
+        .find(|f| f.code == "defaults.unknown_kind")
+        .expect("applied");
+    assert_eq!((fix.from.as_str(), fix.to.as_str()), ("txet", "text"));
+    assert!(
+        error_codes(&out)
+            .iter()
+            .all(|c| !c.starts_with("defaults."))
+    );
+    assert_idempotent(&out);
+}
+
+#[test]
+fn defaults_unknown_kind_rename_skipped_when_target_taken() {
+    let src = row_doc(
+        "",
+        "  defaults {\n    text style=\"body\"\n    txet style=\"box\"\n  }",
+        "",
+    );
+    let out = fix_source(&src).expect("fix");
+    assert!(
+        out.applied
+            .iter()
+            .all(|f| f.code != "defaults.unknown_kind"),
+        "{:?}",
+        out.applied
+    );
+    assert!(error_codes(&out).contains(&"defaults.unknown_kind".to_owned()));
+}
+
+#[test]
+fn defaults_unknown_style_is_replaced_at_page_scope() {
+    let src = row_doc(
+        "",
+        "",
+        "      defaults {\n        shape style=\"bxo\" text-style=\"bodi\"\n      }",
+    );
+    let out = fix_source(&src).expect("fix");
+    assert!(
+        out.source_after
+            .contains("defaults {\n        shape style=\"box\" text-style=\"body\"\n      }"),
+        "{}",
+        out.source_after
+    );
+    let codes: Vec<&str> = out.applied.iter().map(|f| f.code.as_str()).collect();
+    assert_eq!(codes, ["defaults.unknown_style", "defaults.unknown_style"]);
+    assert!(
+        error_codes(&out)
+            .iter()
+            .all(|c| !c.starts_with("defaults."))
+    );
+    assert_idempotent(&out);
+}
+
+#[test]
+fn defaults_unknown_property_is_renamed() {
+    let src = row_doc(
+        "",
+        "  defaults {\n    shape style=\"box\" text-stlye=\"body\"\n  }",
+        "",
+    );
+    let out = fix_source(&src).expect("fix");
+    assert!(
+        out.source_after
+            .contains("    shape style=\"box\" text-style=\"body\"\n"),
+        "{}",
+        out.source_after
+    );
+    assert!(
+        out.applied
+            .iter()
+            .any(|f| f.code == "defaults.unknown_property")
+    );
+    assert_idempotent(&out);
+}
+
+#[test]
+fn style_invalid_value_child_is_replaced() {
+    let src = row_doc(
+        "    style id=\"card\" {\n      align \"centre\"\n      v_align \"midle\"\n    }",
+        "",
+        "",
+    );
+    let out = fix_source(&src).expect("fix");
+    assert!(
+        out.source_after.contains(
+            "style id=\"card\" {\n      align \"center\"\n      v-align \"middle\"\n    }"
+        ),
+        "{}",
+        out.source_after
+    );
+    let codes: Vec<&str> = out.applied.iter().map(|f| f.code.as_str()).collect();
+    assert_eq!(codes, ["style.invalid_value", "style.invalid_value"]);
+    assert!(!error_codes(&out).contains(&"style.invalid_value".to_owned()));
+    assert_idempotent(&out);
+}

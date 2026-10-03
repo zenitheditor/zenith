@@ -229,6 +229,7 @@ pub fn minimal_page(id: &str, children: Vec<Node>) -> Page {
         construction: ConstructionBlock::default(),
         ports: Vec::new(),
         block_styles: Vec::new(),
+        defaults: Default::default(),
         children,
         source_span: None,
     }
@@ -258,6 +259,7 @@ pub fn doc_with(tokens: Vec<Token>, pages: Vec<Page>) -> Document {
             tokens,
         },
         styles: StyleBlock::default(),
+        defaults: Default::default(),
         components: Vec::new(),
         masters: Vec::new(),
         sections: Vec::new(),
@@ -319,6 +321,7 @@ pub fn bounded_page(id: &str, w: f64, h: f64, children: Vec<Node>) -> Page {
         construction: ConstructionBlock::default(),
         ports: Vec::new(),
         block_styles: Vec::new(),
+        defaults: Default::default(),
         children,
         source_span: None,
     }

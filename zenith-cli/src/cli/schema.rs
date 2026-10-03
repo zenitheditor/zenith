@@ -150,4 +150,12 @@ pub enum SchemaSub {
     /// `font-family`, …), and the transaction ops `create_style`,
     /// `set_style_property`, and `delete_style`. Includes a worked example.
     Style,
+
+    /// Show the `defaults { <kind> style=… }` block: placement, rows, and cascade.
+    ///
+    /// Documents the document-level (after `styles`) and page-level (page body
+    /// start) placements, the `<kind> style="…" [text-style="…"]` row, the
+    /// accepted kinds, the cascade, and the diagnostics. Includes a worked
+    /// example.
+    Defaults,
 }

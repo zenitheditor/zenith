@@ -12,7 +12,7 @@ use crate::format::writer::{
 };
 
 use super::helpers::write_span;
-use super::layout::{write_box_size, write_layout_item};
+use super::layout::{write_box_dimension, write_box_size, write_layout_item};
 use super::write_children_block;
 
 pub(super) fn write_shape(s: &ShapeNode, out: &mut String, depth: usize) {
@@ -21,8 +21,8 @@ pub(super) fn write_shape(s: &ShapeNode, out: &mut String, depth: usize) {
 
     // Canonical property order: id, name, role, anchor, anchor-zone, x, y, w, h, kind, fill, stroke,
     // stroke-width, radius, stroke-alignment, padding, h-align, v-align,
-    // text-style, style, opacity, visible, locked, rotate, then unknown props
-    // (sorted), then the span children.
+    // text-style, style, shadow, opacity, visible, locked, rotate, then unknown
+    // props (sorted), then the span children.
     out.push_str(" id=\"");
     out.push_str(&s.id);
     out.push('"');
@@ -50,6 +50,7 @@ pub(super) fn write_shape(s: &ShapeNode, out: &mut String, depth: usize) {
     write_opt_str(out, "v-align", &s.v_align);
     write_opt_str(out, "text-style", &s.text_style);
     write_opt_str(out, "style", &s.style);
+    write_opt_property_value(out, "shadow", &s.shadow);
     write_opt_f64(out, "opacity", &s.opacity);
     write_opt_bool(out, "visible", &s.visible);
     write_opt_bool(out, "locked", &s.locked);
@@ -258,7 +259,7 @@ pub(super) fn write_instance(i: &InstanceNode, out: &mut String, depth: usize) {
     out.push_str("instance");
 
     // Canonical property order: id, name, role, component, source, x, y, w, h,
-    // fit, opacity, visible, locked, then unknown props (sorted), then the
+    // the layout item attributes, fit, opacity, visible, locked, then unknown props (sorted), then the
     // override children.
     out.push_str(" id=\"");
     out.push_str(&i.id);
@@ -269,8 +270,9 @@ pub(super) fn write_instance(i: &InstanceNode, out: &mut String, depth: usize) {
     write_opt_str(out, "source", &i.source);
     write_opt_dimension(out, "x", &i.x);
     write_opt_dimension(out, "y", &i.y);
-    write_opt_dimension(out, "w", &i.w);
-    write_opt_dimension(out, "h", &i.h);
+    write_box_dimension(out, "w", &i.w, i.layout_item.w_keyword);
+    write_box_dimension(out, "h", &i.h, i.layout_item.h_keyword);
+    write_layout_item(out, &i.layout_item);
     write_opt_str(out, "fit", &i.fit);
     write_opt_f64(out, "opacity", &i.opacity);
     write_opt_bool(out, "visible", &i.visible);

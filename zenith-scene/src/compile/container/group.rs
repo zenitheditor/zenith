@@ -13,7 +13,7 @@ use super::super::paint::{
     NodeEffect, resolve_property_filter, resolve_property_mask, resolve_property_shadow,
 };
 use super::super::util::{blend_mode_ir, points_bbox, resolve_geometry_px, rotation_degrees};
-use super::super::{NodeCtx, RenderCtx, compile_node};
+use super::super::{NodeCtx, RenderCtx, compile_node, style_prop};
 use super::wrap::emit_wrapped_container;
 
 // NOTE: compile_group → compile_node → compile_group recursion has no depth
@@ -105,6 +105,7 @@ pub(in crate::compile) fn compile_group(
     } else if let Some(shadows) = group
         .shadow
         .as_ref()
+        .or_else(|| style_prop(&group.style, cx.style_map, "shadow"))
         .and_then(|p| resolve_property_shadow(p, cx.resolved, &group.id))
     {
         Some(NodeEffect::Shadow(shadows))
@@ -127,6 +128,7 @@ pub(in crate::compile) fn compile_group(
         dy: child_dy,
         // Page baseline grid cascades unchanged so all text shares one grid.
         baseline_grid: ctx.baseline_grid,
+        page_origin: ctx.page_origin,
     };
     if effect.is_none() && mask.is_none() {
         emit_live_symmetry_children(

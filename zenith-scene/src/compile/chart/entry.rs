@@ -18,7 +18,10 @@ use crate::ir::{Color, SceneCommand};
 
 use super::super::NodeCtx;
 use super::super::RenderCtx;
-use super::super::paint::resolve_property_color;
+use super::super::paint::{
+    NodeEffect, emit_node_with_effects, resolve_property_color, resolve_property_shadow,
+};
+use super::super::style_prop;
 use super::super::text::run_to_scene_glyphs;
 use super::super::util::{
     AxisTarget, missing_geometry_diag, resolve_anchored_axis, resolve_geometry_px,
@@ -65,9 +68,37 @@ pub(super) const DEFAULT_TITLE_COLOR: Color = Color::srgb(40, 40, 40, 255);
 /// labels and an optional title — no axes, no Y scale. Any unknown kind string
 /// emits nothing — see the gate comment for the reasoning.
 ///
+/// A `shadow` (node attribute, else the style's) brackets the whole chart
+/// ink as one unit, like a group. Without a shadow the ink lands verbatim.
+///
 /// Returns `0.0`: charts are absolute-positioned and do not participate in
 /// flow layout.
 pub(in crate::compile) fn compile_chart(
+    chart: &ChartNode,
+    cx: NodeCtx,
+    commands: &mut Vec<SceneCommand>,
+    diagnostics: &mut Vec<Diagnostic>,
+    ctx: RenderCtx,
+) -> f64 {
+    let effect = chart
+        .shadow
+        .as_ref()
+        .or_else(|| style_prop(&chart.style, cx.style_map, "shadow"))
+        .and_then(|p| resolve_property_shadow(p, cx.resolved, &chart.id))
+        .map(NodeEffect::Shadow);
+    let Some(effect) = effect else {
+        return compile_chart_ink(chart, cx, commands, diagnostics, ctx);
+    };
+    let mut ink: Vec<SceneCommand> = Vec::new();
+    let height = compile_chart_ink(chart, cx, &mut ink, diagnostics, ctx);
+    if !ink.is_empty() {
+        emit_node_with_effects(commands, ink, Some(effect), None);
+    }
+    height
+}
+
+/// Emit the chart ink (see [`compile_chart`]).
+fn compile_chart_ink(
     chart: &ChartNode,
     cx: NodeCtx,
     commands: &mut Vec<SceneCommand>,

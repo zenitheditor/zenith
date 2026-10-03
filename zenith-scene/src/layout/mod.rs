@@ -10,8 +10,11 @@
 //! - `model` — boxes, per-axis sizing, resolved frame settings, child roles.
 //! - `flex` — pure fill / line-break / justify / align math.
 //! - `measure` — hug sizes of children ([`crate::compile::IntrinsicEnv`]).
+//! - `memo` — the per-lowering memo of measured sizes.
 //! - `solve` / `stack` — solve one frame (grid / row and column).
-//! - `lower` — the walk that writes the solved geometry into the nodes.
+//! - `lower` — the walk that writes the solved geometry into the nodes,
+//!   anchored roots included.
+//! - `settle` — repeat passes until position-dependent heights settle.
 //! - `write` — node geometry setters and subtree translation.
 //! - `diag` — layout diagnostics.
 
@@ -19,10 +22,13 @@ mod diag;
 mod flex;
 mod lower;
 mod measure;
+mod memo;
 mod model;
+mod settle;
 mod solve;
 mod stack;
 mod write;
 
-pub(crate) use lower::lower_nodes;
+pub(crate) use lower::{Lowered, lower_nodes};
 pub use model::LayoutBox;
+pub(crate) use settle::{NodeBoxes, may_depend_on_position, settle};

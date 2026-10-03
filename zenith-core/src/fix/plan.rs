@@ -8,19 +8,22 @@
 //! - [`FixHint::RenameProperty`] → rename, when the node does not already set
 //!   the target.
 //! - [`FixHint::ReplaceTokenRef`] → swap the token id.
-//! - [`FixHint::ReplaceValue`] → swap the enum value.
+//! - [`FixHint::ReplaceValue`] → swap the enum value. On a `defaults` row it
+//!   swaps the kind (node name) or a style id; on a `style` block it swaps the
+//!   value of the property child. Row diagnostics are located by span.
 
 use std::collections::BTreeSet;
 
 use kdl::{KdlDocument, KdlEntry, KdlValue};
 
+use crate::ast::canonicalize_style_key;
 use crate::ast::value::{Dimension, Unit};
 use crate::diagnostics::{Diagnostic, FixHint};
 use crate::suggest::LiteralValue;
 
 use super::locate::{
-    NodePath, Site, annotation, entry_at, find_node, node_at, property_sites, quote, scalar_text,
-    value_text,
+    NodePath, Site, Slot, annotation, child_value_site, entry_at, find_node, find_node_by_span,
+    node_at, property_sites, quote, scalar_text, value_text,
 };
 use super::mint::{MintedToken, Minter};
 
@@ -29,7 +32,8 @@ use super::mint::{MintedToken, Minter};
 pub struct AppliedFix {
     /// The diagnostic code the fix resolves.
     pub code: String,
-    /// The diagnostic subject (a node, page, or asset id).
+    /// The diagnostic subject (a node, page, or asset id; empty for a
+    /// document-scope `defaults` row).
     pub subject_id: String,
     /// The property name as the source had it.
     pub property: String,
@@ -48,6 +52,8 @@ pub(super) enum Change {
     Text(String),
     /// Rename the property.
     Rename(String),
+    /// Rename the node (a `defaults` row kind).
+    NodeName(String),
 }
 
 /// A planned edit plus the record it produces.
@@ -80,10 +86,10 @@ pub(super) fn plan(
     let mut renamed: BTreeSet<(NodePath, String)> = BTreeSet::new();
 
     for d in diagnostics {
-        let (Some(hint), Some(subject)) = (d.fix(), d.subject_id.as_deref()) else {
+        let Some(hint) = d.fix() else {
             continue;
         };
-        let Some(path) = find_node(doc, subject) else {
+        let Some(path) = subject_path(doc, d) else {
             continue;
         };
         let planned = match hint {
@@ -108,9 +114,11 @@ pub(super) fn plan(
             FixHint::RenameProperty { from, to } => {
                 plan_rename(doc, d, &path, from, to, &mut renamed)
             }
-            FixHint::ReplaceValue { property, from, to } => {
-                plan_value(doc, d, &path, property, from, to)
-            }
+            FixHint::ReplaceValue { property, from, to } => match d.code.as_str() {
+                "defaults.unknown_kind" => plan_node_name(doc, d, &path, from, to),
+                "style.invalid_value" => plan_style_value(doc, d, &path, property, from, to),
+                _ => plan_value(doc, d, &path, property, from, to),
+            },
         };
         for fix in planned {
             if taken.insert(fix.site.clone()) {
@@ -121,6 +129,22 @@ pub(super) fn plan(
     Plan {
         fixes,
         minted: minter.minted,
+    }
+}
+
+/// Codes whose subject is an id-less row: a `defaults` row or a `style`
+/// block. Their diagnostics are located by source span, not by subject id.
+fn is_row_code(code: &str) -> bool {
+    code.starts_with("defaults.") || code == "style.invalid_value"
+}
+
+/// The node a diagnostic's fix edits: the row at its span for row codes,
+/// else the node whose id is the diagnostic subject.
+fn subject_path(doc: &KdlDocument, d: &Diagnostic) -> Option<NodePath> {
+    if is_row_code(&d.code) {
+        find_node_by_span(doc, d.span?)
+    } else {
+        find_node(doc, d.subject_id.as_deref()?)
     }
 }
 
@@ -254,10 +278,7 @@ fn plan_rename(
         return Vec::new();
     }
     vec![PlannedFix {
-        site: Site {
-            node: path.to_vec(),
-            entry: index,
-        },
+        site: Site::entry(path.to_vec(), index),
         change: Change::Rename(to.to_owned()),
         record: record(d, from, from.to_owned(), to.to_owned()),
     }]
@@ -274,16 +295,74 @@ fn plan_value(
     let Some(node) = node_at(doc, path) else {
         return Vec::new();
     };
+    // `text-style` on a `defaults` row is also accepted as `text_style`.
+    let alias = property.replace('-', "_");
     let Some(index) = node.entries().iter().position(|e| {
-        e.name().map(|n| n.value()) == Some(property) && e.value().as_string() == Some(from)
+        let name = e.name().map(|n| n.value());
+        (name == Some(property) || name == Some(alias.as_str()))
+            && e.value().as_string() == Some(from)
     }) else {
         return Vec::new();
     };
     vec![PlannedFix {
+        site: Site::entry(path.to_vec(), index),
+        change: Change::Text(to.to_owned()),
+        record: record(d, property, quote(from), quote(to)),
+    }]
+}
+
+/// Rename a `defaults` row's kind (its node name) from `from` to `to`.
+///
+/// Skipped when a sibling row already names `to`: the rename would only turn
+/// an unknown kind into a duplicate kind.
+fn plan_node_name(
+    doc: &KdlDocument,
+    d: &Diagnostic,
+    path: &[usize],
+    from: &str,
+    to: &str,
+) -> Vec<PlannedFix> {
+    let Some(node) = node_at(doc, path) else {
+        return Vec::new();
+    };
+    if node.name().value() != from {
+        return Vec::new();
+    }
+    let Some((_, parent)) = path.split_last() else {
+        return Vec::new();
+    };
+    let taken = node_at(doc, parent)
+        .and_then(|p| p.children())
+        .is_some_and(|c| c.nodes().iter().any(|n| n.name().value() == to));
+    if taken {
+        return Vec::new();
+    }
+    vec![PlannedFix {
         site: Site {
             node: path.to_vec(),
-            entry: index,
+            slot: Slot::Name,
         },
+        change: Change::NodeName(to.to_owned()),
+        record: record(d, "kind", from.to_owned(), to.to_owned()),
+    }]
+}
+
+/// Swap the value of the `style` block property child `property` (any
+/// spelling that canonicalizes to it) from `from` to `to`.
+fn plan_style_value(
+    doc: &KdlDocument,
+    d: &Diagnostic,
+    path: &[usize],
+    property: &str,
+    from: &str,
+    to: &str,
+) -> Vec<PlannedFix> {
+    let is_name = |name: &str| canonicalize_style_key(name) == Some(property);
+    let Some(site) = child_value_site(doc, path, is_name, from) else {
+        return Vec::new();
+    };
+    vec![PlannedFix {
+        site,
         change: Change::Text(to.to_owned()),
         record: record(d, property, quote(from), quote(to)),
     }]

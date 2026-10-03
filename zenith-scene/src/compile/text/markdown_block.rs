@@ -40,8 +40,8 @@ use zenith_core::{
 
 use crate::ir::{Color, Paint, SceneCommand};
 
-use super::super::RenderCtx;
 use super::super::util::{resolve_geometry_px, resolve_property_dimension_px};
+use super::super::{RenderCtx, style_enum};
 use super::ctx::{ShapeEnv, TextCompileEnv, empty_md_blocks};
 use super::ink::{BlockOverflow, block_overflow, ink_bounds};
 use super::measure::font_size_px;
@@ -196,7 +196,10 @@ fn resolve_block_style_for_role(
         node_font_family: text.font_family.as_ref(),
         node_font_weight: text.font_weight.as_ref(),
         node_fill: text.fill.as_ref(),
-        node_align: text.align.as_ref(),
+        node_align: text
+            .align
+            .as_ref()
+            .or_else(|| style_enum(&text.style, env.style_map, "align")),
     })
 }
 

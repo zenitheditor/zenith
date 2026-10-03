@@ -6,7 +6,7 @@
 //! Rules:
 //! - Two-space indentation per nesting level.
 //! - Root `zenith` node at column 0.
-//! - Child order under `zenith`: diagnostics, brand, project, assets, libraries, imports, tokens, styles, components, masters, sections, provenance, variants, recipes, actions, document.
+//! - Child order under `zenith`: diagnostics, brand, project, assets, libraries, imports, tokens, styles, defaults, components, masters, sections, provenance, variants, recipes, actions, document.
 //! - Structural containers (`tokens`, `styles`, `document`, `page`) always emit
 //!   a brace block, even when empty.
 //! - Leaf nodes (`project`, a `rect` with no children) emit a single line.
@@ -27,6 +27,7 @@
 //!   `write_opt_*`, escape helpers) re-exported for sibling writer modules;
 //! - [`tokens`] writes the `tokens` block;
 //! - [`styles`] writes the `styles` block;
+//! - [`defaults`] writes the document- and page-scope `defaults` blocks;
 //! - [`nodes`] writes the `document` body, pages, and every node kind.
 
 use std::fmt::Write as _;
@@ -38,6 +39,7 @@ use crate::ast::{
 };
 use crate::error::FormatError;
 
+mod defaults;
 mod nodes;
 mod primitives;
 mod styles;
@@ -46,6 +48,7 @@ mod tokens;
 #[cfg(test)]
 mod tests;
 
+use defaults::write_defaults_block;
 use nodes::{write_component_children, write_document_body, write_ports_block};
 use styles::write_style_block;
 use tokens::write_token_block;
@@ -95,7 +98,7 @@ fn write_document(doc: &Document, out: &mut String) {
     write_opt_str(out, "page-parity-start", &doc.page_parity_start);
     out.push_str(" {\n");
 
-    // Child order: diagnostics, brand, project, assets, libraries, imports, tokens, styles, components, masters, sections, provenance, variants, recipes, actions, document.
+    // Child order: diagnostics, brand, project, assets, libraries, imports, tokens, styles, defaults, components, masters, sections, provenance, variants, recipes, actions, document.
     // `diagnostics` is emitted first — right after the document-level attributes
     // and before `tokens` — so the lint policy reads at the top of the file. It
     // is omitted entirely when the policy is empty, so a document with no
@@ -113,6 +116,7 @@ fn write_document(doc: &Document, out: &mut String) {
     write_import_block(&doc.imports, out, 1);
     write_token_block(&doc.tokens, out, 1);
     write_style_block(&doc.styles, out, 1);
+    write_defaults_block(&doc.defaults, out, 1);
     write_component_block(&doc.components, out, 1);
     write_master_block(&doc.masters, out, 1);
     write_section_block(&doc.sections, out, 1);

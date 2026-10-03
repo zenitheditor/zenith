@@ -74,9 +74,10 @@ pub fn op_summary(name: &str) -> Option<&'static str> {
             "Create a design token (scalar via value; shadow/filter/gradient/mask via structured fields).",
         ),
         "update_token_value" => Some("Replace the literal value of an existing design token."),
-        "set_style_property" => {
-            Some("Set a recognized visual property on a named style to a token reference.")
-        }
+        "set_style_property" => Some(
+            "Set a recognized visual property on a named style to a token reference \
+                 (an enum value for align / v-align).",
+        ),
         "create_style" => Some("Create a named style in the document styles block."),
         "delete_style" => Some("Remove a named style from the document styles block."),
         "create_master" => {

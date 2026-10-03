@@ -2,18 +2,15 @@
 //! text-align, text-direction, find-replace-text, and text-replacement setters,
 //! plus the property accessors they use.
 
-use zenith_core::schema::enums::{CODE_OVERFLOWS, TEXT_OVERFLOWS};
+use zenith_core::schema::enums::{CODE_OVERFLOWS, TEXT_ALIGNS, TEXT_OVERFLOWS};
 use zenith_core::{
     Diagnostic, Document, Node, PropertyValue, TextNode, TextSpan, canonicalize_style_key,
+    style_enum_values,
 };
 
 use crate::op::OpSpan;
 
 use super::{find_node_any_mut, record_affected};
-
-// ── Valid align values ────────────────────────────────────────────────────────
-
-const VALID_ALIGNS: &[&str] = &["start", "center", "end", "justify"];
 
 // ── Field accessor helpers ────────────────────────────────────────────────────
 
@@ -188,13 +185,13 @@ pub(super) fn apply_set_text_align(
     affected: &mut Vec<String>,
 ) {
     // Validate align value before touching the tree.
-    if !VALID_ALIGNS.contains(&align) {
+    if !TEXT_ALIGNS.contains(&align) {
         diagnostics.push(Diagnostic::error(
             "tx.invalid_value",
             format!(
                 "invalid align value {:?}; must be one of: {}",
                 align,
-                VALID_ALIGNS.join(", ")
+                TEXT_ALIGNS.join(", ")
             ),
             None,
             Some(node_id.to_owned()),
@@ -433,7 +430,8 @@ pub(super) fn apply_set_opacity(
 ///
 /// Rejects with `tx.duplicate_id` if a style with `id` already exists.
 /// Each key in `properties` must be a recognized style key (underscore forms
-/// accepted); values are stored as `PropertyValue::TokenRef`.
+/// accepted); values are stored as `PropertyValue::TokenRef`, except
+/// `align` / `v-align`, which store a checked enum literal.
 pub(super) fn apply_create_style(
     id: &str,
     properties: &std::collections::BTreeMap<String, String>,
@@ -465,10 +463,20 @@ pub(super) fn apply_create_style(
             ));
             return;
         };
-        props.insert(
-            canonical.to_owned(),
-            PropertyValue::TokenRef(token_id.clone()),
-        );
+        match style_value(canonical, token_id) {
+            Ok(value) => {
+                props.insert(canonical.to_owned(), value);
+            }
+            Err(message) => {
+                diagnostics.push(Diagnostic::error(
+                    "tx.invalid_value",
+                    format!("create_style: {message}"),
+                    None,
+                    Some(id.to_owned()),
+                ));
+                return;
+            }
+        }
     }
 
     doc.styles.styles.push(zenith_core::Style {
@@ -504,13 +512,15 @@ pub(super) fn apply_delete_style(
 
 // ── SetStyleProperty ─────────────────────────────────────────────────────────
 
-/// Set one recognized visual property on a named style to a token reference.
+/// Set one recognized visual property on a named style.
 ///
 /// Canonicalizes `property` (accepting underscore forms), then looks up the
-/// style by `style_id`. On success, inserts `PropertyValue::TokenRef(value)`
-/// into the style's `properties` map under the canonical key and records the
-/// style id as affected. Emits `tx.unsupported_property` for unrecognized keys
-/// and `tx.unknown_style` when no style with `style_id` exists.
+/// style by `style_id`. On success, inserts the value into the style's
+/// `properties` map under the canonical key and records the style id as
+/// affected: a literal for `align` / `v-align`, else a token reference. Emits
+/// `tx.unsupported_property` for unrecognized keys, `tx.invalid_value` for an
+/// enum value outside its list, and `tx.unknown_style` when no style with
+/// `style_id` exists.
 pub(super) fn apply_set_style_property(
     style_id: &str,
     property: &str,
@@ -540,13 +550,35 @@ pub(super) fn apply_set_style_property(
                 Some(style_id.to_owned()),
             ));
         }
-        Some(style) => {
-            style.properties.insert(
-                canonical_key.to_owned(),
-                PropertyValue::TokenRef(value.to_owned()),
-            );
-            record_affected(style_id, affected);
-        }
+        Some(style) => match style_value(canonical_key, value) {
+            Ok(pv) => {
+                style.properties.insert(canonical_key.to_owned(), pv);
+                record_affected(style_id, affected);
+            }
+            Err(message) => {
+                diagnostics.push(Diagnostic::error(
+                    "tx.invalid_value",
+                    message,
+                    None,
+                    Some(style_id.to_owned()),
+                ));
+            }
+        },
+    }
+}
+
+/// The stored value for canonical style key `key` set to `value`.
+///
+/// An enum-valued key (`align`, `v-align`) stores `value` as a literal and
+/// rejects a value outside its list. Every other key stores a token reference.
+fn style_value(key: &str, value: &str) -> Result<PropertyValue, String> {
+    match style_enum_values(key) {
+        Some(allowed) if allowed.contains(&value) => Ok(PropertyValue::Literal(value.to_owned())),
+        Some(allowed) => Err(format!(
+            "invalid {key} value {value:?}; must be one of: {}",
+            allowed.join(", ")
+        )),
+        None => Ok(PropertyValue::TokenRef(value.to_owned())),
     }
 }
 

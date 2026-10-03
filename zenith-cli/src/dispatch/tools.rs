@@ -134,6 +134,7 @@ pub(super) fn dispatch_schema(args: SchemaArgs) -> ExitCode {
         Some(cli::SchemaSub::Brand) => commands::schema::brand(json),
         Some(cli::SchemaSub::Block) => commands::schema::block(json),
         Some(cli::SchemaSub::Style) => commands::schema::style(json),
+        Some(cli::SchemaSub::Defaults) => commands::schema::defaults(json),
     };
     println!("{}", output);
     ExitCode::from(code)

@@ -194,7 +194,11 @@ pub fn node_content(kind: &str) -> Option<NodeContentDescriptor> {
                 literal or a dimension token. Stacking frames do not clip unless \
                 clip=#true. Frame fill/stroke/stroke-width/radius paint the box under \
                 the children; a clipping frame with a radius clips to the rounded box. \
-                An `instance` in a layout frame reports `layout.not_yet_supported`.",
+                A hugging `image` takes its asset's pixel size (one fixed axis keeps the \
+                aspect). A hugging `instance` takes its component's content bounds; a \
+                fixed or fill size fits the component into the box (`fit`, default \
+                contain). A layout frame placed by `anchor` is measured first, then \
+                anchored at its measured size.",
             example: "rect id=\"bg\" x=(px)0 y=(px)0 w=(px)400 h=(px)300 fill=(token)\"color.bg\"",
         }),
         "group" => Some(NodeContentDescriptor {

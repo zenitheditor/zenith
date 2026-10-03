@@ -6,14 +6,35 @@
 
 use kdl::{KdlDocument, KdlEntry, KdlNode, KdlValue};
 
+use crate::ast::Span;
+
 /// Index path from the document root to a node.
 pub(super) type NodePath = Vec<usize>;
 
-/// One property entry: the node path plus the entry index on that node.
+/// The part of a node a fix edits.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub(super) enum Slot {
+    /// The entry at this index (a property or positional argument).
+    Entry(usize),
+    /// The node name (a `defaults` row kind).
+    Name,
+}
+
+/// One edit site: the node path plus the slot on that node.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub(super) struct Site {
     pub node: NodePath,
-    pub entry: usize,
+    pub slot: Slot,
+}
+
+impl Site {
+    /// The entry at `index` on the node at `node`.
+    pub(super) fn entry(node: NodePath, index: usize) -> Self {
+        Self {
+            node,
+            slot: Slot::Entry(index),
+        }
+    }
 }
 
 /// The string value of the `id` property on `node`, if any.
@@ -66,14 +87,18 @@ pub(super) fn node_at_mut<'a>(doc: &'a mut KdlDocument, path: &[usize]) -> Optio
 
 /// The entry at `site`.
 pub(super) fn entry_at<'a>(doc: &'a KdlDocument, site: &Site) -> Option<&'a KdlEntry> {
-    node_at(doc, &site.node)?.entries().get(site.entry)
+    match site.slot {
+        Slot::Entry(index) => node_at(doc, &site.node)?.entries().get(index),
+        Slot::Name => None,
+    }
 }
 
 /// The entry at `site`, mutably.
 pub(super) fn entry_at_mut<'a>(doc: &'a mut KdlDocument, site: &Site) -> Option<&'a mut KdlEntry> {
-    node_at_mut(doc, &site.node)?
-        .entries_mut()
-        .get_mut(site.entry)
+    match site.slot {
+        Slot::Entry(index) => node_at_mut(doc, &site.node)?.entries_mut().get_mut(index),
+        Slot::Name => None,
+    }
 }
 
 /// Every entry named `prop` on the node at `path`, then on its id-less
@@ -90,10 +115,7 @@ pub(super) fn property_sites(doc: &KdlDocument, path: &[usize], prop: &str) -> V
 fn collect_sites(node: &KdlNode, path: NodePath, prop: &str, out: &mut Vec<Site>) {
     for (i, entry) in node.entries().iter().enumerate() {
         if entry.name().map(|n| n.value()) == Some(prop) {
-            out.push(Site {
-                node: path.clone(),
-                entry: i,
-            });
+            out.push(Site::entry(path.clone(), i));
         }
     }
     let Some(children) = node.children() else {
@@ -106,6 +128,52 @@ fn collect_sites(node: &KdlNode, path: NodePath, prop: &str, out: &mut Vec<Site>
             collect_sites(child, child_path, prop, out);
         }
     }
+}
+
+/// Path of the node whose source span is exactly `span` (byte offsets).
+///
+/// Diagnostics on rows without an id (`defaults` rows, `style` blocks) carry
+/// the row span; the planner parses the same source, so spans match.
+pub(super) fn find_node_by_span(doc: &KdlDocument, span: Span) -> Option<NodePath> {
+    for (i, node) in doc.nodes().iter().enumerate() {
+        let s = node.span();
+        if s.offset() == span.start && s.offset() + s.len() == span.end {
+            return Some(vec![i]);
+        }
+        if let Some(children) = node.children()
+            && let Some(mut rest) = find_node_by_span(children, span)
+        {
+            rest.insert(0, i);
+            return Some(rest);
+        }
+    }
+    None
+}
+
+/// The first positional entry of the child of the node at `path` whose name
+/// satisfies `is_name` and whose first positional value is the string
+/// `value` (a `style` property child such as `align "centre"`).
+pub(super) fn child_value_site(
+    doc: &KdlDocument,
+    path: &[usize],
+    is_name: impl Fn(&str) -> bool,
+    value: &str,
+) -> Option<Site> {
+    let children = node_at(doc, path)?.children()?;
+    for (i, child) in children.nodes().iter().enumerate() {
+        if !is_name(child.name().value()) {
+            continue;
+        }
+        let Some(index) = child.entries().iter().position(|e| e.name().is_none()) else {
+            continue;
+        };
+        if child.entries().get(index)?.value().as_string() == Some(value) {
+            let mut child_path = path.to_vec();
+            child_path.push(i);
+            return Some(Site::entry(child_path, index));
+        }
+    }
+    None
 }
 
 /// The type annotation on `entry` (`px` in `(px)24`).

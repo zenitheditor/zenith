@@ -138,6 +138,7 @@ fn minimal_shape(id: &str, kind: Option<&str>, h_align: Option<&str>) -> Node {
             link: None,
         }],
         style: None,
+        shadow: None,
         opacity: None,
         visible: None,
         locked: None,

@@ -5,8 +5,7 @@
 //! dimensions, inert attributes, ignored or missing placement, and statically
 //! contradictory sizes. Rules that need measured sizes (`layout.unsized_child`,
 //! `layout.child_overflow`, `layout.fill_in_hug_parent`) run in the scene
-//! layout engine. An `instance` placed by a layout frame reports
-//! `layout.not_yet_supported` (Error): the engine does not size instances yet.
+//! layout engine. An `instance` carries the item attributes like a box node.
 
 use crate::ast::Span;
 use crate::ast::node::{
@@ -58,23 +57,37 @@ pub(in crate::validate::check) struct LayoutSite {
     pub(in crate::validate::check) geom_required: bool,
 }
 
-/// `layout.not_yet_supported` for an `instance` placed by a layout frame.
-fn push_instance_in_flow(node: &Node, parent: FlowParent, diagnostics: &mut Vec<Diagnostic>) {
-    let (id, span) = node.id_and_span();
-    let mode = match parent {
-        FlowParent::Row => "row",
-        FlowParent::Column => "column",
-        FlowParent::Grid => "grid",
-    };
-    diagnostics.push(Diagnostic::error(
-        "layout.not_yet_supported",
-        format!(
-            "instance '{id}': a {mode} frame does not place instances yet; wrap the \
-             instance in a group with a fixed w and h, or move it out of the {mode} frame"
-        ),
-        span,
-        Some(id.to_owned()),
-    ));
+/// The layout-relevant facts of a node that carries item attributes.
+struct ItemFacts<'a> {
+    item: &'a LayoutItem,
+    x: bool,
+    y: bool,
+    w: bool,
+    h: bool,
+    anchored: bool,
+}
+
+/// The item facts of a box node or an `instance`; `None` for other kinds.
+fn item_facts(node: &Node) -> Option<ItemFacts<'_>> {
+    if let Node::Instance(i) = node {
+        return Some(ItemFacts {
+            item: &i.layout_item,
+            x: i.x.is_some(),
+            y: i.y.is_some(),
+            w: i.w.is_some(),
+            h: i.h.is_some(),
+            anchored: false,
+        });
+    }
+    let view = node.box_view()?;
+    Some(ItemFacts {
+        item: view.layout_item,
+        x: view.x.is_some(),
+        y: view.y.is_some(),
+        w: view.w.is_some(),
+        h: view.h.is_some(),
+        anchored: view.anchored,
+    })
 }
 
 /// Push one `layout.inert_attribute` Advisory naming every inert attribute.
@@ -128,13 +141,10 @@ pub(in crate::validate::check) fn check_layout_item(
     tokens: &mut TokenEnv<'_>,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
-    if let (Node::Instance(_), Some(parent)) = (node, site.parent) {
-        push_instance_in_flow(node, parent, diagnostics);
-    }
-    let Some(view) = node.box_view() else {
+    let Some(view) = item_facts(node) else {
         return;
     };
-    let item = view.layout_item;
+    let item = view.item;
     let (id, span) = node.id_and_span();
     let subject = node.kind_str();
 
@@ -160,7 +170,7 @@ pub(in crate::validate::check) fn check_layout_item(
 
     check_min_max(id, item, span, diagnostics);
     for (axis, keyword, value) in [("w", item.w_keyword, view.w), ("h", item.h_keyword, view.h)] {
-        if let (Some(k), Some(_)) = (keyword, value) {
+        if let (Some(k), true) = (keyword, value) {
             push_conflict(
                 id,
                 format!(
@@ -237,7 +247,7 @@ pub(in crate::validate::check) fn check_layout_item(
 
     let absolute = matches!(item.position, Some(LayoutPosition::Absolute));
     if absolute {
-        if !(view.anchored || (view.x.is_some() && view.y.is_some())) {
+        if !(view.anchored || (view.x && view.y)) {
             diagnostics.push(Diagnostic::error(
                 "layout.absolute_unplaced",
                 format!(
@@ -248,7 +258,7 @@ pub(in crate::validate::check) fn check_layout_item(
                 Some(id.to_owned()),
             ));
         }
-    } else if view.x.is_some() || view.y.is_some() || view.anchored {
+    } else if view.x || view.y || view.anchored {
         diagnostics.push(Diagnostic::advisory(
             "layout.position_ignored",
             format!(
@@ -271,7 +281,7 @@ pub(in crate::validate::check) fn check_layout_item(
         let hugs = match keyword {
             Some(SizeKeyword::Hug) => true,
             Some(SizeKeyword::Fill) => false,
-            None => value.is_none(),
+            None => !value,
         };
         if hugs {
             push_conflict(

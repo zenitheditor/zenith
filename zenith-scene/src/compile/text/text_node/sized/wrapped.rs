@@ -2,13 +2,14 @@
 
 use zenith_core::Diagnostic;
 
-use crate::compile::text::wrap::{WrapEnv, WrapGeom, emit_wrap_path};
+use crate::compile::text::wrap::{WrapEnv, WrapGeom, WrapOutcome, emit_wrap_path};
 use crate::ir::SceneCommand;
 
 use super::spans::ShapedSet;
 use super::style::{BoxLayout, NodeStyle};
 
-/// Wrap and emit `set`; returns the laid-out line count.
+/// Wrap and emit `set`; returns the laid-out line count (and the grid-snapped
+/// height under a baseline grid).
 ///
 /// A node with a box width wraps to it. A width-less node reaches this path
 /// only for a mandatory `\n` break, so it uses its natural content width and
@@ -21,7 +22,7 @@ pub(super) fn emit_wrapped(
     set: &ShapedSet,
     commands: &mut Vec<SceneCommand>,
     diagnostics: &mut Vec<Diagnostic>,
-) -> usize {
+) -> WrapOutcome {
     let resolved_spans = set.spans.iter().map(|s| s.to_resolved()).collect();
     emit_wrap_path(
         style.text,

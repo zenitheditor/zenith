@@ -57,6 +57,36 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
         "A `(data)` property was encountered but no data context was provided at compile time.",
     ),
     info(
+        "defaults.duplicate_kind",
+        Severity::Error,
+        "A `defaults` block declares the same node kind more than once.",
+    ),
+    info(
+        "defaults.text_style_unsupported",
+        Severity::Error,
+        "A `defaults` row sets `text-style` on a kind without a label.",
+    ),
+    info(
+        "defaults.unknown_kind",
+        Severity::Error,
+        "A `defaults` row names an unknown node kind.",
+    ),
+    info(
+        "defaults.unknown_property",
+        Severity::Error,
+        "A `defaults` row carries an attribute other than `style` / `text-style`.",
+    ),
+    info(
+        "defaults.unknown_style",
+        Severity::Error,
+        "A `defaults` row references an undeclared style id.",
+    ),
+    info(
+        "defaults.unsupported_kind",
+        Severity::Error,
+        "A `defaults` row names a node kind that carries no style.",
+    ),
+    info(
         "document.invalid_colorspace",
         Severity::Error,
         "Document `colorspace` value is unrecognized.",
@@ -260,7 +290,8 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
     info(
         "layout.conflicting_size",
         Severity::Error,
-        "A layout size is contradictory (min above max, wrap or overflow=fit on a hug axis).",
+        "A layout size is contradictory (min above max, overflow=fit on a hug axis, or a \
+         hugging text whose height depends on its own position does not settle).",
     ),
     info(
         "layout.fill_in_hug_parent",
@@ -271,11 +302,6 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
         "layout.inert_attribute",
         Severity::Advisory,
         "A layout attribute has no effect where it is set.",
-    ),
-    info(
-        "layout.not_yet_supported",
-        Severity::Error,
-        "An `instance` sits in a row/column/grid frame, which does not place instances yet.",
     ),
     info(
         "layout.off_canvas",

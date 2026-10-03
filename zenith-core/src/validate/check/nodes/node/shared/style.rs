@@ -4,9 +4,10 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::ast::node::TextSpan;
+use crate::ast::style::Style;
 use crate::ast::value::{Dimension, PropertyValue};
 use crate::diagnostics::Diagnostic;
-use crate::schema::enums::{STROKE_LINECAPS, STROKE_LINEJOINS};
+use crate::schema::enums::{H_ALIGNS, STROKE_LINECAPS, STROKE_LINEJOINS, TEXT_ALIGNS};
 use crate::tokens::ResolvedToken;
 use crate::validate::check::nodes::node::suggest::{blend_mode_names, push_invalid_value};
 use crate::validate::check::visual::{VisualExpect, check_visual_prop};
@@ -169,6 +170,47 @@ pub(in crate::validate::check) fn check_style_ref(
             Some(node_id.to_owned()),
         ));
     }
+}
+
+/// Warn when a node without its own `h-align` takes a style `align` value its
+/// `h-align` does not accept (`justify` on a shape or table).
+///
+/// The renderer ignores that style value and keeps the node's default
+/// alignment, so the mismatch is a `style.align_unsupported` Warning.
+pub(in crate::validate::check) fn check_style_h_align(
+    subject: (&str, &str),
+    h_align: Option<&str>,
+    style_ref: Option<&str>,
+    style_map: &BTreeMap<&str, &Style>,
+    span: Option<crate::ast::Span>,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    let (kind, node_id) = subject;
+    if h_align.is_some() {
+        return;
+    }
+    let Some(sid) = style_ref else {
+        return;
+    };
+    let Some(PropertyValue::Literal(value)) =
+        style_map.get(sid).and_then(|s| s.properties.get("align"))
+    else {
+        return;
+    };
+    if H_ALIGNS.contains(&value.as_str()) || !TEXT_ALIGNS.contains(&value.as_str()) {
+        return;
+    }
+    diagnostics.push(Diagnostic::warning(
+        "style.align_unsupported",
+        format!(
+            "{kind} '{node_id}': style '{sid}' sets align \"{value}\", which {kind} h-align \
+             does not take; the style value is ignored — set h-align on the node or use one \
+             of: {}",
+            H_ALIGNS.join(", ")
+        ),
+        span,
+        Some(node_id.to_owned()),
+    ));
 }
 
 // ── Shared visual-property block ──────────────────────────────────────────────

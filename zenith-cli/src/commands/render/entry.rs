@@ -14,7 +14,7 @@ use crate::report::ImportFiles;
 
 use super::assets::{
     build_asset_provider_with_imports, build_font_provider_with_imports,
-    disk_diagnostics_with_imports,
+    disk_diagnostics_with_imports, image_sizes, read_image_sizes,
 };
 use super::pages::{
     PageSelection, compile_for_render, compile_local_for_render, map_pages, map_slice,
@@ -244,7 +244,8 @@ pub fn to_scene_json_with_options(
     resolve_text_sources(&mut doc, project_dir, &mut text_src_diagnostics);
     let fonts = build_font_provider_with_imports(&doc, project_dir, &imports, false)?;
     let page_index = resolve_page_index(&doc, page)?;
-    let prep = DocumentPrep::new(&doc, opts.data, Some(&scene_imports));
+    let prep = DocumentPrep::new(&doc, opts.data, Some(&scene_imports))
+        .with_image_sizes(read_image_sizes(&doc, project_dir, &imports));
     let compiler = PageCompiler::new(&prep, &fonts);
     let compile_result = compile_for_render(&doc, &compiler, page_index, opts);
     let json = compile_result.scene.to_json().map_err(|e| {
@@ -353,7 +354,8 @@ pub fn to_png_with_dir_options(
         Some(dir) => build_asset_provider_with_imports(&doc, dir, &imports, opts.locked)?,
         None => BytesAssetProvider::new(),
     };
-    let prep = DocumentPrep::new(&doc, opts.data, Some(&scene_imports));
+    let prep = DocumentPrep::new(&doc, opts.data, Some(&scene_imports))
+        .with_image_sizes(image_sizes(&doc, Some(&imports), &assets));
     let compiler = PageCompiler::new(&prep, &fonts);
     let compile_result = compile_for_render(&doc, &compiler, page_index, opts);
     let raster_err = |e: zenith_render::RenderError| {
@@ -434,7 +436,8 @@ pub fn to_pdf_with_dir_options(
         Some(dir) => build_asset_provider_with_imports(&doc, dir, &imports, opts.locked)?,
         None => BytesAssetProvider::new(),
     };
-    let prep = DocumentPrep::new(&doc, opts.data, Some(&scene_imports));
+    let prep = DocumentPrep::new(&doc, opts.data, Some(&scene_imports))
+        .with_image_sizes(image_sizes(&doc, Some(&imports), &assets));
     let compiler = PageCompiler::new(&prep, &fonts);
     let compile_result = compile_for_render(&doc, &compiler, page_index, opts);
     let pdf = render_pdf_with(
@@ -529,7 +532,8 @@ pub fn to_pdf_all_pages_with_dir_options(
     };
     let mut scenes: Vec<Scene> = Vec::with_capacity(page_count);
     diagnostics.extend(disk_diagnostics_with_imports(&doc, project_dir, &imports));
-    let prep = DocumentPrep::new(&doc, opts.data, Some(&scene_imports));
+    let prep = DocumentPrep::new(&doc, opts.data, Some(&scene_imports))
+        .with_image_sizes(image_sizes(&doc, Some(&imports), &assets));
     let compiler = PageCompiler::new(&prep, &fonts);
     diagnostics.extend(govern_compile_diagnostics(
         compiler.document_diagnostics(),
@@ -721,7 +725,11 @@ pub fn to_png_spread(
     });
     let render_opts = RenderEntryOptions::png(flags, locked, data)
         .with_construction_overlay(construction_overlay);
-    let prep = DocumentPrep::new(&doc, data, Some(&scene_imports));
+    let prep = DocumentPrep::new(&doc, data, Some(&scene_imports)).with_image_sizes(image_sizes(
+        &doc,
+        Some(&imports),
+        &assets,
+    ));
     let compiler = PageCompiler::new(&prep, &fonts);
     let compile_a = compile_local_for_render(&doc, &compiler, index_a, render_opts);
     let compile_b = compile_local_for_render(&doc, &compiler, index_b, render_opts);

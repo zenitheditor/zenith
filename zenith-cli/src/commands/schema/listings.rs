@@ -33,7 +33,7 @@ pub fn overview(json: bool) -> (String, u8) {
         let diag_count = core_schema::diagnostic_codes().len();
         let text = format!(
             "Zenith schema — {node_count} node kinds, {op_count} tx ops, \
-             {token_type_count} token types, 8 non-node surfaces, \
+             {token_type_count} token types, 10 non-node surfaces, \
              {diag_count} diagnostic codes\n\n\
              Drill in:\n  \
              zenith schema nodes              # list all node kinds\n  \
@@ -49,7 +49,9 @@ pub fn overview(json: bool) -> (String, u8) {
              zenith schema variant            # variants block + override entry structure\n  \
              zenith schema diagnostics        # diagnostic-policy verbs + codes\n  \
              zenith schema brand              # brand-contract block (allowed colors/fonts/weights)\n  \
-             zenith schema block              # block role declaration: vocab, props, scopes\n\n\
+             zenith schema block              # block role declaration: vocab, props, scopes\n  \
+             zenith schema style              # styles block: recognized keys + tx ops\n  \
+             zenith schema defaults           # per-kind default styles (document / page)\n\n\
              Attribute types, required-ness, and valid values are enforced by \
              `zenith validate`."
         );

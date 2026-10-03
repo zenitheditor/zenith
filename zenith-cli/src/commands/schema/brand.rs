@@ -327,9 +327,17 @@ pub fn style(json: bool) -> (String, u8) {
         `tokens` and `document`.";
 
     let keys: Vec<&str> = zenith_core::STYLE_RECOGNIZED_KEYS.to_vec();
+    let enum_keys: serde_json::Map<String, serde_json::Value> = zenith_core::STYLE_ENUM_KEYS
+        .iter()
+        .map(|(key, values)| ((*key).to_owned(), serde_json::json!(values)))
+        .collect();
+
+    const VALUE_FORMS: &str = "align and v-align take a plain enum value (`align \"center\"`); \
+        shadow takes a shadow token; every other key takes a token reference. A node \
+        attribute of the same name overrides the style value.";
 
     const TX: &str = "create_style  — create a style with optional properties map (key → token id)\n\
-        set_style_property  — set one recognized key to a token id\n\
+        set_style_property  — set one recognized key to a token id (an enum value for align / v-align)\n\
         delete_style  — remove a style by id\n\
         (see `zenith schema op create_style`)";
 
@@ -355,6 +363,8 @@ pub fn style(json: bool) -> (String, u8) {
             "summary": SUMMARY,
             "placement": PLACEMENT,
             "recognized_keys": keys,
+            "enum_keys": enum_keys,
+            "value_forms": VALUE_FORMS,
             "tx_ops": ["create_style", "set_style_property", "delete_style"],
             "example": EXAMPLE,
         });
@@ -366,6 +376,10 @@ pub fn style(json: bool) -> (String, u8) {
         for k in &keys {
             text.push_str(&format!("  - {k}\n"));
         }
+        text.push_str(&format!("\nValue forms:\n  {VALUE_FORMS}\n"));
+        for (key, values) in zenith_core::STYLE_ENUM_KEYS {
+            text.push_str(&format!("  {key}: {}\n", values.join(" | ")));
+        }
         text.push_str(&format!("\nTransaction ops:\n  {TX}\n"));
         text.push_str(&format!("\nExample:\n  {}", EXAMPLE.replace('\n', "\n  ")));
         (text, 0)
@@ -373,3 +387,33 @@ pub fn style(json: bool) -> (String, u8) {
 }
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn style_surface_lists_enum_keys_and_shadow() {
+        let (out, code) = style(true);
+        assert_eq!(code, 0);
+        let v: serde_json::Value = serde_json::from_str(&out).expect("json");
+        let keys = v["recognized_keys"].as_array().expect("keys");
+        for key in ["align", "v-align", "shadow"] {
+            assert!(keys.iter().any(|k| k == key), "{key}");
+        }
+        assert_eq!(
+            v["enum_keys"]["align"],
+            serde_json::json!(["start", "center", "end", "justify"])
+        );
+        assert_eq!(
+            v["enum_keys"]["v-align"],
+            serde_json::json!(["top", "middle", "bottom"])
+        );
+        let (text, _) = style(false);
+        assert!(text.contains("Value forms:"), "{text}");
+        assert!(
+            text.contains("align: start | center | end | justify"),
+            "{text}"
+        );
+    }
+}

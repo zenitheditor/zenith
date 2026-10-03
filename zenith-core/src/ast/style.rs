@@ -26,7 +26,10 @@ pub struct Style {
     /// Canonical keys: `fill`, `stroke`, `stroke-width`, `stroke-alignment`,
     /// `font-family`, `font-size`, `font-weight`, `letter-spacing`,
     /// `line-height`, `radius`,
-    /// `padding`, `gap`.
+    /// `padding`, `gap`, `align`, `v-align`, `shadow`.
+    ///
+    /// `align` and `v-align` hold a [`PropertyValue::Literal`] enum value (see
+    /// [`STYLE_ENUM_KEYS`]); every other key holds a token reference.
     pub properties: BTreeMap<String, PropertyValue>,
     /// Unknown (unrecognized) child node names encountered in the style block.
     ///
@@ -63,7 +66,28 @@ pub const STYLE_RECOGNIZED_KEYS: &[&str] = &[
     "radius",
     "padding",
     "gap",
+    "align",
+    "v-align",
+    "shadow",
 ];
+
+/// Style keys whose value is an enum literal (`align "center"`), stored as
+/// [`PropertyValue::Literal`]. Every other key takes a token reference.
+///
+/// Each key maps to its allowed values in [`crate::schema::enums`].
+pub const STYLE_ENUM_KEYS: &[(&str, &[&str])] = &[
+    ("align", crate::schema::enums::TEXT_ALIGNS),
+    ("v-align", crate::schema::enums::V_ALIGNS),
+];
+
+/// The allowed values of enum-valued style key `key`, or `None` when the key
+/// takes a token reference.
+pub fn style_enum_values(key: &str) -> Option<&'static [&'static str]> {
+    STYLE_ENUM_KEYS
+        .iter()
+        .find(|(k, _)| *k == key)
+        .map(|(_, values)| *values)
+}
 
 /// Map underscore-spelled style child names to their canonical hyphenated form.
 ///
@@ -81,6 +105,7 @@ pub fn canonicalize_style_key(name: &str) -> Option<&'static str> {
         "letter_spacing" => "letter-spacing",
         "tracking" => "letter-spacing",
         "line_height" => "line-height",
+        "v_align" => "v-align",
         other => other,
     };
     STYLE_RECOGNIZED_KEYS

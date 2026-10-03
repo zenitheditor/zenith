@@ -13,10 +13,10 @@ use std::path::Path;
 
 use zenith_core::{BytesAssetProvider, KdlAdapter, KdlSource};
 use zenith_render::render_png;
-use zenith_scene::compile_page;
+use zenith_scene::{DocumentPrep, PageCompiler};
 
 use crate::commands::render::{
-    build_asset_provider, build_font_provider, collect_missing_asset_diagnostics,
+    build_asset_provider, build_font_provider, collect_missing_asset_diagnostics, image_sizes,
 };
 use crate::json_types::{
     DiagnosticJson, VariantManifest, VariantManifestTarget, VariantOutput, VariantResultJson,
@@ -258,7 +258,9 @@ pub fn run_variant(
                 }
 
                 // ── 6d. Compile the source page ───────────────────────────
-                let compile_result = compile_page(&materialized, &fonts, page_index, None);
+                let prep = DocumentPrep::new(&materialized, None, None)
+                    .with_image_sizes(image_sizes(&materialized, None, &template_assets));
+                let compile_result = PageCompiler::new(&prep, &fonts).compile_page(page_index);
 
                 let hard_diags: Vec<String> = compile_result
                     .diagnostics

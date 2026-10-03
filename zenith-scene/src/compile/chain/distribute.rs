@@ -269,6 +269,7 @@ fn distribute_block_chain(
         },
         BlockStyleEnv {
             resolved: doc_styles.resolved,
+            style_map: doc_styles.style_map,
             page_block_styles,
             doc_block_styles: doc_styles.doc_block_styles,
         },

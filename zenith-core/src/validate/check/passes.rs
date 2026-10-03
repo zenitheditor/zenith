@@ -8,16 +8,19 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::ast::STYLE_RECOGNIZED_KEYS;
 use crate::ast::asset::{AssetDecl, AssetKind};
 use crate::ast::document::ImportDecl;
 use crate::ast::library::LibraryDef;
 use crate::ast::provenance::ProvenanceDef;
+use crate::ast::style::Style;
 use crate::ast::style::StyleBlock;
 use crate::ast::value::PropertyValue;
+use crate::ast::{STYLE_RECOGNIZED_KEYS, style_enum_values};
 use crate::diagnostics::Diagnostic;
 use crate::parse::transform::known_props_for_kind;
-use crate::suggest::{rename_property_fix, unknown_property_message};
+use crate::suggest::{
+    invalid_value_message, rename_property_fix, replace_value_fix, unknown_property_message,
+};
 use crate::tokens::ResolvedToken;
 
 use super::visual::{VisualExpect, attach_visual_spans, check_visual_prop};
@@ -453,6 +456,10 @@ pub(in crate::validate::check) fn validate_style_block(
     for style in &block.styles {
         // Check recognized properties.
         for (key, value) in &style.properties {
+            if let Some(allowed) = style_enum_values(key) {
+                check_style_enum(style, key, value, allowed, diagnostics);
+                continue;
+            }
             let expect = style_prop_expect(key);
             if let Some(expect) = expect {
                 let start = diagnostics.len();
@@ -502,8 +509,48 @@ fn style_prop_expect(key: &str) -> Option<VisualExpect> {
         "stroke-width" | "font-size" | "letter-spacing" | "line-height" | "radius" | "padding"
         | "gap" => Some(VisualExpect::Dimension),
         "font-family" => Some(VisualExpect::FontFamily),
+        "shadow" => Some(VisualExpect::Shadow),
         // stroke-alignment: plain enum string, not type-checked.
         // font-weight: fontWeight token type — no VisualExpect variant for it; skip check.
         _ => None,
     }
+}
+
+/// Check an enum-valued style key (`align`, `v-align`).
+///
+/// The value must be a plain string literal from `allowed`. A token
+/// reference, dimension, data reference, or unlisted literal is a
+/// `style.invalid_value` Error.
+fn check_style_enum(
+    style: &Style,
+    key: &str,
+    value: &PropertyValue,
+    allowed: &[&str],
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    let subject = format!("style '{}'", style.id);
+    let diagnostic = match value {
+        PropertyValue::Literal(v) if allowed.contains(&v.as_str()) => return,
+        PropertyValue::Literal(v) => Diagnostic::error(
+            "style.invalid_value",
+            invalid_value_message(&subject, key, v, allowed),
+            style.source_span,
+            Some(style.id.clone()),
+        )
+        .with_fix(replace_value_fix(key, v, allowed)),
+        PropertyValue::TokenRef(_) | PropertyValue::Dimension(_) | PropertyValue::DataRef(_) => {
+            Diagnostic::error(
+                "style.invalid_value",
+                format!(
+                    "{subject}: {key} takes a plain enum value, not a token, dimension, or data \
+                     reference — write `{key} \"{}\"`; allowed values: {}",
+                    allowed.first().copied().unwrap_or_default(),
+                    allowed.join(", ")
+                ),
+                style.source_span,
+                Some(style.id.clone()),
+            )
+        }
+    };
+    diagnostics.push(diagnostic);
 }

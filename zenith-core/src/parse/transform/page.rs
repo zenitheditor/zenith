@@ -9,6 +9,7 @@
 use kdl::KdlNode;
 
 use crate::ast::block_style::BlockStyle;
+use crate::ast::defaults::DefaultsBlock;
 
 /// Canonical set of property names recognised on a `page` node.
 ///
@@ -133,7 +134,7 @@ pub(super) fn transform_page(
     let source_span = node_span(node);
 
     // A page's children block mixes `safe-zone`, `fold`, `construction`,
-    // `ports`, and `block` declarations
+    // `ports`, `block`, and `defaults` declarations
     // (page metadata, not rendering nodes) with renderable nodes. Split them here:
     // safe-zones go to `page.safe_zones`; folds to `page.folds`; construction
     // guides to `page.construction`; ports to `page.ports`; block style decls to
@@ -143,6 +144,7 @@ pub(super) fn transform_page(
     let mut construction = ConstructionBlock::default();
     let mut ports: Vec<PortDef> = Vec::new();
     let mut block_styles: Vec<BlockStyle> = Vec::new();
+    let mut defaults = DefaultsBlock::default();
     let mut children: Vec<Node> = Vec::new();
     if let Some(doc) = node.children() {
         for child in doc.nodes() {
@@ -152,6 +154,7 @@ pub(super) fn transform_page(
                 "construction" => construction = transform_construction(child)?,
                 "ports" => ports.extend(transform_ports(child)?),
                 "block" => block_styles.push(transform_block_style(child)?),
+                "defaults" => defaults = super::defaults::transform_defaults(child)?,
                 _ => children.push(transform_node(child, sink)?),
             }
         }
@@ -179,6 +182,7 @@ pub(super) fn transform_page(
         construction,
         ports,
         block_styles,
+        defaults,
         children,
         source_span,
     })

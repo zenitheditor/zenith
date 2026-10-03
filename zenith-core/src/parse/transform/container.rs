@@ -526,6 +526,11 @@ pub(crate) const INSTANCE_KNOWN_PROPS: &[&str] = &[
     "y",
     "w",
     "h",
+    "min-w",
+    "max-w",
+    "min-h",
+    "max-h",
+    "position",
     "fit",
     "opacity",
     "visible",
@@ -535,7 +540,8 @@ pub(crate) const INSTANCE_KNOWN_PROPS: &[&str] = &[
 /// Transform an `instance` node into an [`InstanceNode`].
 ///
 /// Reads required `id`; optional local `component` or external `source`;
-/// optional `x`/`y` origin dimensions, external `w`/`h`/`fit`, `opacity`/
+/// optional `x`/`y` origin dimensions, external `w`/`h`/`fit` (`w`/`h` also
+/// take the `hug` / `fill` keywords), the layout item attributes, `opacity`/
 /// `visible`/`locked`; and collects `override` child nodes into [`Override`]s.
 /// Non-`override` children are reported as `block.unknown_child` Errors.
 pub(super) fn transform_instance(node: &KdlNode) -> Result<InstanceNode, ParseError> {
@@ -551,6 +557,16 @@ pub(super) fn transform_instance(node: &KdlNode) -> Result<InstanceNode, ParseEr
     }
 
     let unknown_props = collect_unknown_props(node, INSTANCE_KNOWN_PROPS);
+    let layout_item = transform_layout_item(node);
+    // A size keyword (`w="hug"`) lives on the layout item, not on `w`.
+    let w = match layout_item.w_keyword {
+        Some(_) => None,
+        None => optional_dimension_prop(node, "w"),
+    };
+    let h = match layout_item.h_keyword {
+        Some(_) => None,
+        None => optional_dimension_prop(node, "h"),
+    };
 
     Ok(InstanceNode {
         id,
@@ -560,8 +576,9 @@ pub(super) fn transform_instance(node: &KdlNode) -> Result<InstanceNode, ParseEr
         source: optional_string_prop(node, "source").map(str::to_owned),
         x: optional_dimension_prop(node, "x"),
         y: optional_dimension_prop(node, "y"),
-        w: optional_dimension_prop(node, "w"),
-        h: optional_dimension_prop(node, "h"),
+        w,
+        h,
+        layout_item,
         fit: optional_string_prop(node, "fit").map(str::to_owned),
         opacity: optional_f64_prop(node, "opacity"),
         visible: optional_bool_prop(node, "visible"),

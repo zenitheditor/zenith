@@ -103,6 +103,8 @@ pub(in crate::compile) struct ChainMemberPlace<'a> {
     pub(in crate::compile) text_y: f64,
     pub(in crate::compile) baseline_grid: Option<f64>,
     pub(in crate::compile) glyph_stroke: (Option<Color>, Option<f64>),
+    /// Style map, read for the member's style `align` / `shadow` fallback.
+    pub(in crate::compile) style_map: &'a BTreeMap<&'a str, &'a Style>,
 }
 
 /// Everything the tab-leader (TOC) renderer needs beyond the node, leader glyph,

@@ -11,8 +11,10 @@
 //! The pattern's own `fill` (solid or gradient), `radius` (uniform rounded
 //! corners), and `stroke` + `stroke-width` paint a background panel behind the
 //! clipped motif tiling; a pattern without any of those emits nothing new and is
-//! byte-identical to before. The remaining visual properties (shadow/blur/mask/
-//! per-corner radii/…) are inert. Placement is fully deterministic — instance
+//! byte-identical to before. A `shadow` (node attribute, else the style's)
+//! brackets the clipped motif tiling as one unit; the background panel stays
+//! unshadowed. The remaining visual properties (blur/mask/per-corner radii/…)
+//! are inert. Placement is fully deterministic — instance
 //! offsets are computed by `zenith_core::pattern_positions`, which is the single
 //! source of truth shared with any other backend (e.g. the detach transaction op).
 
@@ -28,7 +30,11 @@ use super::NodeCtx;
 use super::RenderCtx;
 use super::anchor::AnchorMap;
 use super::compile_node;
-use super::paint::{apply_gradient_opacity, resolve_property_color, resolve_property_gradient};
+use super::paint::{
+    NodeEffect, apply_gradient_opacity, emit_node_with_effects, resolve_property_color,
+    resolve_property_gradient, resolve_property_shadow,
+};
+use super::style_prop;
 use super::util::{
     AxisTarget, resolve_anchored_axis, resolve_geometry_px, resolve_property_dimension_px,
 };
@@ -94,8 +100,13 @@ pub(in crate::compile) fn compile_pattern(
     // command stream byte-identical to before.
     emit_background(pattern, cx, commands, diagnostics, ctx, (bx, by, bw, bh));
 
+    // The clipped motif tiling is collected so a `shadow` (node attribute,
+    // else the style's) brackets it as one unit. Without a shadow the tiling
+    // lands verbatim.
+    let mut tiles: Vec<SceneCommand> = Vec::new();
+
     // Clip every instance to the bounds box (in device space).
-    commands.push(SceneCommand::PushClip {
+    tiles.push(SceneCommand::PushClip {
         x: ctx.dx + bx,
         y: ctx.dy + by,
         w: bw,
@@ -119,10 +130,18 @@ pub(in crate::compile) fn compile_pattern(
     };
 
     for (ox, oy) in pattern_positions(layout) {
-        emit_instance(pattern, cx, commands, ctx, bx + ox, by + oy);
+        emit_instance(pattern, cx, &mut tiles, ctx, bx + ox, by + oy);
     }
 
-    commands.push(SceneCommand::PopClip);
+    tiles.push(SceneCommand::PopClip);
+
+    let effect = pattern
+        .shadow
+        .as_ref()
+        .or_else(|| style_prop(&pattern.style, cx.style_map, "shadow"))
+        .and_then(|p| resolve_property_shadow(p, cx.resolved, &pattern.id))
+        .map(NodeEffect::Shadow);
+    emit_node_with_effects(commands, tiles, effect, None);
 
     0.0
 }
@@ -137,8 +156,8 @@ pub(in crate::compile) fn compile_pattern(
 /// opacity (× `ctx.opacity`) scales solid-color alpha and gradient stops.
 ///
 /// Emits nothing when neither fill nor stroke resolves → byte-identical to a
-/// pattern that never carried these props. Shadow/blur/mask/per-corner radii are
-/// intentionally NOT handled here (they remain inert for patterns).
+/// pattern that never carried these props. The shadow brackets the motif tiling
+/// in [`compile_pattern`]; blur/mask/per-corner radii remain inert.
 fn emit_background(
     pattern: &PatternNode,
     cx: NodeCtx,

@@ -24,6 +24,7 @@ use crate::tokens::ResolvedToken;
 use super::brand::check_brand_contract;
 use super::construction::check_construction;
 use super::contrast::check_page_text_contrast;
+use super::defaults::check_defaults;
 use super::geometry::{page_background_rgb, page_is_layout_managed};
 use super::nodes::{WalkCtx, WalkPos, check_sibling_anchors, walk_node};
 use super::passes::{
@@ -277,6 +278,15 @@ pub fn validate_with_policy(
         &mut diagnostics,
     );
 
+    // ── Defaults blocks ───────────────────────────────────────────────────
+    check_defaults(
+        &doc.defaults,
+        "document",
+        None,
+        &declared_style_ids,
+        &mut diagnostics,
+    );
+
     // ── Asset IDs and per-declaration checks ──────────────────────────────
     for decl in &doc.assets.assets {
         register_id(&decl.id, &mut seen_ids, &mut diagnostics);
@@ -324,6 +334,7 @@ pub fn validate_with_policy(
             declared_asset_ids: &declared_asset_ids,
             asset_kinds: &asset_kinds,
             declared_style_ids: &declared_style_ids,
+            style_map: &style_map,
             declared_component_ids: &declared_component_ids,
             component_local_ids: &component_local_ids,
             all_node_ids: &all_node_ids,
@@ -370,6 +381,7 @@ pub fn validate_with_policy(
             declared_asset_ids: &declared_asset_ids,
             asset_kinds: &asset_kinds,
             declared_style_ids: &declared_style_ids,
+            style_map: &style_map,
             declared_component_ids: &declared_component_ids,
             component_local_ids: &component_local_ids,
             all_node_ids: &all_node_ids,
@@ -546,6 +558,13 @@ pub fn validate_with_policy(
     for (page_idx0, page) in doc.body.pages.iter().enumerate() {
         let page_index_1based = page_idx0 + 1;
         register_id(&page.id, &mut seen_ids, &mut diagnostics);
+        check_defaults(
+            &page.defaults,
+            &format!("page '{}'", page.id),
+            Some(&page.id),
+            &declared_style_ids,
+            &mut diagnostics,
+        );
         let block_start = diagnostics.len();
         check_block_styles(
             &page.id,
@@ -759,6 +778,7 @@ pub fn validate_with_policy(
             declared_asset_ids: &declared_asset_ids,
             asset_kinds: &asset_kinds,
             declared_style_ids: &declared_style_ids,
+            style_map: &style_map,
             declared_component_ids: &declared_component_ids,
             component_local_ids: &component_local_ids,
             all_node_ids: &all_node_ids,

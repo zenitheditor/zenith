@@ -42,3 +42,15 @@ pub(in crate::compile) struct WrapGeom<'a> {
     pub(in crate::compile) direction: TextDirection,
     pub(in crate::compile) glyph_stroke: (Option<Color>, Option<f64>),
 }
+
+/// What the wrap path laid out: the line count, and the content height when
+/// the page baseline grid snapped the lines.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(in crate::compile) struct WrapOutcome {
+    /// Laid-out line count.
+    pub(in crate::compile) lines: usize,
+    /// Under a baseline-grid snap: the snap offset of the first line plus
+    /// `lines` times the snapped advance, from the node's text top. `None`
+    /// when no snap applied.
+    pub(in crate::compile) grid_height: Option<f64>,
+}

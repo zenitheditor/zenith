@@ -31,13 +31,14 @@
 use std::collections::BTreeMap;
 
 use zenith_core::{
-    BlockStyle, Diagnostic, FontStyle, ListKind, MdBlock, ResolvedToken, TextNode, TextSpan,
+    BlockStyle, Diagnostic, FontStyle, ListKind, MdBlock, ResolvedToken, Style, TextNode, TextSpan,
 };
 use zenith_layout::{FontFeature, KerningPairAdjustment, TextDirection};
 
 use crate::ir::Color;
 
 use super::super::paint::resolve_property_color;
+use super::super::style_enum;
 use super::ctx::{NodeShape, ShapeEnv};
 use super::markdown_block::{
     BLOCKQUOTE_INDENT_PX, BlockStyleCascade, CODE_BLOCK_BG, HR_COLOR, HR_THICKNESS_PX,
@@ -85,6 +86,8 @@ pub(in crate::compile) struct BlockDescriptor {
 #[derive(Clone, Copy)]
 pub(in crate::compile) struct BlockStyleEnv<'a> {
     pub(in crate::compile) resolved: &'a BTreeMap<String, ResolvedToken>,
+    /// Style map, read for the source node's style `align` fallback.
+    pub(in crate::compile) style_map: &'a BTreeMap<&'a str, &'a Style>,
     pub(in crate::compile) page_block_styles: &'a [BlockStyle],
     pub(in crate::compile) doc_block_styles: &'a [BlockStyle],
 }
@@ -127,7 +130,10 @@ pub(in crate::compile) fn shape_source_blocks(
             node_font_family: src.font_family.as_ref(),
             node_font_weight: src.font_weight.as_ref(),
             node_fill: src.fill.as_ref(),
-            node_align: src.align.as_ref(),
+            node_align: src
+                .align
+                .as_ref()
+                .or_else(|| style_enum(&src.style, style_env.style_map, "align")),
         });
 
         let block_font_size = style.font_size_px as f32;

@@ -110,6 +110,21 @@ pub(super) fn conflicting_min_max(child: &Node, axis: Axis, min: f64, max: f64) 
     )
 }
 
+/// `layout.conflicting_size` (Error): a hugging text whose height depends
+/// on its own position kept moving for `passes` layout passes.
+pub(super) fn unsettled(id: &str, span: Option<zenith_core::Span>, passes: usize) -> Diagnostic {
+    Diagnostic::error(
+        "layout.conflicting_size",
+        format!(
+            "node '{id}': its hug height depends on its own position (text-exclusion \
+             runaround or the baseline grid), and layout did not settle after {passes} \
+             passes; set h on '{id}'"
+        ),
+        span,
+        Some(id.to_owned()),
+    )
+}
+
 /// A px value rounded to two decimals for messages.
 fn fmt_px(v: f64) -> String {
     let rounded = (v * 100.0).round() / 100.0;

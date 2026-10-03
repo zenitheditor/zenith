@@ -265,9 +265,12 @@ impl Node {
         (self.id_or_kind(), self.source_span())
     }
 
-    /// Auto-layout item attributes for the box-node kinds; `None` for kinds
-    /// without an `x`/`y`/`w`/`h` box.
+    /// Auto-layout item attributes for the box-node kinds and `instance`;
+    /// `None` for kinds without an `x`/`y`/`w`/`h` box.
     pub fn layout_item(&self) -> Option<&LayoutItem> {
+        if let Node::Instance(n) = self {
+            return Some(&n.layout_item);
+        }
         self.box_view().map(|b| b.layout_item)
     }
 

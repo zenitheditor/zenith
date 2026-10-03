@@ -37,6 +37,7 @@
 //!   dimensions, override-node resolution).
 //! - [`recipes`] — `recipes` block checks (duplicate ids, unknown/non-color
 //!   palette tokens, unknown expanded-node ids, unknown bounds ids).
+//! - [`defaults`] — document- and page-scope `defaults` block checks.
 //! - [`driver`] — the `validate` entry point and its document walk.
 //! - [`passes`] — the orchestration helpers the driver calls (id collection,
 //!   footnote-ref resolution, per-declaration and styles-block checks).
@@ -45,6 +46,7 @@
 mod brand;
 mod construction;
 mod contrast;
+mod defaults;
 mod driver;
 mod fold;
 mod geometry;

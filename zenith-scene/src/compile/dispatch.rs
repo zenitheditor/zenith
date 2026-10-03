@@ -61,6 +61,7 @@ pub(in crate::compile) fn compile_node(
         md_blocks,
         page_block_styles,
         doc_block_styles,
+        image_sizes,
     } = cx;
 
     match node {
@@ -194,7 +195,15 @@ pub(in crate::compile) fn compile_node(
             0.0
         }
         Node::Image(image) => {
-            compile_image(image, resolved, commands, diagnostics, anchors, ctx);
+            compile_image(
+                image,
+                resolved,
+                style_map,
+                commands,
+                diagnostics,
+                anchors,
+                ctx,
+            );
             0.0
         }
         Node::Polygon(poly) => {
@@ -209,25 +218,28 @@ pub(in crate::compile) fn compile_node(
             compile_path(path, resolved, style_map, commands, diagnostics, ctx);
             0.0
         }
-        Node::Code(code) => compile_code(
-            code,
-            TextCompileEnv {
-                resolved,
-                style_map,
-                fonts,
-                engine,
-                chains,
-                footnote_markers: field_ctx.footnote_markers,
-                node_boxes: field_ctx.node_boxes,
-                anchors,
-                md_blocks: empty_md_blocks(),
-                page_block_styles: &[],
-                doc_block_styles: &[],
-            },
-            commands,
-            diagnostics,
-            ctx,
-        ),
+        Node::Code(code) => {
+            compile_code(
+                code,
+                TextCompileEnv {
+                    resolved,
+                    style_map,
+                    fonts,
+                    engine,
+                    chains,
+                    footnote_markers: field_ctx.footnote_markers,
+                    node_boxes: field_ctx.node_boxes,
+                    anchors,
+                    md_blocks: empty_md_blocks(),
+                    page_block_styles: &[],
+                    doc_block_styles: &[],
+                },
+                commands,
+                diagnostics,
+                ctx,
+            )
+            .height
+        }
         Node::Table(table) => {
             compile_table(
                 TableEmitCtx {
@@ -242,6 +254,7 @@ pub(in crate::compile) fn compile_node(
                     flows,
                     anchors,
                     field_ctx,
+                    image_sizes,
                 },
                 commands,
                 diagnostics,

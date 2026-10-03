@@ -11,5 +11,6 @@ mod layout;
 mod page;
 mod prep;
 
+pub use layout::LayoutStats;
 pub use page::PageCompiler;
 pub use prep::DocumentPrep;

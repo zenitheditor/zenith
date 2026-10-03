@@ -2,7 +2,7 @@
 
 use kdl::{KdlDocument, KdlIdentifier, KdlValue};
 
-use super::locate::entry_at_mut;
+use super::locate::{entry_at_mut, node_at_mut};
 use super::mint::insert_tokens;
 use super::plan::{AppliedFix, Change, Plan};
 
@@ -13,6 +13,15 @@ use super::plan::{AppliedFix, Change, Plan};
 pub(super) fn apply(doc: &mut KdlDocument, plan: Plan) -> Vec<AppliedFix> {
     let mut applied = Vec::new();
     for fix in plan.fixes {
+        if let Change::NodeName(name) = &fix.change {
+            let Some(node) = node_at_mut(doc, &fix.site.node) else {
+                continue;
+            };
+            node.set_name(KdlIdentifier::from(name.as_str()));
+            node.clear_format();
+            applied.push(fix.record);
+            continue;
+        }
         let Some(entry) = entry_at_mut(doc, &fix.site) else {
             continue;
         };
@@ -23,6 +32,8 @@ pub(super) fn apply(doc: &mut KdlDocument, plan: Plan) -> Vec<AppliedFix> {
             }
             Change::Text(text) => entry.set_value(KdlValue::String(text)),
             Change::Rename(name) => entry.set_name(Some(KdlIdentifier::from(name))),
+            // Handled above: a node-name change has no entry.
+            Change::NodeName(_) => continue,
         }
         entry.clear_format();
         applied.push(fix.record);

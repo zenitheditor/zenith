@@ -35,6 +35,7 @@ const ZENITH_CHILDREN: &[&str] = &[
     "actions",
     "tokens",
     "styles",
+    "defaults",
     "components",
     "masters",
     "sections",
@@ -108,6 +109,9 @@ fn spec_for(node: &KdlNode, path: &str) -> Option<Spec> {
         "(zenith)/brand" => Spec::Only(&["colors", "fonts", "weights"]),
         "(zenith)/document" => Spec::Only(&["block", "page"]),
         "(zenith)/document/page" => Spec::Nodes,
+        // Every direct child of a `defaults` block is a kind row, classified by
+        // validation (`defaults.unknown_kind`, …). The rows take no children.
+        "(zenith)/defaults" | "(zenith)/document/page/defaults" => Spec::Nodes,
         "(zenith)/document/page/construction" => Spec::Only(&["guide"]),
         "(zenith)/document/page/ports" => Spec::Only(&["port"]),
         // Leaf declarations inside document-level blocks.
@@ -157,6 +161,11 @@ fn spec_for(node: &KdlNode, path: &str) -> Option<Spec> {
         | "chart/label-colors"
         | "chart/slice-colors"
         | "instance/override/span" => LEAF,
+        _ if path.starts_with("(zenith)/defaults/")
+            || path.starts_with("(zenith)/document/page/defaults/") =>
+        {
+            LEAF
+        }
         // Children of a token's own children (`stop`, `layer`, filter ops, …).
         _ if path.starts_with("(zenith)/tokens/token/") => LEAF,
         _ => return None,

@@ -6,12 +6,14 @@
 
 use zenith_core::Span;
 
+use crate::compile::ProbeAt;
+
 use super::diag::{Sink, child_overflow, fill_in_hug_parent, unsized_child};
 use super::flex::{
     OVERFLOW_EPSILON, align_offset, break_lines, distribute_fill, justify_positions, span,
 };
 use super::measure::Engine;
-use super::model::{Avail, Axis, AxisSpec, FrameSpec, Sizing};
+use super::model::{Align, Avail, Axis, AxisSpec, FrameSpec, Justify, Sizing};
 use super::solve::{Item, Slot};
 
 /// The frame-level inputs of a stack or grid solve.
@@ -26,6 +28,10 @@ pub(super) struct StackCx<'a> {
     pub(super) inner_h: Avail,
     /// Top-left corner of the content box.
     pub(super) content: (f64, f64),
+    /// The render translation of the frame's list, when the frame is solved
+    /// at its final origin (placing, or measuring at a known slot). Measure
+    /// probes of position-dependent children then compile where they draw.
+    pub(super) dev: Option<(f64, f64)>,
 }
 
 impl StackCx<'_> {
@@ -42,17 +48,27 @@ impl StackCx<'_> {
         })
     }
 
-    /// Hug height at `w`, reporting `layout.unsized_child` when there is none.
-    fn hug_h(&self, it: &Item<'_>, w: f64, sink: &mut Sink<'_>) -> f64 {
-        self.engine.hug_h(it.node, w).unwrap_or_else(|_| {
-            sink.push(unsized_child(
-                it.node,
-                self.frame_id,
-                self.spec.mode,
-                Axis::Y,
-            ));
-            0.0
-        })
+    /// The probe position of a child at the local `(x, y)`, when both it and
+    /// the render translation are known.
+    fn probe(&self, at: Option<(f64, f64)>) -> Option<ProbeAt> {
+        let ((x, y), (dx, dy)) = at.zip(self.dev)?;
+        Some(ProbeAt { x, y, dx, dy })
+    }
+
+    /// Hug height at `w` (measured at `at` when known), reporting
+    /// `layout.unsized_child` when there is none.
+    fn hug_h(&self, it: &Item<'_>, w: f64, at: Option<(f64, f64)>, sink: &mut Sink<'_>) -> f64 {
+        self.engine
+            .hug_h_at(it.node, w, self.probe(at))
+            .unwrap_or_else(|_| {
+                sink.push(unsized_child(
+                    it.node,
+                    self.frame_id,
+                    self.spec.mode,
+                    Axis::Y,
+                ));
+                0.0
+            })
     }
 
     /// Report overflow along `axis` when `need` exceeds a fixed `have`.
@@ -311,12 +327,27 @@ pub(super) fn row(
     grow_lines(&lines, items, &mut sized, true, cx);
 
     // Heights: fixed and hug first; a `fill` height stretches to its line.
-    for (it, w) in items.iter().zip(&sized.w) {
+    // On one top-aligned line every item's position is known already.
+    let top_aligned = matches!(cx.spec.align, Align::Start | Align::Stretch);
+    let xs = (lines.len() == 1 && top_aligned).then(|| {
+        justify_positions(
+            cx.content.0,
+            &sized.w,
+            cx.spec.gap,
+            cx.inner_w.definite(),
+            cx.spec.justify,
+        )
+    });
+    for (k, (it, w)) in items.iter().zip(&sized.w).enumerate() {
+        let at = xs
+            .as_ref()
+            .and_then(|xs| xs.get(k))
+            .map(|x| (*x, cx.content.1));
         let (h, hugs) = match it.h.sizing {
             Sizing::Fixed(v) => (it.h.clamp(v), false),
-            Sizing::Hug => clamp_hug(it.h, cx.hug_h(it, *w, sink)),
+            Sizing::Hug => clamp_hug(it.h, cx.hug_h(it, *w, at, sink)),
             Sizing::Fill => (
-                it.h.clamp(cx.engine.hug_h(it.node, *w).unwrap_or(0.0)),
+                it.h.clamp(cx.engine.hug_h_at(it.node, *w, cx.probe(at)).unwrap_or(0.0)),
                 false,
             ),
         };
@@ -382,8 +413,27 @@ pub(super) fn column(
         }
     }
 
+    // Heights in order. On one line packed from the top, each item's
+    // position follows from the heights before it (as `place` computes it),
+    // until a growing item, whose height is not known yet.
+    let packed =
+        wraps.is_none() && (cx.spec.justify == Justify::Start || cx.inner_h.definite().is_none());
+    let mut cursor = packed.then_some(cx.content.1);
     for (it, w) in items.iter().zip(&sized.w) {
-        let (h, grow, hugs) = main_base(cx, it, it.h, Axis::Y, |s| cx.hug_h(it, *w, s), sink);
+        let at = cursor.zip(line_cross.first()).map(|(y, line)| {
+            let offset = align_offset(*w, *line, cx.spec.align);
+            let x = if offset == 0.0 {
+                cx.content.0
+            } else {
+                cx.content.0 + offset
+            };
+            (x, y)
+        });
+        let (h, grow, hugs) = main_base(cx, it, it.h, Axis::Y, |s| cx.hug_h(it, *w, at, s), sink);
+        cursor = match cursor {
+            Some(y) if !grow => Some(y + h + cx.spec.gap),
+            Some(_) | None => None,
+        };
         sized.h.push(h);
         sized.grow.push(grow);
         sized.hug_h.push(hugs);

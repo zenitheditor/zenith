@@ -13,7 +13,7 @@ use super::super::field::{SectionAssignment, build_page_index_map, build_section
 use super::super::table_flow::{TableFlowAssignments, resolve_table_flows};
 use super::super::{ComponentMap, MasterMap};
 use super::fonts::FontsRef;
-use super::layout::{LayoutPassEnv, PageLayouts, lower_pages};
+use super::layout::{LayoutPassEnv, LayoutStats, PageLayouts, lower_pages};
 use super::prep::DocumentPrep;
 
 /// Compiles pages of one prepared document.
@@ -47,6 +47,8 @@ pub struct PageCompiler<'p, F: ?Sized + FontProvider = dyn FontProvider> {
     pub(super) page_layout_diagnostics: Vec<Vec<Diagnostic>>,
     /// Per page: resolved layout boxes by node id.
     pub(super) layout_boxes: Vec<BTreeMap<String, LayoutBox>>,
+    /// Per page: layout pass and measure-probe counts.
+    pub(super) layout_stats: Vec<LayoutStats>,
 }
 
 impl<'p, F: ?Sized + FontProvider> PageCompiler<'p, F> {
@@ -98,6 +100,9 @@ impl<'p, F: ?Sized + FontProvider> PageCompiler<'p, F> {
                     md_blocks: &prep.md_blocks,
                     page_index_by_node_id: &page_index_by_node_id,
                     section_assignments: &section_assignments,
+                    components: &component_map,
+                    imports: &prep.import_scopes,
+                    image_sizes: &prep.image_sizes,
                 },
             );
             let lowered: &Document = &layouts.doc;
@@ -124,6 +129,7 @@ impl<'p, F: ?Sized + FontProvider> PageCompiler<'p, F> {
             doc: lowered,
             diagnostics: page_layout_diagnostics,
             boxes: layout_boxes,
+            stats: layout_stats,
         } = layouts;
 
         Self {
@@ -141,6 +147,7 @@ impl<'p, F: ?Sized + FontProvider> PageCompiler<'p, F> {
             lowered,
             page_layout_diagnostics,
             layout_boxes,
+            layout_stats,
         }
     }
 
@@ -169,5 +176,12 @@ impl<'p, F: ?Sized + FontProvider> PageCompiler<'p, F> {
     #[must_use]
     pub fn layout_boxes(&self, page_index: usize) -> Option<&BTreeMap<String, LayoutBox>> {
         self.layout_boxes.get(page_index)
+    }
+
+    /// The auto-layout pass and measure-probe counts of page `page_index`.
+    /// `None` for an out-of-range index.
+    #[must_use]
+    pub fn layout_stats(&self, page_index: usize) -> Option<LayoutStats> {
+        self.layout_stats.get(page_index).copied()
     }
 }

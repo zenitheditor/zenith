@@ -4,6 +4,7 @@ use std::collections::BTreeMap;
 
 use zenith_core::{DataContext, Diagnostic, Document, ResolvedToken, resolve_tokens};
 
+use super::super::ImageSizes;
 use super::super::data_resolve::{scan_for_data_refs, substitute_data_refs};
 use super::super::imports::{ImportGraph, ImportScopes};
 use super::super::markdown_resolve::{MdBlockMap, resolve_markdown, scan_for_markdown_text};
@@ -31,6 +32,9 @@ pub struct DocumentPrep<'d> {
     pub(in crate::compile) resolved: BTreeMap<String, ResolvedToken>,
     /// Data, import, and token diagnostics. Every page reports them first.
     pub(in crate::compile) shared_diagnostics: Vec<Diagnostic>,
+    /// Pixel size `(w, h)` of each image / SVG asset, by asset id. Empty
+    /// unless set with [`DocumentPrep::with_image_sizes`].
+    pub(in crate::compile) image_sizes: ImageSizes,
 }
 
 impl<'d> DocumentPrep<'d> {
@@ -96,7 +100,22 @@ impl<'d> DocumentPrep<'d> {
             import_scopes,
             resolved: token_resolution.resolved,
             shared_diagnostics: diagnostics,
+            image_sizes: ImageSizes::new(),
         }
+    }
+
+    /// Set the intrinsic pixel size `(w, h)` of each image / SVG asset, by
+    /// asset id (an imported asset uses `import-id/asset-id`).
+    ///
+    /// Auto-layout sizes a hugging `image` from it: both axes omitted take
+    /// the pixel size, one fixed axis keeps the aspect ratio. An image whose
+    /// asset has no entry has no intrinsic size (`layout.unsized_child` when
+    /// it hugs). Scene compilation reads no files, so the caller decodes the
+    /// asset headers.
+    #[must_use]
+    pub fn with_image_sizes(mut self, sizes: BTreeMap<String, (f64, f64)>) -> Self {
+        self.image_sizes = sizes;
+        self
     }
 
     /// The document pages compile against: the substituted clone, else the

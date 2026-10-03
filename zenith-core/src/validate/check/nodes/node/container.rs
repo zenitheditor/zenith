@@ -15,7 +15,7 @@ use crate::suggest::{invalid_value_message, replace_value_fix};
 
 use super::shared::{
     AnchorParentCtx, AnchorProps, TokenEnv, VisualProps, check_anchor, check_optional_dim,
-    check_style_ref, check_visual_props,
+    check_style_h_align, check_style_ref, check_visual_props,
 };
 use super::suggest::check_unknown_props;
 use crate::validate::check::nodes::WalkCtx;
@@ -403,6 +403,14 @@ pub(in crate::validate::check) fn check_table(
         &t.id,
         t.style.as_deref(),
         declared_style_ids,
+        t.source_span,
+        diagnostics,
+    );
+    check_style_h_align(
+        ("table", &t.id),
+        t.h_align.as_deref(),
+        t.style.as_deref(),
+        ctx.style_map,
         t.source_span,
         diagnostics,
     );

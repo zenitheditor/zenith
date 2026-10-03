@@ -161,7 +161,7 @@ pub(super) fn resolve_anchored_axis(
 ///
 /// Shared by `field` and `footnote` to synthesize geometry for their
 /// constructed [`zenith_core::TextNode`]s.
-pub(super) fn px(v: f64) -> Dimension {
+pub(crate) fn px(v: f64) -> Dimension {
     Dimension {
         value: v,
         unit: Unit::Px,
@@ -175,7 +175,7 @@ pub(super) fn px(v: f64) -> Dimension {
 /// `Option<PropertyValue>`. The produced value is `PropertyValue::Dimension`, so
 /// it resolves through [`resolve_geometry_px`] to exactly `v` — byte-identical to
 /// the prior raw-`Dimension` synthesis.
-pub(super) fn px_prop(v: f64) -> PropertyValue {
+pub(crate) fn px_prop(v: f64) -> PropertyValue {
     PropertyValue::Dimension(px(v))
 }
 

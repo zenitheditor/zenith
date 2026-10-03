@@ -136,6 +136,7 @@ pub(in crate::engine) fn apply_add_page(
         construction: zenith_core::ConstructionBlock::default(),
         ports: Vec::new(),
         block_styles: Vec::new(),
+        defaults: Default::default(),
         children: Vec::new(),
         source_span: None,
     };

@@ -11,6 +11,8 @@ use crate::format::writer::{
     write_opt_str_escaped,
 };
 
+use crate::format::writer::defaults::write_defaults_block;
+
 use super::helpers::write_block_style;
 use super::write_children_block;
 
@@ -74,6 +76,8 @@ fn write_page(page: &Page, out: &mut String, depth: usize) {
     write_opt_str(out, "master", &page.master);
 
     out.push_str(" {\n");
+    // Page-scope defaults open the page body.
+    write_defaults_block(&page.defaults, out, depth + 1);
     // Safe-zones, folds, construction guides, and ports are page metadata,
     // emitted before block decls and renderable children.
     for zone in &page.safe_zones {

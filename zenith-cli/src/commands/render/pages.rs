@@ -15,7 +15,7 @@ use crate::report::ImportFiles;
 
 use super::assets::{
     build_asset_provider_with_imports, build_font_provider_with_imports,
-    disk_diagnostics_with_imports,
+    disk_diagnostics_with_imports, image_sizes,
 };
 use super::entry::{RenderCmdErr, RenderEntryOptions};
 use super::pipeline::{
@@ -143,7 +143,8 @@ pub(super) fn rasterize_pages(
     };
     diagnostics.extend(import_diagnostics);
     diagnostics.extend(disk_diagnostics_with_imports(&doc, project_dir, &imports));
-    let prep = DocumentPrep::new(&doc, opts.data, Some(&scene_imports));
+    let prep = DocumentPrep::new(&doc, opts.data, Some(&scene_imports))
+        .with_image_sizes(image_sizes(&doc, Some(&imports), &assets));
     let compiler = PageCompiler::new(&prep, &fonts);
     diagnostics.extend(govern_compile_diagnostics(
         compiler.document_diagnostics(),

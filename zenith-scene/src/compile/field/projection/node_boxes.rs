@@ -3,9 +3,7 @@
 
 use std::collections::BTreeMap;
 
-use zenith_core::{
-    ComponentDef, InstanceNode, Node, Page, PropertyValue, ResolvedToken, dim_to_px,
-};
+use zenith_core::{ComponentDef, InstanceNode, Node, PropertyValue, ResolvedToken, dim_to_px};
 
 use super::common::resolve_imported_component;
 use crate::compile::container::prefix_ids_in_children;
@@ -13,9 +11,9 @@ use crate::compile::imports::ImportScopes;
 use crate::compile::util::resolve_geometry_px;
 
 /// Build a single page's `node id → ABSOLUTE bounding box (x, y, w, h)` map in
-/// pixels for text-runaround exclusion lookup.
+/// pixels for text-runaround exclusion lookup, from the page's `children`.
 ///
-/// Walks the page's children recursively, accumulating the translation offset of
+/// Walks the children recursively, accumulating the translation offset of
 /// each ancestor container: a `group` (and an `instance`, which compiles as a
 /// translated synthetic group) shifts its children by its own `x`/`y`; a `frame`
 /// is clip-only and does NOT translate (matching the render-offset semantics in
@@ -26,21 +24,13 @@ use crate::compile::util::resolve_geometry_px;
 /// exclusion). Deterministic: source-order walk; the FIRST occurrence of an id
 /// wins.
 pub(in crate::compile) fn build_node_boxes(
-    page: &Page,
+    children: &[Node],
     resolved: &BTreeMap<String, ResolvedToken>,
     components: &BTreeMap<&str, &ComponentDef>,
     imports: &ImportScopes<'_>,
 ) -> BTreeMap<String, (f64, f64, f64, f64)> {
     let mut map: BTreeMap<String, (f64, f64, f64, f64)> = BTreeMap::new();
-    collect_node_boxes(
-        &page.children,
-        0.0,
-        0.0,
-        resolved,
-        components,
-        imports,
-        &mut map,
-    );
+    collect_node_boxes(children, 0.0, 0.0, resolved, components, imports, &mut map);
     map
 }
 

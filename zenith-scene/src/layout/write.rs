@@ -4,19 +4,13 @@
 use std::collections::BTreeMap;
 
 use zenith_core::{
-    Dimension, FrameNode, Node, PathAnchor, Point, PropertyValue, ResolvedToken, Unit, dim_to_px,
+    Dimension, FrameNode, InstanceNode, Node, PathAnchor, Point, PropertyValue, ResolvedToken,
+    dim_to_px,
 };
 
-use crate::compile::resolve_geometry_px;
+use crate::compile::{px as px_dim, px_prop as px, resolve_geometry_px};
 
-use super::model::LayoutBox;
-
-fn px(v: f64) -> PropertyValue {
-    PropertyValue::Dimension(Dimension {
-        value: v,
-        unit: Unit::Px,
-    })
-}
+use super::model::{LayoutBox, Mode};
 
 fn put(
     x: &mut Option<PropertyValue>,
@@ -32,7 +26,7 @@ fn put(
 }
 
 /// Set the `x` / `y` / `w` / `h` of a box node to `b` (px). Other kinds are
-/// unchanged.
+/// unchanged ([`set_instance_box`] places an instance).
 pub(super) fn set_box(node: &mut Node, b: LayoutBox) {
     match node {
         Node::Rect(n) => put(&mut n.x, &mut n.y, &mut n.w, &mut n.h, b),
@@ -58,6 +52,33 @@ pub(super) fn set_box(node: &mut Node, b: LayoutBox) {
         | Node::Connector(_)
         | Node::Light(_)
         | Node::Unknown(_) => {}
+    }
+}
+
+/// Place an instance in the slot `b`.
+///
+/// When the slot is exactly the component's content size (`bounds`, from the
+/// instance origin) and the instance sets no `w` / `h`, only its origin
+/// moves, so the content's top-left lands on the slot's: the instance
+/// compiles on the translate-only path, as outside a layout frame. Otherwise
+/// the slot becomes the instance's `x` / `y` / `w` / `h` box and the component
+/// fits into it (`fit`, default `contain`).
+pub(super) fn set_instance_box(
+    i: &mut InstanceNode,
+    b: LayoutBox,
+    bounds: Option<(f64, f64, f64, f64)>,
+) {
+    match bounds {
+        Some((min_x, min_y, w, h)) if i.w.is_none() && i.h.is_none() && b.w == w && b.h == h => {
+            i.x = Some(px_dim(b.x - min_x));
+            i.y = Some(px_dim(b.y - min_y));
+        }
+        Some(_) | None => {
+            i.x = Some(px_dim(b.x));
+            i.y = Some(px_dim(b.y));
+            i.w = Some(px_dim(b.w));
+            i.h = Some(px_dim(b.h));
+        }
     }
 }
 
@@ -97,10 +118,7 @@ fn shift_origin(
 
 fn shift_dim(dim: &mut Option<Dimension>, d: f64) {
     if let Some(v) = dim.as_ref().and_then(|x| dim_to_px(x.value, &x.unit)) {
-        *dim = Some(Dimension {
-            value: v + d,
-            unit: Unit::Px,
-        });
+        *dim = Some(px_dim(v + d));
     }
 }
 
@@ -124,7 +142,9 @@ fn shift_anchors(anchors: &mut [PathAnchor], dx: f64, dy: f64) {
 
 /// Move `node` by `(dx, dy)` px.
 ///
-/// A frame moves its descendants too (frames do not translate children). A
+/// An absolute frame moves its descendants too (frames do not translate
+/// children). A layout frame moves only itself: its children count from its
+/// top-left until it is lowered, and every frame is moved before it lowers. A
 /// group and an instance move their origin, so their children follow. A
 /// connector follows its targets. Footnotes and unknown nodes have no
 /// geometry.
@@ -154,8 +174,10 @@ pub(super) fn translate(
         Node::Light(n) => xy(&mut n.x, &mut n.y),
         Node::Frame(n) => {
             xy(&mut n.x, &mut n.y);
-            for child in &mut n.children {
-                translate(child, dx, dy, resolved);
+            if Mode::of(n).is_none() {
+                for child in &mut n.children {
+                    translate(child, dx, dy, resolved);
+                }
             }
         }
         Node::Group(n) => {
@@ -164,12 +186,7 @@ pub(super) fn translate(
         }
         Node::Instance(n) => {
             let shift = |dim: &mut Option<Dimension>, d: f64| match dim {
-                None => {
-                    *dim = Some(Dimension {
-                        value: d,
-                        unit: Unit::Px,
-                    });
-                }
+                None => *dim = Some(px_dim(d)),
                 Some(_) => shift_dim(dim, d),
             };
             shift(&mut n.x, dx);

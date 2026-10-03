@@ -8,6 +8,7 @@
 //! - `document`: the top-level `transform` entry plus the document-level
 //!   structural blocks (project/assets/libraries/.../pages).
 //! - `tokens`: the `tokens { … }` and `styles { … }` blocks.
+//! - `defaults`: the document- and page-scope `defaults { … }` blocks.
 //! - `node`: the per-node-kind dispatch edge (`node::transform_node`).
 //! - `page`: `page { … }` block transform and `PAGE_KNOWN_PROPS`.
 //! - `pattern`: `pattern` node transform.
@@ -20,6 +21,7 @@
 mod block_style;
 mod chart;
 mod container;
+mod defaults;
 mod document;
 mod effect;
 mod helpers;

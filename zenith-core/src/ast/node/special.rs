@@ -56,6 +56,9 @@ pub struct ShapeNode {
     pub spans: Vec<TextSpan>,
     /// Box style ref.
     pub style: Option<String>,
+    /// Optional drop-shadow token reference (`shadow=(token)"…"`). The shadow
+    /// applies to the shape body; the label draws crisp on top of it.
+    pub shadow: Option<PropertyValue>,
     pub opacity: Option<f64>,
     pub visible: Option<bool>,
     pub locked: Option<bool>,
@@ -241,6 +244,9 @@ pub struct InstanceNode {
     pub w: Option<Dimension>,
     /// Optional external instance height.
     pub h: Option<Dimension>,
+    /// Item attributes used when this instance is a child of a `row` /
+    /// `column` / `grid` frame.
+    pub layout_item: LayoutItem,
     /// Optional external instance fitting mode.
     pub fit: Option<String>,
     /// Opacity that cascades (multiplies) into all expanded descendant alphas.

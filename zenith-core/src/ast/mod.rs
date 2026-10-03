@@ -5,6 +5,7 @@ pub mod asset;
 pub mod block_style;
 pub mod brand;
 pub mod construction;
+pub mod defaults;
 pub mod document;
 pub mod kerning;
 pub mod library;
@@ -25,6 +26,10 @@ pub use asset::{AssetBlock, AssetDecl, AssetKind};
 pub use block_style::{BLOCK_ROLE_VOCAB, BlockStyle};
 pub use brand::BrandContract;
 pub use construction::{ConstructionBlock, ConstructionGuideDef};
+pub use defaults::{
+    DEFAULTS_ENTRY_PROPS, DEFAULTS_UNSUPPORTED_KINDS, DefaultsBlock, DefaultsEntry, DefaultsKind,
+    DefaultsRejection, RejectedDefaultsEntry,
+};
 pub use document::{
     ComponentDef, Document, DocumentBody, Fold, ImportDecl, MasterDef, Page, PortDef, Project,
     SafeZone, SafeZoneType, SectionDef, TokenMapDecl,
@@ -46,7 +51,8 @@ pub use provenance::ProvenanceDef;
 pub use recipe::{RecipeDef, RecipeParam};
 pub use span::Span;
 pub use style::{
-    STYLE_RECOGNIZED_KEYS, Style, StyleBlock, UnknownStyleProp, canonicalize_style_key,
+    STYLE_ENUM_KEYS, STYLE_RECOGNIZED_KEYS, Style, StyleBlock, UnknownStyleProp,
+    canonicalize_style_key, style_enum_values,
 };
 pub use token::{
     FilterKind, FilterLiteral, FilterOp, GradientKind, GradientLiteral, GradientStopRef,

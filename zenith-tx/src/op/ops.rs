@@ -481,7 +481,8 @@ pub enum Op {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         set: Option<String>,
     },
-    /// Set one recognized visual property on a named style to a token reference.
+    /// Set one recognized visual property on a named style to a token
+    /// reference, or to an enum value for `align` / `v-align`.
     SetStyleProperty {
         /// The id of the style definition to update (matches `style id="…"`).
         style_id: String,
@@ -489,6 +490,7 @@ pub enum Op {
         /// Underscore spellings such as `font_family` are accepted.
         property: String,
         /// Token id to store as `PropertyValue::TokenRef` (e.g. `"font.body"`).
+        /// For `align` / `v-align`, the enum value (e.g. `"center"`).
         value: String,
     },
     /// Create a named style in the document `styles { }` block.

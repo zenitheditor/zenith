@@ -69,13 +69,14 @@ pub(crate) type AnchorMap = BTreeMap<String, (f64, f64)>;
 
 /// Walk-wide immutable pre-pass environment (page dims + zone table + token
 /// table). The token table resolves geometry token refs (`(token)"dim.h"`) on
-/// box nodes during anchor derivation.
+/// box nodes during anchor derivation. The auto-layout lowering derives the
+/// origin of an anchored layout frame with the same environment.
 #[derive(Clone, Copy)]
-struct PrePassEnv<'a> {
-    page_w: f64,
-    page_h: f64,
-    safe_zones: &'a [SafeZone],
-    resolved: &'a BTreeMap<String, ResolvedToken>,
+pub(crate) struct PrePassEnv<'a> {
+    pub(crate) page_w: f64,
+    pub(crate) page_h: f64,
+    pub(crate) safe_zones: &'a [SafeZone],
+    pub(crate) resolved: &'a BTreeMap<String, ResolvedToken>,
 }
 
 /// Per-recursion container context for parent-relative derivation.
@@ -86,15 +87,15 @@ struct PrePassEnv<'a> {
 /// translation that will be active as `ctx.dx`/`ctx.dy` when the current node
 /// compiles; the parent-relative derivation subtracts it so the leaf's re-add
 /// cancels to the intended device coordinate.
-#[derive(Clone, Copy)]
-struct ParentCtx {
-    parent_box: Option<(f64, f64, f64, f64)>,
-    acc_dx: f64,
-    acc_dy: f64,
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct ParentCtx {
+    pub(crate) parent_box: Option<(f64, f64, f64, f64)>,
+    pub(crate) acc_dx: f64,
+    pub(crate) acc_dy: f64,
 }
 
 impl ParentCtx {
-    const ROOT: ParentCtx = ParentCtx {
+    pub(crate) const ROOT: ParentCtx = ParentCtx {
         parent_box: None,
         acc_dx: 0.0,
         acc_dy: 0.0,
@@ -225,6 +226,7 @@ fn sibling_topo_order(children: &[Node]) -> Vec<&Node> {
 ///
 /// `x`/`y` are included (in addition to `w`/`h`) because sibling-relative
 /// anchoring reads the sibling's authored origin per axis.
+#[derive(Clone, Copy)]
 struct AnchorFields<'a> {
     id: &'a str,
     anchor: Option<&'a str>,
@@ -237,6 +239,11 @@ struct AnchorFields<'a> {
     y: Option<&'a PropertyValue>,
     w: Option<&'a PropertyValue>,
     h: Option<&'a PropertyValue>,
+}
+
+/// The `anchor-sibling` target id of `node`, when it names one.
+pub(crate) fn anchor_sibling_of(node: &Node) -> Option<&str> {
+    anchor_fields(node).and_then(|f| f.anchor_sibling)
 }
 
 /// Extract the anchor-bearing fields of a node, or `None` for kinds that never
@@ -469,14 +476,17 @@ fn collect_anchor(
     // sole additive change.
     match node {
         Node::Frame(frame) => {
-            // Frame box is ABSOLUTE; children inherit acc_dx/acc_dy unchanged.
+            // A frame does not translate its children, but it draws at its
+            // own x/y plus the inherited group translation; children inherit
+            // acc_dx/acc_dy unchanged.
             let frame_box = px_box(
                 frame.x.as_ref(),
                 frame.y.as_ref(),
                 frame.w.as_ref(),
                 frame.h.as_ref(),
                 env.resolved,
-            );
+            )
+            .map(|(x, y, w, h)| (x + ctx.acc_dx, y + ctx.acc_dy, w, h));
             let child_ctx = ParentCtx {
                 parent_box: frame_box,
                 acc_dx: ctx.acc_dx,
@@ -579,6 +589,8 @@ fn cross_v(anchor: Option<Anchor>, sib_y: f64, sib_h: f64, node_h: f64) -> f64 {
 }
 
 /// Derive and insert the anchor map entry for one node from its fields.
+///
+/// The node's `w` and `h` must both resolve to px; otherwise no entry.
 fn derive_entry(
     fields: AnchorFields<'_>,
     env: PrePassEnv,
@@ -586,8 +598,57 @@ fn derive_entry(
     scope: &BTreeMap<&str, &Node>,
     map: &mut AnchorMap,
 ) {
+    // Both w and h must be present and px-convertible for derivation. Raw `(px)`
+    // dims and dimension token refs both resolve via the token table.
+    let (Some(node_w), Some(node_h)) = (
+        resolve_geometry_px(fields.w, env.resolved),
+        resolve_geometry_px(fields.h, env.resolved),
+    ) else {
+        return;
+    };
+    let id = fields.id;
+    if let Some(xy) = derive_xy(
+        &fields,
+        (node_w, node_h),
+        env,
+        ctx,
+        &|sib| scope.get(sib).copied(),
+        map,
+    ) {
+        map.insert(id.to_owned(), xy);
+    }
+}
+
+/// The anchor-derived origin of `node` at size `size`, or `None` when `node`
+/// carries no resolvable anchor.
+///
+/// The auto-layout lowering calls this for an anchored layout frame after it
+/// measures the frame, so the anchor sees the hugged size. `lookup` finds a
+/// sibling in the node's scope by id. `map` holds the entries already
+/// derived in that scope.
+pub(crate) fn anchor_origin<'n>(
+    node: &Node,
+    size: (f64, f64),
+    env: PrePassEnv,
+    ctx: ParentCtx,
+    lookup: &dyn Fn(&str) -> Option<&'n Node>,
+    map: &AnchorMap,
+) -> Option<(f64, f64)> {
+    let fields = anchor_fields(node)?;
+    derive_xy(&fields, size, env, ctx, lookup, map)
+}
+
+/// The anchor `(x, y)` of a node with `fields` at `(node_w, node_h)`.
+fn derive_xy<'n>(
+    fields: &AnchorFields<'_>,
+    (node_w, node_h): (f64, f64),
+    env: PrePassEnv,
+    ctx: ParentCtx,
+    lookup: &dyn Fn(&str) -> Option<&'n Node>,
+    map: &AnchorMap,
+) -> Option<(f64, f64)> {
     let AnchorFields {
-        id,
+        id: _,
         anchor: anchor_str,
         anchor_zone: anchor_zone_str,
         anchor_sibling,
@@ -596,9 +657,9 @@ fn derive_entry(
         anchor_gap,
         x: _,
         y: _,
-        w: w_dim,
-        h: h_dim,
-    } = fields;
+        w: _,
+        h: _,
+    } = *fields;
 
     // Resolve the edge placement request (may be None when anchor-edge is
     // absent or unrecognized). This is needed BEFORE the early-return so we
@@ -607,7 +668,7 @@ fn derive_entry(
 
     // When BOTH anchor string and anchor-edge are absent, nothing to derive.
     if anchor_str.is_none() && edge.is_none() {
-        return;
+        return None;
     }
 
     // Parse the 9-pt anchor string. For edge-placement paths, this is
@@ -620,22 +681,11 @@ fn derive_entry(
             // Unrecognized anchor. For edge paths, don't block; treat as None.
             // For non-edge paths (classic derivation), exit early.
             None => {
-                if edge.is_none() {
-                    return;
-                }
+                edge?;
                 None
             }
         },
         None => None,
-    };
-
-    // Both w and h must be present and px-convertible for derivation. Raw `(px)`
-    // dims and dimension token refs both resolve via the token table.
-    let (Some(node_w), Some(node_h)) = (
-        resolve_geometry_px(w_dim, env.resolved),
-        resolve_geometry_px(h_dim, env.resolved),
-    ) else {
-        return;
     };
 
     // Reference rectangle precedence:
@@ -652,25 +702,14 @@ fn derive_entry(
     //   4. page-relative otherwise.
     if let Some(zone_id) = anchor_zone_str {
         // For zone-relative paths the 9-pt anchor is required (classic path).
-        let anchor = match anchor_parsed {
-            Some(a) => a,
-            None => return,
-        };
-        let (ref_x, ref_y, ref_w, ref_h) = match env.safe_zones.iter().find(|z| z.id == zone_id) {
-            Some(zone) => match (
-                dim_to_px(zone.x.value, &zone.x.unit),
-                dim_to_px(zone.y.value, &zone.y.unit),
-                dim_to_px(zone.w.value, &zone.w.unit),
-                dim_to_px(zone.h.value, &zone.h.unit),
-            ) {
-                (Some(zx), Some(zy), Some(zw), Some(zh)) => (zx, zy, zw, zh),
-                _ => return,
-            },
-            None => return,
-        };
+        let anchor = anchor_parsed?;
+        let zone = env.safe_zones.iter().find(|z| z.id == zone_id)?;
+        let ref_x = dim_to_px(zone.x.value, &zone.x.unit)?;
+        let ref_y = dim_to_px(zone.y.value, &zone.y.unit)?;
+        let ref_w = dim_to_px(zone.w.value, &zone.w.unit)?;
+        let ref_h = dim_to_px(zone.h.value, &zone.h.unit)?;
         let (ox, oy) = anchor_xy(anchor, ref_w, ref_h, node_w, node_h);
-        map.insert(id.to_owned(), (ref_x + ox, ref_y + oy));
-        return;
+        return Some((ref_x + ox, ref_y + oy));
     }
 
     // Sibling-relative: the node's origin is derived from a named
@@ -680,19 +719,15 @@ fn derive_entry(
     if let Some(sib_id) = anchor_sibling {
         // Unresolved reference → no entry (the validator emits
         // anchor.unresolved_sibling).
-        let Some(&sib_node) = scope.get(sib_id) else {
-            return;
-        };
+        let sib_node = lookup(sib_id)?;
         // Not an anchor-bearing kind → no entry.
-        let Some(sib) = anchor_fields(sib_node) else {
-            return;
-        };
+        let sib = anchor_fields(sib_node)?;
         // The sibling's size must be authored and px-convertible.
         let (Some(sib_w), Some(sib_h)) = (
             resolve_geometry_px(sib.w, env.resolved),
             resolve_geometry_px(sib.h, env.resolved),
         ) else {
-            return;
+            return None;
         };
         // The sibling's origin: explicit-wins-per-axis (authored x/y), else its
         // own anchor-map entry, else unresolved (no entry for this node).
@@ -700,7 +735,7 @@ fn derive_entry(
         let sib_x = resolve_geometry_px(sib.x, env.resolved).or(entry.map(|e| e.0));
         let sib_y = resolve_geometry_px(sib.y, env.resolved).or(entry.map(|e| e.1));
         let (Some(sib_x), Some(sib_y)) = (sib_x, sib_y) else {
-            return;
+            return None;
         };
 
         // When anchor-edge is set, use adjacent-edge placement instead of
@@ -727,8 +762,7 @@ fn derive_entry(
                     cross_v(anchor_parsed, sib_y, sib_h, node_h),
                 ),
             };
-            map.insert(id.to_owned(), (x, y));
-            return;
+            return Some((x, y));
         }
 
         // Classic within-box sibling derivation (anchor-edge absent).
@@ -736,19 +770,15 @@ fn derive_entry(
         // anchor_str and edge are None, and zone path has returned. When
         // anchor_str was None and edge is also None we returned above, so
         // anchor_parsed must be Some for this branch.
-        let anchor = match anchor_parsed {
-            Some(a) => a,
-            None => return,
-        };
+        let anchor = anchor_parsed?;
         let (ox, oy) = anchor_xy(anchor, sib_w, sib_h, node_w, node_h);
-        map.insert(id.to_owned(), (sib_x + ox, sib_y + oy));
-        return;
+        return Some((sib_x + ox, sib_y + oy));
     }
 
     // Edge placement without an anchor-sibling: no entry (sibling is required
     // for edge placement; validation warns separately).
     if edge.is_some() {
-        return;
+        return None;
     }
 
     // From here: classic non-edge paths (anchor-parent, page-relative).
@@ -756,27 +786,20 @@ fn derive_entry(
     // anchor_str and edge are None; edge is None here; so anchor_str was Some
     // and anchor_parsed is Some unless it was unrecognized, but unrecognized
     // anchor with no edge already returned above).
-    let anchor = match anchor_parsed {
-        Some(a) => a,
-        None => return,
-    };
+    let anchor = anchor_parsed?;
 
     if anchor_parent == Some(true) {
         // Parent-relative: requires a usable enclosing container box. When the
         // node is not inside a frame/group, or the container box is unknown,
         // no entry is produced (the validator emits anchor.unresolvable_parent).
-        let Some((rx, ry, rw, rh)) = ctx.parent_box else {
-            return;
-        };
+        let (rx, ry, rw, rh) = ctx.parent_box?;
         let (ox, oy) = anchor_xy(anchor, rw, rh, node_w, node_h);
         // Subtract the accumulated group translation: the leaf compiler re-adds
         // ctx.dx/ctx.dy (== acc_dx/acc_dy) so the device coordinate lands at
         // (rx + ox, ry + oy).
-        map.insert(id.to_owned(), (rx + ox - ctx.acc_dx, ry + oy - ctx.acc_dy));
-        return;
+        return Some((rx + ox - ctx.acc_dx, ry + oy - ctx.acc_dy));
     }
 
     // Page-relative: origin is (0, 0).
-    let (ox, oy) = anchor_xy(anchor, env.page_w, env.page_h, node_w, node_h);
-    map.insert(id.to_owned(), (ox, oy));
+    Some(anchor_xy(anchor, env.page_w, env.page_h, node_w, node_h))
 }

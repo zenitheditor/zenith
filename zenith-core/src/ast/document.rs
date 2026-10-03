@@ -8,6 +8,7 @@ use super::asset::AssetBlock;
 use super::block_style::BlockStyle;
 use super::brand::BrandContract;
 use super::construction::ConstructionBlock;
+use super::defaults::DefaultsBlock;
 use super::library::LibraryDef;
 use super::node::{Node, UnknownProperty};
 use super::policy::DiagnosticPolicy;
@@ -109,6 +110,9 @@ pub struct Page {
     /// page < text (the text node's own decls override these). `block` decls are
     /// data-only in this unit; the layout engine consumes them later.
     pub block_styles: Vec<BlockStyle>,
+    /// Page-scope per-kind default style references (`defaults { … }` at the
+    /// page body start). Empty when the page declares none.
+    pub defaults: DefaultsBlock,
     /// Optional explicit recto/verso parity OVERRIDE for this page. `Some("recto")`
     /// or `Some("verso")` forces this page's parity regardless of its 1-based
     /// position and the document `page_parity_start`. `None` (default) → parity is
@@ -374,6 +378,9 @@ pub struct Document {
     pub actions: Vec<ActionDef>,
     pub tokens: TokenBlock,
     pub styles: StyleBlock,
+    /// Document-scope per-kind default style references (`defaults { … }`
+    /// after `styles`). Empty when the document declares none.
+    pub defaults: DefaultsBlock,
     /// Reusable component definitions; empty when the `components` block is
     /// absent. Instanced via [`Node::Instance`].
     pub components: Vec<ComponentDef>,
@@ -536,6 +543,7 @@ mod parity_tests {
             construction: ConstructionBlock::default(),
             ports: Vec::new(),
             block_styles: Vec::new(),
+            defaults: DefaultsBlock::default(),
             children: Vec::new(),
             source_span: None,
         }
@@ -562,6 +570,7 @@ mod parity_tests {
             actions: Vec::new(),
             tokens: TokenBlock::default(),
             styles: StyleBlock::default(),
+            defaults: DefaultsBlock::default(),
             components: Vec::new(),
             masters: Vec::new(),
             sections: Vec::new(),

@@ -53,13 +53,14 @@ use zenith_core::{ComponentDef, MasterDef};
 pub(super) type ComponentMap<'a> = BTreeMap<&'a str, &'a ComponentDef>;
 pub(super) type MasterMap<'a> = BTreeMap<&'a str, &'a MasterDef>;
 
+pub(crate) use anchor::{AnchorMap, ParentCtx, PrePassEnv, anchor_origin, anchor_sibling_of};
 pub(in crate::compile) use ctx::NodeCtx;
 pub(in crate::compile) use dispatch::compile_node;
 pub use entry::{compile, compile_page, compile_page_with_imports, layout_boxes};
 pub use imports::{ImportGraph, ImportedDocument};
-pub(crate) use intrinsic::IntrinsicEnv;
+pub(crate) use intrinsic::{ImageSizes, IntrinsicEnv, ProbeAt, ProbeHints};
 pub use pipeline::CompileResult;
-pub(crate) use pipeline::style_prop;
 pub(in crate::compile) use pipeline::{RenderCtx, compile_page_inner};
-pub use session::{DocumentPrep, PageCompiler};
-pub(crate) use util::{resolve_geometry_px, resolve_property_dimension_px};
+pub(crate) use pipeline::{style_enum, style_h_align, style_prop};
+pub use session::{DocumentPrep, LayoutStats, PageCompiler};
+pub(crate) use util::{px, px_prop, resolve_geometry_px, resolve_property_dimension_px};

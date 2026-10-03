@@ -38,7 +38,7 @@ mod tests;
 
 pub use assets::collect_image_dimension_diagnostics;
 pub(crate) use assets::{
-    build_asset_provider, build_font_provider, collect_missing_asset_diagnostics,
+    build_asset_provider, build_font_provider, collect_missing_asset_diagnostics, image_sizes,
 };
 pub(crate) use check::compile_check_diagnostics;
 pub use data_input::{DataInputError, load_data_context};

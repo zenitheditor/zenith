@@ -79,6 +79,7 @@ pub fn page_with_bg(id: &str, bg_token_id: &str, children: Vec<Node>) -> Page {
         construction: zenith_core::ConstructionBlock::default(),
         ports: Vec::new(),
         block_styles: Vec::new(),
+        defaults: Default::default(),
         children,
         source_span: None,
     }
@@ -348,6 +349,7 @@ pub fn shape_backdrop_at(
         text_style: None,
         spans: Vec::new(),
         style: None,
+        shadow: None,
         opacity: None,
         visible: None,
         locked: None,

@@ -11,6 +11,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::ast::AssetKind;
 use crate::ast::node::Node;
+use crate::ast::style::Style;
 use crate::diagnostics::Diagnostic;
 use crate::tokens::ResolvedToken;
 
@@ -31,6 +32,8 @@ pub(super) struct WalkCtx<'a> {
     /// validate that SVG-only style properties target an `svg` asset.
     pub(super) asset_kinds: &'a BTreeMap<String, AssetKind>,
     pub(super) declared_style_ids: &'a BTreeSet<String>,
+    /// Declared style id → style, for style-value checks on nodes.
+    pub(super) style_map: &'a BTreeMap<&'a str, &'a Style>,
     pub(super) declared_component_ids: &'a BTreeSet<String>,
     pub(super) component_local_ids: &'a BTreeMap<String, BTreeSet<String>>,
     pub(super) all_node_ids: &'a BTreeSet<String>,

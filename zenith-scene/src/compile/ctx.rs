@@ -22,6 +22,7 @@ use super::anchor::AnchorMap;
 use super::chain::ChainAssignments;
 use super::field::FieldCtx;
 use super::imports::ImportScopes;
+use super::intrinsic::ImageSizes;
 use super::markdown_resolve::MdBlockMap;
 use super::table_flow::TableFlowAssignments;
 
@@ -60,4 +61,6 @@ pub(in crate::compile) struct NodeCtx<'a> {
     pub(in crate::compile) page_block_styles: &'a [BlockStyle],
     /// Document-body-scope `block role="…"` style declarations (cascade tier 3).
     pub(in crate::compile) doc_block_styles: &'a [BlockStyle],
+    /// Intrinsic pixel size of each image / SVG asset, for auto-layout.
+    pub(in crate::compile) image_sizes: &'a ImageSizes,
 }

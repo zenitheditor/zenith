@@ -16,5 +16,7 @@ mod wrap;
 // Entry points consumed by the parent `compile` module (`compile::mod`). The
 // external `use container::{...}` paths resolve through these re-exports.
 pub(super) use frame::compile_frame;
-pub(super) use group::compile_group;
-pub(super) use instance::{compile_instance, prefix_ids_in_children};
+pub(super) use group::{compile_group, group_children_bounds};
+pub(super) use instance::{
+    compile_instance, expand_imported, expand_local, prefix_ids_in_children,
+};

@@ -6,6 +6,7 @@ use crate::ast::UnsupportedChild;
 use crate::ast::action::ActionDef;
 use crate::ast::asset::AssetBlock;
 use crate::ast::brand::BrandContract;
+use crate::ast::defaults::DefaultsBlock;
 use crate::ast::document::{
     ComponentDef, Document, DocumentBody, ImportDecl, MasterDef, Project, SectionDef,
 };
@@ -17,6 +18,7 @@ use crate::ast::style::StyleBlock;
 use crate::ast::token::TokenBlock;
 use crate::ast::variant::VariantDef;
 use crate::error::{ParseError, ParseErrorCode};
+use crate::parse::transform::defaults::transform_defaults;
 use crate::parse::transform::helpers::{
     optional_bool_prop, optional_dimension_prop, optional_string_prop, required_u32_prop,
 };
@@ -163,6 +165,7 @@ pub fn transform(doc: &KdlDocument) -> Result<Document, ParseError> {
     let mut actions: Vec<ActionDef> = Vec::new();
     let mut tokens = TokenBlock::default();
     let mut styles = StyleBlock::default();
+    let mut defaults = DefaultsBlock::default();
     let mut components: Vec<ComponentDef> = Vec::new();
     let mut masters: Vec<MasterDef> = Vec::new();
     let mut sections: Vec<SectionDef> = Vec::new();
@@ -200,6 +203,9 @@ pub fn transform(doc: &KdlDocument) -> Result<Document, ParseError> {
             }
             "styles" => {
                 styles = transform_styles(child)?;
+            }
+            "defaults" => {
+                defaults = transform_defaults(child)?;
             }
             "components" => {
                 components = transform_components(child, &mut unsupported_children)?;
@@ -261,6 +267,7 @@ pub fn transform(doc: &KdlDocument) -> Result<Document, ParseError> {
         actions,
         tokens,
         styles,
+        defaults,
         components,
         masters,
         sections,
