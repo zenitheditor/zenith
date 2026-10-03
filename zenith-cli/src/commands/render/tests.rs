@@ -361,6 +361,7 @@ fn construction_overlay_appends_guide_commands_to_scene_json() {
         flags: &CliPolicyFlags::default(),
         data: None,
         construction_overlay: true,
+        scale: 1.0,
     };
     let artifact = to_scene_json_with_options(CONSTRUCTION_DOC, None, 1, opts)
         .expect("scene render must succeed");
@@ -530,7 +531,7 @@ fn to_png_overflow_fit_exceeded_has_error_diagnostic() {
     let has_fit_error = artifact
         .diagnostics
         .iter()
-        .any(|d| d.code == "text.fit_failed" && d.severity == zenith_core::Severity::Error);
+        .any(|d| d.code == "text.fit_failed" && d.is_error());
     assert!(
         has_fit_error,
         "artifact must carry a text.fit_failed Error diagnostic; got: {:?}",
@@ -559,16 +560,16 @@ fn to_png_clip_overflow_guides_geometry_before_shrinking_type() {
         .iter()
         .find(|d| d.code == "text.overflow")
         .expect("clipped text must emit a text.overflow diagnostic");
+    let geometry_at = overflow.message.find("set h=(px)");
+    let shrink_at = overflow.message.find("font-size ≤");
     assert!(
-        overflow.message.contains("increasing the box height"),
-        "overflow diagnostic must guide agents to adjust geometry first; got: {}",
+        geometry_at.is_some() && overflow.message.contains("to keep the type scale"),
+        "overflow diagnostic must name the box height that keeps the type scale; got: {}",
         overflow.message
     );
     assert!(
-        overflow
-            .message
-            .contains("Shrink type only when intended or geometry is constrained"),
-        "overflow diagnostic must name the shrinking constraint; got: {}",
+        shrink_at.is_none_or(|s| geometry_at.is_some_and(|g| g < s)),
+        "the geometry fix must come before any font-size fallback; got: {}",
         overflow.message
     );
 }
@@ -610,7 +611,7 @@ fn to_png_missing_asset_has_asset_missing_error_diagnostic() {
     let has_missing = artifact
         .diagnostics
         .iter()
-        .any(|d| d.code == "asset.missing" && d.severity == zenith_core::Severity::Error);
+        .any(|d| d.code == "asset.missing" && d.is_error());
     assert!(
         has_missing,
         "artifact must carry an asset.missing Error diagnostic; got: {:?}",
@@ -637,7 +638,7 @@ fn to_scene_json_missing_asset_has_asset_missing_error_diagnostic() {
         artifact
             .diagnostics
             .iter()
-            .any(|d| d.code == "asset.missing" && d.severity == zenith_core::Severity::Error),
+            .any(|d| d.code == "asset.missing" && d.is_error()),
         "scene artifact must carry an asset.missing Error diagnostic"
     );
 }
@@ -809,8 +810,6 @@ fn text_src_loads_file_and_renders_png() {
 
 #[test]
 fn text_src_missing_file_yields_error_diagnostic() {
-    use zenith_core::Severity;
-
     let doc_src = text_src_doc("__does_not_exist__.md");
     // Use a real directory that exists but does not contain the file.
     let dir = tempfile::tempdir().expect("temp dir must be created");
@@ -827,7 +826,7 @@ fn text_src_missing_file_yields_error_diagnostic() {
     let has_src_missing = artifact
         .diagnostics
         .iter()
-        .any(|d| d.code == "text.src_missing" && d.severity == Severity::Error);
+        .any(|d| d.code == "text.src_missing" && d.is_error());
     assert!(
         has_src_missing,
         "artifact must carry a text.src_missing Error diagnostic; got: {:?}",

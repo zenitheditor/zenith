@@ -27,7 +27,7 @@ pub(super) fn hard_errors(doc: &Document) -> Vec<String> {
     validate(doc)
         .diagnostics
         .into_iter()
-        .filter(|d| d.severity == zenith_core::Severity::Error)
+        .filter(|d| d.is_error())
         .map(|d| format!("{}: {}", d.code, d.message))
         .collect()
 }

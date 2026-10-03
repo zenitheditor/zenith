@@ -1,7 +1,7 @@
 use super::*;
 use std::fs;
 
-use zenith_core::{KdlAdapter, KdlSource, Node, Severity, validate};
+use zenith_core::{KdlAdapter, KdlSource, Node, validate};
 
 fn write(path: &Path, src: &str) {
     fs::write(path, src).expect("write fixture");
@@ -114,7 +114,7 @@ fn materialize_component_copies_deps_and_provenance() {
     let errors: Vec<_> = validate(&doc)
         .diagnostics
         .into_iter()
-        .filter(|d| d.severity == Severity::Error)
+        .filter(|d| d.is_error())
         .collect();
     assert!(errors.is_empty(), "{errors:?}");
 }

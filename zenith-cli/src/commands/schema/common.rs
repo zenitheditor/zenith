@@ -8,8 +8,13 @@ pub(super) fn format_attr_table(attrs: &[SchemaAttr]) -> String {
 
     let mut out = String::new();
     for attr in attrs {
+        let default = attr
+            .default
+            .as_deref()
+            .map(|d| format!(" (default: {d})"))
+            .unwrap_or_default();
         out.push_str(&format!(
-            "  {:<col_width$}  —  {}\n",
+            "  {:<col_width$}  —  {}{default}\n",
             attr.name,
             attr.ty,
             col_width = col_width,

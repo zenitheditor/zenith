@@ -114,6 +114,26 @@ fn node_detail_json_attr_has_type_hint() {
 }
 
 #[test]
+fn node_detail_frame_lists_layout_defaults() {
+    let (json, code) = node_detail("frame", true);
+    assert_eq!(code, 0);
+    assert!(
+        json.contains("\"default\": \"absolute\""),
+        "layout default must appear; got:\n{json}"
+    );
+    let (text, _) = node_detail("frame", false);
+    assert!(
+        text.contains("enum: start|center|end|stretch (default: stretch)"),
+        "align type + default; got:\n{text}"
+    );
+    let (rect, _) = node_detail("rect", true);
+    assert!(
+        rect.contains("\"default\": \"auto\""),
+        "position default must appear on rect; got:\n{rect}"
+    );
+}
+
+#[test]
 fn node_detail_unknown_kind_returns_error() {
     let (text, code) = node_detail("not-a-kind", false);
     assert_eq!(code, 1);

@@ -2,7 +2,7 @@
 
 use std::path::Path;
 
-use zenith_core::{KdlAdapter, KdlSource, Severity, validate};
+use zenith_core::{KdlAdapter, KdlSource, validate};
 use zenith_session::adapter::OsFs;
 use zenith_session::{CandidateStatus, StorePaths, get_scratch_snapshot, list_scratch};
 use zenith_tx::{merge_candidate_page, reconcile_candidate_tokens};
@@ -126,11 +126,8 @@ pub fn promote_in(
 
     // 8. Validate the mutated main document.
     let report = validate(&main_doc);
-    let errors: Vec<&zenith_core::Diagnostic> = report
-        .diagnostics
-        .iter()
-        .filter(|d| d.severity == Severity::Error)
-        .collect();
+    let errors: Vec<&zenith_core::Diagnostic> =
+        report.diagnostics.iter().filter(|d| d.is_error()).collect();
     if !errors.is_empty() {
         let msgs: Vec<String> = errors
             .iter()

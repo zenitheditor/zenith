@@ -4,19 +4,25 @@ use std::path::Path;
 
 use zenith_core::{BytesAssetProvider, DataContext, Diagnostic, dim_to_px};
 use zenith_render::{
-    PdfOptions, render_pdf_multi_with, render_pdf_with, render_png, render_spread_png,
+    PdfOptions, composite_spread, encode_png, render_image_scaled, render_pdf_multi_with,
+    render_pdf_with,
 };
 use zenith_scene::{DocumentPrep, PageCompiler, Scene};
 
 use crate::config::CliPolicyFlags;
-use crate::report::{ImportFiles, attributed_loader_diagnostics};
+use crate::report::ImportFiles;
 
 use super::assets::{
     build_asset_provider_with_imports, build_font_provider_with_imports,
     disk_diagnostics_with_imports,
 };
-use super::pages::{compile_for_render, compile_local_for_render, map_pages};
-use super::pipeline::{Validated, govern_compile_diagnostics, parse_validate, resolve_page_index};
+use super::pages::{
+    PageSelection, compile_for_render, compile_local_for_render, map_pages, map_slice,
+    rasterize_pages,
+};
+use super::pipeline::{
+    ValidatedParts, govern_compile_diagnostics, parse_validate, resolve_page_index,
+};
 use super::text_source::resolve_text_sources;
 
 // ── Error type ────────────────────────────────────────────────────────────────
@@ -87,6 +93,10 @@ pub struct SceneArtifact {
 pub struct PngArtifact {
     /// The encoded PNG bytes.
     pub png: Vec<u8>,
+    /// Image width in pixels.
+    pub width: u32,
+    /// Image height in pixels.
+    pub height: u32,
     /// Validation diagnostics, then compile-stage diagnostics.
     pub diagnostics: Vec<Diagnostic>,
     /// Files of the composition imports, for locating diagnostic spans.
@@ -118,6 +128,9 @@ pub struct RenderEntryOptions<'a> {
     pub data: Option<&'a DataContext>,
     /// Append page construction guides to the scene after canonical compile.
     pub construction_overlay: bool,
+    /// Raster output scale for PNG outputs (`1.0` = page pixels). Each axis
+    /// is `max(1, round(page × scale))` pixels. Scene JSON and PDF ignore it.
+    pub scale: f64,
 }
 
 impl<'a> RenderEntryOptions<'a> {
@@ -128,6 +141,7 @@ impl<'a> RenderEntryOptions<'a> {
             flags,
             data,
             construction_overlay: false,
+            scale: 1.0,
         }
     }
 
@@ -138,6 +152,7 @@ impl<'a> RenderEntryOptions<'a> {
             flags,
             data,
             construction_overlay: false,
+            scale: 1.0,
         }
     }
 
@@ -153,12 +168,19 @@ impl<'a> RenderEntryOptions<'a> {
             flags,
             data,
             construction_overlay: false,
+            scale: 1.0,
         }
     }
 
     /// Return a copy with construction overlay enabled or disabled.
     pub fn with_construction_overlay(mut self, construction_overlay: bool) -> Self {
         self.construction_overlay = construction_overlay;
+        self
+    }
+
+    /// Return a copy with raster output `scale` (see [`Self::scale`]).
+    pub fn with_scale(mut self, scale: f64) -> Self {
+        self.scale = scale;
         self
     }
 }
@@ -209,14 +231,14 @@ pub fn to_scene_json_with_options(
     page: usize,
     opts: RenderEntryOptions<'_>,
 ) -> Result<SceneArtifact, RenderCmdErr> {
-    let Validated {
+    let ValidatedParts {
         mut doc,
         policy,
         imports,
         diagnostics: validation,
-    } = parse_validate(src, project_dir, opts.flags)?;
-    let import_diagnostics = attributed_loader_diagnostics(&imports);
-    let import_files = ImportFiles::from_graph(&imports);
+        import_diagnostics,
+        import_files,
+    } = parse_validate(src, project_dir, opts.flags)?.into_parts();
     let scene_imports = imports.to_scene_graph();
     let mut text_src_diagnostics: Vec<Diagnostic> = Vec::new();
     resolve_text_sources(&mut doc, project_dir, &mut text_src_diagnostics);
@@ -314,14 +336,14 @@ pub fn to_png_with_dir_options(
     page: usize,
     opts: RenderEntryOptions<'_>,
 ) -> Result<PngArtifact, RenderCmdErr> {
-    let Validated {
+    let ValidatedParts {
         mut doc,
         policy,
         imports,
         diagnostics: validation,
-    } = parse_validate(src, project_dir, opts.flags)?;
-    let import_diagnostics = attributed_loader_diagnostics(&imports);
-    let import_files = ImportFiles::from_graph(&imports);
+        import_diagnostics,
+        import_files,
+    } = parse_validate(src, project_dir, opts.flags)?.into_parts();
     let scene_imports = imports.to_scene_graph();
     let mut text_src_diagnostics: Vec<Diagnostic> = Vec::new();
     resolve_text_sources(&mut doc, project_dir, &mut text_src_diagnostics);
@@ -334,8 +356,12 @@ pub fn to_png_with_dir_options(
     let prep = DocumentPrep::new(&doc, opts.data, Some(&scene_imports));
     let compiler = PageCompiler::new(&prep, &fonts);
     let compile_result = compile_for_render(&doc, &compiler, page_index, opts);
-    let png = render_png(&compile_result.scene, &fonts, &assets)
-        .map_err(|e| RenderCmdErr::new("render.raster_failed", format!("render error: {e}"), 2))?;
+    let raster_err = |e: zenith_render::RenderError| {
+        RenderCmdErr::new("render.raster_failed", format!("render error: {e}"), 2)
+    };
+    let image = render_image_scaled(&compile_result.scene, opts.scale, &fonts, &assets)
+        .map_err(raster_err)?;
+    let png = encode_png(&image).map_err(raster_err)?;
     let mut diagnostics = validation;
     diagnostics.extend(text_src_diagnostics);
     diagnostics.extend(import_diagnostics);
@@ -347,6 +373,8 @@ pub fn to_png_with_dir_options(
     let diagnostics = Diagnostic::dedup(diagnostics);
     Ok(PngArtifact {
         png,
+        width: image.width,
+        height: image.height,
         diagnostics,
         import_files,
     })
@@ -389,14 +417,14 @@ pub fn to_pdf_with_dir_options(
     page: usize,
     opts: RenderEntryOptions<'_>,
 ) -> Result<PdfArtifact, RenderCmdErr> {
-    let Validated {
+    let ValidatedParts {
         mut doc,
         policy,
         imports,
         diagnostics: validation,
-    } = parse_validate(src, project_dir, opts.flags)?;
-    let import_diagnostics = attributed_loader_diagnostics(&imports);
-    let import_files = ImportFiles::from_graph(&imports);
+        import_diagnostics,
+        import_files,
+    } = parse_validate(src, project_dir, opts.flags)?.into_parts();
     let scene_imports = imports.to_scene_graph();
     let mut text_src_diagnostics: Vec<Diagnostic> = Vec::new();
     resolve_text_sources(&mut doc, project_dir, &mut text_src_diagnostics);
@@ -474,14 +502,14 @@ pub fn to_pdf_all_pages_with_dir_options(
     project_dir: Option<&Path>,
     opts: RenderEntryOptions<'_>,
 ) -> Result<PdfArtifact, RenderCmdErr> {
-    let Validated {
+    let ValidatedParts {
         mut doc,
         policy,
         imports,
         diagnostics: validation,
-    } = parse_validate(src, project_dir, opts.flags)?;
-    let import_diagnostics = attributed_loader_diagnostics(&imports);
-    let import_files = ImportFiles::from_graph(&imports);
+        import_diagnostics,
+        import_files,
+    } = parse_validate(src, project_dir, opts.flags)?.into_parts();
     let scene_imports = imports.to_scene_graph();
     let mut diagnostics: Vec<Diagnostic> = validation;
     resolve_text_sources(&mut doc, project_dir, &mut diagnostics);
@@ -539,6 +567,8 @@ pub fn to_pdf_all_pages_with_dir_options(
 pub struct PngPagesArtifact {
     /// Encoded PNG bytes, one entry per page in document order.
     pub pages: Vec<Vec<u8>>,
+    /// `(width, height)` in pixels of each entry of `pages`.
+    pub sizes: Vec<(u32, u32)>,
     /// Validation diagnostics, document diagnostics once, then each page's
     /// own, in page order. Repeats are removed.
     pub diagnostics: Vec<Diagnostic>,
@@ -583,63 +613,26 @@ pub fn to_png_all_pages_options(
     project_dir: Option<&Path>,
     opts: RenderEntryOptions<'_>,
 ) -> Result<PngPagesArtifact, RenderCmdErr> {
-    let Validated {
-        mut doc,
-        policy,
-        imports,
-        diagnostics: validation,
-    } = parse_validate(src, project_dir, opts.flags)?;
-    let import_diagnostics = attributed_loader_diagnostics(&imports);
-    let import_files = ImportFiles::from_graph(&imports);
-    let scene_imports = imports.to_scene_graph();
-    let mut diagnostics: Vec<Diagnostic> = validation;
-    resolve_text_sources(&mut doc, project_dir, &mut diagnostics);
-    let fonts = build_font_provider_with_imports(&doc, project_dir, &imports, opts.locked)?;
-    let page_count = doc.body.pages.len();
-    if page_count == 0 {
-        return Err(RenderCmdErr::new(
-            "render.no_pages",
-            "document has no pages to render; add a page node",
-            2,
-        ));
-    }
-    let assets = match project_dir {
-        Some(dir) => build_asset_provider_with_imports(&doc, dir, &imports, opts.locked)?,
-        None => BytesAssetProvider::new(),
-    };
-    diagnostics.extend(import_diagnostics);
-    diagnostics.extend(disk_diagnostics_with_imports(&doc, project_dir, &imports));
-    let prep = DocumentPrep::new(&doc, opts.data, Some(&scene_imports));
-    let compiler = PageCompiler::new(&prep, &fonts);
-    diagnostics.extend(govern_compile_diagnostics(
-        compiler.document_diagnostics(),
-        &policy,
-    ));
-    // Pages compile and rasterize in parallel. Results merge here in page
-    // order, so the first error reported is the lowest failing page.
-    let rendered = map_pages(page_count, |page_index| {
-        let compile_result = compile_local_for_render(&doc, &compiler, page_index, opts);
-        let png = render_png(&compile_result.scene, &fonts, &assets).map_err(|e| {
+    let rasters = rasterize_pages(src, project_dir, PageSelection::All, opts, &|_| {
+        Ok(opts.scale)
+    })?;
+    // Pages encode in parallel; results stay in page order.
+    let encoded = map_slice(&rasters.images, encode_png);
+    let mut pages = Vec::with_capacity(encoded.len());
+    for (png, page) in encoded.into_iter().zip(&rasters.page_numbers) {
+        pages.push(png.map_err(|e| {
             RenderCmdErr::new(
                 "render.raster_failed",
-                format!("render error on page {}: {e}", page_index + 1),
+                format!("render error on page {page}: {e}"),
                 2,
             )
-        });
-        (compile_result, png)
-    });
-    let mut pages = Vec::with_capacity(page_count);
-    for (compile_result, png) in rendered {
-        pages.push(png?);
-        diagnostics.extend(govern_compile_diagnostics(
-            compile_result.diagnostics,
-            &policy,
-        ));
+        })?);
     }
     Ok(PngPagesArtifact {
         pages,
-        diagnostics: Diagnostic::dedup(diagnostics),
-        import_files,
+        sizes: rasters.images.iter().map(|i| (i.width, i.height)).collect(),
+        diagnostics: rasters.diagnostics,
+        import_files: rasters.import_files,
     })
 }
 
@@ -656,6 +649,8 @@ pub struct SpreadRenderOpts<'a> {
     pub data: Option<&'a DataContext>,
     /// Append page construction guides to both compiled scenes.
     pub construction_overlay: bool,
+    /// Raster output scale (`1.0` = page pixels); the gutter scales with it.
+    pub scale: f64,
 }
 
 /// Parse `src`, validate it with the merged diagnostic policy, compile pages
@@ -696,15 +691,16 @@ pub fn to_png_spread(
         flags,
         data,
         construction_overlay,
+        scale,
     } = opts;
-    let Validated {
+    let ValidatedParts {
         mut doc,
         policy,
         imports,
         diagnostics: validation,
-    } = parse_validate(src, project_dir, flags)?;
-    let import_diagnostics = attributed_loader_diagnostics(&imports);
-    let import_files = ImportFiles::from_graph(&imports);
+        import_diagnostics,
+        import_files,
+    } = parse_validate(src, project_dir, flags)?.into_parts();
     let scene_imports = imports.to_scene_graph();
     let mut text_src_diagnostics: Vec<Diagnostic> = Vec::new();
     resolve_text_sources(&mut doc, project_dir, &mut text_src_diagnostics);
@@ -729,20 +725,19 @@ pub fn to_png_spread(
     let compiler = PageCompiler::new(&prep, &fonts);
     let compile_a = compile_local_for_render(&doc, &compiler, index_a, render_opts);
     let compile_b = compile_local_for_render(&doc, &compiler, index_b, render_opts);
-    let png = render_spread_png(
-        &compile_a.scene,
-        &compile_b.scene,
-        gutter_px,
-        &fonts,
-        &assets,
-    )
-    .map_err(|e| {
+    let spread_err = |e: zenith_render::RenderError| {
         RenderCmdErr::new(
             "render.spread_failed",
             format!("spread render error: {e}"),
             2,
         )
-    })?;
+    };
+    let left = render_image_scaled(&compile_a.scene, scale, &fonts, &assets).map_err(spread_err)?;
+    let right =
+        render_image_scaled(&compile_b.scene, scale, &fonts, &assets).map_err(spread_err)?;
+    let image =
+        composite_spread(&left, &right, scaled_gutter(gutter_px, scale)).map_err(spread_err)?;
+    let png = encode_png(&image).map_err(spread_err)?;
     let mut compile_diagnostics = compiler.document_diagnostics();
     compile_diagnostics.extend(compile_a.diagnostics);
     compile_diagnostics.extend(compile_b.diagnostics);
@@ -754,7 +749,23 @@ pub fn to_png_spread(
     let diagnostics = Diagnostic::dedup(diagnostics);
     Ok(PngArtifact {
         png,
+        width: image.width,
+        height: image.height,
         diagnostics,
         import_files,
     })
+}
+
+/// Spread gutter in output pixels: `round(gutter_px × scale)` (half away from
+/// zero). Exact at scale 1.
+fn scaled_gutter(gutter_px: u32, scale: f64) -> u32 {
+    if scale == 1.0 {
+        return gutter_px;
+    }
+    let scaled = (f64::from(gutter_px) * scale).round();
+    if scaled.is_finite() && scaled > 0.0 {
+        scaled.min(f64::from(u32::MAX)) as u32
+    } else {
+        0
+    }
 }

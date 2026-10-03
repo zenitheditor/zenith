@@ -177,13 +177,36 @@ pub struct TokensOutput {
 /// Top-level JSON envelope for `render`.
 ///
 /// `status` is `"ok"` when every requested output was written, else
-/// `"blocked"`. `outputs` lists the written paths in write order.
+/// `"blocked"`. `outputs` lists the written paths in write order. `images`
+/// lists every written PNG with its pixel size and raster scale, in write
+/// order; it is omitted when no PNG was written.
 #[derive(Debug, Serialize)]
 pub struct RenderOutput {
     pub schema: &'static str,
     pub status: &'static str,
     pub outputs: Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub images: Vec<RenderImageJson>,
     pub diagnostics: Vec<DiagnosticJson>,
+}
+
+/// One written PNG in the `render` envelope.
+///
+/// `kind` is `png`, `page`, `spread`, or `contact_sheet`. `pages` holds the
+/// 1-based page numbers the image shows. `columns` and `rows` are set for a
+/// contact sheet only.
+#[derive(Debug, Clone, Serialize)]
+pub struct RenderImageJson {
+    pub path: String,
+    pub kind: &'static str,
+    pub width: u32,
+    pub height: u32,
+    pub scale: f64,
+    pub pages: Vec<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub columns: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rows: Option<u32>,
 }
 
 /// JSON result of `library add --json`.
@@ -345,6 +368,9 @@ pub struct SchemaNodeEntry {
 pub struct SchemaAttr {
     pub name: String,
     pub ty: String,
+    /// Value used when the attribute is absent; omitted when it has none.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub default: Option<String>,
 }
 
 /// A single node-kind detail entry in the `schema node <kind>` JSON output.

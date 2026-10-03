@@ -11,7 +11,7 @@ use std::path::PathBuf;
 use tempfile::TempDir;
 use zenith_cli::commands::new::{self, DEFAULT_PAGE};
 use zenith_cli::commands::theme::apply_run;
-use zenith_core::{KdlAdapter, KdlSource as _, Severity, validate as core_validate};
+use zenith_core::{KdlAdapter, KdlSource as _, validate as core_validate};
 use zenith_session::StorePaths;
 
 fn store_in(tmp: &TempDir) -> StorePaths {
@@ -38,7 +38,7 @@ fn hard_error_count(src: &str) -> usize {
     core_validate(&doc)
         .diagnostics
         .iter()
-        .filter(|d| d.severity == Severity::Error)
+        .filter(|d| d.is_error())
         .count()
 }
 

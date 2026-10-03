@@ -6,10 +6,16 @@ use std::path::PathBuf;
 /// Arguments for `zenith render`.
 #[derive(Debug, Args)]
 #[command(
-    after_help = "At least one of --scene, --png, --pdf, or --all-pages is required.\n\n\
+    after_help = "At least one of --scene, --png, --pdf, --all-pages, or --contact-sheet is required.\n\n\
+--scale F rasterizes PNG outputs at F x page pixels (0 < F <= 4). Each side is\n\
+max(1, round(page_px x F)), rounding half away from zero. Effects scale too.\n\
+--contact-sheet tiles pages in ceil(sqrt(n)) columns with a 16 px gutter and a\n\
+page-number label under each page. Without --scale it fits the sheet to 2048 px wide.\n\n\
 EXAMPLES:\n  \
 zenith render poster.zen --png out.png\n  \
-zenith render book.zen --all-pages sheet/      # one PNG per page\n  \
+zenith render deck.zen --contact-sheet sheet.png             # all pages, one image\n  \
+zenith render deck.zen --png slide.png --page 3 --scale 0.5  # cheap preview\n  \
+zenith render book.zen --all-pages pages/ --scale 0.25       # small PNG per page\n  \
 zenith render book.zen --pdf book.pdf          # print-ready vector PDF"
 )]
 pub struct RenderArgs {
@@ -46,6 +52,23 @@ pub struct RenderArgs {
     /// Render every page to `<DIR>/page-<N>.png` (1-based) instead of a single page.
     #[arg(long, value_name = "DIR")]
     pub all_pages: Option<PathBuf>,
+
+    /// Write one PNG with every page (or the `--page` page) tiled in a grid.
+    ///
+    /// Columns = ceil(sqrt(pages)). Each cell is the largest scaled page, with
+    /// a 16 px gutter and the page number under each page. Without `--scale`
+    /// the sheet fits 2048 px wide (never above scale 1).
+    #[arg(long, value_name = "OUT")]
+    pub contact_sheet: Option<PathBuf>,
+
+    /// Raster scale for PNG outputs: 0 < F <= 4 (default 1).
+    ///
+    /// Applies to `--png`, `--all-pages`, `--spread`, and `--contact-sheet`.
+    /// Each side is `max(1, round(page_px × F))`. The page is drawn at this
+    /// scale (no resample), and blur, shadow, mask feather, and stroke widths
+    /// scale with it. Use 0.25–0.5 for cheap previews.
+    #[arg(long, value_name = "F", allow_hyphen_values = true)]
+    pub scale: Option<String>,
 
     /// Render two facing pages side by side as a single PNG, e.g. `--spread 10-11`
     /// (1-based page numbers; A on the left, B on the right). Requires `--png`.

@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use zenith_core::{KdlAdapter, KdlSource, Severity, validate};
+use zenith_core::{KdlAdapter, KdlSource, validate};
 use zenith_tx::TxStatus;
 
 use crate::library::{
@@ -227,7 +227,7 @@ fn validate_and_format(target: &zenith_core::Document) -> Result<Vec<u8>, AddCmd
     let errors: Vec<String> = report
         .diagnostics
         .iter()
-        .filter(|d| d.severity == Severity::Error)
+        .filter(|d| d.is_error())
         .map(crate::commands::format_diagnostic_line)
         .collect();
     if !errors.is_empty() {
@@ -279,7 +279,7 @@ mod tests {
         let errors: Vec<_> = validate(&doc)
             .diagnostics
             .into_iter()
-            .filter(|d| d.severity == Severity::Error)
+            .filter(|d| d.is_error())
             .collect();
         assert!(errors.is_empty(), "errors: {:?}", errors);
 
@@ -406,7 +406,7 @@ mod tests {
         let errors: Vec<_> = validate(&doc)
             .diagnostics
             .into_iter()
-            .filter(|d| d.severity == Severity::Error)
+            .filter(|d| d.is_error())
             .collect();
         assert!(errors.is_empty(), "errors: {:?}", errors);
 
@@ -447,7 +447,7 @@ mod tests {
         let applied_errors: Vec<_> = validate(&applied_doc)
             .diagnostics
             .into_iter()
-            .filter(|d| d.severity == Severity::Error)
+            .filter(|d| d.is_error())
             .collect();
         assert!(
             applied_errors.is_empty(),
@@ -485,7 +485,7 @@ mod tests {
         let errors: Vec<_> = validate(&doc)
             .diagnostics
             .into_iter()
-            .filter(|d| d.severity == Severity::Error)
+            .filter(|d| d.is_error())
             .collect();
         assert!(errors.is_empty(), "errors: {:?}", errors);
         assert!(

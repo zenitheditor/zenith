@@ -10,7 +10,7 @@ use std::path::{Component, Path, PathBuf};
 
 use zenith_core::{
     AssetDecl, ComponentDef, Document, InstanceNode, KdlAdapter, KdlSource as _, LibraryDef, Node,
-    ProvenanceDef, Severity, Style, Token, validate,
+    ProvenanceDef, Style, Token, validate,
 };
 
 use super::load_import_graph;
@@ -565,7 +565,7 @@ fn validate_and_format(host: &Document) -> Result<Vec<u8>, MaterializeCmdErr> {
     let errors: Vec<String> = report
         .diagnostics
         .iter()
-        .filter(|d| d.severity == Severity::Error)
+        .filter(|d| d.is_error())
         .map(format_diagnostic_line)
         .collect();
     if !errors.is_empty() {

@@ -386,7 +386,7 @@ fn render_missing_asset_yields_asset_missing_error_diagnostic() {
     let has_missing = artifact
         .diagnostics
         .iter()
-        .any(|d| d.code == "asset.missing" && d.severity == zenith_core::Severity::Error);
+        .any(|d| d.code == "asset.missing" && d.is_error());
     assert!(
         has_missing,
         "artifact must carry an asset.missing Error diagnostic; got: {:?}",

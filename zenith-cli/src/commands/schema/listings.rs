@@ -115,6 +115,7 @@ pub fn node_detail(kind: &str, json: bool) -> (String, u8) {
         .map(|&a| SchemaAttr {
             name: a.to_owned(),
             ty: core_schema::attribute_type_for_kind(kind, a).to_owned(),
+            default: core_schema::attribute_default(kind, a).map(str::to_owned),
         })
         .collect();
 

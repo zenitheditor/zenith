@@ -67,6 +67,7 @@ fn opts(flags: &CliPolicyFlags) -> RenderEntryOptions<'_> {
         flags,
         data: None,
         construction_overlay: false,
+        scale: 1.0,
     }
 }
 

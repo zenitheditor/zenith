@@ -462,6 +462,76 @@ fn render_returns_resource_link_that_reads_back() {
     );
 }
 
+#[test]
+fn render_scale_and_contact_sheet_report_sizes() {
+    let doc_dir = tempfile::tempdir().expect("doc dir");
+    let store = tempfile::tempdir().expect("store dir");
+    let path = doc_dir.path().join("d.zen");
+    std::fs::write(&path, DOC).expect("write doc");
+    let doc = path.to_str().unwrap();
+    let out = doc_dir.path().join("sheet.png");
+
+    let r = mcp_session(
+        store.path(),
+        &[
+            req(
+                1,
+                "zenith_render",
+                json!({ "doc": doc, "format": "png", "scale": 0.5 }),
+            ),
+            req(
+                2,
+                "zenith_render",
+                json!({
+                    "doc": doc,
+                    "format": "png",
+                    "contact_sheet": true,
+                    "out": out.to_str().unwrap()
+                }),
+            ),
+            req(
+                3,
+                "zenith_render",
+                json!({ "doc": doc, "format": "png", "scale": 0 }),
+            ),
+            req(
+                4,
+                "zenith_render",
+                json!({ "doc": doc, "format": "pdf", "contact_sheet": true }),
+            ),
+            req(
+                5,
+                "zenith_render",
+                json!({ "doc": doc, "format": "png", "scale": 4.5 }),
+            ),
+        ],
+    );
+    let scaled = &r[0]["result"];
+    assert_eq!(scaled["isError"], false, "{r:?}");
+    let image = &scaled["structuredContent"]["image"];
+    assert_eq!(image["width"], 50);
+    assert_eq!(image["height"], 50);
+    assert_eq!(image["scale"], 0.5);
+
+    let sheet = &r[1]["result"];
+    assert_eq!(sheet["isError"], false, "{r:?}");
+    let sc = &sheet["structuredContent"];
+    assert_eq!(sc["resource"]["mimeType"], "image/png");
+    // 2 pages of 100×100 → 2 columns, 1 row, 16 px gutters, 28 px label band.
+    assert_eq!(sc["contact_sheet"]["width"], 2 * 100 + 3 * 16);
+    assert_eq!(sc["contact_sheet"]["height"], 100 + 28 + 2 * 16);
+    assert_eq!(sc["contact_sheet"]["columns"], 2);
+    assert_eq!(sc["contact_sheet"]["pages"], json!([1, 2]));
+    assert!(out.exists(), "out path written");
+
+    for (i, resp) in r.iter().enumerate().skip(2) {
+        let result = &resp["result"];
+        assert_eq!(result["isError"], true, "request {i}: {resp:?}");
+        let text = result["content"][0]["text"].as_str().unwrap_or("");
+        assert!(text.contains("cli.invalid_argument"), "request {i}: {text}");
+    }
+}
+
 // ── Store-backed: workspace loop + doc-id addressing (subprocess) ──────────
 
 #[test]
@@ -531,6 +601,79 @@ fn workspace_loop_and_doc_id_addressing() {
         "validate by doc-id: {by_id:?}"
     );
     assert_eq!(by_id[0]["result"]["structuredContent"]["valid"], true);
+}
+
+/// MCP tx and fmt writes are recorded in version history, like the CLI's.
+#[test]
+fn mcp_writes_are_recorded_in_history() {
+    let doc_dir = tempfile::tempdir().expect("doc dir");
+    let store = tempfile::tempdir().expect("store dir");
+    let path = doc_dir.path().join("d.zen");
+    // Non-canonical indentation so `zenith_fmt` changes the file, and a raw
+    // color literal so `zenith_fix` has work.
+    let raw = DOC.replace(
+        "    page id=\"page.b\"",
+        "    page id=\"page.c\" w=(px)100 h=(px)100 {\n      rect id=\"r.2\" x=(px)0 y=(px)0 w=(px)10 h=(px)10 fill=\"#111111\"\n    }\n    page id=\"page.b\"",
+    );
+    std::fs::write(&path, raw.replace("\n  ", "\n        ")).expect("write doc");
+    let doc = path.to_str().unwrap();
+    let tx = json!({ "ops": [ { "op": "set_fill", "node": "r.1", "fill": "color.bg" } ] });
+
+    let resp = mcp_session(
+        store.path(),
+        &[
+            req(1, "zenith_fmt", json!({ "doc": doc })),
+            req(2, "zenith_fix", json!({ "doc": doc, "apply": true })),
+            req(
+                3,
+                "zenith_tx",
+                json!({ "doc": doc, "transaction": tx, "apply": true }),
+            ),
+        ],
+    );
+    assert_eq!(resp.len(), 3, "expected three responses: {resp:?}");
+    for (i, r) in resp.iter().enumerate() {
+        assert_eq!(r["result"]["isError"], false, "step {} failed: {r}", i + 1);
+    }
+
+    let paths = zenith_session::StorePaths::new(store.path());
+    let view = zenith_cli::history::history_view_in(&paths, &path).expect("history view");
+    let kinds: Vec<&str> = view
+        .versions
+        .iter()
+        .filter_map(|v| v.op_kind.as_deref())
+        .collect();
+    assert!(kinds.contains(&"tx.apply"), "history kinds: {kinds:?}");
+    assert!(kinds.contains(&"fmt.apply"), "history kinds: {kinds:?}");
+    assert!(kinds.contains(&"fix.apply"), "history kinds: {kinds:?}");
+}
+
+/// `zenith_tx` with `apply` and `diff` returns exactly the bytes written, even
+/// when history stamps a `doc-id` into a document that had none.
+#[test]
+fn mcp_tx_diff_returns_written_bytes() {
+    let doc_dir = tempfile::tempdir().expect("doc dir");
+    let store = tempfile::tempdir().expect("store dir");
+    let path = doc_dir.path().join("d.zen");
+    std::fs::write(&path, DOC).expect("write doc");
+    let doc = path.to_str().unwrap();
+    let tx = json!({ "ops": [ { "op": "set_fill", "node": "r.1", "fill": "color.bg" } ] });
+
+    let resp = mcp_session(
+        store.path(),
+        &[req(
+            1,
+            "zenith_tx",
+            json!({ "doc": doc, "transaction": tx, "apply": true, "diff": true }),
+        )],
+    );
+    assert_eq!(resp[0]["result"]["isError"], false, "{resp:?}");
+    let after = resp[0]["result"]["structuredContent"]["after_source"]
+        .as_str()
+        .expect("inline after_source");
+    let on_disk = std::fs::read_to_string(&path).expect("read doc");
+    assert!(on_disk.contains("doc-id="), "history stamps a doc-id");
+    assert_eq!(after, on_disk);
 }
 
 // ── HTTP transport (only with `--features http`) ───────────────────────────

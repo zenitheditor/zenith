@@ -17,17 +17,35 @@ use crate::commands;
 use crate::commands::render::{RenderCmdErr, RenderEntryOptions, SpreadRenderOpts};
 use crate::commands::serialize_pretty;
 use crate::config::CliPolicyFlags;
-use crate::json_types::{DiagnosticJson, RenderOutput};
+use crate::json_types::{DiagnosticJson, RenderImageJson, RenderOutput};
 use crate::report::{CliError, ImportFiles};
 
 const RENDER_SCHEMA: &str = "zenith-render-v1";
 
 pub(super) fn dispatch_render(args: RenderArgs) -> ExitCode {
     let json = args.json;
-    if args.scene.is_none() && args.png.is_none() && args.pdf.is_none() && args.all_pages.is_none()
+    if args.scene.is_none()
+        && args.png.is_none()
+        && args.pdf.is_none()
+        && args.all_pages.is_none()
+        && args.contact_sheet.is_none()
     {
         return CliError::usage(
-            "error: at least one of --scene <OUT>, --png <OUT>, --pdf <OUT>, or --all-pages <DIR> is required",
+            "error: at least one of --scene <OUT>, --png <OUT>, --pdf <OUT>, --all-pages <DIR>, or --contact-sheet <OUT> is required",
+        )
+        .emit(json);
+    }
+    let scale = match args.scale.as_deref().map(parse_scale).transpose() {
+        Ok(s) => s,
+        Err(msg) => return CliError::usage(msg).emit(json),
+    };
+    if scale.is_some()
+        && args.png.is_none()
+        && args.all_pages.is_none()
+        && args.contact_sheet.is_none()
+    {
+        return CliError::usage(
+            "error: --scale applies only to PNG outputs; add --png <OUT>, --all-pages <DIR>, or --contact-sheet <OUT>",
         )
         .emit(json);
     }
@@ -75,7 +93,9 @@ pub(super) fn dispatch_render(args: RenderArgs) -> ExitCode {
         src: &src,
         flags: &flags,
         data: data_ctx.as_ref(),
+        scale,
         outputs: Vec::new(),
+        images: Vec::new(),
         diagnostics: Vec::new(),
         import_files: ImportFiles::default(),
     };
@@ -83,6 +103,14 @@ pub(super) fn dispatch_render(args: RenderArgs) -> ExitCode {
         Ok(()) => run.finish_ok(),
         Err(stop) => run.finish_blocked(stop),
     }
+}
+
+/// Parse a `--scale` value: a finite number with `0 < F <= 4`.
+fn parse_scale(raw: &str) -> Result<f64, String> {
+    // An unparsable value checks as NaN, so it gets the same message.
+    let parsed = raw.trim().parse::<f64>().unwrap_or(f64::NAN);
+    commands::render::check_render_scale(parsed, raw)
+        .map_err(|msg| format!("error: --scale: {msg}"))
 }
 
 /// Why a render run stopped.
@@ -110,8 +138,12 @@ struct RenderRun<'a> {
     src: &'a str,
     flags: &'a CliPolicyFlags,
     data: Option<&'a DataContext>,
+    /// The checked `--scale`, when given.
+    scale: Option<f64>,
     /// Written paths, in write order.
     outputs: Vec<String>,
+    /// Written PNGs with size and scale, in write order.
+    images: Vec<RenderImageJson>,
     /// Diagnostics of every finished output, in output order.
     diagnostics: Vec<Diagnostic>,
     /// Files of the composition imports behind the diagnostic spans.
@@ -119,6 +151,11 @@ struct RenderRun<'a> {
 }
 
 impl RenderRun<'_> {
+    /// The raster scale of this run (`1.0` when `--scale` is absent).
+    fn output_scale(&self) -> f64 {
+        self.scale.unwrap_or(1.0)
+    }
+
     fn entry_options(&self) -> RenderEntryOptions<'_> {
         RenderEntryOptions {
             locked: self.args.locked,
@@ -126,6 +163,7 @@ impl RenderRun<'_> {
             flags: self.flags,
             data: self.data,
             construction_overlay: self.args.construction_overlay,
+            scale: self.output_scale(),
         }
     }
 
@@ -144,8 +182,10 @@ impl RenderRun<'_> {
                     flags: self.flags,
                     data: self.data,
                     construction_overlay: args.construction_overlay,
+                    scale: self.output_scale(),
                 },
             )?;
+            let image = self.image(png_out, "spread", (artifact.width, artifact.height));
             self.write(
                 png_out,
                 &artifact.png,
@@ -153,6 +193,10 @@ impl RenderRun<'_> {
                 &artifact.import_files,
                 "spread PNG",
             )?;
+            self.record_image(RenderImageJson {
+                pages: vec![page_a, page_b],
+                ..image
+            });
         }
         if let Some(scene_out) = &args.scene {
             let artifact = commands::render::to_scene_json_with_options(
@@ -177,6 +221,7 @@ impl RenderRun<'_> {
                 args.page.unwrap_or(1),
                 self.entry_options(),
             )?;
+            let image = self.image(png_out, "png", (artifact.width, artifact.height));
             self.write(
                 png_out,
                 &artifact.png,
@@ -184,6 +229,10 @@ impl RenderRun<'_> {
                 &artifact.import_files,
                 "PNG",
             )?;
+            self.record_image(RenderImageJson {
+                pages: vec![args.page.unwrap_or(1)],
+                ..image
+            });
         }
         if let Some(pdf_out) = &args.pdf {
             // `--page N` selects one page. Without it every page goes into one
@@ -212,7 +261,81 @@ impl RenderRun<'_> {
         if let Some(out_dir) = &args.all_pages {
             self.render_pages(out_dir)?;
         }
+        if let Some(sheet_out) = &args.contact_sheet {
+            self.render_contact_sheet(sheet_out)?;
+        }
         Ok(())
+    }
+
+    /// Render the contact sheet to `out` and record it.
+    fn render_contact_sheet(&mut self, out: &Path) -> Result<(), Stop> {
+        let sheet = commands::render::to_contact_sheet(
+            self.src,
+            self.args.path.parent(),
+            self.args.page,
+            self.scale,
+            self.entry_options(),
+        )?;
+        gate(&sheet.diagnostics, &sheet.import_files)?;
+        if let Err(e) = write_bytes(out, &sheet.png) {
+            return Err(write_stop(out, &e));
+        }
+        self.outputs.push(out.display().to_string());
+        if !self.args.json {
+            println!(
+                "contact sheet written to '{}' ({}x{} px, {} page(s), {} column(s), scale {})",
+                out.display(),
+                sheet.width,
+                sheet.height,
+                sheet.pages.len(),
+                sheet.columns,
+                sheet.scale
+            );
+        }
+        self.images.push(RenderImageJson {
+            path: out.display().to_string(),
+            kind: "contact_sheet",
+            width: sheet.width,
+            height: sheet.height,
+            scale: sheet.scale,
+            pages: sheet.pages,
+            columns: Some(sheet.columns),
+            rows: Some(sheet.rows),
+        });
+        self.diagnostics.extend(sheet.diagnostics);
+        self.import_files.extend(&sheet.import_files);
+        Ok(())
+    }
+
+    /// An image record for `path` at this run's scale (pages filled by the
+    /// caller).
+    fn image(
+        &self,
+        path: &Path,
+        kind: &'static str,
+        (width, height): (u32, u32),
+    ) -> RenderImageJson {
+        RenderImageJson {
+            path: path.display().to_string(),
+            kind,
+            width,
+            height,
+            scale: self.output_scale(),
+            pages: Vec::new(),
+            columns: None,
+            rows: None,
+        }
+    }
+
+    /// Record a written PNG and print its size in human mode.
+    fn record_image(&mut self, image: RenderImageJson) {
+        if !self.args.json {
+            println!(
+                "  {}x{} px, scale {}",
+                image.width, image.height, image.scale
+            );
+        }
+        self.images.push(image);
     }
 
     fn render_pages(&mut self, out_dir: &Path) -> Result<(), Stop> {
@@ -226,18 +349,24 @@ impl RenderRun<'_> {
         )?;
         // Block on hard diagnostics before any page reaches disk.
         gate(&artifact.diagnostics, &artifact.import_files)?;
-        for (i, png) in artifact.pages.iter().enumerate() {
+        for (i, (png, size)) in artifact.pages.iter().zip(&artifact.sizes).enumerate() {
             let page_path = out_dir.join(format!("page-{}.png", i + 1));
             if let Err(e) = write_bytes(&page_path, png) {
                 return Err(write_stop(&page_path, &e));
             }
             self.outputs.push(page_path.display().to_string());
+            let image = self.image(&page_path, "page", *size);
+            self.images.push(RenderImageJson {
+                pages: vec![i + 1],
+                ..image
+            });
         }
         if !self.args.json {
             println!(
-                "{} page(s) written to '{}'",
+                "{} page(s) written to '{}' (scale {})",
                 artifact.pages.len(),
-                out_dir.display()
+                out_dir.display(),
+                self.output_scale()
             );
         }
         self.diagnostics.extend(artifact.diagnostics);
@@ -273,6 +402,7 @@ impl RenderRun<'_> {
             print_envelope(
                 "ok",
                 self.outputs,
+                self.images,
                 &diagnostics,
                 self.src,
                 &self.import_files,
@@ -291,6 +421,7 @@ impl RenderRun<'_> {
             print_envelope(
                 "blocked",
                 self.outputs,
+                self.images,
                 &diagnostics,
                 self.src,
                 &self.import_files,
@@ -337,6 +468,7 @@ fn write_stop(path: &Path, e: &std::io::Error) -> Stop {
 fn print_envelope(
     status: &'static str,
     outputs: Vec<String>,
+    images: Vec<RenderImageJson>,
     diagnostics: &[Diagnostic],
     src: &str,
     import_files: &ImportFiles,
@@ -345,6 +477,7 @@ fn print_envelope(
         schema: RENDER_SCHEMA,
         status,
         outputs,
+        images,
         diagnostics: DiagnosticJson::located_all_in(diagnostics, src, import_files),
     };
     println!("{}", serialize_pretty(&out));

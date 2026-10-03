@@ -11,7 +11,7 @@
 use std::collections::BTreeSet;
 use std::path::Path;
 
-use zenith_core::{BytesAssetProvider, KdlAdapter, KdlSource, Severity};
+use zenith_core::{BytesAssetProvider, KdlAdapter, KdlSource};
 use zenith_render::render_png;
 use zenith_scene::compile_page;
 
@@ -242,7 +242,7 @@ pub fn run_variant(
                     let missing_diags = collect_missing_asset_diagnostics(&materialized, dir);
                     let hard: Vec<String> = missing_diags
                         .iter()
-                        .filter(|d| d.severity == Severity::Error)
+                        .filter(|d| d.is_error())
                         .map(crate::commands::format_error_diag)
                         .collect();
                     if !hard.is_empty() {
@@ -263,7 +263,7 @@ pub fn run_variant(
                 let hard_diags: Vec<String> = compile_result
                     .diagnostics
                     .iter()
-                    .filter(|d| d.severity == Severity::Error)
+                    .filter(|d| d.is_error())
                     .map(crate::commands::format_error_diag)
                     .collect();
                 if !hard_diags.is_empty() {

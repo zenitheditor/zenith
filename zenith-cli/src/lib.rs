@@ -19,6 +19,7 @@
 pub mod cli;
 pub mod commands;
 pub mod config;
+mod edit_io;
 pub mod history;
 pub mod json_types;
 pub mod library;

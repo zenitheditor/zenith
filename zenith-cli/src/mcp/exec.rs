@@ -16,6 +16,7 @@ use super::resources::open_store;
 use super::serialize::{compact, maybe_offload, store_link};
 use crate::cli::ScratchNewArgs;
 use crate::commands::{self, theme};
+use crate::edit_io::apply_edit;
 
 /// Dispatch a tool call, returning a structured result. Unknown names and
 /// execution failures become `is_error` results (never JSON-RPC errors).
@@ -157,9 +158,8 @@ fn run_fmt(args: &Value) -> Result<Value, String> {
     let loc = doc_ref::locate(req_str(args, "doc")?)?;
     let src = read(&loc.path)?;
     let result = commands::fmt::run(&src).map_err(|e| e.message)?;
-    std::fs::write(&loc.path, &result.formatted)
-        .map_err(|e| format!("error writing '{}': {e}", loc.path.display()))?;
-    Ok(json!({ "changed": result.changed, "hash": result.hash }))
+    let written = apply_edit(&loc.path, &result.formatted, "fmt.apply").map_err(|e| e.human)?;
+    Ok(json!({ "changed": result.changed, "hash": commands::fmt::hex_hash(&written) }))
 }
 
 fn run_tx(args: &Value) -> Result<Value, String> {
@@ -172,9 +172,15 @@ fn run_tx(args: &Value) -> Result<Value, String> {
     };
     let outcome = commands::tx::run(&src, &tx_json).map_err(|e| e.message)?;
 
+    // The bytes on disk after an apply; history can stamp a `doc-id` into them.
+    let mut after_bytes = outcome.result.source_after.clone().into_bytes();
     if flag(args, "apply") && outcome.exit_code != 1 {
-        std::fs::write(&loc.path, outcome.result.source_after.as_bytes())
-            .map_err(|e| format!("error writing '{}': {e}", loc.path.display()))?;
+        after_bytes = apply_edit(
+            &loc.path,
+            outcome.result.source_after.as_bytes(),
+            "tx.apply",
+        )
+        .map_err(|e| e.human)?;
     }
 
     let parsed = parse_json(&outcome.json_str)?;
@@ -190,11 +196,10 @@ fn run_tx(args: &Value) -> Result<Value, String> {
         "error_count": count_severity(&diags, "error"),
     });
     if flag(args, "diff") {
-        let after = outcome.result.source_after.as_bytes();
         let link = match loc.doc_id.as_deref() {
-            Some(id) => store_link(id, after, "zen", "tx-after")?,
+            Some(id) => store_link(id, &after_bytes, "zen", "tx-after")?,
             // No identity to anchor a resource: inline the resulting source.
-            None => Value::String(outcome.result.source_after.clone()),
+            None => Value::String(String::from_utf8_lossy(&after_bytes).into_owned()),
         };
         insert(&mut out, "after_source", link);
     }
@@ -209,8 +214,8 @@ fn run_fix(args: &Value) -> Result<Value, String> {
         .map_err(|e| e.message)?;
     let changed = out.outcome.changed();
     if flag(args, "apply") && changed {
-        std::fs::write(&loc.path, out.outcome.source_after.as_bytes())
-            .map_err(|e| format!("error writing '{}': {e}", loc.path.display()))?;
+        apply_edit(&loc.path, out.outcome.source_after.as_bytes(), "fix.apply")
+            .map_err(|e| e.human)?;
     }
     let parsed = parse_json(&out.json_str)?;
     let remaining = parsed
@@ -244,12 +249,60 @@ fn run_render(args: &Value) -> Result<Value, String> {
     // MCP carries no policy flags; in-document `diagnostics {}` and config files
     // are still resolved on the render path via the project directory.
     let flags = crate::config::CliPolicyFlags::default();
+    // `scale` sets the PNG raster scale (0 < scale <= 4, default 1).
+    // `contact_sheet` tiles every page (or `page`) into one PNG.
+    let scale = match args.get("scale") {
+        None | Some(Value::Null) => None,
+        Some(v) => {
+            let shown = v.to_string();
+            let f = v.as_f64().unwrap_or(f64::NAN);
+            Some(
+                commands::render::check_render_scale(f, &shown)
+                    .map_err(|m| format!("error[cli.invalid_argument]: {m}"))?,
+            )
+        }
+    };
+    let contact_sheet = flag(args, "contact_sheet");
+    if (scale.is_some() || contact_sheet) && format != "png" {
+        return Err(format!(
+            "error[cli.invalid_argument]: scale and contact_sheet apply only to format 'png', got '{format}'; set format to png"
+        ));
+    }
+    let png_opts = commands::render::RenderEntryOptions {
+        locked,
+        subset: true,
+        flags: &flags,
+        data: None,
+        construction_overlay: false,
+        scale: scale.unwrap_or(1.0),
+    };
+    let mut image_meta: Option<Value> = None;
 
     let (bytes, ext, mime_diags): (Vec<u8>, &str, Vec<zenith_core::Diagnostic>) = match format {
+        "png" if contact_sheet => {
+            let art =
+                commands::render::to_contact_sheet(&src, parent, explicit_page, scale, png_opts)
+                    .map_err(|e| e.message)?;
+            blocked(&art.diagnostics)?;
+            image_meta = Some(json!({
+                "width": art.width,
+                "height": art.height,
+                "scale": art.scale,
+                "columns": art.columns,
+                "rows": art.rows,
+                "pages": art.pages,
+            }));
+            (art.png, "png", art.diagnostics)
+        }
         "png" => {
-            let art = commands::render::to_png_with_dir(&src, parent, page, locked, &flags, None)
+            let art = commands::render::to_png_with_dir_options(&src, parent, page, png_opts)
                 .map_err(|e| e.message)?;
             blocked(&art.diagnostics)?;
+            image_meta = Some(json!({
+                "width": art.width,
+                "height": art.height,
+                "scale": png_opts.scale,
+            }));
             (art.png, "png", art.diagnostics)
         }
         "pdf" => {
@@ -283,9 +336,17 @@ fn run_render(args: &Value) -> Result<Value, String> {
     if let Some(out) = opt_str(args, "out") {
         std::fs::write(out, &bytes).map_err(|e| format!("error writing '{out}': {e}"))?;
     }
-    write_preview(&doc_id, page, ext, &bytes);
+    // The preview slot holds page renders; a contact sheet is not one page.
+    if !contact_sheet {
+        write_preview(&doc_id, page, ext, &bytes);
+    }
 
-    let link = store_link(&doc_id, &bytes, ext, &format!("render-{format}"))?;
+    let name = if contact_sheet {
+        "render-contact-sheet".to_owned()
+    } else {
+        format!("render-{format}")
+    };
+    let link = store_link(&doc_id, &bytes, ext, &name)?;
     let mut out = json!({
         "format": format,
         "resource": link,
@@ -293,6 +354,14 @@ fn run_render(args: &Value) -> Result<Value, String> {
         "error_count": 0,
         "warning_count": count_diag_severity(&mime_diags, zenith_core::Severity::Warning),
     });
+    if let Some(meta) = image_meta {
+        let key = if contact_sheet {
+            "contact_sheet"
+        } else {
+            "image"
+        };
+        insert(&mut out, key, meta);
+    }
     if flag(args, "diagnostics") {
         let diags: Vec<Value> = mime_diags
             .iter()
@@ -541,7 +610,7 @@ fn severity_word(s: zenith_core::Severity) -> &'static str {
 fn blocked(diagnostics: &[zenith_core::Diagnostic]) -> Result<(), String> {
     let hard: Vec<String> = diagnostics
         .iter()
-        .filter(|d| d.severity == zenith_core::Severity::Error)
+        .filter(|d| d.is_error())
         .map(commands::format_diagnostic_line)
         .collect();
     if hard.is_empty() {

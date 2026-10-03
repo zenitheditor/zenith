@@ -15,7 +15,7 @@ use zenith_cli::config::{
     load_global_policy_in, load_policy_file, merge_policy,
 };
 use zenith_core::{
-    BrandContract, KdlAdapter, KdlSource as _, Severity, merge_brand_contract, validate_with_policy,
+    BrandContract, KdlAdapter, KdlSource as _, merge_brand_contract, validate_with_policy,
 };
 
 // ── Fixture ─────────────────────────────────────────────────────────────────
@@ -59,9 +59,7 @@ fn parse(src: &str) -> zenith_core::Document {
 }
 
 fn has_error(diags: &[zenith_core::Diagnostic], code: &str) -> bool {
-    diags
-        .iter()
-        .any(|d| d.code == code && d.severity == Severity::Error)
+    diags.iter().any(|d| d.code == code && d.is_error())
 }
 
 fn present(diags: &[zenith_core::Diagnostic], code: &str) -> bool {

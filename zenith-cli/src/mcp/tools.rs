@@ -141,7 +141,8 @@ the applied fixes and the remaining errors.",
             name: "zenith_render",
             description: "Render a document deterministically to png, pdf, or scene (display-list \
 JSON). Returns a resource link to the artifact (never inlines bytes); blocked by hard diagnostics \
-— validate first. Pass out to also write the file to a path you choose.",
+— validate first. Pass out to also write the file to a path you choose. For cheap visual checks \
+use png with scale 0.25-0.5, or contact_sheet=true to see every page in one image.",
             schema: json!({
                 "type": "object",
                 "properties": {
@@ -150,7 +151,9 @@ JSON). Returns a resource link to the artifact (never inlines bytes); blocked by
                     "page": { "type": "integer", "minimum": 1, "description": "1-based page (default 1)." },
                     "locked": { "type": "boolean", "description": "Verify asset sha256 and fail on mismatch." },
                     "out": { "type": "string", "description": "Optional path to also write the artifact to." },
-                    "diagnostics": { "type": "boolean", "description": "Include soft diagnostics (default false)." }
+                    "diagnostics": { "type": "boolean", "description": "Include soft diagnostics (default false)." },
+                    "scale": { "type": "number", "exclusiveMinimum": 0, "maximum": 4, "description": "png only: raster scale, 0 < scale <= 4 (default 1). Each side is max(1, round(page_px * scale)); drawn at that scale, not resampled." },
+                    "contact_sheet": { "type": "boolean", "description": "png only: tile every page (or `page`) into one labelled PNG, ceil(sqrt(n)) columns. Without scale, fits 2048 px wide." }
                 },
                 "required": ["doc", "format"]
             }),

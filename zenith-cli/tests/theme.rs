@@ -3,7 +3,7 @@
 
 use zenith_cli::commands::theme::{Shape, ThemeInput, new};
 use zenith_core::theme::Scheme;
-use zenith_core::{KdlAdapter, KdlSource, Severity, validate};
+use zenith_core::{KdlAdapter, KdlSource, validate};
 
 fn input(name: &'static str, scheme: Scheme, primary: &'static str) -> ThemeInput<'static> {
     ThemeInput {
@@ -28,7 +28,7 @@ fn hard_errors(src: &str) -> usize {
     validate(&doc)
         .diagnostics
         .iter()
-        .filter(|d| d.severity == Severity::Error)
+        .filter(|d| d.is_error())
         .count()
 }
 

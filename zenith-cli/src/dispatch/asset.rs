@@ -150,4 +150,5 @@ fn apply_asset_outcome(
         outcome.result.source_after.as_bytes(),
         history_label,
     )
+    .map(|_| ())
 }

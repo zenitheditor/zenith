@@ -9,7 +9,7 @@ use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::path::Path;
 
-use zenith_core::{AssetKind, BytesAssetProvider, KdlAdapter, KdlSource, Severity};
+use zenith_core::{AssetKind, BytesAssetProvider, KdlAdapter, KdlSource};
 use zenith_render::render_png;
 use zenith_scene::compile_page;
 use zenith_tx::{AddAssetMetadata, Op, OpSpan, Transaction, TxStatus, run_transaction};
@@ -513,7 +513,7 @@ pub fn run(
             resolve_text_sources(&mut row_doc, project_dir, &mut text_src_diags);
             let hard: Vec<String> = text_src_diags
                 .iter()
-                .filter(|d| d.severity == Severity::Error)
+                .filter(|d| d.is_error())
                 .map(crate::commands::format_error_diag)
                 .collect();
             if !hard.is_empty() {
@@ -589,7 +589,7 @@ pub fn run(
             let missing_diags = collect_missing_asset_diagnostics(&row_doc, dir);
             let hard: Vec<String> = missing_diags
                 .iter()
-                .filter(|d| d.severity == Severity::Error)
+                .filter(|d| d.is_error())
                 .map(crate::commands::format_error_diag)
                 .collect();
             if !hard.is_empty() {
@@ -656,7 +656,7 @@ pub fn run(
             let hard_diags: Vec<String> = compile_result
                 .diagnostics
                 .iter()
-                .filter(|d| d.severity == Severity::Error)
+                .filter(|d| d.is_error())
                 .map(crate::commands::format_error_diag)
                 .collect();
             if !hard_diags.is_empty() {

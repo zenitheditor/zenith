@@ -209,7 +209,7 @@ fn scene_json_with_data_ctx_succeeds() {
     let hard: Vec<_> = artifact
         .diagnostics
         .iter()
-        .filter(|d| d.severity == zenith_core::Severity::Error)
+        .filter(|d| d.is_error())
         .collect();
     assert!(
         hard.is_empty(),

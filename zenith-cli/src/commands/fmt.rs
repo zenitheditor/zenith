@@ -86,7 +86,7 @@ pub fn render_stdout(result: &FmtResult, json: bool) -> String {
 /// SHA-256 is stable across toolchain versions and platforms, so the reported
 /// content hash is reproducible (unlike `DefaultHasher`) and consistent with the
 /// content-addressing model used elsewhere in the project.
-fn hex_hash(bytes: &[u8]) -> String {
+pub(crate) fn hex_hash(bytes: &[u8]) -> String {
     let digest = Sha256::digest(bytes);
     let mut out = String::with_capacity(digest.len() * 2);
     for byte in digest {

@@ -130,6 +130,36 @@ pub(super) struct Validated {
     pub(super) diagnostics: Vec<Diagnostic>,
 }
 
+impl Validated {
+    /// Split into the pieces every render entry point needs, adding the
+    /// attributed import-loader diagnostics and the import file map.
+    pub(super) fn into_parts(self) -> ValidatedParts {
+        let import_diagnostics = attributed_loader_diagnostics(&self.imports);
+        let import_files = ImportFiles::from_graph(&self.imports);
+        ValidatedParts {
+            doc: self.doc,
+            policy: self.policy,
+            imports: self.imports,
+            diagnostics: self.diagnostics,
+            import_diagnostics,
+            import_files,
+        }
+    }
+}
+
+/// The pieces of a [`Validated`] document, plus its import diagnostics and
+/// file map.
+pub(super) struct ValidatedParts {
+    pub(super) doc: Document,
+    pub(super) policy: DiagnosticPolicy,
+    pub(super) imports: LoadedImportGraph,
+    /// Policy-governed validation diagnostics.
+    pub(super) diagnostics: Vec<Diagnostic>,
+    /// Attributed import-loader diagnostics.
+    pub(super) import_diagnostics: Vec<Diagnostic>,
+    pub(super) import_files: ImportFiles,
+}
+
 /// Apply the merged diagnostic `policy` to a list of compile-stage diagnostics
 /// and return the governed list for attachment to the artifact.
 ///

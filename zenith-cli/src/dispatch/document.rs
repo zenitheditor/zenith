@@ -11,7 +11,7 @@ use crate::cli_helpers::{parse_at_spec, read_file};
 use crate::commands;
 use crate::report::CliError;
 
-use super::output::{apply_edit, write_error};
+use super::output::apply_edit;
 
 pub(super) fn dispatch_validate(args: ValidateArgs) -> ExitCode {
     let src = match read_file(&args.path) {
@@ -35,8 +35,8 @@ pub(super) fn dispatch_fmt(args: FmtArgs) -> ExitCode {
     };
     match commands::fmt::run(&src) {
         Ok(result) => {
-            if let Err(e) = std::fs::write(&args.path, &result.formatted) {
-                return write_error(&args.path, &e).emit(args.json);
+            if let Err(e) = apply_edit(&args.path, &result.formatted, "fmt.apply") {
+                return e.emit(args.json);
             }
             println!("{}", commands::fmt::render_stdout(&result, args.json));
             ExitCode::SUCCESS
