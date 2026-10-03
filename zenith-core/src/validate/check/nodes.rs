@@ -16,11 +16,11 @@ use crate::tokens::ResolvedToken;
 
 use super::visual::attach_visual_spans;
 
-use node::shared::{node_rotate_deg, pv_to_dim, resolve_axis};
-
 mod node;
+mod placement;
 
 pub(super) use node::shared::{AnchorParentCtx, check_sibling_anchors, node_bbox};
+pub(super) use placement::placement_walk;
 
 /// Walk-wide immutable validation context (never changes during a page walk).
 #[derive(Clone, Copy)]
@@ -61,8 +61,9 @@ pub(super) struct WalkPos {
 /// the unused-token check (done after the walk) can diff against defined ids.
 ///
 /// `page_px_bounds` is `Some((page_w, page_h))` when the page's dimensions
-/// resolved successfully; `None` means off_canvas checks are skipped for this
-/// page (page unit was bad — already diagnosed).
+/// resolved successfully. `None` skips the off_canvas and child-overflow
+/// checks: the page unit was bad (already diagnosed), or the page uses
+/// auto-layout and the scene engine checks its lowered geometry.
 ///
 /// # Known limitation
 /// Recursion through `Node::Group` and `Node::Frame` children has no depth
@@ -93,34 +94,8 @@ fn walk_node_checks(
     pos: WalkPos,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
-    // ── frame.child_overflow advisory ─────────────────────────────────────
-    // When this node is a direct (or group-nested) child of a frame whose px
-    // box resolved, advise if the child's AUTHORED bbox protrudes beyond the
-    // frame box on any side. `node_bbox` returns None for flow-supplied
-    // (missing) geometry, so such children are naturally skipped.
-    if let Some((fx, fy, fw, fh)) = pos.enclosing_frame
-        && let Some((page_w, page_h)) = pos.page_px_bounds
-        && let Some((nx, ny, nw, nh)) = node_bbox(node, page_w, page_h)
-    {
-        const EPSILON: f64 = 0.5;
-        let over_left = nx < fx - EPSILON;
-        let over_top = ny < fy - EPSILON;
-        let over_right = nx + nw > fx + fw + EPSILON;
-        let over_bottom = ny + nh > fy + fh + EPSILON;
-        if over_left || over_top || over_right || over_bottom {
-            let (node_id, node_span) = node.id_and_span();
-            diagnostics.push(Diagnostic::advisory(
-                "frame.child_overflow",
-                format!(
-                    "node '{}' (bbox {nx}, {ny}, {nw}, {nh}) protrudes beyond its \
-                     enclosing frame (bbox {fx}, {fy}, {fw}, {fh})",
-                    node_id
-                ),
-                node_span,
-                Some(node_id.to_owned()),
-            ));
-        }
-    }
+    // ── frame.child_overflow + layout.off_canvas advisories ───────────────
+    placement::check_placement(node, pos.enclosing_frame, pos.page_px_bounds, diagnostics);
 
     // Direct children of a `row`/`column`/`grid` frame (and of table cells and
     // unknown nodes) have their x/y (and, when omitted, w/h) supplied by the
@@ -145,66 +120,6 @@ fn walk_node_checks(
         in_container: pos.in_container,
         parent_box_known: pos.parent_box_known,
     };
-    // ── off_canvas advisory ───────────────────────────────────────────────
-    // Check whether the node's authored bounding box exceeds the page rect
-    // [0, 0, page_w, page_h]. This uses authored coordinates only — group
-    // translation offsets are NOT accumulated (v0 advisory behavior; render-
-    // time offset accumulation is a scene-compiler concern, not validation).
-    //
-    // When the node carries a non-zero `rotate` (deg), the check uses the
-    // axis-aligned bounding box (AABB) of the four rotated corners instead of
-    // the authored box. Unrotated nodes (no rotate or 0°) use the authored
-    // box unchanged, keeping byte-identical advisory behavior for those nodes.
-    if let Some((page_w, page_h)) = pos.page_px_bounds
-        && let Some((nx, ny, nw, nh)) = node_bbox(node, page_w, page_h)
-    {
-        // Compute the effective (ax, ay, aw, ah) used for the bounds check.
-        let (ax, ay, aw, ah) = match node_rotate_deg(node) {
-            Some(deg) if deg != 0.0 => {
-                // Rotate the four corners of the authored bbox around its center,
-                // then take the min/max to produce the rotated AABB.
-                let rad = deg.to_radians();
-                let cos = rad.cos();
-                let sin = rad.sin();
-                let cx = nx + nw / 2.0;
-                let cy = ny + nh / 2.0;
-                // Half-extents relative to center.
-                let hw = nw / 2.0;
-                let hh = nh / 2.0;
-                // Four corners in local space (relative to center).
-                let locals: [(f64, f64); 4] = [(-hw, -hh), (hw, -hh), (hw, hh), (-hw, hh)];
-                let mut min_x = f64::INFINITY;
-                let mut min_y = f64::INFINITY;
-                let mut max_x = f64::NEG_INFINITY;
-                let mut max_y = f64::NEG_INFINITY;
-                for (lx, ly) in locals {
-                    let rx = cx + lx * cos - ly * sin;
-                    let ry = cy + lx * sin + ly * cos;
-                    min_x = min_x.min(rx);
-                    min_y = min_y.min(ry);
-                    max_x = max_x.max(rx);
-                    max_y = max_y.max(ry);
-                }
-                (min_x, min_y, max_x - min_x, max_y - min_y)
-            }
-            // Unrotated (or no rotate field / non-deg unit): use authored box as-is.
-            _ => (nx, ny, nw, nh),
-        };
-
-        if ax < 0.0 || ay < 0.0 || ax + aw > page_w || ay + ah > page_h {
-            let (node_id, node_span) = node.id_and_span();
-            diagnostics.push(Diagnostic::advisory(
-                "layout.off_canvas",
-                format!(
-                    "node '{}' extends outside the page bounds (0, 0, {page_w}, {page_h})",
-                    node_id
-                ),
-                node_span,
-                Some(node_id.to_owned()),
-            ));
-        }
-    }
-
     match node {
         Node::Rect(r) => {
             node::check_rect(
@@ -404,21 +319,9 @@ fn walk_node_checks(
             let child_flow_parent = node::FlowParent::of_frame(f);
             let children_in_flow = child_flow_parent.is_some();
 
-            // Compute this frame's own px box; children are checked for
-            // overflow against it. If any of x/y/w/h is missing or has a bad
-            // unit, pass None so no spurious overflow advisory is produced.
-            // A layout frame places its children itself, so authored child
-            // boxes are not checked against it (`frame.child_overflow`).
-            let frame_box = match pos.page_px_bounds {
-                Some(_) if children_in_flow => None,
-                Some((page_w, page_h)) => pv_to_dim(f.x.as_ref())
-                    .and_then(|d| resolve_axis(d, page_w))
-                    .zip(pv_to_dim(f.y.as_ref()).and_then(|d| resolve_axis(d, page_h)))
-                    .zip(pv_to_dim(f.w.as_ref()).and_then(|d| resolve_axis(d, page_w)))
-                    .zip(pv_to_dim(f.h.as_ref()).and_then(|d| resolve_axis(d, page_h)))
-                    .map(|(((x, y), w), h)| (x, y, w, h)),
-                None => None,
-            };
+            // This frame's own px box; children are checked for overflow
+            // against it. A missing/bad x/y/w/h or a layout frame gives None.
+            let frame_box = placement::frame_child_box(f, pos.page_px_bounds);
 
             // Validate this frame's sibling-anchor graph (one scope = its
             // direct children) once, before descending.

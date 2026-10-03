@@ -13,18 +13,18 @@ use crate::ast::brand::BrandContract;
 use crate::ast::document::{ComponentDef, Document};
 use crate::ast::policy::DiagnosticPolicy;
 use crate::ast::style::Style;
-use crate::ast::value::{PropertyValue, Unit, dim_to_px};
-use crate::color::parse_rgb;
+use crate::ast::value::{Unit, dim_to_px};
 use crate::diagnostics::Diagnostic;
 use crate::schema::enums::{
     COLORSPACES, LINE_JUMP_STYLES, PAGE_NUMBER_FORMATS, PAGE_PARITIES, PAGE_PROGRESSIONS,
 };
 use crate::suggest::{invalid_value_message, replace_value_fix};
-use crate::tokens::{ResolvedToken, ResolvedValue};
+use crate::tokens::ResolvedToken;
 
 use super::brand::check_brand_contract;
 use super::construction::check_construction;
 use super::contrast::check_page_text_contrast;
+use super::geometry::{page_background_rgb, page_is_layout_managed};
 use super::nodes::{WalkCtx, WalkPos, check_sibling_anchors, walk_node};
 use super::passes::{
     check_footnote_refs, collect_local_ids, register_id, validate_asset_decl, validate_import_decl,
@@ -728,23 +728,15 @@ pub fn validate_with_policy(
             .zip(dim_to_px(page.height.value, &page.height.unit));
 
         // ── Resolve page background color for contrast checks ────────────
-        // Only a TokenRef → Color token produces a usable RGB triple.
-        // If the page has no background or the token is unresolvable, we
-        // set None and silently skip contrast checks for this page — we
-        // cannot determine what the background is without it.
-        let page_bg_rgb: Option<(u8, u8, u8)> = page.background.as_ref().and_then(|pv| {
-            if let PropertyValue::TokenRef(id) = pv {
-                resolved_tokens.get(id.as_str()).and_then(|rt| {
-                    if let ResolvedValue::Color(hex) = &rt.value {
-                        parse_rgb(hex)
-                    } else {
-                        None
-                    }
-                })
-            } else {
-                None
-            }
-        });
+        // Only a TokenRef → Color token produces a usable RGB triple. Without
+        // one, contrast falls back to no page background.
+        let page_bg_rgb = page_background_rgb(page, resolved_tokens);
+
+        // A page with a row/column/grid frame has no final geometry here: the
+        // scene engine lays it out and runs the geometry checks on the result
+        // (`layout_geometry_checks`). Skip them on this page.
+        let layout_managed = page_is_layout_managed(page);
+        let walk_bounds = if layout_managed { None } else { page_px_bounds };
 
         // ── Walk page children ────────────────────────────────────────────
         // Page pixel bounds for backdrop bbox math; when the page unit was bad
@@ -786,7 +778,7 @@ pub fn validate_with_policy(
                 &mut seen_ids,
                 &mut referenced_token_ids,
                 WalkPos {
-                    page_px_bounds,
+                    page_px_bounds: walk_bounds,
                     in_flow_parent: false,
                     flow_parent: None,
                     enclosing_frame: None,
@@ -801,14 +793,16 @@ pub fn validate_with_policy(
         // already diagnosed. It walks the page in paint order and resolves
         // backdrops in page-absolute geometry so container boundaries do not
         // hide the painted color under text.
-        check_page_text_contrast(
-            &page.children,
-            page_bg_rgb,
-            (page_w, page_h),
-            resolved_tokens,
-            &style_map,
-            &mut diagnostics,
-        );
+        if !layout_managed {
+            check_page_text_contrast(
+                &page.children,
+                page_bg_rgb,
+                (page_w, page_h),
+                resolved_tokens,
+                &style_map,
+                &mut diagnostics,
+            );
+        }
 
         // ── Footnote-ref resolution (structural) ──────────────────────────
         // Collect this page's footnote ids (direct children only — footnotes are
@@ -825,7 +819,7 @@ pub fn validate_with_policy(
         // ── Safe-zone advisories ──────────────────────────────────────────
         // Only run when the page dimensions resolved; zone/node geometry is
         // compared in the same pixel space the off_canvas check uses.
-        if let Some((page_w, page_h)) = page_px_bounds {
+        if let Some((page_w, page_h)) = walk_bounds {
             safezone::check_safe_zones(page, page_w, page_h, &mut diagnostics);
             fold::check_folds(page, page_w, page_h, &mut diagnostics);
             margin::check_margins(

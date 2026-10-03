@@ -10,6 +10,9 @@ use crate::ast::node::{Node, PathNode, Point, TextNode, anchor_xy, parse_anchor}
 use crate::ast::value::{Dimension, PropertyValue, Unit, dim_to_px};
 use crate::tokens::{ResolvedToken, ResolvedValue};
 
+/// Inset in px of the corner sample points from the text box edge.
+const SAMPLE_INSET: f64 = 0.5;
+
 #[derive(Clone, Copy, Debug)]
 pub(super) struct RectPx {
     pub(super) x: f64,
@@ -52,13 +55,22 @@ impl RectPx {
         }
     }
 
+    /// The center and four corner points to sample under the box.
+    ///
+    /// The corners sit [`SAMPLE_INSET`] px inside the box (at most half its
+    /// size), so a backdrop that only touches an edge (a stacked neighbour)
+    /// does not count as under the text.
     pub(super) fn sample_points(self) -> [(f64, f64); 5] {
+        let ix = SAMPLE_INSET.min(self.w / 2.0).max(0.0);
+        let iy = SAMPLE_INSET.min(self.h / 2.0).max(0.0);
+        let (left, right) = (self.x + ix, self.x + self.w - ix);
+        let (top, bottom) = (self.y + iy, self.y + self.h - iy);
         [
             (self.x + self.w / 2.0, self.y + self.h / 2.0),
-            (self.x, self.y),
-            (self.x + self.w, self.y),
-            (self.x, self.y + self.h),
-            (self.x + self.w, self.y + self.h),
+            (left, top),
+            (right, top),
+            (left, bottom),
+            (right, bottom),
         ]
     }
 

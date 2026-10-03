@@ -10,6 +10,7 @@ mod common;
 mod container;
 mod effect;
 mod layout_item;
+mod layout_scan;
 mod leaf;
 mod special;
 
@@ -27,6 +28,7 @@ pub use layout_item::{
     LayoutAlign, LayoutContainer, LayoutItem, LayoutJustify, LayoutKind, LayoutPosition,
     SizeKeyword,
 };
+pub use layout_scan::subtree_uses_layout;
 pub use leaf::{
     AnchorKind, ChartNode, ChartSeries, CodeNode, EllipseNode, ImageNode, LineNode, PathAnchor,
     PathNode, PathSubpath, PathSubpathRef, PatternNode, PolygonNode, PolylineNode, RectNode,

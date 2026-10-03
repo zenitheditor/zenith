@@ -24,4 +24,6 @@
 
 mod check;
 
-pub use check::{ValidationReport, apply_policy, validate, validate_with_policy};
+pub use check::{
+    ValidationReport, apply_policy, layout_geometry_checks, validate, validate_with_policy,
+};

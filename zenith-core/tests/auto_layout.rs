@@ -405,23 +405,56 @@ fn invalid_enum_values_carry_a_fix() {
 }
 
 #[test]
-fn gated_container_features_are_not_yet_supported() {
+fn container_features_validate_clean() {
     for attrs in [
         r#"layout="row""#,
         r#"layout="column" wrap=#true"#,
         r#"layout="column" justify="center""#,
-        r#"layout="column" align="end""#,
+        r#"layout="row" justify="space-between" align="end""#,
     ] {
         let report = check(&format!(
             r#"      frame id="f" x=(px)0 y=(px)0 w=(px)200 h=(px)200 {attrs} {{
-        rect id="r" h=(px)20 x=(px)0 y=(px)0 w=(px)10 fill=(token)"color.k"
+        rect id="r" h=(px)20 w=(px)10 fill=(token)"color.k"
       }}"#
         ));
-        let d = diags(&report, "layout.not_yet_supported");
-        assert_eq!(d.len(), 1, "{attrs}: {:?}", report.diagnostics);
-        assert_eq!(d[0].severity, Severity::Error);
-        assert_eq!(d[0].subject_id.as_deref(), Some("f"));
+        assert!(
+            !has(&report, "layout.not_yet_supported"),
+            "{attrs}: {:?}",
+            report.diagnostics
+        );
+        assert!(errors(&report).is_empty(), "{attrs}: {:?}", errors(&report));
     }
+}
+
+#[test]
+fn instance_in_layout_frame_is_not_yet_supported() {
+    let src = r##"zenith version=1 {
+  project id="proj.al" name="AL"
+  tokens format="zenith-token-v1" {
+    token id="color.k" type="color" value="#000000"
+  }
+  styles {
+  }
+  components {
+    component id="comp.c" {
+      rect id="r" x=(px)0 y=(px)0 w=(px)10 h=(px)10 fill=(token)"color.k"
+    }
+  }
+  document id="doc.al" title="AL" {
+    page id="p" w=(px)800 h=(px)800 {
+      frame id="f" x=(px)0 y=(px)0 w=(px)200 h=(px)200 layout="row" {
+        instance id="i" component="comp.c"
+      }
+    }
+  }
+}
+"##;
+    let report = validate(&parse(src));
+    let d = diags(&report, "layout.not_yet_supported");
+    assert_eq!(d.len(), 1, "{:?}", report.diagnostics);
+    assert_eq!(d[0].severity, Severity::Error);
+    assert_eq!(d[0].subject_id.as_deref(), Some("i"));
+    assert!(d[0].message.contains("row frame"), "{}", d[0].message);
 }
 
 #[test]
@@ -462,7 +495,7 @@ fn defaults_spelled_out_are_supported() {
 }
 
 #[test]
-fn gated_item_features_are_not_yet_supported() {
+fn item_features_validate_clean() {
     for attrs in [
         r#"w="fill""#,
         r#"h="hug""#,
@@ -474,14 +507,16 @@ fn gated_item_features_are_not_yet_supported() {
         rect id="r" h=(px)20 {attrs} fill=(token)"color.k"
       }}"#
         ));
-        let d = diags(&report, "layout.not_yet_supported");
-        assert_eq!(d.len(), 1, "{attrs}: {:?}", report.diagnostics);
-        assert_eq!(d[0].subject_id.as_deref(), Some("r"));
+        assert!(
+            !has(&report, "layout.not_yet_supported"),
+            "{attrs}: {:?}",
+            report.diagnostics
+        );
     }
 }
 
 #[test]
-fn layout_frame_without_size_is_implicit_hug() {
+fn layout_frame_without_size_hugs() {
     let report = check(&format!(
         r#"      frame id="f" x=(px)0 y=(px)0 w=(px)200 layout="column" {{
         {RECT}
@@ -492,29 +527,22 @@ fn layout_frame_without_size_is_implicit_hug() {
         "{:?}",
         report.diagnostics
     );
-    let d = diags(&report, "layout.not_yet_supported");
-    assert_eq!(d.len(), 1, "{:?}", report.diagnostics);
-    assert!(d[0].message.contains("hug"), "{}", d[0].message);
+    assert!(errors(&report).is_empty(), "{:?}", errors(&report));
 }
 
 #[test]
-fn explicit_hug_on_layout_frame_is_gated_once() {
+fn explicit_hug_on_layout_frame_is_live() {
     let report = check(&format!(
         r#"      frame id="f" x=(px)0 y=(px)0 w=(px)200 h="hug" layout="column" {{
         {RECT}
       }}"#
     ));
-    assert_eq!(
-        diags(&report, "layout.not_yet_supported").len(),
-        1,
-        "{:?}",
-        report.diagnostics
-    );
+    assert!(errors(&report).is_empty(), "{:?}", errors(&report));
     assert!(!has(&report, "layout.inert_attribute"));
 }
 
 #[test]
-fn position_absolute_is_gated_and_needs_placement() {
+fn position_absolute_needs_placement() {
     let report = check(
         r#"      frame id="f" x=(px)0 y=(px)0 w=(px)200 h=(px)200 layout="column" {
         rect id="r" w=(px)10 h=(px)20 position="absolute" fill=(token)"color.k"
@@ -525,7 +553,6 @@ fn position_absolute_is_gated_and_needs_placement() {
         "{:?}",
         report.diagnostics
     );
-    assert!(has(&report, "layout.not_yet_supported"));
 
     let placed = check(
         r#"      frame id="f" x=(px)0 y=(px)0 w=(px)200 h=(px)200 layout="column" {
@@ -534,6 +561,53 @@ fn position_absolute_is_gated_and_needs_placement() {
     );
     assert!(!has(&placed, "layout.absolute_unplaced"));
     assert!(!has(&placed, "layout.position_ignored"));
+    assert!(errors(&placed).is_empty(), "{:?}", errors(&placed));
+}
+
+#[test]
+fn layout_pages_leave_geometry_checks_to_the_scene() {
+    // An in-flow child with authored (ignored) x past the page edge: validation
+    // reports no off_canvas, because the scene checks the laid-out geometry.
+    let report = check(
+        r#"      frame id="f" x=(px)0 y=(px)0 w=(px)200 h=(px)200 layout="column" {
+        rect id="r" x=(px)5000 h=(px)20 fill=(token)"color.k"
+      }
+      rect id="far" x=(px)5000 y=(px)0 w=(px)10 h=(px)10 fill=(token)"color.k""#,
+    );
+    assert!(
+        !has(&report, "layout.off_canvas"),
+        "{:?}",
+        report.diagnostics
+    );
+
+    // The geometry pass reports the page-level node on that page.
+    let doc = parse(&doc_src(
+        r#"      rect id="far" x=(px)5000 y=(px)0 w=(px)10 h=(px)10 fill=(token)"color.k"
+      frame id="f" x=(px)0 y=(px)0 w=(px)200 h=(px)200 layout="column" {
+        rect id="r" h=(px)20 fill=(token)"color.k"
+      }"#,
+    ));
+    let pages = zenith_core::layout_geometry_checks(&doc);
+    assert_eq!(pages.len(), 1);
+    assert!(
+        pages[0]
+            .iter()
+            .any(|d| d.code == "layout.off_canvas" && d.subject_id.as_deref() == Some("far")),
+        "{:?}",
+        pages[0]
+    );
+
+    // A page without a layout frame keeps its checks in validation.
+    let plain = parse(&doc_src(
+        r#"      rect id="far" x=(px)5000 y=(px)0 w=(px)10 h=(px)10 fill=(token)"color.k""#,
+    ));
+    assert!(
+        validate(&plain)
+            .diagnostics
+            .iter()
+            .any(|d| d.code == "layout.off_canvas")
+    );
+    assert!(zenith_core::layout_geometry_checks(&plain)[0].is_empty());
 }
 
 #[test]

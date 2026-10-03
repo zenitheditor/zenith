@@ -327,25 +327,3 @@ fn column_style_padding_is_the_fallback() {
     );
     assert_eq!(fill_rects(&result), vec![(16.0, 16.0, 168.0, 30.0)]);
 }
-
-/// Until the row algorithm exists, `layout="row"` (rejected by validation)
-/// renders like `absolute`: children keep their authored coordinates.
-#[test]
-fn row_renders_like_absolute_until_supported() {
-    let child = r#"    rect id="rect.a" x=(px)50 y=(px)60 w=(px)40 h=(px)30 fill=(token)"color.k""#;
-    let row = compile(
-        &parse(&column_doc(
-            r#"frame id="f" x=(px)0 y=(px)0 w=(px)200 h=(px)200 layout="row" clip=#true {"#,
-            child,
-        )),
-        &default_provider(),
-    );
-    let absolute = compile(
-        &parse(&column_doc(
-            r#"frame id="f" x=(px)0 y=(px)0 w=(px)200 h=(px)200 {"#,
-            child,
-        )),
-        &default_provider(),
-    );
-    assert_eq!(row.scene.commands, absolute.scene.commands);
-}

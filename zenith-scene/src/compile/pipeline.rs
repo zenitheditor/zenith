@@ -91,7 +91,7 @@ pub struct CompileResult {
 ///
 /// Returns `None` when there is no style reference, the style id is not in the
 /// map, or the style does not carry the requested key.
-pub(in crate::compile) fn style_prop<'a>(
+pub(crate) fn style_prop<'a>(
     style_ref: &Option<String>,
     style_map: &'a BTreeMap<&str, &Style>,
     key: &str,

@@ -2,10 +2,12 @@
 //!
 //! [`DocumentPrep`] runs data binding, markdown resolution, import scopes, and
 //! token resolution once. [`PageCompiler`] borrows it and builds the
-//! document-wide lookups and pre-passes once. Wiring only.
+//! document-wide lookups and pre-passes once (auto-layout lowering first).
+//! Wiring only.
 
 mod compile;
 mod fonts;
+mod layout;
 mod page;
 mod prep;
 

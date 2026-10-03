@@ -45,9 +45,9 @@ struct GutterMetrics {
 ///
 /// Returns the laid-out content height in pixels (`line_count * line_height`,
 /// where `line_count` counts every physical source line including blanks),
-/// which the flow-layout path in [`super::super::container`] uses to advance its
-/// vertical cursor past a code child that declares no explicit `h`. Early
-/// returns (invisible, missing/bad geometry) yield `0.0`.
+/// which the auto-layout measure pass reads as the hug height of a code child
+/// without an explicit `h`. Early returns (invisible, missing/bad geometry)
+/// yield `0.0`.
 pub(in crate::compile) fn compile_code(
     code: &CodeNode,
     env: TextCompileEnv,

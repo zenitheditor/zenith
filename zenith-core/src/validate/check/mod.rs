@@ -30,6 +30,8 @@
 //! - [`safezone`] — safe-zone exclusion/required overlap advisories.
 //! - [`fold`] — fold-line content-crossing advisories.
 //! - [`construction`] — non-printing construction guide metadata advisories.
+//! - [`geometry`] — the geometry checks of auto-layout pages, run by the
+//!   scene engine on lowered geometry.
 //! - [`margin`] — book live-area (mirrored-margin) violation advisories.
 //! - [`variants`] — `variants` block checks (unknown source pages, invalid
 //!   dimensions, override-node resolution).
@@ -45,6 +47,7 @@ mod construction;
 mod contrast;
 mod driver;
 mod fold;
+mod geometry;
 mod margin;
 mod nodes;
 mod passes;
@@ -63,6 +66,7 @@ mod visual;
 // `crate::validate::check::register_id`, so it is re-exported here to keep that
 // path resolving.
 pub use driver::{validate, validate_with_policy};
+pub use geometry::layout_geometry_checks;
 pub(in crate::validate::check) use passes::register_id;
 // `apply_policy` is re-exported up to the crate root so the CLI render path can
 // govern compile-stage diagnostics (emitted by `zenith-scene`) with the same

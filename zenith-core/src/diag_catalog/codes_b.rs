@@ -275,7 +275,7 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
     info(
         "layout.not_yet_supported",
         Severity::Error,
-        "A layout feature is parsed but not rendered yet.",
+        "An `instance` sits in a row/column/grid frame, which does not place instances yet.",
     ),
     info(
         "layout.off_canvas",

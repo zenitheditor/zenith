@@ -3,8 +3,10 @@
 //!
 //! Structural rules only: enum values, `min-*` / `max-*` / `gap` / `padding*`
 //! dimensions, inert attributes, ignored or missing placement, and statically
-//! contradictory sizes. Features parsed ahead of their renderer report
-//! `layout.not_yet_supported` (Error) so no document renders them wrong.
+//! contradictory sizes. Rules that need measured sizes (`layout.unsized_child`,
+//! `layout.child_overflow`, `layout.fill_in_hug_parent`) run in the scene
+//! layout engine. An `instance` placed by a layout frame reports
+//! `layout.not_yet_supported` (Error): the engine does not size instances yet.
 
 use crate::ast::Span;
 use crate::ast::node::{
@@ -56,23 +58,19 @@ pub(in crate::validate::check) struct LayoutSite {
     pub(in crate::validate::check) geom_required: bool,
 }
 
-/// Push one `layout.not_yet_supported` Error naming every gated feature.
-fn push_not_yet_supported(
-    subject: &str,
-    id: &str,
-    features: &[&str],
-    span: Option<Span>,
-    diagnostics: &mut Vec<Diagnostic>,
-) {
-    if features.is_empty() {
-        return;
-    }
+/// `layout.not_yet_supported` for an `instance` placed by a layout frame.
+fn push_instance_in_flow(node: &Node, parent: FlowParent, diagnostics: &mut Vec<Diagnostic>) {
+    let (id, span) = node.id_and_span();
+    let mode = match parent {
+        FlowParent::Row => "row",
+        FlowParent::Column => "column",
+        FlowParent::Grid => "grid",
+    };
     diagnostics.push(Diagnostic::error(
         "layout.not_yet_supported",
         format!(
-            "{subject} '{id}': {} not rendered yet; remove it or use layout=\"column\" \
-             with fixed w/h",
-            features.join(", ")
+            "instance '{id}': a {mode} frame does not place instances yet; wrap the \
+             instance in a group with a fixed w and h, or move it out of the {mode} frame"
         ),
         span,
         Some(id.to_owned()),
@@ -130,6 +128,9 @@ pub(in crate::validate::check) fn check_layout_item(
     tokens: &mut TokenEnv<'_>,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
+    if let (Node::Instance(_), Some(parent)) = (node, site.parent) {
+        push_instance_in_flow(node, parent, diagnostics);
+    }
     let Some(view) = node.box_view() else {
         return;
     };
@@ -172,44 +173,42 @@ pub(in crate::validate::check) fn check_layout_item(
         }
     }
 
-    let own_layout = match node {
-        Node::Frame(f) => f
-            .layout
-            .as_ref()
-            .is_some_and(LayoutKind::positions_children),
-        Node::Rect(_)
-        | Node::Ellipse(_)
-        | Node::Line(_)
-        | Node::Text(_)
-        | Node::Code(_)
-        | Node::Group(_)
-        | Node::Image(_)
-        | Node::Polygon(_)
-        | Node::Polyline(_)
-        | Node::Path(_)
-        | Node::Instance(_)
-        | Node::Field(_)
-        | Node::Toc(_)
-        | Node::Footnote(_)
-        | Node::Table(_)
-        | Node::Shape(_)
-        | Node::Connector(_)
-        | Node::Pattern(_)
-        | Node::Chart(_)
-        | Node::Light(_)
-        | Node::Mesh(_)
-        | Node::Unknown(_) => false,
-    };
-
     let in_stack = site.parent.is_some_and(FlowParent::is_stack);
     if !in_stack {
         // `hug` sizes a layout frame from its own children, so it stays live
         // on a layout frame at any depth. Everything else needs a stack parent.
+        let own_layout = match node {
+            Node::Frame(f) => f
+                .layout
+                .as_ref()
+                .is_some_and(LayoutKind::positions_children),
+            Node::Rect(_)
+            | Node::Ellipse(_)
+            | Node::Line(_)
+            | Node::Text(_)
+            | Node::Code(_)
+            | Node::Group(_)
+            | Node::Image(_)
+            | Node::Polygon(_)
+            | Node::Polyline(_)
+            | Node::Path(_)
+            | Node::Instance(_)
+            | Node::Field(_)
+            | Node::Toc(_)
+            | Node::Footnote(_)
+            | Node::Table(_)
+            | Node::Shape(_)
+            | Node::Connector(_)
+            | Node::Pattern(_)
+            | Node::Chart(_)
+            | Node::Light(_)
+            | Node::Mesh(_)
+            | Node::Unknown(_) => false,
+        };
         let mut inert: Vec<&str> = Vec::new();
-        let mut gated: Vec<&str> = Vec::new();
         for (name, keyword) in [("w", item.w_keyword), ("h", item.h_keyword)] {
             match keyword {
-                Some(SizeKeyword::Hug) if own_layout => gated.push("hug size"),
+                Some(SizeKeyword::Hug) if own_layout => {}
                 Some(SizeKeyword::Hug | SizeKeyword::Fill) => inert.push(name),
                 None => {}
             }
@@ -225,7 +224,6 @@ pub(in crate::validate::check) fn check_layout_item(
                 inert.push(name);
             }
         }
-        gated.dedup();
         push_inert(
             subject,
             id,
@@ -234,7 +232,6 @@ pub(in crate::validate::check) fn check_layout_item(
             span,
             diagnostics,
         );
-        push_not_yet_supported(subject, id, &gated, span, diagnostics);
         return;
     }
 
@@ -288,23 +285,6 @@ pub(in crate::validate::check) fn check_layout_item(
             );
         }
     }
-
-    let mut gated: Vec<&str> = Vec::new();
-    if item.w_keyword.is_some() || item.h_keyword.is_some() {
-        gated.push("w/h keyword");
-    }
-    if item.min_w.is_some() || item.max_w.is_some() || item.min_h.is_some() || item.max_h.is_some()
-    {
-        gated.push("min/max size");
-    }
-    if absolute {
-        gated.push("position=\"absolute\"");
-    }
-    if site.parent == Some(FlowParent::Row) {
-        // Reported once on the row frame itself; a child adds nothing.
-        return;
-    }
-    push_not_yet_supported(subject, id, &gated, span, diagnostics);
 }
 
 /// `layout.conflicting_size` for a statically known `min-*` above `max-*`.
@@ -443,7 +423,6 @@ pub(in crate::validate::check) fn check_frame_layout(
     }
 
     check_frame_hug(f, &kind, site, diagnostics);
-    check_frame_gates(f, &kind, site, diagnostics);
 }
 
 /// Whether the frame's own `w` / `h` hugs its children (keyword `hug`, or
@@ -502,45 +481,4 @@ fn check_frame_hug(
             diagnostics,
         );
     }
-}
-
-/// `layout.not_yet_supported` for frame features parsed ahead of the renderer.
-fn check_frame_gates(
-    f: &FrameNode,
-    kind: &LayoutKind,
-    site: LayoutSite,
-    diagnostics: &mut Vec<Diagnostic>,
-) {
-    let c = &f.container;
-    let mut gated: Vec<&str> = Vec::new();
-    if matches!(kind, LayoutKind::Row) {
-        gated.push("layout=\"row\"");
-    }
-    if kind.is_stack() {
-        if c.wrap == Some(true) {
-            gated.push("wrap=#true");
-        }
-        match &c.justify {
-            Some(LayoutJustify::Center | LayoutJustify::End | LayoutJustify::SpaceBetween) => {
-                gated.push("justify");
-            }
-            Some(LayoutJustify::Start | LayoutJustify::Unknown(_)) | None => {}
-        }
-        match &c.align {
-            Some(LayoutAlign::Start | LayoutAlign::Center | LayoutAlign::End) => {
-                gated.push("align");
-            }
-            Some(LayoutAlign::Stretch | LayoutAlign::Unknown(_)) | None => {}
-        }
-    }
-    if kind.positions_children() {
-        let (w_hugs, h_hugs) = frame_hugs(f, site);
-        // An explicit `hug` keyword is reported by the item check.
-        let implicit_w = w_hugs && f.layout_item.w_keyword.is_none();
-        let implicit_h = h_hugs && f.layout_item.h_keyword.is_none();
-        if implicit_w || implicit_h {
-            gated.push("hug size (missing w/h)");
-        }
-    }
-    push_not_yet_supported("frame", &f.id, &gated, f.source_span, diagnostics);
 }

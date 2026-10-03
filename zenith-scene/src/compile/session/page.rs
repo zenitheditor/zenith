@@ -1,22 +1,26 @@
 //! Per-document page compiler: document-wide lookups and pre-passes built once.
 
+use std::borrow::Cow;
 use std::collections::BTreeMap;
 
-use zenith_core::{Diagnostic, FontProvider, Style};
+use zenith_core::{Diagnostic, Document, FontProvider, Style};
 use zenith_layout::{FontFaceStore, RustybuzzEngine};
+
+use crate::layout::LayoutBox;
 
 use super::super::chain::{ChainAssignments, resolve_chains_document};
 use super::super::field::{SectionAssignment, build_page_index_map, build_section_assignments};
 use super::super::table_flow::{TableFlowAssignments, resolve_table_flows};
 use super::super::{ComponentMap, MasterMap};
 use super::fonts::FontsRef;
+use super::layout::{LayoutPassEnv, PageLayouts, lower_pages};
 use super::prep::DocumentPrep;
 
 /// Compiles pages of one prepared document.
 ///
 /// [`PageCompiler::new`] builds the style, component, and master maps, the
-/// page-ref index, the font face store, the text-chain and table-flow
-/// pre-passes, and the section assignments once. [`PageCompiler::compile_page`]
+/// page-ref index, the font face store, the section assignments, the
+/// auto-layout pre-pass, and the text-chain and table-flow pre-passes once. [`PageCompiler::compile_page`]
 /// then compiles any page from them and returns the same result as
 /// [`compile_page`](crate::compile::compile_page).
 ///
@@ -36,6 +40,13 @@ pub struct PageCompiler<'p, F: ?Sized + FontProvider = dyn FontProvider> {
     pub(super) section_assignments: Vec<Option<SectionAssignment<'p>>>,
     /// Chain and table-flow diagnostics. Only page 0 reports them.
     pub(super) page0_diagnostics: Vec<Diagnostic>,
+    /// The document with page layout frames lowered to absolute geometry.
+    /// Borrowed from `prep` when no page holds a layout frame.
+    pub(super) lowered: Cow<'p, Document>,
+    /// Per page: layout and geometry-check diagnostics of the lowering.
+    pub(super) page_layout_diagnostics: Vec<Vec<Diagnostic>>,
+    /// Per page: resolved layout boxes by node id.
+    pub(super) layout_boxes: Vec<BTreeMap<String, LayoutBox>>,
 }
 
 impl<'p, F: ?Sized + FontProvider> PageCompiler<'p, F> {
@@ -66,15 +77,32 @@ impl<'p, F: ?Sized + FontProvider> PageCompiler<'p, F> {
         }
         let page_index_by_node_id = build_page_index_map(doc);
 
+        let section_assignments = build_section_assignments(doc);
+
         // Each face parses at most once per engine. This engine serves the
         // pre-passes only. Each page compile builds its own engine over the
         // same store, so shaped output is identical.
         let font_faces = FontFaceStore::new(dyn_fonts);
         let mut page0_diagnostics: Vec<Diagnostic> = Vec::new();
-        let (chains, flows) = {
+        let (layouts, chains, flows) = {
             let engine = RustybuzzEngine::new(&font_faces);
-            let chains = resolve_chains_document(
+            // Auto-layout runs first: the chain and flow pre-passes read the
+            // lowered boxes.
+            let layouts = lower_pages(
                 doc,
+                LayoutPassEnv {
+                    resolved: &prep.resolved,
+                    style_map: &style_map,
+                    fonts: dyn_fonts,
+                    engine: &engine,
+                    md_blocks: &prep.md_blocks,
+                    page_index_by_node_id: &page_index_by_node_id,
+                    section_assignments: &section_assignments,
+                },
+            );
+            let lowered: &Document = &layouts.doc;
+            let chains = resolve_chains_document(
+                lowered,
                 &prep.resolved,
                 &style_map,
                 dyn_fonts,
@@ -83,17 +111,20 @@ impl<'p, F: ?Sized + FontProvider> PageCompiler<'p, F> {
                 &mut page0_diagnostics,
             );
             let flows = resolve_table_flows(
-                doc,
+                lowered,
                 &prep.resolved,
                 &style_map,
                 dyn_fonts,
                 &engine,
                 &mut page0_diagnostics,
             );
-            (chains, flows)
+            (layouts, chains, flows)
         };
-
-        let section_assignments = build_section_assignments(doc);
+        let PageLayouts {
+            doc: lowered,
+            diagnostics: page_layout_diagnostics,
+            boxes: layout_boxes,
+        } = layouts;
 
         Self {
             prep,
@@ -107,6 +138,9 @@ impl<'p, F: ?Sized + FontProvider> PageCompiler<'p, F> {
             flows,
             section_assignments,
             page0_diagnostics,
+            lowered,
+            page_layout_diagnostics,
+            layout_boxes,
         }
     }
 
@@ -120,5 +154,20 @@ impl<'p, F: ?Sized + FontProvider> PageCompiler<'p, F> {
     #[must_use]
     pub fn page_count(&self) -> usize {
         self.prep.page_count()
+    }
+
+    /// The document pages compile from: the prepared document with every
+    /// page's row / column / grid frames lowered to absolute geometry.
+    #[must_use]
+    pub fn document(&self) -> &Document {
+        &self.lowered
+    }
+
+    /// The resolved boxes of the layout frames and their flow children on
+    /// page `page_index`, by node id, in page-absolute px. `None` for an
+    /// out-of-range index. Master-page content is not included.
+    #[must_use]
+    pub fn layout_boxes(&self, page_index: usize) -> Option<&BTreeMap<String, LayoutBox>> {
+        self.layout_boxes.get(page_index)
     }
 }

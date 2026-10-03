@@ -28,11 +28,12 @@
 //!   weight/fill. The whole chain is shaped ONCE with the first member's
 //!   resolved style (+ per-span overrides). Each box re-wraps to its OWN width,
 //!   so line height is uniform across the chain even when boxes differ in width.
-//! - **Geometry source.** A chain member must carry explicit `x`/`y`/`w`/`h`
-//!   geometry resolvable to pixels. The pre-pass runs before the column/grid
-//!   geometry injection in [`super::container`], so combining `layout="column"`
-//!   box injection WITH `chain` is a documented follow-up — a layout-injected
-//!   member has no explicit box at pre-pass time and is skipped from the chain.
+//! - **Geometry source.** A chain member must carry `x`/`y`/`w`/`h` geometry
+//!   resolvable to pixels. The pre-pass runs after auto-layout lowering, so a
+//!   member placed by a row/column/grid frame has its laid-out box. A chain
+//!   member has no content size of its own: in a layout frame it needs a fixed
+//!   or `fill` size on each axis it does not stretch on (else
+//!   `layout.unsized_child`).
 //! - **Opacity cascade.** The pre-pass shapes colors at opacity 1.0 (no group/
 //!   frame opacity cascade), so placing chain members under an opacity-cascading
 //!   group is a documented follow-up.

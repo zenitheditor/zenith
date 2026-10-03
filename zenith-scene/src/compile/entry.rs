@@ -1,8 +1,13 @@
 //! Public scene compilation entry points.
 
+use std::collections::BTreeMap;
+
 use zenith_core::{DataContext, Document, FontProvider};
 
+use crate::layout::LayoutBox;
+
 use super::imports::ImportGraph;
+use super::session::{DocumentPrep, PageCompiler};
 use super::{CompileResult, compile_page_inner};
 
 /// Compile `doc` into a [`CompileResult`], using `fonts` to shape text nodes.
@@ -46,4 +51,23 @@ pub fn compile_page_with_imports(
     imports: &ImportGraph<'_>,
 ) -> CompileResult {
     compile_page_inner(doc, fonts, page_index, data, Some(imports))
+}
+
+/// The resolved auto-layout boxes on page `page_index` of `doc`, by node id.
+///
+/// Holds every `row` / `column` / `grid` frame on the page and every child it
+/// places, in page-absolute px (group translations applied). The map is empty
+/// for a page without a layout frame or an out-of-range index. Master-page
+/// content is not included.
+pub fn layout_boxes(
+    doc: &Document,
+    page_index: usize,
+    fonts: &dyn FontProvider,
+) -> BTreeMap<String, LayoutBox> {
+    let prep = DocumentPrep::new(doc, None, None);
+    let compiler = PageCompiler::new(&prep, fonts);
+    compiler
+        .layout_boxes(page_index)
+        .cloned()
+        .unwrap_or_default()
 }

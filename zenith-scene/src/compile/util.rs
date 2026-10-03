@@ -185,7 +185,7 @@ pub(super) fn px_prop(v: f64) -> PropertyValue {
 /// a non-dimension (or unresolved) token, or carries an unsupported unit. The
 /// idiomatic path is a token ref resolving to a `Dimension`. Shared by
 /// font-size and stroke-width resolution.
-pub(super) fn resolve_property_dimension_px(
+pub(crate) fn resolve_property_dimension_px(
     prop: Option<&PropertyValue>,
     resolved: &BTreeMap<String, ResolvedToken>,
     default: f64,
@@ -222,7 +222,7 @@ pub(super) fn resolve_property_dimension_px(
 /// an unsupported unit — yields `None`, matching the prior "missing or non-px
 /// dimension" behavior exactly. The raw-`Dimension` path is byte-identical to
 /// the old `dim_to_px(d.value, &d.unit)` read.
-pub(super) fn resolve_geometry_px(
+pub(crate) fn resolve_geometry_px(
     prop: Option<&PropertyValue>,
     resolved: &BTreeMap<String, ResolvedToken>,
 ) -> Option<f64> {

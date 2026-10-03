@@ -38,10 +38,9 @@ use super::wrapped::emit_wrapped;
 /// adds the diagnostics.
 ///
 /// `SizedOutcome::height` is the laid-out content height in pixels
-/// (`line_count * line_height`), which the flow-layout path in
-/// [`crate::compile::container`] uses to advance its vertical cursor past a text
-/// child that declares no explicit `h`. Early returns (invisible, missing/bad
-/// geometry, empty spans) yield `0.0`.
+/// (`line_count * line_height`), which the auto-layout measure pass reads as
+/// the hug height of a text child without an explicit `h`. Early returns
+/// (invisible, missing/bad geometry, empty spans) yield `0.0`.
 pub(in crate::compile::text::text_node) fn compile_text_core(
     text: &TextNode,
     env: TextCompileEnv,

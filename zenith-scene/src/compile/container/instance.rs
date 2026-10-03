@@ -13,6 +13,7 @@ use crate::ir::SceneCommand;
 
 use super::super::font_ns::NamespacedFontProvider;
 use super::super::imports::{ImportSource, parse_import_source, stamp_import};
+use super::super::intrinsic::lower_expanded;
 use super::super::util::resolve_geometry_px;
 use super::super::{NodeCtx, RenderCtx};
 use super::group::{compile_group, group_children_bounds};
@@ -83,6 +84,7 @@ pub(in crate::compile) fn compile_instance(
     }
     let prefix = format!("{}/", instance.id);
     prefix_ids_in_children(&mut children, &prefix);
+    lower_expanded(&mut children, cx, diagnostics);
 
     // Resolve `w`/`h`/`fit`. With a positive box the component subtree is scaled
     // into it (an icon component is all `path` nodes, whose extent is its
@@ -250,13 +252,15 @@ fn compile_imported_instance(
         doc_block_styles: &imported.document.body.block_styles,
     };
 
+    let mut imported_diagnostics: Vec<Diagnostic> = Vec::new();
+    lower_expanded(&mut children, imported_cx, &mut imported_diagnostics);
+
     // Resolve the instance `w`/`h`/`fit` against the HOST token scope. When both
     // dimensions resolve to a positive px box, the imported subtree is scaled to
     // fit that box (mirroring the page-source fit path); otherwise the current
     // translate-only path is preserved exactly (byte-identical for no-w/h).
     // Spans of diagnostics from the imported subtree index into the imported
     // document, so they are tagged with the import id.
-    let mut imported_diagnostics: Vec<Diagnostic> = Vec::new();
     match fit_outcome(
         instance,
         &children,

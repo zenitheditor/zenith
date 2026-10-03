@@ -50,6 +50,7 @@ pub(in crate::compile) use ctx::{NodeShape, ShapeEnv, TextCompileEnv, empty_md_b
 pub(in crate::compile) use hyphen::{
     HyphenationContext, en_us_hyphenator, flatten_lines_to_tokens,
 };
+pub(in crate::compile) use ink::ink_bounds;
 pub(in crate::compile) use kerning::resolve_kerning_pairs;
 pub(in crate::compile) use measure::{
     MeasureEnv, measure_text_natural, measure_text_wrapped_height, resolve_text_families,

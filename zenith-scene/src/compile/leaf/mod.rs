@@ -14,6 +14,7 @@ mod poly;
 mod rect_ellipse;
 mod routing;
 mod shape;
+mod shape_label;
 
 pub(in crate::compile) use box_paint::{
     BoxGeom, BoxPaintEnv, BoxStroke, push_box_fill, push_box_stroke,
@@ -24,3 +25,4 @@ pub(super) use poly::{compile_line, compile_path, compile_polygon, compile_polyl
 pub(in crate::compile) use poly::{path_outline_bounds, path_to_compound_geometry};
 pub(super) use rect_ellipse::{RectEllipseEnv, compile_ellipse, compile_rect};
 pub(super) use shape::{ShapeCompileEnv, compile_shape};
+pub(in crate::compile) use shape_label::label_text_node;

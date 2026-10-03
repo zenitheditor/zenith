@@ -14,6 +14,7 @@ use super::super::field::{
     FieldCtx, build_connector_targets, build_node_boxes, build_port_map, compute_live_area,
 };
 use super::super::footnote;
+use super::super::intrinsic::lower_expanded;
 use super::super::line_jumps;
 use super::super::page_source::{PageSourceEnv, compile_page_source};
 use super::super::paint::{resolve_property_color, resolve_property_gradient};
@@ -58,7 +59,7 @@ impl<F: ?Sized + FontProvider> PageCompiler<'_, F> {
 
     fn compile_page_with(&self, page_index: usize, with_document: bool) -> CompileResult {
         let prep = self.prep;
-        let doc = prep.document();
+        let doc: &zenith_core::Document = &self.lowered;
         let mut diagnostics: Vec<Diagnostic> = if with_document {
             prep.shared_diagnostics.clone()
         } else {
@@ -103,6 +104,10 @@ impl<F: ?Sized + FontProvider> PageCompiler<'_, F> {
         // Document-wide chain and flow diagnostics surface on page 0 only.
         if with_document && page_index == 0 {
             diagnostics.extend(self.page0_diagnostics.iter().cloned());
+        }
+        // This page's auto-layout and lowered-geometry diagnostics.
+        if let Some(layout) = self.page_layout_diagnostics.get(page_index) {
+            diagnostics.extend(layout.iter().cloned());
         }
 
         // One engine per page compile. Each face parses at most once here.
@@ -192,6 +197,8 @@ impl<F: ?Sized + FontProvider> PageCompiler<'_, F> {
             let mut projected = master.children.clone();
             let prefix = format!("{}/", page.id);
             container::prefix_ids_in_children(&mut projected, &prefix);
+            // Masters lower per page: a field measures against this page.
+            lower_expanded(&mut projected, node_cx, &mut diagnostics);
             for node in &projected {
                 compile_node(
                     node,

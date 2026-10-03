@@ -31,14 +31,17 @@
 //!   helper.
 //! - [`layout`] — the SINGLE content-based sizing math ([`compute_table_layout`]
 //!   / [`TableLayout`]) plus the per-cell width/height measurers.
+//! - [`measure`] — the table's natural size for the auto-layout engine.
 //! - [`collapse`] — `border-collapse="collapse"` edge deduplication.
 //! - [`emit`] — the [`compile_table`] entry point and the per-cell emission.
 
 mod collapse;
 mod emit;
 mod layout;
+mod measure;
 mod place;
 
 pub(in crate::compile) use emit::{TableEmitCtx, compile_table};
 pub(in crate::compile) use layout::{GridDims, compute_table_layout};
+pub(in crate::compile) use measure::table_natural_size;
 pub(in crate::compile) use place::place_cells;

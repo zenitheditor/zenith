@@ -13,6 +13,8 @@
 //! - `color`   — sRGB hex parsing → `Color`.
 //! - `compile` — `compile(&Document, &dyn FontProvider) -> CompileResult`.
 //! - `compile_page_with_imports` — compile one page with a caller-owned in-memory import graph.
+//! - `layout` — the auto-layout engine that lowers row/column/grid frames to
+//!   absolute geometry before compile; [`layout_boxes`] reports its boxes.
 //! - `construction_overlay` — opt-in construction guide scene commands.
 //! - `text_outline` — compiled glyph-run commands → editable compound paths.
 //!
@@ -37,12 +39,13 @@ pub mod color;
 pub mod compile;
 pub mod construction_overlay;
 pub mod ir;
+mod layout;
 pub mod text_outline;
 
 // Curated flat re-exports.
 pub use compile::{
     CompileResult, DocumentPrep, ImportGraph, ImportedDocument, PageCompiler, compile,
-    compile_page, compile_page_with_imports,
+    compile_page, compile_page_with_imports, layout_boxes,
 };
 pub use construction_overlay::append_construction_overlay;
 pub use ir::{
@@ -50,6 +53,7 @@ pub use ir::{
     LineCap, LineJoin, MaskShape, MaskSpec, Paint, Rect, Scene, SceneCommand, SceneGlyph,
     ShadowSpec, SrcRect, StrokeAlign, SvgStyle,
 };
+pub use layout::LayoutBox;
 pub use text_outline::{
     collect_text_outline_paths, outline_glyph_run_command, outline_glyph_run_commands,
     outline_source_glyph_run_commands,

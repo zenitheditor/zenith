@@ -45,6 +45,7 @@ pub use ast::{
     TocNode, Token, TokenBlock, TokenLiteral, TokenMapDecl, TokenType, TokenValue, Unit,
     UnknownNode, UnknownProperty, UnknownStyleProp, UnknownValue, VariantDef, VariantOverride,
     anchor_xy, canonicalize_style_key, dim_to_px, parse_anchor, parse_anchor_edge,
+    subtree_uses_layout,
 };
 pub use color::{
     BlendMode, Cmyk, Color, GradientPaint, GradientStop, cmyk_to_hex, cmyk_to_srgb, contrast_ratio,
@@ -67,4 +68,6 @@ pub use tokens::{
 };
 pub use util::hash_unit;
 pub use util::pattern::{PatternLayout, pattern_positions};
-pub use validate::{ValidationReport, apply_policy, validate, validate_with_policy};
+pub use validate::{
+    ValidationReport, apply_policy, layout_geometry_checks, validate, validate_with_policy,
+};

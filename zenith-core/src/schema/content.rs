@@ -181,15 +181,20 @@ pub fn node_content(kind: &str) -> Option<NodeContentDescriptor> {
         "frame" => Some(NodeContentDescriptor {
             description: "Arbitrary renderable child nodes (any node kind). \
                 layout=\"absolute\" (default) keeps child x/y and clips to the frame box. \
-                layout=\"column\" stacks children top to bottom inside the padded box, \
-                `gap` apart; children omit x/y and stretch to the content width when they \
-                omit w (no clip unless clip=#true). layout=\"grid\" tiles children into \
-                `columns` × `rows` cells. `gap` and `padding*` take a px literal or a \
-                dimension token. Frame fill/stroke/stroke-width/radius paint the box \
-                under the children; a clipping frame with a radius clips to the \
-                rounded box. layout=\"row\", wrap, justify, non-stretch align, \
-                w/h=\"hug\"|\"fill\", min/max sizes, and position=\"absolute\" \
-                validate as `layout.not_yet_supported`.",
+                layout=\"row\" / \"column\" stack children left to right / top to bottom \
+                inside the padded box, `gap` apart, with justify (start|center|end|\
+                space-between), align (start|center|end|stretch), and wrap=#true \
+                (lines `wrap-gap` apart). A child sizes each axis by its w/h: a fixed \
+                dimension, \"hug\" (its content), or \"fill\" (a share of the free \
+                space), clamped by min-*/max-*. An omitted main-axis size hugs; an \
+                omitted cross-axis size fills under align=\"stretch\". A layout frame \
+                without w/h hugs its children. position=\"absolute\" children leave the \
+                flow and place x/y from the frame's top-left. layout=\"grid\" tiles \
+                children into `columns` × `rows` cells. `gap` and `padding*` take a px \
+                literal or a dimension token. Stacking frames do not clip unless \
+                clip=#true. Frame fill/stroke/stroke-width/radius paint the box under \
+                the children; a clipping frame with a radius clips to the rounded box. \
+                An `instance` in a layout frame reports `layout.not_yet_supported`.",
             example: "rect id=\"bg\" x=(px)0 y=(px)0 w=(px)400 h=(px)300 fill=(token)\"color.bg\"",
         }),
         "group" => Some(NodeContentDescriptor {

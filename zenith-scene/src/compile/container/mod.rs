@@ -7,7 +7,6 @@
 //! shared [`NodeCtx`](super::NodeCtx) borrow bundle threaded through every
 //! container compiler is defined in the parent `compile::ctx` module.
 
-mod flow;
 mod frame;
 mod frame_paint;
 mod group;

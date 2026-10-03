@@ -29,10 +29,10 @@ use super::toc::resolve_toc_to_text;
 /// emitted `SceneCommand` stream is identical to the previous inline match.
 ///
 /// Returns the child's laid-out content height in pixels for the kinds whose
-/// intrinsic height is meaningful to flow layout (`text`/`code`); every other
-/// kind returns `0.0`. The absolute-positioning callers ignore this value, so
-/// command output is unchanged; only the flow-layout path in [`container`]
-/// consumes it to advance its vertical cursor.
+/// height comes from their content (`text`/`code`); every other kind returns
+/// `0.0`. Page compile ignores this value. The auto-layout measure pass
+/// (`compile::intrinsic`) compiles `text`/`code` into scratch buffers and
+/// reads it as the hug height.
 pub(in crate::compile) fn compile_node(
     node: &Node,
     cx: NodeCtx,
