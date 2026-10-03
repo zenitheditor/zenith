@@ -12,6 +12,7 @@ mod effect;
 mod layout_item;
 mod layout_scan;
 mod leaf;
+mod space;
 mod special;
 
 pub use accessors::BoxView;
@@ -34,6 +35,7 @@ pub use leaf::{
     PathNode, PathSubpath, PathSubpathRef, PatternNode, PolygonNode, PolylineNode, RectNode,
     TextNode,
 };
+pub use space::{resolve_geometry_px, translate_node};
 pub use special::{
     ConnectorNode, FieldNode, FootnoteNode, InstanceNode, Override, ShapeNode, TocNode, UnknownNode,
 };

@@ -222,39 +222,9 @@ pub(crate) fn resolve_property_dimension_px(
     }
 }
 
-/// Resolve an optional geometry property (`x`/`y`/`w`/`h`) to pixels.
-///
-/// Geometry fields on box nodes are typed `Option<PropertyValue>`: a raw
-/// dimension (`(px)120`) resolves directly, and a dimension token ref
-/// (`(token)"dim.h"`) resolves through the token table to px. Any other shape —
-/// an absent value, a literal, a data ref, an unresolved/non-dimension token, or
-/// an unsupported unit — yields `None`, matching the prior "missing or non-px
-/// dimension" behavior exactly. The raw-`Dimension` path is byte-identical to
-/// the old `dim_to_px(d.value, &d.unit)` read.
-pub(crate) fn resolve_geometry_px(
-    prop: Option<&PropertyValue>,
-    resolved: &BTreeMap<String, ResolvedToken>,
-) -> Option<f64> {
-    match prop? {
-        PropertyValue::TokenRef(id) => match resolved.get(id.as_str()) {
-            Some(rt) => match &rt.value {
-                ResolvedValue::Dimension(d) => dim_to_px(d.value, &d.unit),
-                ResolvedValue::Color(_)
-                | ResolvedValue::CmykColor { .. }
-                | ResolvedValue::Number(_)
-                | ResolvedValue::FontFamily(_)
-                | ResolvedValue::FontWeight(_)
-                | ResolvedValue::Gradient(_)
-                | ResolvedValue::Shadow(_)
-                | ResolvedValue::Filter(_)
-                | ResolvedValue::Mask(_) => None,
-            },
-            None => None,
-        },
-        PropertyValue::Dimension(d) => dim_to_px(d.value, &d.unit),
-        PropertyValue::Literal(_) | PropertyValue::DataRef(_) => None,
-    }
-}
+/// Resolve an optional geometry property (`x`/`y`/`w`/`h`) to pixels: the
+/// core resolver, shared with validation and the layout writer.
+pub(crate) use zenith_core::resolve_geometry_px;
 
 #[cfg(test)]
 mod tests {

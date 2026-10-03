@@ -241,6 +241,9 @@ fn emit_live_symmetry_children(
         ));
         return;
     }
+    // The center is authored in the group's child space, like its children.
+    let cx_pivot = child_ctx.dx + cx_pivot;
+    let cy_pivot = child_ctx.dy + cy_pivot;
 
     let start_angle = rotation_degrees(group.symmetry_start_angle.as_ref()).unwrap_or(0.0);
     if !start_angle.is_finite() {

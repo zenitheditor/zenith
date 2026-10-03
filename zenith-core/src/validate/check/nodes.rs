@@ -21,7 +21,7 @@ mod node;
 mod placement;
 
 pub(super) use node::shared::{AnchorParentCtx, check_sibling_anchors, node_bbox};
-pub(super) use placement::placement_walk;
+pub(super) use placement::{PlacementSite, placement_walk};
 
 /// Walk-wide immutable validation context (never changes during a page walk).
 #[derive(Clone, Copy)]
@@ -49,7 +49,11 @@ pub(super) struct WalkPos {
     pub(super) in_flow_parent: bool,
     /// Layout mode of the direct parent frame when it positions children.
     pub(super) flow_parent: Option<node::FlowParent>,
+    /// Page-space box of the nearest enclosing absolute frame.
     pub(super) enclosing_frame: Option<(f64, f64, f64, f64)>,
+    /// Page-space origin of this node's list: the summed child spaces of the
+    /// enclosing containers ([`Node::child_space`]).
+    pub(super) origin: (f64, f64),
     /// `true` when this node is a direct (or group-nested) child of a
     /// `frame`/`group` — the anchor-parent container context.
     pub(super) in_container: bool,
@@ -98,7 +102,13 @@ fn walk_node_checks(
     diagnostics: &mut Vec<Diagnostic>,
 ) {
     // ── frame.child_overflow + layout.off_canvas advisories ───────────────
-    placement::check_placement(node, pos.enclosing_frame, pos.page_px_bounds, diagnostics);
+    placement::check_placement(
+        node,
+        pos.enclosing_frame,
+        pos.origin,
+        pos.page_px_bounds,
+        diagnostics,
+    );
 
     // Direct children of a `row`/`column`/`grid` frame (and of table cells and
     // unknown nodes) have their x/y (and, when omitted, w/h) supplied by the
@@ -324,7 +334,8 @@ fn walk_node_checks(
 
             // This frame's own px box; children are checked for overflow
             // against it. A missing/bad x/y/w/h or a layout frame gives None.
-            let frame_box = placement::frame_child_box(f, pos.page_px_bounds);
+            let frame_box = placement::frame_child_box(f, pos.origin, pos.page_px_bounds);
+            let child_origin = placement::child_origin(node, pos.origin, ctx.resolved_tokens);
 
             // Validate this frame's sibling-anchor graph (one scope = its
             // direct children) once, before descending.
@@ -341,6 +352,7 @@ fn walk_node_checks(
                         in_flow_parent: children_in_flow,
                         flow_parent: child_flow_parent,
                         enclosing_frame: frame_box,
+                        origin: child_origin,
                         // A frame is always an anchor-parent container with a
                         // usable box (its geometry is required + validated).
                         in_container: true,
@@ -374,7 +386,8 @@ fn walk_node_checks(
             // not lay out children, so geometry remains required for them.
             // Groups don't clip, so the enclosing frame (if any) is propagated
             // unchanged: a group inside a frame still has the frame as the
-            // clipping ancestor.
+            // clipping ancestor. The group adds its child space to the origin.
+            let child_origin = placement::child_origin(node, pos.origin, ctx.resolved_tokens);
             for child in &g.children {
                 walk_node(
                     child,
@@ -386,6 +399,7 @@ fn walk_node_checks(
                         in_flow_parent: false,
                         flow_parent: None,
                         enclosing_frame: pos.enclosing_frame,
+                        origin: child_origin,
                         in_container: true,
                         parent_box_known: group_box_known,
                     },
@@ -423,6 +437,7 @@ fn walk_node_checks(
                                 in_flow_parent: true,
                                 flow_parent: None,
                                 enclosing_frame: pos.enclosing_frame,
+                                origin: pos.origin,
                                 // A table cell is NOT an anchor-parent
                                 // container; its children's direct parent is the
                                 // cell, so anchor-parent there is unresolvable.
@@ -455,6 +470,7 @@ fn walk_node_checks(
                         in_flow_parent: true,
                         flow_parent: None,
                         enclosing_frame: pos.enclosing_frame,
+                        origin: pos.origin,
                         // An unknown parent is not a known anchor-parent container.
                         in_container: false,
                         parent_box_known: false,

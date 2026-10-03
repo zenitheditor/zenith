@@ -313,19 +313,6 @@ pub(super) fn local_box(
     box_from_fields(fields, page_size, resolved_tokens)
 }
 
-pub(super) fn group_offset(
-    x: Option<&PropertyValue>,
-    y: Option<&PropertyValue>,
-    page_size: (f64, f64),
-    resolved_tokens: &BTreeMap<String, ResolvedToken>,
-) -> (f64, f64) {
-    let (page_w, page_h) = page_size;
-    (
-        resolve_axis_px(x, page_w, resolved_tokens).unwrap_or(0.0),
-        resolve_axis_px(y, page_h, resolved_tokens).unwrap_or(0.0),
-    )
-}
-
 pub(super) fn polygon_region(
     points: &[Point],
     place: Place,

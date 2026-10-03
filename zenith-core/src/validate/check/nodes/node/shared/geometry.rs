@@ -24,10 +24,8 @@ pub(in crate::validate::check) fn resolve_axis(dim: &Dimension, basis: f64) -> O
 /// or any node with a missing/unresolvable required dimension). Callers should
 /// treat `None` as "no check possible" and produce no advisory.
 ///
-/// v0 NOTE: authored coordinates are used as-is. Group translation offsets are
-/// NOT accumulated here (that is a scene-compiler / render-time concern). The
-/// off_canvas advisory documents this v0 behavior: it checks authored geometry
-/// against the page rectangle, not render-time geometry.
+/// The box is in the node's own list space: authored coordinates as-is. The
+/// placement checks add the accumulated container origin to reach page space.
 pub(in crate::validate::check) fn node_bbox(
     node: &Node,
     page_w: f64,

@@ -61,10 +61,10 @@ use super::util::resolve_geometry_px;
 ///
 /// A node appears in this map if and only if it carries a recognized anchor
 /// value AND its `w` and `h` both resolved to px. The stored pair is the raw
-/// coordinate `(x, y)` BEFORE the `ctx.dx`/`ctx.dy` group-translation offset is
-/// applied by the leaf compiler; the anchor-parent derivation pre-subtracts the
-/// accumulated group translation so adding `ctx.dx`/`ctx.dy` lands the node at
-/// the intended device position.
+/// coordinate `(x, y)` BEFORE the `ctx.dx`/`ctx.dy` container-translation
+/// offset is applied by the leaf compiler; the parent-, zone-, and
+/// page-relative derivations pre-subtract the accumulated translation so
+/// adding `ctx.dx`/`ctx.dy` lands the node at the intended device position.
 pub(crate) type AnchorMap = BTreeMap<String, (f64, f64)>;
 
 /// Walk-wide immutable pre-pass environment (page dims + zone table + token
@@ -83,10 +83,11 @@ pub(crate) struct PrePassEnv<'a> {
 ///
 /// `parent_box` = `Some((ref_x, ref_y, ref_w, ref_h))` is the enclosing
 /// container's reference rectangle, or `None` at the page root (and when a
-/// container box is unresolvable). `acc_dx`/`acc_dy` is the cumulative GROUP
-/// translation that will be active as `ctx.dx`/`ctx.dy` when the current node
-/// compiles; the parent-relative derivation subtracts it so the leaf's re-add
-/// cancels to the intended device coordinate.
+/// container box is unresolvable). `acc_dx`/`acc_dy` is the cumulative
+/// container translation (summed child spaces) that will be active as
+/// `ctx.dx`/`ctx.dy` when the current node compiles; the parent-, zone-, and
+/// page-relative derivations subtract it so the leaf's re-add cancels to the
+/// intended device coordinate.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct ParentCtx {
     pub(crate) parent_box: Option<(f64, f64, f64, f64)>,
@@ -469,16 +470,13 @@ fn collect_anchor(
         derive_entry(fields, env, ctx, scope, map);
     }
 
-    // Recurse into the two anchor-parent containers: frame (clip-only — does
-    // NOT translate children) and group (translates children by group_x/group_y).
-    // Other node kinds are leaves for anchor purposes (matching the prior pre-pass
-    // which did not recurse at all), so adding only frame/group recursion is the
-    // sole additive change.
+    // Recurse into the two anchor-parent containers: frame and group. Each
+    // adds its child space (`Node::child_space`) to the accumulated
+    // translation of its children. Other node kinds are leaves for anchor
+    // purposes.
     match node {
         Node::Frame(frame) => {
-            // A frame does not translate its children, but it draws at its
-            // own x/y plus the inherited group translation; children inherit
-            // acc_dx/acc_dy unchanged.
+            // A frame draws at its own x/y plus the inherited translation.
             let frame_box = px_box(
                 frame.x.as_ref(),
                 frame.y.as_ref(),
@@ -487,10 +485,14 @@ fn collect_anchor(
                 env.resolved,
             )
             .map(|(x, y, w, h)| (x + ctx.acc_dx, y + ctx.acc_dy, w, h));
+            let (acc_dx, acc_dy) = match frame.child_space(env.resolved) {
+                Some((sx, sy)) => (ctx.acc_dx + sx, ctx.acc_dy + sy),
+                None => (ctx.acc_dx, ctx.acc_dy),
+            };
             let child_ctx = ParentCtx {
                 parent_box: frame_box,
-                acc_dx: ctx.acc_dx,
-                acc_dy: ctx.acc_dy,
+                acc_dx,
+                acc_dy,
             };
             // The frame's direct children form a new sibling scope.
             let child_scope: BTreeMap<&str, &Node> = frame
@@ -503,10 +505,10 @@ fn collect_anchor(
             }
         }
         Node::Group(group) => {
-            // Group translates children by group_x/group_y (default 0 if absent
-            // or non-px). The child's compile context acc becomes acc + group_x.
-            let group_x = resolve_geometry_px(group.x.as_ref(), env.resolved).unwrap_or(0.0);
-            let group_y = resolve_geometry_px(group.y.as_ref(), env.resolved).unwrap_or(0.0);
+            // Group translates children by its child space (its x/y, 0 when
+            // absent or non-px). The child's compile context acc becomes
+            // acc + group_x.
+            let (group_x, group_y) = group.child_space(env.resolved);
             let child_dx = ctx.acc_dx + group_x;
             let child_dy = ctx.acc_dy + group_y;
             // The group reference box origin is its device origin (child_dx,
@@ -709,7 +711,9 @@ fn derive_xy<'n>(
         let ref_w = dim_to_px(zone.w.value, &zone.w.unit)?;
         let ref_h = dim_to_px(zone.h.value, &zone.h.unit)?;
         let (ox, oy) = anchor_xy(anchor, ref_w, ref_h, node_w, node_h);
-        return Some((ref_x + ox, ref_y + oy));
+        // A zone is page-space: subtract the accumulated container
+        // translation that the leaf compiler re-adds.
+        return Some((ref_x + ox - ctx.acc_dx, ref_y + oy - ctx.acc_dy));
     }
 
     // Sibling-relative: the node's origin is derived from a named
@@ -800,6 +804,7 @@ fn derive_xy<'n>(
         return Some((rx + ox - ctx.acc_dx, ry + oy - ctx.acc_dy));
     }
 
-    // Page-relative: origin is (0, 0).
-    Some(anchor_xy(anchor, env.page_w, env.page_h, node_w, node_h))
+    // Page-relative: origin is (0, 0), in page space like a zone.
+    let (x, y) = anchor_xy(anchor, env.page_w, env.page_h, node_w, node_h);
+    Some((x - ctx.acc_dx, y - ctx.acc_dy))
 }

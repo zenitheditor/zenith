@@ -12,13 +12,18 @@ use super::paint::resolve_fill_paint;
 use super::types::{ContrastEnv, PaintCtx};
 use super::walk::walk_paint;
 
+/// Judge the text of every cell of `table`, which sits in the place of
+/// `ctx`: cell content inherits its translation, scale, opacity, and
+/// unmodeled ancestors. Cell content is not clipped to the ancestor clip,
+/// since its cell-relative boxes have no page position.
 pub(super) fn check_table_text_contrast(
     table: &TableNode,
-    page_bg_rgb: Option<(u8, u8, u8)>,
-    page_size: (f64, f64),
+    ctx: PaintCtx<'_>,
     env: ContrastEnv<'_>,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
+    let page_bg_rgb = ctx.page_bg_rgb;
+    let parent = ctx;
     let header_rows = table.header_rows.unwrap_or(0);
     let resolve_fill = |pv: &Option<PropertyValue>| -> Option<(u8, u8, u8)> {
         resolve_fill_paint(pv, None, env.style_map, env.resolved_tokens, 1.0)?.as_solid_rgb()
@@ -40,17 +45,11 @@ pub(super) fn check_table_text_contrast(
             // text that sets no `style`; the walk applies it as an override
             // on the cell's direct text children.
             let ctx = PaintCtx {
-                dx: 0.0,
-                dy: 0.0,
-                sx: 1.0,
-                sy: 1.0,
                 clip: None,
-                opacity: 1.0,
-                unmodeled: false,
                 page_bg_rgb: cell_bg,
-                page_size,
                 header_style: table.header_style.as_deref().filter(|_| is_header),
                 in_cell: true,
+                ..parent
             };
             let mut candidates = Vec::new();
             walk_paint(&cell.children, ctx, &mut candidates, env, diagnostics);

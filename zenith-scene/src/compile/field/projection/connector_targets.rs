@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 use zenith_core::{ComponentDef, InstanceNode, Node, Point, ResolvedToken, dim_to_px};
 use zenith_geometry::{CompoundFillRule, CompoundPathGeometry, Point2};
 
-use super::common::resolve_imported_component;
+use super::common::{child_offset, resolve_imported_component};
 use crate::compile::container::prefix_ids_in_children;
 use crate::compile::imports::ImportScopes;
 use crate::compile::leaf::{path_outline_bounds, path_to_compound_geometry};
@@ -153,15 +153,14 @@ fn collect_connector_targets(
             }
         }
         match child {
-            // A frame is clip-only: its children are NOT translated by its origin.
+            // A frame and a group add their child space to their children.
             Node::Frame(f) => {
-                collect_connector_targets(&f.children, dx, dy, env, targets);
+                let (cdx, cdy) = child_offset(child, dx, dy, resolved);
+                collect_connector_targets(&f.children, cdx, cdy, env, targets);
             }
-            // A group translates its children by its own x/y (absent/bad-unit → 0).
             Node::Group(g) => {
-                let gx = resolve_geometry_px(g.x.as_ref(), resolved).unwrap_or(0.0);
-                let gy = resolve_geometry_px(g.y.as_ref(), resolved).unwrap_or(0.0);
-                collect_connector_targets(&g.children, dx + gx, dy + gy, env, targets);
+                let (cdx, cdy) = child_offset(child, dx, dy, resolved);
+                collect_connector_targets(&g.children, cdx, cdy, env, targets);
             }
             Node::Instance(i) => {
                 collect_instance_connector_targets(i, dx, dy, env, targets);
@@ -417,16 +416,7 @@ fn collect_instance_connector_targets(
         components: _,
         imports,
     } = env;
-    let ix = instance
-        .x
-        .as_ref()
-        .and_then(|d| dim_to_px(d.value, &d.unit))
-        .unwrap_or(0.0);
-    let iy = instance
-        .y
-        .as_ref()
-        .and_then(|d| dim_to_px(d.value, &d.unit))
-        .unwrap_or(0.0);
+    let (ix, iy) = instance.child_space();
 
     if let Some(source) = instance.source.as_deref() {
         // An imported instance resolves its children against the IMPORTED scope's

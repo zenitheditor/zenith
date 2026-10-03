@@ -22,7 +22,7 @@ use crate::color::parse_rgb;
 use crate::diagnostics::Diagnostic;
 use crate::tokens::{ResolvedToken, ResolvedValue};
 
-use super::nodes::placement_walk;
+use super::nodes::{PlacementSite, placement_walk};
 use super::{fold, margin, safezone};
 
 /// `true` when validation leaves `page`'s geometry checks to the scene engine.
@@ -54,6 +54,7 @@ pub(super) fn page_background_rgb(
 pub fn layout_geometry_checks(doc: &Document) -> Vec<Vec<Diagnostic>> {
     let mirror_margins = doc.mirror_margins.unwrap_or(false);
     let rtl = doc.page_progression.as_deref() == Some("rtl");
+    let tokens = crate::tokens::resolve_tokens(&doc.tokens);
 
     doc.body
         .pages
@@ -69,7 +70,12 @@ pub fn layout_geometry_checks(doc: &Document) -> Vec<Vec<Diagnostic>> {
             else {
                 return diagnostics;
             };
-            placement_walk(&page.children, None, (page_w, page_h), &mut diagnostics);
+            let site = PlacementSite {
+                enclosing_frame: None,
+                origin: (0.0, 0.0),
+                page_bounds: (page_w, page_h),
+            };
+            placement_walk(&page.children, site, &tokens.resolved, &mut diagnostics);
             safezone::check_safe_zones(page, page_w, page_h, &mut diagnostics);
             fold::check_folds(page, page_w, page_h, &mut diagnostics);
             margin::check_margins(

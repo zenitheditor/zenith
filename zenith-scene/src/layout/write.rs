@@ -3,12 +3,9 @@
 
 use std::collections::BTreeMap;
 
-use zenith_core::{
-    Dimension, FrameNode, InstanceNode, Node, PathAnchor, Point, PropertyValue, ResolvedToken,
-    dim_to_px,
-};
+use zenith_core::{FrameNode, InstanceNode, Node, PropertyValue, ResolvedToken, translate_node};
 
-use crate::compile::{px as px_dim, px_prop as px, resolve_geometry_px};
+use crate::compile::{px as px_dim, px_prop as px};
 
 use super::model::{LayoutBox, Mode};
 
@@ -96,116 +93,26 @@ pub(super) fn mark_hugging_text(node: &mut Node) {
     }
 }
 
-/// Add `d` to a resolvable geometry value. An absent value (anchor-placed)
-/// stays absent.
-fn shift_pv(pv: &mut Option<PropertyValue>, d: f64, resolved: &BTreeMap<String, ResolvedToken>) {
-    if let Some(v) = resolve_geometry_px(pv.as_ref(), resolved) {
-        *pv = Some(px(v + d));
-    }
-}
-
-/// Add `d` to a group origin; an absent origin counts as 0.
-fn shift_origin(
-    pv: &mut Option<PropertyValue>,
-    d: f64,
-    resolved: &BTreeMap<String, ResolvedToken>,
-) {
-    match pv {
-        None => *pv = Some(px(d)),
-        Some(_) => shift_pv(pv, d, resolved),
-    }
-}
-
-fn shift_dim(dim: &mut Option<Dimension>, d: f64) {
-    if let Some(v) = dim.as_ref().and_then(|x| dim_to_px(x.value, &x.unit)) {
-        *dim = Some(px_dim(v + d));
-    }
-}
-
-fn shift_points(points: &mut [Point], dx: f64, dy: f64) {
-    for p in points {
-        shift_dim(&mut p.x, dx);
-        shift_dim(&mut p.y, dy);
-    }
-}
-
-fn shift_anchors(anchors: &mut [PathAnchor], dx: f64, dy: f64) {
-    for a in anchors {
-        shift_dim(&mut a.x, dx);
-        shift_dim(&mut a.y, dy);
-        shift_dim(&mut a.in_x, dx);
-        shift_dim(&mut a.in_y, dy);
-        shift_dim(&mut a.out_x, dx);
-        shift_dim(&mut a.out_y, dy);
-    }
-}
-
-/// Move `node` by `(dx, dy)` px.
+/// Move `node` by `(dx, dy)` px, with the descendants that do not follow it.
 ///
-/// An absolute frame moves its descendants too (frames do not translate
-/// children). A layout frame moves only itself: its children count from its
-/// top-left until it is lowered, and every frame is moved before it lowers. A
-/// group and an instance move their origin, so their children follow. A
-/// connector follows its targets. Footnotes and unknown nodes have no
-/// geometry.
+/// [`translate_node`] moves the node's own position. A container whose
+/// [`Node::child_space`] translates its children carries them along. An
+/// absolute frame that keeps its children in its parent's space moves them
+/// too. A layout frame moves only itself: its children count from its
+/// top-left until it is lowered, and every frame is moved before it lowers.
 pub(super) fn translate(
     node: &mut Node,
     dx: f64,
     dy: f64,
     resolved: &BTreeMap<String, ResolvedToken>,
 ) {
-    let xy = |x: &mut Option<PropertyValue>, y: &mut Option<PropertyValue>| {
-        shift_pv(x, dx, resolved);
-        shift_pv(y, dy, resolved);
-    };
-    match node {
-        Node::Rect(n) => xy(&mut n.x, &mut n.y),
-        Node::Ellipse(n) => xy(&mut n.x, &mut n.y),
-        Node::Text(n) => xy(&mut n.x, &mut n.y),
-        Node::Code(n) => xy(&mut n.x, &mut n.y),
-        Node::Image(n) => xy(&mut n.x, &mut n.y),
-        Node::Field(n) => xy(&mut n.x, &mut n.y),
-        Node::Toc(n) => xy(&mut n.x, &mut n.y),
-        Node::Table(n) => xy(&mut n.x, &mut n.y),
-        Node::Shape(n) => xy(&mut n.x, &mut n.y),
-        Node::Pattern(n) => xy(&mut n.x, &mut n.y),
-        Node::Chart(n) => xy(&mut n.x, &mut n.y),
-        Node::Mesh(n) => xy(&mut n.x, &mut n.y),
-        Node::Light(n) => xy(&mut n.x, &mut n.y),
-        Node::Frame(n) => {
-            xy(&mut n.x, &mut n.y);
-            if Mode::of(n).is_none() {
-                for child in &mut n.children {
-                    translate(child, dx, dy, resolved);
-                }
-            }
+    translate_node(node, dx, dy, resolved);
+    if let Node::Frame(f) = node
+        && Mode::of(f).is_none()
+        && f.child_space(resolved).is_none()
+    {
+        for child in &mut f.children {
+            translate(child, dx, dy, resolved);
         }
-        Node::Group(n) => {
-            shift_origin(&mut n.x, dx, resolved);
-            shift_origin(&mut n.y, dy, resolved);
-        }
-        Node::Instance(n) => {
-            let shift = |dim: &mut Option<Dimension>, d: f64| match dim {
-                None => *dim = Some(px_dim(d)),
-                Some(_) => shift_dim(dim, d),
-            };
-            shift(&mut n.x, dx);
-            shift(&mut n.y, dy);
-        }
-        Node::Line(n) => {
-            shift_dim(&mut n.x1, dx);
-            shift_dim(&mut n.y1, dy);
-            shift_dim(&mut n.x2, dx);
-            shift_dim(&mut n.y2, dy);
-        }
-        Node::Polygon(n) => shift_points(&mut n.points, dx, dy),
-        Node::Polyline(n) => shift_points(&mut n.points, dx, dy),
-        Node::Path(n) => {
-            shift_anchors(&mut n.anchors, dx, dy);
-            for sub in &mut n.subpaths {
-                shift_anchors(&mut sub.anchors, dx, dy);
-            }
-        }
-        Node::Connector(_) | Node::Footnote(_) | Node::Unknown(_) => {}
     }
 }

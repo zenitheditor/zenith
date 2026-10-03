@@ -9,9 +9,7 @@ use crate::diagnostics::Diagnostic;
 use crate::tokens::ResolvedToken;
 
 use super::chart::check_chart_text;
-use super::geometry::{
-    CoverageShape, RectPx, group_offset, local_box, path_fill_region, polygon_region,
-};
+use super::geometry::{CoverageShape, RectPx, local_box, path_fill_region, polygon_region};
 use super::label::check_label;
 use super::paint::resolve_fill_paint;
 use super::props::{
@@ -85,7 +83,13 @@ pub(super) fn walk_paint(
                     candidates,
                     env,
                 );
+                let (dx, dy) = match node.child_space(env.resolved_tokens) {
+                    Some((ox, oy)) => ctx.place().point(ox, oy),
+                    None => (ctx.dx, ctx.dy),
+                };
                 let child_ctx = PaintCtx {
+                    dx,
+                    dy,
                     clip: frame_clip,
                     opacity: cascaded_opacity(ctx.opacity, f.opacity),
                     unmodeled: ctx.unmodeled || container_is_unmodeled(node),
@@ -100,12 +104,7 @@ pub(super) fn walk_paint(
                 let (ox, oy, sx, sy) = match scope.and_then(|s| s.fit) {
                     Some(fit) => (fit.tx, fit.ty, fit.sx, fit.sy),
                     None => {
-                        let (gx, gy) = group_offset(
-                            g.x.as_ref(),
-                            g.y.as_ref(),
-                            ctx.page_size,
-                            env.resolved_tokens,
-                        );
+                        let (gx, gy) = g.child_space(env.resolved_tokens);
                         (gx, gy, 1.0, 1.0)
                     }
                 };
@@ -132,7 +131,7 @@ pub(super) fn walk_paint(
             }
             Node::Text(t) => check_text_node(t, ctx, candidates, env, diagnostics),
             Node::Table(t) => {
-                check_table_text_contrast(t, ctx.page_bg_rgb, ctx.page_size, env, diagnostics);
+                check_table_text_contrast(t, ctx, env, diagnostics);
             }
             Node::Path(p) => push_path_backdrop(node, p, ctx, candidates, env),
             Node::Chart(c) => check_chart_text(c, ctx, candidates, env, diagnostics),

@@ -44,7 +44,8 @@ pub use node::{
     PathAnchor, PathNode, PathSubpath, PathSubpathRef, PatternNode, Point, PolygonNode,
     PolylineNode, ProtectedRegion, RectNode, ShapeNode, SizeKeyword, TableCell, TableColumn,
     TableNode, TableRow, TextNode, TextSpan, TocNode, UnknownNode, UnknownProperty, UnknownValue,
-    anchor_xy, parse_anchor, parse_anchor_edge, parse_connector_anchor, subtree_uses_layout,
+    anchor_xy, parse_anchor, parse_anchor_edge, parse_connector_anchor, resolve_geometry_px,
+    subtree_uses_layout, translate_node,
 };
 pub use policy::{DiagnosticPolicy, PolicyEntry, PolicyVerb};
 pub use provenance::ProvenanceDef;

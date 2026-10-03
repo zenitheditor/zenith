@@ -83,10 +83,11 @@ struct Walk<'a> {
 /// Where a node list sits.
 #[derive(Clone, Copy)]
 struct Place {
-    /// Page-absolute translation: the summed origins of enclosing groups.
+    /// Page-absolute translation: the summed child spaces of enclosing
+    /// containers ([`Node::child_space`]).
     offset: (f64, f64),
     /// The render translation compile applies to the list, accumulated in
-    /// compile's order (base translation, then each group origin).
+    /// compile's order (base translation, then each container child space).
     dev: (f64, f64),
     /// The anchor-parent reference box of the list's container, in
     /// page-absolute px, when it resolves.
@@ -102,22 +103,19 @@ impl Place {
         }
     }
 
-    /// The children of a group at `(gx, gy)`, `size` px when it resolves.
-    fn group(self, gx: f64, gy: f64, size: Option<(f64, f64)>) -> Self {
-        let (ox, oy) = (self.offset.0 + gx, self.offset.1 + gy);
-        Self {
-            offset: (ox, oy),
-            dev: (self.dev.0 + gx, self.dev.1 + gy),
-            parent_box: size.map(|(w, h)| (ox, oy, w, h)),
-        }
-    }
-
-    /// The children of a frame with the local box `b` (frames do not
-    /// translate their children).
-    fn frame(self, b: Option<(f64, f64, f64, f64)>) -> Self {
-        Self {
-            parent_box: b.map(|(x, y, w, h)| (x + self.offset.0, y + self.offset.1, w, h)),
-            ..self
+    /// The children of a container with the local box `b`, when it
+    /// resolves. `space` is the container's [`Node::child_space`]: the
+    /// origin it adds to its children, or `None` when they keep this list's
+    /// space.
+    fn enter(self, space: Option<(f64, f64)>, b: Option<(f64, f64, f64, f64)>) -> Self {
+        let parent_box = b.map(|(x, y, w, h)| (x + self.offset.0, y + self.offset.1, w, h));
+        match space {
+            None => Self { parent_box, ..self },
+            Some((sx, sy)) => Self {
+                offset: (self.offset.0 + sx, self.offset.1 + sy),
+                dev: (self.dev.0 + sx, self.dev.1 + sy),
+                parent_box,
+            },
         }
     }
 
@@ -348,21 +346,15 @@ fn walk_node(cx: &Walk<'_>, node: &mut Node, place: Place, out: &mut Lowered) {
                     arrange_root(cx, f, (x, y), place, out);
                 }
             } else {
-                let b = frame_box(f, cx);
-                walk_scope(cx, &mut f.children, place.frame(b), &|_| true, out);
+                let inner = place.enter(f.child_space(resolved), frame_box(f, cx));
+                walk_scope(cx, &mut f.children, inner, &|_| true, out);
             }
         }
         Node::Group(g) => {
-            let gx = px_of(g.x.as_ref(), resolved).unwrap_or(0.0);
-            let gy = px_of(g.y.as_ref(), resolved).unwrap_or(0.0);
+            let (gx, gy) = g.child_space(resolved);
             let size = px_of(g.w.as_ref(), resolved).zip(px_of(g.h.as_ref(), resolved));
-            walk_scope(
-                cx,
-                &mut g.children,
-                place.group(gx, gy, size),
-                &|_| true,
-                out,
-            );
+            let inner = place.enter(Some((gx, gy)), size.map(|(w, h)| (gx, gy, w, h)));
+            walk_scope(cx, &mut g.children, inner, &|_| true, out);
         }
         Node::Unknown(u) => walk_scope(cx, &mut u.children, place.detached(), &|_| true, out),
         Node::Table(t) => {
@@ -448,19 +440,48 @@ fn arrange_frame(
     };
     record(out, &f.id, own, place);
     set_frame_box(f, own);
+    let resolved = cx.engine.resolved();
+    let space = f.child_space(resolved);
+    let inner = place.enter(space, Some((own.x, own.y, own.w, own.h)));
     for slot in &sol.slots {
         if let Some(child) = f.children.get_mut(slot.index) {
-            place_child(cx, child, *slot, place, out);
+            place_child(cx, child, in_child_space(*slot, space), inner, out);
         }
     }
     let absolute = |n: &Node| child_role(n) == ChildRole::Absolute;
-    for child in &mut f.children {
-        if absolute(child) {
-            translate(child, origin.0, origin.1, cx.engine.resolved());
+    if let Some((dx, dy)) = top_left_shift(origin, space) {
+        for child in &mut f.children {
+            if absolute(child) {
+                translate(child, dx, dy, resolved);
+            }
         }
     }
-    let inner = place.frame(Some((own.x, own.y, own.w, own.h)));
     walk_scope(cx, &mut f.children, inner, &absolute, out);
+}
+
+/// A slot solved in the frame's parent space, moved into the frame's child
+/// `space`.
+fn in_child_space(slot: Slot, space: Option<(f64, f64)>) -> Slot {
+    match space {
+        None => slot,
+        Some((sx, sy)) => Slot {
+            x: slot.x - sx,
+            y: slot.y - sy,
+            ..slot
+        },
+    }
+}
+
+/// The move that takes children authored from a frame's top-left at
+/// `origin` into the frame's child `space`. `None` when they already are.
+fn top_left_shift(origin: (f64, f64), space: Option<(f64, f64)>) -> Option<(f64, f64)> {
+    match space {
+        None => Some(origin),
+        Some((sx, sy)) => {
+            let d = (origin.0 - sx, origin.1 - sy);
+            (d != (0.0, 0.0)).then_some(d)
+        }
+    }
 }
 
 /// Place one flow child in its slot.
@@ -517,15 +538,20 @@ fn place_child(cx: &Walk<'_>, child: &mut Node, slot: Slot, place: Place, out: &
     match child {
         // An absolute frame's children count from its top-left.
         Node::Frame(f) => {
-            for grandchild in &mut f.children {
-                translate(grandchild, b.x, b.y, cx.engine.resolved());
+            let resolved = cx.engine.resolved();
+            let space = f.child_space(resolved);
+            if let Some((dx, dy)) = top_left_shift((b.x, b.y), space) {
+                for grandchild in &mut f.children {
+                    translate(grandchild, dx, dy, resolved);
+                }
             }
-            let inner = place.frame(Some((b.x, b.y, b.w, b.h)));
+            let inner = place.enter(space, Some((b.x, b.y, b.w, b.h)));
             walk_scope(cx, &mut f.children, inner, &|_| true, out);
         }
         // A group translates its children; they stay group-local.
         Node::Group(g) => {
-            let inner = place.group(b.x, b.y, Some((b.w, b.h)));
+            let space = g.child_space(cx.engine.resolved());
+            let inner = place.enter(Some(space), Some((b.x, b.y, b.w, b.h)));
             walk_scope(cx, &mut g.children, inner, &|_| true, out);
         }
         Node::Rect(_)

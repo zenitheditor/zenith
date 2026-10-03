@@ -9,7 +9,7 @@ use crate::ir::{GradientPaint, GradientStop, Paint, SceneCommand};
 use super::RenderCtx;
 use super::leaf::resolve_dash_params;
 use super::paint::resolve_property_color;
-use super::util::resolve_property_dimension_px;
+use super::util::{resolve_geometry_px, resolve_property_dimension_px};
 
 pub(super) fn compile_light(
     light: &LightNode,
@@ -143,7 +143,17 @@ pub(super) fn compile_mesh(
     }
 
     match mesh.kind.as_deref().unwrap_or("orthographic") {
-        "perspective" => compile_perspective_mesh(mesh, resolved, box_px, stroke, commands),
+        "perspective" => {
+            // An authored vanishing point is in the mesh's parent space, like
+            // its `x` / `y`.
+            let vanishing = (
+                resolve_geometry_px(mesh.vanishing_x.as_ref(), resolved)
+                    .map_or(box_px.x, |v| v + ctx.dx),
+                resolve_geometry_px(mesh.vanishing_y.as_ref(), resolved)
+                    .map_or(box_px.y, |v| v + ctx.dy),
+            );
+            compile_perspective_mesh(mesh, box_px, vanishing, stroke, commands);
+        }
         "orthographic" => compile_orthographic_mesh(mesh, box_px, stroke, commands),
         _ => compile_orthographic_mesh(mesh, box_px, stroke, commands),
     }
@@ -184,17 +194,17 @@ fn compile_orthographic_mesh(
     }
 }
 
+/// A perspective mesh converging on the device-space vanishing point
+/// `(vx, vy)`.
 fn compile_perspective_mesh(
     mesh: &MeshNode,
-    resolved: &BTreeMap<String, ResolvedToken>,
     box_px: MeshBox,
+    (vx, vy): (f64, f64),
     stroke: MeshStroke,
     commands: &mut Vec<SceneCommand>,
 ) {
     let rows = mesh.rows.unwrap_or(1).max(1);
     let columns = mesh.columns.unwrap_or(1).max(1);
-    let vx = resolve_property_dimension_px(mesh.vanishing_x.as_ref(), resolved, box_px.x);
-    let vy = resolve_property_dimension_px(mesh.vanishing_y.as_ref(), resolved, box_px.y);
     if !vx.is_finite() || !vy.is_finite() {
         return;
     }

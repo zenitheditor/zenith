@@ -47,7 +47,7 @@ pub use ast::{
     TextNode, TextSpan, TocNode, Token, TokenBlock, TokenLiteral, TokenMapDecl, TokenType,
     TokenValue, Unit, UnknownNode, UnknownProperty, UnknownStyleProp, UnknownValue, VariantDef,
     VariantOverride, anchor_xy, canonicalize_style_key, dim_to_px, parse_anchor, parse_anchor_edge,
-    style_enum_values, subtree_uses_layout,
+    resolve_geometry_px, style_enum_values, subtree_uses_layout, translate_node,
 };
 pub use color::{
     BlendMode, Cmyk, Color, GradientPaint, GradientStop, apca_lc, best_text_color, cmyk_to_hex,

@@ -6,28 +6,58 @@
 //! through [`super::super::geometry`] on a page whose auto-layout it has
 //! lowered to absolute geometry.
 
+use std::collections::BTreeMap;
+
 use crate::ast::node::{FrameNode, LayoutKind, Node};
 use crate::diagnostics::Diagnostic;
+use crate::tokens::ResolvedToken;
 
 use super::node::shared::{node_bbox, node_rotate_deg, pv_to_dim, resolve_axis};
 
 /// A resolved px box `(x, y, w, h)`.
 pub(super) type PxBox = (f64, f64, f64, f64);
 
+/// A px translation `(dx, dy)` from a node list's space to page space.
+pub(super) type Origin = (f64, f64);
+
+/// The page-space origin of the children of `node` in a list at `origin`:
+/// `origin` plus the node's [`Node::child_space`].
+pub(super) fn child_origin(
+    node: &Node,
+    origin: Origin,
+    resolved: &BTreeMap<String, ResolvedToken>,
+) -> Origin {
+    match node.child_space(resolved) {
+        Some((sx, sy)) => (origin.0 + sx, origin.1 + sy),
+        None => origin,
+    }
+}
+
+/// `b` moved by `origin` into page space.
+fn to_page((x, y, w, h): PxBox, origin: Origin) -> PxBox {
+    if origin == (0.0, 0.0) {
+        return (x, y, w, h);
+    }
+    (x + origin.0, y + origin.1, w, h)
+}
+
 /// Push `frame.child_overflow` when `node` protrudes past `enclosing_frame`,
 /// and `layout.off_canvas` when it leaves the page.
 ///
-/// Both checks need the page size. With `page_bounds = None` they are skipped.
+/// `origin` moves the node's authored box into page space.
+/// `enclosing_frame` is a page-space box. Both checks need the page size.
+/// With `page_bounds = None` they are skipped.
 pub(super) fn check_placement(
     node: &Node,
     enclosing_frame: Option<PxBox>,
+    origin: Origin,
     page_bounds: Option<(f64, f64)>,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
     let Some((page_w, page_h)) = page_bounds else {
         return;
     };
-    let Some((nx, ny, nw, nh)) = node_bbox(node, page_w, page_h) else {
+    let Some((nx, ny, nw, nh)) = node_bbox(node, page_w, page_h).map(|b| to_page(b, origin)) else {
         return;
     };
 
@@ -58,8 +88,7 @@ pub(super) fn check_placement(
 
     // ── off_canvas advisory ───────────────────────────────────────────────
     // Check whether the node's bounding box exceeds the page rect
-    // [0, 0, page_w, page_h]. Group translation offsets are NOT accumulated
-    // (v0 advisory behavior).
+    // [0, 0, page_w, page_h], in page space.
     //
     // A node with a non-zero `rotate` (deg) uses the axis-aligned bounding box
     // (AABB) of the four rotated corners instead of its box.
@@ -106,12 +135,17 @@ fn rotated_aabb((nx, ny, nw, nh): PxBox, deg: f64) -> PxBox {
     (min_x, min_y, max_x - min_x, max_y - min_y)
 }
 
-/// The px box a frame's children are checked against for
-/// `frame.child_overflow`.
+/// The page-space px box a frame's children are checked against for
+/// `frame.child_overflow`. `origin` is the page-space origin of the frame's
+/// own list.
 ///
 /// `None` when the page size is unknown, when any of x/y/w/h does not resolve,
 /// or when the frame lays out its children (its own layout reports overflow).
-pub(super) fn frame_child_box(f: &FrameNode, page_bounds: Option<(f64, f64)>) -> Option<PxBox> {
+pub(super) fn frame_child_box(
+    f: &FrameNode,
+    origin: Origin,
+    page_bounds: Option<(f64, f64)>,
+) -> Option<PxBox> {
     let (page_w, page_h) = page_bounds?;
     if f.layout
         .as_ref()
@@ -123,36 +157,63 @@ pub(super) fn frame_child_box(f: &FrameNode, page_bounds: Option<(f64, f64)>) ->
     let y = pv_to_dim(f.y.as_ref()).and_then(|d| resolve_axis(d, page_h))?;
     let w = pv_to_dim(f.w.as_ref()).and_then(|d| resolve_axis(d, page_w))?;
     let h = pv_to_dim(f.h.as_ref()).and_then(|d| resolve_axis(d, page_h))?;
-    Some((x, y, w, h))
+    Some(to_page((x, y, w, h), origin))
+}
+
+/// Where a node list sits for [`placement_walk`].
+#[derive(Clone, Copy)]
+pub(in crate::validate::check) struct PlacementSite {
+    /// The page-space box of the nearest enclosing absolute frame.
+    pub(in crate::validate::check) enclosing_frame: Option<PxBox>,
+    /// The page-space origin of the list.
+    pub(in crate::validate::check) origin: Origin,
+    pub(in crate::validate::check) page_bounds: (f64, f64),
 }
 
 /// Run [`check_placement`] over `children` and their descendants, with the
-/// same enclosing-frame propagation as the main walk.
+/// same enclosing-frame and origin propagation as the main walk.
 pub(in crate::validate::check) fn placement_walk(
     children: &[Node],
-    enclosing_frame: Option<PxBox>,
-    page_bounds: (f64, f64),
+    site: PlacementSite,
+    resolved: &BTreeMap<String, ResolvedToken>,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
+    let PlacementSite {
+        enclosing_frame,
+        origin,
+        page_bounds,
+    } = site;
     for node in children {
-        check_placement(node, enclosing_frame, Some(page_bounds), diagnostics);
+        check_placement(
+            node,
+            enclosing_frame,
+            origin,
+            Some(page_bounds),
+            diagnostics,
+        );
         match node {
-            Node::Frame(f) => placement_walk(
-                &f.children,
-                frame_child_box(f, Some(page_bounds)),
-                page_bounds,
-                diagnostics,
-            ),
+            Node::Frame(f) => {
+                let inner = PlacementSite {
+                    enclosing_frame: frame_child_box(f, origin, Some(page_bounds)),
+                    origin: child_origin(node, origin, resolved),
+                    page_bounds,
+                };
+                placement_walk(&f.children, inner, resolved, diagnostics);
+            }
             Node::Group(g) => {
-                placement_walk(&g.children, enclosing_frame, page_bounds, diagnostics);
+                let inner = PlacementSite {
+                    origin: child_origin(node, origin, resolved),
+                    ..site
+                };
+                placement_walk(&g.children, inner, resolved, diagnostics);
             }
             Node::Unknown(u) => {
-                placement_walk(&u.children, enclosing_frame, page_bounds, diagnostics);
+                placement_walk(&u.children, site, resolved, diagnostics);
             }
             Node::Table(t) => {
                 for row in &t.rows {
                     for cell in &row.cells {
-                        placement_walk(&cell.children, enclosing_frame, page_bounds, diagnostics);
+                        placement_walk(&cell.children, site, resolved, diagnostics);
                     }
                 }
             }
