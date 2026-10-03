@@ -6,6 +6,7 @@ use crate::ir::SceneCommand;
 
 use super::font_ns::NamespacedFontProvider;
 use super::imports::{ImportGraph, ImportScopes, ImportSource, parse_import_source, stamp_import};
+use super::util::is_identity_transform;
 use super::{RenderCtx, compile_page_inner};
 
 #[derive(Clone, Copy)]
@@ -239,10 +240,6 @@ fn imported_page_bleed_px(page: &Page) -> Option<f64> {
 
 fn same_px(left: f64, right: f64) -> bool {
     (left - right).abs() <= f64::EPSILON
-}
-
-fn is_identity_transform(sx: f64, sy: f64, tx: f64, ty: f64) -> bool {
-    same_px(sx, 1.0) && same_px(sy, 1.0) && same_px(tx, 0.0) && same_px(ty, 0.0)
 }
 
 struct ImportedCommandPrefixes<'a> {

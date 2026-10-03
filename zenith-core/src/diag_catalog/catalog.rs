@@ -136,7 +136,9 @@ mod tests {
         // Codes emitted by zenith-scene during compilation must be in the catalog
         // so that `diagnostics { … }` blocks can govern them.
         let cases: &[(&str, Severity)] = &[
+            ("align.near_miss", Severity::Advisory),
             ("baseline-grid.snap_failed", Severity::Warning),
+            ("connector.crosses_node", Severity::Advisory),
             ("footnote.body_overlap", Severity::Advisory),
             ("footnote.no_live_area", Severity::Advisory),
             ("label.overflow", Severity::Warning),
@@ -157,6 +159,7 @@ mod tests {
             ("scene.unsupported_node", Severity::Advisory),
             ("scene.unsupported_unit", Severity::Advisory),
             ("scene.wrong_token_type", Severity::Advisory),
+            ("spacing.uneven_gap", Severity::Advisory),
             ("table.flow_overflow", Severity::Advisory),
             ("text.fit_failed", Severity::Error),
             ("text.forced_break", Severity::Warning),

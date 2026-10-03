@@ -67,7 +67,7 @@ fn hugging_text_wraps_at_the_cap() {
 #[test]
 fn hugging_text_renders_unclipped_and_the_next_child_follows() {
     let src = doc(
-        r#"      frame id="f" x=(px)0 y=(px)0 w=(px)300 layout="column" gap=(px)8 {
+        r#"      frame id="f" x=(px)100 y=(px)100 w=(px)300 layout="column" gap=(px)8 {
         text id="t" font-size=(px)24 fill=(token)"color.k" {
           span "Heading"
         }
@@ -77,7 +77,10 @@ fn hugging_text_renders_unclipped_and_the_next_child_follows() {
     let (_, ty, _, th) = text_box(&src);
     let result = compile(&parse(&src), &default_provider());
     assert!(result.diagnostics.is_empty(), "{:?}", result.diagnostics);
-    assert_eq!(fill_rects(&result), vec![(0.0, ty + th + 8.0, 300.0, 10.0)]);
+    assert_eq!(
+        fill_rects(&result),
+        vec![(100.0, ty + th + 8.0, 300.0, 10.0)]
+    );
     assert!(
         !result
             .scene

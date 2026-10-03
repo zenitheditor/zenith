@@ -21,7 +21,7 @@ use crate::color::parse_rgb;
 use crate::diagnostics::Diagnostic;
 use crate::tokens::{ResolvedToken, ResolvedValue, resolve_tokens};
 
-use super::contrast::check_page_text_contrast;
+use super::contrast::{ContentScopes, check_page_text_contrast, check_scoped_text_contrast};
 use super::nodes::placement_walk;
 use super::{fold, margin, safezone};
 
@@ -52,12 +52,15 @@ pub(super) fn page_background_rgb(
 /// projection first. Validation skips that content, because its ids and
 /// positions exist only after expansion. The result judges every `text`
 /// node in `children`; the caller keeps the diagnostics of expanded nodes.
-/// Each keeps the span of its authored component or master node.
-pub fn expanded_text_contrast_checks(
+/// Each keeps the span of its authored component or master node. A group
+/// in `scopes` stands in for an instance drawn in its own token scope (an
+/// imported component) or under a `w` / `h` fit transform.
+pub fn expanded_text_contrast_checks<'a>(
     page: &Page,
     children: &[Node],
-    resolved: &BTreeMap<String, ResolvedToken>,
-    style_map: &BTreeMap<&str, &Style>,
+    resolved: &'a BTreeMap<String, ResolvedToken>,
+    style_map: &'a BTreeMap<&'a str, &'a Style>,
+    scopes: &'a ContentScopes<'a>,
 ) -> Vec<Diagnostic> {
     let mut diagnostics = Vec::new();
     let Some(page_size) = dim_to_px(page.width.value, &page.width.unit)
@@ -65,12 +68,13 @@ pub fn expanded_text_contrast_checks(
     else {
         return diagnostics;
     };
-    check_page_text_contrast(
+    check_scoped_text_contrast(
         children,
         page_background_rgb(page, resolved),
         page_size,
         resolved,
         style_map,
+        Some(scopes),
         &mut diagnostics,
     );
     diagnostics

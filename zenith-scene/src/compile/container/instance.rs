@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 
 use zenith_core::{
     ComponentDef, Diagnostic, Dimension, GroupNode, InstanceNode, Node, Override, PropertyValue,
-    ResolvedToken,
+    ResolvedToken, ScopeFit,
 };
 
 use crate::ir::SceneCommand;
@@ -16,7 +16,7 @@ use super::super::boxes::Expansion;
 use super::super::font_ns::NamespacedFontProvider;
 use super::super::imports::{ImportSource, parse_import_source, stamp_import};
 use super::super::intrinsic::lower_expanded;
-use super::super::util::resolve_geometry_px;
+use super::super::util::{is_identity_transform, resolve_geometry_px};
 use super::super::{NodeCtx, RenderCtx};
 use super::group::{compile_group, group_children_bounds};
 
@@ -92,7 +92,7 @@ pub(in crate::compile) fn compile_instance(
     // into it (an icon component is all `path` nodes, whose extent is its
     // outline); with no box the translate-only path is preserved exactly.
     let outcome = fit_outcome(instance, &children, cx.resolved, cx, ctx, diagnostics);
-    record_expansion(instance, &children, &outcome, false, cx);
+    record_expansion(instance, &children, &outcome, None, (cx, ctx));
     match outcome {
         FitOutcome::Skip => {}
         FitOutcome::Transform { sx, sy, tx, ty } => {
@@ -274,7 +274,7 @@ fn compile_imported_instance(
         ctx,
         diagnostics,
     );
-    record_expansion(instance, &children, &outcome, true, cx);
+    record_expansion(instance, &children, &outcome, Some(import_id), (cx, ctx));
     match outcome {
         FitOutcome::Skip => {}
         FitOutcome::Transform { sx, sy, tx, ty } => {
@@ -329,28 +329,36 @@ fn compile_imported_instance(
 }
 
 /// Record the lowered subtree `instance` draws, when the compile records
-/// boxes. A skipped instance draws nothing and records nothing.
+/// boxes. A skipped instance draws nothing and records nothing. `import` is
+/// the import id of an imported component.
 fn record_expansion(
     instance: &InstanceNode,
     children: &[Node],
     outcome: &FitOutcome,
-    imported: bool,
-    cx: NodeCtx,
+    import: Option<&str>,
+    (cx, ctx): (NodeCtx, RenderCtx),
 ) {
     let Some(recorder) = cx.boxes else {
         return;
     };
-    let scaled = match *outcome {
+    let fit = match *outcome {
         FitOutcome::Skip => return,
-        FitOutcome::Translate => false,
-        FitOutcome::Transform { sx, sy, tx, ty } => !is_identity_transform(sx, sy, tx, ty),
+        FitOutcome::Translate => None,
+        // The transform is render-space; the record keeps the offset from
+        // the parent origin, so it holds in page space too.
+        FitOutcome::Transform { sx, sy, tx, ty } => Some(ScopeFit {
+            sx,
+            sy,
+            tx: tx - ctx.dx,
+            ty: ty - ctx.dy,
+        }),
     };
     recorder.expand(
         &instance.id,
         Expansion {
             children: children.to_vec(),
-            scaled,
-            imported,
+            fit,
+            import: import.map(str::to_owned),
         },
     );
 }
@@ -497,11 +505,6 @@ fn instance_dim_px(
 ) -> Option<f64> {
     let prop = dim.cloned().map(PropertyValue::Dimension);
     resolve_geometry_px(prop.as_ref(), resolved)
-}
-
-/// Whether a `PushScaleTranslate` would be the identity (no-op).
-fn is_identity_transform(sx: f64, sy: f64, tx: f64, ty: f64) -> bool {
-    sx == 1.0 && sy == 1.0 && tx == 0.0 && ty == 0.0
 }
 
 fn invalid_import_source(instance: &InstanceNode, source: &str) -> Diagnostic {

@@ -321,11 +321,16 @@ impl<F: ?Sized + FontProvider> PageCompiler<'_, F> {
                     style_map: &self.style_map,
                     assets: &doc.assets.assets,
                 },
+                imports: import_scopes,
                 shape: ShapeEnv {
                     engine: &engine,
                     fonts,
                 },
                 compiled: &diagnostics,
+                margins_declared: {
+                    let (i, o, t, b) = doc.effective_margins(page);
+                    i.is_some() || o.is_some() || t.is_some() || b.is_some()
+                },
             };
             let found = lint_page(&env, recorder);
             diagnostics.extend(found);

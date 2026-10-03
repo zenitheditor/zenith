@@ -52,6 +52,15 @@ pub(super) fn rotation_degrees(rotate: Option<&Dimension>) -> Option<f64> {
     rotate.map(|d| d.value).filter(|a| *a != 0.0)
 }
 
+// ── Transform helper ──────────────────────────────────────────────────────────
+
+/// `true` when a `PushScaleTranslate { sx, sy, tx, ty }` would be the identity
+/// map (each term within `f64::EPSILON` of 1 or 0), so the push is left out.
+pub(super) fn is_identity_transform(sx: f64, sy: f64, tx: f64, ty: f64) -> bool {
+    let near = |value: f64, target: f64| (value - target).abs() <= f64::EPSILON;
+    near(sx, 1.0) && near(sy, 1.0) && near(tx, 0.0) && near(ty, 0.0)
+}
+
 // ── Blend-mode helper ───────────────────────────────────────────────────────
 
 /// Map a `blend-mode` attribute string to a non-`Normal` [`BlendMode`], or

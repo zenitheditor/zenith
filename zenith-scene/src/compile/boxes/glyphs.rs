@@ -26,6 +26,8 @@ pub(in crate::compile) struct TextInk {
     pub(in crate::compile) font_size: f64,
     /// Every run draws under a transform that keeps boxes axis-aligned.
     pub(in crate::compile) axis_aligned: bool,
+    /// The baseline y of the first run, in page px.
+    pub(in crate::compile) baseline: Option<f64>,
 }
 
 /// The glyph ink of every glyph run in `commands` that names its source
@@ -80,6 +82,9 @@ pub(in crate::compile) fn glyph_inks(
                 ink.alpha = ink.alpha.max(color.a);
                 ink.font_size = ink.font_size.max(f64::from(*font_size));
                 ink.axis_aligned &= m.is_axis_aligned();
+                if ink.baseline.is_none() {
+                    ink.baseline = Some(m.apply(*x, *y).1 - origin.1);
+                }
                 for g in glyphs {
                     let key = (font_id.as_str(), g.glyph_id, font_size.to_bits());
                     let Some(b) = *memo.entry(key).or_insert_with(|| {

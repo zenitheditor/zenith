@@ -434,3 +434,61 @@ fn fix_applies_the_compile_stage_ink_overlap_move() {
         "{after:#}"
     );
 }
+
+/// Four boxes in a row; the last sits 3px too far right (gaps 20, 20, 23).
+const UNEVEN_DOC: &str = r##"zenith version=1 {
+  project id="proj.u" name="Uneven"
+  tokens format="zenith-token-v1" {
+    token id="color.box" type="color" value="#2255aa"
+    token id="color.paper" type="color" value="#ffffff"
+  }
+  styles {}
+  document id="doc.u" title="Uneven" {
+    page id="p" w=(px)800 h=(px)600 background=(token)"color.paper" {
+      rect id="r1" x=(px)40 y=(px)300 w=(px)100 h=(px)60 fill=(token)"color.box"
+      rect id="r2" x=(px)160 y=(px)300 w=(px)100 h=(px)60 fill=(token)"color.box"
+      rect id="r3" x=(px)280 y=(px)300 w=(px)100 h=(px)60 fill=(token)"color.box"
+      rect id="r4" x=(px)403 y=(px)300 w=(px)100 h=(px)60 fill=(token)"color.box"
+    }
+  }
+}
+"##;
+
+#[test]
+fn fix_moves_the_uneven_gap_outlier() {
+    let env = Env::new();
+    std::fs::write(env.doc(), UNEVEN_DOC).expect("write doc");
+    let before = env.validate_json();
+    let hint = before["diagnostics"]
+        .as_array()
+        .expect("diagnostics")
+        .iter()
+        .find(|d| d["code"] == "spacing.uneven_gap")
+        .unwrap_or_else(|| panic!("{before:#}"));
+    assert_eq!(hint["subject_id"], "r4", "{hint:#}");
+    assert_eq!(hint["fix"]["kind"], "set_property", "{hint:#}");
+    assert_eq!(hint["fix"]["to"], "(px)400", "{hint:#}");
+
+    let report = env.fix_json(true);
+    let applied = report["applied"].as_array().expect("applied");
+    assert!(
+        applied
+            .iter()
+            .any(|f| f["code"] == "spacing.uneven_gap" && f["subject_id"] == "r4"),
+        "{report:#}"
+    );
+    assert!(
+        env.read().contains(r#"rect id="r4" x=(px)400"#),
+        "{}",
+        env.read()
+    );
+    let after = env.validate_json();
+    assert!(
+        after["diagnostics"]
+            .as_array()
+            .expect("diagnostics")
+            .iter()
+            .all(|d| d["code"] != "spacing.uneven_gap"),
+        "{after:#}"
+    );
+}

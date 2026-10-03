@@ -41,6 +41,8 @@ pub(super) fn check_table_text_contrast(
             let ctx = PaintCtx {
                 dx: 0.0,
                 dy: 0.0,
+                sx: 1.0,
+                sy: 1.0,
                 clip: None,
                 opacity: 1.0,
                 unmodeled: false,

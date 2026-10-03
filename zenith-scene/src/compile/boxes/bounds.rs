@@ -54,7 +54,7 @@ impl Affine {
         }
     }
 
-    fn apply(self, x: f64, y: f64) -> (f64, f64) {
+    pub(super) fn apply(self, x: f64, y: f64) -> (f64, f64) {
         (
             self.a * x + self.c * y + self.e,
             self.b * x + self.d * y + self.f,
@@ -164,6 +164,28 @@ pub(super) fn open_transform(base: Affine, commands: &[SceneCommand]) -> Affine 
         stack.step(cmd, false);
     }
     stack.top()
+}
+
+/// The points of the first `StrokePolyline` in `commands`, every transform
+/// open under `base` applied. A connector draws its routed path as one.
+pub(super) fn first_polyline(commands: &[SceneCommand], base: Affine) -> Option<Vec<(f64, f64)>> {
+    let mut stack = Stack::new(base);
+    for cmd in commands {
+        if let SceneCommand::StrokePolyline { points, .. } = cmd {
+            let m = stack.top();
+            return Some(
+                points
+                    .chunks_exact(2)
+                    .filter_map(|pair| match pair {
+                        [x, y] => Some(m.apply(*x, *y)),
+                        _ => None,
+                    })
+                    .collect(),
+            );
+        }
+        stack.step(cmd, false);
+    }
+    None
 }
 
 /// Axis-aligned extent accumulator.

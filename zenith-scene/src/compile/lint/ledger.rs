@@ -33,6 +33,15 @@ pub(super) struct ShapeFacts {
     pub(super) pad: f64,
 }
 
+/// The `connector` facts the crossing check reads.
+#[derive(Clone, Debug, PartialEq)]
+pub(super) struct ConnectorFacts {
+    /// The `from` / `to` node ids, port suffix (`#port`) removed.
+    pub(super) ends: [Option<String>; 2],
+    /// `route`, `straight` when absent.
+    pub(super) route: String,
+}
+
 /// One compiled node. `role="decoration"` / `"background"` (own or
 /// inherited) folds into `exempt`; `role="guide"` nodes never compile and
 /// have no entry.
@@ -65,6 +74,7 @@ pub(super) struct Entry {
     /// Intersection of the clipping frames around the node, in page px.
     pub(super) clip: Option<LayoutBox>,
     pub(super) shape: Option<ShapeFacts>,
+    pub(super) connector: Option<ConnectorFacts>,
 }
 
 /// The glyph ink of one text node or `shape` / `connector` label.
@@ -203,6 +213,40 @@ impl PageLedger {
             | Node::Mesh(_)
             | Node::Unknown(_) => None,
         };
+        let connector = match node {
+            Node::Connector(c) => {
+                let end = |e: &Option<String>| {
+                    e.as_deref()
+                        .map(|e| e.split_once('#').map_or(e, |(id, _)| id).to_owned())
+                };
+                Some(ConnectorFacts {
+                    ends: [end(&c.from), end(&c.to)],
+                    route: c.route.clone().unwrap_or_else(|| "straight".to_owned()),
+                })
+            }
+            Node::Rect(_)
+            | Node::Ellipse(_)
+            | Node::Line(_)
+            | Node::Text(_)
+            | Node::Code(_)
+            | Node::Frame(_)
+            | Node::Group(_)
+            | Node::Image(_)
+            | Node::Polygon(_)
+            | Node::Polyline(_)
+            | Node::Path(_)
+            | Node::Instance(_)
+            | Node::Field(_)
+            | Node::Toc(_)
+            | Node::Footnote(_)
+            | Node::Table(_)
+            | Node::Shape(_)
+            | Node::Pattern(_)
+            | Node::Chart(_)
+            | Node::Light(_)
+            | Node::Mesh(_)
+            | Node::Unknown(_) => None,
+        };
         let index = self.entries.len();
         self.entries.push(Entry {
             id: id.to_owned(),
@@ -220,6 +264,7 @@ impl PageLedger {
             scope: inherit.scope,
             clip: inherit.clip,
             shape,
+            connector,
         });
         if !visible {
             return;
@@ -263,8 +308,8 @@ impl PageLedger {
                 if let Some(expansion) = input.expansions.get(id) {
                     let inner = Inherit {
                         expanded: true,
-                        unmodeled: child.unmodeled || expansion.scaled,
-                        imported: child.imported || expansion.imported,
+                        unmodeled: child.unmodeled || expansion.scaled(),
+                        imported: child.imported || expansion.import.is_some(),
                         ..child
                     };
                     self.walk(&expansion.children, inner, input);

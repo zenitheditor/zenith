@@ -227,6 +227,11 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
         "Shape `kind` is not a recognized preset shape.",
     ),
     info(
+        "spacing.uneven_gap",
+        Severity::Advisory,
+        "Three or more siblings in a row or column have nearly but not exactly equal gaps.",
+    ),
+    info(
         "style.align_unsupported",
         Severity::Warning,
         "A shape or table takes a style `align` value its `h-align` does not accept.",
@@ -277,6 +282,11 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
         "Text `text-exclusion` references an unknown node.",
     ),
     info(
+        "text.edge_crowding",
+        Severity::Advisory,
+        "A text's glyph ink sits closer to the trim edge than max(8px, 1.5% of the shorter page side) while still inside the trim; skipped when the page declares margins or a safe zone. The message names the gap, the floor, and the `x` / `y` that reaches it, with a `set_property` fix when the text has an authored absolute `x` / `y`.",
+    ),
+    info(
         "text.fit_failed",
         Severity::Error,
         "Text with `overflow=\"fit\"` (or `\"autofit\"` at its floor) overflows its box; the message names the box size and font size that fit.",
@@ -315,6 +325,11 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
         "text.src_missing",
         Severity::Error,
         "A text node's `src` file was not found or could not be read at render time.",
+    ),
+    info(
+        "text.too_small",
+        Severity::Advisory,
+        "A text's effective font size is below max(9px, 0.9% of the shorter page side); the message names the floor and the `font-size` that reaches it, with a `replace_value` fix when `font-size` is a literal on the node.",
     ),
     info(
         "toc.no_selector",
@@ -501,6 +516,11 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
         "tx.wrong_node_type",
         Severity::Error,
         "A transaction op targets a node of the wrong kind for that operation.",
+    ),
+    info(
+        "type.near_duplicate_size",
+        Severity::Advisory,
+        "Two distinct authored font sizes inside one top-level group or frame differ by 1px or less, or by under 8%; the message names both sizes and their sources. Chart, table, and code internals are skipped.",
     ),
     info(
         "value.out_of_range",

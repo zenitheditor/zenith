@@ -6,8 +6,9 @@ use std::collections::BTreeMap;
 use crate::ast::style::Style;
 use crate::tokens::ResolvedToken;
 
-use super::geometry::{CoverageShape, RectPx, Rotation};
+use super::geometry::{CoverageShape, Place, RectPx, Rotation};
 use super::label::LabelInk;
+use super::scope::ContentScopes;
 
 /// Below this APCA magnitude the text is effectively painted into its backdrop,
 /// which is a stronger signal than ordinary sub-threshold contrast.
@@ -18,8 +19,12 @@ pub(super) const BLACK: (u8, u8, u8) = (0, 0, 0);
 
 #[derive(Clone, Copy)]
 pub(super) struct PaintCtx<'a> {
+    /// Page position of the local origin.
     pub(super) dx: f64,
     pub(super) dy: f64,
+    /// Scale from local to page px (an enclosing instance fit transform).
+    pub(super) sx: f64,
+    pub(super) sy: f64,
     pub(super) clip: Option<RectPx>,
     pub(super) opacity: f64,
     /// True when an ancestor `group`/`frame` carries a transform the validator
@@ -33,6 +38,23 @@ pub(super) struct PaintCtx<'a> {
     /// children that sets no `style` of its own. `None` everywhere else, and
     /// below the first container.
     pub(super) header_style: Option<&'a str>,
+}
+
+impl PaintCtx<'_> {
+    /// The local-to-page map of this context.
+    pub(super) fn place(&self) -> Place {
+        Place {
+            dx: self.dx,
+            dy: self.dy,
+            sx: self.sx,
+            sy: self.sy,
+        }
+    }
+
+    /// `true` when local x and y scale alike, so a leaf rotation stays rigid.
+    pub(super) fn uniform(&self) -> bool {
+        (self.sx - self.sy).abs() <= f64::EPSILON
+    }
 }
 
 pub(super) struct BackdropCandidate {
@@ -95,4 +117,6 @@ pub(super) struct ContrastEnv<'a> {
     /// `None`: judge text nodes. `Some`: judge only the labels with measured
     /// ink (the compile-stage label pass).
     pub(super) labels: Option<&'a BTreeMap<String, LabelInk>>,
+    /// Groups that stand in for expanded instances, by id.
+    pub(super) scopes: Option<&'a ContentScopes<'a>>,
 }

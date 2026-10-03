@@ -67,7 +67,9 @@ mod visual;
 // `passes` but is called by the node submodules via
 // `crate::validate::check::register_id`, so it is re-exported here to keep that
 // path resolving.
-pub use contrast::{LabelInk, label_contrast_checks};
+pub use contrast::{
+    ContentScope, ContentScopes, LabelInk, ScopeFit, ScopeTokens, label_contrast_checks,
+};
 pub use driver::{validate, validate_with_policy};
 pub use geometry::{expanded_text_contrast_checks, layout_geometry_checks};
 pub(in crate::validate::check) use passes::register_id;

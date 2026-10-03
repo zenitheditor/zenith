@@ -26,6 +26,8 @@ pub(in crate::compile) struct PaintEnv<'a> {
 /// How the authored document places one node.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub(super) struct Authored {
+    /// The authored `x` when it is a literal dimension, in px.
+    pub(super) x_px: Option<f64>,
     /// The authored `y` when it is a literal dimension, in px.
     pub(super) y_px: Option<f64>,
     /// Any `anchor*` attribute is set.
@@ -48,15 +50,8 @@ fn collect_authored(nodes: &[Node], placed_by_parent: bool, out: &mut BTreeMap<S
             view.is_some_and(|v| matches!(v.layout_item.position, Some(LayoutPosition::Absolute)));
         if let Some(id) = node.id() {
             out.entry(id.to_owned()).or_insert(Authored {
-                y_px: view.and_then(|v| match v.y {
-                    Some(PropertyValue::Dimension(d)) => dim_to_px(d.value, &d.unit),
-                    Some(
-                        PropertyValue::TokenRef(_)
-                        | PropertyValue::Literal(_)
-                        | PropertyValue::DataRef(_),
-                    )
-                    | None => None,
-                }),
+                x_px: view.and_then(|v| literal_px(v.x)),
+                y_px: view.and_then(|v| literal_px(v.y)),
                 anchored: view.is_some_and(|v| v.anchored),
                 in_flow: placed_by_parent && !absolute,
             });
@@ -95,6 +90,17 @@ fn collect_authored(nodes: &[Node], placed_by_parent: bool, out: &mut BTreeMap<S
             | Node::Light(_)
             | Node::Mesh(_) => {}
         }
+    }
+}
+
+/// The px value of a literal dimension.
+pub(super) fn literal_px(value: Option<&PropertyValue>) -> Option<f64> {
+    match value {
+        Some(PropertyValue::Dimension(d)) => dim_to_px(d.value, &d.unit),
+        Some(
+            PropertyValue::TokenRef(_) | PropertyValue::Literal(_) | PropertyValue::DataRef(_),
+        )
+        | None => None,
     }
 }
 

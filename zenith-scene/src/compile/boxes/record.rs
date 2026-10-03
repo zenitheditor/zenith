@@ -3,7 +3,7 @@
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 
-use zenith_core::{Node, PropertyValue};
+use zenith_core::{Node, PropertyValue, ScopeFit};
 
 use crate::ir::SceneCommand;
 use crate::layout::LayoutBox;
@@ -14,7 +14,7 @@ use super::super::pipeline::RenderCtx;
 use super::super::text::ShapeEnv;
 use super::super::toc::resolve_toc_to_text;
 use super::super::util::resolve_geometry_px;
-use super::bounds::{Affine, map_box, open_transform, painted};
+use super::bounds::{Affine, first_polyline, map_box, open_transform, painted};
 
 /// The final geometry of one compiled node, in page-absolute px.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -33,18 +33,40 @@ pub struct CompiledBox {
 pub(in crate::compile) struct Expansion {
     /// The expanded children, ids prefixed with `<instance-id>/`.
     pub(in crate::compile) children: Vec<Node>,
-    /// The children draw under the instance `w` / `h` fit transform.
-    pub(in crate::compile) scaled: bool,
-    /// The children come from an imported component (their own token scope).
-    pub(in crate::compile) imported: bool,
+    /// The instance `w` / `h` fit transform the children draw under, its
+    /// offset taken from the instance parent's origin. `None`: the children
+    /// draw offset by the instance `x` / `y`.
+    pub(in crate::compile) fit: Option<ScopeFit>,
+    /// The import id, when the children come from an imported component
+    /// (their own token scope).
+    pub(in crate::compile) import: Option<String>,
 }
 
-/// Collects the final box of every compiled node of one page, and the
-/// subtree each `instance` expanded to.
+impl Expansion {
+    /// `true` when the children draw under a fit scale.
+    pub(in crate::compile) fn scaled(&self) -> bool {
+        self.fit.is_some_and(|f| f.scales())
+    }
+}
+
+/// Everything one [`BoxRecorder`] collected.
+#[derive(Debug, Default)]
+pub(in crate::compile) struct Recorded {
+    /// The final box of every compiled node, by id.
+    pub(in crate::compile) boxes: BTreeMap<String, CompiledBox>,
+    /// The subtree each `instance` expanded to, by instance id.
+    pub(in crate::compile) expansions: BTreeMap<String, Expansion>,
+    /// The drawn route of every stroked `connector`, in page px, by id.
+    pub(in crate::compile) routes: BTreeMap<String, Vec<(f64, f64)>>,
+}
+
+/// Collects the final box of every compiled node of one page, the subtree
+/// each `instance` expanded to, and the route each `connector` drew.
 #[derive(Debug)]
 pub(in crate::compile) struct BoxRecorder {
     boxes: RefCell<BTreeMap<String, CompiledBox>>,
     expansions: RefCell<BTreeMap<String, Expansion>>,
+    routes: RefCell<BTreeMap<String, Vec<(f64, f64)>>>,
     /// The transform open where this recorder's command stream starts.
     base: Affine,
 }
@@ -54,6 +76,7 @@ impl Default for BoxRecorder {
         Self {
             boxes: RefCell::new(BTreeMap::new()),
             expansions: RefCell::new(BTreeMap::new()),
+            routes: RefCell::new(BTreeMap::new()),
             base: Affine::IDENTITY,
         }
     }
@@ -101,12 +124,14 @@ impl BoxRecorder {
         BoxRecorder {
             boxes: RefCell::new(BTreeMap::new()),
             expansions: RefCell::new(BTreeMap::new()),
+            routes: RefCell::new(BTreeMap::new()),
             base: open_transform(self.base, outer),
         }
     }
 
     /// Move every box record of `child` into this recorder under `prefix` +
-    /// id. The expansions of `child` (pattern motif copies) are dropped.
+    /// id. The expansions and routes of `child` (pattern motif copies) are
+    /// dropped.
     pub(in crate::compile) fn absorb(&self, child: BoxRecorder, prefix: &str) {
         let mut boxes = self.boxes.borrow_mut();
         for (id, b) in child.boxes.into_inner() {
@@ -119,11 +144,13 @@ impl BoxRecorder {
         self.boxes.into_inner()
     }
 
-    /// The recorded boxes and instance expansions, by id.
-    pub(in crate::compile) fn into_parts(
-        self,
-    ) -> (BTreeMap<String, CompiledBox>, BTreeMap<String, Expansion>) {
-        (self.boxes.into_inner(), self.expansions.into_inner())
+    /// Everything recorded.
+    pub(in crate::compile) fn into_parts(self) -> Recorded {
+        Recorded {
+            boxes: self.boxes.into_inner(),
+            expansions: self.expansions.into_inner(),
+            routes: self.routes.into_inner(),
+        }
     }
 
     /// Record the subtree the instance `id` expanded to (first record wins).
@@ -174,6 +201,9 @@ impl BoxRecorder {
             | Node::Mesh(_)
             | Node::Unknown(_) => None,
         };
+        if let Node::Connector(_) = c.node {
+            self.route(id, c);
+        }
         let source = resolved_text.as_ref().unwrap_or(c.node);
         self.place(Placed {
             id,
@@ -187,6 +217,21 @@ impl BoxRecorder {
                 fonts: c.cx.fonts,
             },
         });
+    }
+
+    /// Record the route a connector drew (first record of an id wins).
+    fn route(&self, id: &str, c: Compiled<'_>) {
+        if self.routes.borrow().contains_key(id) {
+            return;
+        }
+        let prefix = open_transform(self.base, c.commands.get(..c.start).unwrap_or_default());
+        let own = c.commands.get(c.start..).unwrap_or_default();
+        let Some(points) = first_polyline(own, prefix) else {
+            return;
+        };
+        let (ox, oy) = c.ctx.page_origin;
+        let points = points.into_iter().map(|(x, y)| (x - ox, y - oy)).collect();
+        self.routes.borrow_mut().insert(id.to_owned(), points);
     }
 
     /// Record one placed node (first record of an id wins).

@@ -9,7 +9,9 @@
 
 use std::collections::BTreeMap;
 
-use zenith_core::{Diagnostic, LabelInk, Page, ResolvedToken, Style, label_contrast_checks};
+use zenith_core::{
+    ContentScopes, Diagnostic, LabelInk, Page, ResolvedToken, Style, label_contrast_checks,
+};
 
 use crate::ir::SceneCommand;
 
@@ -39,14 +41,15 @@ enum Transform {
 
 /// Label contrast diagnostics for `page`, compiled into `commands`.
 ///
-/// `bleed` is the scene offset of the trim box. `style_map` and `resolved`
-/// are the compile document's.
+/// `bleed` is the scene offset of the trim box. `resolved` and `style_map`
+/// are the compile document's. The groups in `scopes` stand in for expanded
+/// instances with their own token scope or fit transform.
 pub(in crate::compile) fn label_contrast(
     commands: &[SceneCommand],
     page: &Page,
     bleed: f64,
-    resolved: &BTreeMap<String, ResolvedToken>,
-    style_map: &BTreeMap<&str, &Style>,
+    (resolved, style_map): (&BTreeMap<String, ResolvedToken>, &BTreeMap<&str, &Style>),
+    scopes: &ContentScopes<'_>,
     env: ShapeEnv<'_>,
 ) -> Vec<Diagnostic> {
     let mut stack: Vec<Transform> = Vec::new();
@@ -143,5 +146,5 @@ pub(in crate::compile) fn label_contrast(
             ))
         })
         .collect();
-    label_contrast_checks(page, resolved, style_map, &inks)
+    label_contrast_checks(page, resolved, style_map, &inks, scopes)
 }

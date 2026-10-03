@@ -94,21 +94,40 @@ pub(super) fn walk_paint(
                 walk_paint(&f.children, child_ctx, candidates, env, diagnostics);
             }
             Node::Group(g) => {
-                let (gx, gy) = group_offset(
-                    g.x.as_ref(),
-                    g.y.as_ref(),
-                    ctx.page_size,
-                    env.resolved_tokens,
-                );
+                let scope = env.scopes.and_then(|scopes| scopes.get(&g.id));
+                // A scoped group's `x` / `y` resolve in the enclosing scope.
+                let (ox, oy, sx, sy) = match scope.and_then(|s| s.fit) {
+                    Some(fit) => (fit.tx, fit.ty, fit.sx, fit.sy),
+                    None => {
+                        let (gx, gy) = group_offset(
+                            g.x.as_ref(),
+                            g.y.as_ref(),
+                            ctx.page_size,
+                            env.resolved_tokens,
+                        );
+                        (gx, gy, 1.0, 1.0)
+                    }
+                };
+                let (dx, dy) = ctx.place().point(ox, oy);
                 let child_ctx = PaintCtx {
-                    dx: ctx.dx + gx,
-                    dy: ctx.dy + gy,
+                    dx,
+                    dy,
+                    sx: ctx.sx * sx,
+                    sy: ctx.sy * sy,
                     opacity: cascaded_opacity(ctx.opacity, g.opacity),
                     unmodeled: ctx.unmodeled || container_is_unmodeled(node),
                     header_style: None,
                     ..ctx
                 };
-                walk_paint(&g.children, child_ctx, candidates, env, diagnostics);
+                let child_env = match scope.and_then(|s| s.tokens) {
+                    Some(tokens) => ContrastEnv {
+                        resolved_tokens: tokens.resolved,
+                        style_map: tokens.styles,
+                        ..env
+                    },
+                    None => env,
+                };
+                walk_paint(&g.children, child_ctx, candidates, child_env, diagnostics);
             }
             Node::Text(t) => {
                 if env.labels.is_none() {
@@ -218,7 +237,7 @@ fn push_point_backdrop(
     ) else {
         return;
     };
-    let Some((bounds, shape)) = polygon_region(points, ctx.dx, ctx.dy, ctx.page_size) else {
+    let Some((bounds, shape)) = polygon_region(points, ctx.place(), ctx.page_size) else {
         return;
     };
     // A rotated polygon/polyline pivots on its centroid box (not its bounding-box
@@ -259,15 +278,15 @@ fn push_path_backdrop(
     ) else {
         return;
     };
-    let Some((bounds, shape)) = path_fill_region(path, ctx.dx, ctx.dy, ctx.page_size) else {
+    let Some((bounds, shape)) = path_fill_region(path, ctx.place(), ctx.page_size) else {
         return;
     };
-    let paint = if ctx.unmodeled {
+    let rotation = leaf_rotation(node, bounds);
+    let paint = if ctx.unmodeled || skewed(ctx, rotation.is_some()) {
         BackdropPaint::Indeterminate
     } else {
         paint
     };
-    let rotation = leaf_rotation(node, bounds);
     if let Some(bounds) = clip_bounds(ctx.clip, bounds) {
         candidates.push(BackdropCandidate {
             paint,
@@ -303,19 +322,19 @@ fn push_backdrop(
     // A paint-altering effect on the leaf itself (mask/filter/blur/non-normal
     // blend), or an unmodeled ancestor transform, makes the composited colour
     // un-sampleable — downgrade to indeterminate rather than trust the raw fill.
-    let paint = if ctx.unmodeled || candidate_has_effect(node) {
+    // A rotation on the leaf is modeled EXACTLY: the renderer rotates it about
+    // its own box center, so containment is tested by inverse-rotating samples.
+    let rotation = leaf_rotation(node, bounds);
+    let paint = if ctx.unmodeled || candidate_has_effect(node) || skewed(ctx, rotation.is_some()) {
         BackdropPaint::Indeterminate
     } else {
         paint
     };
-    // A rotation on the leaf is modeled EXACTLY: the renderer rotates it about
-    // its own box center, so containment is tested by inverse-rotating samples.
-    let rotation = leaf_rotation(node, bounds);
     if let Some(clipped) = clip_bounds(ctx.clip, bounds) {
         candidates.push(BackdropCandidate {
             paint,
             bounds: clipped,
-            shape,
+            shape: shape.scaled(ctx.sx.min(ctx.sy)),
             rotation,
         });
     }
@@ -350,7 +369,13 @@ fn absolute_box(
     ctx: PaintCtx<'_>,
     resolved_tokens: &BTreeMap<String, ResolvedToken>,
 ) -> Option<RectPx> {
-    local_box(node, ctx.page_size, resolved_tokens).map(|b| b.translated(ctx.dx, ctx.dy))
+    local_box(node, ctx.page_size, resolved_tokens).map(|b| ctx.place().rect(b))
+}
+
+/// `true` when a rotated leaf draws under a non-uniform scale: the drawn
+/// outline is sheared, so the rigid rotation model does not hold.
+fn skewed(ctx: PaintCtx<'_>, rotates: bool) -> bool {
+    rotates && !ctx.uniform()
 }
 
 fn cascaded_opacity(parent: f64, opacity: Option<f64>) -> f64 {

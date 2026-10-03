@@ -5,11 +5,14 @@ use zenith_core::{Diagnostic, Node, Page};
 
 use crate::ir::SceneCommand;
 
-use super::super::boxes::{BoxRecorder, glyph_inks};
+use super::super::boxes::{BoxRecorder, Recorded, glyph_inks};
+use super::super::imports::ImportScopes;
 use super::super::text::ShapeEnv;
+use super::arrange::arrangement;
 use super::contrast::content_contrast;
 use super::label_overflow::label_overflow;
 use super::ledger::{LedgerInput, PageLedger};
+use super::legibility::legibility;
 use super::overlap::{ink_overlap, occluded};
 use super::paint::{PaintEnv, authored_facts};
 
@@ -26,16 +29,24 @@ pub(in crate::compile) struct LintEnv<'a> {
     /// Scene offset of the trim box.
     pub(in crate::compile) bleed: f64,
     pub(in crate::compile) paint: PaintEnv<'a>,
+    /// The import scopes, for expanded imported components.
+    pub(in crate::compile) imports: &'a ImportScopes<'a>,
     pub(in crate::compile) shape: ShapeEnv<'a>,
     /// The page's diagnostics so far.
     pub(in crate::compile) compiled: &'a [Diagnostic],
+    /// The page or document declares book margins (a live area).
+    pub(in crate::compile) margins_declared: bool,
 }
 
 /// The lint diagnostics of one page: `text.ink_overlap`, `text.occluded`,
 /// `label.overflow`, label contrast, and the text contrast of expanded
 /// content. `recorder` is the page compile's box recorder.
 pub(in crate::compile) fn lint_page(env: &LintEnv<'_>, recorder: BoxRecorder) -> Vec<Diagnostic> {
-    let (boxes, expansions) = recorder.into_parts();
+    let Recorded {
+        boxes,
+        expansions,
+        routes,
+    } = recorder.into_parts();
     let authored = env
         .authored
         .map(|p| authored_facts(&p.children))
@@ -56,5 +67,7 @@ pub(in crate::compile) fn lint_page(env: &LintEnv<'_>, recorder: BoxRecorder) ->
     out.extend(occluded(&ledger));
     out.extend(label_overflow(&ledger, env.compiled));
     out.extend(content_contrast(env, &expansions));
+    out.extend(legibility(env, &ledger, &authored));
+    out.extend(arrangement(&ledger, &authored, &routes));
     out
 }

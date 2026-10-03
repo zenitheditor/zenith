@@ -21,16 +21,32 @@ pub(super) struct RectPx {
     pub(super) h: f64,
 }
 
-impl RectPx {
-    pub(super) fn translated(self, dx: f64, dy: f64) -> Self {
-        Self {
-            x: self.x + dx,
-            y: self.y + dy,
-            w: self.w,
-            h: self.h,
-        }
+/// The map from local px to page px: `page = (dx, dy) + (sx, sy) · local`.
+#[derive(Clone, Copy, Debug)]
+pub(super) struct Place {
+    pub(super) dx: f64,
+    pub(super) dy: f64,
+    pub(super) sx: f64,
+    pub(super) sy: f64,
+}
+
+impl Place {
+    pub(super) fn point(self, x: f64, y: f64) -> (f64, f64) {
+        (self.dx + self.sx * x, self.dy + self.sy * y)
     }
 
+    pub(super) fn rect(self, r: RectPx) -> RectPx {
+        let (x, y) = self.point(r.x, r.y);
+        RectPx {
+            x,
+            y,
+            w: r.w * self.sx,
+            h: r.h * self.sy,
+        }
+    }
+}
+
+impl RectPx {
     pub(super) fn contains_rect(self, other: Self) -> bool {
         self.x <= other.x
             && self.y <= other.y
@@ -123,6 +139,25 @@ impl Rotation {
 }
 
 impl CoverageShape {
+    /// The shape drawn under a local-to-page scale of `k` (the smaller axis
+    /// scale): corner radii grow with it. Outlines held in page px are kept.
+    pub(super) fn scaled(self, k: f64) -> Self {
+        match self {
+            CoverageShape::RoundedRect { tl, tr, br, bl } => CoverageShape::RoundedRect {
+                tl: tl * k,
+                tr: tr * k,
+                br: br * k,
+                bl: bl * k,
+            },
+            CoverageShape::Rect
+            | CoverageShape::Ellipse
+            | CoverageShape::Diamond
+            | CoverageShape::Capsule
+            | CoverageShape::Polygon(_)
+            | CoverageShape::PathFill { .. } => self,
+        }
+    }
+
     pub(super) fn contains_point(&self, bounds: RectPx, x: f64, y: f64) -> bool {
         if !bounds.contains_point(x, y) {
             return false;
@@ -293,8 +328,7 @@ pub(super) fn group_offset(
 
 pub(super) fn polygon_region(
     points: &[Point],
-    dx: f64,
-    dy: f64,
+    place: Place,
     page_size: (f64, f64),
 ) -> Option<(RectPx, CoverageShape)> {
     let mut resolved = Vec::with_capacity(points.len());
@@ -302,14 +336,12 @@ pub(super) fn polygon_region(
         let x = point
             .x
             .as_ref()
-            .and_then(|dim| resolve_dim_axis(dim, page_size.0))?
-            + dx;
+            .and_then(|dim| resolve_dim_axis(dim, page_size.0))?;
         let y = point
             .y
             .as_ref()
-            .and_then(|dim| resolve_dim_axis(dim, page_size.1))?
-            + dy;
-        resolved.push((x, y));
+            .and_then(|dim| resolve_dim_axis(dim, page_size.1))?;
+        resolved.push(place.point(x, y));
     }
     if resolved.len() < 3 {
         return None;
@@ -322,15 +354,14 @@ pub(super) fn polygon_region(
 ///
 /// Builds absolute-page [`CompoundPathGeometry`] from `path.effective_subpaths()`,
 /// resolves anchor/handle dimensions with percent-aware page axes and the
-/// ancestor translation `(dx, dy)`, and returns extrema-aware closed-fill bounds
+/// ancestor map `place`, and returns extrema-aware closed-fill bounds
 /// plus a [`CoverageShape::PathFill`].
 ///
 /// Returns `None` when geometry is undecidable (mixed partial coordinates),
 /// open/stroke-only (no closed contour), or bounds cannot be computed.
 pub(super) fn path_fill_region(
     path: &PathNode,
-    dx: f64,
-    dy: f64,
+    place: Place,
     page_size: (f64, f64),
 ) -> Option<(RectPx, CoverageShape)> {
     let mut contours = Vec::new();
@@ -338,19 +369,17 @@ pub(super) fn path_fill_region(
         let closed = sub.closed.unwrap_or(false);
         let mut anchors = Vec::with_capacity(sub.anchors.len());
         for anchor in sub.anchors {
-            let point = resolve_abs_point(anchor.x.as_ref(), anchor.y.as_ref(), dx, dy, page_size)?;
+            let point = resolve_abs_point(anchor.x.as_ref(), anchor.y.as_ref(), place, page_size)?;
             let in_handle = resolve_optional_abs_point(
                 anchor.in_x.as_ref(),
                 anchor.in_y.as_ref(),
-                dx,
-                dy,
+                place,
                 page_size,
             )?;
             let out_handle = resolve_optional_abs_point(
                 anchor.out_x.as_ref(),
                 anchor.out_y.as_ref(),
-                dx,
-                dy,
+                place,
                 page_size,
             )?;
             let geom_anchor = GeomPathAnchor::new(point, in_handle, out_handle).ok()?;
@@ -384,12 +413,13 @@ pub(super) fn path_fill_region(
 fn resolve_abs_point(
     x: Option<&Dimension>,
     y: Option<&Dimension>,
-    dx: f64,
-    dy: f64,
+    place: Place,
     page_size: (f64, f64),
 ) -> Option<Point2> {
-    let x = resolve_dim_axis(x?, page_size.0)? + dx;
-    let y = resolve_dim_axis(y?, page_size.1)? + dy;
+    let (x, y) = place.point(
+        resolve_dim_axis(x?, page_size.0)?,
+        resolve_dim_axis(y?, page_size.1)?,
+    );
     Point2::new(x, y).ok()
 }
 
@@ -400,13 +430,12 @@ fn resolve_abs_point(
 fn resolve_optional_abs_point(
     x: Option<&Dimension>,
     y: Option<&Dimension>,
-    dx: f64,
-    dy: f64,
+    place: Place,
     page_size: (f64, f64),
 ) -> Option<Option<Point2>> {
     match (x, y) {
         (None, None) => Some(None),
-        (Some(_), Some(_)) => Some(Some(resolve_abs_point(x, y, dx, dy, page_size)?)),
+        (Some(_), Some(_)) => Some(Some(resolve_abs_point(x, y, place, page_size)?)),
         (Some(_), None) | (None, Some(_)) => None,
     }
 }

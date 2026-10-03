@@ -7,15 +7,29 @@
 //! - `overlap` — `text.ink_overlap` and `text.occluded`.
 //! - `label_overflow` — `label.overflow`.
 //! - `contrast` — label contrast, and text contrast of expanded content.
+//! - `legibility` — `text.edge_crowding`, `text.too_small`, and
+//!   `type.near_duplicate_size` (`edges`, `small_text`, `type_scale`, over the
+//!   authored facts of `text_facts`).
+//! - `arrange` — `align.near_miss`, `spacing.uneven_gap`, and
+//!   `connector.crosses_node` (`align`, `spacing`, `connector`).
 //! - `run` — the entry point the page compile calls.
 
+mod align;
+mod arrange;
+mod connector;
 mod contrast;
+mod edges;
 mod geom;
 mod label_overflow;
 mod ledger;
+mod legibility;
 mod overlap;
 mod paint;
 mod run;
+mod small_text;
+mod spacing;
+mod text_facts;
+mod type_scale;
 
 pub(in crate::compile) use paint::PaintEnv;
 pub(in crate::compile) use run::{LintEnv, lint_page};

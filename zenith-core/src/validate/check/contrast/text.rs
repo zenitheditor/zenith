@@ -43,18 +43,21 @@ pub(super) fn check_text_node(
         },
     };
 
-    let size_px = resolve_font_size(text, style, env.style_map, env.resolved_tokens);
+    // A fit transform scales the drawn glyphs; the smaller axis scale rules.
+    let size_px =
+        resolve_font_size(text, style, env.style_map, env.resolved_tokens) * ctx.sx.min(ctx.sy);
     let weight = resolve_font_weight(text, style, env.style_map, env.resolved_tokens);
     let threshold = lc_threshold(size_px, weight);
 
     let hint_rgb = resolve_color_property(text.contrast_bg.as_ref(), env.resolved_tokens);
     let mut backdrop_samples = Vec::new();
     if hint_rgb.is_none() {
-        // The text sample box must live in ABSOLUTE page space, translated by the
-        // accumulated ancestor offset, so it lands on the same coordinates as the
-        // (already-absolute) backdrop candidates and frame clip.
-        let Some(text_bbox) = text_box(text, ctx.page_size, env.resolved_tokens)
-            .map(|b| b.translated(ctx.dx, ctx.dy))
+        // The text sample box must live in ABSOLUTE page space, mapped by the
+        // accumulated ancestor offset and scale, so it lands on the same
+        // coordinates as the (already-absolute) backdrop candidates and frame
+        // clip.
+        let Some(text_bbox) =
+            text_box(text, ctx.page_size, env.resolved_tokens).map(|b| ctx.place().rect(b))
         else {
             // No resolvable box (e.g. anchored text with no authored w/h). We
             // cannot compute its extent without font metrics, so rather than

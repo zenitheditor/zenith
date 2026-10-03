@@ -12,6 +12,7 @@
 //! - `label` — measured `shape` / `connector` label ink.
 //! - `paint` — `fill` to backdrop paint resolution.
 //! - `props` / `geometry` — property and coverage-geometry helpers.
+//! - `scope` — token scope and fit transform of expanded content.
 //! - `types` — shared value types.
 
 mod entry;
@@ -19,11 +20,13 @@ mod geometry;
 mod label;
 mod paint;
 mod props;
+mod scope;
 mod table;
 mod text;
 mod types;
 mod walk;
 
-pub(super) use entry::check_page_text_contrast;
 pub use entry::label_contrast_checks;
+pub(super) use entry::{check_page_text_contrast, check_scoped_text_contrast};
 pub use label::LabelInk;
+pub use scope::{ContentScope, ContentScopes, ScopeFit, ScopeTokens};

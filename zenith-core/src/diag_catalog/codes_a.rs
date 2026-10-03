@@ -7,6 +7,11 @@ use crate::diagnostics::Severity;
 /// Group a of the diagnostic-code catalog (see `super::catalog::DIAGNOSTIC_CODES`).
 pub(super) const CODES: &[DiagnosticCodeInfo] = &[
     info(
+        "align.near_miss",
+        Severity::Advisory,
+        "A node edge, center, or text baseline sits 0.75-3px off a value two or more siblings share.",
+    ),
+    info(
         "anchor.cycle",
         Severity::Error,
         "Anchor parent chain forms a cycle.",
@@ -155,6 +160,11 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
         "connector.anchor_unresolved",
         Severity::Error,
         "A connector endpoint could not be resolved to a target box (unknown node or no authored geometry).",
+    ),
+    info(
+        "connector.crosses_node",
+        Severity::Advisory,
+        "A connector's drawn route runs through the box of a node it does not connect.",
     ),
     info(
         "connector.invalid_anchor",
