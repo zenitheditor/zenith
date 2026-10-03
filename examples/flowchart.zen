@@ -1,5 +1,7 @@
-zenith version=1 {
+zenith version=1 doc-id="01M406FQPBZF7Q9ARVS5YS8W9T" {
   project id="proj.flowchart" name="Flowchart Example"
+  assets {
+  }
   tokens format="zenith-token-v1" {
     token id="color.bg" type="color" value="#f8fafc"
     token id="color.fill" type="color" value="#dbeafe"
@@ -14,18 +16,24 @@ zenith version=1 {
   }
   styles {
     style id="style.label" {
+      fill (token)"color.ink"
       font-family (token)"font.body"
       font-size (token)"size.fs"
-      fill (token)"color.ink"
     }
   }
   document id="doc.flowchart" title="Flowchart Example" {
     page id="page.flowchart" w=(px)360 h=(px)420 background=(token)"color.bg" {
-      shape id="shape.start" kind="terminator" x=(px)80 y=(px)40 w=(px)200 h=(px)64 fill=(token)"color.fill" stroke=(token)"color.stroke" stroke-width=(token)"size.bw" padding=(token)"size.pad" text-style="style.label" { span "Start" }
-      shape id="shape.check" kind="decision" x=(px)90 y=(px)160 w=(px)180 h=(px)120 fill=(token)"color.dec" stroke=(token)"color.stroke" stroke-width=(token)"size.bw" padding=(token)"size.pad" text-style="style.label" { span "OK?" }
-      shape id="shape.done" kind="process" x=(px)80 y=(px)330 w=(px)200 h=(px)64 fill=(token)"color.fill" stroke=(token)"color.stroke" stroke-width=(token)"size.bw" radius=(token)"size.r" padding=(token)"size.pad" text-style="style.label" { span "Done" }
-      connector id="conn.1" from="shape.start" to="shape.check" stroke=(token)"color.stroke" stroke-width=(token)"size.bw" route="orthogonal" marker-end="arrow"
-      connector id="conn.2" from="shape.check" to="shape.done" stroke=(token)"color.stroke" stroke-width=(token)"size.bw" route="orthogonal" marker-end="arrow"
+      shape id="shape.start" x=(px)80 y=(px)40 w=(px)200 h=(px)64 kind="terminator" fill=(token)"color.fill" stroke=(token)"color.stroke" stroke-width=(token)"size.bw" padding=(token)"size.pad" text-style="style.label" {
+        span "Start"
+      }
+      shape id="shape.check" x=(px)90 y=(px)157 w=(px)180 h=(px)120 kind="decision" fill=(token)"color.dec" stroke=(token)"color.stroke" stroke-width=(token)"size.bw" padding=(token)"size.pad" text-style="style.label" {
+        span "OK?"
+      }
+      shape id="shape.done" x=(px)80 y=(px)330 w=(px)200 h=(px)64 kind="process" fill=(token)"color.fill" stroke=(token)"color.stroke" stroke-width=(token)"size.bw" radius=(token)"size.r" padding=(token)"size.pad" text-style="style.label" {
+        span "Done"
+      }
+      connector id="conn.1" from="shape.start" to="shape.check" route="orthogonal" marker-end="arrow" stroke=(token)"color.stroke" stroke-width=(token)"size.bw"
+      connector id="conn.2" from="shape.check" to="shape.done" route="orthogonal" marker-end="arrow" stroke=(token)"color.stroke" stroke-width=(token)"size.bw"
     }
   }
 }

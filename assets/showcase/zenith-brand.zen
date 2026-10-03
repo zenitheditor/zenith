@@ -1,4 +1,4 @@
-zenith version=1 {
+zenith version=1 doc-id="01M406ESNPSVH6R25T0SKV2XME" {
   project id="@zenith/theme.zenith" name="Theme: zenith"
   assets {
     asset id="asset.logo" kind="svg" src="zenith-logo.svg"
@@ -94,9 +94,9 @@ zenith version=1 {
   document id="theme.zenith.preview" title="Theme zenith" {
     page id="pg" w=(px)960 h=(px)360 background=(token)"color.paper" {
       rect id="panel.navy" x=(px)0 y=(px)0 w=(px)328 h=(px)360 fill=(token)"color.base.100"
-      rect id="logo.tile" x=(px)52 y=(px)68 w=(px)224 h=(px)224 fill=(token)"color.paper" radius=(token)"radius.box" shadow=(token)"shadow.depth"
+      rect id="logo.tile" x=(px)52 y=(px)68 w=(px)224 h=(px)224 radius=(token)"radius.box" fill=(token)"color.paper" shadow=(token)"shadow.depth"
       image id="logo.real" asset="asset.logo" x=(px)72 y=(px)88 w=(px)184 h=(px)184 fit="contain"
-      text id="t.title" x=(px)376 y=(px)46 w=(px)520 h=(px)82 fill=(token)"color.paper.content" font-family=(token)"font.heading" font-size=(token)"size.h1" {
+      text id="t.title" x=(px)377.87 y=(px)46 w=(px)520 h=(px)82 fill=(token)"color.paper.content" font-family=(token)"font.heading" font-size=(token)"size.h1" {
         span "Zenith"
       }
       text id="t.body" x=(px)380 y=(px)132 w=(px)490 h=(px)100 fill=(token)"color.neutral" font-family=(token)"font.body" font-size=(token)"size.body" {
