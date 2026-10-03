@@ -19,6 +19,7 @@ use zenith_session::StorePaths;
 use zenith_session::adapter::{OsClock, OsRng};
 
 use super::page::PageSpec;
+use super::print_scale;
 use crate::history::record_edit_in;
 
 // ── Result / error types ────────────────────────────────────────────────────────
@@ -141,8 +142,10 @@ pub fn run_in(
 
     // When a theme was requested, splice its token, style, and `defaults`
     // blocks into the canonical document and re-format (the formatter writes
-    // them in canonical order: tokens, styles, defaults). Without a theme this
-    // is a no-op and the output is byte-identical to before `--theme` existed.
+    // them in canonical order: tokens, styles, defaults). A print `--format`
+    // rescales the theme's type and radius tokens (`print_scale`). Without a
+    // theme this is a no-op and the output is byte-identical to before
+    // `--theme` existed.
     let canonical_bytes = match theme_pack {
         Some(theme_doc) => {
             let mut doc = KdlAdapter.parse(&canonical.formatted).map_err(|e| NewErr {
@@ -153,6 +156,7 @@ pub fn run_in(
                 exit_code: 2,
             })?;
             doc.tokens = theme_doc.tokens;
+            print_scale::apply(&mut doc.tokens, page);
             doc.styles = theme_doc.styles;
             doc.defaults = theme_doc.defaults;
             KdlAdapter.format(&doc).map_err(|e| NewErr {
@@ -311,6 +315,7 @@ fn emit(slug: &str, name: &str, page: PageSpec, theme_bg_token: Option<&str>) ->
         width,
         height,
         pages,
+        format: _,
     } = page;
 
     let bg_token = theme_bg_token.unwrap_or("color.bg");
@@ -394,6 +399,7 @@ mod tests {
             width: 794,
             height: 1123,
             pages: 3,
+            format: None,
         };
         let raw = emit("demo", "Demo", spec, None);
         let r = crate::commands::fmt::run(&raw).expect("template must format");

@@ -19,6 +19,7 @@ A theme picks no layout. Pick canvas and primitives in `references/by-kind.md` f
 | Shape | `radius.box`, `radius.field`, `radius.selector`, `border.width`, `space.unit`, `shadow.depth` (depth themes only) |
 | Type | `font.heading`, `font.body`, `size.display` 112, `size.h1` 64, `size.h2` 40, `size.body` 28, `size.caption` 18, `font.weight.heading` |
 
+- The type sizes above are tuned for the 1080×1080 page. `new` with a print `--format` rescales `size.*` and `radius.*`.
 - Each `X.content` is the readable ink on fill `X`.
 - `color.base.200` and `color.base.300` are surfaces, never text ink.
 - Two chart series: if `secondary` ≈ `primary`, pair `primary` with `accent` or `info`.

@@ -498,7 +498,9 @@ pub struct VariantArgs {
     zenith new flyer.zen --format a4\n  \
     zenith new deck.zen --format letter --landscape --pages 12\n  \
     zenith new banner.zen --width 1600 --height 400\n  \
-    zenith new poster.zen --theme sunset")]
+    zenith new poster.zen --theme sunset\n\n\
+PRINT SCALE: a print --format (not square) with --theme scales size.* to a 16 px body on A4 \
+(text.too_small floor, steps kept distinct) and radius.* by short side / 1080.")]
 pub struct NewArgs {
     /// Path to create the new document at (must not already exist). A `.zen`
     /// extension is appended if absent, and missing parent directories are created.

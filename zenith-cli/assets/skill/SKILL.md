@@ -37,6 +37,7 @@ If `zenith --version` fails, give the installer from https://github.com/zenithed
 ## Core loop (fastest path)
 
 1. **Scaffold.** `zenith new <path> --theme <name>` plus canvas flags. If `.zenith/brand.md` exists in or above the directory, use its tokens (`references/brand.md`). Invent a palette only when the brand and every theme fail the brief.
+   - A print `--format` (A4, Letter, A5, …) scales the theme type to a 16 px body on A4. Use the scaled `size.*` tokens. Do not add smaller ones.
 2. **Author with layout and defaults.**
    - Stacks, rows, cards, chips, and lists go in `frame layout="row|column|grid"`. Do not compute child x/y by hand.
    - A themed document styles bare `text`, `shape`, and `connector` through its `defaults` block. Omit font, fill, and radius attributes.

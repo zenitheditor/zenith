@@ -50,6 +50,21 @@ impl PaperFormat {
             Self::Square => (1080, 1080),
         }
     }
+
+    /// `true` for a print paper format. `Square` is a screen canvas.
+    pub fn is_print(self) -> bool {
+        match self {
+            Self::A3
+            | Self::A4
+            | Self::A5
+            | Self::B4
+            | Self::B5
+            | Self::Letter
+            | Self::Legal
+            | Self::Tabloid => true,
+            Self::Square => false,
+        }
+    }
 }
 
 /// Resolved page geometry for a scaffolded document: a per-page pixel size and a
@@ -62,6 +77,9 @@ pub struct PageSpec {
     pub height: u32,
     /// Number of pages to scaffold (≥ 1).
     pub pages: u32,
+    /// The `--format` the size came from, or `None` for no format. A print
+    /// format turns on the theme print scale (`print_scale`).
+    pub format: Option<PaperFormat>,
 }
 
 /// The default page: a single 1080×1080 square.
@@ -72,6 +90,7 @@ pub const DEFAULT_PAGE: PageSpec = PageSpec {
     width: 1080,
     height: 1080,
     pages: 1,
+    format: None,
 };
 
 /// Resolve CLI geometry inputs into a concrete [`PageSpec`].
@@ -115,6 +134,7 @@ pub fn resolve_page(
         width,
         height,
         pages,
+        format,
     })
 }
 
@@ -164,6 +184,31 @@ mod tests {
     #[test]
     fn zero_pages_is_rejected() {
         assert!(resolve_page(None, None, None, false, 0).is_err());
+    }
+
+    #[test]
+    fn format_is_carried_on_the_spec() {
+        let p = resolve_page(Some(PaperFormat::Letter), None, None, true, 1).unwrap();
+        assert_eq!(p.format, Some(PaperFormat::Letter));
+        let p = resolve_page(None, Some(640), Some(480), false, 1).unwrap();
+        assert_eq!(p.format, None);
+    }
+
+    #[test]
+    fn only_square_is_not_print() {
+        assert!(!PaperFormat::Square.is_print());
+        for f in [
+            PaperFormat::A3,
+            PaperFormat::A4,
+            PaperFormat::A5,
+            PaperFormat::B4,
+            PaperFormat::B5,
+            PaperFormat::Letter,
+            PaperFormat::Legal,
+            PaperFormat::Tabloid,
+        ] {
+            assert!(f.is_print(), "{f:?} is a print format");
+        }
     }
 
     #[test]
