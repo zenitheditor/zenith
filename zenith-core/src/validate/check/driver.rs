@@ -260,6 +260,18 @@ pub fn validate_with_policy(
         .map(|s| (s.id.as_str(), s))
         .collect();
 
+    // Contrast reads the defaults-lowered document, so a fill or font size a
+    // `defaults` block supplies is the one judged. Every other check reads
+    // the authored document. The lowered nodes keep their source spans.
+    let lowered = crate::defaults::lower(doc, resolved_tokens);
+    let contrast_doc: &Document = lowered.as_ref().map_or(doc, |l| &l.document);
+    let contrast_style_map: BTreeMap<&str, &Style> = contrast_doc
+        .styles
+        .styles
+        .iter()
+        .map(|s| (s.id.as_str(), s))
+        .collect();
+
     // ── Token IDs ─────────────────────────────────────────────────────────
     for token in &doc.tokens.tokens {
         register_id(&token.id, &mut seen_ids, &mut diagnostics);
@@ -813,13 +825,13 @@ pub fn validate_with_policy(
         // already diagnosed. It walks the page in paint order and resolves
         // backdrops in page-absolute geometry so container boundaries do not
         // hide the painted color under text.
-        if !layout_managed {
+        if !layout_managed && let Some(contrast_page) = contrast_doc.body.pages.get(page_idx0) {
             check_page_text_contrast(
-                &page.children,
+                &contrast_page.children,
                 page_bg_rgb,
                 (page_w, page_h),
                 resolved_tokens,
-                &style_map,
+                &contrast_style_map,
                 &mut diagnostics,
             );
         }

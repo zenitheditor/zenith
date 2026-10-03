@@ -5,7 +5,10 @@ use zenith_layout::RustybuzzEngine;
 
 use crate::ir::{Paint, Rect, Scene, SceneCommand};
 
+use std::collections::BTreeMap;
+
 use super::super::anchor::build_anchor_map;
+use super::super::boxes::{BoxRecorder, CompiledBox};
 use super::super::container;
 use super::super::crop;
 use super::super::ctx::NodeCtx;
@@ -18,8 +21,10 @@ use super::super::intrinsic::lower_expanded;
 use super::super::line_jumps;
 use super::super::page_source::{PageSourceEnv, compile_page_source};
 use super::super::paint::{resolve_property_color, resolve_property_gradient};
+use super::super::text::ShapeEnv;
 use super::super::{CompileResult, RenderCtx};
 use super::fonts::FontsRef;
+use super::label_contrast;
 use super::page::PageCompiler;
 
 impl<F: ?Sized + FontProvider> PageCompiler<'_, F> {
@@ -32,7 +37,7 @@ impl<F: ?Sized + FontProvider> PageCompiler<'_, F> {
     /// `scene.page_out_of_range` advisory.
     #[must_use]
     pub fn compile_page(&self, page_index: usize) -> CompileResult {
-        self.compile_page_with(page_index, true)
+        self.compile_page_with(page_index, true, None)
     }
 
     /// Compile the page at `page_index` with only its own diagnostics.
@@ -43,7 +48,22 @@ impl<F: ?Sized + FontProvider> PageCompiler<'_, F> {
     /// scene is identical to [`PageCompiler::compile_page`].
     #[must_use]
     pub fn compile_page_local(&self, page_index: usize) -> CompileResult {
-        self.compile_page_with(page_index, false)
+        self.compile_page_with(page_index, false, None)
+    }
+
+    /// The final geometry of every node compiled on page `page_index`, by id,
+    /// in page-absolute px: the unrotated box (anchors resolved, text heights
+    /// measured, footnotes in their zone, line / path / connector boxes from
+    /// their stroked bounds), the node's rotation, and its visual bounds.
+    /// Master projections record as `<page-id>/<id>`, instance content as
+    /// `<instance-id>/<id>`, and pattern motif instances as
+    /// `<pattern-id>/<index>/<motif-id>`. Guide nodes and nodes that fail to
+    /// compile have no box. Empty for an out-of-range index.
+    #[must_use]
+    pub fn compiled_boxes(&self, page_index: usize) -> BTreeMap<String, CompiledBox> {
+        let recorder = BoxRecorder::default();
+        let _ = self.compile_page_with(page_index, false, Some(&recorder));
+        recorder.into_boxes()
     }
 
     /// Document diagnostics, reported once per document.
@@ -54,10 +74,16 @@ impl<F: ?Sized + FontProvider> PageCompiler<'_, F> {
     pub fn document_diagnostics(&self) -> Vec<Diagnostic> {
         let mut diagnostics = self.prep.shared_diagnostics.clone();
         diagnostics.extend(self.page0_diagnostics.iter().cloned());
+        self.prep.id_aliases.scrub(&mut diagnostics);
         Diagnostic::dedup(diagnostics)
     }
 
-    fn compile_page_with(&self, page_index: usize, with_document: bool) -> CompileResult {
+    fn compile_page_with(
+        &self,
+        page_index: usize,
+        with_document: bool,
+        boxes: Option<&BoxRecorder>,
+    ) -> CompileResult {
         let prep = self.prep;
         let doc: &zenith_core::Document = &self.lowered;
         let mut diagnostics: Vec<Diagnostic> = if with_document {
@@ -176,6 +202,7 @@ impl<F: ?Sized + FontProvider> PageCompiler<'_, F> {
             page_block_styles: &page.block_styles,
             doc_block_styles: &doc.body.block_styles,
             image_sizes: &prep.image_sizes,
+            boxes,
         };
 
         let root_ctx = root_render_ctx(page, bleed);
@@ -253,6 +280,7 @@ impl<F: ?Sized + FontProvider> PageCompiler<'_, F> {
                 chains: &self.chains,
                 anchors: &anchors,
                 field_ctx: &field_ctx,
+                boxes,
             },
             &mut scene.commands,
             &mut diagnostics,
@@ -272,6 +300,22 @@ impl<F: ?Sized + FontProvider> PageCompiler<'_, F> {
                 h: page_h,
             });
         }
+
+        // Shape and connector label contrast, judged on the drawn label ink.
+        diagnostics.extend(label_contrast::label_contrast(
+            &scene.commands,
+            page,
+            bleed,
+            resolved,
+            &self.style_map,
+            ShapeEnv {
+                engine: &engine,
+                fonts,
+            },
+        ));
+
+        // Internal defaults copy ids never leave the compile.
+        prep.id_aliases.scrub(&mut diagnostics);
 
         CompileResult {
             scene,

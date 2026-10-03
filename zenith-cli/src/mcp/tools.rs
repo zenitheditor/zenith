@@ -76,7 +76,8 @@ hard (Error) diagnostics block rendering — fix them first. Set severity to als
         Tool {
             name: "zenith_inspect",
             description: "Discover node ids and structure (read-only). Returns a shallow tree by \
-default (deeper levels collapse to child_count). Use node/depth to drill in, detail for geometry. \
+default (deeper levels collapse to child_count). Use node/depth to drill in, detail for geometry: \
+authored `geometry` plus the final page-absolute `box` after auto-layout. \
 Large trees are returned as a resource link.",
             schema: json!({
                 "type": "object",
@@ -84,7 +85,7 @@ Large trees are returned as a resource link.",
                     "doc": doc_arg(),
                     "node": { "type": "string", "description": "Only the subtree at this node id." },
                     "depth": { "type": "integer", "minimum": 0, "description": "Levels to expand (default 1)." },
-                    "detail": { "type": "boolean", "description": "Include geometry/visible/locked per node." }
+                    "detail": { "type": "boolean", "description": "Include geometry, resolved box, visible, and locked per node." }
                 },
                 "required": ["doc"]
             }),

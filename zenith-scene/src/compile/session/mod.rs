@@ -7,6 +7,7 @@
 
 mod compile;
 mod fonts;
+mod label_contrast;
 mod layout;
 mod page;
 mod prep;

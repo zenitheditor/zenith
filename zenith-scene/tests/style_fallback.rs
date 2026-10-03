@@ -1,7 +1,7 @@
 //! Style fallback for `align`, `v-align`, and `shadow`: a node without the
 //! attribute takes its style's value and compiles to the same scene as the
-//! attribute form. Also covers the `shape` `shadow` attribute and the byte
-//! identity of documents that carry a `defaults` block (no render effect yet).
+//! attribute form. Also covers the `shape` `shadow` attribute and a
+//! `defaults` row acting as the node style.
 
 mod common;
 use common::*;
@@ -238,21 +238,20 @@ fn shape_shadow_brackets_body_and_label_draws_on_top() {
 }
 
 #[test]
-fn defaults_block_has_no_render_effect_yet() {
-    let page = r#"text id="t" x=(px)10 y=(px)10 w=(px)300 fill=(token)"color.ink" { span "Hi" }
-      shape id="sh" x=(px)10 y=(px)60 w=(px)200 h=(px)80 fill=(token)"color.fill" { span "Go" }"#;
-    let plain = commands(&doc(r#"align "center""#, page));
-    let src = doc(r#"align "center""#, page).replace(
+fn defaults_block_applies_its_style_like_the_style_attribute() {
+    let text = |attrs: &str| {
+        format!(
+            r#"text id="t" x=(px)10 y=(px)10 w=(px)300 fill=(token)"color.ink" {attrs} {{ span "Hi" }}"#
+        )
+    };
+    let by_style = commands(&doc(r#"align "center""#, &text(r#"style="s""#)));
+    let by_defaults = commands(&doc(r#"align "center""#, &text("")).replace(
         "  assets {",
-        "  defaults {\n    text style=\"s\"\n    shape style=\"s\" text-style=\"s\"\n  }\n  assets {",
-    );
-    assert!(src.contains("defaults {"));
-    let with_page_defaults = src.replace(
-        "page id=\"p\" w=(px)400 h=(px)400 {\n",
-        "page id=\"p\" w=(px)400 h=(px)400 {\n      defaults { rect style=\"s\" }\n",
-    );
-    assert!(with_page_defaults.contains("defaults { rect"));
-    assert_eq!(commands(&with_page_defaults), plain);
+        "  defaults {\n    text style=\"s\"\n  }\n  assets {",
+    ));
+    assert_eq!(by_defaults, by_style, "a text default acts as its style");
+    let plain = commands(&doc(r#"align "center""#, &text("")));
+    assert_ne!(by_defaults, plain, "the default centers the text");
 }
 
 #[test]

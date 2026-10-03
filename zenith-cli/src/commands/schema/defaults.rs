@@ -31,9 +31,17 @@ const ENTRY_ATTRS: &[(&str, &str)] = &[
 ];
 
 /// How a default combines with node, page, and document styles.
-const CASCADE: &str = "A node's own `style` wins. Without one, the node takes its kind's \
-    page `defaults` row, else the document `defaults` row. Node attributes still override every \
-    style key. Each kind appears at most once per block.";
+const CASCADE: &str = "Per style key: node attribute > node `style` > page `defaults` style > \
+    document `defaults` style > engine default. A label (shape, connector) cascades the same way: \
+    node `text-style` > page default `text-style` > document default `text-style`. With a \
+    `defaults` block on the document or page, a text or label fill that the node and its own \
+    style leave unset takes the content token of the structural fill it sits on (page \
+    background, frame fill, shape fill, table cell fill), ahead of the default style fill: \
+    `X` pairs with `X.content`; a step `P.N` pairs with `P.content`; any other solid colour pairs \
+    with the `*.content` colour token of highest APCA contrast (tie: smallest id); a gradient or \
+    no fill keeps the parent pair. Components and masters drawn on a page take that page's \
+    defaults. An imported document lowers with its own defaults and tokens, before the host \
+    `token-map`. Each kind appears at most once per block.";
 
 /// Diagnostics the block can raise.
 const DIAGNOSTICS: &[(&str, &str)] = &[

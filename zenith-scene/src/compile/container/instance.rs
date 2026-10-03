@@ -246,6 +246,7 @@ fn compile_imported_instance(
         page_block_styles: &[],
         doc_block_styles: &imported.document.body.block_styles,
         image_sizes: cx.image_sizes,
+        boxes: cx.boxes,
     };
 
     let mut imported_diagnostics: Vec<Diagnostic> = Vec::new();

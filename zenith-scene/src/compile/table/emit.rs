@@ -13,6 +13,7 @@ use crate::ir::{Paint, SceneCommand};
 
 use super::super::ImageSizes;
 use super::super::anchor::AnchorMap;
+use super::super::boxes::BoxRecorder;
 use super::super::chain::ChainAssignments;
 use super::super::field::FieldCtx;
 use super::super::imports::ImportScopes;
@@ -57,6 +58,8 @@ pub(in crate::compile) struct TableEmitCtx<'a> {
     pub(in crate::compile) field_ctx: &'a FieldCtx<'a>,
     /// Intrinsic pixel size of each image / SVG asset, for auto-layout.
     pub(in crate::compile) image_sizes: &'a ImageSizes,
+    /// Where cell children record their final boxes, when set.
+    pub(in crate::compile) boxes: Option<&'a BoxRecorder>,
 }
 
 impl<'a> TableEmitCtx<'a> {
@@ -91,6 +94,7 @@ impl<'a> TableEmitCtx<'a> {
             page_block_styles: &[],
             doc_block_styles: &[],
             image_sizes: self.image_sizes,
+            boxes: self.boxes,
         }
     }
 }

@@ -92,7 +92,7 @@ pub(super) fn dispatch_inspect(args: InspectArgs) -> ExitCode {
                 Ok(s) => s,
                 Err(e) => return e.emit(json),
             };
-            match commands::inspect::run(&src, args.node.as_deref(), json) {
+            match commands::inspect::run(&src, args.node.as_deref(), json, path.parent()) {
                 Ok(out) => {
                     println!("{}", out);
                     ExitCode::SUCCESS

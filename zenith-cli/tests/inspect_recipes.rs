@@ -54,7 +54,7 @@ const DOC_NO_RECIPES: &str = r##"zenith version=1 {
 
 #[test]
 fn human_output_includes_recipe_ids() {
-    let out = run(DOC_WITH_RECIPES, None, false).expect("inspect must succeed");
+    let out = run(DOC_WITH_RECIPES, None, false, None).expect("inspect must succeed");
     assert!(
         out.contains("recipe.aurora"),
         "human output must include first recipe id; got:\n{out}"
@@ -67,7 +67,7 @@ fn human_output_includes_recipe_ids() {
 
 #[test]
 fn human_output_includes_recipe_kinds() {
-    let out = run(DOC_WITH_RECIPES, None, false).expect("inspect must succeed");
+    let out = run(DOC_WITH_RECIPES, None, false, None).expect("inspect must succeed");
     assert!(
         out.contains("kind=aurora"),
         "human output must show kind=aurora; got:\n{out}"
@@ -80,7 +80,7 @@ fn human_output_includes_recipe_kinds() {
 
 #[test]
 fn human_output_includes_seed_and_generator() {
-    let out = run(DOC_WITH_RECIPES, None, false).expect("inspect must succeed");
+    let out = run(DOC_WITH_RECIPES, None, false, None).expect("inspect must succeed");
     assert!(
         out.contains("seed=7"),
         "human output must show seed; got:\n{out}"
@@ -93,7 +93,7 @@ fn human_output_includes_seed_and_generator() {
 
 #[test]
 fn human_output_includes_bounds_and_detached() {
-    let out = run(DOC_WITH_RECIPES, None, false).expect("inspect must succeed");
+    let out = run(DOC_WITH_RECIPES, None, false, None).expect("inspect must succeed");
     assert!(
         out.contains("bounds=page.ri"),
         "human output must show bounds; got:\n{out}"
@@ -106,7 +106,7 @@ fn human_output_includes_bounds_and_detached() {
 
 #[test]
 fn human_output_includes_params() {
-    let out = run(DOC_WITH_RECIPES, None, false).expect("inspect must succeed");
+    let out = run(DOC_WITH_RECIPES, None, false, None).expect("inspect must succeed");
     assert!(
         out.contains("param density"),
         "human output must include density param; got:\n{out}"
@@ -127,7 +127,7 @@ fn human_output_includes_params() {
 
 #[test]
 fn human_output_includes_palette_tokens() {
-    let out = run(DOC_WITH_RECIPES, None, false).expect("inspect must succeed");
+    let out = run(DOC_WITH_RECIPES, None, false, None).expect("inspect must succeed");
     assert!(
         out.contains("color.sky"),
         "human output must include palette token color.sky; got:\n{out}"
@@ -140,7 +140,7 @@ fn human_output_includes_palette_tokens() {
 
 #[test]
 fn human_output_includes_expanded_nodes() {
-    let out = run(DOC_WITH_RECIPES, None, false).expect("inspect must succeed");
+    let out = run(DOC_WITH_RECIPES, None, false, None).expect("inspect must succeed");
     assert!(
         out.contains("rect.a"),
         "human output must include expanded node rect.a; got:\n{out}"
@@ -153,7 +153,7 @@ fn human_output_includes_expanded_nodes() {
 
 #[test]
 fn human_output_also_contains_pages() {
-    let out = run(DOC_WITH_RECIPES, None, false).expect("inspect must succeed");
+    let out = run(DOC_WITH_RECIPES, None, false, None).expect("inspect must succeed");
     assert!(
         out.contains("page page.ri"),
         "human output must still include the pages section; got:\n{out}"
@@ -164,7 +164,7 @@ fn human_output_also_contains_pages() {
 
 #[test]
 fn human_output_no_recipes_section_when_empty() {
-    let out = run(DOC_NO_RECIPES, None, false).expect("inspect must succeed");
+    let out = run(DOC_NO_RECIPES, None, false, None).expect("inspect must succeed");
     assert!(
         !out.contains("recipe"),
         "human output must not contain 'recipe' when doc has no recipes block; got:\n{out}"
@@ -180,7 +180,7 @@ fn human_output_no_recipes_section_when_empty() {
 
 #[test]
 fn json_output_includes_recipes_array() {
-    let out = run(DOC_WITH_RECIPES, None, true).expect("inspect must succeed");
+    let out = run(DOC_WITH_RECIPES, None, true, None).expect("inspect must succeed");
     let v: serde_json::Value = serde_json::from_str(&out).expect("must be valid JSON");
     let arr = v["recipes"]
         .as_array()
@@ -190,7 +190,7 @@ fn json_output_includes_recipes_array() {
 
 #[test]
 fn json_output_recipe_ids_in_source_order() {
-    let out = run(DOC_WITH_RECIPES, None, true).expect("inspect must succeed");
+    let out = run(DOC_WITH_RECIPES, None, true, None).expect("inspect must succeed");
     let v: serde_json::Value = serde_json::from_str(&out).unwrap();
     let arr = v["recipes"].as_array().unwrap();
     assert_eq!(arr[0]["id"], "recipe.aurora");
@@ -199,7 +199,7 @@ fn json_output_recipe_ids_in_source_order() {
 
 #[test]
 fn json_output_recipe_scalars() {
-    let out = run(DOC_WITH_RECIPES, None, true).expect("inspect must succeed");
+    let out = run(DOC_WITH_RECIPES, None, true, None).expect("inspect must succeed");
     let v: serde_json::Value = serde_json::from_str(&out).unwrap();
     let aurora = &v["recipes"][0];
     assert_eq!(aurora["kind"], "aurora");
@@ -211,7 +211,7 @@ fn json_output_recipe_scalars() {
 
 #[test]
 fn json_output_recipe_scalars_absent_for_minimal_recipe() {
-    let out = run(DOC_WITH_RECIPES, None, true).expect("inspect must succeed");
+    let out = run(DOC_WITH_RECIPES, None, true, None).expect("inspect must succeed");
     let v: serde_json::Value = serde_json::from_str(&out).unwrap();
     let scatter = &v["recipes"][1];
     // Fields absent in source must be omitted (skip_serializing_if = Option::is_none).
@@ -225,7 +225,7 @@ fn json_output_recipe_scalars_absent_for_minimal_recipe() {
 
 #[test]
 fn json_output_recipe_params() {
-    let out = run(DOC_WITH_RECIPES, None, true).expect("inspect must succeed");
+    let out = run(DOC_WITH_RECIPES, None, true, None).expect("inspect must succeed");
     let v: serde_json::Value = serde_json::from_str(&out).unwrap();
     let params = v["recipes"][0]["params"].as_array().unwrap();
     assert_eq!(params.len(), 2);
@@ -237,7 +237,7 @@ fn json_output_recipe_params() {
 
 #[test]
 fn json_output_recipe_palette_and_expanded() {
-    let out = run(DOC_WITH_RECIPES, None, true).expect("inspect must succeed");
+    let out = run(DOC_WITH_RECIPES, None, true, None).expect("inspect must succeed");
     let v: serde_json::Value = serde_json::from_str(&out).unwrap();
     let aurora = &v["recipes"][0];
     let palette = aurora["palette"].as_array().unwrap();
@@ -248,7 +248,7 @@ fn json_output_recipe_palette_and_expanded() {
 
 #[test]
 fn json_output_schema_and_pages_unaffected() {
-    let out = run(DOC_WITH_RECIPES, None, true).expect("inspect must succeed");
+    let out = run(DOC_WITH_RECIPES, None, true, None).expect("inspect must succeed");
     let v: serde_json::Value = serde_json::from_str(&out).unwrap();
     assert_eq!(v["schema"], "zenith-inspect-v1");
     let pages = v["pages"].as_array().unwrap();
@@ -260,7 +260,7 @@ fn json_output_schema_and_pages_unaffected() {
 
 #[test]
 fn json_output_empty_recipes_array_when_no_recipes_block() {
-    let out = run(DOC_NO_RECIPES, None, true).expect("inspect must succeed");
+    let out = run(DOC_NO_RECIPES, None, true, None).expect("inspect must succeed");
     let v: serde_json::Value = serde_json::from_str(&out).unwrap();
     let arr = v["recipes"]
         .as_array()

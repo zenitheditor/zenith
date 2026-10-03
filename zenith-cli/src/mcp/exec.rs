@@ -122,8 +122,14 @@ fn run_inspect(args: &Value) -> Result<Value, String> {
     let src = read(&loc.path)?;
     let depth = opt_u64(args, "depth").unwrap_or(1) as usize;
     let detail = flag(args, "detail");
-    let value = commands::inspect::summary(&src, opt_str(args, "node"), depth, detail)
-        .map_err(|e| e.message)?;
+    let value = commands::inspect::summary(
+        &src,
+        opt_str(args, "node"),
+        depth,
+        detail,
+        loc.path.parent(),
+    )
+    .map_err(|e| e.message)?;
     Ok(maybe_offload(
         loc.doc_id.as_deref(),
         value,

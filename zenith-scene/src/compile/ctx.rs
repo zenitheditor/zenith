@@ -19,6 +19,7 @@ use zenith_layout::RustybuzzEngine;
 
 use super::ComponentMap;
 use super::anchor::AnchorMap;
+use super::boxes::BoxRecorder;
 use super::chain::ChainAssignments;
 use super::field::FieldCtx;
 use super::imports::ImportScopes;
@@ -63,4 +64,7 @@ pub(in crate::compile) struct NodeCtx<'a> {
     pub(in crate::compile) doc_block_styles: &'a [BlockStyle],
     /// Intrinsic pixel size of each image / SVG asset, for auto-layout.
     pub(in crate::compile) image_sizes: &'a ImageSizes,
+    /// Where `compile_node` records each node's final box; `None` outside
+    /// [`super::PageCompiler::compiled_boxes`].
+    pub(in crate::compile) boxes: Option<&'a BoxRecorder>,
 }

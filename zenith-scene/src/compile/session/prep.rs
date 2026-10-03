@@ -2,6 +2,7 @@
 
 use std::collections::BTreeMap;
 
+use zenith_core::defaults::IdAliases;
 use zenith_core::{DataContext, Diagnostic, Document, ResolvedToken, resolve_tokens};
 
 use super::super::ImageSizes;
@@ -18,7 +19,8 @@ use super::super::markdown_resolve::{MdBlockMap, resolve_markdown, scan_for_mark
 pub struct DocumentPrep<'d> {
     /// The caller's document.
     source: &'d Document,
-    /// Data-substituted and markdown-resolved clone. `None` keeps `source`.
+    /// Data-substituted, markdown-resolved, and defaults-lowered clone.
+    /// `None` keeps `source`.
     owned: Option<Document>,
     /// Parsed block-level markdown, keyed by `text` node id.
     pub(in crate::compile) md_blocks: MdBlockMap,
@@ -35,6 +37,9 @@ pub struct DocumentPrep<'d> {
     /// Pixel size `(w, h)` of each image / SVG asset, by asset id. Empty
     /// unless set with [`DocumentPrep::with_image_sizes`].
     pub(in crate::compile) image_sizes: ImageSizes,
+    /// Internal copy id → authored id of the host and import defaults
+    /// lowerings. Every diagnostic a page compile returns maps through it.
+    pub(in crate::compile) id_aliases: IdAliases,
 }
 
 impl<'d> DocumentPrep<'d> {
@@ -91,6 +96,18 @@ impl<'d> DocumentPrep<'d> {
         let token_resolution = resolve_tokens(&compiled.tokens);
         diagnostics.extend(token_resolution.diagnostics);
 
+        // Defaults lowering runs before layout lowering, so every later pass
+        // reads explicit values. A document without a `defaults` block keeps
+        // its AST (no clone).
+        let mut id_aliases = imports.map(ImportGraph::id_aliases).unwrap_or_default();
+        let owned = match zenith_core::defaults::lower(compiled, &token_resolution.resolved) {
+            Some(lowered) => {
+                id_aliases.extend(&lowered.aliases);
+                Some(lowered.document)
+            }
+            None => owned,
+        };
+
         Self {
             source: doc,
             owned,
@@ -101,6 +118,7 @@ impl<'d> DocumentPrep<'d> {
             resolved: token_resolution.resolved,
             shared_diagnostics: diagnostics,
             image_sizes: ImageSizes::new(),
+            id_aliases,
         }
     }
 
@@ -118,11 +136,19 @@ impl<'d> DocumentPrep<'d> {
         self
     }
 
-    /// The document pages compile against: the substituted clone, else the
-    /// caller's document.
+    /// The document pages compile against: the substituted or
+    /// defaults-lowered clone, else the caller's document.
     #[must_use]
     pub fn document(&self) -> &Document {
         self.owned.as_ref().unwrap_or(self.source)
+    }
+
+    /// The authored id behind `id`. The compiled document holds per-page
+    /// copies of components and masters under internal ids; map any id read
+    /// from [`DocumentPrep::document`] through this before showing it.
+    #[must_use]
+    pub fn authored_id<'a>(&'a self, id: &'a str) -> &'a str {
+        self.id_aliases.authored_id(id)
     }
 
     /// Number of pages in the compiled document.

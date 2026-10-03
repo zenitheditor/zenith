@@ -11,6 +11,7 @@ pub mod asset;
 pub mod ast;
 pub mod color;
 pub mod data;
+pub mod defaults;
 pub mod diag_catalog;
 pub mod diagnostics;
 pub mod error;
@@ -69,5 +70,6 @@ pub use tokens::{
 pub use util::hash_unit;
 pub use util::pattern::{PatternLayout, pattern_positions};
 pub use validate::{
-    ValidationReport, apply_policy, layout_geometry_checks, validate, validate_with_policy,
+    LabelInk, ValidationReport, apply_policy, label_contrast_checks, layout_geometry_checks,
+    validate, validate_with_policy,
 };

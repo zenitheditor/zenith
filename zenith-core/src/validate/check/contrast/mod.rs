@@ -6,18 +6,24 @@
 //! lightness contrast (`Lc`) with the current WCAG 3 draft thresholds.
 
 mod geometry;
+mod label;
 mod props;
+
+pub use label::LabelInk;
 
 use std::collections::BTreeMap;
 
+use crate::ast::document::Page;
 use crate::ast::node::{
     ImageNode, Node, PathNode, PolygonNode, PolylineNode, ShapeNode, TableNode, TextNode,
 };
 use crate::ast::style::Style;
-use crate::ast::value::PropertyValue;
+use crate::ast::value::{PropertyValue, dim_to_px};
 use crate::color::{apca_lc, parse_rgb};
 use crate::diagnostics::Diagnostic;
 use crate::tokens::{ResolvedToken, ResolvedValue};
+
+use super::geometry::page_background_rgb;
 
 use geometry::{
     CoverageShape, RectPx, Rotation, group_offset, local_box, path_fill_region, polygon_region,
@@ -33,6 +39,8 @@ use props::{
 /// which is a stronger signal than ordinary sub-threshold contrast.
 const INVISIBLE_LC_FLOOR: f64 = 15.0;
 const MIN_PAINT_ALPHA: f64 = 1.0 / 255.0;
+/// The engine default text and label colour.
+const BLACK: (u8, u8, u8) = (0, 0, 0);
 
 pub(super) fn check_page_text_contrast(
     children: &[Node],
@@ -55,8 +63,49 @@ pub(super) fn check_page_text_contrast(
     let env = ContrastEnv {
         resolved_tokens,
         style_map,
+        labels: None,
     };
     walk_paint(children, ctx, &mut candidates, env, diagnostics);
+}
+
+/// Judge the drawn `shape` / `connector` labels of `page` against their
+/// backdrops: the label pass of the compile stage.
+///
+/// `labels` maps an owner node id to its label's measured ink (see
+/// [`LabelInk`]). Text nodes are not judged here: validation and the layout
+/// geometry checks judge them.
+pub fn label_contrast_checks(
+    page: &Page,
+    resolved_tokens: &BTreeMap<String, ResolvedToken>,
+    style_map: &BTreeMap<&str, &Style>,
+    labels: &BTreeMap<String, LabelInk>,
+) -> Vec<Diagnostic> {
+    let mut diagnostics = Vec::new();
+    let Some(page_size) = dim_to_px(page.width.value, &page.width.unit)
+        .zip(dim_to_px(page.height.value, &page.height.unit))
+    else {
+        return diagnostics;
+    };
+    if labels.is_empty() {
+        return diagnostics;
+    }
+    let ctx = PaintCtx {
+        dx: 0.0,
+        dy: 0.0,
+        clip: None,
+        opacity: 1.0,
+        unmodeled: false,
+        page_bg_rgb: page_background_rgb(page, resolved_tokens),
+        page_size,
+    };
+    let env = ContrastEnv {
+        resolved_tokens,
+        style_map,
+        labels: Some(labels),
+    };
+    let mut candidates = Vec::new();
+    walk_paint(&page.children, ctx, &mut candidates, env, &mut diagnostics);
+    diagnostics
 }
 
 #[derive(Clone, Copy)]
@@ -121,6 +170,9 @@ struct ContrastSample {
 struct ContrastEnv<'a> {
     resolved_tokens: &'a BTreeMap<String, ResolvedToken>,
     style_map: &'a BTreeMap<&'a str, &'a Style>,
+    /// `None`: judge text nodes. `Some`: judge only the labels with measured
+    /// ink (the compile-stage label pass).
+    labels: Option<&'a BTreeMap<String, LabelInk>>,
 }
 
 fn walk_paint(
@@ -153,7 +205,11 @@ fn walk_paint(
                 candidates,
                 env,
             ),
-            Node::Shape(s) => push_shape_backdrop(node, s, ctx, candidates, env),
+            Node::Shape(s) => {
+                push_shape_backdrop(node, s, ctx, candidates, env);
+                label::check_label(node, ctx, candidates, env, diagnostics);
+            }
+            Node::Connector(_) => label::check_label(node, ctx, candidates, env, diagnostics),
             Node::Image(img) => push_image_backdrop(node, img, ctx, candidates, env),
             Node::Polygon(poly) => push_polygon_backdrop(node, poly, ctx, candidates, env),
             Node::Polyline(poly) => push_polyline_backdrop(node, poly, ctx, candidates, env),
@@ -206,9 +262,17 @@ fn walk_paint(
                 };
                 walk_paint(&g.children, child_ctx, candidates, env, diagnostics);
             }
-            Node::Text(t) => check_text_node(t, ctx, candidates, env, diagnostics),
+            Node::Text(t) => {
+                if env.labels.is_none() {
+                    check_text_node(t, ctx, candidates, env, diagnostics);
+                }
+            }
+            // Cell content lays out cell-relative: the label pass (absolute
+            // ink) skips tables.
             Node::Table(t) => {
-                check_table_text_contrast(t, ctx.page_bg_rgb, ctx.page_size, env, diagnostics)
+                if env.labels.is_none() {
+                    check_table_text_contrast(t, ctx.page_bg_rgb, ctx.page_size, env, diagnostics);
+                }
             }
             Node::Path(p) => push_path_backdrop(node, p, ctx, candidates, env),
             Node::Line(_)
@@ -217,7 +281,6 @@ fn walk_paint(
             | Node::Field(_)
             | Node::Footnote(_)
             | Node::Toc(_)
-            | Node::Connector(_)
             | Node::Pattern(_)
             | Node::Chart(_)
             | Node::Light(_)
@@ -442,6 +505,13 @@ fn absolute_box(
     local_box(node, ctx.page_size, resolved_tokens).map(|b| b.translated(ctx.dx, ctx.dy))
 }
 
+/// The minimum `Lc` for text of `size_px` and `weight`: 45 for large text,
+/// else 60.
+fn lc_threshold(size_px: f64, weight: u32) -> f64 {
+    let is_large = size_px >= 24.0 || (size_px >= 18.66 && weight >= 700);
+    if is_large { 45.0 } else { 60.0 }
+}
+
 fn check_text_node(
     text: &TextNode,
     ctx: PaintCtx,
@@ -449,19 +519,22 @@ fn check_text_node(
     env: ContrastEnv<'_>,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
-    let Some(fg_rgb) = resolve_color_property(
-        text.fill
-            .as_ref()
-            .or_else(|| style_property(text.style.as_deref(), "fill", env.style_map)),
-        env.resolved_tokens,
-    ) else {
-        return;
+    // A text with no fill paints the engine default, black.
+    let fg_rgb = match text
+        .fill
+        .as_ref()
+        .or_else(|| style_property(text.style.as_deref(), "fill", env.style_map))
+    {
+        None => BLACK,
+        Some(fill) => match resolve_color_property(Some(fill), env.resolved_tokens) {
+            Some(rgb) => rgb,
+            None => return,
+        },
     };
 
     let size_px = resolve_font_size(text, env.style_map, env.resolved_tokens);
     let weight = resolve_font_weight(text, env.style_map, env.resolved_tokens);
-    let is_large = size_px >= 24.0 || (size_px >= 18.66 && weight >= 700);
-    let threshold = if is_large { 45.0_f64 } else { 60.0_f64 };
+    let threshold = lc_threshold(size_px, weight);
 
     let hint_rgb = resolve_color_property(text.contrast_bg.as_ref(), env.resolved_tokens);
     let mut backdrop_samples = Vec::new();
@@ -736,9 +809,38 @@ fn check_table_text_contrast(
                 page_size,
             };
             let mut candidates = Vec::new();
-            walk_paint(&cell.children, ctx, &mut candidates, env, diagnostics);
+            match header_styled_children(&cell.children, is_header, table) {
+                Some(children) => walk_paint(&children, ctx, &mut candidates, env, diagnostics),
+                None => walk_paint(&cell.children, ctx, &mut candidates, env, diagnostics),
+            }
         }
     }
+}
+
+/// A header cell's children with the table `header_style` set on each text
+/// that sets no `style` (the scene paints it so). `None` when nothing
+/// changes.
+fn header_styled_children(
+    children: &[Node],
+    is_header: bool,
+    table: &TableNode,
+) -> Option<Vec<Node>> {
+    let header_style = table.header_style.as_ref().filter(|_| is_header)?;
+    let needs = children
+        .iter()
+        .any(|c| matches!(c, Node::Text(t) if t.style.is_none()));
+    if !needs {
+        return None;
+    }
+    let mut out = children.to_vec();
+    for child in &mut out {
+        if let Node::Text(t) = child
+            && t.style.is_none()
+        {
+            t.style = Some(header_style.clone());
+        }
+    }
+    Some(out)
 }
 
 fn resolve_fill_paint(

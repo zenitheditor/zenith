@@ -611,7 +611,7 @@ mod tests {
         anchor x=(px)0 y=(px)40
       }"##,
         );
-        let tree = super::super::run(&src, None, true).expect("tree inspect");
+        let tree = super::super::run(&src, None, true, None).expect("tree inspect");
         let v: serde_json::Value = serde_json::from_str(&tree).expect("tree json");
         assert_eq!(v["schema"], "zenith-inspect-v1");
     }

@@ -1,3 +1,4 @@
+use super::super::tree::{build_doc_tree, find_node_tree};
 use super::*;
 use zenith_core::resolve_tokens;
 
@@ -179,7 +180,7 @@ fn mesh_reports_authored_bbox_geometry() {
 
 #[test]
 fn role_emitted_in_json_and_omitted_when_absent() {
-    let out = run(TOKEN_GEOM_DOC, None, true).expect("run must succeed");
+    let out = run(TOKEN_GEOM_DOC, None, true, None).expect("run must succeed");
     let v: serde_json::Value = serde_json::from_str(&out).unwrap();
     let children = v["pages"][0]["children"].as_array().unwrap();
     assert_eq!(children[0]["role"], "accent-rule");
@@ -256,7 +257,7 @@ fn find_missing_node_returns_none() {
 
 #[test]
 fn run_human_whole_doc() {
-    let out = run(SMALL_DOC, None, false).expect("run must succeed");
+    let out = run(SMALL_DOC, None, false, None).expect("run must succeed");
     assert!(out.contains("page page.1"), "must contain page line");
     assert!(out.contains("group group.1"), "must contain group line");
     assert!(out.contains("rect rect.1"), "must contain rect line");
@@ -266,7 +267,7 @@ fn run_human_whole_doc() {
 
 #[test]
 fn run_human_indentation() {
-    let out = run(SMALL_DOC, None, false).expect("run must succeed");
+    let out = run(SMALL_DOC, None, false, None).expect("run must succeed");
     // group is indented 2 spaces (depth 1), rect is indented 4 (depth 2).
     let group_line = out.lines().find(|l| l.contains("group.1")).unwrap();
     let rect_line = out.lines().find(|l| l.contains("rect.1")).unwrap();
@@ -282,7 +283,7 @@ fn run_human_indentation() {
 
 #[test]
 fn run_human_flags() {
-    let out = run(FLAGS_DOC, None, false).expect("run must succeed");
+    let out = run(FLAGS_DOC, None, false, None).expect("run must succeed");
     assert!(
         out.contains("[hidden]"),
         "hidden node must show [hidden] flag"
@@ -295,7 +296,7 @@ fn run_human_flags() {
 
 #[test]
 fn run_json_whole_doc_schema() {
-    let out = run(SMALL_DOC, None, true).expect("run must succeed");
+    let out = run(SMALL_DOC, None, true, None).expect("run must succeed");
     assert!(
         out.contains("zenith-inspect-v1"),
         "JSON must have schema field"
@@ -304,7 +305,7 @@ fn run_json_whole_doc_schema() {
 
 #[test]
 fn run_json_has_pages_array() {
-    let out = run(SMALL_DOC, None, true).expect("run must succeed");
+    let out = run(SMALL_DOC, None, true, None).expect("run must succeed");
     let v: serde_json::Value = serde_json::from_str(&out).expect("must be valid JSON");
     let pages = v["pages"].as_array().expect("pages must be array");
     assert_eq!(pages.len(), 1);
@@ -313,7 +314,7 @@ fn run_json_has_pages_array() {
 
 #[test]
 fn run_json_node_kinds_correct() {
-    let out = run(SMALL_DOC, None, true).expect("run must succeed");
+    let out = run(SMALL_DOC, None, true, None).expect("run must succeed");
     let v: serde_json::Value = serde_json::from_str(&out).unwrap();
     let children = v["pages"][0]["children"].as_array().unwrap();
     assert_eq!(children[0]["kind"], "group");
@@ -325,7 +326,7 @@ fn run_json_node_kinds_correct() {
 
 #[test]
 fn run_node_flag_filters_subtree() {
-    let out = run(SMALL_DOC, Some("group.1"), false).expect("run must succeed");
+    let out = run(SMALL_DOC, Some("group.1"), false, None).expect("run must succeed");
     assert!(out.contains("group group.1"), "must have root line");
     assert!(out.contains("rect rect.1"), "must include children");
     assert!(out.contains("ellipse ellipse.1"), "must include children");
@@ -338,7 +339,7 @@ fn run_node_flag_filters_subtree() {
 
 #[test]
 fn run_node_json_flag() {
-    let out = run(SMALL_DOC, Some("group.1"), true).expect("run must succeed");
+    let out = run(SMALL_DOC, Some("group.1"), true, None).expect("run must succeed");
     let v: serde_json::Value = serde_json::from_str(&out).unwrap();
     assert_eq!(v["schema"], "zenith-inspect-v1");
     assert_eq!(v["node"]["id"], "group.1");
@@ -348,7 +349,7 @@ fn run_node_json_flag() {
 
 #[test]
 fn run_node_missing_id_errors() {
-    let result = run(SMALL_DOC, Some("does.not.exist"), false);
+    let result = run(SMALL_DOC, Some("does.not.exist"), false, None);
     assert!(result.is_err());
     let err = result.unwrap_err();
     assert_eq!(err.exit_code, 2);
@@ -357,7 +358,7 @@ fn run_node_missing_id_errors() {
 
 #[test]
 fn run_parse_error_returns_err() {
-    let result = run("not valid kdl {{{", None, false);
+    let result = run("not valid kdl {{{", None, false, None);
     assert!(result.is_err());
     let err = result.unwrap_err();
     assert_eq!(err.exit_code, 2);
@@ -429,7 +430,7 @@ fn find_text_inside_table_cell_returns_entry() {
 #[test]
 fn run_node_flag_table_cell_child_found() {
     // `zenith inspect --node cell.rect.1` must succeed and return that node.
-    let out = run(TABLE_INSPECT_DOC, Some("cell.rect.1"), false)
+    let out = run(TABLE_INSPECT_DOC, Some("cell.rect.1"), false, None)
         .expect("inspect of cell child must succeed");
     assert!(
         out.contains("cell.rect.1"),
@@ -444,7 +445,7 @@ fn run_node_flag_table_cell_child_found() {
 #[test]
 fn run_node_flag_table_cell_child_not_found_errors() {
     // A nonexistent id inside a table must still return not-found.
-    let result = run(TABLE_INSPECT_DOC, Some("no.such.node"), false);
+    let result = run(TABLE_INSPECT_DOC, Some("no.such.node"), false, None);
     assert!(result.is_err(), "missing id must error");
     let err = result.unwrap_err();
     assert_eq!(err.exit_code, 2);

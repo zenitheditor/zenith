@@ -77,9 +77,10 @@ pub(in crate::compile) fn compile_pattern(
     // Pattern motif instances are self-contained and replicated inside a
     // `PushClip`; their connectors do NOT participate in page line-jumps, so the
     // recorded strokes go to a throwaway accumulator.
+    // The probe records no boxes; each placed instance records below.
     compile_node(
         &pattern.motif,
-        cx,
+        NodeCtx { boxes: None, ..cx },
         &mut scratch_cmds,
         &mut scratch_diags,
         &mut Vec::new(),
@@ -129,8 +130,21 @@ pub(in crate::compile) fn compile_pattern(
         jitter: pattern.jitter.unwrap_or(0.0),
     };
 
-    for (ox, oy) in pattern_positions(layout) {
-        emit_instance(pattern, cx, &mut tiles, ctx, bx + ox, by + oy);
+    for (index, (ox, oy)) in pattern_positions(layout).into_iter().enumerate() {
+        match cx.boxes {
+            // Each instance records under `<pattern-id>/<index>/`, in a
+            // recorder that knows the transform open where `tiles` lands.
+            Some(recorder) => {
+                let nested = recorder.nested(commands);
+                let instance_cx = NodeCtx {
+                    boxes: Some(&nested),
+                    ..cx
+                };
+                emit_instance(pattern, instance_cx, &mut tiles, ctx, bx + ox, by + oy);
+                recorder.absorb(nested, &format!("{}/{index}/", pattern.id));
+            }
+            None => emit_instance(pattern, cx, &mut tiles, ctx, bx + ox, by + oy),
+        }
     }
 
     tiles.push(SceneCommand::PopClip);

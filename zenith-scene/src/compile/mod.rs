@@ -17,6 +17,7 @@
 //! submodule declarations, type aliases, and re-exports.
 
 mod anchor;
+mod boxes;
 mod chain;
 mod chart;
 mod container;
@@ -54,6 +55,7 @@ pub(super) type ComponentMap<'a> = BTreeMap<&'a str, &'a ComponentDef>;
 pub(super) type MasterMap<'a> = BTreeMap<&'a str, &'a MasterDef>;
 
 pub(crate) use anchor::{AnchorMap, ParentCtx, PrePassEnv, anchor_origin, anchor_sibling_of};
+pub use boxes::CompiledBox;
 pub(in crate::compile) use ctx::NodeCtx;
 pub(in crate::compile) use dispatch::compile_node;
 pub use entry::{compile, compile_page, compile_page_with_imports, layout_boxes};

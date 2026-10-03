@@ -35,12 +35,14 @@ use crate::ir::{Color, Paint, SceneCommand};
 
 use super::RenderCtx;
 use super::anchor::AnchorMap;
+use super::boxes::{BoxRecorder, Placed};
 use super::chain::ChainAssignments;
 use super::field::FieldCtx;
 use super::paint::resolve_property_color;
 use super::style_prop;
-use super::text::{TextCompileEnv, compile_text, empty_md_blocks};
+use super::text::{ShapeEnv, TextCompileEnv, compile_text, empty_md_blocks};
 use super::util::{px_prop, resolve_geometry_px, resolve_property_dimension_px};
+use crate::layout::LayoutBox;
 
 /// The gap (px) between stacked footnotes in the zone.
 const FOOTNOTE_GAP: f64 = 6.0;
@@ -187,6 +189,8 @@ pub(in crate::compile) struct FootnoteZoneEnv<'a> {
     pub(in crate::compile) chains: &'a ChainAssignments,
     pub(in crate::compile) anchors: &'a AnchorMap,
     pub(in crate::compile) field_ctx: &'a FieldCtx<'a>,
+    /// Where each emitted footnote records its box, when set.
+    pub(in crate::compile) boxes: Option<&'a BoxRecorder>,
 }
 
 /// Render the page's footnote zone: the separator rule plus the stacked,
@@ -217,6 +221,7 @@ pub(in crate::compile) fn compile_footnote_zone(
         chains,
         anchors,
         field_ctx,
+        boxes,
     } = env;
     // Collect the footnote nodes in source order (direct page children only).
     let footnotes: Vec<&FootnoteNode> = page
@@ -380,7 +385,24 @@ pub(in crate::compile) fn compile_footnote_zone(
     for (fnote, h) in footnotes.iter().zip(heights.iter()) {
         let marker = markers.get(&fnote.id).map(String::as_str).unwrap_or("?");
         let text = synth_footnote_text(fnote, marker, live_x, cursor_y, live_w);
+        let start = commands.len();
         compile_text(&text, text_env, commands, diagnostics, ctx);
+        if let Some(recorder) = boxes {
+            recorder.place(Placed {
+                id: &fnote.id,
+                declared: Some(LayoutBox {
+                    x: live_x + ctx.dx,
+                    y: cursor_y + ctx.dy,
+                    w: live_w,
+                    h: *h,
+                }),
+                rotate: None,
+                commands,
+                start,
+                page_origin: ctx.page_origin,
+                shape: ShapeEnv { engine, fonts },
+            });
+        }
         cursor_y += h + FOOTNOTE_GAP;
     }
 

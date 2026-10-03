@@ -9,19 +9,38 @@ use zenith_core::{
     ComponentDef, Diagnostic, Document, ImportDecl, Page, ResolvedToken, Style, resolve_tokens,
 };
 
+use zenith_core::defaults::{IdAliases, Lowered};
+
 use super::ComponentMap;
 
 /// A parsed document made available to scene compilation as an import.
-#[derive(Debug, Clone, Copy)]
+///
+/// An imported document lowers its OWN `defaults` blocks against its own
+/// tokens and styles when it is added, so its subtree renders as it does
+/// standalone.
+#[derive(Debug, Clone)]
 pub struct ImportedDocument<'a> {
     /// The imported document AST.
     pub document: &'a Document,
+    /// The defaults-lowered clone and its internal ids, when the document
+    /// has a `defaults` block.
+    lowered: Option<Lowered>,
 }
 
 impl<'a> ImportedDocument<'a> {
     /// Create an imported-document entry from an already parsed document.
     pub fn new(document: &'a Document) -> Self {
-        Self { document }
+        let resolved = resolve_tokens(&document.tokens).resolved;
+        Self {
+            document,
+            lowered: zenith_core::defaults::lower(document, &resolved),
+        }
+    }
+
+    /// The document imported subtrees compile against: the defaults-lowered
+    /// clone, else the parsed document.
+    pub fn effective(&self) -> &Document {
+        self.lowered.as_ref().map_or(self.document, |l| &l.document)
     }
 }
 
@@ -47,6 +66,18 @@ impl<'a> ImportGraph<'a> {
     pub fn with_document(mut self, id: impl Into<String>, document: &'a Document) -> Self {
         self.insert(id, document);
         self
+    }
+
+    /// Internal copy id → authored id of every imported document's defaults
+    /// lowering.
+    pub(in crate::compile) fn id_aliases(&self) -> IdAliases {
+        let mut aliases = IdAliases::default();
+        for imported in self.documents.values() {
+            if let Some(lowered) = &imported.lowered {
+                aliases.extend(&lowered.aliases);
+            }
+        }
+        aliases
     }
 }
 
@@ -95,13 +126,13 @@ impl<'a> ImportScopes<'a> {
 
         let mut scopes = BTreeMap::new();
         for (id, imported) in &graph.documents {
-            let token_resolution = resolve_tokens(&imported.document.tokens);
+            let document: &'a Document = imported.effective();
+            let token_resolution = resolve_tokens(&document.tokens);
             let mut token_diagnostics = token_resolution.diagnostics;
             stamp_import(&mut token_diagnostics, id);
             diagnostics.extend(token_diagnostics);
 
-            let style_map: BTreeMap<&str, &Style> = imported
-                .document
+            let style_map: BTreeMap<&str, &Style> = document
                 .styles
                 .styles
                 .iter()
@@ -109,14 +140,14 @@ impl<'a> ImportScopes<'a> {
                 .collect();
 
             let mut component_map: BTreeMap<&str, &ComponentDef> = BTreeMap::new();
-            for component in &imported.document.components {
+            for component in &document.components {
                 component_map
                     .entry(component.id.as_str())
                     .or_insert(component);
             }
 
             let mut page_map: BTreeMap<&str, &Page> = BTreeMap::new();
-            for page in &imported.document.body.pages {
+            for page in &document.body.pages {
                 page_map.entry(page.id.as_str()).or_insert(page);
             }
 
@@ -128,7 +159,7 @@ impl<'a> ImportScopes<'a> {
             scopes.insert(
                 id.clone(),
                 ImportedScope {
-                    document: imported.document,
+                    document,
                     resolved,
                     style_map,
                     components: component_map,

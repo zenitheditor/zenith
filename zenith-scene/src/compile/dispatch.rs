@@ -4,6 +4,7 @@ use zenith_core::{Diagnostic, Node};
 
 use crate::ir::SceneCommand;
 
+use super::boxes::Compiled;
 use super::chart::compile_chart;
 use super::container::{compile_frame, compile_group, compile_instance};
 use super::ctx::NodeCtx;
@@ -46,7 +47,30 @@ pub(in crate::compile) fn compile_node(
     if node.role() == Some("guide") {
         return 0.0;
     }
+    let start = commands.len();
+    let content_h = compile_kind(node, cx, commands, diagnostics, connector_strokes, ctx);
+    if let Some(recorder) = cx.boxes {
+        recorder.record(Compiled {
+            node,
+            cx,
+            ctx,
+            commands,
+            start,
+            content_h,
+        });
+    }
+    content_h
+}
 
+/// Compile `node` by kind; returns the content height as [`compile_node`].
+fn compile_kind(
+    node: &Node,
+    cx: NodeCtx,
+    commands: &mut Vec<SceneCommand>,
+    diagnostics: &mut Vec<Diagnostic>,
+    connector_strokes: &mut Vec<usize>,
+    ctx: RenderCtx,
+) -> f64 {
     let NodeCtx {
         resolved,
         style_map,
@@ -62,6 +86,7 @@ pub(in crate::compile) fn compile_node(
         page_block_styles,
         doc_block_styles,
         image_sizes,
+        boxes,
     } = cx;
 
     match node {
@@ -255,6 +280,7 @@ pub(in crate::compile) fn compile_node(
                     anchors,
                     field_ctx,
                     image_sizes,
+                    boxes,
                 },
                 commands,
                 diagnostics,

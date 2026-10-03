@@ -236,9 +236,20 @@ pub(super) fn resolve_font_size(
     style_map: &BTreeMap<&str, &Style>,
     resolved_tokens: &BTreeMap<String, ResolvedToken>,
 ) -> f64 {
-    text.font_size
-        .as_ref()
-        .or_else(|| style_property(text.style.as_deref(), "font-size", style_map))
+    font_size_px(
+        text.font_size
+            .as_ref()
+            .or_else(|| style_property(text.style.as_deref(), "font-size", style_map)),
+        resolved_tokens,
+    )
+}
+
+/// The px size of a `font-size` value, else the 16 px engine default.
+pub(super) fn font_size_px(
+    value: Option<&PropertyValue>,
+    resolved_tokens: &BTreeMap<String, ResolvedToken>,
+) -> f64 {
+    value
         .and_then(|pv| {
             if let PropertyValue::TokenRef(id) = pv {
                 resolved_tokens.get(id.as_str()).and_then(|rt| {
@@ -260,9 +271,20 @@ pub(super) fn resolve_font_weight(
     style_map: &BTreeMap<&str, &Style>,
     resolved_tokens: &BTreeMap<String, ResolvedToken>,
 ) -> u32 {
-    text.font_weight
-        .as_ref()
-        .or_else(|| style_property(text.style.as_deref(), "font-weight", style_map))
+    font_weight_of(
+        text.font_weight
+            .as_ref()
+            .or_else(|| style_property(text.style.as_deref(), "font-weight", style_map)),
+        resolved_tokens,
+    )
+}
+
+/// The numeric weight of a `font-weight` value, else the 400 engine default.
+pub(super) fn font_weight_of(
+    value: Option<&PropertyValue>,
+    resolved_tokens: &BTreeMap<String, ResolvedToken>,
+) -> u32 {
+    value
         .and_then(|pv| {
             if let PropertyValue::TokenRef(id) = pv {
                 resolved_tokens.get(id.as_str()).and_then(|rt| {
