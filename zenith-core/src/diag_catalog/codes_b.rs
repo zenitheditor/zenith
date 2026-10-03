@@ -64,7 +64,8 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
     info(
         "defaults.text_style_unsupported",
         Severity::Error,
-        "A `defaults` row sets `text-style` on a kind without a label.",
+        "A `defaults` row sets `text-style` on a kind without a label. Carries a \
+         `remove_property` fix.",
     ),
     info(
         "defaults.unknown_kind",
@@ -311,7 +312,8 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
     info(
         "layout.inert_attribute",
         Severity::Advisory,
-        "A layout attribute has no effect where it is set.",
+        "A layout attribute has no effect where it is set. One advisory per attribute, with a \
+         `remove_property` fix.",
     ),
     info(
         "layout.off_canvas",
@@ -321,7 +323,8 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
     info(
         "layout.position_ignored",
         Severity::Advisory,
-        "x/y/anchor on an in-flow child of a row/column frame are ignored.",
+        "x/y/anchor on an in-flow child of a row/column frame are ignored. One advisory per \
+         attribute, with a `remove_property` fix.",
     ),
     info(
         "layout.unsized_child",

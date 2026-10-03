@@ -13,7 +13,7 @@ use crate::ast::node::{
     SizeKeyword,
 };
 use crate::ast::value::{PropertyValue, Unit, dim_to_px};
-use crate::diagnostics::Diagnostic;
+use crate::diagnostics::{Diagnostic, FixHint};
 use crate::schema::enums::{LAYOUT_ALIGNS, LAYOUT_JUSTIFIES, LAYOUT_KINDS, LAYOUT_POSITIONS};
 
 use super::shared::{TokenEnv, check_optional_dim};
@@ -90,27 +90,81 @@ fn item_facts(node: &Node) -> Option<ItemFacts<'_>> {
     })
 }
 
-/// Push one `layout.inert_attribute` Advisory naming every inert attribute.
+/// One attribute a layout check flags for removal, and whether `zenith fix`
+/// can remove it unambiguously.
+#[derive(Clone, Copy)]
+struct Removable {
+    name: &'static str,
+    /// `true` attaches a [`FixHint::RemoveProperty`].
+    fixable: bool,
+}
+
+impl Removable {
+    fn fixable(name: &'static str) -> Self {
+        Self {
+            name,
+            fixable: true,
+        }
+    }
+
+    /// The `RemoveProperty` hint for this attribute, when it is fixable.
+    fn hint(self) -> Option<FixHint> {
+        self.fixable.then(|| FixHint::RemoveProperty {
+            property: self.name.to_owned(),
+        })
+    }
+}
+
+/// Push one `layout.inert_attribute` Advisory per inert attribute, each with
+/// a `RemoveProperty` fix when the removal is unambiguous.
 fn push_inert(
     subject: &str,
     id: &str,
-    attrs: &[&str],
+    attrs: &[Removable],
     reason: &str,
     span: Option<Span>,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
-    if attrs.is_empty() {
-        return;
+    for attr in attrs {
+        diagnostics.push(
+            Diagnostic::advisory(
+                "layout.inert_attribute",
+                format!(
+                    "{subject} '{id}': {} has no effect {reason}; remove it",
+                    attr.name
+                ),
+                span,
+                Some(id.to_owned()),
+            )
+            .with_fix(attr.hint()),
+        );
     }
-    diagnostics.push(Diagnostic::advisory(
-        "layout.inert_attribute",
-        format!(
-            "{subject} '{id}': {} has no effect {reason}; remove it",
-            attrs.join(", ")
-        ),
-        span,
-        Some(id.to_owned()),
-    ));
+}
+
+/// The placement attributes `node` sets: `x`, `y`, and each anchor
+/// attribute.
+fn placement_attrs(node: &Node, view: &ItemFacts<'_>) -> Vec<Removable> {
+    let mut out = Vec::new();
+    for (name, set) in [("x", view.x), ("y", view.y)] {
+        if set {
+            out.push(Removable::fixable(name));
+        }
+    }
+    if let Some(a) = node.anchor_view() {
+        for (name, set) in [
+            ("anchor", a.anchor.is_some()),
+            ("anchor-zone", a.anchor_zone.is_some()),
+            ("anchor-sibling", a.anchor_sibling.is_some()),
+            ("anchor-parent", a.anchor_parent.is_some()),
+            ("anchor-edge", a.anchor_edge.is_some()),
+            ("anchor-gap", a.anchor_gap.is_some()),
+        ] {
+            if set {
+                out.push(Removable::fixable(name));
+            }
+        }
+    }
+    out
 }
 
 /// Push a `layout.conflicting_size` Error.
@@ -215,11 +269,18 @@ pub(in crate::validate::check) fn check_layout_item(
             | Node::Mesh(_)
             | Node::Unknown(_) => false,
         };
-        let mut inert: Vec<&str> = Vec::new();
-        for (name, keyword) in [("w", item.w_keyword), ("h", item.h_keyword)] {
+        let mut inert: Vec<Removable> = Vec::new();
+        for (name, keyword, has_px) in
+            [("w", item.w_keyword, view.w), ("h", item.h_keyword, view.h)]
+        {
             match keyword {
                 Some(SizeKeyword::Hug) if own_layout => {}
-                Some(SizeKeyword::Hug | SizeKeyword::Fill) => inert.push(name),
+                // With a px size on the same axis, removing `w` / `h` is
+                // ambiguous (`layout.conflicting_size` reports it).
+                Some(SizeKeyword::Hug | SizeKeyword::Fill) => inert.push(Removable {
+                    name,
+                    fixable: !has_px,
+                }),
                 None => {}
             }
         }
@@ -231,7 +292,7 @@ pub(in crate::validate::check) fn check_layout_item(
             ("position", item.position.is_some()),
         ] {
             if set {
-                inert.push(name);
+                inert.push(Removable::fixable(name));
             }
         }
         push_inert(
@@ -258,16 +319,23 @@ pub(in crate::validate::check) fn check_layout_item(
                 Some(id.to_owned()),
             ));
         }
-    } else if view.x || view.y || view.anchored {
-        diagnostics.push(Diagnostic::advisory(
-            "layout.position_ignored",
-            format!(
-                "{subject} '{id}': x/y/anchor are ignored inside a row/column frame; \
-                 remove them or set position=\"absolute\""
-            ),
-            span,
-            Some(id.to_owned()),
-        ));
+    } else {
+        // One advisory per ignored attribute, each with its own removal fix.
+        for attr in placement_attrs(node, &view) {
+            diagnostics.push(
+                Diagnostic::advisory(
+                    "layout.position_ignored",
+                    format!(
+                        "{subject} '{id}': {} is ignored inside a row/column frame; \
+                         remove it or set position=\"absolute\"",
+                        attr.name
+                    ),
+                    span,
+                    Some(id.to_owned()),
+                )
+                .with_fix(attr.hint()),
+            );
+        }
     }
 
     if let (Node::Text(t), Some(parent)) = (node, site.parent)
@@ -400,10 +468,10 @@ pub(in crate::validate::check) fn check_frame_layout(
         ("padding-bottom", c.padding_bottom.is_some()),
         ("padding-left", c.padding_left.is_some()),
     ];
-    let set_names = |list: &[(&'static str, bool)]| -> Vec<&'static str> {
+    let set_names = |list: &[(&'static str, bool)]| -> Vec<Removable> {
         list.iter()
             .filter(|(_, set)| *set)
-            .map(|(n, _)| *n)
+            .map(|(n, _)| Removable::fixable(n))
             .collect()
     };
     match kind {

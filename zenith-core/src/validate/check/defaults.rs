@@ -18,7 +18,7 @@ use crate::ast::{
     DEFAULTS_ENTRY_PROPS, DEFAULTS_UNSUPPORTED_KINDS, DefaultsBlock, DefaultsEntry, DefaultsKind,
     DefaultsRejection,
 };
-use crate::diagnostics::Diagnostic;
+use crate::diagnostics::{Diagnostic, FixHint};
 use crate::suggest::{
     find_suggestion, format_candidate_list, rename_property_fix, replace_value_fix,
     unknown_property_message,
@@ -131,15 +131,20 @@ fn check_entry(
         if let Some(k) = kind
             && !k.accepts_text_style()
         {
-            diagnostics.push(cx.error(
-                "defaults.text_style_unsupported",
-                format!(
-                    "{} defaults: kind '{name}' has no label, so text-style=\"{ts}\" has no \
-                     effect; remove text-style (only connector and shape take it)",
-                    cx.scope
-                ),
-                entry,
-            ));
+            diagnostics.push(
+                cx.error(
+                    "defaults.text_style_unsupported",
+                    format!(
+                        "{} defaults: kind '{name}' has no label, so text-style=\"{ts}\" has no \
+                         effect; remove text-style (only connector and shape take it)",
+                        cx.scope
+                    ),
+                    entry,
+                )
+                .with_fix(Some(FixHint::RemoveProperty {
+                    property: "text-style".to_owned(),
+                })),
+            );
         }
         check_style(cx, name, "text-style", ts, entry, diagnostics);
     }

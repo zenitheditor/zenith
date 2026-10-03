@@ -12,6 +12,8 @@
 //!   swaps the kind (node name) or a style id; on a `style` block it swaps the
 //!   value of the property child. Row diagnostics are located by span.
 //! - [`FixHint::SetProperty`] → replace the subject's own entry, or add it.
+//! - [`FixHint::RemoveProperty`] → remove the subject's own entry. On a
+//!   `defaults` row the underscore spelling counts too.
 
 use std::collections::BTreeSet;
 
@@ -57,6 +59,8 @@ pub(super) enum Change {
     NodeName(String),
     /// Set the value and its type annotation (replacing any annotation).
     Value { ty: Option<String>, value: KdlValue },
+    /// Remove the entry.
+    Remove,
 }
 
 /// A planned edit plus the record it produces.
@@ -123,6 +127,7 @@ pub(super) fn plan(
                 _ => plan_value(doc, d, &path, property, from, to),
             },
             FixHint::SetProperty { property, to } => plan_set_property(doc, d, &path, property, to),
+            FixHint::RemoveProperty { property } => plan_remove_property(doc, d, &path, property),
         };
         for fix in planned {
             if taken.insert(fix.site.clone()) {
@@ -370,6 +375,34 @@ fn plan_style_value(
         change: Change::Text(to.to_owned()),
         record: record(d, property, quote(from), quote(to)),
     }]
+}
+
+/// Remove every entry named `property` (or its underscore spelling) on the
+/// node at `path`. Id-less children are not touched: their properties are
+/// their own. A node without the entry plans nothing.
+fn plan_remove_property(
+    doc: &KdlDocument,
+    d: &Diagnostic,
+    path: &[usize],
+    property: &str,
+) -> Vec<PlannedFix> {
+    let Some(node) = node_at(doc, path) else {
+        return Vec::new();
+    };
+    let alias = property.replace('-', "_");
+    node.entries()
+        .iter()
+        .enumerate()
+        .filter(|(_, e)| {
+            let name = e.name().map(|n| n.value());
+            name == Some(property) || name == Some(alias.as_str())
+        })
+        .map(|(index, entry)| PlannedFix {
+            site: Site::entry(path.to_vec(), index),
+            change: Change::Remove,
+            record: record(d, property, value_text(entry), "(removed)".to_owned()),
+        })
+        .collect()
 }
 
 /// Set `property` on the node at `path` to the value text `to`: the node's

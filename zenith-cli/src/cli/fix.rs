@@ -12,7 +12,9 @@ weight.<n>, font.<slug>) placed in the tokens block\n  \
 unknown property        → its did-you-mean, when unique and not already set\n  \
 unknown token reference → a declared prefix (color.primary.500 → color.primary)\n                          \
 or a unique id within 2 edits of the same type\n  \
-invalid enum value      → its did-you-mean, when unique\n\
+invalid enum value      → its did-you-mean, when unique\n  \
+no-effect attribute     → removed (layout.position_ignored, layout.inert_attribute,\n                          \
+defaults.text_style_unsupported)\n\
 Everything else stays in `remaining`. The result is canonical (`zenith fmt`).\n\n\
 EXAMPLES:\n  \
 zenith fix draft.zen            # preview the fixes and the source diff (dry-run)\n  \

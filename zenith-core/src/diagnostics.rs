@@ -104,6 +104,9 @@ pub enum FixHint {
     /// Set `property` to `to`: replace the subject's own entry, or add one
     /// when the subject does not set it (`y` → `(px)140`).
     SetProperty { property: String, to: String },
+    /// Remove the subject's own `property` entry: the attribute has no
+    /// effect where it is set (`x` on an in-flow child).
+    RemoveProperty { property: String },
 }
 
 impl Diagnostic {

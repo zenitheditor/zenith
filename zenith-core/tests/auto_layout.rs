@@ -664,6 +664,36 @@ fn xy_on_in_flow_child_is_ignored() {
     let d = diags(&report, "layout.position_ignored");
     assert_eq!(d.len(), 2, "{:?}", report.diagnostics);
     assert_eq!(d[0].severity, Severity::Advisory);
+    for (subject, attr) in [("r", "x"), ("r2", "anchor")] {
+        assert!(
+            d.iter().any(|d| d.subject_id.as_deref() == Some(subject)
+                && d.fix()
+                    == Some(&zenith_core::FixHint::RemoveProperty {
+                        property: attr.to_owned()
+                    })),
+            "{subject} {attr}: {d:?}"
+        );
+    }
+}
+
+#[test]
+fn each_ignored_position_attribute_gets_its_own_fix() {
+    let report = check(
+        r#"      frame id="f" x=(px)0 y=(px)0 w=(px)200 h=(px)200 layout="row" {
+        rect id="r" x=(px)5 y=(px)6 w=(px)20 h=(px)20 fill=(token)"color.k"
+      }"#,
+    );
+    let props: Vec<String> = diags(&report, "layout.position_ignored")
+        .iter()
+        .filter_map(|d| {
+            if let Some(zenith_core::FixHint::RemoveProperty { property }) = d.fix() {
+                Some(property.clone())
+            } else {
+                None
+            }
+        })
+        .collect();
+    assert_eq!(props, ["x", "y"], "{:?}", report.diagnostics);
 }
 
 #[test]
@@ -674,16 +704,20 @@ fn inert_attributes_are_advised() {
         rect id="r" x=(px)0 y=(px)0 w=(px)10 h=(px)10 min-w=(px)2 fill=(token)"color.k"
       }"#,
     );
+    // One advisory per attribute, each with its own removal fix.
     let d = diags(&report, "layout.inert_attribute");
-    assert_eq!(d.len(), 2, "{:?}", report.diagnostics);
-    assert!(
-        d.iter()
-            .any(|d| d.subject_id.as_deref() == Some("f") && d.message.contains("gap, justify"))
-    );
-    assert!(
-        d.iter()
-            .any(|d| d.subject_id.as_deref() == Some("r") && d.message.contains("min-w"))
-    );
+    assert_eq!(d.len(), 3, "{:?}", report.diagnostics);
+    for (subject, attr) in [("f", "gap"), ("f", "justify"), ("r", "min-w")] {
+        assert!(
+            d.iter().any(|d| d.subject_id.as_deref() == Some(subject)
+                && d.message.contains(&format!("{attr} has no effect"))
+                && d.fix()
+                    == Some(&zenith_core::FixHint::RemoveProperty {
+                        property: attr.to_owned()
+                    })),
+            "{subject} {attr}: {d:?}"
+        );
+    }
 
     // Stack-only attributes on a grid frame.
     let grid = check(
