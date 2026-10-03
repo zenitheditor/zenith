@@ -34,7 +34,7 @@ fn translated_group_text_over_ellipse_flags_invisible() {
             ],
         )],
     );
-    let report = validate(&doc);
+    let report = contrast_report(&doc);
     assert!(
         has_code(&report, "contrast.invisible"),
         "translated-group text over the ellipse must flag invisible; codes: {:?}",
@@ -62,7 +62,7 @@ fn zero_translation_group_text_still_flags() {
             ],
         )],
     );
-    let report = validate(&doc);
+    let report = contrast_report(&doc);
     assert!(
         has_code(&report, "contrast.invisible"),
         "zero-offset group text over the ellipse must still flag invisible; codes: {:?}",
@@ -94,7 +94,7 @@ fn nested_translated_groups_accumulate_offset() {
             ],
         )],
     );
-    let report = validate(&doc);
+    let report = contrast_report(&doc);
     assert!(
         has_code(&report, "contrast.invisible"),
         "nested group offsets must accumulate onto the backdrop; codes: {:?}",
@@ -130,7 +130,7 @@ fn translated_text_within_frame_clip_over_backdrop_flags() {
             )],
         )],
     );
-    let report = validate(&doc);
+    let report = contrast_report(&doc);
     assert!(
         has_code(&report, "contrast.invisible"),
         "translated text inside the frame clip over the rect must flag invisible; codes: {:?}",
@@ -165,7 +165,7 @@ fn rounded_rect_corner_text_not_flagged() {
             ],
         )],
     );
-    let report = validate(&doc);
+    let report = contrast_report(&doc);
     assert!(
         !has_code(&report, "contrast.invisible"),
         "text in the rounded-away corner must NOT be flagged; codes: {:?}",
@@ -196,7 +196,7 @@ fn rounded_rect_body_text_flagged() {
             ],
         )],
     );
-    let report = validate(&doc);
+    let report = contrast_report(&doc);
     assert!(
         has_code(&report, "contrast.invisible"),
         "text in the rounded rect body must be flagged; codes: {:?}",
@@ -234,7 +234,7 @@ fn rotated_rect_covers_text_after_rotation_flags() {
             ],
         )],
     );
-    let report = validate(&doc);
+    let report = contrast_report(&doc);
     assert!(
         has_code(&report, "contrast.invisible"),
         "text over the rotated square must be flagged; codes: {:?}",
@@ -270,7 +270,7 @@ fn rotated_rect_misses_axis_aligned_corner() {
             ],
         )],
     );
-    let report = validate(&doc);
+    let report = contrast_report(&doc);
     assert!(
         !has_code(&report, "contrast.invisible"),
         "text off the rotated square must NOT be flagged; codes: {:?}",
@@ -296,7 +296,7 @@ fn rotated_group_backdrop_is_indeterminate() {
             200.0,
         )],
     ));
-    let report = validate(&doc);
+    let report = contrast_report(&doc);
     assert!(
         has_code(&report, "contrast.indeterminate_backdrop"),
         "a backdrop inside a rotated group must be indeterminate; codes: {:?}",
@@ -326,7 +326,7 @@ fn unrotated_group_backdrop_still_samples() {
             200.0,
         )],
     ));
-    let report = validate(&doc);
+    let report = contrast_report(&doc);
     assert!(
         has_code(&report, "contrast.invisible"),
         "an unrotated group backdrop must still be sampled; codes: {:?}",
@@ -353,7 +353,7 @@ fn path_fill_backdrop_samples_solid_paint() {
         240.0,
         120.0,
     ));
-    let report = validate(&doc);
+    let report = contrast_report(&doc);
     assert!(
         has_code(&report, "contrast.invisible"),
         "a solid path fill covering the text must sample real paint; codes: {:?}",
@@ -377,7 +377,7 @@ fn monogram_on_path_fill_flags_invisible_not_indeterminate() {
         240.0,
         120.0,
     ));
-    let report = validate(&doc);
+    let report = contrast_report(&doc);
     assert!(
         has_code(&report, "contrast.invisible") || has_code(&report, "contrast.low"),
         "monogram on path fill must see the path paint; codes: {:?}",
@@ -417,7 +417,7 @@ fn text_in_path_aabb_outside_fill_uses_page_bg() {
             ],
         )],
     );
-    let report = validate(&doc);
+    let report = contrast_report(&doc);
     assert!(
         !has_code(&report, "contrast.invisible"),
         "text outside the path fill must not inherit path paint; codes: {:?}",
@@ -440,7 +440,7 @@ fn evenodd_hole_text_not_covered_by_path_fill() {
         (80.0, 80.0, 280.0, 160.0),
         (120.0, 120.0, 100.0, 50.0),
     ));
-    let report = validate(&doc);
+    let report = contrast_report(&doc);
     assert!(
         !has_code(&report, "contrast.invisible"),
         "text in an evenodd hole must not see the path fill; codes: {:?}",
@@ -466,7 +466,7 @@ fn masked_rect_backdrop_is_indeterminate() {
         100.0,
         |r| r.mask = Some(PropertyValue::TokenRef("mask.reveal".to_owned())),
     ));
-    let report = validate(&doc);
+    let report = contrast_report(&doc);
     assert!(
         has_code(&report, "contrast.indeterminate_backdrop"),
         "a masked fill must be indeterminate; codes: {:?}",
@@ -486,7 +486,7 @@ fn filtered_rect_backdrop_is_indeterminate() {
         100.0,
         |r| r.filter = Some(PropertyValue::TokenRef("filter.duo".to_owned())),
     ));
-    let report = validate(&doc);
+    let report = contrast_report(&doc);
     assert!(
         has_code(&report, "contrast.indeterminate_backdrop"),
         "a filtered fill must be indeterminate; codes: {:?}",
@@ -511,7 +511,7 @@ fn blurred_rect_backdrop_is_indeterminate() {
             })
         },
     ));
-    let report = validate(&doc);
+    let report = contrast_report(&doc);
     assert!(
         has_code(&report, "contrast.indeterminate_backdrop"),
         "a blurred fill must be indeterminate; codes: {:?}",
@@ -531,7 +531,7 @@ fn blended_rect_backdrop_is_indeterminate() {
         100.0,
         |r| r.blend_mode = Some("multiply".to_owned()),
     ));
-    let report = validate(&doc);
+    let report = contrast_report(&doc);
     assert!(
         has_code(&report, "contrast.indeterminate_backdrop"),
         "a non-normal blend fill must be indeterminate; codes: {:?}",
@@ -552,7 +552,7 @@ fn plain_rect_backdrop_flags_invisible_control() {
         220.0,
         100.0,
     ));
-    let report = validate(&doc);
+    let report = contrast_report(&doc);
     assert!(
         has_code(&report, "contrast.invisible"),
         "a plain navy rect must flag invisible; codes: {:?}",
@@ -574,7 +574,7 @@ fn zero_opacity_rect_backdrop_yields_no_backdrop() {
         100.0,
         |r| r.opacity = Some(0.0),
     ));
-    let report = validate(&doc);
+    let report = contrast_report(&doc);
     assert!(
         !has_code(&report, "contrast.indeterminate_backdrop"),
         "a fully transparent fill is no backdrop, not indeterminate; codes: {:?}",
@@ -601,7 +601,7 @@ fn anchored_boxless_text_is_indeterminate() {
             vec![anchored_boxless_text("floating", "color.text", None)],
         )],
     );
-    let report = validate(&doc);
+    let report = contrast_report(&doc);
     assert!(
         has_code(&report, "contrast.indeterminate_backdrop"),
         "boxless anchored text must be indeterminate; codes: {:?}",
@@ -632,7 +632,7 @@ fn anchored_boxless_text_hint_suppresses_indeterminate() {
             )],
         )],
     );
-    let report = validate(&doc);
+    let report = contrast_report(&doc);
     assert!(
         !has_code(&report, "contrast.indeterminate_backdrop"),
         "a contrast-bg hint wins over the unknown-extent advisory; codes: {:?}",
@@ -664,7 +664,7 @@ fn frame_fill_is_a_backdrop_for_its_text() {
             )],
         )],
     );
-    let report = validate(&doc);
+    let report = contrast_report(&doc);
     assert!(
         has_code(&report, "contrast.invisible"),
         "black text on the navy frame fill must flag invisible; codes: {:?}",
@@ -692,7 +692,7 @@ fn frame_child_paints_over_frame_fill() {
             )],
         )],
     );
-    let report = validate(&doc);
+    let report = contrast_report(&doc);
     assert!(
         !has_code(&report, "contrast.invisible") && !has_code(&report, "contrast.low"),
         "text on the white child card must pass; codes: {:?}",
@@ -726,7 +726,7 @@ fn unclipped_frame_does_not_clip_text_sampling() {
             ],
         )],
     );
-    let report = validate(&doc);
+    let report = contrast_report(&doc);
     assert!(
         has_code(&report, "contrast.invisible"),
         "text outside an unclipped frame must be sampled; codes: {:?}",

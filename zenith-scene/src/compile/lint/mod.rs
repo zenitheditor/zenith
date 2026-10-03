@@ -6,7 +6,7 @@
 //! - `geom` — rectangle math and coverage outlines.
 //! - `overlap` — `text.ink_overlap` and `text.occluded`.
 //! - `label_overflow` — `label.overflow`.
-//! - `contrast` — label contrast, and text contrast of expanded content.
+//! - `contrast` — text and label contrast, judged on drawn glyph ink.
 //! - `legibility` — `text.edge_crowding`, `text.too_small`, and
 //!   `type.near_duplicate_size` (`edges`, `small_text`, `type_scale`, over the
 //!   authored facts of `text_facts`).

@@ -9,7 +9,7 @@ use super::super::boxes::{BoxRecorder, Recorded, glyph_inks};
 use super::super::imports::ImportScopes;
 use super::super::text::ShapeEnv;
 use super::arrange::arrangement;
-use super::contrast::content_contrast;
+use super::contrast::{content_contrast, text_inks};
 use super::label_overflow::label_overflow;
 use super::ledger::{LedgerInput, PageLedger};
 use super::legibility::legibility;
@@ -39,8 +39,7 @@ pub(in crate::compile) struct LintEnv<'a> {
 }
 
 /// The lint diagnostics of one page: `text.ink_overlap`, `text.occluded`,
-/// `label.overflow`, label contrast, and the text contrast of expanded
-/// content. `recorder` is the page compile's box recorder.
+/// `label.overflow`, and the contrast of every text and label. `recorder` is the page compile's box recorder.
 pub(in crate::compile) fn lint_page(env: &LintEnv<'_>, recorder: BoxRecorder) -> Vec<Diagnostic> {
     let Recorded {
         boxes,
@@ -52,6 +51,7 @@ pub(in crate::compile) fn lint_page(env: &LintEnv<'_>, recorder: BoxRecorder) ->
         .map(|p| authored_facts(&p.children))
         .unwrap_or_default();
     let inks = glyph_inks(env.commands, (env.bleed, env.bleed), env.shape);
+    let texts = text_inks(&inks);
     let ledger = PageLedger::build(
         &LedgerInput {
             master: env.master,
@@ -66,7 +66,7 @@ pub(in crate::compile) fn lint_page(env: &LintEnv<'_>, recorder: BoxRecorder) ->
     let mut out = ink_overlap(&ledger, &authored);
     out.extend(occluded(&ledger));
     out.extend(label_overflow(&ledger, env.compiled));
-    out.extend(content_contrast(env, &expansions));
+    out.extend(content_contrast(env, &expansions, &texts));
     out.extend(legibility(env, &ledger, &authored));
     out.extend(arrangement(&ledger, &authored, &routes));
     out

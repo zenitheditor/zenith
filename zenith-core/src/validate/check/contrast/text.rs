@@ -1,11 +1,13 @@
-//! Contrast of `text` nodes: sampling the backdrop under a text box and
-//! judging the text fill against it with APCA.
+//! Contrast of `text` nodes: sampling the backdrop under the drawn glyph ink
+//! (or, with no measured ink, the text box) and judging the text fill
+//! against it with APCA.
 
 use crate::ast::node::TextNode;
 use crate::color::apca_lc;
 use crate::diagnostics::Diagnostic;
 
 use super::geometry::{RectPx, text_box};
+use super::ink::{ink_points, sample_points};
 use super::props::{
     resolve_color_property, resolve_font_size, resolve_font_weight, style_property,
 };
@@ -50,31 +52,53 @@ pub(super) fn check_text_node(
     let threshold = lc_threshold(size_px, weight);
 
     let hint_rgb = resolve_color_property(text.contrast_bg.as_ref(), env.resolved_tokens);
+    // The compile stage measured the drawn glyphs: judge where they are. A
+    // table cell lays its content out cell-relative, so it keeps its box.
+    let ink = match env.inks {
+        Some(inks) if !ctx.in_cell => match inks.texts.get(text.id.as_str()) {
+            Some(ink) => Some(ink),
+            // No glyph drawn: nothing to judge.
+            None => return,
+        },
+        Some(_) | None => None,
+    };
     let mut backdrop_samples = Vec::new();
     if hint_rgb.is_none() {
-        // The text sample box must live in ABSOLUTE page space, mapped by the
-        // accumulated ancestor offset and scale, so it lands on the same
-        // coordinates as the (already-absolute) backdrop candidates and frame
-        // clip.
-        let Some(text_bbox) =
-            text_box(text, ctx.page_size, env.resolved_tokens).map(|b| ctx.place().rect(b))
-        else {
-            // No resolvable box (e.g. anchored text with no authored w/h). We
-            // cannot compute its extent without font metrics, so rather than
-            // silently judging it against the page background we flag it honestly.
-            if text_has_position(text) {
-                push_indeterminate_extent(text, diagnostics);
+        let (samples, indeterminate_backdrop) = match ink {
+            Some(ink) => {
+                let (samples, indeterminate, hidden) =
+                    sample_points(ink_points(ink), ctx.clip, candidates, ctx.page_bg_rgb);
+                if hidden {
+                    return;
+                }
+                (samples, indeterminate)
             }
-            return;
+            None => {
+                // The text sample box must live in ABSOLUTE page space, mapped
+                // by the accumulated ancestor offset and scale, so it lands on
+                // the same coordinates as the (already-absolute) backdrop
+                // candidates and frame clip.
+                let Some(text_bbox) =
+                    text_box(text, ctx.page_size, env.resolved_tokens).map(|b| ctx.place().rect(b))
+                else {
+                    // No resolvable box (e.g. anchored text with no authored
+                    // w/h). We cannot compute its extent without font
+                    // metrics, so rather than silently judging it against the
+                    // page background we flag it honestly.
+                    if text_has_position(text) {
+                        push_indeterminate_extent(text, diagnostics);
+                    }
+                    return;
+                };
+                collect_backdrop_samples(text_bbox, ctx.clip, candidates, ctx.page_bg_rgb)
+            }
         };
-        let (samples, indeterminate_backdrop) =
-            collect_backdrop_samples(text_bbox, ctx.clip, candidates, ctx.page_bg_rgb);
         backdrop_samples = samples;
         if indeterminate_backdrop {
             diagnostics.push(Diagnostic::advisory(
                 "contrast.indeterminate_backdrop",
                 format!(
-                    "text '{}': its backdrop includes an unsampled paint (image, or a rotated/masked/blurred/blended fill) and cannot be sampled during validation; add a contrast-bg hint",
+                    "text '{}': its backdrop includes an unsampled paint (image, or a rotated/masked/blurred/blended fill) and cannot be sampled; add a contrast-bg hint",
                     text.id
                 ),
                 text.source_span,
@@ -124,12 +148,12 @@ fn emit_contrast_diagnostic(
 }
 
 /// Advisory for a text node with a resolvable position and fill but no
-/// computable box (its extent needs font metrics unavailable at validation).
+/// computable box (its extent needs font metrics unavailable to the contrast pass).
 fn push_indeterminate_extent(text: &TextNode, diagnostics: &mut Vec<Diagnostic>) {
     diagnostics.push(Diagnostic::advisory(
         "contrast.indeterminate_backdrop",
         format!(
-            "text '{}': its extent (width/height) is unknown during validation, so the backdrop it sits on cannot be sampled; add a contrast-bg hint",
+            "text '{}': its extent (width/height) is unknown, so the backdrop it sits on cannot be sampled; add a contrast-bg hint",
             text.id
         ),
         text.source_span,
@@ -249,7 +273,7 @@ fn composite_channel(src: u8, alpha: f64, dst: u8) -> u8 {
     ((src as f64 * alpha) + (dst as f64 * (1.0 - alpha))).round() as u8
 }
 
-fn push_unique_sample(backdrops: &mut Vec<SampledBackdrop>, sample: SampledBackdrop) {
+pub(super) fn push_unique_sample(backdrops: &mut Vec<SampledBackdrop>, sample: SampledBackdrop) {
     if !backdrops
         .iter()
         .any(|backdrop| backdrop.rgb == sample.rgb && backdrop.source == sample.source)

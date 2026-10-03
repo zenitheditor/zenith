@@ -23,9 +23,8 @@ use crate::tokens::ResolvedToken;
 
 use super::brand::check_brand_contract;
 use super::construction::check_construction;
-use super::contrast::check_page_text_contrast;
 use super::defaults::check_defaults;
-use super::geometry::{page_background_rgb, page_is_layout_managed};
+use super::geometry::page_is_layout_managed;
 use super::nodes::{WalkCtx, WalkPos, check_sibling_anchors, walk_node};
 use super::passes::{
     check_footnote_refs, collect_local_ids, register_id, validate_asset_decl, validate_import_decl,
@@ -74,6 +73,27 @@ pub fn validate_with_policy(
     policy: &DiagnosticPolicy,
     brand: &BrandContract,
 ) -> ValidationReport {
+    // Content pairing and default styles write token refs into the lowered
+    // document only. Count those refs as usage so the unused-token check
+    // does not flag a token that only `defaults` uses. No `defaults` block
+    // means no extra pass and byte-identical output.
+    let resolution = crate::tokens::resolve_tokens(&doc.tokens);
+    let lowered_refs = match crate::defaults::lower(doc, &resolution.resolved) {
+        Some(lowered) => validate_pass(&lowered.document, policy, brand, &BTreeSet::new()).1,
+        None => BTreeSet::new(),
+    };
+    validate_pass(doc, policy, brand, &lowered_refs).0
+}
+
+/// One validation walk over `doc`. Returns the report and every token id the
+/// walk saw referenced. `extra_referenced` counts as referenced for the
+/// unused-token check.
+fn validate_pass(
+    doc: &Document,
+    policy: &DiagnosticPolicy,
+    brand: &BrandContract,
+    extra_referenced: &BTreeSet<String>,
+) -> (ValidationReport, BTreeSet<String>) {
     // ── Step 1: token resolution ──────────────────────────────────────────
     let token_resolution = crate::tokens::resolve_tokens(&doc.tokens);
     let resolved_tokens: &BTreeMap<String, ResolvedToken> = &token_resolution.resolved;
@@ -251,21 +271,8 @@ pub fn validate_with_policy(
         collect_local_ids(&comp.children, &mut all_node_ids);
     }
 
-    // Style lookup by id, so the contrast check can resolve a text node's
-    // style-inherited fill / font-size / font-weight. Ordered for determinism.
+    // Style lookup by id, for the node walk. Ordered for determinism.
     let style_map: BTreeMap<&str, &Style> = doc
-        .styles
-        .styles
-        .iter()
-        .map(|s| (s.id.as_str(), s))
-        .collect();
-
-    // Contrast reads the defaults-lowered document, so a fill or font size a
-    // `defaults` block supplies is the one judged. Every other check reads
-    // the authored document. The lowered nodes keep their source spans.
-    let lowered = crate::defaults::lower(doc, resolved_tokens);
-    let contrast_doc: &Document = lowered.as_ref().map_or(doc, |l| &l.document);
-    let contrast_style_map: BTreeMap<&str, &Style> = contrast_doc
         .styles
         .styles
         .iter()
@@ -329,7 +336,7 @@ pub fn validate_with_policy(
     // two different components without colliding. Token/asset/style refs inside
     // a component are validated ONCE here at the definition, by walking the
     // component's children exactly like page children (no page bounds → no
-    // off_canvas/contrast checks, which are placement-relative).
+    // off_canvas checks, which are placement-relative).
     for comp in &doc.components {
         register_id(&comp.id, &mut seen_ids, &mut diagnostics);
 
@@ -758,11 +765,6 @@ pub fn validate_with_policy(
         let page_px_bounds = dim_to_px(page.width.value, &page.width.unit)
             .zip(dim_to_px(page.height.value, &page.height.unit));
 
-        // ── Resolve page background color for contrast checks ────────────
-        // Only a TokenRef → Color token produces a usable RGB triple. Without
-        // one, contrast falls back to no page background.
-        let page_bg_rgb = page_background_rgb(page, resolved_tokens);
-
         // A page with a row/column/grid frame has no final geometry here: the
         // scene engine lays it out and runs the geometry checks on the result
         // (`layout_geometry_checks`). Skip them on this page.
@@ -770,11 +772,6 @@ pub fn validate_with_policy(
         let walk_bounds = if layout_managed { None } else { page_px_bounds };
 
         // ── Walk page children ────────────────────────────────────────────
-        // Page pixel bounds for backdrop bbox math; when the page unit was bad
-        // (already diagnosed) bounds are unresolved and we use (0, 0) — no
-        // shape will contain the text, so contrast falls back to the page bg.
-        let (page_w, page_h) = page_px_bounds.unwrap_or((0.0, 0.0));
-
         // Build the set of safe-zone ids for this page so that check_anchor
         // can validate anchor-zone references.
         let zone_ids: BTreeSet<&str> = page.safe_zones.iter().map(|z| z.id.as_str()).collect();
@@ -817,21 +814,6 @@ pub fn validate_with_policy(
                     in_container: false,
                     parent_box_known: false,
                 },
-                &mut diagnostics,
-            );
-        }
-
-        // Contrast runs after the structural walk so token-reference errors are
-        // already diagnosed. It walks the page in paint order and resolves
-        // backdrops in page-absolute geometry so container boundaries do not
-        // hide the painted color under text.
-        if !layout_managed && let Some(contrast_page) = contrast_doc.body.pages.get(page_idx0) {
-            check_page_text_contrast(
-                &contrast_page.children,
-                page_bg_rgb,
-                (page_w, page_h),
-                resolved_tokens,
-                &contrast_style_map,
                 &mut diagnostics,
             );
         }
@@ -879,6 +861,7 @@ pub fn validate_with_policy(
     }
 
     // ── Step 3: unused token check ────────────────────────────────────────
+    referenced_token_ids.extend(extra_referenced.iter().cloned());
     check_unused_tokens(doc, &referenced_token_ids, &mut diagnostics);
 
     // ── Step 4: diagnostic policy ─────────────────────────────────────────
@@ -892,5 +875,5 @@ pub fn validate_with_policy(
     let mut diagnostics = apply_policy(diagnostics, policy);
     check_policy_entries(policy, &mut diagnostics);
 
-    ValidationReport { diagnostics }
+    (ValidationReport { diagnostics }, referenced_token_ids)
 }

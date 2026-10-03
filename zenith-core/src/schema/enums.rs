@@ -87,6 +87,9 @@ mod tests {
     use super::*;
     use crate::schema::{attribute_type, attribute_type_for_kind};
 
+    /// Span data-binding `format` values, as read by `parse_span_data_format`.
+    const SPAN_DATA_FORMATS: &[&str] = &["currency", "percent", "number"];
+
     fn hint(list: &[&str]) -> String {
         format!("enum: {}", list.join("|"))
     }
@@ -112,6 +115,7 @@ mod tests {
             ("connector", "route", CONNECTOR_ROUTES),
             ("text", "overflow", TEXT_OVERFLOWS),
             ("code", "overflow", CODE_OVERFLOWS),
+            ("text", "format", TEXT_FORMATS),
         ];
         for (kind, name, list) in by_kind {
             assert_eq!(
@@ -133,6 +137,7 @@ mod tests {
             ("v-align", V_ALIGNS),
             ("overflow", TEXT_OVERFLOWS),
             ("align", TEXT_ALIGNS),
+            ("format", SPAN_DATA_FORMATS),
         ];
         for (name, list) in generic {
             assert_eq!(attribute_type(name), hint(list), "{name}");

@@ -129,17 +129,9 @@ pub(super) fn walk_paint(
                 };
                 walk_paint(&g.children, child_ctx, candidates, child_env, diagnostics);
             }
-            Node::Text(t) => {
-                if env.labels.is_none() {
-                    check_text_node(t, ctx, candidates, env, diagnostics);
-                }
-            }
-            // Cell content lays out cell-relative: the label pass (absolute
-            // ink) skips tables.
+            Node::Text(t) => check_text_node(t, ctx, candidates, env, diagnostics),
             Node::Table(t) => {
-                if env.labels.is_none() {
-                    check_table_text_contrast(t, ctx.page_bg_rgb, ctx.page_size, env, diagnostics);
-                }
+                check_table_text_contrast(t, ctx.page_bg_rgb, ctx.page_size, env, diagnostics);
             }
             Node::Path(p) => push_path_backdrop(node, p, ctx, candidates, env),
             Node::Line(_)

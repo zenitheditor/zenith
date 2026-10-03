@@ -46,7 +46,7 @@ pub struct CmdOutput {
 ///
 /// With no Error diagnostic, every page also compiles (no raster), so the
 /// compile-stage diagnostics `render` reports (`text.overflow`,
-/// `font.unresolved`, …) show here in the same round. Repeats are removed.
+/// `font.unresolved`, `contrast.*`, …) show here in the same round. Repeats are removed.
 /// JSON diagnostics carry 1-based `line`/`col` when they have a span. A span
 /// from an imported file adds `file` and locates over that file's text.
 ///
@@ -276,6 +276,34 @@ mod tests {
             "JSON must contain import.missing; got: {}",
             out.stdout
         );
+    }
+
+    #[test]
+    fn text_contrast_reports_once_with_the_authored_span() {
+        let src = r##"zenith version=1 {
+  project id="proj.c" name="C"
+  tokens format="zenith-token-v1" {
+    token id="color.w" type="color" value="#ffffff"
+  }
+  styles {}
+  document id="doc.c" title="C" {
+    page id="page.c" w=(px)200 h=(px)100 background=(token)"color.w" {
+      text id="t" x=(px)10 y=(px)10 w=(px)180 h=(px)40 fill=(token)"color.w" { span "Hidden" }
+    }
+  }
+}
+"##;
+        let out = run(src, None, true, &CliPolicyFlags::default());
+        let json: serde_json::Value = serde_json::from_str(&out.stdout).expect("json");
+        let found: Vec<&serde_json::Value> = json["diagnostics"]
+            .as_array()
+            .expect("diagnostics")
+            .iter()
+            .filter(|d| d["code"] == "contrast.invisible")
+            .collect();
+        assert_eq!(found.len(), 1, "stdout: {}", out.stdout);
+        assert_eq!(found[0]["subject_id"], "t");
+        assert_eq!(found[0]["line"], 9, "stdout: {}", out.stdout);
     }
 
     #[test]

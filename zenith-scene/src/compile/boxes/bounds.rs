@@ -61,6 +61,11 @@ impl Affine {
         )
     }
 
+    /// The coefficients `[a, b, c, d, e, f]`.
+    pub(super) fn coefficients(self) -> [f64; 6] {
+        [self.a, self.b, self.c, self.d, self.e, self.f]
+    }
+
     /// `true` when the map keeps axis-aligned boxes axis-aligned: no
     /// rotation off a quarter turn, no shear.
     pub(super) fn is_axis_aligned(self) -> bool {

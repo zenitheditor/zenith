@@ -198,6 +198,9 @@ fn attribute_type_for_kind_inner(kind: &str, name: &str, fallback: &'static str)
         ("import", "kind") => "enum: zen",
         // overflow: text supports fit/autofit; code only clips or paints past.
         ("code", "overflow") => "enum: clip|visible",
+        // text `format` is the content format (`schema::enums::TEXT_FORMATS`).
+        // The span data format (currency|percent|number) hint is the generic arm.
+        ("text", "format") => "enum: markdown|plain",
         ("token-map", "from") | ("token-map", "to") => "string",
         // chart axis/legend/caption/bar-mode/orientation/legend-position/legend-layout/legend-align: chart-only attributes (validate/check/nodes/node/chart.rs).
         ("chart", "legend") => "bool",
@@ -357,6 +360,7 @@ fn attribute_type_generic(name: &str, fallback: &'static str) -> &'static str {
 
         // ── Data binding (on a `span`) ────────────────────────────────────
         "data-ref" => "string",
+        // span data format; text `format` is overridden per kind above.
         "format" => "enum: currency|percent|number",
         "precision" => "i64",
         "locale" => "string",

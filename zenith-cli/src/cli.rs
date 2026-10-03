@@ -701,7 +701,7 @@ A tx file is a JSON object with a single \"ops\" array; ops are applied in order
 DISCOVERING OPS:\n  \
 zenith schema op set_fill          # fields, types, and a working example\n  \
 zenith schema op add_node          # how to insert a new node from .zen source\n  \
-zenith schema ops                  # list all 40 available ops with summaries\n  \
+zenith schema ops                  # list every available op with a summary\n  \
 See examples/*.tx.json for runnable samples.\n\n\
 EXAMPLES:\n  \
 zenith tx poster.zen edits.json            # preview the diff (dry-run)\n  \

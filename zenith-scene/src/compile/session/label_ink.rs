@@ -1,17 +1,14 @@
-//! The compile-stage label contrast pass.
+//! The label ink the compile-stage contrast pass judges.
 //!
 //! A `shape` or `connector` label is laid out by the scene compiler, so its
 //! real position exists only after the page compiles: the shape's padded,
 //! aligned content box, or the midpoint of the routed connector. This pass
-//! reads the drawn label glyph runs (`<owner>/label`), measures their ink box,
-//! and hands it to [`zenith_core::label_contrast_checks`], which samples the
-//! backdrop over that box.
+//! reads the drawn label glyph runs (`<owner>/label`) and measures their ink
+//! box. [`zenith_core::page_contrast_checks`] samples the backdrop over it.
 
 use std::collections::BTreeMap;
 
-use zenith_core::{
-    ContentScopes, Diagnostic, LabelInk, Page, ResolvedToken, Style, label_contrast_checks,
-};
+use zenith_core::LabelInk;
 
 use crate::ir::SceneCommand;
 
@@ -39,19 +36,14 @@ enum Transform {
     Other,
 }
 
-/// Label contrast diagnostics for `page`, compiled into `commands`.
-///
-/// `bleed` is the scene offset of the trim box. `resolved` and `style_map`
-/// are the compile document's. The groups in `scopes` stand in for expanded
-/// instances with their own token scope or fit transform.
-pub(in crate::compile) fn label_contrast(
+/// The measured ink of every label drawn into `commands`, by owner id, in
+/// page px. `bleed` is the scene offset of the trim box. A label drawn under
+/// a transform the check cannot model, or in no visible colour, is left out.
+pub(in crate::compile) fn label_inks(
     commands: &[SceneCommand],
-    page: &Page,
     bleed: f64,
-    (resolved, style_map): (&BTreeMap<String, ResolvedToken>, &BTreeMap<&str, &Style>),
-    scopes: &ContentScopes<'_>,
     env: ShapeEnv<'_>,
-) -> Vec<Diagnostic> {
+) -> BTreeMap<String, LabelInk> {
     let mut stack: Vec<Transform> = Vec::new();
     let mut labels: BTreeMap<String, Runs> = BTreeMap::new();
     for command in commands {
@@ -127,7 +119,7 @@ pub(in crate::compile) fn label_contrast(
         }
     }
 
-    let inks: BTreeMap<String, LabelInk> = labels
+    labels
         .into_iter()
         .filter(|(_, runs)| !runs.unmodeled && !runs.colors.is_empty())
         .filter_map(|(owner, runs)| {
@@ -145,6 +137,5 @@ pub(in crate::compile) fn label_contrast(
                 },
             ))
         })
-        .collect();
-    label_contrast_checks(page, resolved, style_map, &inks, scopes)
+        .collect()
 }

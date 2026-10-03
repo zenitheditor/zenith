@@ -1,11 +1,11 @@
-//! Text and label contrast over the content validation cannot see: the
-//! master projection and the subtree each `instance` expanded to.
+//! Text and label contrast over the page as the compile drew it: the master
+//! projection and each `instance` replaced by the subtree it expanded to.
 //!
 //! The pass rebuilds the page content as the compile drew it (master
-//! projection first, each `instance` replaced by its expansion group) and
-//! runs the core contrast walks over it. Text diagnostics are kept for
-//! expanded ids only, because validation already judges authored text.
-//! Label contrast covers every label, authored or expanded.
+//! projection first, each `instance` replaced by its expansion group),
+//! measures the drawn ink of every `text` node and label, and runs the core
+//! contrast walk over it once. Every text is judged where its glyphs land,
+//! authored or expanded.
 //!
 //! An expansion group carries a [`ContentScope`] when it needs one: an
 //! imported component draws in its own document's tokens and styles, and an
@@ -13,23 +13,22 @@
 //! diagnostic about a node inside an imported component keeps that
 //! component's span and names the import.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 use zenith_core::{
-    ContentScope, ContentScopes, Diagnostic, Node, Page, ScopeTokens, expanded_text_contrast_checks,
+    ContentScope, ContentScopes, ContrastInks, Diagnostic, GlyphInk, InkLine, Node, ScopeTokens,
+    page_contrast_checks,
 };
 
-use super::super::boxes::Expansion;
+use super::super::boxes::{Expansion, TextInk};
 use super::super::container::synthetic_group;
 use super::super::imports::ImportScopes;
-use super::super::session::label_contrast;
+use super::super::session::label_inks;
 use super::run::LintEnv;
 
 /// The rebuilt page content and what the walks need to judge it.
 #[derive(Default)]
 struct Rebuilt<'a> {
-    /// Every id inside the master projection or an expansion.
-    expanded: BTreeSet<String>,
     /// The import id of every node inside an imported component.
     imported: BTreeMap<String, String>,
     scopes: ContentScopes<'a>,
@@ -37,18 +36,54 @@ struct Rebuilt<'a> {
     substituted: bool,
 }
 
-/// Contrast diagnostics of every label, and of the text in expanded content.
+/// The glyph ink of every drawn text, in the form the core walk reads.
+pub(super) fn text_inks(inks: &BTreeMap<String, TextInk>) -> BTreeMap<String, GlyphInk> {
+    inks.iter()
+        .map(|(id, ink)| {
+            let lines = ink
+                .lines
+                .iter()
+                .map(|line| InkLine {
+                    x: line.rect.x,
+                    y: line.rect.y,
+                    w: line.rect.w,
+                    h: line.rect.h,
+                    matrix: line.matrix,
+                })
+                .collect();
+            (id.clone(), GlyphInk { lines })
+        })
+        .collect()
+}
+
+/// Contrast diagnostics of every text and label on the page. `texts` is the
+/// drawn glyph ink of each text (see [`text_inks`]).
 pub(super) fn content_contrast(
     env: &LintEnv<'_>,
     expansions: &BTreeMap<String, Expansion>,
+    texts: &BTreeMap<String, GlyphInk>,
 ) -> Vec<Diagnostic> {
+    let labels = label_inks(env.commands, env.bleed, env.shape);
+    let inks = ContrastInks {
+        labels: &labels,
+        texts,
+    };
+    let judge = |children: &[Node], scopes: &ContentScopes<'_>| {
+        page_contrast_checks(
+            env.page,
+            children,
+            env.paint.resolved,
+            env.paint.style_map,
+            Some(inks),
+            scopes,
+        )
+    };
     let none = ContentScopes::new();
     // Nothing to rebuild: skip the deep copy of the page content.
     if env.master.is_empty() && expansions.is_empty() {
-        return labels(env, env.page, &none);
+        return judge(&env.page.children, &none);
     }
     let mut rebuilt = Rebuilt::default();
-    collect_ids(env.master, None, &mut rebuilt);
     let children = substitute(
         &env.page.children,
         expansions,
@@ -57,27 +92,11 @@ pub(super) fn content_contrast(
         &mut rebuilt,
     );
     if env.master.is_empty() && !rebuilt.substituted {
-        return labels(env, env.page, &none);
+        return judge(&env.page.children, &none);
     }
     let mut content: Vec<Node> = env.master.to_vec();
     content.extend(children);
-    let mut out: Vec<Diagnostic> = expanded_text_contrast_checks(
-        env.page,
-        &content,
-        env.paint.resolved,
-        env.paint.style_map,
-        &rebuilt.scopes,
-    )
-    .into_iter()
-    .filter(|d| {
-        d.subject_id
-            .as_ref()
-            .is_some_and(|id| rebuilt.expanded.contains(id))
-    })
-    .collect();
-    let mut page = env.page.clone();
-    page.children = content;
-    out.extend(labels(env, &page, &rebuilt.scopes));
+    let mut out = judge(&content, &rebuilt.scopes);
     for d in &mut out {
         let import = d
             .subject_id
@@ -88,18 +107,6 @@ pub(super) fn content_contrast(
         }
     }
     out
-}
-
-/// Label contrast of `page` as the page compile drew it.
-fn labels(env: &LintEnv<'_>, page: &Page, scopes: &ContentScopes<'_>) -> Vec<Diagnostic> {
-    label_contrast(
-        env.commands,
-        page,
-        env.bleed,
-        (env.paint.resolved, env.paint.style_map),
-        scopes,
-        env.shape,
-    )
 }
 
 /// `nodes` with each drawn `instance` replaced by its expansion group. An
@@ -132,7 +139,9 @@ fn substitute<'a>(
                 };
                 let inner_import = e.import.as_deref().or(import);
                 rebuilt.substituted = true;
-                collect_ids(&e.children, inner_import, rebuilt);
+                if let Some(import) = inner_import {
+                    collect_imports(&e.children, import, rebuilt);
+                }
                 let inner = substitute(&e.children, expansions, imports, inner_import, rebuilt);
                 let mut group = synthetic_group(instance, inner);
                 if e.fit.is_some() {
@@ -181,18 +190,14 @@ fn substitute<'a>(
         .collect()
 }
 
-/// Every id in `nodes` and their containers' descendants joins `expanded`;
-/// with `import` set, each also maps to that import.
-fn collect_ids(nodes: &[Node], import: Option<&str>, rebuilt: &mut Rebuilt<'_>) {
+/// Map every id in `nodes` and their containers' descendants to `import`.
+fn collect_imports(nodes: &[Node], import: &str, rebuilt: &mut Rebuilt<'_>) {
     for node in nodes {
         if let Some(id) = node.id() {
-            rebuilt.expanded.insert(id.to_owned());
-            if let Some(import) = import {
-                rebuilt.imported.insert(id.to_owned(), import.to_owned());
-            }
+            rebuilt.imported.insert(id.to_owned(), import.to_owned());
         }
         if let Some(children) = node.children() {
-            collect_ids(children, import, rebuilt);
+            collect_imports(children, import, rebuilt);
         }
     }
 }

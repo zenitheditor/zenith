@@ -1,5 +1,9 @@
 //! Integration tests: contrast validation.
 //!
+//! `contrast_report` judges each text on its authored box (no glyph ink).
+//! The compile stage runs the same judgement over drawn glyph ink; the
+//! `zenith-scene` `text_contrast` tests cover that path.
+//!
 //! Test bodies moved verbatim from the former in-`src` `validate/check/tests/`
 //! concern files; only import paths changed (`crate::`/`super::common` ->
 //! `zenith_core::`/`common`).
@@ -33,7 +37,7 @@ fn low_contrast_normal_text_warns() {
             )],
         )],
     );
-    let report = validate(&doc);
+    let report = contrast_report(&doc);
     assert!(
         has_code(&report, "contrast.low"),
         "light gray on white should warn contrast.low; codes: {:?}",
@@ -72,7 +76,7 @@ fn same_color_text_warns_invisible() {
             )],
         )],
     );
-    let report = validate(&doc);
+    let report = contrast_report(&doc);
     let diag = report
         .diagnostics
         .iter()
@@ -105,7 +109,7 @@ fn high_contrast_text_no_warning() {
             )],
         )],
     );
-    let report = validate(&doc);
+    let report = contrast_report(&doc);
     assert!(
         !has_code(&report, "contrast.low"),
         "black on white must NOT warn contrast.low; codes: {:?}",
@@ -137,7 +141,7 @@ fn large_text_passes_lower_threshold_no_warning() {
             )],
         )],
     );
-    let report = validate(&doc);
+    let report = contrast_report(&doc);
     assert!(
         !has_code(&report, "contrast.low"),
         "large text (#777 on white, Lc ~71) should pass the 45 large-text threshold; codes: {:?}",
@@ -167,7 +171,7 @@ fn bold_large_text_passes_lower_threshold() {
             )],
         )],
     );
-    let report = validate(&doc);
+    let report = contrast_report(&doc);
     assert!(
         !has_code(&report, "contrast.low"),
         "18pt bold (large text, Lc ~71) should clear the 45 large-text threshold; codes: {:?}",
@@ -196,7 +200,7 @@ fn centered_anchor_text_uses_preceding_ellipse_backdrop() {
             ],
         )],
     );
-    let report = validate(&doc);
+    let report = contrast_report(&doc);
     assert!(
         has_code(&report, "contrast.invisible"),
         "black centered-anchor text over the navy ellipse should warn contrast.invisible via the backdrop; codes: {:?}",
@@ -236,7 +240,7 @@ fn grouped_text_uses_outer_page_backdrop() {
             ],
         )],
     );
-    let report = validate(&doc);
+    let report = contrast_report(&doc);
     assert!(
         has_code(&report, "contrast.invisible"),
         "grouped text should use the earlier page-level backdrop; codes: {:?}",
@@ -273,7 +277,7 @@ fn page_text_uses_backdrop_inside_translated_group() {
             ],
         )],
     );
-    let report = validate(&doc);
+    let report = contrast_report(&doc);
     assert!(
         has_code(&report, "contrast.invisible"),
         "page text should use the absolute backdrop from the earlier translated group; codes: {:?}",
@@ -306,7 +310,7 @@ fn decision_shape_can_be_text_backdrop() {
             ],
         )],
     );
-    let report = validate(&doc);
+    let report = contrast_report(&doc);
     assert!(
         has_code(&report, "contrast.invisible"),
         "text inside the decision shape interior should use the shape backdrop; codes: {:?}",
@@ -331,7 +335,7 @@ fn text_straddling_backdrop_uses_worst_sample() {
             ],
         )],
     );
-    let report = validate(&doc);
+    let report = contrast_report(&doc);
     assert!(
         has_code(&report, "contrast.invisible"),
         "text partly over the dark backdrop should use the worst sampled backdrop; codes: {:?}",
@@ -361,7 +365,7 @@ fn gradient_backdrop_uses_worst_stop() {
             ],
         )],
     );
-    let report = validate(&doc);
+    let report = contrast_report(&doc);
     assert!(
         has_code(&report, "contrast.invisible"),
         "gradient backdrop should use its worst-contrast stop; codes: {:?}",
@@ -386,7 +390,7 @@ fn translucent_backdrop_composites_over_page() {
             ],
         )],
     );
-    let report = validate(&doc);
+    let report = contrast_report(&doc);
     assert!(
         has_code(&report, "contrast.low"),
         "translucent white over black should composite to gray and warn as low contrast; codes: {:?}",
@@ -429,7 +433,7 @@ fn group_opacity_cascades_into_backdrop_compositing() {
             ],
         )],
     );
-    let report = validate(&doc);
+    let report = contrast_report(&doc);
     assert!(
         has_code(&report, "contrast.low"),
         "group opacity should cascade into the child backdrop before contrast sampling; codes: {:?}",
@@ -459,7 +463,7 @@ fn transparent_backdrop_does_not_override_page() {
             ],
         )],
     );
-    let report = validate(&doc);
+    let report = contrast_report(&doc);
     assert!(
         has_code(&report, "contrast.invisible"),
         "fully transparent paint should leave the navy page as the sampled backdrop; codes: {:?}",
@@ -488,7 +492,7 @@ fn polygon_backdrop_uses_true_containment() {
             ],
         )],
     );
-    let report = validate(&doc);
+    let report = contrast_report(&doc);
     assert!(
         has_code(&report, "contrast.invisible"),
         "text inside the triangle fill should use the polygon backdrop; codes: {:?}",
@@ -517,7 +521,7 @@ fn polygon_bbox_corner_is_not_a_backdrop() {
             ],
         )],
     );
-    let report = validate(&doc);
+    let report = contrast_report(&doc);
     assert!(
         !has_code(&report, "contrast.invisible"),
         "text in the triangle bbox but outside the polygon should keep the page backdrop; codes: {:?}",
@@ -546,7 +550,7 @@ fn polyline_fill_can_be_text_backdrop() {
             ],
         )],
     );
-    let report = validate(&doc);
+    let report = contrast_report(&doc);
     assert!(
         has_code(&report, "contrast.invisible"),
         "filled polyline should use its renderer-closed fill as a backdrop; codes: {:?}",
@@ -565,7 +569,7 @@ fn text_without_fill_skips_contrast_check() {
             vec![text_with_fill_and_size("text.one", None, None, None)],
         )],
     );
-    let report = validate(&doc);
+    let report = contrast_report(&doc);
     assert!(
         !has_code(&report, "contrast.low"),
         "text with no fill must not produce contrast.low; codes: {:?}",
@@ -588,7 +592,7 @@ fn no_page_background_skips_contrast_check() {
             )],
         )],
     );
-    let report = validate(&doc);
+    let report = contrast_report(&doc);
     assert!(
         !has_code(&report, "contrast.low"),
         "page with no background must not produce contrast.low; codes: {:?}",
@@ -619,7 +623,7 @@ fn contrast_bg_hint_used_as_background() {
             )],
         )],
     );
-    let report = validate(&dark);
+    let report = contrast_report(&dark);
     assert!(
         has_code(&report, "contrast.invisible"),
         "dark fill on a near-matching contrast-bg hint must warn contrast.invisible; codes: {:?}",
@@ -653,7 +657,7 @@ fn contrast_bg_hint_used_as_background() {
             )],
         )],
     );
-    let report = validate(&light);
+    let report = contrast_report(&light);
     assert!(
         !has_code(&report, "contrast.low"),
         "dark fill on a light contrast-bg hint must NOT warn contrast.low; codes: {:?}",
@@ -678,7 +682,7 @@ fn image_backdrop_without_hint_is_indeterminate() {
             text_at("headline", "color.text", 40.0, 30.0, 80.0, 30.0),
         ],
     );
-    let report = validate(&doc);
+    let report = contrast_report(&doc);
     assert!(
         has_code(&report, "contrast.indeterminate_backdrop"),
         "text over image without contrast-bg should request a contrast hint; codes: {:?}",
@@ -699,7 +703,7 @@ fn contrast_bg_hint_suppresses_image_indeterminate() {
             text_with_fill_and_contrast_bg("headline", "color.text", "color.photo.light"),
         ],
     );
-    let report = validate(&doc);
+    let report = contrast_report(&doc);
     assert!(
         !has_code(&report, "contrast.indeterminate_backdrop"),
         "contrast-bg hint should suppress image indeterminate advisory; codes: {:?}",
@@ -721,7 +725,7 @@ fn opaque_solid_above_image_suppresses_indeterminate_backdrop() {
             text_at("headline", "color.text", 40.0, 30.0, 80.0, 30.0),
         ],
     );
-    let report = validate(&doc);
+    let report = contrast_report(&doc);
     assert!(
         !has_code(&report, "contrast.indeterminate_backdrop"),
         "opaque known paint above an image should make the sampled backdrop determinate; codes: {:?}",
@@ -743,7 +747,7 @@ fn translucent_solid_above_image_remains_indeterminate() {
             text_at("headline", "color.text", 40.0, 30.0, 80.0, 30.0),
         ],
     );
-    let report = validate(&doc);
+    let report = contrast_report(&doc);
     assert!(
         has_code(&report, "contrast.indeterminate_backdrop"),
         "translucent known paint above an image should still include unknown image pixels; codes: {:?}",
@@ -763,7 +767,7 @@ fn transparent_image_backdrop_is_ignored() {
             text_at("headline", "color.text", 40.0, 30.0, 80.0, 30.0),
         ],
     );
-    let report = validate(&doc);
+    let report = contrast_report(&doc);
     assert!(
         !has_code(&report, "contrast.indeterminate_backdrop"),
         "fully transparent image paint should not make the backdrop indeterminate; codes: {:?}",
@@ -796,7 +800,7 @@ fn white_text_in_dark_cell_no_false_positive() {
             )],
         )],
     );
-    let report = validate(&doc);
+    let report = contrast_report(&doc);
     assert!(
         !has_code(&report, "contrast.low"),
         "white text in a dark-blue cell should NOT warn contrast.low (cell fill is bg); codes: {:?}",
@@ -827,7 +831,7 @@ fn white_text_in_light_cell_still_warns() {
             )],
         )],
     );
-    let report = validate(&doc);
+    let report = contrast_report(&doc);
     assert!(
         has_code(&report, "contrast.low"),
         "white text in a light-gray cell should warn contrast.low; codes: {:?}",
@@ -851,7 +855,7 @@ fn cell_no_fill_falls_back_to_page_bg() {
             vec![table_with_cell_text(None, None, None, None, "color.text")],
         )],
     );
-    let report = validate(&doc);
+    let report = contrast_report(&doc);
     assert!(
         has_code(&report, "contrast.low"),
         "light-gray text in an unfilled cell must still warn via page-bg fallback; codes: {:?}",
@@ -881,7 +885,7 @@ fn table_fill_used_when_cell_has_no_fill() {
             )],
         )],
     );
-    let report = validate(&doc);
+    let report = contrast_report(&doc);
     assert!(
         !has_code(&report, "contrast.low"),
         "white text on dark table.fill should NOT warn; codes: {:?}",
@@ -906,7 +910,7 @@ fn contrast_bg_literal_rejected() {
         ],
         vec![page_with_bg("page.one", "color.bg", vec![Node::Text(text)])],
     );
-    let report = validate(&doc);
+    let report = contrast_report(&doc);
     assert!(
         has_code(&report, "token.raw_visual_literal"),
         "a raw-literal contrast-bg must flag token.raw_visual_literal; codes: {:?}",

@@ -2,6 +2,7 @@
 //!
 //! Cell content lays out cell-relative, so each cell is walked on its own
 //! backdrop: the cell fill, else the header or table fill, else the page.
+//! Cell text is judged by its cell-relative box, not by page-px glyph ink.
 
 use crate::ast::node::TableNode;
 use crate::ast::value::PropertyValue;
@@ -49,6 +50,7 @@ pub(super) fn check_table_text_contrast(
                 page_bg_rgb: cell_bg,
                 page_size,
                 header_style: table.header_style.as_deref().filter(|_| is_header),
+                in_cell: true,
             };
             let mut candidates = Vec::new();
             walk_paint(&cell.children, ctx, &mut candidates, env, diagnostics);

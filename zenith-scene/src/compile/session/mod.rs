@@ -7,12 +7,12 @@
 
 mod compile;
 mod fonts;
-mod label_contrast;
+mod label_ink;
 mod layout;
 mod page;
 mod prep;
 
-pub(in crate::compile) use label_contrast::label_contrast;
+pub(in crate::compile) use label_ink::label_inks;
 pub use layout::LayoutStats;
 pub use page::PageCompiler;
 pub use prep::DocumentPrep;

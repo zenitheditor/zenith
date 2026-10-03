@@ -7,7 +7,7 @@ use crate::ast::style::Style;
 use crate::tokens::ResolvedToken;
 
 use super::geometry::{CoverageShape, Place, RectPx, Rotation};
-use super::label::LabelInk;
+use super::ink::ContrastInks;
 use super::scope::ContentScopes;
 
 /// Below this APCA magnitude the text is effectively painted into its backdrop,
@@ -38,6 +38,9 @@ pub(super) struct PaintCtx<'a> {
     /// children that sets no `style` of its own. `None` everywhere else, and
     /// below the first container.
     pub(super) header_style: Option<&'a str>,
+    /// Inside a table cell: content lays out cell-relative, so a text is
+    /// judged by its box, not by its page-px glyph ink.
+    pub(super) in_cell: bool,
 }
 
 impl PaintCtx<'_> {
@@ -114,9 +117,9 @@ pub(super) struct ContrastSample {
 pub(super) struct ContrastEnv<'a> {
     pub(super) resolved_tokens: &'a BTreeMap<String, ResolvedToken>,
     pub(super) style_map: &'a BTreeMap<&'a str, &'a Style>,
-    /// `None`: judge text nodes. `Some`: judge only the labels with measured
-    /// ink (the compile-stage label pass).
-    pub(super) labels: Option<&'a BTreeMap<String, LabelInk>>,
+    /// The drawn ink the compile stage measured. `None`: judge each text by
+    /// its box, and skip labels (no label ink).
+    pub(super) inks: Option<ContrastInks<'a>>,
     /// Groups that stand in for expanded instances, by id.
     pub(super) scopes: Option<&'a ContentScopes<'a>>,
 }

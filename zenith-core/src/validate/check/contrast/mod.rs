@@ -5,9 +5,10 @@
 //! page coordinates, falling back to the page background. The metric is APCA
 //! lightness contrast (`Lc`) with the current WCAG 3 draft thresholds.
 //!
-//! - `entry` — the validation text pass and the compile-stage label pass.
+//! - `entry` — the compile-stage pass over one drawn page.
 //! - `walk` — the paint-order walk that collects backdrop candidates.
 //! - `text` — backdrop sampling and the APCA judgement of text nodes.
+//! - `ink` — measured glyph ink and the sampling over it.
 //! - `table` — text inside table cells, judged per cell backdrop.
 //! - `label` — measured `shape` / `connector` label ink.
 //! - `paint` — `fill` to backdrop paint resolution.
@@ -17,6 +18,7 @@
 
 mod entry;
 mod geometry;
+mod ink;
 mod label;
 mod paint;
 mod props;
@@ -26,7 +28,7 @@ mod text;
 mod types;
 mod walk;
 
-pub use entry::label_contrast_checks;
-pub(super) use entry::{check_page_text_contrast, check_scoped_text_contrast};
+pub use entry::page_contrast_checks;
+pub use ink::{ContrastInks, GlyphInk, InkLine};
 pub use label::LabelInk;
 pub use scope::{ContentScope, ContentScopes, ScopeFit, ScopeTokens};

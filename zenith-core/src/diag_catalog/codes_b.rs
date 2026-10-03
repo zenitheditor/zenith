@@ -39,7 +39,7 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
     info(
         "contrast.indeterminate_backdrop",
         Severity::Advisory,
-        "Text sits on an image or other backdrop that cannot be sampled during validation.",
+        "Text sits on an image or other backdrop that cannot be sampled.",
     ),
     info(
         "contrast.low",

@@ -28,6 +28,36 @@ pub(in crate::compile) struct TextInk {
     pub(in crate::compile) axis_aligned: bool,
     /// The baseline y of the first run, in page px.
     pub(in crate::compile) baseline: Option<f64>,
+    /// The ink of each drawn line: the glyph boxes of the runs that share a
+    /// transform and a baseline, in run space, with the map to page px.
+    pub(in crate::compile) lines: Vec<RunLine>,
+}
+
+/// The run-space ink box of one drawn line and the map to page px.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(in crate::compile) struct RunLine {
+    /// Run-space ink box (glyph boxes unioned).
+    pub(in crate::compile) rect: LayoutBox,
+    /// The pen baseline y of the line's runs, in run space.
+    pub(in crate::compile) baseline: f64,
+    /// Run space to page px: `[a, b, c, d, e, f]`.
+    pub(in crate::compile) matrix: [f64; 6],
+}
+
+impl RunLine {
+    /// Grow the line box to hold `rect`.
+    fn add(&mut self, rect: LayoutBox) {
+        let left = self.rect.x.min(rect.x);
+        let top = self.rect.y.min(rect.y);
+        let right = (self.rect.x + self.rect.w).max(rect.x + rect.w);
+        let bottom = (self.rect.y + self.rect.h).max(rect.y + rect.h);
+        self.rect = LayoutBox {
+            x: left,
+            y: top,
+            w: right - left,
+            h: bottom - top,
+        };
+    }
 }
 
 /// The glyph ink of every glyph run in `commands` that names its source
@@ -85,6 +115,13 @@ pub(in crate::compile) fn glyph_inks(
                 if ink.baseline.is_none() {
                     ink.baseline = Some(m.apply(*x, *y).1 - origin.1);
                 }
+                let [a, b, c, d, e, f] = m.coefficients();
+                let matrix = [a, b, c, d, e - origin.0, f - origin.1];
+                // Runs of one line share the transform and the baseline.
+                let mut line = ink
+                    .lines
+                    .iter()
+                    .position(|l| l.matrix == matrix && l.baseline == *y);
                 for g in glyphs {
                     let key = (font_id.as_str(), g.glyph_id, font_size.to_bits());
                     let Some(b) = *memo.entry(key).or_insert_with(|| {
@@ -106,6 +143,17 @@ pub(in crate::compile) fn glyph_inks(
                     }
                     ink.glyphs.push(page(map_box(m, rect)));
                     ink.local.push(page(map_box(ml, rect)));
+                    match line.and_then(|i| ink.lines.get_mut(i)) {
+                        Some(l) => l.add(rect),
+                        None => {
+                            line = Some(ink.lines.len());
+                            ink.lines.push(RunLine {
+                                rect,
+                                baseline: *y,
+                                matrix,
+                            });
+                        }
+                    }
                 }
             }
             SceneCommand::DrawGlyphRun {

@@ -308,7 +308,7 @@ impl<F: ?Sized + FontProvider> PageCompiler<'_, F> {
         }
 
         // Visual QA over the final geometry: ink overlap, occlusion, label
-        // overflow, and label / expanded-content contrast.
+        // overflow, and text / label contrast.
         if let Some(recorder) = lint_recorder {
             let env = LintEnv {
                 page,

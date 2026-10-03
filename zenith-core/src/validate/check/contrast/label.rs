@@ -3,15 +3,16 @@
 //! The scene compiler measures each label after it draws it: the glyph ink
 //! box, the run colours, the run font size, and the label's rotation. This
 //! module samples the backdrop over that ink box the same way a text node's
-//! box is sampled. Labels carry no `contrast-bg` hint, so a label over an
-//! unsampled backdrop (image, effect) is skipped.
+//! glyph ink is sampled. Labels carry no `contrast-bg` hint, so a label over
+//! an unsampled backdrop (image, effect) is skipped.
 
 use crate::ast::node::Node;
 use crate::diagnostics::Diagnostic;
 
 use super::geometry::{RectPx, Rotation};
+use super::ink::sample_points;
 use super::props::{font_weight_of, style_property};
-use super::text::{collect_backdrop_samples, lc_threshold, select_contrast_sample};
+use super::text::{lc_threshold, select_contrast_sample};
 use super::types::{BackdropCandidate, ContrastEnv, ContrastSample, INVISIBLE_LC_FLOOR, PaintCtx};
 
 /// The measured ink of one drawn label, in page px (trim-box origin).
@@ -66,7 +67,7 @@ pub(super) fn check_label(
         | Node::Mesh(_)
         | Node::Unknown(_) => return,
     };
-    let Some(ink) = env.labels.and_then(|labels| labels.get(id.as_str())) else {
+    let Some(ink) = env.inks.and_then(|inks| inks.labels.get(id.as_str())) else {
         return;
     };
     let ink_box = RectPx {
@@ -75,34 +76,19 @@ pub(super) fn check_label(
         w: ink.w,
         h: ink.h,
     };
-    let (samples, indeterminate) = match ink.rotation {
-        None => collect_backdrop_samples(ink_box, ctx.clip, candidates, ctx.page_bg_rgb),
-        Some((angle_deg, cx, cy)) => {
-            // Sample the rotated ink: each sample point turns with the label.
-            let turn = Rotation {
-                angle_deg: -angle_deg,
-                cx,
-                cy,
-            };
-            let mut all = Vec::new();
-            let mut any_indeterminate = false;
-            for (x, y) in ink_box.sample_points() {
-                let (px, py) = turn.inverse_map(x, y);
-                let point = RectPx {
-                    x: px,
-                    y: py,
-                    w: 0.0,
-                    h: 0.0,
-                };
-                let (samples, indeterminate) =
-                    collect_backdrop_samples(point, ctx.clip, candidates, ctx.page_bg_rgb);
-                any_indeterminate |= indeterminate;
-                all.extend(samples);
-            }
-            (all, any_indeterminate)
-        }
-    };
-    if indeterminate {
+    // Sample the rotated ink: each sample point turns with the label.
+    let turn = ink.rotation.map(|(angle_deg, cx, cy)| Rotation {
+        angle_deg: -angle_deg,
+        cx,
+        cy,
+    });
+    let points = ink_box.sample_points().map(|(x, y)| match turn {
+        Some(turn) => turn.inverse_map(x, y),
+        None => (x, y),
+    });
+    let (samples, indeterminate, hidden) =
+        sample_points(points, ctx.clip, candidates, ctx.page_bg_rgb);
+    if indeterminate || hidden {
         return;
     }
     let mut worst: Option<ContrastSample> = None;
