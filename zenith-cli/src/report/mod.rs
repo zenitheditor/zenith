@@ -3,15 +3,15 @@
 //! - `error` — [`CliError`] and the `zenith-error-v1` envelope for failures
 //!   outside a command's own JSON shape.
 //! - `human` — grouped human diagnostic lines.
-//! - `location` — 1-based line/column from a byte span.
+//! - `locator` — span to file, line, and column; the parse-error line.
 //! - `source` — the file behind each diagnostic span.
 
 mod error;
 mod human;
-mod location;
+mod locator;
 mod source;
 
 pub(crate) use error::CliError;
 pub(crate) use human::human_diagnostic_lines;
-pub(crate) use location::line_col;
+pub(crate) use locator::{Locator, parse_error_line};
 pub(crate) use source::{ImportFiles, attributed_loader_diagnostics};

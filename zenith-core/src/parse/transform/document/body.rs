@@ -10,7 +10,7 @@ use crate::ast::node::Node;
 use crate::error::ParseError;
 use crate::parse::transform::block_style::transform_block_style;
 use crate::parse::transform::helpers::{optional_string_prop, required_string_prop};
-use crate::parse::transform::node::transform_node;
+use crate::parse::transform::node::transform_child;
 use crate::parse::transform::page::transform_page;
 
 pub(super) fn transform_document_body(
@@ -57,7 +57,7 @@ pub(in crate::parse::transform) fn transform_children(
     let mut children: Vec<Node> = Vec::new();
     if let Some(doc) = node.children() {
         for child in doc.nodes() {
-            children.push(transform_node(child, sink)?);
+            children.push(transform_child(child, node, sink)?);
         }
     }
     Ok(children)

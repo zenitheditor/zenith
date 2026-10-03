@@ -107,7 +107,7 @@ pub fn vector(
     let doc = KdlAdapter
         .parse(src.as_bytes())
         .map_err(|e| PerceiveCmdErr {
-            message: format!("error[parse.error]: {}", e.message),
+            message: crate::report::parse_error_line(src, &e),
             exit_code: 2,
         })?;
 

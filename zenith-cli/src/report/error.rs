@@ -46,8 +46,13 @@ impl CliError {
             .map(str::trim)
             .filter(|line| !line.is_empty())
             .map(|line| {
-                let (code, message) = split_code(line);
-                DiagnosticJson::error(code.unwrap_or(&self.code), message)
+                let (code, at, message) = split_code(line);
+                let mut d = DiagnosticJson::error(code.unwrap_or(&self.code), message);
+                if let Some((line_no, col)) = at {
+                    d.line = Some(line_no);
+                    d.col = Some(col);
+                }
+                d
             })
             .collect();
         if out.is_empty() {
@@ -84,18 +89,28 @@ impl std::fmt::Display for CliError {
     }
 }
 
-/// Split `error[<code>]: <message>` or `error: <message>` into its parts.
-fn split_code(line: &str) -> (Option<&str>, &str) {
+/// Split `error[<code>]: <message>`, `error[<code>] <line>:<col>: <message>`,
+/// or `error: <message>` into code, location, and message.
+fn split_code(line: &str) -> (Option<&str>, Option<(usize, usize)>, &str) {
     if let Some(rest) = line.strip_prefix("error[")
-        && let Some((code, message)) = rest.split_once("]: ")
+        && let Some((code, tail)) = rest.split_once(']')
         && !code.is_empty()
         && !code.contains(char::is_whitespace)
     {
-        return (Some(code), message);
+        if let Some(message) = tail.strip_prefix(": ") {
+            return (Some(code), None, message);
+        }
+        if let Some(located) = tail.strip_prefix(' ')
+            && let Some((at, message)) = located.split_once(": ")
+            && let Some((line_no, col)) = at.split_once(':')
+            && let (Ok(line_no), Ok(col)) = (line_no.parse(), col.parse())
+        {
+            return (Some(code), Some((line_no, col)), message);
+        }
     }
     match line.strip_prefix("error: ") {
-        Some(message) => (None, message),
-        None => (None, line),
+        Some(message) => (None, None, message),
+        None => (None, None, line),
     }
 }
 
@@ -111,6 +126,15 @@ mod tests {
         assert_eq!(d[0].code, "tx.parse");
         assert_eq!(d[0].message, "unknown op 'Foo'");
         assert_eq!(d[0].severity, "error");
+    }
+
+    #[test]
+    fn located_line_keeps_code_and_gains_line_col() {
+        let e = CliError::new("fix.failed", "error[parse.error] 7:7: bad node", 2);
+        let d = e.diagnostics();
+        assert_eq!(d[0].code, "parse.error");
+        assert_eq!(d[0].message, "bad node");
+        assert_eq!((d[0].line, d[0].col), (Some(7), Some(7)));
     }
 
     #[test]

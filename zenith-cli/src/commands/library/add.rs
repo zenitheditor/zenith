@@ -81,7 +81,7 @@ pub fn add(
 
     let mut target = KdlAdapter
         .parse(target_src.as_bytes())
-        .map_err(|e| AddCmdErr::new(format!("error[parse.error]: {}", e.message), 2))?;
+        .map_err(|e| AddCmdErr::new(crate::report::parse_error_line(target_src, &e), 2))?;
 
     let packs = resolve_packs(project_dir);
     let id_base = id_override.unwrap_or(item.as_str());

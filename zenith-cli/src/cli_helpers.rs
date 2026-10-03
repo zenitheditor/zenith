@@ -48,8 +48,13 @@ pub(crate) fn targets_from_flags(f: &cli::AgentFlags) -> commands::plugin::Targe
 /// Print diagnostics to stderr, one line each, with same-cause advisories and
 /// warnings grouped (see [`crate::report::human_diagnostic_lines`]). Does
 /// nothing when there are no diagnostics.
-pub(crate) fn print_diagnostics_stderr(diagnostics: &[zenith_core::Diagnostic]) {
-    for line in crate::report::human_diagnostic_lines(diagnostics) {
+pub(crate) fn print_diagnostics_stderr(
+    diagnostics: &[zenith_core::Diagnostic],
+    src: &str,
+    files: &crate::report::ImportFiles,
+) {
+    let mut locator = crate::report::Locator::with_files(src, files);
+    for line in crate::report::human_diagnostic_lines(diagnostics, &mut locator) {
         eprintln!("{line}");
     }
 }

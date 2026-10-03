@@ -6,7 +6,7 @@ use crate::ast::UnsupportedChild;
 use crate::ast::document::{ComponentDef, Project};
 use crate::error::ParseError;
 use crate::parse::transform::helpers::{node_span, required_string_prop};
-use crate::parse::transform::node::transform_node;
+use crate::parse::transform::node::transform_child;
 use crate::parse::transform::page::transform_ports;
 
 // ---------------------------------------------------------------------------
@@ -44,7 +44,7 @@ fn transform_component_def(
         for child in doc.nodes() {
             match child.name().value() {
                 "ports" => ports.extend(transform_ports(child)?),
-                _ => children.push(transform_node(child, sink)?),
+                _ => children.push(transform_child(child, node, sink)?),
             }
         }
     }

@@ -53,7 +53,7 @@ use super::helpers::{
     entry_to_dimension, entry_to_property_value, node_span, optional_dimension_prop,
     optional_string_prop, required_string_prop,
 };
-use super::node::transform_node;
+use super::node::transform_child;
 
 pub(super) fn transform_page(
     node: &KdlNode,
@@ -67,7 +67,8 @@ pub(super) fn transform_page(
     let width = node
         .entry("w")
         .ok_or_else(|| {
-            ParseError::spanless(
+            ParseError::at(
+                node_span(node),
                 ParseErrorCode::InvalidPropertyValue,
                 format!("page `{id}` is missing required property `w`"),
             )
@@ -77,7 +78,8 @@ pub(super) fn transform_page(
     let height = node
         .entry("h")
         .ok_or_else(|| {
-            ParseError::spanless(
+            ParseError::at(
+                node_span(node),
                 ParseErrorCode::InvalidPropertyValue,
                 format!("page `{id}` is missing required property `h`"),
             )
@@ -155,7 +157,7 @@ pub(super) fn transform_page(
                 "ports" => ports.extend(transform_ports(child)?),
                 "block" => block_styles.push(transform_block_style(child)?),
                 "defaults" => defaults = super::defaults::transform_defaults(child)?,
-                _ => children.push(transform_node(child, sink)?),
+                _ => children.push(transform_child(child, node, sink)?),
             }
         }
     }
@@ -284,7 +286,8 @@ fn transform_safe_zone(node: &KdlNode) -> Result<SafeZone, ParseError> {
     let x = node
         .entry("x")
         .ok_or_else(|| {
-            ParseError::spanless(
+            ParseError::at(
+                node_span(node),
                 ParseErrorCode::InvalidPropertyValue,
                 format!("safe-zone `{id}` is missing required property `x`"),
             )
@@ -293,7 +296,8 @@ fn transform_safe_zone(node: &KdlNode) -> Result<SafeZone, ParseError> {
     let y = node
         .entry("y")
         .ok_or_else(|| {
-            ParseError::spanless(
+            ParseError::at(
+                node_span(node),
                 ParseErrorCode::InvalidPropertyValue,
                 format!("safe-zone `{id}` is missing required property `y`"),
             )
@@ -302,7 +306,8 @@ fn transform_safe_zone(node: &KdlNode) -> Result<SafeZone, ParseError> {
     let w = node
         .entry("w")
         .ok_or_else(|| {
-            ParseError::spanless(
+            ParseError::at(
+                node_span(node),
                 ParseErrorCode::InvalidPropertyValue,
                 format!("safe-zone `{id}` is missing required property `w`"),
             )
@@ -311,7 +316,8 @@ fn transform_safe_zone(node: &KdlNode) -> Result<SafeZone, ParseError> {
     let h = node
         .entry("h")
         .ok_or_else(|| {
-            ParseError::spanless(
+            ParseError::at(
+                node_span(node),
                 ParseErrorCode::InvalidPropertyValue,
                 format!("safe-zone `{id}` is missing required property `h`"),
             )

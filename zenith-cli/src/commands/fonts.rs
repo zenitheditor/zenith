@@ -297,7 +297,7 @@ fn register_doc_project_fonts(
     })?;
     let doc = KdlAdapter
         .parse(src.as_bytes())
-        .map_err(|e| format!("error[parse.error]: {}", e.message))?;
+        .map_err(|e| crate::report::parse_error_line(&src, &e))?;
     let dir = doc_path.parent().unwrap_or_else(|| Path::new("."));
 
     for decl in &doc.assets.assets {

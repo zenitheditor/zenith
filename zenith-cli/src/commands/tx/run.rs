@@ -140,7 +140,7 @@ pub fn run_outline_text(
 
 fn parse_doc(doc_src: &str) -> Result<Document, TxCmdErr> {
     KdlAdapter.parse(doc_src.as_bytes()).map_err(|e| TxCmdErr {
-        message: format!("error[parse.error]: {}", e.message),
+        message: crate::report::parse_error_line(doc_src, &e),
         exit_code: 2,
     })
 }

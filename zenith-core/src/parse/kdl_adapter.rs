@@ -5,6 +5,7 @@ use crate::ast::Document;
 use crate::error::{FormatError, ParseError, ParseErrorCode};
 use crate::format::format_document;
 use crate::parse::transform;
+use crate::util::line_col;
 
 use super::KdlSource;
 
@@ -14,33 +15,6 @@ use super::KdlSource;
 /// All other code works with the Zenith AST types.
 #[derive(Debug, Clone, Default)]
 pub struct KdlAdapter;
-
-/// Converts a byte offset within `text` into a 1-based (line, column) pair.
-///
-/// Both line and column are counted in bytes, which matches the convention used
-/// by the `kdl` crate's `SourceSpan`. The offset is clamped to `text.len()` so
-/// no unchecked indexing can occur.
-fn line_col(text: &str, offset: usize) -> (usize, usize) {
-    let safe_offset = offset.min(text.len());
-    // Iterate over bytes up to safe_offset.  We only need to count '\n' bytes;
-    // the source is valid UTF-8 (guaranteed by Step 1) so byte-by-byte is safe.
-    let prefix = match text.get(..safe_offset) {
-        Some(s) => s,
-        // `safe_offset` is already clamped, so this branch is unreachable in
-        // practice, but we handle it gracefully rather than panicking.
-        None => text,
-    };
-    let mut line = 1usize;
-    let mut last_newline_byte = 0usize;
-    for (i, b) in prefix.bytes().enumerate() {
-        if b == b'\n' {
-            line += 1;
-            last_newline_byte = i + 1;
-        }
-    }
-    let col = safe_offset - last_newline_byte + 1;
-    (line, col)
-}
 
 impl KdlSource for KdlAdapter {
     fn parse(&self, source: &[u8]) -> Result<Document, ParseError> {
@@ -58,7 +32,8 @@ impl KdlSource for KdlAdapter {
             match e.diagnostics.first() {
                 Some(d) => {
                     let offset = d.span.offset();
-                    let (line, col) = line_col(text, offset);
+                    // An offset past the end clamps to the end of the source.
+                    let (line, col) = line_col(text, offset.min(text.len())).unwrap_or((1, 1));
                     let mut msg = format!("KDL parse error at line {line}, column {col}");
                     match (&d.message, &d.help) {
                         (Some(m), Some(h)) => {
@@ -586,36 +561,6 @@ mod tests {
             "unrelated error must NOT contain the bool hint; got: {:?}",
             err.message
         );
-    }
-
-    // ── line_col helper ──────────────────────────────────────────────────────
-
-    #[test]
-    fn line_col_first_line() {
-        assert_eq!(line_col("hello world", 0), (1, 1));
-        assert_eq!(line_col("hello world", 5), (1, 6));
-    }
-
-    #[test]
-    fn line_col_second_line() {
-        // "foo\nbar" — offset 4 is 'b', line 2 col 1.
-        assert_eq!(line_col("foo\nbar", 4), (2, 1));
-        assert_eq!(line_col("foo\nbar", 6), (2, 3));
-    }
-
-    #[test]
-    fn line_col_clamps_past_end() {
-        let text = "ab";
-        // offset beyond length must not panic.
-        let (l, c) = line_col(text, 999);
-        assert_eq!(l, 1);
-        assert_eq!(c, 3); // clamped to text.len() = 2, col = 2 - 0 + 1 = 3
-    }
-
-    #[test]
-    fn line_col_empty_string() {
-        assert_eq!(line_col("", 0), (1, 1));
-        assert_eq!(line_col("", 5), (1, 1));
     }
 
     /// A gradient token (angle + 2 stops) parses into the expected AST shape:

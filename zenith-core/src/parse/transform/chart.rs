@@ -191,7 +191,8 @@ pub(super) fn transform_chart(node: &KdlNode) -> Result<ChartNode, ParseError> {
                             KdlValue::Float(v) => values.push(*v),
                             KdlValue::Integer(n) => values.push(*n as f64),
                             other => {
-                                return Err(ParseError::spanless(
+                                return Err(ParseError::at(
+                                    node_span(child),
                                     ParseErrorCode::InvalidPropertyValue,
                                     format!(
                                         "chart '{id}': series value must be a number, got: {other:?}"
@@ -251,7 +252,8 @@ pub(super) fn transform_chart(node: &KdlNode) -> Result<ChartNode, ParseError> {
                         match entry.value() {
                             KdlValue::String(s) => categories.push(s.clone()),
                             other => {
-                                return Err(ParseError::spanless(
+                                return Err(ParseError::at(
+                                    node_span(child),
                                     ParseErrorCode::InvalidPropertyValue,
                                     format!(
                                         "chart '{id}': category label must be a string, got: {other:?}"

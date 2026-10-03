@@ -4,8 +4,6 @@
 //! zenith-core.  Each type maps from zenith-core/zenith-scene types to a
 //! schema-versioned JSON shape.
 
-use std::collections::BTreeMap;
-
 use serde::Serialize;
 
 use crate::report::ImportFiles;
@@ -57,7 +55,7 @@ impl DiagnosticJson {
     /// A diagnostic from an import has no known file here, so it gets no
     /// `line`/`col`. Use [`Self::located_all_in`] when imports are known.
     pub fn located(d: &zenith_core::Diagnostic, src: &str) -> Self {
-        Self::located_with(d, src, &ImportFiles::default(), &mut BTreeMap::new())
+        Self::located_with(d, &mut crate::report::Locator::new(src))
     }
 
     /// Convert every diagnostic in `diagnostics`, located over the host `src`.
@@ -76,41 +74,18 @@ impl DiagnosticJson {
         src: &str,
         files: &ImportFiles,
     ) -> Vec<Self> {
-        let mut texts: BTreeMap<String, Option<String>> = BTreeMap::new();
+        let mut locator = crate::report::Locator::with_files(src, files);
         diagnostics
             .iter()
-            .map(|d| Self::located_with(d, src, files, &mut texts))
+            .map(|d| Self::located_with(d, &mut locator))
             .collect()
     }
 
-    fn located_with(
-        d: &zenith_core::Diagnostic,
-        src: &str,
-        files: &ImportFiles,
-        texts: &mut BTreeMap<String, Option<String>>,
-    ) -> Self {
+    fn located_with(d: &zenith_core::Diagnostic, locator: &mut crate::report::Locator<'_>) -> Self {
         let mut out = Self::from(d);
-        let Some(span) = d.span else {
-            return out;
-        };
-        let Some(import) = d.import() else {
-            if let Some((line, col)) = crate::report::line_col(src, span.start) {
-                out.line = Some(line);
-                out.col = Some(col);
-            }
-            return out;
-        };
-        let Some(path) = files.path(import) else {
-            return out;
-        };
-        out.file = Some(path.display().to_string());
-        let text = texts
-            .entry(import.to_owned())
-            .or_insert_with(|| std::fs::read_to_string(path).ok());
-        if let Some((line, col)) = text
-            .as_deref()
-            .and_then(|text| crate::report::line_col(text, span.start))
-        {
+        let loc = locator.locate(d);
+        out.file = loc.file;
+        if let Some((line, col)) = loc.line_col {
             out.line = Some(line);
             out.col = Some(col);
         }

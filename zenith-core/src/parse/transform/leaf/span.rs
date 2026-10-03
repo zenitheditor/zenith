@@ -7,7 +7,7 @@ use crate::data::DataFormat;
 use crate::error::{ParseError, ParseErrorCode};
 
 use crate::parse::transform::helpers::{
-    entry_to_property_value, optional_bool_prop, optional_property_value,
+    entry_to_property_value, node_span, optional_bool_prop, optional_property_value,
     optional_property_value_aliased, optional_string_prop, optional_string_prop_aliased,
     optional_u32_prop,
 };
@@ -24,7 +24,8 @@ pub(in crate::parse::transform) fn transform_span(node: &KdlNode) -> Result<Text
             }
         })
         .ok_or_else(|| {
-            ParseError::spanless(
+            ParseError::at(
+                node_span(node),
                 ParseErrorCode::InvalidPropertyValue,
                 "`span` node must have a string argument as its first value",
             )

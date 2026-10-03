@@ -15,11 +15,11 @@ use super::helpers::{
     collect_unknown_props, entry_to_dimension, node_span, optional_bool_prop,
     optional_dimension_prop, optional_f64_prop, optional_i64_prop, optional_property_value,
     optional_property_value_aliased, optional_string_prop, optional_string_prop_aliased,
-    optional_u32_prop, required_string_prop,
+    optional_u32_prop, required_string_prop, within_parent,
 };
 use super::layout::{optional_box_size, transform_layout_container, transform_layout_item};
 use super::leaf::transform_span;
-use super::node::transform_node;
+use super::node::transform_child;
 
 pub(crate) const FRAME_KNOWN_PROPS: &[&str] = &[
     "id",
@@ -211,7 +211,7 @@ pub(super) fn transform_group(
                     let param_id = required_string_prop(child, "id")?.to_owned();
                     editable_param_ids.push(param_id);
                 }
-                _ => children.push(transform_node(child, sink)?),
+                _ => children.push(transform_child(child, node, sink)?),
             }
         }
     }
@@ -284,7 +284,8 @@ fn transform_protected_region(node: &KdlNode) -> Result<ProtectedRegion, ParseEr
     let x = node
         .entry("x")
         .ok_or_else(|| {
-            ParseError::spanless(
+            ParseError::at(
+                node_span(node),
                 ParseErrorCode::InvalidPropertyValue,
                 format!("protected-region `{id}` is missing required property `x`"),
             )
@@ -293,7 +294,8 @@ fn transform_protected_region(node: &KdlNode) -> Result<ProtectedRegion, ParseEr
     let y = node
         .entry("y")
         .ok_or_else(|| {
-            ParseError::spanless(
+            ParseError::at(
+                node_span(node),
                 ParseErrorCode::InvalidPropertyValue,
                 format!("protected-region `{id}` is missing required property `y`"),
             )
@@ -302,7 +304,8 @@ fn transform_protected_region(node: &KdlNode) -> Result<ProtectedRegion, ParseEr
     let w = node
         .entry("w")
         .ok_or_else(|| {
-            ParseError::spanless(
+            ParseError::at(
+                node_span(node),
                 ParseErrorCode::InvalidPropertyValue,
                 format!("protected-region `{id}` is missing required property `w`"),
             )
@@ -311,7 +314,8 @@ fn transform_protected_region(node: &KdlNode) -> Result<ProtectedRegion, ParseEr
     let h = node
         .entry("h")
         .ok_or_else(|| {
-            ParseError::spanless(
+            ParseError::at(
+                node_span(node),
                 ParseErrorCode::InvalidPropertyValue,
                 format!("protected-region `{id}` is missing required property `h`"),
             )
@@ -429,7 +433,7 @@ fn transform_row(node: &KdlNode, sink: &mut Vec<UnsupportedChild>) -> Result<Tab
     if let Some(children) = node.children() {
         for child in children.nodes() {
             if child.name().value() == "cell" {
-                cells.push(transform_cell(child, sink)?);
+                cells.push(transform_cell(child, sink).map_err(|e| within_parent(e, node))?);
             }
         }
     }
@@ -458,7 +462,7 @@ pub(super) fn transform_table(
                     source_span: node_span(child),
                     unknown_props: collect_unknown_props(child, COLUMN_KNOWN_PROPS),
                 }),
-                "row" => rows.push(transform_row(child, sink)?),
+                "row" => rows.push(transform_row(child, sink).map_err(|e| within_parent(e, node))?),
                 _ => {}
             }
         }

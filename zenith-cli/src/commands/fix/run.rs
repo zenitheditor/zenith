@@ -83,8 +83,8 @@ pub fn run(
     let before = collect(src, project_dir, &CliPolicyFlags::default());
     let outcome = fix_source_with(src, &before.diagnostics).map_err(|e| FixCmdErr {
         message: format!(
-            "error[parse.error]: {}; fix the syntax, then run `zenith fix` again",
-            e.message
+            "{}; fix the syntax, then run `zenith fix` again",
+            crate::report::parse_error_line(src, &e)
         ),
         exit_code: 2,
     })?;

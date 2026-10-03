@@ -271,7 +271,7 @@ pub fn run(
     // ── 1. Parse the template document (once) ─────────────────────────────
     let doc = KdlAdapter
         .parse(doc_src.as_bytes())
-        .map_err(|e| MergeError::new(format!("error[parse.error]: {}", e.message)))?;
+        .map_err(|e| MergeError::new(crate::report::parse_error_line(doc_src, &e)))?;
 
     // ── 2. Collect data bindings ──────────────────────────────────────────
     let mut bindings: Vec<DataBinding> = Vec::new();

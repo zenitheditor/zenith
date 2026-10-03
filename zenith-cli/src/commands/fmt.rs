@@ -41,7 +41,7 @@ pub struct FmtResult {
 pub fn run(src: &str) -> Result<FmtResult, FmtErr> {
     // Parse ─────────────────────────────────────────────────────────────────
     let doc = KdlAdapter.parse(src.as_bytes()).map_err(|e| FmtErr {
-        message: format!("error[parse.error]: {}", e.message),
+        message: crate::report::parse_error_line(src, &e),
         exit_code: 2,
     })?;
 
@@ -120,6 +120,18 @@ mod tests {
   }
 }
 "##;
+
+    #[test]
+    fn parse_error_shows_location() {
+        let src = "zenith version=1 {\n  project id=\"p\" name=\"P\"\n  tokens format=\"zenith-token-v1\" {\n  }\n  document id=\"d\" title=\"T\" {\n    page id=\"pg\" w=(px)100 h=(px)100 {\n      text x=(px)0 y=(px)0 w=(px)50 h=(px)20 { span \"Hi\" }\n    }\n  }\n}\n";
+        let err = run(src).expect_err("id-less text must fail to parse");
+        assert_eq!(err.exit_code, 2);
+        assert!(
+            err.message.starts_with("error[parse.error] 7:7: "),
+            "message: {}",
+            err.message
+        );
+    }
 
     #[test]
     fn already_formatted_doc_reports_not_changed() {

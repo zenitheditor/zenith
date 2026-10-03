@@ -4,7 +4,8 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use zenith_core::{Diagnostic, Severity};
 
-use crate::commands::format_diagnostic_line;
+use super::Locator;
+use crate::commands::format_located_diagnostic_line;
 use crate::json_types::severity_str;
 
 /// Smallest group of same-cause diagnostics printed as one line.
@@ -22,7 +23,13 @@ type GroupKey<'a> = (&'a str, Severity, &'a str);
 /// two others collapse into one line at the first member's position:
 /// `advisory[font.unresolved]: <cause> — 31 nodes: a, b, … (+N more)`.
 /// Errors are never grouped. A diagnostic without a cause is never grouped.
-pub(crate) fn human_diagnostic_lines(diagnostics: &[Diagnostic]) -> Vec<String> {
+///
+/// A diagnostic line shows `line:col` after its code and subject when
+/// `locator` resolves its span. A grouped line has no location.
+pub(crate) fn human_diagnostic_lines(
+    diagnostics: &[Diagnostic],
+    locator: &mut Locator<'_>,
+) -> Vec<String> {
     let mut groups: BTreeMap<GroupKey<'_>, Vec<&Diagnostic>> = BTreeMap::new();
     for d in diagnostics {
         if let Some(key) = group_key(d) {
@@ -44,7 +51,10 @@ pub(crate) fn human_diagnostic_lines(diagnostics: &[Diagnostic]) -> Vec<String> 
                     lines.push(group_line(key, members));
                 }
             }
-            None => lines.push(format_diagnostic_line(d)),
+            None => {
+                let at = locator.locate(d).display();
+                lines.push(format_located_diagnostic_line(d, at.as_deref()));
+            }
         }
     }
     lines
@@ -102,7 +112,7 @@ mod tests {
             1,
             Diagnostic::warning("text.overflow", "overflow", None, Some("t".into())),
         );
-        let lines = human_diagnostic_lines(&diags);
+        let lines = human_diagnostic_lines(&diags, &mut Locator::new(""));
         assert_eq!(lines.len(), 2, "lines: {lines:?}");
         assert_eq!(
             lines[0],
@@ -114,7 +124,8 @@ mod tests {
 
     #[test]
     fn two_same_cause_stay_separate() {
-        let lines = human_diagnostic_lines(&[unresolved("a"), unresolved("b")]);
+        let lines =
+            human_diagnostic_lines(&[unresolved("a"), unresolved("b")], &mut Locator::new(""));
         assert_eq!(lines.len(), 2);
         assert!(lines[0].contains("(a)"));
     }
@@ -127,14 +138,36 @@ mod tests {
                     .with_cause("shared")
             })
             .collect();
-        assert_eq!(human_diagnostic_lines(&diags).len(), 4);
+        assert_eq!(
+            human_diagnostic_lines(&diags, &mut Locator::new("")).len(),
+            4
+        );
     }
 
     #[test]
     fn short_group_lists_every_subject_without_tail() {
         let diags = [unresolved("a"), unresolved("b"), unresolved("c")];
-        let lines = human_diagnostic_lines(&diags);
+        let lines = human_diagnostic_lines(&diags, &mut Locator::new(""));
         assert_eq!(lines.len(), 1);
         assert!(lines[0].ends_with("3 nodes: a, b, c"), "{}", lines[0]);
+    }
+
+    #[test]
+    fn spanned_diagnostic_shows_location_after_subject() {
+        let d = Diagnostic::warning(
+            "text.overflow",
+            "overflow",
+            Some(zenith_core::Span { start: 3, end: 4 }),
+            Some("t".into()),
+        );
+        let lines = human_diagnostic_lines(&[d], &mut Locator::new("ab\ncd"));
+        assert_eq!(lines, ["warning[text.overflow] (t) 2:1: overflow"]);
+    }
+
+    #[test]
+    fn spanless_diagnostic_prints_without_location() {
+        let d = Diagnostic::warning("text.overflow", "overflow", None, Some("t".into()));
+        let lines = human_diagnostic_lines(&[d], &mut Locator::new("ab\ncd"));
+        assert_eq!(lines, ["warning[text.overflow] (t): overflow"]);
     }
 }

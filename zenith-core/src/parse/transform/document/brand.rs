@@ -46,7 +46,8 @@ pub(crate) fn transform_brand_contract(node: &KdlNode) -> Result<BrandContract, 
                                 colors.push(s.to_lowercase());
                             }
                             _ => {
-                                return Err(ParseError::spanless(
+                                return Err(ParseError::at(
+                                    node_span(child),
                                     ParseErrorCode::InvalidPropertyValue,
                                     format!(
                                         "brand `colors` argument {idx} must be a quoted string \
@@ -71,7 +72,8 @@ pub(crate) fn transform_brand_contract(node: &KdlNode) -> Result<BrandContract, 
                                 fonts.push(s.clone());
                             }
                             _ => {
-                                return Err(ParseError::spanless(
+                                return Err(ParseError::at(
+                                    node_span(child),
                                     ParseErrorCode::InvalidPropertyValue,
                                     format!(
                                         "brand `fonts` argument {idx} must be a quoted string \
@@ -96,7 +98,8 @@ pub(crate) fn transform_brand_contract(node: &KdlNode) -> Result<BrandContract, 
                                 // KDL integers are i128; we need a u32 in 100..=900.
                                 let n_val = *n;
                                 if !(100..=900).contains(&n_val) {
-                                    return Err(ParseError::spanless(
+                                    return Err(ParseError::at(
+                                        node_span(child),
                                         ParseErrorCode::InvalidPropertyValue,
                                         format!(
                                             "brand `weights` argument {idx} must be an integer \
@@ -106,7 +109,8 @@ pub(crate) fn transform_brand_contract(node: &KdlNode) -> Result<BrandContract, 
                                 }
                                 // Infallible: 100..=900 fits in u32 and is positive.
                                 let w = u32::try_from(n_val).map_err(|_| {
-                                    ParseError::spanless(
+                                    ParseError::at(
+                                        node_span(child),
                                         ParseErrorCode::InvalidPropertyValue,
                                         format!(
                                             "brand `weights` argument {idx} is out of range \
@@ -117,7 +121,8 @@ pub(crate) fn transform_brand_contract(node: &KdlNode) -> Result<BrandContract, 
                                 weights.push(w);
                             }
                             _ => {
-                                return Err(ParseError::spanless(
+                                return Err(ParseError::at(
+                                    node_span(child),
                                     ParseErrorCode::InvalidPropertyValue,
                                     format!(
                                         "brand `weights` argument {idx} must be an integer \

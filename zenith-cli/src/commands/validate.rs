@@ -15,7 +15,7 @@ use crate::commands::render::{
 use crate::commands::serialize_pretty;
 use crate::config::{CliPolicyFlags, load_global_and_local, merge_policy};
 use crate::json_types::{DiagnosticJson, ValidateOutput};
-use crate::report::{ImportFiles, attributed_loader_diagnostics, human_diagnostic_lines};
+use crate::report::{ImportFiles, Locator, attributed_loader_diagnostics, human_diagnostic_lines};
 
 // ── Result type ───────────────────────────────────────────────────────────────
 
@@ -155,7 +155,7 @@ fn output(
     } else if diagnostics.is_empty() {
         "ok — no diagnostics".to_owned()
     } else {
-        human_diagnostic_lines(diagnostics).join("\n")
+        human_diagnostic_lines(diagnostics, &mut Locator::with_files(src, files)).join("\n")
     };
     CmdOutput { stdout, exit_code }
 }
@@ -304,6 +304,37 @@ mod tests {
         assert_eq!(found.len(), 1, "stdout: {}", out.stdout);
         assert_eq!(found[0]["subject_id"], "t");
         assert_eq!(found[0]["line"], 9, "stdout: {}", out.stdout);
+    }
+
+    /// An id-less `text` on line 7, column 7.
+    const IDLESS_TEXT_DOC: &str = r##"zenith version=1 {
+  project id="proj.t" name="T"
+  tokens format="zenith-token-v1" {
+  }
+  document id="doc.t" title="T" {
+    page id="pg" w=(px)100 h=(px)100 {
+      text x=(px)0 y=(px)0 w=(px)50 h=(px)20 { span "Hi" }
+    }
+  }
+}
+"##;
+
+    #[test]
+    fn human_output_shows_parse_error_location() {
+        let out = run(IDLESS_TEXT_DOC, None, false, &CliPolicyFlags::default());
+        assert_eq!(out.exit_code, 2, "stdout: {}", out.stdout);
+        assert!(
+            out.stdout.starts_with("error[parse.error] 7:7: "),
+            "stdout: {}",
+            out.stdout
+        );
+    }
+
+    #[test]
+    fn human_output_without_span_has_no_location() {
+        let d = Diagnostic::error("x.bad", "boom", None, Some("n".into()));
+        let out = output(&[d], IDLESS_TEXT_DOC, &ImportFiles::default(), false, 1);
+        assert_eq!(out.stdout, "error[x.bad] (n): boom");
     }
 
     #[test]

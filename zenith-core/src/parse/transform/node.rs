@@ -11,7 +11,7 @@ use super::chart::transform_chart;
 use super::container::{transform_frame, transform_group, transform_instance, transform_table};
 use super::document::transform_children;
 use super::effect::{transform_light, transform_mesh};
-use super::helpers::{collect_unknown_props, node_span, optional_string_prop};
+use super::helpers::{collect_unknown_props, node_span, optional_string_prop, within_parent};
 use super::leaf::{
     transform_code, transform_ellipse, transform_image, transform_line, transform_path,
     transform_polygon, transform_polyline, transform_rect, transform_text,
@@ -23,10 +23,21 @@ use super::special::{
 use super::unknown_children::collect_unknown_substructure;
 use super::unsupported::collect_unsupported_children;
 
-pub(super) fn transform_node(
-    node: &KdlNode,
+/// Transform `child`, recording `parent` in the ancestor chain of any error.
+pub(super) fn transform_child(
+    child: &KdlNode,
+    parent: &KdlNode,
     sink: &mut Vec<UnsupportedChild>,
 ) -> Result<Node, ParseError> {
+    transform_node(child, sink).map_err(|e| within_parent(e, parent))
+}
+
+/// Transform one node. An error with no span of its own gets this node's span.
+fn transform_node(node: &KdlNode, sink: &mut Vec<UnsupportedChild>) -> Result<Node, ParseError> {
+    dispatch_node(node, sink).map_err(|e| e.or_span(node_span(node)))
+}
+
+fn dispatch_node(node: &KdlNode, sink: &mut Vec<UnsupportedChild>) -> Result<Node, ParseError> {
     // Capture any children this node's kind does not consume BEFORE dispatch, so
     // the silent data loss is recorded even though the transform drops them.
     collect_unsupported_children(node, sink);

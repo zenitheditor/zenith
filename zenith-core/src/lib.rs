@@ -70,8 +70,8 @@ pub use tokens::{
     ResolvedShadow, ResolvedShadowLayer, ResolvedToken, ResolvedValue, SyntaxTheme, TokenKind,
     TokenResolution, builtin_color, is_supported, resolve_tokens, scan, token_id_for_kind,
 };
-pub use util::hash_unit;
 pub use util::pattern::{PatternLayout, pattern_positions};
+pub use util::{hash_unit, line_col};
 pub use validate::{
     ChartTextInk, ContentScope, ContentScopes, ContrastInks, GlyphInk, InkLine, LabelInk, ScopeFit,
     ScopeTokens, ValidationReport, apply_policy, layout_geometry_checks, page_contrast_checks,

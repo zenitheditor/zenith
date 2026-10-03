@@ -28,7 +28,7 @@ pub(super) fn transform_tokens(node: &KdlNode) -> Result<TokenBlock, ParseError>
     if let Some(children) = node.children() {
         for child in children.nodes() {
             if child.name().value() == "token" {
-                token_list.push(transform_token(child)?);
+                token_list.push(transform_token(child).map_err(|e| e.or_span(node_span(child)))?);
             }
         }
     }

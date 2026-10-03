@@ -187,7 +187,8 @@ fn transform_action_def(node: &KdlNode) -> Result<ActionDef, ParseError> {
             })
         })
         .ok_or_else(|| {
-            ParseError::spanless(
+            ParseError::at(
+                node_span(node),
                 ParseErrorCode::InvalidPropertyValue,
                 format!("node `action` id=\"{id}\" is missing required `tx` child node"),
             )

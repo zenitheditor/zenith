@@ -15,7 +15,7 @@ use super::helpers::{
     optional_string_prop, optional_string_prop_aliased, required_string_prop,
 };
 use super::layout::{optional_box_size, transform_layout_item};
-use super::node::transform_node;
+use super::node::transform_child;
 
 pub(crate) const PATTERN_KNOWN_PROPS: &[&str] = &[
     "id",
@@ -133,12 +133,13 @@ pub(super) fn transform_pattern(
         .children()
         .and_then(|c| c.nodes().first())
         .ok_or_else(|| {
-            ParseError::spanless(
+            ParseError::at(
+                node_span(node),
                 ParseErrorCode::UnexpectedNode,
                 format!("pattern `{id}` is missing its required child motif node"),
             )
         })?;
-    let motif = Box::new(transform_node(motif, sink)?);
+    let motif = Box::new(transform_child(motif, node, sink)?);
 
     let unknown_props = collect_unknown_props(node, PATTERN_KNOWN_PROPS);
 

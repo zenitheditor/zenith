@@ -45,7 +45,8 @@ pub(crate) fn transform_diagnostic_policy(node: &KdlNode) -> Result<DiagnosticPo
             let code = match positional.next().map(|entry| entry.value()) {
                 Some(KdlValue::String(s)) => s.clone(),
                 _ => {
-                    return Err(ParseError::spanless(
+                    return Err(ParseError::at(
+                        node_span(child),
                         ParseErrorCode::InvalidPropertyValue,
                         format!(
                             "diagnostics `{verb_name}` entry requires a quoted diagnostic-code \
@@ -60,7 +61,8 @@ pub(crate) fn transform_diagnostic_policy(node: &KdlNode) -> Result<DiagnosticPo
                     KdlValue::String(s) => subjects.push(s.clone()),
                     _ => {
                         let subject_index = idx + 1;
-                        return Err(ParseError::spanless(
+                        return Err(ParseError::at(
+                            node_span(child),
                             ParseErrorCode::InvalidPropertyValue,
                             format!(
                                 "diagnostics `{verb_name}` subject argument {subject_index} must \
@@ -77,7 +79,8 @@ pub(crate) fn transform_diagnostic_policy(node: &KdlNode) -> Result<DiagnosticPo
                     .map(|name| name.value() == "subject" || name.value() == "subjects")
                     .unwrap_or(false)
             }) {
-                return Err(ParseError::spanless(
+                return Err(ParseError::at(
+                    node_span(child),
                     ParseErrorCode::InvalidPropertyValue,
                     "diagnostics scoped subjects must be positional strings after the \
                      diagnostic code, e.g. `allow \"layout.off_canvas\" \"bg.glow\"`",

@@ -20,7 +20,8 @@ use crate::ast::variant::VariantDef;
 use crate::error::{ParseError, ParseErrorCode};
 use crate::parse::transform::defaults::transform_defaults;
 use crate::parse::transform::helpers::{
-    optional_bool_prop, optional_dimension_prop, optional_string_prop, required_u32_prop,
+    node_span, optional_bool_prop, optional_dimension_prop, optional_string_prop,
+    required_u32_prop, spanned,
 };
 use crate::parse::transform::tokens::{transform_styles, transform_tokens};
 use crate::parse::transform::unknown_children::collect_unknown_document_children;
@@ -152,7 +153,8 @@ pub fn transform(doc: &KdlDocument) -> Result<Document, ParseError> {
         .or_else(|| optional_dimension_prop(zenith_node, "margin_bottom"));
 
     let children_doc = zenith_node.children().ok_or_else(|| {
-        ParseError::spanless(
+        ParseError::at(
+            node_span(zenith_node),
             ParseErrorCode::MissingZenithRoot,
             "`zenith` node has no children block",
         )
@@ -184,55 +186,61 @@ pub fn transform(doc: &KdlDocument) -> Result<Document, ParseError> {
     for child in children_doc.nodes() {
         match child.name().value() {
             "project" => {
-                project = Some(transform_project(child)?);
+                project = Some(spanned(transform_project(child), child)?);
             }
             "assets" => {
-                assets = transform_assets(child)?;
+                assets = spanned(transform_assets(child), child)?;
             }
             "libraries" => {
-                libraries = transform_libraries(child)?;
+                libraries = spanned(transform_libraries(child), child)?;
             }
             "imports" => {
-                imports = transform_imports(child)?;
+                imports = spanned(transform_imports(child), child)?;
             }
             "actions" => {
-                actions = transform_actions(child)?;
+                actions = spanned(transform_actions(child), child)?;
             }
             "tokens" => {
-                tokens = transform_tokens(child)?;
+                tokens = spanned(transform_tokens(child), child)?;
             }
             "styles" => {
-                styles = transform_styles(child)?;
+                styles = spanned(transform_styles(child), child)?;
             }
             "defaults" => {
-                defaults = transform_defaults(child)?;
+                defaults = spanned(transform_defaults(child), child)?;
             }
             "components" => {
-                components = transform_components(child, &mut unsupported_children)?;
+                components = spanned(
+                    transform_components(child, &mut unsupported_children),
+                    child,
+                )?;
             }
             "masters" => {
-                masters = transform_masters(child, &mut unsupported_children)?;
+                masters = spanned(transform_masters(child, &mut unsupported_children), child)?;
             }
             "sections" => {
-                sections = transform_sections(child)?;
+                sections = spanned(transform_sections(child), child)?;
             }
             "provenance" => {
-                provenance = transform_provenance(child)?;
+                provenance = spanned(transform_provenance(child), child)?;
             }
             "variants" => {
-                variants = transform_variants(child)?;
+                variants = spanned(transform_variants(child), child)?;
             }
             "recipes" => {
-                recipes = transform_recipes(child)?;
+                recipes = spanned(transform_recipes(child), child)?;
             }
             "diagnostics" => {
-                diagnostic_policy = transform_diagnostic_policy(child)?;
+                diagnostic_policy = spanned(transform_diagnostic_policy(child), child)?;
             }
             "brand" => {
-                brand_contract = transform_brand_contract(child)?;
+                brand_contract = spanned(transform_brand_contract(child), child)?;
             }
             "document" => {
-                body = Some(transform_document_body(child, &mut unsupported_children)?);
+                body = Some(spanned(
+                    transform_document_body(child, &mut unsupported_children),
+                    child,
+                )?);
             }
             // Unknown top-level children are recorded by
             // `collect_unknown_document_children` and reported by validation.
@@ -241,7 +249,8 @@ pub fn transform(doc: &KdlDocument) -> Result<Document, ParseError> {
     }
 
     let body = body.ok_or_else(|| {
-        ParseError::spanless(
+        ParseError::at(
+            node_span(zenith_node),
             ParseErrorCode::MissingZenithRoot,
             "`zenith` node is missing a `document` child",
         )

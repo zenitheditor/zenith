@@ -408,7 +408,7 @@ impl RenderRun<'_> {
                 &self.import_files,
             );
         } else {
-            print_diagnostics_stderr(&diagnostics);
+            print_diagnostics_stderr(&diagnostics, self.src, &self.import_files);
         }
         ExitCode::SUCCESS
     }
@@ -427,7 +427,7 @@ impl RenderRun<'_> {
                 &self.import_files,
             );
         } else {
-            print_diagnostics_stderr(&diagnostics);
+            print_diagnostics_stderr(&diagnostics, self.src, &self.import_files);
             eprintln!(
                 "render blocked by {} hard diagnostic(s)",
                 diagnostics.iter().filter(|d| d.is_error()).count()

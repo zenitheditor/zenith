@@ -18,7 +18,7 @@ pub fn list(src: &str, json: bool) -> Result<String, (String, u8)> {
     // Parse ─────────────────────────────────────────────────────────────────
     let doc = KdlAdapter
         .parse(src.as_bytes())
-        .map_err(|e| (format!("error[parse.error]: {}", e.message), 2u8))?;
+        .map_err(|e| (crate::report::parse_error_line(src, &e), 2u8))?;
 
     // Resolve tokens ─────────────────────────────────────────────────────────
     let resolution = resolve_tokens(&doc.tokens);

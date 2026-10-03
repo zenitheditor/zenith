@@ -105,7 +105,7 @@ pub(crate) fn run(
 ) -> Result<MaterializeResult, MaterializeCmdErr> {
     let mut host = KdlAdapter
         .parse(host_src.as_bytes())
-        .map_err(|e| MaterializeCmdErr::fail(format!("error[parse.error]: {}", e.message)))?;
+        .map_err(|e| MaterializeCmdErr::fail(crate::report::parse_error_line(host_src, &e)))?;
 
     let (import_id, component_id) = parse_component_target(target)?;
 

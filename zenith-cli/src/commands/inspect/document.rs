@@ -245,7 +245,7 @@ pub fn summary(
 fn parse(src: &str) -> Result<Document, InspectCmdErr> {
     KdlAdapter
         .parse(src.as_bytes())
-        .map_err(|e| InspectCmdErr::new(format!("error[parse.error]: {}", e.message), 2))
+        .map_err(|e| InspectCmdErr::new(crate::report::parse_error_line(src, &e), 2))
 }
 
 /// Every page tree with resolved boxes attached.

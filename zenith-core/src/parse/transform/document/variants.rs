@@ -42,7 +42,8 @@ fn transform_variant_def(node: &KdlNode) -> Result<VariantDef, ParseError> {
     let w = node
         .entry("w")
         .ok_or_else(|| {
-            ParseError::spanless(
+            ParseError::at(
+                node_span(node),
                 ParseErrorCode::InvalidPropertyValue,
                 format!("variant `{id}` is missing required property `w`"),
             )
@@ -52,7 +53,8 @@ fn transform_variant_def(node: &KdlNode) -> Result<VariantDef, ParseError> {
     let h = node
         .entry("h")
         .ok_or_else(|| {
-            ParseError::spanless(
+            ParseError::at(
+                node_span(node),
                 ParseErrorCode::InvalidPropertyValue,
                 format!("variant `{id}` is missing required property `h`"),
             )
@@ -188,7 +190,8 @@ fn transform_recipe_param(node: &KdlNode) -> Result<RecipeParam, ParseError> {
     let value = node
         .entry("value")
         .ok_or_else(|| {
-            ParseError::spanless(
+            ParseError::at(
+                node_span(node),
                 ParseErrorCode::InvalidPropertyValue,
                 format!("recipe `param` `{name}` is missing required property `value`"),
             )

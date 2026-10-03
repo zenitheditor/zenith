@@ -86,7 +86,7 @@ pub fn run(src: &str, node_id: &str, json: bool, craft: bool) -> Result<String, 
     let doc = KdlAdapter
         .parse(src.as_bytes())
         .map_err(|e| InspectCmdErr {
-            message: format!("error[parse.error]: {}", e.message),
+            message: crate::report::parse_error_line(src, &e),
             exit_code: 2,
         })?;
 

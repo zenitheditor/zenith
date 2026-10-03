@@ -117,7 +117,7 @@ pub fn run_variant(
     // ── 1. Parse the input document ───────────────────────────────────────
     let doc = KdlAdapter
         .parse(doc_src.as_bytes())
-        .map_err(|e| VariantCmdErr::new(format!("error[parse.error]: {}", e.message)))?;
+        .map_err(|e| VariantCmdErr::new(crate::report::parse_error_line(doc_src, &e)))?;
 
     // ── 2. Expand variants (pure engine — no I/O) ─────────────────────────
     let expansion = expand_variants(&doc);

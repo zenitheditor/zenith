@@ -138,14 +138,29 @@ pub(super) fn required_string_prop<'a>(
             }
         })
         .ok_or_else(|| {
-            ParseError::spanless(
-                ParseErrorCode::InvalidPropertyValue,
-                format!(
-                    "node `{}` is missing required string property `{key}`",
-                    node.name().value()
-                ),
-            )
+            ParseError::missing_property(node_span(node), node.name().value(), "string", key)
         })
+}
+
+/// Give a spanless error the span of `node`. Errors with a span pass through.
+pub(super) fn spanned<T>(result: Result<T, ParseError>, node: &KdlNode) -> Result<T, ParseError> {
+    result.map_err(|e| e.or_span(node_span(node)))
+}
+
+/// Describe `node` for a parse-error ancestor chain: `table "schedule"` when it
+/// has an `id`, else the bare node name. The flag is true when an id was named.
+pub(super) fn describe_node(node: &KdlNode) -> (String, bool) {
+    let kind = node.name().value();
+    match optional_string_prop(node, "id") {
+        Some(id) => (format!("{kind} \"{id}\""), true),
+        None => (kind.to_owned(), false),
+    }
+}
+
+/// Add `parent` to the ancestor chain of an error raised while parsing a child.
+pub(super) fn within_parent(err: ParseError, parent: &KdlNode) -> ParseError {
+    let (description, has_id) = describe_node(parent);
+    err.within(description, has_id)
 }
 
 /// Get a required integer property from a node and convert to u32.
@@ -159,13 +174,7 @@ pub(super) fn required_u32_prop(node: &KdlNode, key: &str) -> Result<u32, ParseE
             }
         })
         .ok_or_else(|| {
-            ParseError::spanless(
-                ParseErrorCode::InvalidPropertyValue,
-                format!(
-                    "node `{}` is missing required integer property `{key}`",
-                    node.name().value()
-                ),
-            )
+            ParseError::missing_property(node_span(node), node.name().value(), "integer", key)
         })
 }
 
