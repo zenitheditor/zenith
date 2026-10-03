@@ -140,12 +140,12 @@ pub(super) fn op_fields(name: &str) -> Option<&'static [OpFieldSchema]> {
                 },
                 OpFieldSchema {
                     name: "w",
-                    ty: "px",
+                    ty: "px | \"hug\" | \"fill\"",
                     required: false,
                 },
                 OpFieldSchema {
                     name: "h",
-                    ty: "px",
+                    ty: "px | \"hug\" | \"fill\"",
                     required: false,
                 },
                 OpFieldSchema {

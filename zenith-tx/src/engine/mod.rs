@@ -8,6 +8,7 @@ mod dispatch;
 mod fill_rule;
 mod flags;
 mod geometry;
+mod layout;
 mod lock;
 mod path;
 mod pattern;

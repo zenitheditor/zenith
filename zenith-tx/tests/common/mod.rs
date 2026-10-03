@@ -221,6 +221,7 @@ pub const STROKE_DOC: &str = r##"zenith version=1 {
   project id="proj" name="Test"
   tokens format="zenith-token-v1" {
     token id="color.rule" type="color" value="#334155"
+    token id="color.on.rule" type="color" value="#ffffff"
     token id="size.stroke" type="dimension" value=(px)2
   }
   styles { }
@@ -229,7 +230,7 @@ pub const STROKE_DOC: &str = r##"zenith version=1 {
       rect id="r1" x=(px)0 y=(px)0 w=(px)100 h=(px)100 stroke=(token)"color.rule" stroke-width=(token)"size.stroke"
       line id="ln1" x1=(px)0 y1=(px)0 x2=(px)100 y2=(px)100 stroke=(token)"color.rule"
       ellipse id="dot" x=(px)0 y=(px)0 w=(px)100 h=(px)100 fill=(token)"color.rule"
-      text id="lbl" x=(px)10 y=(px)10 w=(px)200 h=(px)40 {
+      text id="lbl" x=(px)10 y=(px)10 w=(px)200 h=(px)40 fill=(token)"color.on.rule" {
         span "Hi"
       }
       polygon id="poly1" stroke=(token)"color.rule" stroke-width=(token)"size.stroke" {

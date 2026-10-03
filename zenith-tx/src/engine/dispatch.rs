@@ -9,6 +9,7 @@ use super::geometry::{
     GeometryDelta, apply_align_nodes, apply_align_to_edge, apply_distribute_nodes,
     apply_set_geometry,
 };
+use super::layout::apply_set_layout;
 use super::path::{
     MakePathSymmetricArgs, MovePathAnchorArgs, MovePathHandleArgs, PathBooleanArgs,
     apply_insert_path_anchor, apply_insert_path_anchor_at_point, apply_make_path_symmetric,
@@ -110,8 +111,8 @@ pub(super) fn apply_op(
                 GeometryDelta {
                     x: *x,
                     y: *y,
-                    w: *w,
-                    h: *h,
+                    w: w.as_ref(),
+                    h: h.as_ref(),
                     rotate: *rotate,
                 },
                 doc,
@@ -573,6 +574,9 @@ pub(super) fn apply_op(
         }
         Op::DetachPattern { node: node_id } => {
             apply_detach_pattern(node_id, doc, diagnostics, affected);
+        }
+        Op::SetLayout(edit) => {
+            apply_set_layout(edit, doc, diagnostics, affected);
         }
     }
 }

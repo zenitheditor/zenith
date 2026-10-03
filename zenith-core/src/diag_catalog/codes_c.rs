@@ -407,6 +407,12 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
         "A transaction op carries a value that fails validation.",
     ),
     info(
+        "tx.layout_managed",
+        Severity::Error,
+        "A transaction op sets the x/y of a node that a row, column, or grid frame places in flow; \
+         set position=\"absolute\" with set_layout or reorder the node instead.",
+    ),
+    info(
         "tx.locked_skipped",
         Severity::Warning,
         "A transaction op was skipped because the target node is locked.",

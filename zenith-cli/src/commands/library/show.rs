@@ -484,6 +484,7 @@ fn op_name(op: &zenith_tx::Op) -> &'static str {
         zenith_tx::Op::UpdateRecipe { .. } => "update_recipe",
         zenith_tx::Op::DeleteRecipe { .. } => "delete_recipe",
         zenith_tx::Op::DetachPattern { .. } => "detach_pattern",
+        zenith_tx::Op::SetLayout(_) => "set_layout",
     }
 }
 

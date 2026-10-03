@@ -166,7 +166,7 @@ fn from_json_reshape_ops_round_trip() {
                 node: "r".to_owned(),
                 x: Some(10.0),
                 y: None,
-                w: Some(200.0),
+                w: Some(200.0.into()),
                 h: None,
                 rotate: None,
             }],

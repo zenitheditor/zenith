@@ -15,13 +15,16 @@
 //! ]}
 //! ```
 //!
-//! Submodules: `types` (supporting value types), `ops` (the [`Op`] enum
-//! itself), `transaction` (the [`Transaction`] envelope).
+//! Submodules: `types` (supporting value types), `layout` (auto-layout
+//! payloads), `ops` (the [`Op`] enum itself), `transaction` (the
+//! [`Transaction`] envelope).
 
+mod layout;
 mod ops;
 mod transaction;
 mod types;
 
+pub use layout::{LayoutDim, LayoutEdit, SizeInput};
 pub use ops::Op;
 pub use transaction::Transaction;
 pub use types::{

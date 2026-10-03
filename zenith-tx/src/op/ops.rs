@@ -1,5 +1,6 @@
 //! The [`Op`] enum: every mutating operation a [`super::Transaction`] can carry.
 
+use super::layout::{LayoutEdit, SizeInput};
 use super::types::{
     AddAssetMetadata, FilterOpInput, GradientStopInput, OpPathAnchor, OpPathBooleanOperation,
     OpPathHandle, OpPathSubpath, OpPathTransform, OpPoint, OpSpan, Position, ShadowLayerInput,
@@ -90,12 +91,14 @@ pub enum Op {
         /// New top edge in pixels. Omit to leave unchanged.
         #[serde(default)]
         y: Option<f64>,
-        /// New width in pixels. Omit to leave unchanged.
+        /// New width: pixels, or `"hug"` / `"fill"` inside a row/column frame.
+        /// Omit to leave unchanged.
         #[serde(default)]
-        w: Option<f64>,
-        /// New height in pixels. Omit to leave unchanged.
+        w: Option<SizeInput>,
+        /// New height: pixels, or `"hug"` / `"fill"` inside a row/column frame.
+        /// Omit to leave unchanged.
         #[serde(default)]
-        h: Option<f64>,
+        h: Option<SizeInput>,
         /// New rotation in degrees. Omit to leave unchanged.
         #[serde(default)]
         rotate: Option<f64>,
@@ -607,6 +610,10 @@ pub enum Op {
         /// The id of the recipe to remove.
         id: String,
     },
+    /// Set or clear auto-layout attributes: frame container fields (`layout`,
+    /// `gap`, `padding*`, `justify`, `align`, `wrap`, `clip`) and item fields
+    /// (`position`, `min_w`, `max_w`, `min_h`, `max_h`). `null` clears a field.
+    SetLayout(LayoutEdit),
     /// Materialize a `pattern` node into an editable `group` of native shapes —
     DetachPattern {
         /// The stable id of the pattern node to detach into a native group.

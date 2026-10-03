@@ -44,6 +44,7 @@ pub fn op_names() -> &'static [&'static str] {
         "set_fill",
         "set_fill_rule",
         "set_geometry",
+        "set_layout",
         "set_locked",
         "set_opacity",
         "set_page_master",

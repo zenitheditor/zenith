@@ -35,7 +35,7 @@ fn set_geometry_on_node_inside_unknown() {
             node: "inner".to_owned(),
             x: Some(25.0),
             y: None,
-            w: Some(120.0),
+            w: Some(120.0.into()),
             h: None,
             rotate: None,
         }],

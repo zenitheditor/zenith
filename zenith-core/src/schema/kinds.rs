@@ -50,7 +50,11 @@ pub fn node_summary(kind: &str) -> Option<&'static str> {
         "line" => Some("Straight line segment between two endpoints."),
         "text" => Some("Multi-span text block with typography and layout properties."),
         "code" => Some("Monospace code block with syntax-theme highlighting."),
-        "frame" => Some("Container that clips and positions its children within a fixed box."),
+        "frame" => Some(
+            "Container box. layout=\"row\"|\"column\"|\"grid\" places and sizes its children \
+             (gap, padding, justify, align, wrap); children size with w/h=\"hug\"|\"fill\", \
+             min/max-w/h, and leave the flow with position=\"absolute\".",
+        ),
         "group" => Some("Transparent grouping container for related nodes."),
         "image" => Some("Raster or SVG image positioned within a bounding box."),
         "polygon" => Some("Closed polygon defined by an ordered vertex list."),
@@ -75,6 +79,30 @@ pub fn node_summary(kind: &str) -> Option<&'static str> {
     }
 }
 
+/// Two auto-layout frames: a wrapping row of hugging chips, and a column card
+/// whose texts fill its width, with an absolute badge out of the flow.
+const FRAME_EXAMPLE: &str = r#"frame id="chips" x=(px)40 y=(px)40 w=(px)360 layout="row" gap=(px)8 wrap=#true align="center" {
+  frame id="chip.design" w="hug" h="hug" layout="row" padding-x=(px)12 padding-y=(px)6 fill=(token)"color.chip" radius=(token)"radius.pill" {
+    text id="chip.design.label" font-size=(token)"size.label" fill=(token)"color.ink" {
+      span "Design"
+    }
+  }
+  frame id="chip.layout" w="hug" h="hug" layout="row" padding-x=(px)12 padding-y=(px)6 fill=(token)"color.chip" radius=(token)"radius.pill" {
+    text id="chip.layout.label" font-size=(token)"size.label" fill=(token)"color.ink" {
+      span "Layout"
+    }
+  }
+}
+frame id="card" x=(px)40 y=(px)120 w=(px)320 layout="column" gap=(token)"space.md" padding=(token)"space.lg" fill=(token)"color.surface" {
+  text id="card.title" w="fill" font-size=(token)"size.title" fill=(token)"color.ink" {
+    span "Card title"
+  }
+  text id="card.body" w="fill" font-size=(token)"size.label" fill=(token)"color.ink" {
+    span "Body copy wraps to the card width."
+  }
+  rect id="card.badge" x=(px)284 y=(px)12 w=(px)24 h=(px)24 position="absolute" fill=(token)"color.chip"
+}"#;
+
 /// Return a minimal, syntactically correct full-node example for a node kind.
 ///
 /// This is separate from [`crate::schema::node_content`]: leaf nodes have no
@@ -82,6 +110,7 @@ pub fn node_summary(kind: &str) -> Option<&'static str> {
 /// output.
 pub fn node_example(kind: &str) -> Option<&'static str> {
     match kind {
+        "frame" => Some(FRAME_EXAMPLE),
         "light" => Some(
             "light id=\"bg.glow\" kind=\"ambient\" x=(%)85 y=(%)12 \
              radius=(token)\"size.glow\" color=(token)\"color.glow\" opacity=0.35",

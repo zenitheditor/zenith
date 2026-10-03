@@ -274,6 +274,36 @@ impl Node {
         self.box_view().map(|b| b.layout_item)
     }
 
+    /// Mutable auto-layout item attributes; the same kinds as
+    /// [`Node::layout_item`] return `Some`.
+    pub fn layout_item_mut(&mut self) -> Option<&mut LayoutItem> {
+        match self {
+            Node::Rect(n) => Some(&mut n.layout_item),
+            Node::Ellipse(n) => Some(&mut n.layout_item),
+            Node::Text(n) => Some(&mut n.layout_item),
+            Node::Code(n) => Some(&mut n.layout_item),
+            Node::Frame(n) => Some(&mut n.layout_item),
+            Node::Group(n) => Some(&mut n.layout_item),
+            Node::Image(n) => Some(&mut n.layout_item),
+            Node::Instance(n) => Some(&mut n.layout_item),
+            Node::Field(n) => Some(&mut n.layout_item),
+            Node::Toc(n) => Some(&mut n.layout_item),
+            Node::Table(n) => Some(&mut n.layout_item),
+            Node::Shape(n) => Some(&mut n.layout_item),
+            Node::Pattern(n) => Some(&mut n.layout_item),
+            Node::Chart(n) => Some(&mut n.layout_item),
+            Node::Mesh(n) => Some(&mut n.layout_item),
+            Node::Line(_)
+            | Node::Polygon(_)
+            | Node::Polyline(_)
+            | Node::Path(_)
+            | Node::Footnote(_)
+            | Node::Connector(_)
+            | Node::Light(_)
+            | Node::Unknown(_) => None,
+        }
+    }
+
     /// Borrowed box geometry for the box-node kinds; `None` for kinds without
     /// an `x`/`y`/`w`/`h` box (line, polygon, polyline, path, instance,
     /// footnote, connector, light, unknown).

@@ -239,6 +239,7 @@ mod tests {
             ("tx.invalid_parent", Severity::Error),
             ("tx.invalid_path_anchor", Severity::Error),
             ("tx.invalid_value", Severity::Error),
+            ("tx.layout_managed", Severity::Error),
             ("tx.locked_skipped", Severity::Warning),
             ("tx.noop", Severity::Advisory),
             ("tx.not_a_pattern", Severity::Error),

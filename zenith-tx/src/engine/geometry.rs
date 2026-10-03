@@ -3,8 +3,10 @@
 
 use zenith_core::{Diagnostic, Dimension, Document, Node, PropertyValue, Unit, dim_to_px};
 
+use super::layout::{SizeArg, parse_size_arg, reject_layout_managed, write_size_keywords};
 use super::structure::parse_dimension_str;
 use super::{find_node_any_mut, find_node_any_shared, px, record_affected, subtree_contains};
+use crate::op::SizeInput;
 
 /// Valid alignment directions for `Op::AlignNodes`.
 const VALID_ALIGN_DIRS: &[&str] = &["left", "hcenter", "right", "top", "vcenter", "bottom"];
@@ -119,11 +121,11 @@ fn write_node_xy(node: &mut Node, new_x: Option<f64>, new_y: Option<f64>) -> boo
 ///
 /// Grouping these avoids pushing `apply_set_geometry` past the
 /// `clippy::too_many_arguments` threshold without using `#[allow]`.
-pub(super) struct GeometryDelta {
+pub(super) struct GeometryDelta<'a> {
     pub x: Option<f64>,
     pub y: Option<f64>,
-    pub w: Option<f64>,
-    pub h: Option<f64>,
+    pub w: Option<&'a SizeInput>,
+    pub h: Option<&'a SizeInput>,
     pub rotate: Option<f64>,
 }
 
@@ -169,7 +171,7 @@ fn node_rotate_mut(node: &mut Node) -> Option<&mut Option<Dimension>> {
 
 pub(super) fn apply_set_geometry(
     node_id: &str,
-    delta: GeometryDelta,
+    delta: GeometryDelta<'_>,
     doc: &mut Document,
     diagnostics: &mut Vec<Diagnostic>,
     affected: &mut Vec<String>,
@@ -187,6 +189,17 @@ pub(super) fn apply_set_geometry(
             None,
             Some(node_id.to_owned()),
         ));
+        return;
+    }
+    let (Ok(w), Ok(h)) = (
+        parse_size_arg(w, "w", node_id, diagnostics),
+        parse_size_arg(h, "h", node_id, diagnostics),
+    ) else {
+        return;
+    };
+    if (x.is_some() || y.is_some())
+        && reject_layout_managed(doc, [node_id], "set_geometry", diagnostics)
+    {
         return;
     }
 
@@ -216,10 +229,10 @@ pub(super) fn apply_set_geometry(
                         inst.y = Some(px(v));
                     }
                     if let Some(v) = w {
-                        inst.w = Some(px(v));
+                        inst.w = size_dimension(v);
                     }
                     if let Some(v) = h {
-                        inst.h = Some(px(v));
+                        inst.h = size_dimension(v);
                     }
                     if rotate.is_some() {
                         diagnostics.push(Diagnostic::error(
@@ -230,6 +243,7 @@ pub(super) fn apply_set_geometry(
                         ));
                         return;
                     }
+                    write_size_keywords(node, w, h);
                     record_affected(node_id, affected);
                     return;
                 }
@@ -255,13 +269,14 @@ pub(super) fn apply_set_geometry(
                             *ny = Some(PropertyValue::Dimension(px(v)));
                         }
                         if let Some(v) = w {
-                            *nw = Some(PropertyValue::Dimension(px(v)));
+                            *nw = size_dimension(v).map(PropertyValue::Dimension);
                         }
                         if let Some(v) = h {
-                            *nh = Some(PropertyValue::Dimension(px(v)));
+                            *nh = size_dimension(v).map(PropertyValue::Dimension);
                         }
                     }
                 }
+                write_size_keywords(node, w, h);
             }
 
             // Apply rotate when requested.
@@ -287,6 +302,15 @@ pub(super) fn apply_set_geometry(
 
             record_affected(node_id, affected);
         }
+    }
+}
+
+/// The px dimension a size write stores: a px size, or `None` for a keyword
+/// (the keyword lives on the layout item).
+fn size_dimension(arg: SizeArg) -> Option<Dimension> {
+    match arg {
+        SizeArg::Px(v) => Some(px(v)),
+        SizeArg::Keyword(_) => None,
     }
 }
 
@@ -368,6 +392,14 @@ pub(super) fn apply_align_nodes(
             None,
             None,
         ));
+        return;
+    }
+    if reject_layout_managed(
+        doc,
+        node_ids.iter().map(String::as_str),
+        "align_nodes",
+        diagnostics,
+    ) {
         return;
     }
 
@@ -648,6 +680,9 @@ pub(super) fn apply_align_to_edge(
         ));
         return;
     }
+    if reject_layout_managed(doc, [node_id], "align_to_edge", diagnostics) {
+        return;
+    }
 
     // ── Phase 1 (shared scan): read the node's geometry and find its page ────
 
@@ -762,6 +797,14 @@ pub(super) fn apply_distribute_nodes(
             None,
             None,
         ));
+        return;
+    }
+    if reject_layout_managed(
+        doc,
+        node_ids.iter().map(String::as_str),
+        "distribute_nodes",
+        diagnostics,
+    ) {
         return;
     }
     let horizontal = axis == "horizontal";

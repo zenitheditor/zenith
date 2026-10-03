@@ -20,7 +20,10 @@ pub fn op_summary(name: &str) -> Option<&'static str> {
         }
         "set_visible" => Some("Show or hide a node by toggling its visible property."),
         "set_locked" => Some("Lock or unlock a node to prevent accidental edits."),
-        "set_geometry" => Some("Move and/or resize a node by setting x, y, w, h, or rotate."),
+        "set_geometry" => Some(
+            "Move and/or resize a node by setting x, y, w, h (px, or \"hug\"/\"fill\"), or rotate. \
+             x/y on an in-flow child of a row/column/grid frame is rejected (tx.layout_managed).",
+        ),
         "set_points" => Some("Replace the full vertex list of a polygon or polyline node."),
         "set_path_anchors" => Some("Replace the full anchor list of a path node."),
         "set_path_anchor_kind" => Some("Set or clear one path anchor's authoring intent metadata."),
@@ -89,6 +92,10 @@ pub fn op_summary(name: &str) -> Option<&'static str> {
         }
         "set_text_direction" => Some("Set the text direction (ltr or rtl) of a text node."),
         "find_replace_text" => Some("Literal find-and-replace across text and shape label spans."),
+        "set_layout" => Some(
+            "Set or clear auto-layout attributes: frame container fields (layout, gap, padding*, \
+             justify, align, wrap, clip) and box-node item fields (position, min/max w/h); null clears.",
+        ),
         "set_page_size" => Some("Resize a page by setting new width and height dimensions."),
         "align_to_edge" => {
             Some("Snap a node's edge or centre to the boundary of its containing page.")

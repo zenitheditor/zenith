@@ -55,6 +55,7 @@ pub(super) fn op_lock_targets(op: &Op) -> Vec<&str> {
             node_ids.iter().map(String::as_str).collect()
         }
         Op::SetAsset { node_id, .. } => vec![node_id.as_str()],
+        Op::SetLayout(edit) => vec![edit.node.as_str()],
         Op::SetLocked { .. }
         | Op::SetVisible { .. }
         | Op::AddNode { .. }

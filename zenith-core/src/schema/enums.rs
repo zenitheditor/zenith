@@ -2,7 +2,8 @@
 //!
 //! Validation checks, `node.invalid_value` messages, and schema type hints
 //! all read these constants so the lists cannot drift apart. The lists other
-//! crates validate against (`overflow`, `align`, `v-align`) are public.
+//! crates validate against (`overflow`, `align`, `v-align`, the auto-layout
+//! values) are public.
 
 /// `stroke-linecap` values.
 pub(crate) const STROKE_LINECAPS: &[&str] = &["butt", "round", "square"];
@@ -71,13 +72,13 @@ pub(crate) const PAGE_PARITIES: &[&str] = &["recto", "verso"];
 /// Page number format values.
 pub(crate) const PAGE_NUMBER_FORMATS: &[&str] = &["decimal", "lower-roman", "upper-roman"];
 /// Frame `layout` values.
-pub(crate) const LAYOUT_KINDS: &[&str] = &["absolute", "row", "column", "grid"];
+pub const LAYOUT_KINDS: &[&str] = &["absolute", "row", "column", "grid"];
 /// Frame `justify` values.
-pub(crate) const LAYOUT_JUSTIFIES: &[&str] = &["start", "center", "end", "space-between"];
+pub const LAYOUT_JUSTIFIES: &[&str] = &["start", "center", "end", "space-between"];
 /// Frame `align` values.
-pub(crate) const LAYOUT_ALIGNS: &[&str] = &["start", "center", "end", "stretch"];
+pub const LAYOUT_ALIGNS: &[&str] = &["start", "center", "end", "stretch"];
 /// Item `position` values.
-pub(crate) const LAYOUT_POSITIONS: &[&str] = &["auto", "absolute"];
+pub const LAYOUT_POSITIONS: &[&str] = &["auto", "absolute"];
 /// Page `line-jumps` style values.
 pub(crate) const LINE_JUMP_STYLES: &[&str] = &["none", "arc", "gap"];
 

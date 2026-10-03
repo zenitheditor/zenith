@@ -119,8 +119,16 @@ pub fn expand_variants(doc: &Document) -> VariantExpansion {
                     node: ov.node.clone(),
                     x: ov.x.as_ref().and_then(|d| dim_to_px(d.value, &d.unit)),
                     y: ov.y.as_ref().and_then(|d| dim_to_px(d.value, &d.unit)),
-                    w: ov.w.as_ref().and_then(|d| dim_to_px(d.value, &d.unit)),
-                    h: ov.h.as_ref().and_then(|d| dim_to_px(d.value, &d.unit)),
+                    w: ov
+                        .w
+                        .as_ref()
+                        .and_then(|d| dim_to_px(d.value, &d.unit))
+                        .map(Into::into),
+                    h: ov
+                        .h
+                        .as_ref()
+                        .and_then(|d| dim_to_px(d.value, &d.unit))
+                        .map(Into::into),
                     rotate: None,
                 });
             }

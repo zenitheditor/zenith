@@ -19,7 +19,8 @@ pub use engine::{
 };
 pub use merge::{merge_candidate_page, reconcile_candidate_tokens};
 pub use op::{
-    AddAssetMetadata, FilterOpInput, GradientStopInput, Op, OpPathBooleanOperation, OpPathHandle,
-    OpPoint, OpSpan, Permissions, Position, ShadowLayerInput, Transaction,
+    AddAssetMetadata, FilterOpInput, GradientStopInput, LayoutDim, LayoutEdit, Op,
+    OpPathBooleanOperation, OpPathHandle, OpPoint, OpSpan, Permissions, Position, ShadowLayerInput,
+    SizeInput, Transaction,
 };
 pub use result::{TxError, TxResult, TxStatus};
