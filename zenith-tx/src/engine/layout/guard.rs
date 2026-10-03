@@ -36,6 +36,12 @@ pub(in crate::engine) fn reject_layout_managed<'a>(
     rejected
 }
 
+/// `true` when a `row` / `column` / `grid` frame places node `id` in flow,
+/// so the frame supplies its x/y.
+pub(in crate::engine) fn in_layout_flow(doc: &Document, id: &str) -> bool {
+    managing_frame(doc, id).is_some()
+}
+
 /// The id and layout mode of the frame that places node `id` in flow, or
 /// `None` when no layout frame manages the node's position.
 fn managing_frame<'d>(doc: &'d Document, id: &str) -> Option<(&'d str, &'static str)> {

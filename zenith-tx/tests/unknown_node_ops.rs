@@ -33,9 +33,9 @@ fn set_geometry_on_node_inside_unknown() {
     let tx = Transaction {
         ops: vec![Op::SetGeometry {
             node: "inner".to_owned(),
-            x: Some(25.0),
+            x: Some(Some(25.0)),
             y: None,
-            w: Some(120.0.into()),
+            w: Some(Some(120.0.into())),
             h: None,
             rotate: None,
         }],

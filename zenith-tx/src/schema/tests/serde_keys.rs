@@ -80,11 +80,11 @@ fn op_fields_names_match_serde_keys() {
             "set_geometry",
             Op::SetGeometry {
                 node: "n".into(),
-                x: Some(0.0),
-                y: Some(0.0),
-                w: Some(100.0.into()),
-                h: Some("hug".into()),
-                rotate: Some(0.0),
+                x: Some(Some(0.0)),
+                y: Some(Some(0.0)),
+                w: Some(Some(100.0.into())),
+                h: Some(Some("hug".into())),
+                rotate: Some(Some(0.0)),
             },
         ),
         (
@@ -385,7 +385,7 @@ fn op_fields_names_match_serde_keys() {
             Op::UpdateTokenValue {
                 id: "color.brand".into(),
                 value: "#3b82f6".into(),
-                set: Some("@zenith/theme.cobalt".into()),
+                set: Some(Some("@zenith/theme.cobalt".into())),
             },
         ),
         (

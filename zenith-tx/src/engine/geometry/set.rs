@@ -5,18 +5,21 @@ use zenith_core::{Diagnostic, Dimension, Document, Node, PropertyValue, Unit};
 use super::super::layout::{SizeArg, parse_size_arg, reject_layout_managed, write_size_keywords};
 use super::super::{find_node_any_mut, px, record_affected};
 use super::boxes::node_geometry_mut;
+use super::required::{Removals, reject_required_removals};
 use crate::op::SizeInput;
 
 /// Bundled geometry deltas passed to [`apply_set_geometry`].
 ///
-/// Grouping these avoids pushing `apply_set_geometry` past the
-/// `clippy::too_many_arguments` threshold without using `#[allow]`.
+/// Each field is tri-state: `None` leaves the attribute, `Some(None)` removes
+/// it, `Some(Some(v))` sets it. Grouping these avoids pushing
+/// `apply_set_geometry` past the `clippy::too_many_arguments` threshold
+/// without using `#[allow]`.
 pub(in crate::engine) struct GeometryDelta<'a> {
-    pub x: Option<f64>,
-    pub y: Option<f64>,
-    pub w: Option<&'a SizeInput>,
-    pub h: Option<&'a SizeInput>,
-    pub rotate: Option<f64>,
+    pub x: Option<Option<f64>>,
+    pub y: Option<Option<f64>>,
+    pub w: Option<Option<&'a SizeInput>>,
+    pub h: Option<Option<&'a SizeInput>>,
+    pub rotate: Option<Option<f64>>,
 }
 
 /// Return a mutable reference to a node's `rotate` slot, or `None` for node
@@ -87,9 +90,20 @@ pub(in crate::engine) fn apply_set_geometry(
     ) else {
         return;
     };
-    if (x.is_some() || y.is_some())
+    // Only a write places the node by hand. Removing a stale x/y from an
+    // in-flow child is the cleanup that `layout.position_ignored` asks for.
+    if (matches!(x, Some(Some(_))) || matches!(y, Some(Some(_))))
         && reject_layout_managed(doc, [node_id], "set_geometry", diagnostics)
     {
+        return;
+    }
+    let removals = Removals {
+        x: x == Some(None),
+        y: y == Some(None),
+        w: w == Some(SizeArg::Remove),
+        h: h == Some(SizeArg::Remove),
+    };
+    if reject_required_removals(doc, node_id, removals, diagnostics) {
         return;
     }
 
@@ -113,10 +127,10 @@ pub(in crate::engine) fn apply_set_geometry(
                 // Instance stores placement as Option<Dimension>, not PropertyValue.
                 if let Node::Instance(inst) = node {
                     if let Some(v) = x {
-                        inst.x = Some(px(v));
+                        inst.x = v.map(px);
                     }
                     if let Some(v) = y {
-                        inst.y = Some(px(v));
+                        inst.y = v.map(px);
                     }
                     if let Some(v) = w {
                         inst.w = size_dimension(v);
@@ -153,10 +167,10 @@ pub(in crate::engine) fn apply_set_geometry(
                     }
                     Some((nx, ny, nw, nh)) => {
                         if let Some(v) = x {
-                            *nx = Some(PropertyValue::Dimension(px(v)));
+                            *nx = v.map(|v| PropertyValue::Dimension(px(v)));
                         }
                         if let Some(v) = y {
-                            *ny = Some(PropertyValue::Dimension(px(v)));
+                            *ny = v.map(|v| PropertyValue::Dimension(px(v)));
                         }
                         if let Some(v) = w {
                             *nw = size_dimension(v).map(PropertyValue::Dimension);
@@ -182,8 +196,8 @@ pub(in crate::engine) fn apply_set_geometry(
                         return;
                     }
                     Some(slot) => {
-                        *slot = Some(Dimension {
-                            value: r,
+                        *slot = r.map(|value| Dimension {
+                            value,
                             unit: Unit::Deg,
                         });
                     }
@@ -196,10 +210,10 @@ pub(in crate::engine) fn apply_set_geometry(
 }
 
 /// The px dimension a size write stores: a px size, or `None` for a keyword
-/// (the keyword lives on the layout item).
+/// (the keyword lives on the layout item) or a removal.
 fn size_dimension(arg: SizeArg) -> Option<Dimension> {
     match arg {
         SizeArg::Px(v) => Some(px(v)),
-        SizeArg::Keyword(_) => None,
+        SizeArg::Keyword(_) | SizeArg::Remove => None,
     }
 }

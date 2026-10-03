@@ -12,18 +12,24 @@ pub(in crate::engine) enum SizeArg {
     Px(f64),
     /// A size keyword; clears the px size on that axis.
     Keyword(SizeKeyword),
+    /// A `null` input: removes both the px size and the keyword on that axis.
+    Remove,
 }
 
-/// Check one `w` / `h` input. `Err(())` after pushing `tx.invalid_value` for
-/// a keyword other than `hug` / `fill`.
+/// Check one `w` / `h` input: `None` (absent), `Some(None)` (`null`, remove),
+/// or `Some(Some(v))`. `Err(())` after pushing `tx.invalid_value` for a
+/// keyword other than `hug` / `fill`.
 pub(in crate::engine) fn parse_size_arg(
-    input: Option<&SizeInput>,
+    input: Option<Option<&SizeInput>>,
     axis: &str,
     node_id: &str,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Result<Option<SizeArg>, ()> {
+    let Some(input) = input else {
+        return Ok(None);
+    };
     match input {
-        None => Ok(None),
+        None => Ok(Some(SizeArg::Remove)),
         Some(SizeInput::Px(v)) => Ok(Some(SizeArg::Px(*v))),
         Some(SizeInput::Keyword(k)) => match SizeKeyword::from_attr(k) {
             Some(kw) => Ok(Some(SizeArg::Keyword(kw))),
@@ -44,10 +50,10 @@ pub(in crate::engine) fn parse_size_arg(
 }
 
 /// The keyword a size write leaves on the layout item: `Some(Some(k))` sets
-/// it, `Some(None)` clears it (a px write), `None` leaves it.
+/// it, `Some(None)` clears it (a px write or a removal), `None` leaves it.
 fn keyword_write(arg: Option<SizeArg>) -> Option<Option<SizeKeyword>> {
     match arg? {
-        SizeArg::Px(_) => Some(None),
+        SizeArg::Px(_) | SizeArg::Remove => Some(None),
         SizeArg::Keyword(k) => Some(Some(k)),
     }
 }

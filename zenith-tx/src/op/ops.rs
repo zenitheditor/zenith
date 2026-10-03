@@ -82,26 +82,53 @@ pub enum Op {
         locked: bool,
     },
     /// Move and/or resize a bbox node by updating its `x`, `y`, `w`, `h`
+    /// and `rotate`.
+    ///
+    /// Every field is tri-state: omit it to leave the attribute unchanged,
+    /// pass `null` to remove the attribute, pass a value to set it. Removing
+    /// `x` / `y` / `w` / `h` is rejected with `tx.geometry_required` when the
+    /// node then has no placement: no row/column/grid frame places it in flow,
+    /// and (for `x` / `y`) no anchor places it.
     SetGeometry {
         /// The stable node `id` to target.
         node: String,
-        /// New left edge in pixels. Omit to leave unchanged.
-        #[serde(default)]
-        x: Option<f64>,
-        /// New top edge in pixels. Omit to leave unchanged.
-        #[serde(default)]
-        y: Option<f64>,
+        /// New left edge in pixels. Omit to leave unchanged, `null` to remove.
+        #[serde(
+            default,
+            deserialize_with = "super::layout::nullable",
+            skip_serializing_if = "Option::is_none"
+        )]
+        x: Option<Option<f64>>,
+        /// New top edge in pixels. Omit to leave unchanged, `null` to remove.
+        #[serde(
+            default,
+            deserialize_with = "super::layout::nullable",
+            skip_serializing_if = "Option::is_none"
+        )]
+        y: Option<Option<f64>>,
         /// New width: pixels, or `"hug"` / `"fill"` inside a row/column frame.
-        /// Omit to leave unchanged.
-        #[serde(default)]
-        w: Option<SizeInput>,
+        /// Omit to leave unchanged, `null` to remove (px size and keyword).
+        #[serde(
+            default,
+            deserialize_with = "super::layout::nullable",
+            skip_serializing_if = "Option::is_none"
+        )]
+        w: Option<Option<SizeInput>>,
         /// New height: pixels, or `"hug"` / `"fill"` inside a row/column frame.
-        /// Omit to leave unchanged.
-        #[serde(default)]
-        h: Option<SizeInput>,
-        /// New rotation in degrees. Omit to leave unchanged.
-        #[serde(default)]
-        rotate: Option<f64>,
+        /// Omit to leave unchanged, `null` to remove (px size and keyword).
+        #[serde(
+            default,
+            deserialize_with = "super::layout::nullable",
+            skip_serializing_if = "Option::is_none"
+        )]
+        h: Option<Option<SizeInput>>,
+        /// New rotation in degrees. Omit to leave unchanged, `null` to remove.
+        #[serde(
+            default,
+            deserialize_with = "super::layout::nullable",
+            skip_serializing_if = "Option::is_none"
+        )]
+        rotate: Option<Option<f64>>,
     },
     /// Replace the entire vertex list of a `polygon` or `polyline` node.
     SetPoints {
@@ -330,6 +357,10 @@ pub enum Op {
     },
     /// Wrap a set of sibling nodes inside a new group node.
     ///
+    /// The group takes the slot of the earliest member. The members keep
+    /// their document order (paint order) inside the group, whatever order
+    /// `node_ids` lists them in.
+    ///
     /// The children keep their page position, except in a row/column/grid
     /// frame: the new group takes a flow slot, and `tx.flow_placed` reports
     /// each grouped id. The CLI warns with `tx.page_box_changed` when a
@@ -341,6 +372,8 @@ pub enum Op {
         group_id: String,
     },
     /// Dissolve a group node, moving its children up to the group's parent.
+    ///
+    /// The children take the group's slot, in their order inside the group.
     ///
     /// Each child shifts by the group origin, so it keeps its page position.
     /// A child that takes a flow slot of a layout parent frame does not shift:
@@ -511,9 +544,13 @@ pub enum Op {
         /// New literal value in string form appropriate for the token's existing type.
         value: String,
         /// Optional new provenance id to stamp on the token. Omit to leave the
-        /// existing `set` unchanged.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        set: Option<String>,
+        /// existing `set` unchanged, `null` to remove it.
+        #[serde(
+            default,
+            deserialize_with = "super::layout::nullable",
+            skip_serializing_if = "Option::is_none"
+        )]
+        set: Option<Option<String>>,
     },
     /// Set one recognized visual property on a named style to a token
     /// reference, or to an enum value for `align` / `v-align`.

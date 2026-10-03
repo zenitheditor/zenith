@@ -293,8 +293,8 @@ fn set_size(node: &str, w: Option<&str>, h: Option<f64>) -> Op {
         node: node.to_owned(),
         x: None,
         y: None,
-        w: w.map(Into::into),
-        h: h.map(Into::into),
+        w: w.map(|v| Some(v.into())),
+        h: h.map(|v| Some(v.into())),
         rotate: None,
     }
 }
@@ -321,8 +321,8 @@ fn set_geometry_px_clears_the_keyword() {
             node: "a".into(),
             x: None,
             y: None,
-            w: Some(55.0.into()),
-            h: Some("hug".into()),
+            w: Some(Some(55.0.into())),
+            h: Some(Some("hug".into())),
             rotate: None,
         }],
         permissions: Permissions::default(),
@@ -378,7 +378,7 @@ fn assert_managed(r: &TxResult, node: &str, frame: &str) {
 fn guard_rejects_set_geometry_xy_on_an_in_flow_child() {
     let r = run(vec![Op::SetGeometry {
         node: "a".into(),
-        x: Some(100.0),
+        x: Some(Some(100.0)),
         y: None,
         w: None,
         h: None,
@@ -393,7 +393,7 @@ fn guard_allows_set_geometry_size_on_an_in_flow_child() {
         node: "a".into(),
         x: None,
         y: None,
-        w: Some(70.0.into()),
+        w: Some(Some(70.0.into())),
         h: None,
         rotate: None,
     }]);
@@ -450,8 +450,8 @@ fn guard_covers_grid_children() {
 fn guard_allows_an_absolute_child() {
     let r = run(vec![Op::SetGeometry {
         node: "abs".into(),
-        x: Some(20.0),
-        y: Some(25.0),
+        x: Some(Some(20.0)),
+        y: Some(Some(25.0)),
         w: None,
         h: None,
         rotate: None,
@@ -473,8 +473,8 @@ fn guard_allows_a_child_made_absolute_in_the_same_transaction() {
         }),
         Op::SetGeometry {
             node: "a".into(),
-            x: Some(300.0),
-            y: Some(10.0),
+            x: Some(Some(300.0)),
+            y: Some(Some(10.0)),
             w: None,
             h: None,
             rotate: None,
@@ -496,7 +496,7 @@ fn guard_leaves_nodes_outside_layout_frames_alone() {
         },
         Op::SetGeometry {
             node: "chips".into(),
-            x: Some(30.0),
+            x: Some(Some(30.0)),
             y: None,
             w: None,
             h: None,

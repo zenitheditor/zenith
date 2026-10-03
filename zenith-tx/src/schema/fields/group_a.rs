@@ -130,27 +130,27 @@ pub(super) fn op_fields(name: &str) -> Option<&'static [OpFieldSchema]> {
                 },
                 OpFieldSchema {
                     name: "x",
-                    ty: "px",
+                    ty: "px | null (omit keeps, null removes)",
                     required: false,
                 },
                 OpFieldSchema {
                     name: "y",
-                    ty: "px",
+                    ty: "px | null (omit keeps, null removes)",
                     required: false,
                 },
                 OpFieldSchema {
                     name: "w",
-                    ty: "px | \"hug\" | \"fill\"",
+                    ty: "px | \"hug\" | \"fill\" | null (omit keeps, null removes)",
                     required: false,
                 },
                 OpFieldSchema {
                     name: "h",
-                    ty: "px | \"hug\" | \"fill\"",
+                    ty: "px | \"hug\" | \"fill\" | null (omit keeps, null removes)",
                     required: false,
                 },
                 OpFieldSchema {
                     name: "rotate",
-                    ty: "f64",
+                    ty: "f64 | null (omit keeps, null removes)",
                     required: false,
                 },
             ];

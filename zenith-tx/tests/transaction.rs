@@ -164,9 +164,9 @@ fn from_json_reshape_ops_round_trip() {
         Transaction {
             ops: vec![Op::SetGeometry {
                 node: "r".to_owned(),
-                x: Some(10.0),
+                x: Some(Some(10.0)),
                 y: None,
-                w: Some(200.0.into()),
+                w: Some(Some(200.0.into())),
                 h: None,
                 rotate: None,
             }],
@@ -530,7 +530,7 @@ fn set_geometry_on_locked_node_rejected() {
             },
             Op::SetGeometry {
                 node: "a".to_owned(),
-                x: Some(50.0),
+                x: Some(Some(50.0)),
                 y: None,
                 w: None,
                 h: None,
@@ -566,7 +566,7 @@ fn set_geometry_on_locked_node_allowed_with_permission() {
             },
             Op::SetGeometry {
                 node: "a".to_owned(),
-                x: Some(50.0),
+                x: Some(Some(50.0)),
                 y: None,
                 w: None,
                 h: None,

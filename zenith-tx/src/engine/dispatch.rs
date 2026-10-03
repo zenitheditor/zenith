@@ -112,8 +112,8 @@ pub(super) fn apply_op(
                 GeometryDelta {
                     x: *x,
                     y: *y,
-                    w: w.as_ref(),
-                    h: h.as_ref(),
+                    w: w.as_ref().map(Option::as_ref),
+                    h: h.as_ref().map(Option::as_ref),
                     rotate: *rotate,
                 },
                 doc,
@@ -486,7 +486,8 @@ pub(super) fn apply_op(
             );
         }
         Op::UpdateTokenValue { id, value, set } => {
-            apply_update_token_value(id, value, set.as_deref(), doc, diagnostics, affected);
+            let set = set.as_ref().map(Option::as_deref);
+            apply_update_token_value(id, value, set, doc, diagnostics, affected);
         }
         Op::SetStyleProperty {
             style_id,

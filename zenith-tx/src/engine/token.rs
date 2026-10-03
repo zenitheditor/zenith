@@ -400,13 +400,13 @@ pub(super) fn apply_create_token(
 /// op), or if `value` does not parse for the token's existing type.  On success
 /// replaces `token.value` and records `id` in `affected`.
 ///
-/// When `set` is `Some`, the token's `set` provenance is re-stamped to it
-/// (e.g. a theme apply re-skinning the token to a new theme/pack); `None`
-/// leaves the token's existing `set` untouched.
+/// `set` is tri-state. `Some(Some(id))` re-stamps the token's `set`
+/// provenance (e.g. a theme apply re-skinning the token to a new theme/pack).
+/// `Some(None)` removes it. `None` leaves the existing `set` untouched.
 pub(super) fn apply_update_token_value(
     id: &str,
     value: &str,
-    set: Option<&str>,
+    set: Option<Option<&str>>,
     doc: &mut Document,
     diagnostics: &mut Vec<Diagnostic>,
     affected: &mut Vec<String>,
@@ -471,7 +471,7 @@ pub(super) fn apply_update_token_value(
     if let Some(token) = doc.tokens.tokens.get_mut(idx) {
         token.value = TokenValue::Literal(lit);
         if let Some(set_id) = set {
-            token.set = Some(set_id.to_owned());
+            token.set = set_id.map(str::to_owned);
         }
     }
 

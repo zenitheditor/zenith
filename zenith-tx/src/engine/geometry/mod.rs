@@ -4,12 +4,14 @@
 //!
 //! - `boxes` — read and write a node box, page-space conversion, page bounds.
 //! - `set` — apply `set_geometry`.
+//! - `required` — reject a `set_geometry` `null` that removes a needed box field.
 //! - `align` — apply `align_nodes` and `align_to_edge`.
 //! - `distribute` — apply `distribute_nodes`.
 
 mod align;
 mod boxes;
 mod distribute;
+mod required;
 mod set;
 
 pub(in crate::engine) use align::{apply_align_nodes, apply_align_to_edge};

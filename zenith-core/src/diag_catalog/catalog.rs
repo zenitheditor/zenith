@@ -242,6 +242,7 @@ mod tests {
             ("tx.coordinate_unresolved", Severity::Advisory),
             ("tx.duplicate_id", Severity::Error),
             ("tx.flow_placed", Severity::Advisory),
+            ("tx.geometry_required", Severity::Error),
             ("tx.geometry_unresolved", Severity::Warning),
             ("tx.invalid_geometry", Severity::Error),
             ("tx.invalid_geometry_tolerance", Severity::Error),

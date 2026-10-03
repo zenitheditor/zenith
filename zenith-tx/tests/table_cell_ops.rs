@@ -99,7 +99,7 @@ fn set_geometry_on_cell_child_succeeds() {
             node: "cell.rect".to_owned(),
             x: None,
             y: None,
-            w: Some(80.0.into()),
+            w: Some(Some(80.0.into())),
             h: None,
             rotate: None,
         }],

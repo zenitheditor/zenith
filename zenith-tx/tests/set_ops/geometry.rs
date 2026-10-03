@@ -8,9 +8,9 @@ fn set_geometry_moves_rect() {
     let tx = Transaction {
         ops: vec![Op::SetGeometry {
             node: "rect".to_owned(),
-            x: Some(50.0),
+            x: Some(Some(50.0)),
             y: None,
-            w: Some(200.0.into()),
+            w: Some(Some(200.0.into())),
             h: None,
             rotate: None,
         }],
@@ -52,7 +52,7 @@ fn set_geometry_unsupported_on_line() {
     let tx = Transaction {
         ops: vec![Op::SetGeometry {
             node: "ln1".to_owned(),
-            x: Some(10.0),
+            x: Some(Some(10.0)),
             y: None,
             w: None,
             h: None,
@@ -158,7 +158,7 @@ fn set_geometry_supported_on_code() {
     let tx = Transaction {
         ops: vec![Op::SetGeometry {
             node: "snip".to_owned(),
-            x: Some(10.0),
+            x: Some(Some(10.0)),
             y: None,
             w: None,
             h: None,
@@ -184,7 +184,7 @@ fn set_geometry_supported_on_text() {
     let tx = Transaction {
         ops: vec![Op::SetGeometry {
             node: "label".to_owned(),
-            x: Some(-200.0),
+            x: Some(Some(-200.0)),
             y: None,
             w: None,
             h: None,
@@ -216,7 +216,7 @@ fn set_geometry_rotate_on_image_accepted() {
             y: None,
             w: None,
             h: None,
-            rotate: Some(45.0),
+            rotate: Some(Some(45.0)),
         }],
         permissions: Permissions::default(),
     };
@@ -242,7 +242,7 @@ fn set_geometry_rotate_on_line_rejected() {
             y: None,
             w: None,
             h: None,
-            rotate: Some(30.0),
+            rotate: Some(Some(30.0)),
         }],
         permissions: Permissions::default(),
     };
@@ -282,10 +282,10 @@ fn set_geometry_on_instance_sets_origin_and_box() {
     let tx = Transaction {
         ops: vec![Op::SetGeometry {
             node: "icon.1".to_owned(),
-            x: Some(40.0),
-            y: Some(60.0),
-            w: Some(48.0.into()),
-            h: Some(48.0.into()),
+            x: Some(Some(40.0)),
+            y: Some(Some(60.0)),
+            w: Some(Some(48.0.into())),
+            h: Some(Some(48.0.into())),
             rotate: None,
         }],
         permissions: Permissions::default(),

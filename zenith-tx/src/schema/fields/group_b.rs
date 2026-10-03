@@ -456,7 +456,7 @@ pub(super) fn op_fields(name: &str) -> Option<&'static [OpFieldSchema]> {
                 },
                 OpFieldSchema {
                     name: "set",
-                    ty: "string",
+                    ty: "string or null (omit keeps, null removes)",
                     required: false,
                 },
             ];

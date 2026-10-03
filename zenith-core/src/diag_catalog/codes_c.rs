@@ -410,6 +410,13 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
          position=\"absolute\" or use set_geometry to keep its page box.",
     ),
     info(
+        "tx.geometry_required",
+        Severity::Error,
+        "A set_geometry null removes x, y, w, or h from a node that needs it: no row, column, or \
+         grid frame places the node in flow, and no anchor places it. Keep the attribute or set \
+         a value.",
+    ),
+    info(
         "tx.geometry_unresolved",
         Severity::Warning,
         "An align/distribute target has no resolvable geometry and was skipped.",

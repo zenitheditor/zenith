@@ -22,7 +22,9 @@ pub fn op_summary(name: &str) -> Option<&'static str> {
         "set_locked" => Some("Lock or unlock a node to prevent accidental edits."),
         "set_geometry" => Some(
             "Move and/or resize a node by setting x, y, w, h (px, or \"hug\"/\"fill\"), or rotate. \
-             x/y on an in-flow child of a row/column/grid frame is rejected (tx.layout_managed).",
+             Omit a field to keep it; null removes the attribute. x/y values on an in-flow child of \
+             a row/column/grid frame are rejected (tx.layout_managed); null x/y there is allowed. \
+             Removing x/y/w/h that a node needs outside flow is rejected (tx.geometry_required).",
         ),
         "set_points" => Some("Replace the full vertex list of a polygon or polyline node."),
         "set_path_anchors" => Some("Replace the full anchor list of a path node."),
@@ -59,7 +61,8 @@ pub fn op_summary(name: &str) -> Option<&'static str> {
         "duplicate_node" => Some("Clone a leaf node and insert the copy after the original."),
         "duplicate_page" => Some("Deep-clone a page and insert the copy after the original."),
         "group" => Some(
-            "Wrap a set of sibling nodes inside a new group node; in a layout flow frame the group \
+            "Wrap a set of sibling nodes inside a new group node; members keep document (paint) \
+             order whatever order node_ids lists; in a layout flow frame the group \
              takes a flow slot (tx.flow_placed), and a changed page box warns (tx.page_box_changed).",
         ),
         "ungroup" => Some(

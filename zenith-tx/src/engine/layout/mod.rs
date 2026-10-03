@@ -11,6 +11,8 @@ mod guard;
 mod set;
 mod size;
 
-pub(super) use guard::{flow_placed, flow_slot_mode, places_in_flow, reject_layout_managed};
+pub(super) use guard::{
+    flow_placed, flow_slot_mode, in_layout_flow, places_in_flow, reject_layout_managed,
+};
 pub(super) use set::apply_set_layout;
 pub(super) use size::{SizeArg, parse_size_arg, write_size_keywords};

@@ -293,7 +293,7 @@ fn plan_ops(
                 ops.push(Op::UpdateTokenValue {
                     id: theme_token.id.clone(),
                     value: value_str,
-                    set: Some(pack_id.to_owned()),
+                    set: Some(Some(pack_id.to_owned())),
                 });
             }
             Some(existing) => {
@@ -534,7 +534,7 @@ mod tests {
             &ops[0],
             Op::UpdateTokenValue { id, value, set }
                 if id == "color.primary" && value == "#222222"
-                    && set.as_deref() == Some(TEST_PACK_ID)
+                    && set.as_ref().map(Option::as_deref) == Some(Some(TEST_PACK_ID))
         ));
         assert!(added.is_empty());
         assert!(skipped.is_empty());

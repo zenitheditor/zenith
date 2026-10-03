@@ -464,7 +464,7 @@ fn update_token_value_with_set_restamps_provenance() {
         ops: vec![Op::UpdateTokenValue {
             id: "size.base".to_owned(),
             value: "(px)40".to_owned(),
-            set: Some("@zenith/theme.cobalt".to_owned()),
+            set: Some(Some("@zenith/theme.cobalt".to_owned())),
         }],
         permissions: Permissions::default(),
     };
@@ -493,6 +493,41 @@ fn update_token_value_with_set_restamps_provenance() {
         updated.set.as_deref(),
         Some("@zenith/theme.cobalt"),
         "set: Some(_) must re-stamp the token's set provenance"
+    );
+}
+
+/// update_token_value with `"set": null` removes the token's `set`
+/// provenance. An absent `set` keeps it.
+#[test]
+fn update_token_value_null_set_removes_provenance() {
+    let doc = parse(TOKEN_DOC);
+    let run = |json: &str| {
+        let tx: Transaction = serde_json::from_str(json).expect("tx parses");
+        run_transaction(&doc, &tx).expect("run_transaction should not error")
+    };
+
+    let cleared = run(
+        r#"{"ops":[{"op":"update_token_value","id":"size.base","value":"(px)40","set":null}]}"#,
+    );
+    assert_eq!(
+        cleared.status,
+        TxStatus::Accepted,
+        "{:?}",
+        cleared.diagnostics
+    );
+    assert!(
+        !cleared
+            .source_after
+            .contains("set=\"@zenith/theme.sunset\""),
+        "null set must remove the provenance; got:\n{}",
+        cleared.source_after
+    );
+
+    let kept = run(r#"{"ops":[{"op":"update_token_value","id":"size.base","value":"(px)40"}]}"#);
+    assert!(
+        kept.source_after.contains("set=\"@zenith/theme.sunset\""),
+        "absent set must keep the provenance; got:\n{}",
+        kept.source_after
     );
 }
 
