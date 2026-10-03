@@ -16,7 +16,7 @@ Each recipe: scaffold → structure → primitives. Syntax comes from `zenith sc
 
 - Scaffold: default 1080×1080.
 - Structure: one column frame with accent bar, headline, one subline, CTA.
-- Primitives: `text style="ui.h1"`, `text`, `shape style="ui.button"`. Optional Lucide icon for a concrete object.
+- Primitives: `text id="hero.title" style="ui.h1"`, `text id="hero.sub"`, `shape id="cta.button" style="ui.button"`. Optional Lucide icon for a concrete object.
 - Margins: 64-96 px. One focal point. One accent color.
 - Bespoke-token starting point: `templates/social-square.zen`.
 
@@ -149,7 +149,7 @@ Details: `references/variants.md`.
 | Instead of | Use |
 | --- | --- |
 | Hand-computed x/y for stacked siblings | layout `frame` |
-| `rect` + centered `text` button | `shape style="ui.button"` |
+| `rect` + centered `text` button | `shape id="cta.button" style="ui.button"` |
 | Font/fill/radius on every node of a themed doc | theme defaults and `ui.*` styles |
 | Fixed `h` on text inside a layout frame | omitted `h` |
 | Hand-drawn bar chart | `chart` |

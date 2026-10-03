@@ -48,7 +48,7 @@ If `zenith --version` fails, give the installer from https://github.com/zenithed
 6. **Iterate** with `zenith tx <file> <tx.json>` (dry-run, then `--apply`). `zenith inspect <file> --json` gives each node's final `box`.
    - The dry-run prints the source diff and every moved or resized box. Check them before `--apply`.
    - `tx --apply` rewrites the file in canonical form. Re-read it before text edits.
-7. **Finish.** Render full scale (`--png`, `--all-pages`, or `--pdf`). Report the changed ids, the validate result, and the output path.
+7. **Finish.** Render full scale with `--png <out.png>`, `--all-pages <DIR>`, or `--pdf <out.pdf>`. Report the changed ids, the validate result, and the output path.
 
 A clean validate does not mean a good design. Critique the PNG with `references/design-critique.md`.
 
@@ -68,7 +68,7 @@ Read the matching section of `references/by-kind.md` before authoring new work.
 
 | Brief | Scaffold flags | Core tools |
 | --- | --- | --- |
-| Social / story / banner | default 1080² · `--width 1080 --height 1920` · `--width 1600 --height 400` | column or row frame, CTA `shape style="ui.button"`, anchors |
+| Social / story / banner | default 1080² · `--width 1080 --height 1920` · `--width 1600 --height 400` | column or row frame, CTA `shape id="cta.button" style="ui.button"`, anchors |
 | Poster / flyer | `--format a4` / `tabloid` | hierarchy, one depth motif |
 | Deck / slides | `--format letter --landscape --pages N` | master chrome, one idea per page, contact sheet |
 | Flow / architecture | any | `shape` + `connector`, `@zenith/flowchart`, Lucide icons |

@@ -20,6 +20,7 @@ Never compute sibling coordinates by hand where a layout frame fits. Hand math d
 - **Container** — `gap`, `padding*`, `justify`, `align`, `wrap=#true` + `wrap-gap`. Grid takes `columns` / `rows`.
 - **Child size** — per axis: fixed, `"hug"` (content), or `"fill"` (share of free space). `min-*` / `max-*` clamp it.
 - **Omitted size** — main axis hugs. Cross axis fills under `align="stretch"`.
+- **Grid child** — always fills its cell. `w`/`h` `fill` or `hug` on a grid child has no effect.
 - **Frame size** — a layout frame without `w`/`h` hugs its children. Give the outer frame a `w` so text wraps.
 - **Text** — omit `h` on text inside a layout frame. The compile measures it.
 - **Out of flow** — `position="absolute"` places a child by `x`/`y` from the frame's top-left.

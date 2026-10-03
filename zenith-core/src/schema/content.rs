@@ -171,8 +171,8 @@ pub fn node_content(kind: &str) -> Option<NodeContentDescriptor> {
                 "column width=(px)120\n",
                 "column width=(px)80\n",
                 "row {\n",
-                "    cell { text { span \"Name\" } }\n",
-                "    cell { text { span \"Score\" } }\n",
+                "    cell { text id=\"name.head\" { span \"Name\" } }\n",
+                "    cell { text id=\"score.head\" { span \"Score\" } }\n",
                 "}",
             ),
         }),
@@ -191,7 +191,8 @@ pub fn node_content(kind: &str) -> Option<NodeContentDescriptor> {
                 omitted cross-axis size fills under align=\"stretch\". A layout frame \
                 without w/h hugs its children. position=\"absolute\" children leave the \
                 flow and place x/y from the frame's top-left. layout=\"grid\" tiles \
-                children into `columns` × `rows` cells. `gap` and `padding*` take a px \
+                children into `columns` × `rows` cells. A grid child always fills its \
+                cell, so `w`/`h` `fill` or `hug` on a grid child has no effect. `gap` and `padding*` take a px \
                 literal or a dimension token. Stacking frames do not clip unless \
                 clip=#true. Frame fill/stroke/stroke-width/radius paint the box under \
                 the children; a clipping frame with a radius clips to the rounded box. \
