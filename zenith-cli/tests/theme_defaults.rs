@@ -7,7 +7,10 @@ use std::path::{Path, PathBuf};
 
 use tempfile::TempDir;
 use zenith_cli::commands::new::{self, DEFAULT_PAGE};
-use zenith_cli::commands::theme::{Shape, ThemeInput, apply_run, new as theme_new};
+use zenith_cli::commands::theme::{
+    HEADING_WEIGHT_TOKEN_ID, HEADING_WEIGHT_TOKEN_TYPE, HEADING_WEIGHT_TOKEN_VALUE, Shape,
+    THEME_DEFAULTS, THEME_STYLE_IDS, ThemeInput, apply_run, kit_document_source, new as theme_new,
+};
 use zenith_cli::commands::validate;
 use zenith_cli::config::CliPolicyFlags;
 use zenith_cli::library::{EMBEDDED_PACKS, resolve_theme_pack};
@@ -15,24 +18,18 @@ use zenith_core::theme::Scheme;
 use zenith_core::{DefaultsKind, Document, KdlAdapter, KdlSource as _, default_provider};
 use zenith_session::StorePaths;
 
-const STYLE_IDS: &[&str] = &[
-    "ui.body",
-    "ui.h1",
-    "ui.h2",
-    "ui.caption",
-    "ui.label",
-    "ui.control",
-    "ui.button",
-    "ui.card",
-    "ui.connector",
-];
+const STYLE_IDS: &[&str] = THEME_STYLE_IDS;
 
 /// `(kind, style, text-style)` for every document `defaults` entry a theme ships.
-const DEFAULTS: &[(DefaultsKind, &str, Option<&str>)] = &[
-    (DefaultsKind::Connector, "ui.connector", Some("ui.caption")),
-    (DefaultsKind::Shape, "ui.control", Some("ui.label")),
-    (DefaultsKind::Text, "ui.body", None),
-];
+fn expected_defaults() -> Vec<(DefaultsKind, &'static str, Option<&'static str>)> {
+    THEME_DEFAULTS
+        .iter()
+        .map(|d| {
+            let kind = DefaultsKind::from_name(d.kind).expect("kit kind is a defaults kind");
+            (kind, d.style, d.text_style)
+        })
+        .collect()
+}
 
 fn theme_names() -> Vec<&'static str> {
     EMBEDDED_PACKS
@@ -52,7 +49,7 @@ fn assert_theme_blocks(doc: &Document, label: &str) {
         .iter()
         .map(|(k, e)| (*k, e.style.as_str(), e.text_style.as_deref()))
         .collect();
-    assert_eq!(entries, DEFAULTS, "{label}: defaults entries");
+    assert_eq!(entries, expected_defaults(), "{label}: defaults entries");
     assert!(doc.defaults.rejected.is_empty(), "{label}: rejected rows");
     for style in &doc.styles.styles {
         assert!(
@@ -75,8 +72,8 @@ fn assert_theme_blocks(doc: &Document, label: &str) {
         doc.tokens
             .tokens
             .iter()
-            .any(|t| t.id == "font.weight.heading"),
-        "{label}: font.weight.heading token"
+            .any(|t| t.id == HEADING_WEIGHT_TOKEN_ID),
+        "{label}: {HEADING_WEIGHT_TOKEN_ID} token"
     );
 }
 
@@ -237,7 +234,8 @@ fn apply_adds_styles_and_defaults_then_is_idempotent() {
     let first = apply_run(Some(tmp.path()), "ember", BARE_DOC).expect("ember resolves");
     assert_eq!(first.exit_code, 0, "{}", first.human);
     assert_eq!(first.added_styles, STYLE_IDS);
-    assert_eq!(first.added_defaults, ["connector", "shape", "text"]);
+    let kinds: Vec<&str> = THEME_DEFAULTS.iter().map(|d| d.kind).collect();
+    assert_eq!(first.added_defaults, kinds);
     assert!(first.skipped_styles.is_empty());
     assert!(first.skipped_defaults.is_empty());
     let doc = KdlAdapter
@@ -248,8 +246,14 @@ fn apply_adds_styles_and_defaults_then_is_idempotent() {
     assert_eq!(code, 0);
 
     let json: serde_json::Value = serde_json::from_str(&first.json_str).expect("json");
-    assert_eq!(json["added_styles"].as_array().map(Vec::len), Some(9));
-    assert_eq!(json["added_defaults"].as_array().map(Vec::len), Some(3));
+    assert_eq!(
+        json["added_styles"].as_array().map(Vec::len),
+        Some(STYLE_IDS.len())
+    );
+    assert_eq!(
+        json["added_defaults"].as_array().map(Vec::len),
+        Some(THEME_DEFAULTS.len())
+    );
 
     // Determinism: the same input yields the same bytes.
     let again = apply_run(Some(tmp.path()), "ember", BARE_DOC).expect("ember resolves");
@@ -362,4 +366,100 @@ fn common_node_ids_do_not_collide_with_theme_styles() {
     let (code, codes) = validate_codes(&src, path.parent());
     assert_eq!(code, 0, "codes {codes:?}");
     assert!(!codes.iter().any(|c| c == "id.duplicate"), "{codes:?}");
+}
+
+/// Comparable form of a pack's kit: styles, `defaults` rows, heading token.
+type Kit = (
+    Vec<(
+        String,
+        std::collections::BTreeMap<String, zenith_core::PropertyValue>,
+    )>,
+    Vec<(&'static str, String, Option<String>)>,
+    Vec<(String, zenith_core::TokenType, zenith_core::TokenValue)>,
+);
+
+fn kit_of(doc: &Document) -> Kit {
+    let styles = doc
+        .styles
+        .styles
+        .iter()
+        .map(|s| (s.id.clone(), s.properties.clone()))
+        .collect();
+    let defaults = doc
+        .defaults
+        .entries
+        .iter()
+        .map(|(k, e)| (k.name(), e.style.clone(), e.text_style.clone()))
+        .collect();
+    let tokens = doc
+        .tokens
+        .tokens
+        .iter()
+        .filter(|t| t.id == HEADING_WEIGHT_TOKEN_ID)
+        .map(|t| (t.id.clone(), t.token_type.clone(), t.value.clone()))
+        .collect();
+    (styles, defaults, tokens)
+}
+
+/// Name the first entry where `pack` differs from `kit`.
+fn first_drift<T: std::fmt::Debug + PartialEq>(
+    what: &str,
+    pack: &[T],
+    kit: &[T],
+) -> Option<String> {
+    for i in 0..pack.len().max(kit.len()) {
+        if pack.get(i) != kit.get(i) {
+            return Some(format!(
+                "{what}[{i}]: pack {:?} vs kit {:?}",
+                pack.get(i),
+                kit.get(i)
+            ));
+        }
+    }
+    None
+}
+
+/// The hand-edited blocks in each embedded pack equal the kit `theme new`
+/// emits, so the two cannot drift apart.
+#[test]
+fn every_pack_matches_the_kit() {
+    let kit_doc = KdlAdapter
+        .parse(kit_document_source().as_bytes())
+        .expect("kit source parses");
+    let kit = kit_of(&kit_doc);
+    assert_eq!(kit.2.len(), 1, "kit declares the heading weight token");
+    assert_eq!(HEADING_WEIGHT_TOKEN_TYPE, "fontWeight");
+    assert_eq!(HEADING_WEIGHT_TOKEN_VALUE, 700);
+    for name in theme_names() {
+        let pack = resolve_theme_pack(None, name).expect("embedded pack resolves");
+        let got = kit_of(&pack);
+        let drift = first_drift("styles", &got.0, &kit.0)
+            .or_else(|| first_drift("defaults", &got.1, &kit.1))
+            .or_else(|| first_drift("token", &got.2, &kit.2));
+        assert!(drift.is_none(), "theme pack {name} drifted: {drift:?}");
+    }
+}
+
+/// `theme new` output carries the same kit as the packs.
+#[test]
+fn theme_new_matches_the_kit() {
+    let kit_doc = KdlAdapter
+        .parse(kit_document_source().as_bytes())
+        .expect("kit source parses");
+    let input = ThemeInput {
+        name: "acme",
+        scheme: Scheme::Light,
+        primary: "#3b5bdb",
+        secondary: None,
+        accent: None,
+        neutral: None,
+        info: None,
+        success: None,
+        warning: None,
+        error: None,
+        shape: Shape::default(),
+    };
+    let src = theme_new(&input).expect("theme new");
+    let doc = KdlAdapter.parse(src.as_bytes()).expect("theme parses");
+    assert_eq!(kit_of(&doc), kit_of(&kit_doc));
 }

@@ -90,30 +90,6 @@ fn opt(label: &str, s: Option<&str>) -> Result<Option<Rgb>, ThemeErr> {
     }
 }
 
-/// The fixed `styles` and document `defaults` blocks every theme carries, the
-/// same set the bundled packs ship. Styles reference only the theme's own
-/// tokens. Style ids sit under `ui.` because style, token, and node ids share
-/// one namespace: a bare `card` style collides with a node `id="card"`.
-/// `rect`, `frame`, and `ellipse` take no default: they are backgrounds, and a
-/// card opts in with `style="ui.card"`.
-const STYLES_AND_DEFAULTS: &str = r#"  styles {
-    style id="ui.body" { fill (token)"color.base.content"; font-family (token)"font.body"; font-size (token)"size.body"; }
-    style id="ui.h1" { font-family (token)"font.heading"; font-size (token)"size.h1"; font-weight (token)"font.weight.heading"; }
-    style id="ui.h2" { font-family (token)"font.heading"; font-size (token)"size.h2"; font-weight (token)"font.weight.heading"; }
-    style id="ui.caption" { font-family (token)"font.body"; font-size (token)"size.caption"; }
-    style id="ui.label" { font-family (token)"font.body"; font-size (token)"size.body"; }
-    style id="ui.control" { radius (token)"radius.field"; stroke-width (token)"border.width"; }
-    style id="ui.button" { fill (token)"color.primary"; radius (token)"radius.field"; }
-    style id="ui.card" { fill (token)"color.base.200"; radius (token)"radius.box"; stroke (token)"color.base.300"; stroke-width (token)"border.width"; }
-    style id="ui.connector" { stroke (token)"color.base.content"; stroke-width (token)"border.width"; }
-  }
-  defaults {
-    connector style="ui.connector" text-style="ui.caption"
-    shape style="ui.control" text-style="ui.label"
-    text style="ui.body"
-  }
-"#;
-
 /// Format a px scalar without a trailing `.0` (so `16.0` → `16`, `1.5` → `1.5`).
 fn px(v: f64) -> String {
     super::support::format_scalar(v)
@@ -225,10 +201,7 @@ fn emit(input: &ThemeInput, palette: &[(&'static str, Rgb)]) -> String {
         s,
         "    token id=\"size.caption\" type=\"dimension\" value=(px)18"
     );
-    let _ = writeln!(
-        s,
-        "    token id=\"font.weight.heading\" type=\"fontWeight\" value=700"
-    );
+    let _ = writeln!(s, "    {}", super::kit::heading_weight_token_kdl());
     if input.shape.depth {
         let _ = writeln!(
             s,
@@ -240,7 +213,7 @@ fn emit(input: &ThemeInput, palette: &[(&'static str, Rgb)]) -> String {
         );
     }
     let _ = writeln!(s, "  }}");
-    s.push_str(STYLES_AND_DEFAULTS);
+    s.push_str(&super::kit::styles_and_defaults_kdl());
     let _ = writeln!(
         s,
         "  document id=\"theme.{name}.preview\" title=\"Theme {name}\" {{"
