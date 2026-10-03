@@ -237,6 +237,8 @@ pub fn node_content(kind: &str) -> Option<NodeContentDescriptor> {
                 unless `value-color` or `label-color` sets it. \
                 Gridlines are the axis colour mixed 70% into the backdrop. \
                 Margins and legend spacing scale with the base size. \
+                Chart `h` and `w` are the whole box: title, caption, axis labels, legend, and plot. \
+                A box too small for its text clamps the plot to zero and warns `chart.overflow`. \
                 Lint attributes chart text as `chart '<id>' <role> text`; roles: title, caption, axis, \
                 category, legend, value, value-inside.",
             example: concat!(

@@ -165,6 +165,41 @@ fn occluded_stays_quiet_on_exemptions() {
     }
 }
 
+const CHART: &str = r#"      chart id="c" kind="bar" x=(px)40 y=(px)100 w=(px)400 h=(px)300 {
+        categories "North" "South" "West"
+        series label="2025" 10.0 20.0 30.0
+      }"#;
+
+const FOOTER: &str =
+    r#"      frame id="footer" x=(px)0 y=(px)340 w=(px)800 h=(px)200 fill=(token)"color.box""#;
+
+#[test]
+fn occluded_fires_on_chart_text_under_a_later_frame() {
+    let diags = lint(&doc("", &format!("{CHART}\n{FOOTER}")));
+    let hits = with_code(&diags, "text.occluded");
+    assert!(!hits.is_empty(), "{diags:#?}");
+    for d in &hits {
+        assert_eq!(d.subject_id.as_deref(), Some("c"));
+        assert!(d.message.contains("chart 'c'"), "{}", d.message);
+        assert!(d.message.contains("frame 'footer'"), "{}", d.message);
+    }
+    assert!(
+        hits.iter().any(|d| d.message.contains("category text")),
+        "{hits:#?}"
+    );
+}
+
+#[test]
+fn chart_over_an_earlier_frame_is_not_occluded() {
+    let diags = lint(&doc("", &format!("{FOOTER}\n{CHART}")));
+    assert!(with_code(&diags, "text.occluded").is_empty(), "{diags:#?}");
+    // One chart's strings never pair with each other.
+    assert!(
+        with_code(&diags, "text.ink_overlap").is_empty(),
+        "{diags:#?}"
+    );
+}
+
 fn shape(kind: &str, label: &str) -> String {
     format!(
         r#"      shape id="s" kind="{kind}" x=(px)100 y=(px)100 w=(px)200 h=(px)100 fill=(token)"color.pale" text-style="st.label" {{ span "{label}" }}"#

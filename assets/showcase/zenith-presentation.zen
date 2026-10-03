@@ -152,7 +152,7 @@ zenith version=1 doc-id="01KW1BCCSWW39XACE5YPNZGT7S" {
         span "Flat image"
       }
       rect id="left-preview" x=(px)128 y=(px)336 w=(px)536 h=(px)170 radius=(token)"radius.pre" fill=(token)"grad.pixel"
-      ellipse id="lock-shackle" x=(px)372 y=(px)388 w=(px)48 h=(px)52 fill=(token)"grad.pixel" stroke=(token)"color.navy-deep" stroke-width=(token)"stroke.thick"
+      ellipse id="lock-shackle" role="decoration" x=(px)372 y=(px)388 w=(px)48 h=(px)52 fill=(token)"grad.pixel" stroke=(token)"color.navy-deep" stroke-width=(token)"stroke.thick"
       rect id="lock-body" x=(px)364 y=(px)416 w=(px)64 h=(px)50 radius=(token)"radius.pre" fill=(token)"color.navy-deep"
       text id="card-left-bullets" x=(px)128 y=(px)534 w=(px)536 h=(px)160 align="left" v-align="top" fill=(token)"color.muted-dark" font-family=(token)"font.sans" font-size=(token)"size.body" font-weight=(token)"font.weight.regular" {
         span "•  Pixels only\n•  Hard to edit safely\n•  No semantic diff"
@@ -340,7 +340,7 @@ zenith version=1 doc-id="01KW1BCCSWW39XACE5YPNZGT7S" {
       }
       rect id="g4" x=(px)96 y=(px)480 w=(px)440 h=(px)210 radius=(token)"radius.card" fill=(token)"color.white" shadow=(token)"shadow.card"
       rect id="g4-tile" x=(px)128 y=(px)512 w=(px)56 h=(px)56 radius=(token)"radius.glyph" fill=(token)"color.cyan-tint"
-      rect id="g4-b1" x=(px)140 y=(px)524 w=(px)24 h=(px)24 radius=(token)"radius.pre" fill=(token)"color.cyan" stroke=(token)"color.blue" stroke-width=(token)"stroke.thin"
+      rect id="g4-b1" role="decoration" x=(px)140 y=(px)524 w=(px)24 h=(px)24 radius=(token)"radius.pre" fill=(token)"color.cyan" stroke=(token)"color.blue" stroke-width=(token)"stroke.thin"
       rect id="g4-b2" x=(px)152 y=(px)536 w=(px)24 h=(px)24 radius=(token)"radius.pre" fill=(token)"color.white" stroke=(token)"color.blue" stroke-width=(token)"stroke.medium"
       text id="g4-title" x=(px)204 y=(px)512 w=(px)300 h=(px)56 align="left" v-align="middle" fill=(token)"color.navy-deep" font-family=(token)"font.sans" font-size=(token)"size.body" font-weight=(token)"font.weight.bold" {
         span "Campaign variants"

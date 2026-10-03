@@ -16,7 +16,7 @@ use crate::layout::LayoutBox;
 use super::super::boxes::{CompiledBox, Expansion, TextInk};
 use super::super::chart::{ChartTextRole, parse_chart_source};
 use super::geom::{Coverage, bounds, intersect};
-use super::paint::{Authored, PaintEnv, occluder_of, own_effects};
+use super::paint::{Authored, PaintEnv, hollow, occluder_of, own_effects};
 
 /// Opaque paint of one node: the region its fill or image covers.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -68,6 +68,10 @@ pub(super) struct Entry {
     /// An ancestor draws under a rotation, scale, or effect the checks do not
     /// model, so the final box is not the drawn geometry.
     pub(super) unmodeled: bool,
+    /// The node itself draws through a blend layer, mask, filter, or blur.
+    pub(super) effects: bool,
+    /// A `rect`, `ellipse`, or `shape` with no fill: an outline only.
+    pub(super) hollow: bool,
     /// Expanded from an `instance` or projected from a master.
     pub(super) expanded: bool,
     /// The enclosing `table` or `chart` entry.
@@ -274,6 +278,8 @@ impl PageLedger {
             in_flow: !inherit.expanded && input.authored.get(id).is_some_and(|a| a.in_flow),
             exempt,
             unmodeled: inherit.unmodeled,
+            effects: own_effects,
+            hollow: hollow(node, input.paint),
             expanded: inherit.expanded,
             scope: inherit.scope,
             clip: inherit.clip,

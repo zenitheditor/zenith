@@ -1,14 +1,17 @@
 //! [`lint_page`]: the page lint the page compile runs when it reports
 //! diagnostics.
 
-use zenith_core::{Diagnostic, Node, Page};
+use zenith_core::{Diagnostic, Node, Page, dim_to_px};
 
 use crate::ir::SceneCommand;
+use crate::layout::LayoutBox;
 
 use super::super::boxes::{BoxRecorder, Recorded, glyph_inks};
 use super::super::imports::ImportScopes;
 use super::super::text::ShapeEnv;
 use super::arrange::arrangement;
+use super::blocks::block_overlap;
+use super::chart_overflow::chart_overflow;
 use super::contrast::{content_contrast, text_inks};
 use super::label_overflow::label_overflow;
 use super::ledger::{LedgerInput, PageLedger};
@@ -39,7 +42,9 @@ pub(in crate::compile) struct LintEnv<'a> {
 }
 
 /// The lint diagnostics of one page: `text.ink_overlap`, `text.occluded`,
-/// `label.overflow`, and the contrast of every text and label. `recorder` is the page compile's box recorder.
+/// `label.overflow`, the contrast of every text and label, legibility,
+/// arrangement, `layout.block_overlap`, and `chart.overflow`. `recorder` is
+/// the page compile's box recorder.
 pub(in crate::compile) fn lint_page(env: &LintEnv<'_>, recorder: BoxRecorder) -> Vec<Diagnostic> {
     let Recorded {
         boxes,
@@ -69,5 +74,19 @@ pub(in crate::compile) fn lint_page(env: &LintEnv<'_>, recorder: BoxRecorder) ->
     out.extend(content_contrast(env, &expansions, &texts));
     out.extend(legibility(env, &ledger, &authored));
     out.extend(arrangement(&ledger, &authored, &routes));
+    let trim = match (
+        dim_to_px(env.page.width.value, &env.page.width.unit),
+        dim_to_px(env.page.height.value, &env.page.height.unit),
+    ) {
+        (Some(w), Some(h)) => Some(LayoutBox {
+            x: 0.0,
+            y: 0.0,
+            w,
+            h,
+        }),
+        _ => None,
+    };
+    out.extend(block_overlap(&ledger, trim));
+    out.extend(chart_overflow(&ledger, &authored));
     out
 }

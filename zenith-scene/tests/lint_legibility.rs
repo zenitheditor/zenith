@@ -85,6 +85,16 @@ fn edge_crowding_fires_with_a_y_fix() {
 }
 
 #[test]
+fn edge_crowding_measures_from_the_trim_under_a_bleed() {
+    let plain = lint(&doc(ZERO, &crowd("")));
+    let bled = lint(&doc("bleed=(px)35", &crowd("")));
+    let plain = with_code(&plain, "text.edge_crowding");
+    let bled = with_code(&bled, "text.edge_crowding");
+    assert_eq!(bled.len(), 1, "{bled:#?}");
+    assert_eq!(bled[0].message, plain[0].message);
+}
+
+#[test]
 fn edge_crowding_left_edge_fixes_x() {
     let body = text_at("title", 2, 400, &token("size.type"), "");
     let diags = lint(&doc(ZERO, &body));

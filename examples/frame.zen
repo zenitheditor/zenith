@@ -10,7 +10,7 @@ zenith version=1 {
     page id="page.frame" w=(px)320 h=(px)200 background=(token)"color.bg" {
       frame id="frame.clip" x=(px)40 y=(px)40 w=(px)120 h=(px)100 {
         rect id="rect.inside" x=(px)10 y=(px)10 w=(px)80 h=(px)60 fill=(token)"color.inside"
-        rect id="rect.overflow" x=(px)60 y=(px)-10 w=(px)100 h=(px)120 fill=(token)"color.overflow"
+        rect id="rect.overflow" role="decoration" x=(px)60 y=(px)-10 w=(px)100 h=(px)120 fill=(token)"color.overflow"
       }
     }
   }

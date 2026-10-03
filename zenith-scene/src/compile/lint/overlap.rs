@@ -1,6 +1,8 @@
 //! Text ink collisions: `text.ink_overlap` (two texts' glyphs collide) and
 //! `text.occluded` (opaque paint drawn later hides a text's glyphs).
 //!
+//! Text nodes, shape / connector labels, and chart strings all take part.
+//!
 //! Both checks skip guide and hidden nodes (they never compile) and any node
 //! with `role="decoration"` or `role="background"` on itself or an ancestor.
 //! Ink drawn under a rotation off a quarter turn is skipped: its glyph boxes
@@ -26,12 +28,13 @@ const CLEARANCE: f64 = 12.0;
 const HIDDEN_SHARE: f64 = 0.5;
 
 /// `true` when the text takes part in the collision checks. Chart strings
-/// do not: their layout belongs to the chart.
+/// take part like any text. One chart's strings share the chart entry, so
+/// they never pair with each other, and the chart itself paints no opaque
+/// fill over them.
 fn checked(ledger: &PageLedger, item: &TextItem) -> bool {
     ledger
         .entry(item.entry)
         .is_some_and(|e| e.visible && !e.exempt)
-        && !matches!(item.source, TextSource::Chart(_))
         && item.ink.axis_aligned
         && !item.ink.glyphs.is_empty()
 }
@@ -80,8 +83,9 @@ fn glyph_overlap(a: &TextItem, b: &TextItem) -> Option<(f64, LayoutBox)> {
 }
 
 /// `text.ink_overlap`: the glyph ink of two different texts intersects over
-/// more than 4 px². Texts under 0.5 effective opacity and two texts inside
-/// the same table or chart are skipped. The lower text (larger ink top) is
+/// more than 4 px². Texts under 0.5 effective opacity, two texts inside the
+/// same table, and two strings of the same chart (one entry) are skipped.
+/// A chart string pairs with any other text. The lower text (larger ink top) is
 /// the subject; the fix moves it 12px below the upper text's ink.
 pub(super) fn ink_overlap(
     ledger: &PageLedger,

@@ -46,6 +46,8 @@ Text `overflow` sets what happens when glyph ink leaves the box. The check measu
 | `text.ink_overlap` | Glyph ink of two texts or labels intersects |
 | `text.occluded` | A later opaque node hides over half of a glyph |
 | `label.overflow` | Shape label ink crosses the shape outline |
+| `layout.block_overlap` | Two sibling blocks overlap in part. Containment and children of one `group` are silent |
+| `chart.overflow` | Chart text ink leaves the chart box; raise `h` / `w` to the named size |
 | `align.near_miss` | An edge, center, or baseline sits 0.75-3 px off a shared value |
 | `spacing.uneven_gap` | Three or more siblings have nearly equal gaps |
 | `connector.crosses_node` | A connector route runs through an unconnected node |

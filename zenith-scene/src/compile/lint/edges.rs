@@ -21,11 +21,10 @@ const FLOOR_SHARE: f64 = 0.015;
 /// Effective opacity below which a text is a watermark, not body ink.
 const MIN_OPACITY: f64 = 0.5;
 
-/// The trim box the ink is measured against, in scene px.
+/// The trim box the ink is measured against. Glyph ink is in page px, so
+/// the trim box starts at `(0, 0)`.
 #[derive(Clone, Copy)]
 pub(super) struct Trim {
-    /// Scene offset of the trim box (the bleed).
-    pub(super) origin: f64,
     pub(super) w: f64,
     pub(super) h: f64,
 }
@@ -99,10 +98,10 @@ fn judge(
     }
     let b = item.bounds;
     let gaps = [
-        (Edge::Top, b.y - trim.origin),
-        (Edge::Left, b.x - trim.origin),
-        (Edge::Bottom, trim.origin + trim.h - (b.y + b.h)),
-        (Edge::Right, trim.origin + trim.w - (b.x + b.w)),
+        (Edge::Top, b.y),
+        (Edge::Left, b.x),
+        (Edge::Bottom, trim.h - (b.y + b.h)),
+        (Edge::Right, trim.w - (b.x + b.w)),
     ];
     // Ink that leaves the trim on any side is bleed.
     if gaps.iter().any(|(_, gap)| *gap < 0.0) {

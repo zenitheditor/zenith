@@ -288,6 +288,11 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
         "A `position=\"absolute\"` child of a row/column frame has no x/y or anchor.",
     ),
     info(
+        "layout.block_overlap",
+        Severity::Warning,
+        "Two sibling blocks (frame, group, chart, table, image, shape, rect, ellipse, instance, or text ink) overlap in part: over 16 px² and 2% of the smaller box, under 95% of it. Containment, decoration/background layers, and siblings of one layout frame are silent. The later-painted block is the subject.",
+    ),
+    info(
         "layout.child_overflow",
         Severity::Advisory,
         "Laid-out children of a row/column frame extend past its content box.",
@@ -472,6 +477,11 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
         "chart.invalid_value_labels",
         Severity::Error,
         "Chart `value-labels` is not one of `auto`, `none`, `top`, or `center`.",
+    ),
+    info(
+        "chart.overflow",
+        Severity::Warning,
+        "The ink of a chart's own text (title, caption, axis labels, legend, value labels) passes the chart box by over 0.5px; the message names the overflow per side and the `h` / `w` that fits, with a `set_property` fix when that side is a literal px value.",
     ),
     info(
         "pattern.grid_missing_spacing",

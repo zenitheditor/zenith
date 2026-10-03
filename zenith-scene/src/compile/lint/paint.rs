@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 
 use zenith_core::{
     AssetDecl, Diagnostic, Dimension, LayoutPosition, Node, PropertyValue, ResolvedToken, Style,
-    dim_to_px,
+    Unit, dim_to_px,
 };
 
 use crate::layout::LayoutBox;
@@ -30,6 +30,10 @@ pub(super) struct Authored {
     pub(super) x_px: Option<f64>,
     /// The authored `y` when it is a literal dimension, in px.
     pub(super) y_px: Option<f64>,
+    /// The authored `w` when it is a literal `(px)` dimension.
+    pub(super) w_px: Option<f64>,
+    /// The authored `h` when it is a literal `(px)` dimension.
+    pub(super) h_px: Option<f64>,
     /// Any `anchor*` attribute is set.
     pub(super) anchored: bool,
     /// A `row` / `column` / `grid` frame places the node.
@@ -52,6 +56,8 @@ fn collect_authored(nodes: &[Node], placed_by_parent: bool, out: &mut BTreeMap<S
             out.entry(id.to_owned()).or_insert(Authored {
                 x_px: view.and_then(|v| literal_px(v.x)),
                 y_px: view.and_then(|v| literal_px(v.y)),
+                w_px: view.and_then(|v| px_literal(v.w)),
+                h_px: view.and_then(|v| px_literal(v.h)),
                 anchored: view.is_some_and(|v| v.anchored),
                 in_flow: placed_by_parent && !absolute,
             });
@@ -97,6 +103,20 @@ fn collect_authored(nodes: &[Node], placed_by_parent: bool, out: &mut BTreeMap<S
 pub(super) fn literal_px(value: Option<&PropertyValue>) -> Option<f64> {
     match value {
         Some(PropertyValue::Dimension(d)) => dim_to_px(d.value, &d.unit),
+        Some(
+            PropertyValue::TokenRef(_) | PropertyValue::Literal(_) | PropertyValue::DataRef(_),
+        )
+        | None => None,
+    }
+}
+
+/// The value of a literal dimension authored in `(px)`.
+fn px_literal(value: Option<&PropertyValue>) -> Option<f64> {
+    match value {
+        Some(PropertyValue::Dimension(d)) => match d.unit {
+            Unit::Px => Some(d.value),
+            Unit::Pt | Unit::Pct | Unit::Deg | Unit::Unknown(_) => None,
+        },
         Some(
             PropertyValue::TokenRef(_) | PropertyValue::Literal(_) | PropertyValue::DataRef(_),
         )
@@ -229,6 +249,39 @@ pub(super) fn occluder_of(node: &Node, rect: LayoutBox, env: PaintEnv<'_>) -> Op
         region: rect,
         shape,
     })
+}
+
+/// `true` for a `rect`, `ellipse`, or `shape` with no fill (own or style):
+/// it paints an outline only, and its box holds no paint.
+pub(super) fn hollow(node: &Node, env: PaintEnv<'_>) -> bool {
+    let unfilled = |fill: &Option<PropertyValue>, style: &Option<String>| {
+        fill.is_none() && style_prop(style, env.style_map, "fill").is_none()
+    };
+    match node {
+        Node::Rect(n) => unfilled(&n.fill, &n.style),
+        Node::Ellipse(n) => unfilled(&n.fill, &n.style),
+        Node::Shape(n) => unfilled(&n.fill, &n.style),
+        Node::Line(_)
+        | Node::Text(_)
+        | Node::Code(_)
+        | Node::Frame(_)
+        | Node::Group(_)
+        | Node::Image(_)
+        | Node::Polygon(_)
+        | Node::Polyline(_)
+        | Node::Path(_)
+        | Node::Instance(_)
+        | Node::Field(_)
+        | Node::Toc(_)
+        | Node::Footnote(_)
+        | Node::Table(_)
+        | Node::Connector(_)
+        | Node::Pattern(_)
+        | Node::Chart(_)
+        | Node::Light(_)
+        | Node::Mesh(_)
+        | Node::Unknown(_) => false,
+    }
 }
 
 /// `Some(())` when the fill (own, else the style's) is a solid colour with

@@ -138,10 +138,12 @@ mod tests {
         let cases: &[(&str, Severity)] = &[
             ("align.near_miss", Severity::Advisory),
             ("baseline-grid.snap_failed", Severity::Warning),
+            ("chart.overflow", Severity::Warning),
             ("connector.crosses_node", Severity::Advisory),
             ("footnote.body_overlap", Severity::Advisory),
             ("footnote.no_live_area", Severity::Advisory),
             ("label.overflow", Severity::Warning),
+            ("layout.block_overlap", Severity::Warning),
             ("scene.invalid_color", Severity::Advisory),
             ("scene.invalid_import_source", Severity::Advisory),
             ("scene.missing_geometry", Severity::Advisory),

@@ -12,10 +12,14 @@
 //!   authored facts of `text_facts`).
 //! - `arrange` — `align.near_miss`, `spacing.uneven_gap`, and
 //!   `connector.crosses_node` (`align`, `spacing`, `connector`).
+//! - `blocks` — `layout.block_overlap`.
+//! - `chart_overflow` — `chart.overflow`.
 //! - `run` — the entry point the page compile calls.
 
 mod align;
 mod arrange;
+mod blocks;
+mod chart_overflow;
 mod connector;
 mod contrast;
 mod edges;

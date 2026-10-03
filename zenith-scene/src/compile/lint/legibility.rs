@@ -29,11 +29,7 @@ pub(super) fn legibility(
     let text = collect(&source.children, env.paint);
     let live_area =
         env.margins_declared || !env.page.safe_zones.is_empty() || !source.safe_zones.is_empty();
-    let trim = Trim {
-        origin: env.bleed,
-        w,
-        h,
-    };
+    let trim = Trim { w, h };
     let mut out = edge_crowding(ledger, authored, &text, trim, live_area);
     out.extend(too_small(ledger, &text, (w, h)));
     out.extend(near_duplicate_size(&text));
