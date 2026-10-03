@@ -17,6 +17,7 @@
 //! - [`chain_member`] — threaded-text chain member rendering.
 //! - [`ink`] — ink bounds of drawn text and the block-axis overflow they imply.
 //! - [`overflow_mode`] — the parsed `overflow` mode + the shared box-clip bracket.
+//! - [`overflow_report`] — the shared per-mode overflow diagnostic builder.
 //! - [`wrap`] — the single-box wrap path (drop-cap / runaround / plain).
 //! - [`text_node`] — the `compile_text` entry + sized layout engine.
 //! - [`code_node`] — the `compile_code` entry.
@@ -34,6 +35,7 @@ mod kerning;
 mod markdown_block;
 mod measure;
 mod overflow_mode;
+mod overflow_report;
 mod pack;
 mod shape;
 mod tableader;

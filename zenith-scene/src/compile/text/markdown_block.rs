@@ -45,7 +45,8 @@ use super::super::util::{resolve_geometry_px, resolve_property_dimension_px};
 use super::ctx::{ShapeEnv, TextCompileEnv, empty_md_blocks};
 use super::ink::{BlockOverflow, block_overflow, ink_bounds};
 use super::measure::font_size_px;
-use super::overflow_mode::{ClipBox, TextOverflow, clip_commands_since, fmt_px};
+use super::overflow_mode::{ClipBox, TextOverflow, clip_commands_since};
+use super::overflow_report::{OverflowReport, block_tail};
 use super::shape::CODE_MONO_FAMILY;
 use super::text_node::compile_text_sized;
 
@@ -555,54 +556,26 @@ fn markdown_overflow_diagnostic(
     box_h: f64,
     clipped: bool,
 ) -> Option<Diagnostic> {
-    let tail = if o.below {
-        format!(
-            "markdown content needs {:.0}px height in a {}px box — set h=(px){:.0}, \
-             reduce block font-size/spacing, or add a continuation box with chain=\"{}\"",
-            o.need_h,
-            fmt_px(box_h),
-            o.need_h,
-            text.id
-        )
+    let remedy = format!(
+        "reduce block font-size/spacing, or add a continuation box with chain=\"{}\"",
+        text.id
+    );
+    let tail = block_tail("markdown content", o, box_h, &remedy);
+    let who = format!("text '{}'", text.id);
+    let clip_what = if clipped {
+        "clipped at the box edge"
     } else {
-        format!(
-            "markdown content rises {:.0}px above the top of a {}px box — set overflow=\"visible\"",
-            o.rise,
-            fmt_px(box_h)
-        )
+        "overflows its box (no w to clip to)"
     };
-    let subject = Some(text.id.clone());
-    match mode {
-        TextOverflow::Visible => None,
-        TextOverflow::Clip => {
-            let what = if clipped {
-                "clipped at the box edge"
-            } else {
-                "overflows its box (no w to clip to)"
-            };
-            Some(Diagnostic::warning(
-                "text.overflow",
-                format!("text '{}': {what}: {tail}", text.id),
-                text.source_span,
-                subject,
-            ))
-        }
-        TextOverflow::Fit => Some(Diagnostic::error(
-            "text.fit_failed",
-            format!("text '{}': overflow=\"fit\" failed: {tail}", text.id),
-            text.source_span,
-            subject,
-        )),
-        TextOverflow::Autofit => Some(Diagnostic::error(
-            "text.fit_failed",
-            format!(
-                "text '{}': overflow=\"autofit\" failed (markdown blocks keep their sizes): {tail}",
-                text.id
-            ),
-            text.source_span,
-            subject,
-        )),
+    OverflowReport {
+        who: &who,
+        subject: &text.id,
+        span: text.source_span,
+        clip_what,
+        autofit_note: " (markdown blocks keep their sizes)",
+        tail: &tail,
     }
+    .diagnostic(mode)
 }
 
 /// A plain literal span carrying `text` and no styling.

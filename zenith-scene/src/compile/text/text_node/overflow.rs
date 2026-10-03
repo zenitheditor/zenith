@@ -9,10 +9,13 @@
 //! the per-mode message, naming the box size that fits at the laid-out font
 //! size and the largest font size that fits the box.
 
+use std::fmt;
+
 use zenith_core::{Diagnostic, Span};
 
 use crate::compile::text::ink::{BlockOverflow, EPSILON, InkRect, block_overflow};
 use crate::compile::text::overflow_mode::{TextOverflow, fmt_px};
+use crate::compile::text::overflow_report::OverflowReport;
 
 /// Inputs to [`measure_overflow`] — the drawn ink and the box.
 pub(super) struct OverflowCheck {
@@ -129,46 +132,29 @@ pub(super) fn overflow_diagnostic(
     fitting_px: Option<i64>,
 ) -> Option<Diagnostic> {
     let need = need_clause(facts);
-    let remedy = set_clause(facts);
-    let subject = Some(id.to_owned());
-    match mode {
-        TextOverflow::Visible => None,
-        TextOverflow::Clip => {
-            let keep = if remedy.starts_with("set w=") || remedy.starts_with("set h=") {
-                " to keep the type scale"
-            } else {
-                ""
-            };
-            Some(Diagnostic::warning(
-                "text.overflow",
-                format!(
-                    "{who}: clipped at the box edge: {need} — {remedy}{keep}{}",
-                    font_clause("font-size", fitting_px)
-                ),
-                span,
-                subject,
-            ))
-        }
-        TextOverflow::Fit => Some(Diagnostic::error(
-            "text.fit_failed",
-            format!(
-                "{who}: overflow=\"fit\" failed: {need} — {remedy}{}",
-                font_clause("font-size", fitting_px)
-            ),
-            span,
-            subject,
-        )),
-        TextOverflow::Autofit => Some(Diagnostic::error(
-            "text.fit_failed",
-            format!(
-                "{who}: overflow=\"autofit\" failed at its {}px floor: {need} — {remedy}{}",
-                fmt_px(facts.font_size),
-                font_clause("font-size-min", fitting_px)
-            ),
-            span,
-            subject,
-        )),
+    let remedy = Remedy::of(facts);
+    let keep = if remedy.keeps_type_scale() {
+        " to keep the type scale"
+    } else {
+        ""
+    };
+    let base = format!("{need} — {remedy}");
+    let tail = match mode {
+        TextOverflow::Visible => return None,
+        TextOverflow::Clip => format!("{base}{keep}{}", font_clause("font-size", fitting_px)),
+        TextOverflow::Fit => format!("{base}{}", font_clause("font-size", fitting_px)),
+        TextOverflow::Autofit => format!("{base}{}", font_clause("font-size-min", fitting_px)),
+    };
+    let floor = format!(" at its {}px floor", fmt_px(facts.font_size));
+    OverflowReport {
+        who,
+        subject: id,
+        span,
+        clip_what: "clipped at the box edge",
+        autofit_note: &floor,
+        tail: &tail,
     }
+    .diagnostic(mode)
 }
 
 /// `3 lines at 64px need 262px height in a 60px box` (and the width / rise
@@ -211,16 +197,50 @@ fn need_clause(f: &OverflowFacts) -> String {
     }
 }
 
-/// `set h=(px)262` (and the width variants) — the box that fits at this size.
-/// Ink that only rises above the box top has no box fix: paint it past the box.
-fn set_clause(f: &OverflowFacts) -> String {
-    let need_w = f.content_w.ceil();
-    let below = f.block.filter(|b| b.below).map(|b| b.need_h);
-    match (f.width_overflow, below) {
-        (true, Some(h)) => format!("set w=(px){need_w:.0} h=(px){h:.0}"),
-        (true, None) => format!("set w=(px){need_w:.0}"),
-        (false, Some(h)) => format!("set h=(px){h:.0}"),
-        (false, None) => "set overflow=\"visible\"".to_owned(),
+/// The box fix for an overflow, decided once from the facts. Ink that only
+/// rises above the box top has no box fix: paint it past the box.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Remedy {
+    /// `set h=(px)262`: a taller box.
+    Height(f64),
+    /// `set w=(px)300`: a wider box.
+    Width(f64),
+    /// `set w=(px)300 h=(px)262`: both.
+    Both(f64, f64),
+    /// `set overflow="visible"`.
+    RaiseTop,
+}
+
+impl Remedy {
+    /// The remedy for the box that fits at the laid-out font size.
+    fn of(f: &OverflowFacts) -> Self {
+        let need_w = f.content_w.ceil();
+        let below = f.block.filter(|b| b.below).map(|b| b.need_h);
+        match (f.width_overflow, below) {
+            (true, Some(h)) => Self::Both(need_w, h),
+            (true, None) => Self::Width(need_w),
+            (false, Some(h)) => Self::Height(h),
+            (false, None) => Self::RaiseTop,
+        }
+    }
+
+    /// A box fix keeps the font size; `RaiseTop` is not one.
+    fn keeps_type_scale(self) -> bool {
+        match self {
+            Self::Height(_) | Self::Width(_) | Self::Both(..) => true,
+            Self::RaiseTop => false,
+        }
+    }
+}
+
+impl fmt::Display for Remedy {
+    fn fmt(&self, out: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Height(h) => write!(out, "set h=(px){h:.0}"),
+            Self::Width(w) => write!(out, "set w=(px){w:.0}"),
+            Self::Both(w, h) => write!(out, "set w=(px){w:.0} h=(px){h:.0}"),
+            Self::RaiseTop => out.write_str("set overflow=\"visible\""),
+        }
     }
 }
 

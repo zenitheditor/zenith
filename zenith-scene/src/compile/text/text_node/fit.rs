@@ -35,7 +35,12 @@ pub(in crate::compile) fn compile_text_sized(
 ) -> f64 {
     let outcome = compile_text_core(text, env, commands, diagnostics, ctx);
     if let Some(facts) = outcome.overflow {
-        report_overflow(text, &facts, env, ctx, diagnostics);
+        let who = format!("text '{}'", text.id);
+        let site = OverflowSite {
+            who: &who,
+            subject: &text.id,
+        };
+        report_overflow(text, &facts, site, env, ctx, diagnostics);
     }
     outcome.height
 }
@@ -62,32 +67,31 @@ pub(in crate::compile) fn compile_label_text(
 ) -> f64 {
     let outcome = compile_text_core(text, env, commands, diagnostics, ctx);
     if let Some(facts) = outcome.overflow {
-        let mode = TextOverflow::from_attr(text.overflow.as_deref());
-        let fitting_px = match mode {
-            TextOverflow::Visible => None,
-            TextOverflow::Clip | TextOverflow::Fit | TextOverflow::Autofit => {
-                largest_fitting_px(text, env, ctx, below_px(facts.font_size), 1)
-            }
-        };
         let who = format!("label of shape '{}'", host.id);
-        if let Some(d) = overflow_diagnostic(
-            &who,
-            host.id,
-            text.source_span,
-            mode,
-            &facts.padded(host.pad),
-            fitting_px,
-        ) {
-            diagnostics.push(d);
-        }
+        let facts = facts.padded(host.pad);
+        let site = OverflowSite {
+            who: &who,
+            subject: host.id,
+        };
+        report_overflow(text, &facts, site, env, ctx, diagnostics);
     }
     outcome.height
 }
 
-/// Push the overflow diagnostic for `text` in its `overflow` mode.
+/// Who an overflow diagnostic speaks for: the opening of the message and the
+/// subject id.
+#[derive(Clone, Copy)]
+struct OverflowSite<'a> {
+    who: &'a str,
+    subject: &'a str,
+}
+
+/// Push the overflow diagnostic for `text` in its `overflow` mode: search the
+/// largest fitting font size, then build the message for `site`.
 fn report_overflow(
     text: &TextNode,
     facts: &OverflowFacts,
+    site: OverflowSite,
     env: TextCompileEnv,
     ctx: RenderCtx,
     diagnostics: &mut Vec<Diagnostic>,
@@ -100,9 +104,14 @@ fn report_overflow(
             largest_fitting_px(text, env, ctx, below_px(facts.font_size), 1)
         }
     };
-    let who = format!("text '{}'", text.id);
-    if let Some(d) = overflow_diagnostic(&who, &text.id, text.source_span, mode, facts, fitting_px)
-    {
+    if let Some(d) = overflow_diagnostic(
+        site.who,
+        site.subject,
+        text.source_span,
+        mode,
+        facts,
+        fitting_px,
+    ) {
         diagnostics.push(d);
     }
 }

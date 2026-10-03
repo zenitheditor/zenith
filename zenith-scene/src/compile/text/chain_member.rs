@@ -18,7 +18,8 @@ use super::baseline::{baseline_grid_snap_failed_diag, snap_to_baseline_grid};
 use super::ctx::{ChainMemberPlace, EmitStyle};
 use super::emit::emit_lines;
 use super::ink::{BlockOverflow, block_overflow, ink_bounds};
-use super::overflow_mode::{ClipBox, TextOverflow, clip_commands_since, fmt_px};
+use super::overflow_mode::{ClipBox, TextOverflow, clip_commands_since};
+use super::overflow_report::{OverflowReport, block_tail};
 
 /// Render a chain member's PRE-ASSIGNED lines into its own box.
 ///
@@ -237,45 +238,16 @@ fn chain_overflow_diagnostic(
     box_h: f64,
 ) -> Option<Diagnostic> {
     let chain = text.chain.as_deref().unwrap_or(text.id.as_str());
-    let tail = if o.below {
-        format!(
-            "chain content needs {:.0}px height in a {}px box — set h=(px){:.0}, \
-             or add a continuation box with chain=\"{chain}\"",
-            o.need_h,
-            fmt_px(box_h),
-            o.need_h
-        )
-    } else {
-        format!(
-            "chain content rises {:.0}px above the top of a {}px box — set overflow=\"visible\"",
-            o.rise,
-            fmt_px(box_h)
-        )
-    };
-    let subject = Some(text.id.clone());
-    match mode {
-        TextOverflow::Visible => None,
-        TextOverflow::Clip => Some(Diagnostic::warning(
-            "text.overflow",
-            format!("text '{}': clipped at the box edge: {tail}", text.id),
-            text.source_span,
-            subject,
-        )),
-        TextOverflow::Fit => Some(Diagnostic::error(
-            "text.fit_failed",
-            format!("text '{}': overflow=\"fit\" failed: {tail}", text.id),
-            text.source_span,
-            subject,
-        )),
-        TextOverflow::Autofit => Some(Diagnostic::error(
-            "text.fit_failed",
-            format!(
-                "text '{}': overflow=\"autofit\" failed (a chain member keeps the source \
-                 font size): {tail}",
-                text.id
-            ),
-            text.source_span,
-            subject,
-        )),
+    let remedy = format!("or add a continuation box with chain=\"{chain}\"");
+    let tail = block_tail("chain content", o, box_h, &remedy);
+    let who = format!("text '{}'", text.id);
+    OverflowReport {
+        who: &who,
+        subject: &text.id,
+        span: text.source_span,
+        clip_what: "clipped at the box edge",
+        autofit_note: " (a chain member keeps the source font size)",
+        tail: &tail,
     }
+    .diagnostic(mode)
 }
