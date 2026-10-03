@@ -48,7 +48,7 @@ pub use svg_lib::{ItemScope, SvgIcon, SvgLibrary, embedded_svg_libraries, load_s
 pub use add::{AddError, AddOutcome, collect_all_ids, load_pack_document, parse_spec};
 
 // Shared materialization helpers (used by composition-import materialize too).
-pub(crate) use add::{px, unique_id};
+pub(crate) use add::{collect_node_ids, px, unique_id};
 
 pub use action::{ActionAddOutcome, materialize_action};
 pub use component::materialize;

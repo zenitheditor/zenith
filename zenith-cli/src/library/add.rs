@@ -153,7 +153,7 @@ pub(crate) fn target_component_id(pkg_id: &str, item: &str) -> String {
 /// cells do). Mirrors the validator's `collect_local_ids` but ALSO captures the
 /// `Unknown` node id when present (forward-compat: an unknown node may still be
 /// addressable), so dedup never accidentally reuses a taken id.
-fn collect_node_ids(children: &[Node], out: &mut BTreeSet<String>) {
+pub(crate) fn collect_node_ids(children: &[Node], out: &mut BTreeSet<String>) {
     for child in children {
         match child {
             Node::Rect(n) => {

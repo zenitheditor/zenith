@@ -221,6 +221,9 @@ pub struct LibraryAddOutput {
     pub summary: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source: Option<String>,
+    /// The `--parent` container the instance was placed into, when given.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub parent: Option<String>,
 }
 
 /// JSON envelope for a failure outside a command's own output shape: a

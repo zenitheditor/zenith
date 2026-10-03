@@ -36,7 +36,7 @@ Mixed lists are fine. Keep the label edges aligned (a column frame does this).
 
 `library add` places the instance on a page at `--at X,Y`. Then:
 
-1. **Move** — `reparent` it into a layout frame, or keep it absolute.
+1. **Move** — add `--parent <frame-or-group-id>` to place it into a container directly. A layout frame puts it in flow and ignores `--at`. Or `reparent` it later, or keep it absolute.
 2. **Size** — `set_geometry` with `w`/`h` (raw px). Without them it draws at 24 px.
 3. **Recolor** — before the first render on dark themes (below).
 

@@ -128,8 +128,21 @@ pub struct LibraryAddArgs {
     pub page: Option<String>,
 
     /// Instance origin as `X,Y` in pixels (default `0,0`).
+    ///
+    /// With `--parent`, the origin is relative to the parent as the scene reads
+    /// it. A layout frame places the instance in flow and ignores `--at` unless
+    /// the instance has `position absolute`.
     #[arg(long, value_name = "X,Y")]
     pub at: Option<String>,
+
+    /// Id of a frame or group on `--page` to place the instance into.
+    ///
+    /// Default: the page itself. COMPONENT items only.
+    ///
+    /// EXAMPLE:
+    ///   zenith library add @zenith/icons-lucide#heart --into poster.zen --page p1 --parent card.row --at 8,8
+    #[arg(long, value_name = "NODE_ID")]
+    pub parent: Option<String>,
 
     /// Override the generated instance id base (default: the item name).
     #[arg(long, value_name = "ID")]

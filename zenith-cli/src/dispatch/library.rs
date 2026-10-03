@@ -96,6 +96,7 @@ fn dispatch_add(add_args: cli::LibraryAddArgs) -> ExitCode {
         add_args.page.as_deref(),
         at,
         add_args.id.as_deref(),
+        add_args.parent.as_deref(),
     ) {
         Ok(result) => result,
         Err(e) => return CliError::new("library.add_failed", e.message, e.exit_code).emit(json),
@@ -113,7 +114,13 @@ fn dispatch_add(add_args: cli::LibraryAddArgs) -> ExitCode {
     };
     if add_args.dry_run {
         if json {
-            print_add_json(&add_args.into, false, result.summary, Some(source));
+            print_add_json(
+                &add_args.into,
+                false,
+                result.summary,
+                Some(source),
+                result.parent,
+            );
         } else {
             print!("{}", source);
         }
@@ -127,20 +134,27 @@ fn dispatch_add(add_args: cli::LibraryAddArgs) -> ExitCode {
         return e.emit(json);
     }
     if json {
-        print_add_json(&add_args.into, true, result.summary, None);
+        print_add_json(&add_args.into, true, result.summary, None, result.parent);
     } else {
         println!("{}", result.summary);
     }
     ExitCode::SUCCESS
 }
 
-fn print_add_json(path: &Path, written: bool, summary: String, source: Option<String>) {
+fn print_add_json(
+    path: &Path,
+    written: bool,
+    summary: String,
+    source: Option<String>,
+    parent: Option<String>,
+) {
     let out = LibraryAddOutput {
         schema: "zenith-library-add-v1",
         path: path.display().to_string(),
         written,
         summary,
         source,
+        parent,
     };
     println!("{}", serialize_pretty(&out));
 }

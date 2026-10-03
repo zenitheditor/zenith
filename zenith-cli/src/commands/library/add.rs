@@ -1,10 +1,11 @@
 use std::path::Path;
 
-use zenith_core::{KdlAdapter, KdlSource, validate};
-use zenith_tx::TxStatus;
+use zenith_core::{Document, KdlAdapter, KdlSource, validate};
+use zenith_tx::{Op, Permissions, Position, Transaction, TxStatus, run_transaction};
 
 use crate::library::{
-    EmbeddedPresetAsset, ItemKind, embedded_preset_assets_for_document, parse_spec, resolve_packs,
+    EmbeddedPresetAsset, ItemKind, collect_node_ids, embedded_preset_assets_for_document,
+    parse_spec, resolve_packs,
 };
 
 /// Error produced by the `library add` command.
@@ -36,6 +37,8 @@ pub struct AddResult {
     /// Embedded preset asset files the dispatcher should materialize beside the
     /// target document for non-dry-run adds.
     pub embedded_assets: Vec<EmbeddedPresetAsset>,
+    /// The container the instance was placed into (`--parent`), when given.
+    pub parent: Option<String>,
 }
 
 /// Materialize the library item named by `spec` into the document `target_src`,
@@ -55,6 +58,11 @@ pub struct AddResult {
 /// `page` is required only for COMPONENT items (which materialize as an instance
 /// on a page); TOKEN items (filter tokens) ignore it.
 ///
+/// `parent` moves the new instance into a frame or group on `page` with a
+/// `Reparent` transaction. The instance keeps `at` as written, so the engine's
+/// coordinate rules for that container apply. Layout frames place it in flow.
+/// COMPONENT items only.
+///
 /// # Errors
 ///
 /// Returns [`AddCmdErr`] on a malformed spec, parse/format failure, unknown
@@ -67,6 +75,7 @@ pub fn add(
     page: Option<&str>,
     at: (f64, f64),
     id_override: Option<&str>,
+    parent: Option<&str>,
 ) -> Result<AddResult, AddCmdErr> {
     let (pkg_id, item) = parse_spec(spec).map_err(|e| AddCmdErr::new(e.message, 2))?;
 
@@ -85,6 +94,18 @@ pub fn add(
         .find(|p| p.id == pkg_id)
         .and_then(|p| p.items.iter().find(|it| it.id == item))
         .map(|it| it.kind);
+
+    if parent.is_some() {
+        match item_kind {
+            Some(ItemKind::Component) | None => {}
+            Some(ItemKind::Token) | Some(ItemKind::Action) => {
+                return Err(AddCmdErr::new(
+                    "--parent applies to component items only; token and action items have no placement",
+                    2,
+                ));
+            }
+        }
+    }
 
     let summary = match item_kind {
         Some(ItemKind::Action) => {
@@ -152,6 +173,7 @@ pub fn add(
                 formatted,
                 summary,
                 embedded_assets,
+                parent: None,
             });
         }
         Some(ItemKind::Token) => {
@@ -197,10 +219,15 @@ pub fn add(
             let outcome =
                 crate::library::materialize(&mut target, &packs, &pkg_id, &item, page, id_base, at)
                     .map_err(|e| AddCmdErr::new(e.message, 2))?;
+            let mut placement = format!("on page '{page}'");
+            if let Some(parent) = parent {
+                target = move_into_parent(&target, page, &outcome.instance_id, parent)?;
+                placement = format!("in '{parent}' on page '{page}'");
+            }
             let mut summary = String::new();
             summary.push_str(&format!(
-                "added {}#{} as instance '{}' on page '{}'\n",
-                outcome.pkg_id, outcome.item, outcome.instance_id, page
+                "added {}#{} as instance '{}' {}\n",
+                outcome.pkg_id, outcome.item, outcome.instance_id, placement
             ));
             summary.push_str(&format!("  component: {}\n", outcome.target_component_id));
             summary.push_str(&format!("  provenance: {}", outcome.provenance_id));
@@ -217,7 +244,70 @@ pub fn add(
         formatted,
         summary,
         embedded_assets,
+        parent: parent.map(str::to_owned),
     })
+}
+
+/// Move the instance `instance_id` (placed on `page`) into the frame or group
+/// `parent` with a `Reparent` transaction. `parent` must sit on `page`.
+fn move_into_parent(
+    target: &Document,
+    page: &str,
+    instance_id: &str,
+    parent: &str,
+) -> Result<Document, AddCmdErr> {
+    let on_page = target
+        .body
+        .pages
+        .iter()
+        .find(|p| p.id == page)
+        .is_some_and(|p| {
+            let mut ids = std::collections::BTreeSet::new();
+            collect_node_ids(&p.children, &mut ids);
+            ids.contains(parent)
+        });
+    if !on_page {
+        return Err(AddCmdErr::new(
+            format!(
+                "parent '{parent}' not found on page '{page}'; pass the id of a frame or group on that page"
+            ),
+            2,
+        ));
+    }
+    let tx = Transaction {
+        ops: vec![Op::Reparent {
+            node: instance_id.to_owned(),
+            new_parent: parent.to_owned(),
+            position: Position::default(),
+        }],
+        permissions: Permissions::default(),
+    };
+    let result = run_transaction(target, &tx)
+        .map_err(|e| AddCmdErr::new(format!("error: could not move into parent: {e}"), 2))?;
+    match result.status {
+        TxStatus::Rejected => {
+            let lines: Vec<String> = result
+                .diagnostics
+                .iter()
+                .map(crate::commands::format_diagnostic_line)
+                .collect();
+            Err(AddCmdErr::new(
+                format!("cannot place into parent '{parent}':\n{}", lines.join("\n")),
+                1,
+            ))
+        }
+        TxStatus::Accepted | TxStatus::AcceptedWithWarnings => KdlAdapter
+            .parse(result.source_after.as_bytes())
+            .map_err(|e| {
+                AddCmdErr::new(
+                    format!(
+                        "internal error: could not re-parse moved document: {}",
+                        e.message
+                    ),
+                    2,
+                )
+            }),
+    }
 }
 
 /// Validate the mutated `target` (hard errors abort with no write) then format it
@@ -249,7 +339,173 @@ fn validate_and_format(target: &zenith_core::Document) -> Result<Vec<u8>, AddCmd
 mod tests {
     use super::*;
 
+    /// `add` without `--parent`: the 6-argument form most tests exercise.
+    fn add(
+        target_src: &str,
+        spec: &str,
+        project_dir: Option<&Path>,
+        page: Option<&str>,
+        at: (f64, f64),
+        id_override: Option<&str>,
+    ) -> Result<AddResult, AddCmdErr> {
+        super::add(target_src, spec, project_dir, page, at, id_override, None)
+    }
+
     // ── `add` command tests ────────────────────────────────────────────────────
+
+    const PARENT_SRC: &str = r#"zenith version=1 {
+  project id="proj.x" name="Target"
+  tokens format="zenith-token-v1" {}
+  styles {}
+  document id="d" title="x" {
+    page id="pg" w=(px)800 h=(px)600 {
+      frame id="plain" x=(px)100 y=(px)50 w=(px)300 h=(px)200 {}
+      frame id="flow" x=(px)10 y=(px)20 w=(px)400 h=(px)60 layout="row" gap=(px)8 align="start" {}
+      group id="grp" {}
+    }
+    page id="pg2" w=(px)800 h=(px)600 {
+      frame id="other" x=(px)0 y=(px)0 w=(px)100 h=(px)100 {}
+    }
+  }
+}
+"#;
+
+    /// Find the node `id` and return its direct children's ids.
+    fn child_ids(doc: &zenith_core::Document, id: &str) -> Vec<String> {
+        fn walk(nodes: &[zenith_core::Node], id: &str) -> Option<Vec<String>> {
+            for n in nodes {
+                let (nid, kids): (&str, &[zenith_core::Node]) = match n {
+                    zenith_core::Node::Frame(f) => (&f.id, &f.children),
+                    zenith_core::Node::Group(g) => (&g.id, &g.children),
+                    _ => continue,
+                };
+                if nid == id {
+                    return Some(
+                        kids.iter()
+                            .filter_map(|k| match k {
+                                zenith_core::Node::Instance(i) => Some(i.id.clone()),
+                                _ => None,
+                            })
+                            .collect(),
+                    );
+                }
+                if let Some(found) = walk(kids, id) {
+                    return Some(found);
+                }
+            }
+            None
+        }
+        doc.body
+            .pages
+            .iter()
+            .find_map(|p| walk(&p.children, id))
+            .unwrap_or_default()
+    }
+
+    fn add_into(parent: &str, page: &str) -> Result<AddResult, AddCmdErr> {
+        super::add(
+            PARENT_SRC,
+            "@zenith/flowchart#decision",
+            None,
+            Some(page),
+            (12.0, 34.0),
+            None,
+            Some(parent),
+        )
+    }
+
+    #[test]
+    fn add_with_parent_places_instance_inside_frame_and_group() {
+        for parent in ["plain", "flow", "grp"] {
+            let result = add_into(parent, "pg").expect("add into parent");
+            assert_eq!(result.parent.as_deref(), Some(parent));
+            assert!(
+                result
+                    .summary
+                    .contains(&format!("in '{parent}' on page 'pg'")),
+                "summary: {}",
+                result.summary
+            );
+            let src = String::from_utf8(result.formatted).expect("utf8");
+            let doc = KdlAdapter.parse(src.as_bytes()).expect("reparse");
+            assert_eq!(
+                child_ids(&doc, parent),
+                vec!["decision".to_owned()],
+                "{src}"
+            );
+            // The instance keeps `--at` as written; the engine reads it in the
+            // parent's coordinate space.
+            assert!(src.contains("x=(px)12"), "{src}");
+            assert!(src.contains("y=(px)34"), "{src}");
+            // The page itself holds no stray instance.
+            let page = doc.body.pages.iter().find(|p| p.id == "pg").expect("page");
+            assert!(
+                !page
+                    .children
+                    .iter()
+                    .any(|n| matches!(n, zenith_core::Node::Instance(_))),
+                "{src}"
+            );
+        }
+    }
+
+    #[test]
+    fn add_with_parent_on_another_page_errors() {
+        let err = add_into("other", "pg").expect_err("parent on another page");
+        assert_eq!(err.exit_code, 2);
+        assert!(
+            err.message
+                .contains("parent 'other' not found on page 'pg'"),
+            "{}",
+            err.message
+        );
+    }
+
+    #[test]
+    fn add_with_unknown_parent_errors() {
+        let err = add_into("nope", "pg").expect_err("unknown parent");
+        assert_eq!(err.exit_code, 2);
+        assert!(
+            err.message.contains("parent 'nope' not found"),
+            "{}",
+            err.message
+        );
+    }
+
+    #[test]
+    fn add_with_parent_rejects_non_component_items() {
+        let err = super::add(
+            PARENT_SRC,
+            "@zenith/filters#noir",
+            None,
+            None,
+            (0.0, 0.0),
+            None,
+            Some("plain"),
+        )
+        .expect_err("token item with parent");
+        assert_eq!(err.exit_code, 2);
+        assert!(err.message.contains("--parent"), "{}", err.message);
+    }
+
+    #[test]
+    fn add_without_parent_reports_no_parent() {
+        let result = add(
+            PARENT_SRC,
+            "@zenith/flowchart#decision",
+            None,
+            Some("pg"),
+            (0.0, 0.0),
+            None,
+        )
+        .expect("add ok");
+        assert_eq!(result.parent, None);
+        assert!(
+            result.summary.contains("on page 'pg'"),
+            "{}",
+            result.summary
+        );
+    }
 
     const TARGET_SRC: &str = r#"zenith version=1 {
   project id="proj.x" name="Target"
