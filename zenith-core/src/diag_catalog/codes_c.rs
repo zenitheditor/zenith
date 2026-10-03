@@ -369,7 +369,7 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
     info(
         "token.set_partially_used",
         Severity::Advisory,
-        "A multi-token provenance `set` has some but not all of its tokens referenced.",
+        "A multi-token provenance `set` has some but not all of its tokens referenced. Theme pack sets (`@zenith/theme.*`) are exempt.",
     ),
     info(
         "token.type_mismatch",

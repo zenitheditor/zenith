@@ -5,6 +5,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use crate::ast::document::Document;
 use crate::diagnostics::Diagnostic;
 
+/// Provenance `set` prefix of the embedded theme packs (`@zenith/theme.<name>`).
+/// `theme apply` and `new --theme` stamp every theme token with the pack id.
+const THEME_PACK_SET_PREFIX: &str = "@zenith/theme.";
+
 /// Report unused tokens, grouped by their optional provenance `set` id.
 ///
 /// Tokens are grouped by `set` (a `BTreeMap` for deterministic, lexicographic
@@ -51,6 +55,12 @@ pub(super) fn check_unused_tokens(
             }
             continue;
         };
+
+        // Theme packs ship a full vocabulary on purpose: a document uses only
+        // part of it. Their sets (`@zenith/theme.*`) are never reported.
+        if set_id.starts_with(THEME_PACK_SET_PREFIX) {
+            continue;
+        }
 
         // A multi-token `set`: collapse into at most one advisory for the
         // whole set instead of one per unreferenced member.

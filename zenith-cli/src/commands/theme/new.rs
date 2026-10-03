@@ -189,6 +189,7 @@ fn emit(input: &ThemeInput, palette: &[(&'static str, Rgb)]) -> String {
         s,
         "    token id=\"size.h1\" type=\"dimension\" value=(px)64"
     );
+    let _ = writeln!(s, "    {}", super::kit::display_size_token_kdl());
     let _ = writeln!(
         s,
         "    token id=\"size.h2\" type=\"dimension\" value=(px)40"

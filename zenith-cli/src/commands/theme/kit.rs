@@ -1,5 +1,6 @@
 //! The one definition of what every theme ships besides its palette: the
-//! `ui.*` styles, the document `defaults` rows, and the heading-weight token.
+//! `ui.*` styles, the document `defaults` rows, the display-size token, and the
+//! heading-weight token.
 //!
 //! `theme new` renders its KDL from these tables. The embedded packs carry
 //! hand-edited copies, and a drift test compares each pack against
@@ -53,6 +54,11 @@ theme_styles! {
     "ui.h1" => [
         ("font-family", "font.heading"),
         ("font-size", "size.h1"),
+        ("font-weight", "font.weight.heading"),
+    ],
+    "ui.display" => [
+        ("font-family", "font.heading"),
+        ("font-size", "size.display"),
         ("font-weight", "font.weight.heading"),
     ],
     "ui.h2" => [
@@ -114,6 +120,21 @@ pub const HEADING_WEIGHT_TOKEN_TYPE: &str = "fontWeight";
 /// Value of [`HEADING_WEIGHT_TOKEN_ID`].
 pub const HEADING_WEIGHT_TOKEN_VALUE: u16 = 700;
 
+/// Id of the display size token the `ui.display` style reads.
+pub const DISPLAY_SIZE_TOKEN_ID: &str = "size.display";
+/// Declared type of [`DISPLAY_SIZE_TOKEN_ID`].
+pub const DISPLAY_SIZE_TOKEN_TYPE: &str = "dimension";
+/// Value of [`DISPLAY_SIZE_TOKEN_ID`] in px: `size.h1` (64) x 1.75 = 112, an
+/// even px. Every pack uses the same ratio.
+pub const DISPLAY_SIZE_TOKEN_PX: u16 = 112;
+
+/// KDL for the `token` line of the display size token (no indent, no newline).
+pub(super) fn display_size_token_kdl() -> String {
+    format!(
+        "token id=\"{DISPLAY_SIZE_TOKEN_ID}\" type=\"{DISPLAY_SIZE_TOKEN_TYPE}\" value=(px){DISPLAY_SIZE_TOKEN_PX}"
+    )
+}
+
 /// KDL for the `token` line of the heading-weight token (no indent, no newline).
 pub(super) fn heading_weight_token_kdl() -> String {
     format!(
@@ -144,12 +165,13 @@ pub(super) fn styles_and_defaults_kdl() -> String {
     s
 }
 
-/// A minimal `.zen` document holding only the kit: the heading-weight token,
-/// the styles, and the `defaults`. Parse it to get the reference a pack must
-/// match.
+/// A minimal `.zen` document holding only the kit: the display-size and
+/// heading-weight tokens, the styles, and the `defaults`. Parse it to get the
+/// reference a pack must match.
 pub fn kit_document_source() -> String {
     format!(
-        "zenith version=1 {{\n  project id=\"theme.kit\" name=\"Kit\"\n  tokens format=\"zenith-token-v1\" {{\n    {}\n  }}\n{}  document id=\"doc.kit\" title=\"Kit\" {{\n    page id=\"pg\" w=(px)10 h=(px)10 {{}}\n  }}\n}}\n",
+        "zenith version=1 {{\n  project id=\"theme.kit\" name=\"Kit\"\n  tokens format=\"zenith-token-v1\" {{\n    {}\n    {}\n  }}\n{}  document id=\"doc.kit\" title=\"Kit\" {{\n    page id=\"pg\" w=(px)10 h=(px)10 {{}}\n  }}\n}}\n",
+        display_size_token_kdl(),
         heading_weight_token_kdl(),
         styles_and_defaults_kdl()
     )

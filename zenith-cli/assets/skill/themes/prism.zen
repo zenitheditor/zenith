@@ -34,6 +34,7 @@ zenith version=1 {
     token id="font.heading" type="fontFamily" set="@zenith/theme.prism" value="Noto Sans"
     token id="font.body" type="fontFamily" set="@zenith/theme.prism" value="Noto Sans"
     token id="size.h1" type="dimension" set="@zenith/theme.prism" value=(px)64
+    token id="size.display" type="dimension" set="@zenith/theme.prism" value=(px)112
     token id="size.h2" type="dimension" set="@zenith/theme.prism" value=(px)40
     token id="size.body" type="dimension" set="@zenith/theme.prism" value=(px)28
     token id="size.caption" type="dimension" set="@zenith/theme.prism" value=(px)18
@@ -50,6 +51,11 @@ zenith version=1 {
     style id="ui.h1" {
       font-family (token)"font.heading"
       font-size (token)"size.h1"
+      font-weight (token)"font.weight.heading"
+    }
+    style id="ui.display" {
+      font-family (token)"font.heading"
+      font-size (token)"size.display"
       font-weight (token)"font.weight.heading"
     }
     style id="ui.h2" {

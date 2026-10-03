@@ -17,7 +17,7 @@ A theme picks no layout. Pick canvas and primitives in `references/by-kind.md` f
 | Roles | `color.primary`, `color.secondary`, `color.accent`, `color.neutral`, each with `.content` |
 | Status | `color.info`, `color.success`, `color.warning`, `color.error`, each with `.content` |
 | Shape | `radius.box`, `radius.field`, `radius.selector`, `border.width`, `space.unit`, `shadow.depth` (depth themes only) |
-| Type | `font.heading`, `font.body`, `size.h1` 64, `size.h2` 40, `size.body` 28, `size.caption` 18, `font.weight.heading` |
+| Type | `font.heading`, `font.body`, `size.display` 112, `size.h1` 64, `size.h2` 40, `size.body` 28, `size.caption` 18, `font.weight.heading` |
 
 - Each `X.content` is the readable ink on fill `X`.
 - `color.base.200` and `color.base.300` are surfaces, never text ink.
@@ -28,6 +28,7 @@ A theme picks no layout. Pick canvas and primitives in `references/by-kind.md` f
 | Style | Use |
 | --- | --- |
 | `ui.body` | default `text` |
+| `ui.display` | hero title (`size.display`) |
 | `ui.h1`, `ui.h2`, `ui.caption` | headings, captions |
 | `ui.label` | default shape label |
 | `ui.control` | default `shape` |
@@ -67,7 +68,7 @@ A theme picks no layout. Pick canvas and primitives in `references/by-kind.md` f
 ## Rules
 
 - `theme apply` adds missing styles and `defaults` rows. It keeps an existing style id or kind and reports it as skipped.
-- Theme tokens carry `set="@zenith/theme.<name>"`. Unused members roll up into one `token.set_partially_used` advisory.
+- Theme tokens carry `set="@zenith/theme.<name>"`. Theme sets never raise `token.set_partially_used`. Other token sets still do.
 - Keep the contract whole. Trimming it breaks the one-command re-skin.
 - One dialect per document. Never mix theme ids with brand ids (`references/brand.md`).
 - To make a theme the project default, record it in `.zenith/brand.md`.

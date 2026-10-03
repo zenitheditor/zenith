@@ -8,8 +8,9 @@ use std::path::{Path, PathBuf};
 use tempfile::TempDir;
 use zenith_cli::commands::new::{self, DEFAULT_PAGE};
 use zenith_cli::commands::theme::{
-    HEADING_WEIGHT_TOKEN_ID, HEADING_WEIGHT_TOKEN_TYPE, HEADING_WEIGHT_TOKEN_VALUE, Shape,
-    THEME_DEFAULTS, THEME_STYLE_IDS, ThemeInput, apply_run, kit_document_source, new as theme_new,
+    DISPLAY_SIZE_TOKEN_ID, DISPLAY_SIZE_TOKEN_PX, DISPLAY_SIZE_TOKEN_TYPE, HEADING_WEIGHT_TOKEN_ID,
+    HEADING_WEIGHT_TOKEN_TYPE, HEADING_WEIGHT_TOKEN_VALUE, Shape, THEME_DEFAULTS, THEME_STYLE_IDS,
+    ThemeInput, apply_run, kit_document_source, new as theme_new,
 };
 use zenith_cli::commands::validate;
 use zenith_cli::config::CliPolicyFlags;
@@ -74,6 +75,13 @@ fn assert_theme_blocks(doc: &Document, label: &str) {
             .iter()
             .any(|t| t.id == HEADING_WEIGHT_TOKEN_ID),
         "{label}: {HEADING_WEIGHT_TOKEN_ID} token"
+    );
+    assert!(
+        doc.tokens
+            .tokens
+            .iter()
+            .any(|t| t.id == DISPLAY_SIZE_TOKEN_ID),
+        "{label}: {DISPLAY_SIZE_TOKEN_ID} token"
     );
 }
 
@@ -395,7 +403,7 @@ fn kit_of(doc: &Document) -> Kit {
         .tokens
         .tokens
         .iter()
-        .filter(|t| t.id == HEADING_WEIGHT_TOKEN_ID)
+        .filter(|t| t.id == HEADING_WEIGHT_TOKEN_ID || t.id == DISPLAY_SIZE_TOKEN_ID)
         .map(|t| (t.id.clone(), t.token_type.clone(), t.value.clone()))
         .collect();
     (styles, defaults, tokens)
@@ -427,9 +435,15 @@ fn every_pack_matches_the_kit() {
         .parse(kit_document_source().as_bytes())
         .expect("kit source parses");
     let kit = kit_of(&kit_doc);
-    assert_eq!(kit.2.len(), 1, "kit declares the heading weight token");
+    assert_eq!(
+        kit.2.len(),
+        2,
+        "kit declares the display size and heading weight tokens"
+    );
     assert_eq!(HEADING_WEIGHT_TOKEN_TYPE, "fontWeight");
     assert_eq!(HEADING_WEIGHT_TOKEN_VALUE, 700);
+    assert_eq!(DISPLAY_SIZE_TOKEN_TYPE, "dimension");
+    assert_eq!(DISPLAY_SIZE_TOKEN_PX, 112);
     for name in theme_names() {
         let pack = resolve_theme_pack(None, name).expect("embedded pack resolves");
         let got = kit_of(&pack);

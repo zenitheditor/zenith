@@ -597,9 +597,9 @@ fn singleton_set_still_produces_plain_token_unused() {
 fn multi_token_set_fully_unused_collapses_to_one_advisory() {
     let doc = doc_with(
         vec![
-            color_token_with_set("color.a", "@zenith/theme.cobalt"),
-            color_token_with_set("color.b", "@zenith/theme.cobalt"),
-            color_token_with_set("color.c", "@zenith/theme.cobalt"),
+            color_token_with_set("color.a", "brand.kit"),
+            color_token_with_set("color.b", "brand.kit"),
+            color_token_with_set("color.c", "brand.kit"),
         ],
         vec![minimal_page("page.one", vec![])],
     );
@@ -621,10 +621,7 @@ fn multi_token_set_fully_unused_collapses_to_one_advisory() {
         codes(&report)
     );
     assert_eq!(matches[0].severity, Severity::Advisory);
-    assert_eq!(
-        matches[0].subject_id.as_deref(),
-        Some("@zenith/theme.cobalt")
-    );
+    assert_eq!(matches[0].subject_id.as_deref(), Some("brand.kit"));
     assert!(
         matches[0].message.contains("none of 3 tokens referenced"),
         "message should report 0/3; got: {}",
@@ -639,9 +636,9 @@ fn multi_token_set_fully_unused_collapses_to_one_advisory() {
 fn multi_token_set_partially_used_reports_used_count() {
     let doc = doc_with(
         vec![
-            color_token_with_set("color.a", "@zenith/theme.cobalt"),
-            color_token_with_set("color.b", "@zenith/theme.cobalt"),
-            color_token_with_set("color.c", "@zenith/theme.cobalt"),
+            color_token_with_set("color.a", "brand.kit"),
+            color_token_with_set("color.b", "brand.kit"),
+            color_token_with_set("color.c", "brand.kit"),
         ],
         vec![minimal_page(
             "page.one",
@@ -673,8 +670,8 @@ fn multi_token_set_partially_used_reports_used_count() {
 fn multi_token_set_fully_used_emits_nothing() {
     let doc = doc_with(
         vec![
-            color_token_with_set("color.a", "@zenith/theme.cobalt"),
-            color_token_with_set("color.b", "@zenith/theme.cobalt"),
+            color_token_with_set("color.a", "brand.kit"),
+            color_token_with_set("color.b", "brand.kit"),
         ],
         vec![minimal_page(
             "page.one",
@@ -693,6 +690,34 @@ fn multi_token_set_fully_used_emits_nothing() {
     assert!(
         !has_code(&report, "token.set_partially_used"),
         "fully-used set must emit nothing; codes: {:?}",
+        codes(&report)
+    );
+}
+
+/// A multi-token set from an embedded theme pack (`@zenith/theme.*`) is never
+/// reported: packs ship a full vocabulary on purpose.
+#[test]
+fn theme_pack_set_is_not_reported_when_partially_used() {
+    let doc = doc_with(
+        vec![
+            color_token_with_set("color.a", "@zenith/theme.cobalt"),
+            color_token_with_set("color.b", "@zenith/theme.cobalt"),
+            color_token_with_set("color.c", "@zenith/theme.cobalt"),
+        ],
+        vec![minimal_page(
+            "page.one",
+            vec![minimal_rect("rect.one", Some(token_ref("color.a")))],
+        )],
+    );
+    let report = validate(&doc);
+    assert!(
+        !has_code(&report, "token.set_partially_used"),
+        "codes: {:?}",
+        codes(&report)
+    );
+    assert!(
+        !has_code(&report, "token.unused"),
+        "codes: {:?}",
         codes(&report)
     );
 }
