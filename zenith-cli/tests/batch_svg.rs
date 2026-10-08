@@ -292,7 +292,10 @@ fn merge_later_page_write_error_keeps_error_and_fallback_diagnostics() {
     assert_eq!(report["written"], 0);
     assert_eq!(report["failed"], 1);
     assert_eq!(report["rows"][0]["status"], "failed");
-    assert_eq!(report["rows"][0]["outputs"], serde_json::json!([]));
+    assert_eq!(
+        report["rows"][0]["outputs"],
+        serde_json::json!(["row-0001-page-1.svg"])
+    );
     let diagnostics = report["rows"][0]["diagnostics"].as_array().unwrap();
     assert!(
         diagnostics
@@ -311,5 +314,8 @@ fn merge_later_page_write_error_keeps_error_and_fallback_diagnostics() {
     assert!(env.dir.path().join("out/row-0001-page-2.svg").is_dir());
     let manifest: serde_json::Value =
         serde_json::from_slice(&fs::read(env.dir.path().join("manifest.json")).unwrap()).unwrap();
-    assert_eq!(manifest["rows"], serde_json::json!([]));
+    assert_eq!(
+        manifest["rows"],
+        serde_json::json!([{ "row": 0, "outputs": ["row-0001-page-1.svg"], "status": "failed" }])
+    );
 }

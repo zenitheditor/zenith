@@ -302,15 +302,19 @@ pub struct MergeOutput {
     pub written: usize,
     pub failed: usize,
     pub rows: Vec<MergeRowResult>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub diagnostics: Vec<DiagnosticJson>,
 }
 
-/// One row entry in the generation manifest (successful rows only).
+/// One manifest row with committed files, including partial writes.
 #[derive(Debug, Serialize)]
 pub struct ManifestRow {
     pub row: usize,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub key: Option<String>,
     pub outputs: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub status: Option<&'static str>,
 }
 
 /// Deterministic generation manifest for `zenith merge --manifest`.
@@ -352,9 +356,11 @@ pub struct VariantOutput {
     pub generated: usize,
     pub failed: usize,
     pub variants: Vec<VariantResultJson>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub diagnostics: Vec<DiagnosticJson>,
 }
 
-/// One target entry in the variant generation manifest (successful variants only).
+/// One manifest target with committed files, including partial writes.
 #[derive(Debug, Serialize)]
 pub struct VariantManifestTarget {
     pub id: String,
@@ -364,6 +370,8 @@ pub struct VariantManifestTarget {
     pub outputs_png: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub outputs_svg: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub status: Option<&'static str>,
 }
 
 /// Deterministic generation manifest for `zenith variant --manifest`.

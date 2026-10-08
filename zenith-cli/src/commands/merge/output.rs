@@ -5,9 +5,8 @@ use crate::json_types::{DiagnosticJson, MergeOutput, MergeRowResult};
 
 /// Build a deterministic generation manifest from the merge inputs and report.
 /// Inputs are hashed as bytes; NO timestamps, absolute paths, or crate version
-/// are embedded, so identical inputs yield a byte-identical manifest. Only
-/// successfully-written rows are included (failed rows produced no output and
-/// their messages may vary across runs).
+/// are embedded, so identical inputs yield a byte-identical manifest.
+/// Rows with committed files are included. Partial rows carry failed status without error text.
 pub fn build_manifest(
     doc_src: &str,
     csv_src: &str,
@@ -25,11 +24,12 @@ pub fn build_manifest(
     let rows = report
         .rows
         .iter()
-        .filter(|r| r.failure.is_none())
+        .filter(|r| !r.outputs.is_empty())
         .map(|r| crate::json_types::ManifestRow {
             row: r.row,
             key: r.key.clone(),
             outputs: r.outputs.clone(),
+            status: r.failure.as_ref().map(|_| "failed"),
         })
         .collect();
     crate::json_types::MergeManifest {
@@ -51,6 +51,7 @@ pub fn to_json_output(report: &MergeReport) -> MergeOutput {
         total_rows: report.rows.len(),
         written: n_written,
         failed: n_failed,
+        diagnostics: Vec::new(),
         rows: report
             .rows
             .iter()

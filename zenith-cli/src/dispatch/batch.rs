@@ -36,21 +36,31 @@ pub(super) fn dispatch_merge(args: MergeArgs) -> ExitCode {
         Ok(report) => report,
         Err(e) => return CliError::new("merge.setup_failed", e.message, e.exit_code).emit(json),
     };
-    // The manifest goes first so a write error is the only output.
+    let mut manifest_error = None;
     if let Some(manifest_path) = &args.manifest {
         let manifest =
             commands::merge::build_manifest(&doc_src, &csv_src, args.name_by.as_deref(), &report);
         if let Err(e) = write_manifest(manifest_path, &serialize_pretty(&manifest)) {
-            return e.emit(json);
+            manifest_error = Some(e);
         }
     }
     if json {
         println!(
             "{}",
-            serialize_pretty(&commands::merge::to_json_output(&report))
+            serialize_pretty(&{
+                let mut output = commands::merge::to_json_output(&report);
+                if let Some(error) = &manifest_error {
+                    output.diagnostics.extend(error.diagnostics());
+                }
+                output
+            })
         );
     } else {
-        let n_written = report.rows.iter().filter(|r| r.failure.is_none()).count();
+        let n_written = report
+            .rows
+            .iter()
+            .map(|row| row.outputs.len())
+            .sum::<usize>();
         println!(
             "wrote {} file(s) to '{}'",
             n_written,
@@ -68,6 +78,12 @@ pub(super) fn dispatch_merge(args: MergeArgs) -> ExitCode {
         for r in report.failed() {
             eprintln!("row {}: {}", r.row + 1, r.failure.as_deref().unwrap_or(""));
         }
+    }
+    if let Some(error) = manifest_error {
+        if !json {
+            eprintln!("{}", error.human);
+        }
+        return ExitCode::from(error.exit_code);
     }
     if report.rows.iter().any(|r| r.failure.is_some()) {
         ExitCode::from(1u8)
@@ -104,25 +120,40 @@ pub(super) fn dispatch_variant(args: VariantArgs) -> ExitCode {
             return CliError::new("variant.setup_failed", e.message, e.exit_code).emit(json);
         }
     };
-    // The manifest goes first so a write error is the only output.
+    let mut manifest_error = None;
     if let Some(manifest_path) = &args.manifest {
         let manifest = commands::variant::build_manifest(&doc_src, &report);
         if let Err(e) = write_manifest(manifest_path, &serialize_pretty(&manifest)) {
-            return e.emit(json);
+            manifest_error = Some(e);
         }
     }
     let failed = report.failed();
     if json {
         println!(
             "{}",
-            serialize_pretty(&commands::variant::to_json_output(&report))
+            serialize_pretty(&{
+                let mut output = commands::variant::to_json_output(&report);
+                if let Some(error) = &manifest_error {
+                    output.diagnostics.extend(error.diagnostics());
+                }
+                output
+            })
         );
     } else {
+        let files = report
+            .variants
+            .iter()
+            .filter_map(|record| record.outputs.as_ref())
+            .map(|outputs| {
+                1 + usize::from(!outputs.png.is_empty()) + usize::from(outputs.svg.is_some())
+            })
+            .sum::<usize>();
         println!(
             "generated {} variant(s) to '{}'",
             report.generated(),
             args.out_dir.display()
         );
+        println!("wrote {files} file(s)");
         for r in &report.variants {
             for diagnostic in &r.diagnostics {
                 eprintln!(
@@ -135,6 +166,12 @@ pub(super) fn dispatch_variant(args: VariantArgs) -> ExitCode {
         for r in &failed {
             eprintln!("variant {}: {}", r.id, r.failure.as_deref().unwrap_or(""));
         }
+    }
+    if let Some(error) = manifest_error {
+        if !json {
+            eprintln!("{}", error.human);
+        }
+        return ExitCode::from(error.exit_code);
     }
     if failed.is_empty() {
         ExitCode::SUCCESS
@@ -151,7 +188,8 @@ fn write_manifest(path: &Path, manifest_json: &str) -> Result<(), CliError> {
     {
         return Err(create_dir_error(parent, &e));
     }
-    std::fs::write(path, manifest_json.as_bytes()).map_err(|e| write_error(path, &e))
+    crate::output_file::write_bytes(path, manifest_json.as_bytes())
+        .map_err(|e| write_error(path, &e))
 }
 
 fn batch_options(

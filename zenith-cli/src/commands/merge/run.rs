@@ -53,7 +53,7 @@ pub struct RowResult {
     pub row: usize,
     /// The --name-by cell value, or None.
     pub key: Option<String>,
-    /// Filenames written (empty on failure), page order.
+    /// Committed filenames in page order, including partially written failed rows.
     pub outputs: Vec<String>,
     /// None = ok; Some(reason) = failed.
     pub failure: Option<String>,
@@ -762,14 +762,12 @@ pub fn run_with_options(
             continue;
         }
 
-        // All pages rendered successfully — write them out in page order.
-        // Defer registering names into `used_names` until every write succeeds;
-        // otherwise a mid-row write failure would permanently reserve those names.
+        // Commit pages in order and reserve each written name immediately.
         let mut write_failed = false;
         let mut newly_written: Vec<String> = Vec::new();
         for (fname, bytes) in page_images {
             let out_path = out_dir.join(&fname);
-            if let Err(e) = std::fs::write(&out_path, &bytes) {
+            if let Err(e) = crate::output_file::write_bytes(&out_path, &bytes) {
                 push_failure(
                     &mut rows,
                     row_idx,
@@ -778,17 +776,16 @@ pub fn run_with_options(
                 );
                 if let Some(row) = rows.last_mut() {
                     row.diagnostics = std::mem::take(&mut diagnostics);
+                    row.outputs = std::mem::take(&mut newly_written);
                 }
                 write_failed = true;
                 break;
             }
+            used_names.insert(fname.clone());
             newly_written.push(fname);
         }
         if write_failed {
             continue;
-        }
-        for fname in &newly_written {
-            used_names.insert(fname.clone());
         }
         rows.push(RowResult {
             row: row_idx,

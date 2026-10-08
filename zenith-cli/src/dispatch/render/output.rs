@@ -67,6 +67,9 @@ impl RenderRun<'_> {
                 &self.import_files,
             );
         } else {
+            for path in &self.outputs {
+                println!("written: {path}");
+            }
             print_diagnostics_stderr(&diagnostics, self.src, &self.import_files);
             eprintln!(
                 "render blocked by {} hard diagnostic(s)",

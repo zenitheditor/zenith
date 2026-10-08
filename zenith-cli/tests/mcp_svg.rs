@@ -328,3 +328,51 @@ fn mcp_render_schema_exposes_vector_raster_scale_bounds() {
             .contains("svg/pdf only")
     );
 }
+
+#[test]
+fn mcp_store_error_names_the_committed_requested_output() {
+    let directory = tempfile::tempdir().unwrap();
+    let store = tempfile::tempdir().unwrap();
+    let doc = directory.path().join("doc.zen");
+    fs::write(&doc, DOC).unwrap();
+    let paths = zenith_session::StorePaths::new(store.path());
+    let identity = zenith_cli::history::ensure_doc_id_in(&paths, &doc).unwrap();
+    let source = fs::read_to_string(&doc).unwrap();
+    let flags = zenith_cli::config::CliPolicyFlags::default();
+    let bytes = zenith_cli::commands::render::to_svg_with_dir(
+        &source,
+        Some(directory.path()),
+        1,
+        false,
+        &flags,
+        None,
+    )
+    .unwrap()
+    .svg;
+    let hash = zenith_session::object_hash(&bytes);
+    let shard = paths.objects_dir(&identity.doc_id).join(&hash[..2]);
+    if shard.is_dir() {
+        fs::rename(
+            &shard,
+            paths.objects_dir(&identity.doc_id).join("saved-shard"),
+        )
+        .unwrap();
+    }
+    fs::write(&shard, "object shard conflict").unwrap();
+    let out = directory.path().join("requested.svg");
+    fs::write(&out, "previous output").unwrap();
+    let responses = session(
+        store.path(),
+        &[render(1, json!({"doc":doc,"format":"svg","out":out}))],
+    );
+    let result = &responses[0]["result"];
+    assert_eq!(result["isError"], true, "{responses:?}");
+    assert_eq!(fs::read(&out).unwrap(), bytes);
+    let message = result["content"][0]["text"].as_str().unwrap();
+    assert!(
+        message.contains(&format!("artifact written to '{}'", out.display())),
+        "{message}"
+    );
+    assert!(message.contains("Resource storage failed"), "{message}");
+    assert!(result["structuredContent"].get("resource").is_none());
+}

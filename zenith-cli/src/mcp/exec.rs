@@ -397,7 +397,8 @@ fn run_render(args: &Value) -> Result<Value, String> {
 
     // Optional caller-chosen path, plus a stable per-doc preview file.
     if let Some(out) = opt_str(args, "out") {
-        std::fs::write(out, &bytes).map_err(|e| format!("error writing '{out}': {e}"))?;
+        crate::output_file::write_bytes(Path::new(out), &bytes)
+            .map_err(|e| format!("error writing '{out}': {e}"))?;
     }
     // The preview slot holds page renders; a contact sheet is not one page.
     if !contact_sheet {
@@ -409,7 +410,11 @@ fn run_render(args: &Value) -> Result<Value, String> {
     } else {
         format!("render-{format}")
     };
-    let link = store_link(&doc_id, &bytes, ext, &name)?;
+    let link =
+        store_link(&doc_id, &bytes, ext, &name).map_err(|error| match opt_str(args, "out") {
+            Some(out) => format!("artifact written to '{out}'. Resource storage failed: {error}"),
+            None => error,
+        })?;
     let mut out = json!({
         "format": format,
         "resource": link,
@@ -610,7 +615,7 @@ fn write_preview(doc_id: &str, page: usize, ext: &str, bytes: &[u8]) {
     let Ok(paths) = open_store() else { return };
     let dir = paths.workspace_renders_dir(doc_id);
     if std::fs::create_dir_all(&dir).is_ok() {
-        let _ = std::fs::write(dir.join(format!("page-{page}.{ext}")), bytes);
+        let _ = crate::output_file::write_bytes(&dir.join(format!("page-{page}.{ext}")), bytes);
     }
 }
 

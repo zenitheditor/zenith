@@ -66,7 +66,7 @@ pub struct VariantResultRecord {
     pub id: String,
     /// The source page id this variant derives from.
     pub source: String,
-    /// Output files written — `None` when `failure` is set.
+    /// Committed output paths. Partial writes retain their completed files.
     pub outputs: Option<VariantOutputs>,
     /// `None` = generated successfully; `Some(reason)` = failed.
     pub failure: Option<String>,
@@ -221,7 +221,7 @@ pub fn run_variant_with_options(
                 let zen_name = format!("{}-{}.zen", stem, result.id);
                 let image_name = format!("{}-{}.{}", stem, result.id, format.extension());
 
-                // ── 6a. Write the materialized `.zen` ─────────────────────
+                // ── 6a. Format the materialized `.zen` ─────────────────────
                 let zen_bytes = match KdlAdapter.format(&materialized) {
                     Ok(b) => b,
                     Err(e) => {
@@ -236,19 +236,6 @@ pub fn run_variant_with_options(
                     }
                 };
                 let zen_path = out_dir.join(&zen_name);
-                if format == BatchFormat::Png
-                    && let Err(e) = std::fs::write(&zen_path, &zen_bytes)
-                {
-                    records.push(VariantResultRecord {
-                        id: result.id,
-                        source: result.source,
-                        outputs: None,
-                        failure: Some(format!("write error '{}': {}", zen_path.display(), e)),
-                        diagnostics: Vec::new(),
-                    });
-                    continue;
-                }
-
                 // ── 6b. Find the source page index in the materialized doc ─
                 let page_index = match materialized
                     .body
@@ -258,11 +245,7 @@ pub fn run_variant_with_options(
                 {
                     Some(idx) => idx,
                     None => {
-                        // Source page missing in materialized doc — clean up the
-                        // .zen we already wrote and record failure.
-                        if format == BatchFormat::Png {
-                            let _ = std::fs::remove_file(&zen_path);
-                        }
+                        // Source page missing in materialized doc: record failure before writes.
                         let failure = format!(
                             "source page '{}' not found in materialized document",
                             result.source
@@ -287,9 +270,6 @@ pub fn run_variant_with_options(
                         .map(crate::commands::format_error_diag)
                         .collect();
                     if !hard.is_empty() {
-                        if format == BatchFormat::Png {
-                            let _ = std::fs::remove_file(&zen_path);
-                        }
                         records.push(VariantResultRecord {
                             id: result.id,
                             source: result.source,
@@ -317,9 +297,6 @@ pub fn run_variant_with_options(
                     .map(crate::commands::format_error_diag)
                     .collect();
                 if !hard_diags.is_empty() {
-                    if format == BatchFormat::Png {
-                        let _ = std::fs::remove_file(&zen_path);
-                    }
                     records.push(VariantResultRecord {
                         id: result.id,
                         source: result.source,
@@ -345,9 +322,6 @@ pub fn run_variant_with_options(
                 ) {
                     Ok(output) => output,
                     Err(e) => {
-                        if format == BatchFormat::Png {
-                            let _ = std::fs::remove_file(&zen_path);
-                        }
                         records.push(VariantResultRecord {
                             id: result.id,
                             source: result.source,
@@ -372,9 +346,7 @@ pub fn run_variant_with_options(
                     diagnostics.extend(compile_result.diagnostics);
                 }
 
-                if format == BatchFormat::Svg
-                    && let Err(e) = std::fs::write(&zen_path, &zen_bytes)
-                {
+                if let Err(e) = crate::output_file::write_bytes(&zen_path, &zen_bytes) {
                     records.push(VariantResultRecord {
                         id: result.id,
                         source: result.source,
@@ -387,12 +359,15 @@ pub fn run_variant_with_options(
 
                 // ── 6f. Write the image ─────────────────────────────────────────
                 let image_path = out_dir.join(&image_name);
-                if let Err(e) = std::fs::write(&image_path, &image_bytes) {
-                    let _ = std::fs::remove_file(&zen_path);
+                if let Err(e) = crate::output_file::write_bytes(&image_path, &image_bytes) {
                     records.push(VariantResultRecord {
                         id: result.id,
                         source: result.source,
-                        outputs: None,
+                        outputs: Some(VariantOutputs {
+                            zen: zen_name,
+                            png: String::new(),
+                            svg: None,
+                        }),
                         failure: Some(format!("write error '{}': {}", image_path.display(), e)),
                         diagnostics,
                     });
@@ -427,7 +402,8 @@ pub fn run_variant_with_options(
 ///
 /// `source_sha256` is the SHA-256 of the input `.zen` bytes.  No timestamps,
 /// absolute paths, or crate versions are embedded — identical inputs yield a
-/// byte-identical manifest.  Only successfully-generated variants are included.
+/// byte-identical manifest. Variants with committed files are included.
+/// Partial variants carry failed status without error text.
 pub fn build_manifest(doc_src: &str, report: &VariantReport) -> VariantManifest {
     use sha2::{Digest, Sha256};
 
@@ -440,7 +416,6 @@ pub fn build_manifest(doc_src: &str, report: &VariantReport) -> VariantManifest 
     let targets = report
         .variants
         .iter()
-        .filter(|r| r.failure.is_none())
         .filter_map(|r| {
             let outputs = r.outputs.as_ref()?;
             Some(VariantManifestTarget {
@@ -449,6 +424,7 @@ pub fn build_manifest(doc_src: &str, report: &VariantReport) -> VariantManifest 
                 outputs_zen: outputs.zen.clone(),
                 outputs_png: outputs.png.clone(),
                 outputs_svg: outputs.svg.clone(),
+                status: r.failure.as_ref().map(|_| "failed"),
             })
         })
         .collect();
@@ -472,6 +448,7 @@ pub fn to_json_output(report: &VariantReport) -> VariantOutput {
         total_variants: report.variants.len(),
         generated: n_generated,
         failed: n_failed,
+        diagnostics: Vec::new(),
         variants: report
             .variants
             .iter()

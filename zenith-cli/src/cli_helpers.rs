@@ -1,5 +1,3 @@
-use std::io::Write as _;
-
 use crate::report::CliError;
 use crate::{cli, commands};
 
@@ -166,6 +164,5 @@ pub(crate) fn read_file(path: &std::path::Path) -> Result<String, CliError> {
 ///
 /// Returns a `std::io::Error` on failure.
 pub(crate) fn write_bytes(path: &std::path::Path, bytes: &[u8]) -> std::io::Result<()> {
-    let mut f = std::fs::File::create(path)?;
-    f.write_all(bytes)
+    crate::output_file::write_bytes(path, bytes)
 }

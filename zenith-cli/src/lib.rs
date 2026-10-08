@@ -28,6 +28,7 @@ pub mod selfupdate;
 
 mod cli_helpers;
 mod dispatch;
+mod output_file;
 mod report;
 
 pub use dispatch::run;
