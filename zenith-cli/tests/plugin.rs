@@ -206,3 +206,141 @@ fn uninstall_absent_is_clean() {
             .all(|i| matches!(i.outcome, Ok(RemoveOutcome::Absent)))
     );
 }
+
+#[test]
+fn single_file_rules_embed_authoring_and_export_contracts() {
+    use zenith_cli::commands::plugin::render::render_rule;
+    for agent in [Agent::Cursor, Agent::Windsurf, Agent::Aider] {
+        let body = render_rule(agent);
+        for constraint in [
+            "Stable ids",
+            "Tokens for visuals",
+            "Never mix theme ids and brand ids",
+            "Layout over coordinates",
+            "Text fits its box",
+            "Grow the box before shrinking type",
+            "Intentional overlap",
+            "dry-run",
+            "Re-read it before text edits",
+            "--all-pages-svg",
+            "--raster-scale",
+            "render.svg_rasterized",
+            "Partial rows",
+            "committed",
+            ".zenith/brand.md",
+            "<file>",
+        ] {
+            assert!(body.contains(constraint), "{agent:?}: {constraint}");
+        }
+        for (path, _) in SKILL_FILES {
+            if path.starts_with("references/") || path.starts_with("templates/") {
+                assert!(!body.contains(&format!("`{path}`")), "local route: {path}");
+                if let Some(name) = path.strip_prefix("references/") {
+                    assert!(
+                        !body.contains(&format!("`{name}`")),
+                        "sibling route: {name}"
+                    );
+                }
+            }
+        }
+        assert!(body.contains("https://github.com/zenitheditor/zenith/blob/main/zenith-cli/assets/skill/references/variants.md"));
+        assert!(body.contains("optional guidance"));
+        assert!(!body.contains("Read `references/authoring-workflow.md`"));
+    }
+}
+
+#[test]
+fn folder_install_preserves_every_embedded_asset() {
+    let tmp = tempfile::tempdir().unwrap();
+    install_agent(Agent::ClaudeCode, Scope::Project, tmp.path(), false, false);
+    for (path, body) in SKILL_FILES {
+        let installed = tmp.path().join(".claude/skills/zenith").join(path);
+        assert_eq!(std::fs::read_to_string(installed).unwrap(), *body, "{path}");
+    }
+    for (path, body) in COMMAND_FILES {
+        let installed = tmp.path().join(".claude/commands").join(path);
+        assert_eq!(std::fs::read_to_string(installed).unwrap(), *body, "{path}");
+    }
+}
+
+#[test]
+fn canonical_skill_routes_resolve_to_embedded_assets() {
+    for source in [
+        "SKILL.md",
+        "references/authoring-workflow.md",
+        "references/export.md",
+    ] {
+        let body = SKILL_FILES
+            .iter()
+            .find(|(path, _)| *path == source)
+            .unwrap()
+            .1;
+        for route in body.split('`').skip(1).step_by(2) {
+            if route.starts_with("references/") || route.starts_with("templates/") {
+                assert!(
+                    SKILL_FILES.iter().any(|(path, _)| *path == route),
+                    "{source}: {route}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn claude_commands_cover_vector_exports_and_partial_reports() {
+    let render = COMMAND_FILES
+        .iter()
+        .find(|(path, _)| *path == "zenith-render.md")
+        .unwrap()
+        .1;
+    for guidance in [
+        "--png",
+        "--svg",
+        "--pdf",
+        "--all-pages ",
+        "--all-pages-svg",
+        "--contact-sheet",
+        "--scale",
+        "--raster-scale",
+        "--deny",
+        "committed output paths",
+        "Partial writes",
+    ] {
+        assert!(render.contains(guidance), "render: {guidance}");
+    }
+    let merge = COMMAND_FILES
+        .iter()
+        .find(|(path, _)| *path == "zenith-merge.md")
+        .unwrap()
+        .1;
+    for guidance in [
+        "--format svg",
+        "--raster-scale",
+        "global config policy",
+        "Merge has no",
+        "Partial rows",
+        "Manifest errors",
+        "PNG previews",
+    ] {
+        assert!(merge.contains(guidance), "merge: {guidance}");
+    }
+}
+
+#[test]
+fn rule_and_command_upgrades_preserve_edits_without_force() {
+    let tmp = tempfile::tempdir().unwrap();
+    for agent in [Agent::Cursor, Agent::ClaudeCode] {
+        install_agent(agent, Scope::Project, tmp.path(), false, false);
+        let path = match agent {
+            Agent::Cursor => tmp.path().join(".cursor/rules/zenith.mdc"),
+            Agent::ClaudeCode => tmp.path().join(".claude/commands/zenith-render.md"),
+            _ => panic!("test agent"),
+        };
+        let original = std::fs::read(&path).unwrap();
+        std::fs::write(&path, "User changes").unwrap();
+        install_agent(agent, Scope::Project, tmp.path(), false, false);
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "User changes");
+        install_agent(agent, Scope::Project, tmp.path(), true, false);
+        assert_eq!(std::fs::read(&path).unwrap(), original);
+    }
+}

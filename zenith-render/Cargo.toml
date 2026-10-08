@@ -10,12 +10,13 @@ keywords.workspace = true
 categories.workspace = true
 publish.workspace = true
 readme.workspace = true
-description = "Zenith CPU PNG (tiny-skia) and vector PDF rendering backends."
+description = "Zenith CPU PNG (tiny-skia), self-contained SVG, and vector PDF rendering backends."
 
 [dependencies]
 zenith-core = { workspace = true }
 zenith-raster = { workspace = true }
 zenith-scene = { workspace = true }
+gif = "0.12"
 jpeg-decoder = "0.3"
 miniz_oxide = "0.8"
 pdf-writer = "0.14"

@@ -7,7 +7,7 @@
 <h3>A design-document format and engine built for the age of AI agents.</h3>
 
 <p>
-Plain-text <strong>.zen</strong> design files that you can read, diff, review, validate, and let an agent safely edit — compiled <strong>deterministically</strong> to pixel-exact PNG and print-ready PDF.
+Plain-text <strong>.zen</strong> design files that you can read, diff, review, validate, and let an agent safely edit — compiled <strong>deterministically</strong> to pixel-exact PNG, self-contained SVG, and print-ready PDF.
 </p>
 
 <p>
@@ -37,7 +37,7 @@ Plain-text <strong>.zen</strong> design files that you can read, diff, review, v
 
 Zenith is a plain-text format and engine for design files — posters, decks, books, social graphics, diagrams, and more. The idea is simple: **design should work the way code does.** You should be able to read it, diff it, review it, test it, and let an agent safely edit it.
 
-A `.zen` file is human-readable [KDL](https://kdl.dev) text. The engine parses it, validates it against a large diagnostic set, compiles it to a backend-neutral scene, and renders the same file to the **same pixels every time** — as a PNG or a print-ready PDF.
+A `.zen` file is human-readable [KDL](https://kdl.dev) text. The engine parses it, validates it against a large diagnostic set, compiles it to a backend-neutral scene, and renders the same file to the **same pixels every time** — as a PNG, self-contained SVG, or print-ready PDF.
 
 > The sections below are collapsed to keep this page skimmable — click any heading's ▸ to expand it. **Install** and **Quick start** are open by default.
 
@@ -127,11 +127,42 @@ zenith fmt examples/hello.zen               # canonical, idempotent formatting
 zenith fix draft.zen --apply                # apply machine fixes (tokens, typos) in one step
 zenith tokens examples/hello.zen            # list design tokens and their resolved values
 zenith inspect examples/hello.zen           # print the node tree (read-only)
-zenith render examples/hello.zen --out .    # compile + render to PNG
+zenith render examples/hello.zen --png hello.png          # render to PNG
 
 zenith render examples/multipage.zen --all-pages out/     # one PNG per page
 zenith render examples/hello.zen --pdf hello.pdf          # print-ready PDF
+zenith render examples/hello.zen --svg hello.svg          # self-contained SVG
+zenith render examples/multipage.zen --svg page.svg --page 2
+zenith render examples/multipage.zen --all-pages-svg svg-pages/
 zenith render examples/hello.zen --scene scene.json       # dump the scene IR
+```
+
+| Export flag | Output |
+| --- | --- |
+| `--svg OUT` | Page 1 by default, with outlined text. |
+| `--pdf OUT` | Every page in one PDF by default. |
+| `--page N` | Selects one page for single-output flags, including PDF. |
+| `--all-pages-svg DIR` | Writes `page-N.svg` in document order. |
+| `--raster-scale F` | SVG/PDF fallback resolution. Finite `0 < F <= 4`, default 1. |
+| `--scale F` | PNG output scale. Finite `0 < F <= 4`, default 1. |
+| `--deny render.svg_rasterized` | Blocks SVG exports requiring raster fallback. |
+| `--deny render.pdf_rasterized` | Blocks PDF exports requiring raster fallback. |
+
+- **SVG assets:** RGB colors and embedded image assets keep the artifact self-contained.
+- **SVG text:** Outlines preserve appearance and lose editing, selection, and search.
+- **SVG fallback:** Effects capture their complete scope. Non-normal blends capture the page. Crossed scopes and bitmap glyphs require capture.
+- **PDF fallback:** Unsupported features capture their required scope or page. Captured text loses selection and search. Captured links lose click targets.
+- **Resolution:** `--raster-scale` changes fallback pixels without changing vector geometry or page dimensions. Existing bitmap assets retain source resolution.
+- **Reports:** `render.svg_rasterized` and `render.pdf_rasterized` report pages, command ranges, and reasons. JSON includes structured rasterized regions.
+- **PDF errors:** CLI and MCP reject capture and resource errors. Legacy library APIs returning `Vec<u8>` retain compatibility emission. Use report APIs for strict errors.
+- **Policy:** Blocking diagnostics prevent output writes. Read the export report after source validation.
+- **Writes:** Each file uses a temporary sibling and rename. Write errors preserve existing destinations. Earlier committed outputs can remain after later I/O errors.
+- **Batch reports:** Partial rows and variants retain committed paths with failed status. Manifest write errors retain batch error counts.
+- **Filesystem limits:** Writes reject read-only destinations. Symlink outputs replace the resolved target and retain the link. Replacement preserves permissions and leaves other hard links unchanged. Crash durability is not guaranteed.
+
+```bash
+zenith render examples/multipage.zen --pdf book.pdf --raster-scale 2 --json
+zenith render examples/hello.zen --svg hello.svg --raster-scale 2 --json
 ```
 
 The smallest valid document:
@@ -201,11 +232,11 @@ Zenith is built the other way around. The foundation is a programmatic, text-bas
 
 ## How it works
 
-<details><summary>One deterministic pipeline: parse + validate → AST → compile → scene IR → render (PNG/PDF).</summary>
+<details><summary>One deterministic pipeline: parse + validate → AST → compile → scene IR → render (PNG/SVG/PDF).</summary>
 
-A `.zen` document flows through a single deterministic pipeline. Each stage is a separate crate with a clean contract boundary, so a future GPU backend, SVG export, or visual editor consumes the same scene IR:
+A `.zen` document flows through a single deterministic pipeline. Each stage is a separate crate with a clean contract boundary, so a future GPU backend or visual editor consumes the same scene IR:
 
-<p align="center"><img src="assets/showcase/pipeline.png" alt="Pipeline: .zen source → validate → compile → scene IR → render → PNG/PDF" width="900"></p>
+<p align="center"><img src="assets/showcase/pipeline.png" alt="Pipeline: .zen source → validate → compile → scene IR → render" width="900"></p>
 
 <sub><i>Rendered by Zenith — source: <a href="assets/showcase/pipeline.zen"><code>assets/showcase/pipeline.zen</code></a>.</i></sub>
 
@@ -221,6 +252,7 @@ A `.zen` document flows through a single deterministic pipeline. Each stage is a
   Scene IR  (backend-neutral display list)
        │  render                     zenith-render
        ├─▶ PNG   (tiny-skia, byte-identical)
+       ├─▶ SVG   (outlined text, embedded assets)
        └─▶ PDF   (vector, native CMYK, bleed / trim / crop)
 
   local history / undo / versions    zenith-session   (off the render path; never affects pixels)
@@ -232,7 +264,7 @@ Everything that touches the render path is **deterministic and C-free**: no time
 
 ## What it does
 
-<details><summary>Tokens, a full node set, real typography, visual effects, anchors, recipes, a transaction engine, deterministic PNG/PDF, history, libraries, and data-merge.</summary>
+<details><summary>Tokens, a full node set, real typography, visual effects, anchors, recipes, a transaction engine, deterministic PNG/SVG/PDF, history, libraries, and data-merge.</summary>
 
 - **Scaffold & identity** — `zenith new` creates a ready-to-edit document (minimal valid template, default `.zen` extension, parent dirs created) with a stable `doc-id` minted on first write; any `.zen` gains its identity and workspace store transparently on the first edit — no manual setup step.
 - **Plain-text `.zen` format** — KDL v2 source with `project` / `tokens` / `styles` / `document` / `page` structure; every node carries a stable id.
@@ -245,7 +277,7 @@ Everything that touches the render path is **deterministic and C-free**: no time
 - **Procedural recipes** — a `recipes` provenance block records how a generated motif was made (kind, seed, generator, params, palette tokens, expanded node ids), inspectable and editable via typed recipe transactions, so procedural visuals stay reproducible and re-tunable.
 - **Transaction engine** — a typed op set (set fill/stroke/geometry, add/remove/reparent/group, align/distribute, page ops, token ops, find-replace, pattern detach, and more) applied as **dry-run by default**, with referential-integrity and id-uniqueness enforcement, a source diff, moved/resized node boxes, affected node ids, and an audit record.
 - **Deterministic rendering** — pixel-exact PNG via tiny-skia and print-ready PDF (native DeviceRGB/CMYK, MediaBox/TrimBox/BleedBox, no embedded timestamps), single page, all pages, or facing-page spreads. The scene IR can be dumped to JSON.
-- **Real PDF text, not pictures** — PDF output embeds genuine, selectable / searchable / indexable text (subsetted fonts + ToUnicode) and clickable hyperlinks by default; set `selectable=#false` on a `text`/`code` node to render it as outlines instead. `--embed-full-fonts` embeds whole faces in place of subsets.
+- **Real PDF text, not pictures** — PDF output embeds genuine, selectable / searchable / indexable text (subsetted fonts + ToUnicode) and clickable hyperlinks by default; set `selectable=#false` on a `text`/`code` node to render it as outlines instead. `--embed-full-fonts` embeds whole faces in place of subsets. Opaque linear and radial gradients retain native shading. Bitmap glyphs, translucent gradients, and gradients with outer or non-strict stop offsets rasterize their complete enclosing scopes. Effects and compositing layers requiring group opacity rasterize their complete enclosing scopes. Non-normal blends rasterize the whole page to preserve the backdrop. Text and links inside rasterized ranges lose selectability and clickability. Text outside those ranges retains native PDF behavior. Imported SVG paths with supported fills and solid strokes retain native vectors. Imported radial gradients, gradient strokes, patterns, clips, masks, filters, nested images, and unsupported paint transforms rasterize their complete enclosing scopes at page pixel resolution. SVG group opacity and placement opacity use the same fallback.
 - **Local history** — per-document identity (ULID doc-id stamped in the file, ignored by the renderer), an ephemeral session DAG for undo/redo, and a durable content-addressed version store (SHA-256 + DEFLATE) with named versions and restore — entirely off the render path.
 - **Workspace scratch candidates** — content-addressed `.zen` snapshots for design exploration, stored alongside history: `scratch new` records a candidate, `scratch list`/`show` review them, `candidate` transitions their lifecycle (draft → selected | rejected), `promote --into <page>` merges a selected candidate into the deliverable, and `finalize` drops the rejected ones. `bundle`/`unbundle` pack the whole per-doc store (history + scratch) into a portable, deterministic `.zenithbundle`.
 - **Library subsystem** — embedded preset packs (`@zenith/flowchart`, `@zenith/filters`, `@zenith/masks`, `@zenith/brand-kit`); `library add` materializes an item into a self-contained document with `libraries` + `provenance` tracking. Inspect any item with `zenith library show <pkg>#<item>`.
@@ -300,7 +332,7 @@ Two complementary ways to generate many outputs from one design — one varies *
 
 ### Size / format variants (`zenith variant`)
 
-Declare a `variants` block and expand one canonical page into many named target sizes (square, story, banner, ad slots) — each written as a native `.zen` page plus a rendered PNG, with optional per-target `override`s (hide/show a node, swap text, change a fill). Source token edits propagate to every variant automatically, and anchored nodes reflow to each size.
+A `variants` block expands one canonical page into named target sizes. Each target produces a `.zen` companion and PNG or SVG image. Per-target `override`s change visibility, text, and visual properties. Source token edits propagate to every variant. Anchored nodes reflow to each size.
 
 ```kdl
 variants {
@@ -313,7 +345,16 @@ variants {
 
 ```bash
 zenith variant poster.zen --out-dir out/ --manifest manifest.json
+zenith variant poster.zen --out-dir svg/ --format svg --raster-scale 2
 ```
+
+| Batch flag | Contract |
+| --- | --- |
+| `--format png\|svg` | Selects PNG or SVG. PNG is the default. SVG variants retain `.zen` companions. |
+| `--raster-scale F` | SVG only. Finite `0 < F <= 4`, default 1. |
+| `--manifest PATH` | Records committed outputs, including partial entries with failed status. |
+
+Batch commands have no `--deny` flags. Document, local, and global policy govern fallback diagnostics. Denied fallback prevents writes for that variant. I/O errors can leave earlier outputs. There is no batch rollback.
 
 Generation is deterministic (same source → byte-identical outputs + manifest, `schema: zenith-variant-manifest-v1`).
 
@@ -328,7 +369,10 @@ text id="hero.name" role="data.name" x=(px)60 y=(px)160 w=(px)680 h=(px)90 fill=
 
 ```bash
 zenith merge poster.zen people.csv --out-dir out/ --name-by name --manifest manifest.json
+zenith merge poster.zen people.csv --out-dir svg/ --name-by name --format svg --raster-scale 2
 ```
+
+PNG is the default merge format. Multi-page filenames include `-page-N` before `.png` or `.svg`. SVG fallback diagnostics respect document, local, and global policy. Denied fallback prevents writes for that row. I/O errors can leave earlier committed outputs. Reports retain those paths.
 
 Every row renders independently and deterministically. `--name-by` names files by a column (`Alice.png`, `Bob.png`); `--manifest` writes a byte-reproducible batch record (template + data hashes and per-row provenance) for CI. Image columns work too — a `role="data.logo"` image node swaps its asset path per row.
 
@@ -416,7 +460,7 @@ Run `zenith <command> --help` for flags (each prints a description and an exampl
 | Group         | Commands                                                                                                  |
 | ------------- | --------------------------------------------------------------------------------------------------------- |
 | **Author**    | `new` · `validate` · `fmt` · `tokens` · `inspect`                                                         |
-| **Render**    | `render` (`--pdf` · `--scene` · `--all-pages` · `--spread` · `--page`)                                    |
+| **Render**    | `render` (`--png` · `--svg` · `--pdf` · `--scene` · `--all-pages` · `--all-pages-svg` · `--spread` · `--page`)                                    |
 | **Edit**      | `tx` (typed transactions, dry-run by default) · `fix` (machine fixes for diagnostics, dry-run by default) |
 | **Variants**  | `variant` (one design → many sizes/formats) · `merge` (CSV data mail-merge)                               |
 | **Library**   | `library list` · `library search` · `library show` · `library add`                                        |
@@ -477,7 +521,13 @@ zenith plugin list                     # see what's installed where
 Claude Code, Codex, and OpenCode get the full folder skill (reference packs, templates, and
 themes); other agents (Cursor, Windsurf, Aider, Zed, Gemini, Copilot, Continue, Kiro,
 Antigravity) get a single self-contained rule file that points back at the self-documenting
-CLI. Writes are idempotent — re-run any time to update, or `zenith plugin uninstall` to remove.
+CLI. Matching files remain unchanged. Upgrade installed assets with:
+
+```bash
+zenith plugin install --force
+```
+
+`--force` overwrites differing installed files, including user changes. Without it, differing files remain untouched. Remove installs with `zenith plugin uninstall`.
 
 ### MCP server (remote / CI / hosted agents)
 
@@ -490,6 +540,17 @@ store instead of being inlined, and documents are addressable by `doc-id` so age
 juggling paths. The full author loop is exposed — `zenith_schema`, `zenith_validate`,
 `zenith_inspect`, `zenith_tokens`, `zenith_tx`, `zenith_fix`, `zenith_render`, `zenith_fmt`, `zenith_merge`,
 `zenith_theme_new`, plus the scratch/candidate/promote/finalize workspace tools.
+
+| MCP render parameter | Contract |
+| --- | --- |
+| `format` | Required: `png`, `svg`, `pdf`, or `scene`. |
+| `page` | One-based. Defaults to every PDF page and page 1 for other formats. |
+| `raster_scale` | SVG/PDF fallback resolution. Finite `0 < F <= 4`, default 1. |
+| `scale` / `contact_sheet` | PNG only. |
+| `out` | Optional protected file write alongside the artifact resource link. |
+| `diagnostics` | Includes soft diagnostics. Fallback reports remain visible when false. |
+
+MCP `zenith_merge` supports `format: png|svg`, with PNG as the default. SVG accepts finite `raster_scale` values within `0 < F <= 4`, default 1. Document, local, and global batch policy apply. Structured responses retain committed paths and partial rows. Manifest write errors retain row counts and mark the tool result as an error. There is no MCP variant tool.
 
 Run it over stdio (the default transport):
 
@@ -551,7 +612,7 @@ Zenith is a Rust workspace. Each crate owns one concern and exposes a stable con
 | `zenith-core`    | KDL parser adapter, semantic AST, canonical formatter, tokens, validation, diagnostics    |
 | `zenith-layout`  | Text shaping & font metrics (`rustybuzz` + `ttf-parser`); third-party types confined here |
 | `zenith-scene`   | Backend-neutral scene IR + compilation (geometry, text wrap, anchors, opacity/clip)       |
-| `zenith-render`  | CPU PNG backend (tiny-skia) and vector PDF backend; determinism enforcement               |
+| `zenith-render`  | CPU PNG backend (tiny-skia), SVG export, and vector PDF backend; determinism enforcement               |
 | `zenith-tx`      | Transaction op set, apply/dry-run engine, diffs, and the audit-record contract            |
 | `zenith-session` | Local-machine doc identity, session DAG, durable versions (content-addressed store)       |
 | `zenith-cli`     | `zenith` command-line tool — dispatch, argument parsing, and JSON/human output            |
@@ -591,7 +652,7 @@ Only put files in the showcase if you have the rights to share them and you allo
 
 ## Status
 
-Zenith is in its first public release series. The author → validate → edit → render pipeline works end-to-end: parsing, the diagnostic set, the transaction engine, PNG/PDF rendering, local history, the library subsystem, and variable-data merge are implemented and tested. The format, wire types, and command surface may still evolve while the project matures.
+Zenith is in its first public release series. The author → validate → edit → render pipeline works end-to-end: parsing, the diagnostic set, the transaction engine, PNG/SVG/PDF rendering, local history, the library subsystem, and variable-data merge are implemented and tested. The format, wire types, and command surface may still evolve while the project matures.
 
 ## Contributing
 

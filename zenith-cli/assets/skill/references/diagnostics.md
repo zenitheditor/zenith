@@ -7,12 +7,13 @@ Codes, severities, and summaries: `zenith schema diagnostics`. The full catalog 
 - `zenith validate <file> --json` checks the source.
 - With no Errors, `validate` also compiles every page. That adds overflow, contrast, and lint.
 - `zenith render <file> … --json` always prints JSON with every diagnostic.
-- `render` `status` is `ok` or `blocked`. Blocked means Errors remain and nothing is written.
-- One `validate --json` round shows everything. Never render to discover problems.
+- `render` `status` is `ok` or `blocked`. Diagnostic blocking leaves outputs untouched before writes.
+- I/O errors can leave earlier committed outputs. Inspect the report paths. There is no batch rollback.
+- Source validation reports source and compile diagnostics. Export-specific diagnostics require the export report.
 
 ## `zenith fix`
 
-`zenith fix <file>` previews fixes and a source diff. `--apply` writes and prints a summary; add `--diff` to print the diff too. Fix table: `zenith fix --help`.
+`zenith fix <file>` previews fixes and a source diff. `--apply` writes and prints a summary. add `--diff` to print the diff too. Fix table: `zenith fix --help`.
 
 - A machine-fixable diagnostic carries a structured `fix` object in `validate --json`.
 - Raw visual literals become the same-value token, else a minted one (`color.custom.<hex>`, `size.<n>`, …).
@@ -47,7 +48,7 @@ Text `overflow` sets what happens when glyph ink leaves the box. The check measu
 | `text.occluded` | A later opaque node hides over half of a glyph |
 | `label.overflow` | Shape label ink crosses the shape outline |
 | `layout.block_overlap` | Two sibling blocks overlap in part. Containment and children of one `group` are silent |
-| `chart.overflow` | Chart text ink leaves the chart box; raise `h` / `w` to the named size |
+| `chart.overflow` | Chart text ink leaves the chart box. raise `h` / `w` to the named size |
 | `align.near_miss` | An edge, center, or baseline sits 0.75-3 px off a shared value |
 | `spacing.uneven_gap` | Three or more siblings have nearly equal gaps |
 | `connector.crosses_node` | A connector route runs through an unconnected node |
@@ -94,3 +95,16 @@ Sources, last wins:
 - A non-bundled `fontFamily` emits `font.local`. That render is not deterministic across machines.
 - Use a Bundled family (`zenith fonts`), or declare the font as a project `font` asset.
 - `font.local` is raised at render time. Gate it with `render --deny font.local`, not `validate`.
+
+## Export diagnostics
+
+| Code | Contract |
+| --- | --- |
+| `render.svg_rasterized` | SVG fallback captures a scope or page. |
+| `render.pdf_rasterized` | PDF fallback captures a scope or page. |
+| `render.pdf_failed` | Strict PDF capture or resource error blocks export. |
+| `io.write_failed` | An output write fails. Earlier committed files can remain. |
+
+Fallback diagnostics identify pages, command ranges, and reasons. Captured text loses selection and search. Captured links lose click targets. MCP returns fallback diagnostics even when soft diagnostics are disabled. Structured rasterized regions remain metadata despite diagnostic policy.
+
+CLI render supports `--deny render.pdf_rasterized` and `--deny render.svg_rasterized`. Batch commands have no policy flags. Document, local, and global policy apply to batches. Read `export.md` for resolution controls and protected writes.

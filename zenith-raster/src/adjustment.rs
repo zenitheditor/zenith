@@ -74,10 +74,10 @@ fn validated_stop_colors(stops: &[GradientStop]) -> Result<Vec<StopColor>, Raste
         if !offset.is_finite() || !(0.0..=1.0).contains(&offset) {
             return Err(RasterError::InvalidGradientStops);
         }
-        if let Some(previous_offset) = previous_offset {
-            if offset < previous_offset {
-                return Err(RasterError::InvalidGradientStops);
-            }
+        if let Some(previous_offset) = previous_offset
+            && offset < previous_offset
+        {
+            return Err(RasterError::InvalidGradientStops);
         }
         previous_offset = Some(offset);
 

@@ -138,8 +138,7 @@ pub(super) fn poly_bbox(points: &[f64]) -> (f64, f64, f64, f64) {
     let mut min_y = f64::INFINITY;
     let mut max_x = f64::NEG_INFINITY;
     let mut max_y = f64::NEG_INFINITY;
-    for pair in points.chunks_exact(2) {
-        let &[x, y] = pair else { continue };
+    for &[x, y] in points.as_chunks::<2>().0 {
         min_x = min_x.min(x);
         max_x = max_x.max(x);
         min_y = min_y.min(y);

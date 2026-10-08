@@ -6,6 +6,9 @@
 //! pure command functions, writes any outputs, and returns a [`ToolResult`]
 //! carrying a trimmed `structuredContent` object (never raw human stdout).
 
+mod merge;
+mod render_request;
+
 use std::path::Path;
 
 use serde_json::{Value, json};
@@ -31,7 +34,7 @@ pub fn call(name: &str, args: &Value) -> ToolResult {
         "zenith_tx" => run_tx(args),
         "zenith_fix" => run_fix(args),
         "zenith_render" => run_render(args),
-        "zenith_merge" => run_merge(args),
+        "zenith_merge" => return merge::call(args),
         "zenith_theme_new" => run_theme_new(args),
         "zenith_workspace_scratch" => run_workspace_scratch(args),
         "zenith_workspace_candidate" => run_workspace_candidate(args),
@@ -257,51 +260,46 @@ fn run_fix(args: &Value) -> Result<Value, String> {
 }
 
 fn run_render(args: &Value) -> Result<Value, String> {
-    let (path, doc_id) = doc_ref::ensure(req_str(args, "doc")?)?;
-    let format = req_str(args, "format")?;
+    let request = render_request::RenderRequest::parse(args)?;
+    let reference = request.doc;
+    if let Some(out) = request.out {
+        let location = doc_ref::locate(reference)?;
+        let mut guard = crate::output_file::OutputGuard::new(&[location.path.as_path()])
+            .map_err(|error| format!("error writing '{out}': {error}"))?;
+        guard
+            .check(Path::new(out))
+            .map_err(|error| format!("error writing '{out}': {error}"))?;
+    }
+    let (path, doc_id) = doc_ref::ensure(reference)?;
+    let format = request.format;
     // An explicit `page` selects one page; its absence means "default" — which
-    // for PDF renders all pages, and for PNG/scene renders page 1.
-    let explicit_page: Option<usize> = opt_u64(args, "page").map(|p| p.max(1) as usize);
+    // for PDF renders all pages, and for PNG/SVG/scene renders page 1.
+    let explicit_page = request.page;
     let page = explicit_page.unwrap_or(1);
-    let locked = flag(args, "locked");
+    let locked = request.locked;
     let parent = path.parent();
     let src = read(&path)?;
     // MCP carries no policy flags; in-document `diagnostics {}` and config files
     // are still resolved on the render path via the project directory.
     let flags = crate::config::CliPolicyFlags::default();
-    // `scale` sets the PNG raster scale (0 < scale <= 4, default 1).
-    // `contact_sheet` tiles every page (or `page`) into one PNG.
-    let scale = match args.get("scale") {
-        None | Some(Value::Null) => None,
-        Some(v) => {
-            let shown = v.to_string();
-            let f = v.as_f64().unwrap_or(f64::NAN);
-            Some(
-                commands::render::check_render_scale(f, &shown)
-                    .map_err(|m| format!("error[cli.invalid_argument]: {m}"))?,
-            )
-        }
-    };
-    let contact_sheet = flag(args, "contact_sheet");
-    if (scale.is_some() || contact_sheet) && format != "png" {
-        return Err(format!(
-            "error[cli.invalid_argument]: scale and contact_sheet apply only to format 'png', got '{format}'; set format to png"
-        ));
-    }
-    let png_opts = commands::render::RenderEntryOptions {
+    let scale = request.scale;
+    let raster_scale = request.raster_scale;
+    let contact_sheet = request.contact_sheet;
+    let render_opts = commands::render::RenderEntryOptions {
         locked,
         subset: true,
         flags: &flags,
         data: None,
         construction_overlay: false,
         scale: scale.unwrap_or(1.0),
+        raster_scale: raster_scale.unwrap_or(1.0),
     };
     let mut image_meta: Option<Value> = None;
 
     let (bytes, ext, mime_diags): (Vec<u8>, &str, Vec<zenith_core::Diagnostic>) = match format {
-        "png" if contact_sheet => {
+        render_request::RenderFormat::Png if contact_sheet => {
             let art =
-                commands::render::to_contact_sheet(&src, parent, explicit_page, scale, png_opts)
+                commands::render::to_contact_sheet(&src, parent, explicit_page, scale, render_opts)
                     .map_err(|e| e.message)?;
             blocked(&art.diagnostics)?;
             image_meta = Some(json!({
@@ -314,47 +312,69 @@ fn run_render(args: &Value) -> Result<Value, String> {
             }));
             (art.png, "png", art.diagnostics)
         }
-        "png" => {
-            let art = commands::render::to_png_with_dir_options(&src, parent, page, png_opts)
+        render_request::RenderFormat::Png => {
+            let art = commands::render::to_png_with_dir_options(&src, parent, page, render_opts)
                 .map_err(|e| e.message)?;
             blocked(&art.diagnostics)?;
             image_meta = Some(json!({
                 "width": art.width,
                 "height": art.height,
-                "scale": png_opts.scale,
+                "scale": render_opts.scale,
             }));
             (art.png, "png", art.diagnostics)
         }
-        "pdf" => {
+        render_request::RenderFormat::Svg => {
+            let art = commands::render::to_svg_with_dir_options(&src, parent, page, render_opts)
+                .map_err(|e| e.message)?;
+            blocked(&art.diagnostics)?;
+            image_meta = Some(
+                json!({ "width": art.width, "height": art.height, "page": art.page,
+                "rasterized_regions": art.rasterized_regions.iter().map(|region| json!({
+                    "command_start": region.command_start, "command_end": region.command_end,
+                    "reason": format!("{:?}", region.reason),
+                })).collect::<Vec<_>>() }),
+            );
+            (art.svg, "svg", art.diagnostics)
+        }
+        render_request::RenderFormat::Pdf => {
             let art = match explicit_page {
                 // MCP renders always subset (small PDFs); the full-font knob is a CLI flag.
-                Some(n) => {
-                    commands::render::to_pdf_with_dir(&src, parent, n, locked, true, &flags, None)
+                Some(n) => commands::render::to_pdf_with_dir_options(&src, parent, n, render_opts),
+                None => {
+                    commands::render::to_pdf_all_pages_with_dir_options(&src, parent, render_opts)
                 }
-                None => commands::render::to_pdf_all_pages_with_dir(
-                    &src, parent, locked, true, &flags, None,
-                ),
             }
             .map_err(|e| e.message)?;
             blocked(&art.diagnostics)?;
+            image_meta = Some(
+                json!({"rasterized_regions": art.rasterized_regions.iter().map(|region| json!({
+                "page": region.page, "command_start": region.command_start, "command_end": region.command_end,
+                "reason": format!("{:?}", region.reason),
+            })).collect::<Vec<_>>() }),
+            );
             (art.pdf, "pdf", art.diagnostics)
         }
-        "scene" => {
+        render_request::RenderFormat::Scene => {
             let art = commands::render::to_scene_json(&src, parent, page, &flags, None)
                 .map_err(|e| e.message)?;
             blocked(&art.diagnostics)?;
             (art.json.into_bytes(), "json", art.diagnostics)
         }
-        other => {
-            return Err(format!(
-                "invalid format '{other}' (expected png, pdf, or scene)"
-            ));
-        }
     };
 
+    if let Some(scale) = raster_scale.filter(|scale| *scale != 1.0)
+        && let Some(metadata) = &mut image_meta
+    {
+        insert(metadata, "raster_scale", json!(scale));
+    }
+
     // Optional caller-chosen path, plus a stable per-doc preview file.
-    if let Some(out) = opt_str(args, "out") {
-        std::fs::write(out, &bytes).map_err(|e| format!("error writing '{out}': {e}"))?;
+    if let Some(out) = request.out {
+        let mut guard = crate::output_file::OutputGuard::new(&[path.as_path()])
+            .map_err(|error| format!("error writing '{out}': {error}"))?;
+        guard
+            .write(Path::new(out), &bytes)
+            .map_err(|error| format!("error writing '{out}': {error}"))?;
     }
     // The preview slot holds page renders; a contact sheet is not one page.
     if !contact_sheet {
@@ -364,11 +384,14 @@ fn run_render(args: &Value) -> Result<Value, String> {
     let name = if contact_sheet {
         "render-contact-sheet".to_owned()
     } else {
-        format!("render-{format}")
+        format!("render-{}", format.as_str())
     };
-    let link = store_link(&doc_id, &bytes, ext, &name)?;
+    let link = store_link(&doc_id, &bytes, ext, &name).map_err(|error| match request.out {
+        Some(out) => format!("artifact written to '{out}'. Resource storage failed: {error}"),
+        None => error,
+    })?;
     let mut out = json!({
-        "format": format,
+        "format": format.as_str(),
         "resource": link,
         "blocked": false,
         "error_count": 0,
@@ -382,7 +405,7 @@ fn run_render(args: &Value) -> Result<Value, String> {
         };
         insert(&mut out, key, meta);
     }
-    if flag(args, "diagnostics") {
+    if request.diagnostics {
         let diags: Vec<Value> = mime_diags
             .iter()
             .map(|d| json!({ "code": d.code, "severity": severity_word(d.severity), "message": d.message }))
@@ -393,47 +416,6 @@ fn run_render(args: &Value) -> Result<Value, String> {
 }
 
 // ── Authoring tools ───────────────────────────────────────────────────────────
-
-fn run_merge(args: &Value) -> Result<Value, String> {
-    let loc = doc_ref::locate(req_str(args, "doc")?)?;
-    let data = req_str(args, "data")?;
-    let out_dir = req_str(args, "out_dir")?;
-    let name_by = opt_str(args, "name_by");
-    let doc_src = read(&loc.path)?;
-    let csv_src = read(Path::new(data))?;
-
-    let report = commands::merge::run(
-        &doc_src,
-        &csv_src,
-        loc.path.parent(),
-        Path::new(out_dir),
-        name_by,
-    )
-    .map_err(|e| e.message)?;
-
-    if let Some(manifest) = opt_str(args, "manifest") {
-        let m = commands::merge::build_manifest(&doc_src, &csv_src, name_by, &report);
-        let txt = serde_json::to_string_pretty(&m).map_err(|e| e.to_string())?;
-        std::fs::write(manifest, txt).map_err(|e| format!("error writing '{manifest}': {e}"))?;
-    }
-
-    let failures: Vec<Value> = report
-        .rows
-        .iter()
-        .filter_map(|r| {
-            r.failure
-                .as_ref()
-                .map(|f| json!({ "row": r.row + 1, "error": f }))
-        })
-        .collect();
-    let written = report.rows.iter().filter(|r| r.failure.is_none()).count();
-    Ok(json!({
-        "total_rows": report.rows.len(),
-        "written": written,
-        "failed": failures.len(),
-        "failures": failures,
-    }))
-}
 
 fn run_theme_new(args: &Value) -> Result<Value, String> {
     let name = req_str(args, "name")?;
@@ -567,7 +549,7 @@ fn write_preview(doc_id: &str, page: usize, ext: &str, bytes: &[u8]) {
     let Ok(paths) = open_store() else { return };
     let dir = paths.workspace_renders_dir(doc_id);
     if std::fs::create_dir_all(&dir).is_ok() {
-        let _ = std::fs::write(dir.join(format!("page-{page}.{ext}")), bytes);
+        let _ = crate::output_file::write_bytes(&dir.join(format!("page-{page}.{ext}")), bytes);
     }
 }
 

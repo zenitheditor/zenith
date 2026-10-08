@@ -5,7 +5,7 @@
 //! pattern established by `tx_pipeline.rs`.
 
 use tempfile::TempDir;
-use zenith_cli::commands::merge::run as merge_run;
+use zenith_cli::commands::merge::{build_manifest, run as merge_run, to_json_output};
 
 // ── Shared fixture helper ─────────────────────────────────────────────────────
 
@@ -835,4 +835,125 @@ fn manifest_is_deterministic_and_correct() {
         m_mixed.name_by, None,
         "name_by must be None when not supplied"
     );
+}
+
+#[test]
+fn explicit_png_matches_default_bytes_and_manifest() {
+    use zenith_cli::commands::render::BatchFormat;
+    let first = TempDir::new().unwrap();
+    let second = TempDir::new().unwrap();
+    let csv = "name,title\nAlice,Engineer\nBob,Designer\n";
+    let default = merge_run(TEMPLATE_DOC, csv, None, first.path(), None).unwrap();
+    let explicit = zenith_cli::commands::merge::run_with_format(
+        TEMPLATE_DOC,
+        csv,
+        None,
+        second.path(),
+        None,
+        BatchFormat::Png,
+    )
+    .unwrap();
+    assert_eq!(
+        serde_json::to_vec(&build_manifest(TEMPLATE_DOC, csv, None, &default)).unwrap(),
+        serde_json::to_vec(&build_manifest(TEMPLATE_DOC, csv, None, &explicit)).unwrap()
+    );
+    for name in default.written() {
+        assert_eq!(
+            std::fs::read(first.path().join(&name)).unwrap(),
+            std::fs::read(second.path().join(&name)).unwrap()
+        );
+    }
+}
+
+#[test]
+fn svg_merge_keeps_multipage_names_determinism_and_collisions() {
+    use zenith_cli::commands::render::BatchFormat;
+    let first = TempDir::new().unwrap();
+    let second = TempDir::new().unwrap();
+    let csv = "name\nAlice\nAlice\nBob\n";
+    let generate = |dir| {
+        zenith_cli::commands::merge::run_with_format(
+            TWO_PAGE_TEMPLATE,
+            csv,
+            None,
+            dir,
+            Some("name"),
+            BatchFormat::Svg,
+        )
+        .unwrap()
+    };
+    let report = generate(first.path());
+    let again = generate(second.path());
+    assert_eq!(
+        report.written(),
+        [
+            "Alice-page-1.svg",
+            "Alice-page-2.svg",
+            "Bob-page-1.svg",
+            "Bob-page-2.svg"
+        ]
+    );
+    assert_eq!(report.failed().len(), 1);
+    assert!(report.rows[1].outputs.is_empty());
+    let manifest = serde_json::to_vec(&build_manifest(
+        TWO_PAGE_TEMPLATE,
+        csv,
+        Some("name"),
+        &report,
+    ))
+    .unwrap();
+    assert_eq!(
+        manifest,
+        serde_json::to_vec(&build_manifest(
+            TWO_PAGE_TEMPLATE,
+            csv,
+            Some("name"),
+            &again
+        ))
+        .unwrap()
+    );
+    for name in report.written() {
+        let bytes = std::fs::read(first.path().join(&name)).unwrap();
+        assert_eq!(bytes, std::fs::read(second.path().join(&name)).unwrap());
+        assert!(String::from_utf8(bytes).unwrap().contains("<svg"));
+    }
+    let json = serde_json::to_value(to_json_output(&report)).unwrap();
+    assert_eq!(json["rows"][0]["outputs"][0], "Alice-page-1.svg");
+}
+
+#[test]
+fn svg_merge_embeds_row_scoped_image_assets() {
+    use zenith_cli::commands::render::BatchFormat;
+    let project = TempDir::new().unwrap();
+    let out = TempDir::new().unwrap();
+    let first = write_test_png(&project, "first", 8, 8);
+    let second = write_test_png(&project, "second", 16, 16);
+    let doc = format!(
+        r##"zenith version=1 {{
+      project id="project" name="Images"
+      assets {{ asset id="photo" kind="image" src="{first}"; }}
+      tokens format="zenith-token-v1" {{}}
+      styles {{}}
+      document id="document" title="Images" {{
+        page id="page" w=(px)40 h=(px)40 {{
+          image id="image" asset="photo" x=(px)0 y=(px)0 w=(px)40 h=(px)40 fit="stretch" role="data.photo"
+        }}
+      }}
+    }}"##
+    );
+    let report = zenith_cli::commands::merge::run_with_format(
+        &doc,
+        &format!("photo\n{first}\n{second}\n"),
+        Some(project.path()),
+        out.path(),
+        None,
+        BatchFormat::Svg,
+    )
+    .unwrap();
+    assert_eq!(report.written(), ["row-0001.svg", "row-0002.svg"]);
+    let first = std::fs::read_to_string(out.path().join("row-0001.svg")).unwrap();
+    let second = std::fs::read_to_string(out.path().join("row-0002.svg")).unwrap();
+    assert!(first.contains("data:image/png;base64,"));
+    assert!(second.contains("data:image/png;base64,"));
+    assert_ne!(first, second);
 }

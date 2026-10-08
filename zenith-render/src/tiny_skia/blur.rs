@@ -281,7 +281,12 @@ fn blur_row_zoned<Q: Quotient>(src: &[u8], dst: &mut [u8], radius: usize, q: Q) 
     let (mid, tail) = rest.split_at_mut_checked(mid_len * 4)?;
 
     let head_add = src.get((r + 1) * 4..(2 * r + 1) * 4)?;
-    for (out, add) in head.chunks_exact_mut(4).zip(head_add.chunks_exact(4)) {
+    for (out, add) in head
+        .as_chunks_mut::<4>()
+        .0
+        .iter_mut()
+        .zip(head_add.as_chunks::<4>().0.iter())
+    {
         store(out, &sum, q);
         slide(&mut sum, add, first);
     }
@@ -289,16 +294,23 @@ fn blur_row_zoned<Q: Quotient>(src: &[u8], dst: &mut [u8], radius: usize, q: Q) 
     let mid_add = src.get((2 * r + 1) * 4..)?;
     let mid_sub = src.get(..mid_len * 4)?;
     let mid_px = mid
-        .chunks_exact_mut(4)
-        .zip(mid_add.chunks_exact(4))
-        .zip(mid_sub.chunks_exact(4));
+        .as_chunks_mut::<4>()
+        .0
+        .iter_mut()
+        .zip(mid_add.as_chunks::<4>().0.iter())
+        .zip(mid_sub.as_chunks::<4>().0.iter());
     for ((out, add), sub) in mid_px {
         store(out, &sum, q);
         slide(&mut sum, add, sub);
     }
 
     let tail_sub = src.get(mid_len * 4..(w - r) * 4)?;
-    for (out, sub) in tail.chunks_exact_mut(4).zip(tail_sub.chunks_exact(4)) {
+    for (out, sub) in tail
+        .as_chunks_mut::<4>()
+        .0
+        .iter_mut()
+        .zip(tail_sub.as_chunks::<4>().0.iter())
+    {
         store(out, &sum, q);
         slide(&mut sum, end, sub);
     }
@@ -313,7 +325,7 @@ fn blur_row_clamped<Q: Quotient>(src: &[u8], dst: &mut [u8], radius: usize, q: Q
     for (k, weight) in window_weights(radius, last) {
         add_scaled(&mut sum, px(k), weight);
     }
-    for (x, out) in dst.chunks_exact_mut(4).enumerate() {
+    for (x, out) in dst.as_chunks_mut::<4>().0.iter_mut().enumerate() {
         store(out, &sum, q);
         let add = px(x.saturating_add(radius).saturating_add(1).min(last));
         let sub = px(x.saturating_sub(radius));
@@ -512,10 +524,10 @@ mod tests {
         let stride = w as usize * 4;
         for row in pm.data_mut().chunks_exact_mut(stride) {
             let mode = rng.next() % 5;
-            for px in row.chunks_exact_mut(4) {
+            for px in row.as_chunks_mut::<4>().0 {
                 let a = match mode {
                     0 => 0,
-                    1 if rng.next() % 7 != 0 => 0,
+                    1 if !rng.next().is_multiple_of(7) => 0,
                     2 => rng.next() % 3,
                     _ => rng.next() % 256,
                 };

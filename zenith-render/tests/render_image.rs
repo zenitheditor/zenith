@@ -385,7 +385,7 @@ fn quantize_unit_to_u8(channel: f32) -> u8 {
         lower_int
     } else if fraction > 0.5 {
         lower_int + 1
-    } else if lower_int % 2 == 0 {
+    } else if lower_int.is_multiple_of(2) {
         lower_int
     } else {
         lower_int + 1

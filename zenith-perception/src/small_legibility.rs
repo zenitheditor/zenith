@@ -378,10 +378,11 @@ fn segments(contour: &FlattenedPathContour) -> Vec<(Point2, Point2)> {
         })
         .collect();
 
-    if contour.closed && contour.points.len() > 2 {
-        if let (Some(first), Some(last)) = (contour.points.first(), contour.points.last()) {
-            segments.push((*last, *first));
-        }
+    if contour.closed
+        && contour.points.len() > 2
+        && let (Some(first), Some(last)) = (contour.points.first(), contour.points.last())
+    {
+        segments.push((*last, *first));
     }
 
     segments

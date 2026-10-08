@@ -49,7 +49,9 @@ page id="page.cn" w=(px)640 h=(px)360 {
     // The tip sits on the `to` anchor (300, 100): one vertex must equal it.
     let to_anchor = (300.0, 100.0);
     let has_tip = head
-        .chunks_exact(2)
+        .as_chunks::<2>()
+        .0
+        .iter()
         .any(|p| (p[0] - to_anchor.0).abs() < 1e-9 && (p[1] - to_anchor.1).abs() < 1e-9);
     assert!(
         has_tip,
@@ -58,7 +60,9 @@ page id="page.cn" w=(px)640 h=(px)360 {
 
     // Horizontal left→right travel: the tip is the rightmost vertex.
     let max_x = head
-        .chunks_exact(2)
+        .as_chunks::<2>()
+        .0
+        .iter()
         .map(|p| p[0])
         .fold(f64::NEG_INFINITY, f64::max);
     assert!(
@@ -105,7 +109,9 @@ page id="page.cn" w=(px)640 h=(px)360 {
     let from_anchor = (140.0, 80.0);
     let to_anchor = (300.0, 100.0);
     let tip_on = |head: &Vec<f64>, t: (f64, f64)| {
-        head.chunks_exact(2)
+        head.as_chunks::<2>()
+            .0
+            .iter()
             .any(|p| (p[0] - t.0).abs() < 1e-9 && (p[1] - t.1).abs() < 1e-9)
     };
     assert!(

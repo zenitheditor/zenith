@@ -191,15 +191,15 @@ pub(in crate::validate::check) fn check_pattern(
     }
 
     // count <= 0 is invalid regardless of kind.
-    if let Some(count) = p.count {
-        if count <= 0 {
-            diagnostics.push(Diagnostic::error(
-                "pattern.invalid_count",
-                format!("pattern '{}': count must be > 0, got {}", p.id, count),
-                p.source_span,
-                Some(p.id.clone()),
-            ));
-        }
+    if let Some(count) = p.count
+        && count <= 0
+    {
+        diagnostics.push(Diagnostic::error(
+            "pattern.invalid_count",
+            format!("pattern '{}': count must be > 0, got {}", p.id, count),
+            p.source_span,
+            Some(p.id.clone()),
+        ));
     }
 
     // spacing <= 0 or not px-convertible is invalid regardless of kind.
@@ -230,18 +230,18 @@ pub(in crate::validate::check) fn check_pattern(
 
     // jitter outside 0.0..=1.0 is a warning (the engine clamps, but the author
     // almost certainly made an error).
-    if let Some(jitter) = p.jitter {
-        if !(0.0..=1.0).contains(&jitter) {
-            diagnostics.push(Diagnostic::warning(
-                "pattern.jitter_out_of_range",
-                format!(
-                    "pattern '{}': jitter {jitter} is outside the valid range 0.0..=1.0",
-                    p.id
-                ),
-                p.source_span,
-                Some(p.id.clone()),
-            ));
-        }
+    if let Some(jitter) = p.jitter
+        && !(0.0..=1.0).contains(&jitter)
+    {
+        diagnostics.push(Diagnostic::warning(
+            "pattern.jitter_out_of_range",
+            format!(
+                "pattern '{}': jitter {jitter} is outside the valid range 0.0..=1.0",
+                p.id
+            ),
+            p.source_span,
+            Some(p.id.clone()),
+        ));
     }
 
     // Unknown properties.

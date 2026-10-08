@@ -1,6 +1,7 @@
 //! Raster image decoding (PNG, JPEG) into premultiplied `Pixmap`s.
 
-use tiny_skia::Pixmap;
+use tiny_skia::{IntRect, Pixmap};
+use zenith_scene::SrcRect;
 
 /// Decode a raster image asset into a premultiplied `Pixmap`.
 ///
@@ -20,6 +21,33 @@ pub(crate) fn decode_raster_image(bytes: &[u8]) -> Option<Pixmap> {
     None
 }
 
+/// Clamp and truncate source-crop endpoints before copying premultiplied pixels.
+/// Absent crops return the original pixmap. Empty crops skip the image.
+pub(crate) fn crop_raster_image(decoded: Pixmap, crop: Option<&SrcRect>) -> Option<Pixmap> {
+    let Some(sr) = crop else {
+        return Some(decoded);
+    };
+    let rect = crop_raster_rect((decoded.width(), decoded.height()), sr)?;
+    decoded.as_ref().clone_rect(rect)
+}
+
+/// Resolve effective crop dimensions without copying raster pixels.
+pub(crate) fn crop_raster_rect(dimensions: (u32, u32), sr: &SrcRect) -> Option<IntRect> {
+    let (rx, ry, rw, rh) = (sr.x, sr.y, sr.w, sr.h);
+    let src_w = dimensions.0 as f64;
+    let src_h = dimensions.1 as f64;
+    let cx = rx.max(0.0).min(src_w) as i32;
+    let cy = ry.max(0.0).min(src_h) as i32;
+    let cx2 = (rx + rw).max(0.0).min(src_w) as i32;
+    let cy2 = (ry + rh).max(0.0).min(src_h) as i32;
+    let cw = (cx2 - cx).max(0) as u32;
+    let ch = (cy2 - cy).max(0) as u32;
+    if cw == 0 || ch == 0 {
+        return None;
+    }
+    IntRect::from_xywh(cx, cy, cw, ch)
+}
+
 /// Decode a JPEG into an opaque premultiplied `Pixmap`. Handles RGB24 and L8
 /// (grayscale) pixel formats; other formats (L16, CMYK32) return `None`.
 fn decode_jpeg(bytes: &[u8]) -> Option<Pixmap> {
@@ -34,8 +62,7 @@ fn decode_jpeg(bytes: &[u8]) -> Option<Pixmap> {
 
     match info.pixel_format {
         PixelFormat::RGB24 => {
-            for (chunk, px) in pixels.chunks_exact(3).zip(dst.iter_mut()) {
-                let [r, g, b] = chunk else { continue };
+            for ([r, g, b], px) in pixels.as_chunks::<3>().0.iter().zip(dst.iter_mut()) {
                 // Opaque source: premultiplied == straight at alpha 255.
                 *px = PremultipliedColorU8::from_rgba(*r, *g, *b, 255)?;
             }

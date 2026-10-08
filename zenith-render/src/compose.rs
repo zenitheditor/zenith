@@ -46,14 +46,19 @@ pub fn composite_over(
                 src.width, src.height
             )));
         };
-        for (d, s) in d_row.chunks_exact_mut(4).zip(s_row.chunks_exact(4)) {
+        for (d, s) in d_row
+            .as_chunks_mut::<4>()
+            .0
+            .iter_mut()
+            .zip(s_row.as_chunks::<4>().0.iter())
+        {
             over_pixel(d, s);
         }
     }
     Ok(())
 }
 
-/// Integer straight-alpha source-over of one pixel (`chunks_exact(4)` input).
+/// Integer straight-alpha source-over of one four-byte RGBA pixel.
 fn over_pixel(d: &mut [u8], s: &[u8]) {
     let (Some(&sa), Some(&da)) = (s.get(3), d.get(3)) else {
         return;

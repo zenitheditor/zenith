@@ -48,7 +48,7 @@ pub(super) fn attenuate_by_mask(pm: &mut Pixmap, spec: &MaskSpec, region: Region
             return;
         };
         // `chunks_exact` guarantees exactly 4 bytes per chunk.
-        for (px, &cov) in px_row.chunks_exact_mut(4).zip(cov_row) {
+        for (px, &cov) in px_row.as_chunks_mut::<4>().0.iter_mut().zip(cov_row) {
             let cov = u32::from(cov);
             // (channel * cov + 127) / 255 — same rounding as shadow.rs premultiply.
             for ch in px.iter_mut() {
@@ -113,7 +113,7 @@ fn build_mask_coverage(
             for (dy, out_row) in dst.chunks_exact_mut(crop.w as usize * 4).enumerate() {
                 let start = (crop.y as usize + dy) * width as usize + crop.x as usize;
                 let src_row = src.get(start..start + crop.w as usize)?;
-                for (out, &a) in out_row.chunks_exact_mut(4).zip(src_row) {
+                for (out, &a) in out_row.as_chunks_mut::<4>().0.iter_mut().zip(src_row) {
                     out[0] = a;
                     out[1] = a;
                     out[2] = a;
@@ -180,7 +180,7 @@ mod tests {
     /// Build a fully-opaque red premultiplied pixmap.
     fn red_pixmap(w: u32, h: u32) -> Pixmap {
         let mut pm = Pixmap::new(w, h).expect("alloc");
-        for px in pm.data_mut().chunks_exact_mut(4) {
+        for px in pm.data_mut().as_chunks_mut::<4>().0 {
             px[0] = 200; // r (premultiplied, a=255 → unchanged)
             px[1] = 0;
             px[2] = 0;

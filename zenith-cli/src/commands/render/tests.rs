@@ -362,6 +362,7 @@ fn construction_overlay_appends_guide_commands_to_scene_json() {
         data: None,
         construction_overlay: true,
         scale: 1.0,
+        raster_scale: 1.0,
     };
     let artifact = to_scene_json_with_options(CONSTRUCTION_DOC, None, 1, opts)
         .expect("scene render must succeed");

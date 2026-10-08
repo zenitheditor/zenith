@@ -50,9 +50,9 @@ use std::path::PathBuf;
 #[command(
     name = "zenith",
     version,
-    about = "Author, validate, and render deterministic .zen design documents (KDL → PNG/PDF).",
+    about = "Author, validate, and render deterministic .zen design documents (KDL → PNG/SVG/PDF).",
     long_about = "Zenith turns a design into plain-text .zen source (KDL) you can read, diff, \
-validate, edit with typed transactions, and render deterministically to pixel-exact PNG or \
+validate, edit with typed transactions, and render deterministically to pixel-exact PNG, self-contained SVG, or \
 print-ready PDF — the opposite of a flat AI image.\n\n\
 The core loop: author/edit source → `validate` → `render` to inspect → iterate. Edits to \
 existing documents should go through `tx` (typed, dry-run by default). Every command accepts \
@@ -114,11 +114,11 @@ pub enum Command {
 
     /// Compile and render a `.zen` document.
     ///
-    /// Compile and render a .zen document to PNG, PDF, or a scene display-list.
+    /// Compile and render a .zen document to PNG, SVG, PDF, or a scene display-list.
     /// Rendering is deterministic (same source + backend → same bytes) and is blocked by hard
-    /// diagnostics, so `validate` first. Use `--all-pages <DIR>` for a contact sheet and `--spread
-    /// A-B` for facing pages.
-    Render(RenderArgs),
+    /// diagnostics, so `validate` first. Use `--all-pages <DIR>` for individual PNGs,
+    /// `--contact-sheet <PNG>` for a page grid, and `--spread A-B` for facing pages.
+    Render(Box<RenderArgs>),
 
     /// Apply a transaction to a `.zen` document (dry-run by default).
     ///
@@ -158,9 +158,9 @@ pub enum Command {
     /// judgments.
     Perceive(PerceiveArgs),
 
-    /// Mail-merge a `.zen` template with a CSV data file, writing one PNG per row.
+    /// Mail-merge a `.zen` template with CSV data, writing PNG or SVG row pages.
     ///
-    /// Mail-merge a .zen template with a CSV, writing one PNG per row. Mark variable
+    /// Render each CSV row as PNG pages by default, or SVG pages with `--format svg`. Mark variable
     /// nodes with `role="data.<column>"` (text nodes substitute their text; image nodes substitute
     /// their asset path) where `<column>` matches a CSV header. Use this for localized posts,
     /// personalized graphics, certificates, badges, and campaign variants. For a SINGLE
@@ -215,7 +215,7 @@ pub enum Command {
     /// Generate size/format variants of a document (one design → many sizes).
     ///
     /// Expands the `variants` block: one canonical page becomes N named target sizes (square,
-    /// story, banner), each written as a native `.zen` page plus a rendered PNG. Per-variant
+    /// story, banner), each written as a native `.zen` companion plus a PNG or SVG image. PNG is the default. Per-variant
     /// `override`s can hide/show nodes, swap text, or change visual properties; source token edits
     /// propagate to every variant. This varies DIMENSIONS — distinct from `merge`, which varies CONTENT
     /// across CSV rows. Deterministic: same source → byte-identical outputs.
@@ -477,7 +477,7 @@ pub struct VariantArgs {
     /// Input `.zen` document containing a `variants` block.
     pub doc: PathBuf,
 
-    /// Directory to write one `.zen` + one `.png` per generated variant into.
+    /// Directory for each generated `.zen` companion and image.
     #[arg(long, value_name = "DIR")]
     pub out_dir: PathBuf,
 
@@ -489,6 +489,12 @@ pub struct VariantArgs {
     /// reproducibility.  Independent of --json.
     #[arg(long, value_name = "PATH")]
     pub manifest: Option<PathBuf>,
+    /// Output image format.
+    #[arg(long, value_enum, default_value = "png")]
+    pub format: crate::commands::render::BatchFormat,
+    /// Raster fallback resolution for SVG: 0 < F <= 4 (default 1).
+    #[arg(long, value_name = "F", allow_hyphen_values = true)]
+    pub raster_scale: Option<String>,
 }
 
 /// Arguments for `zenith new`.
@@ -851,11 +857,11 @@ pub struct MergeArgs {
     /// CSV data file; header row names the columns.
     pub data: PathBuf,
 
-    /// Directory to write one PNG per row into.
+    /// Directory for rendered row pages.
     #[arg(long, value_name = "DIR")]
     pub out_dir: PathBuf,
 
-    /// CSV column to name each output file by (default: row-NNNN.png).
+    /// CSV column for output names (default: row-NNNN with the chosen format extension).
     #[arg(long, value_name = "COL")]
     pub name_by: Option<String>,
 
@@ -867,6 +873,12 @@ pub struct MergeArgs {
     /// reproducibility. Independent of --json.
     #[arg(long, value_name = "PATH")]
     pub manifest: Option<PathBuf>,
+    /// Output image format.
+    #[arg(long, value_enum, default_value = "png")]
+    pub format: crate::commands::render::BatchFormat,
+    /// Raster fallback resolution for SVG: 0 < F <= 4 (default 1).
+    #[arg(long, value_name = "F", allow_hyphen_values = true)]
+    pub raster_scale: Option<String>,
 }
 
 /// Arguments for `zenith history`.

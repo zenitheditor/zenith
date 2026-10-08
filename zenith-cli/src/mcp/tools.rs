@@ -6,9 +6,10 @@
 //! instead of carrying every schema in context. Every other tool returns a
 //! trimmed structured result and expands only on opt-in params.
 //!
-//! Every tool accepts `doc` as either a filesystem path or a 26-char `doc-id`
-//! (see [`super::doc_ref`]), so an agent can stop passing paths after the first
-//! call.
+//! A `doc` argument accepts a path or the 26-character `doc-id`.
+//! Schema, fonts, theme creation, and workspace `unbundle` do not require `doc`.
+//! Check tool schemas and operation requirements for document arguments.
+//! See [`super::doc_ref`] for document identity resolution.
 
 use serde_json::{Value, json};
 
@@ -144,20 +145,22 @@ the applied fixes and the remaining errors.",
         },
         Tool {
             name: "zenith_render",
-            description: "Render a document deterministically to png, pdf, or scene (display-list \
+            description: "Render a document deterministically to png, svg, pdf, or scene (display-list \
 JSON). Returns a resource link to the artifact (never inlines bytes); blocked by hard diagnostics \
 — validate first. Pass out to also write the file to a path you choose. For cheap visual checks \
-use png with scale 0.25-0.5, or contact_sheet=true to see every page in one image.",
+use png with scale 0.25-0.5, or contact_sheet=true to see every page in one image. \
+SVG exports page 1 by default, outlines text, embeds images, and reports raster fallback diagnostics.",
             schema: json!({
                 "type": "object",
                 "properties": {
                     "doc": doc_arg(),
-                    "format": { "type": "string", "enum": ["png", "pdf", "scene"] },
-                    "page": { "type": "integer", "minimum": 1, "description": "1-based page (default 1)." },
+                    "format": { "type": "string", "enum": ["png", "svg", "pdf", "scene"] },
+                    "page": { "type": "integer", "minimum": 1, "description": "1-based page. Omit for every PDF page or page 1 in other formats." },
                     "locked": { "type": "boolean", "description": "Verify asset sha256 and fail on mismatch." },
                     "out": { "type": "string", "description": "Optional path to also write the artifact to." },
                     "diagnostics": { "type": "boolean", "description": "Include soft diagnostics (default false)." },
                     "scale": { "type": "number", "exclusiveMinimum": 0, "maximum": 4, "description": "png only: raster scale, 0 < scale <= 4 (default 1). Each side is max(1, round(page_px * scale)); drawn at that scale, not resampled." },
+                    "raster_scale": { "type": "number", "exclusiveMinimum": 0, "maximum": 4, "description": "svg/pdf only: raster fallback resolution, 0 < raster_scale <= 4 (default 1). Vector page dimensions and geometry remain unchanged." },
                     "contact_sheet": { "type": "boolean", "description": "png only: tile every page (or `page`) into one labelled PNG, ceil(sqrt(n)) columns. Without scale, fits 2048 px wide." }
                 },
                 "required": ["doc", "format"]
@@ -175,16 +178,18 @@ changed and its content hash.",
         },
         Tool {
             name: "zenith_merge",
-            description: "Mail-merge a .zen template with a CSV, writing one PNG per row. Mark \
+            description: "Mail-merge a .zen template with CSV data, writing PNG or SVG pages per row. Mark \
 variable nodes with role=\"data.<column>\". Use for localized/personalized/batch variants.",
             schema: json!({
                 "type": "object",
                 "properties": {
                     "doc": doc_arg(),
                     "data": { "type": "string", "description": "CSV data file path." },
-                    "out_dir": { "type": "string", "description": "Directory for the output PNGs." },
+                    "out_dir": { "type": "string", "description": "Directory for committed row pages." },
                     "name_by": { "type": "string", "description": "CSV column to name files by." },
-                    "manifest": { "type": "string", "description": "Write a reproducibility manifest here." }
+                    "manifest": { "type": "string", "description": "Write a reproducibility manifest here." },
+                    "format": { "type": "string", "enum": ["png", "svg"], "default": "png", "description": "Output image format (default png)." },
+                    "raster_scale": { "type": "number", "exclusiveMinimum": 0, "maximum": 4, "description": "svg only: raster fallback resolution, 0 < raster_scale <= 4 (default 1). Vector geometry remains unchanged." }
                 },
                 "required": ["doc", "data", "out_dir"]
             }),

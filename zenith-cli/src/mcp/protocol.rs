@@ -19,8 +19,9 @@ pub fn error(id: Value, code: i64, message: &str) -> Value {
 ///
 /// Every successful tool returns a compact structured object; the text mirror
 /// (`text`) is the same object serialised compactly, so clients that only read
-/// `content[].text` still receive the full machine result. Failures carry a
-/// human message in `text`, no structured payload, and `is_error = true`.
+/// `content[].text` still receive the full machine result. Setup errors carry a
+/// human message without a structured payload. Partial batch errors retain their
+/// structured report and its JSON text mirror with `is_error = true`.
 pub struct ToolResult {
     /// The `structuredContent` payload (omitted from the wire when `None`).
     pub structured: Option<Value>,

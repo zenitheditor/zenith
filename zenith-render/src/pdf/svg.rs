@@ -12,28 +12,20 @@
 //! space → the placement box in scene coordinates. The page's outer y-flip CTM
 //! then maps scene space → PDF user space, exactly as for every other primitive.
 //!
-//! # Coverage and degradations (consistent with the rest of the v0 PDF backend)
-//!
-//! - **Paths** (lines + quadratic/cubic béziers), **solid fills**, **linear
-//!   gradients** (`userSpaceOnUse` exactly; `objectBoundingBox` mapped via the
-//!   path's local bbox), **solid strokes**, and **fill-rule** are translated.
-//! - **Radial gradients** degrade to a solid fill of the first stop (matching
-//!   `fill_region`); **patterns**, **clip-paths**, **masks**, and **nested image
-//!   nodes** inside the SVG are skipped. Per-stop gradient alpha is not
-//!   representable in an axial shading and is treated as opaque.
-//! - Group/fill/stroke opacity and the placement opacity multiply into a single
-//!   `ca`/`CA` alpha per paint.
+//! Supported paths remain native. Capability planning captures unsupported SVG
+//! paints, compositing, and image nodes through the shared raster renderer.
 
 use pdf_writer::Content;
-use resvg::usvg::tiny_skia_path::{PathSegment, Point};
-use resvg::usvg::{self, NodeKind, Paint, TreeParsing, TreeTextToPath, Units, Visibility};
+use resvg::usvg::tiny_skia_path::PathSegment;
+use resvg::usvg::{self, NodeKind, Paint, Units, Visibility};
 use zenith_core::FontProvider;
 use zenith_scene::{Color, FitMode, ImageClip, SvgStyle};
 
 use super::color;
 use super::content::{ALPHA_PREFIX, PageResources, SHADING_PREFIX, name, push_gradient};
 use super::geometry::{ellipse_path, rounded_rect_path};
-use super::gradient::AxialGradient;
+use super::gradient::{GradientGeometry, PdfGradient};
+use super::svg_parse::Affine;
 
 /// Where and how an SVG asset is placed on the page. Mirrors the fields the
 /// raster image path uses; bundled into a `Copy` struct to stay within the
@@ -52,73 +44,6 @@ pub(super) struct SvgPlacement<'a> {
     pub(super) svg_style: Option<SvgStyle>,
 }
 
-/// A 2-D affine map `(x, y) → (a·x + c·y + e, b·x + d·y + f)`, in scene units.
-#[derive(Clone, Copy)]
-struct Affine {
-    a: f64,
-    b: f64,
-    c: f64,
-    d: f64,
-    e: f64,
-    f: f64,
-}
-
-impl Affine {
-    /// A pure scale + translate (no rotation/skew).
-    fn scale_translate(sx: f64, sy: f64, tx: f64, ty: f64) -> Self {
-        Affine {
-            a: sx,
-            b: 0.0,
-            c: 0.0,
-            d: sy,
-            e: tx,
-            f: ty,
-        }
-    }
-
-    /// Convert a `usvg`/`tiny_skia` transform to an [`Affine`].
-    fn from_usvg(t: usvg::Transform) -> Self {
-        Affine {
-            a: f64::from(t.sx),
-            b: f64::from(t.ky),
-            c: f64::from(t.kx),
-            d: f64::from(t.sy),
-            e: f64::from(t.tx),
-            f: f64::from(t.ty),
-        }
-    }
-
-    /// `self ∘ inner`: apply `inner` first, then `self`.
-    fn then(self, inner: Affine) -> Affine {
-        Affine {
-            a: self.a * inner.a + self.c * inner.b,
-            b: self.b * inner.a + self.d * inner.b,
-            c: self.a * inner.c + self.c * inner.d,
-            d: self.b * inner.c + self.d * inner.d,
-            e: self.a * inner.e + self.c * inner.f + self.e,
-            f: self.b * inner.e + self.d * inner.f + self.f,
-        }
-    }
-
-    /// Map a point.
-    fn map(self, x: f64, y: f64) -> (f64, f64) {
-        (
-            self.a * x + self.c * y + self.e,
-            self.b * x + self.d * y + self.f,
-        )
-    }
-
-    /// Map a `tiny_skia` point.
-    fn map_pt(self, p: Point) -> (f64, f64) {
-        self.map(f64::from(p.x), f64::from(p.y))
-    }
-
-    /// Average linear scale factor `√|det|`, used to scale stroke widths.
-    fn avg_scale(self) -> f64 {
-        (self.a * self.d - self.b * self.c).abs().sqrt()
-    }
-}
-
 /// Translate the SVG `bytes` into vector PDF operators placed per `place`.
 pub(super) fn emit_svg(
     content: &mut Content,
@@ -132,9 +57,9 @@ pub(super) fn emit_svg(
         y,
         w,
         h,
-        fit,
-        pos_x,
-        pos_y,
+        fit: _,
+        pos_x: _,
+        pos_y: _,
         opacity,
         clip_shape,
         svg_style,
@@ -143,70 +68,13 @@ pub(super) fn emit_svg(
         return;
     }
 
-    // Parse with the same options + font handling as the raster backend so text
-    // resolves identically. Build the fontdb from the registered faces only
-    // (deterministic order, no system fonts).
-    let mut fontdb = usvg::fontdb::Database::new();
-    fontdb.set_sans_serif_family("Noto Sans");
-    fontdb.set_serif_family("Noto Sans");
-    fontdb.set_monospace_family("Noto Sans Mono");
-    for face in fonts.all_faces() {
-        fontdb.load_font_data(face.bytes.to_vec());
-    }
-    let opts = usvg::Options {
-        font_family: "Noto Sans".to_owned(),
-        ..Default::default()
-    };
-    let svg_bytes = crate::svg_style::styled_svg_bytes(bytes, svg_style);
-    let Ok(mut tree) = usvg::Tree::from_data(&svg_bytes, &opts) else {
-        return; // malformed SVG: draw nothing (no fallback raster)
-    };
-    tree.convert_text(&fontdb);
-
-    let (svw, svh) = (f64::from(tree.size.width()), f64::from(tree.size.height()));
-    if !(svw > 0.0 && svh > 0.0) {
+    let database = super::svg_parse::font_database(fonts);
+    let Some(tree) = super::svg_parse::parse(bytes, svg_style, &database) else {
         return;
-    }
-
-    // Fit transform: SVG viewBox box [0,0,svw,svh] → placement box, preserving
-    // aspect per `fit` and `object-position`. Identical math to `emit_image`.
-    let (sx, sy, tx, ty) = match fit {
-        FitMode::Stretch => (w / svw, h / svh, x, y),
-        FitMode::Contain => {
-            let s = (w / svw).min(h / svh);
-            (
-                s,
-                s,
-                x + (w - svw * s) * pos_x / 100.0,
-                y + (h - svh * s) * pos_y / 100.0,
-            )
-        }
-        FitMode::Cover => {
-            let s = (w / svw).max(h / svh);
-            (
-                s,
-                s,
-                x - (svw * s - w) * pos_x / 100.0,
-                y - (svh * s - h) * pos_y / 100.0,
-            )
-        }
-        FitMode::None => (
-            1.0,
-            1.0,
-            x - (svw - w) * pos_x / 100.0,
-            y - (svh - h) * pos_y / 100.0,
-        ),
     };
-    if !(sx.is_finite()
-        && sy.is_finite()
-        && tx.is_finite()
-        && ty.is_finite()
-        && sx > 0.0
-        && sy > 0.0)
-    {
+    let Some(fit) = super::svg_parse::placement_transform(&tree, place) else {
         return;
-    }
-    let fit = Affine::scale_translate(sx, sy, tx, ty);
+    };
 
     content.save_state();
 
@@ -304,9 +172,9 @@ fn emit_path(
                     content.restore_state();
                 }
             }
-            Paint::RadialGradient(rg) => {
-                // Degrade to a solid fill of the first stop (as `fill_region`).
-                if let Some(stop) = rg.stops.first() {
+            Paint::RadialGradient(gradient) => {
+                // Compatibility emission when malformed scopes or raster errors bypass planning.
+                if let Some(stop) = gradient.stops.first() {
                     content.save_state();
                     set_alpha(content, res, alpha);
                     color::set_fill(content, &svg_color(stop.color));
@@ -320,21 +188,57 @@ fn emit_path(
     }
 
     if let Some(stroke) = &path.stroke {
-        // Only a solid stroke color is vectorized; a gradient stroke degrades to
-        // its first stop. Pattern strokes are skipped.
         let stroke_color = match &stroke.paint {
             Paint::Color(c) => Some(svg_color(*c)),
-            Paint::LinearGradient(lg) => lg.stops.first().map(|s| svg_color(s.color)),
-            Paint::RadialGradient(rg) => rg.stops.first().map(|s| svg_color(s.color)),
+            // Compatibility emission when malformed scopes or raster errors bypass planning.
+            Paint::LinearGradient(gradient) => {
+                gradient.stops.first().map(|stop| svg_color(stop.color))
+            }
+            Paint::RadialGradient(gradient) => {
+                gradient.stops.first().map(|stop| svg_color(stop.color))
+            }
             Paint::Pattern(_) => None,
         };
         if let Some(sc) = stroke_color {
             let alpha = opacity * f64::from(stroke.opacity.get());
-            let width = f64::from(stroke.width.get()) * t.avg_scale();
+            let scale = t.avg_scale();
+            let width = f64::from(stroke.width.get()) * scale;
             content.save_state();
             set_alpha(content, res, alpha);
             color::set_stroke(content, &sc);
             content.set_line_width(width as f32);
+            content.set_line_cap(match stroke.linecap {
+                usvg::LineCap::Butt => pdf_writer::types::LineCapStyle::ButtCap,
+                usvg::LineCap::Round => pdf_writer::types::LineCapStyle::RoundCap,
+                usvg::LineCap::Square => pdf_writer::types::LineCapStyle::ProjectingSquareCap,
+            });
+            content.set_line_join(match stroke.linejoin {
+                usvg::LineJoin::Miter | usvg::LineJoin::MiterClip => {
+                    pdf_writer::types::LineJoinStyle::MiterJoin
+                }
+                usvg::LineJoin::Round => pdf_writer::types::LineJoinStyle::RoundJoin,
+                usvg::LineJoin::Bevel => pdf_writer::types::LineJoinStyle::BevelJoin,
+            });
+            content.set_miter_limit(stroke.miterlimit.get());
+            if let Some(dashes) = &stroke.dasharray {
+                let sum = dashes.iter().map(|dash| f64::from(*dash)).sum::<f64>();
+                let period = sum * if dashes.len() % 2 == 1 { 2.0 } else { 1.0 };
+                if period > 0.0
+                    && period.is_finite()
+                    && dashes.iter().all(|dash| dash.is_finite() && *dash >= 0.0)
+                    && stroke.dashoffset.is_finite()
+                {
+                    let phase = f64::from(stroke.dashoffset).rem_euclid(period) * scale;
+                    content.set_dash_pattern(
+                        dashes.iter().map(|dash| (f64::from(*dash) * scale) as f32),
+                        phase as f32,
+                    );
+                } else {
+                    content.set_dash_pattern(std::iter::empty(), 0.0);
+                }
+            } else {
+                content.set_dash_pattern(std::iter::empty(), 0.0);
+            }
             if build_path(content, path, t) {
                 content.stroke();
             } else {
@@ -432,11 +336,11 @@ fn svg_color(c: usvg::Color) -> Color {
 /// axial gradient with endpoints in scene space. `userSpaceOnUse` maps the
 /// declared endpoints directly; `objectBoundingBox` maps them through the path's
 /// local bounding box first. Returns `None` with fewer than two stops.
-fn resolve_linear(
+pub(super) fn resolve_linear(
     lg: &usvg::LinearGradient,
     path: &usvg::Path,
     t: Affine,
-) -> Option<AxialGradient> {
+) -> Option<PdfGradient> {
     if lg.stops.len() < 2 {
         return None;
     }
@@ -474,8 +378,8 @@ fn resolve_linear(
             )
         })
         .collect();
-    Some(AxialGradient {
-        coords: [x0 as f32, y0 as f32, x1 as f32, y1 as f32],
+    Some(PdfGradient {
+        geometry: GradientGeometry::Axial([x0 as f32, y0 as f32, x1 as f32, y1 as f32]),
         stops,
     })
 }

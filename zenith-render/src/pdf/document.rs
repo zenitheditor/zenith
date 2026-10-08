@@ -8,17 +8,16 @@ use zenith_scene::Scene;
 
 use super::content::{
     ALPHA_PREFIX, FONT_PREFIX, IMAGE_PREFIX, LinkAnnot, PageResources, SHADING_PREFIX, name,
-    translate,
+    translate, translate_strict,
 };
-use super::font::{self, FontPlan};
-use super::gradient::AxialGradient;
+use super::font;
+use super::gradient::{GradientGeometry, PdfGradient};
 
 /// Options controlling PDF emission.
 #[derive(Clone, Copy)]
 pub struct PdfOptions {
-    /// Subset embedded fonts to just the glyphs used (`true`, default → small
-    /// files) or embed the whole font program (`false`). Either way the text is
-    /// selectable and searchable.
+    /// Subset embedded fonts to used glyphs (`true`, default) or embed whole fonts (`false`).
+    /// Native text remains selectable and searchable. Rasterized text loses these capabilities.
     pub subset: bool,
 }
 
@@ -35,6 +34,9 @@ impl Default for PdfOptions {
 /// (MediaBox / TrimBox / BleedBox / CropBox) and native DeviceCMYK colors for
 /// CMYK-origin tokens. Identical input yields byte-identical output: no
 /// timestamps, no document id, ordered iteration throughout.
+///
+/// Capture errors retain compatibility vector emission, which can lose effect appearance.
+/// Use [`super::render_pdf_report`] for strict capture and resource errors.
 ///
 /// Mirrors the shape of [`crate::render_png`] (`scene`, `fonts`, `assets`).
 ///
@@ -94,6 +96,17 @@ pub fn render_pdf_multi_with(
     assets: &dyn AssetProvider,
     options: PdfOptions,
 ) -> Vec<u8> {
+    assemble(scenes, fonts, assets, options, None, 1.0).unwrap_or_default()
+}
+
+pub(super) fn assemble(
+    scenes: &[Scene],
+    fonts: &dyn FontProvider,
+    assets: &dyn AssetProvider,
+    options: PdfOptions,
+    plans: Option<&[Vec<super::report::PlannedRegion>]>,
+    raster_scale: f64,
+) -> Result<Vec<u8>, crate::RenderError> {
     let mut pdf = Pdf::new();
 
     let catalog_id = Ref::new(1);
@@ -114,8 +127,18 @@ pub fn render_pdf_multi_with(
     // Translate each scene and reserve all of its object ids in order, so the
     // page-tree's /Kids can list every page id before any page body is written.
     let mut pages: Vec<PreparedPage<'_>> = Vec::with_capacity(scenes.len());
-    for scene in scenes {
-        pages.push(prepare_page(scene, fonts, assets, &font_plan, &mut alloc));
+    for (index, scene) in scenes.iter().enumerate() {
+        let translated = if let Some(plans) = plans {
+            let regions = plans
+                .get(index)
+                .ok_or_else(|| crate::RenderError::new("missing PDF page capture plan"))?;
+            translate_strict(scene, fonts, assets, &font_plan, regions, raster_scale).map_err(
+                |error| crate::RenderError::new(format!("PDF page {}: {error}", index + 1)),
+            )?
+        } else {
+            translate(scene, fonts, assets, &font_plan)
+        };
+        pages.push(prepare_page(scene, translated, &mut alloc));
     }
 
     // ── Catalog + page tree ──────────────────────────────────────────────
@@ -135,7 +158,7 @@ pub fn render_pdf_multi_with(
         write_prepared_page(&mut pdf, page_tree_id, prepared);
     }
 
-    pdf.finish()
+    Ok(pdf.finish())
 }
 
 /// One scene translated to its content stream and resources, with every object
@@ -160,16 +183,14 @@ struct PreparedPage<'a> {
 /// SMask). Matches the historical single-page allocation order.
 fn prepare_page<'a>(
     scene: &'a Scene,
-    fonts: &dyn FontProvider,
-    assets: &dyn AssetProvider,
-    font_plan: &FontPlan,
+    translated: (pdf_writer::Content, PageResources),
     alloc: &mut impl FnMut() -> Ref,
 ) -> PreparedPage<'a> {
     let page_id = alloc();
     let content_id = alloc();
 
     // Translate the scene to a content stream + the resources it references.
-    let (content, res) = translate(scene, fonts, assets, font_plan);
+    let (content, res) = translated;
 
     // Reserve one ref per link annotation (in res.links order), before the
     // resource refs, so the page's /Annots array can list them.
@@ -296,7 +317,7 @@ fn write_link_annotations(pdf: &mut Pdf, scene: &Scene, links: &[LinkAnnot], ann
     }
 }
 
-/// Indirect references backing one axial gradient: its shading dict and its
+/// Indirect references backing one native gradient: its shading dict and its
 /// stitching/exponential color function.
 struct GradientRefs {
     shading: Ref,
@@ -431,17 +452,24 @@ fn write_alpha_states(pdf: &mut Pdf, res: &PageResources, alpha_ids: &[Ref]) {
     }
 }
 
-/// Write each axial gradient as a Type 2 shading whose color function is a Type
-/// 3 stitching function over Type 2 (linear, exponent 1) exponential
-/// subfunctions — one per adjacent stop pair. Stops are DeviceRGB.
+/// Write native axial or radial shading with DeviceRGB color functions.
 fn write_gradients(pdf: &mut Pdf, res: &PageResources, refs: &[GradientRefs]) {
     for (g, gr) in res.gradients.iter().zip(refs) {
         write_gradient_function(pdf, gr, g);
 
         let mut shading = pdf.function_shading(gr.shading);
-        shading.shading_type(FunctionShadingType::Axial);
-        shading.color_space().device_rgb();
-        shading.coords(g.coords);
+        match g.geometry {
+            GradientGeometry::Axial(coords) => {
+                shading.shading_type(FunctionShadingType::Axial);
+                shading.color_space().device_rgb();
+                shading.coords(coords);
+            }
+            GradientGeometry::Radial(coords) => {
+                shading.shading_type(FunctionShadingType::Radial);
+                shading.color_space().device_rgb();
+                shading.coords(coords);
+            }
+        }
         shading.function(gr.function);
         // Clamp (don't extend) beyond the endpoints so the shading fills the
         // clipped shape with the edge colors, matching CSS `Pad` spread.
@@ -454,7 +482,7 @@ fn write_gradients(pdf: &mut Pdf, res: &PageResources, refs: &[GradientRefs]) {
 /// exponential (linear) function is emitted at `gr.function`; with more stops a
 /// Type 3 stitching function at `gr.function` combines one exponential
 /// subfunction per segment (refs in `gr.sub_functions`).
-fn write_gradient_function(pdf: &mut Pdf, gr: &GradientRefs, g: &AxialGradient) {
+fn write_gradient_function(pdf: &mut Pdf, gr: &GradientRefs, g: &PdfGradient) {
     // Two-stop (or defensively fewer): a single linear exponential function.
     if g.stops.len() <= 2 {
         let c0 = g.stops.first().map(|s| s.1).unwrap_or([0.0, 0.0, 0.0]);

@@ -62,7 +62,9 @@ Name a checkpoint before risky steps such as promotion.
 
 Prefer the CLI when it can run. Use `zenith mcp` for remote, CI, sandboxed, or hosted agents.
 
-- Every tool takes `doc` as a path or the 26-char `doc-id`.
+- A `doc` argument accepts a path or the 26-character `doc-id`.
+- Schema, fonts, theme creation, and workspace `unbundle` do not require `doc`.
+- Check each tool schema and operation requirements before calling.
 - Large and binary results come back as resource links. Read them with `resources/read`.
 - Transport is stdio. `zenith mcp --http <ADDR>` serves Streamable-HTTP (needs the `http` build feature).
 - History commands (`history`, `undo`, `redo`, `version`, `restore`, `sync`) are CLI-only.
@@ -73,11 +75,13 @@ Prefer the CLI when it can run. Use `zenith mcp` for remote, CI, sandboxed, or h
 | `tx` | `zenith_tx` |
 | `validate` | `zenith_validate` |
 | `fix` | `zenith_fix` (`apply`) |
-| `render` | `zenith_render` (`scale`, `contact_sheet`) |
+| `render` | `zenith_render` (`format`, `page`, `raster_scale`, `out`, `diagnostics`, PNG `scale`/`contact_sheet`) |
 | `inspect` / `tokens` / `fmt` / `fonts` | `zenith_inspect` / `zenith_tokens` / `zenith_fmt` / `zenith_fonts` |
 | `workspace scratch` / `candidate` / `promote` | `zenith_workspace_scratch` / `zenith_workspace_candidate` / `zenith_workspace_promote` |
 | `workspace finalize` / `bundle` / `unbundle` | `zenith_workspace_finalize` |
 | `merge` / `theme new` | `zenith_merge` / `zenith_theme_new` |
+
+Render parameters and fallback contracts: `export.md`. PDF defaults to every page. SVG defaults to page 1. Fallback diagnostics remain visible with `diagnostics=false`. MCP merge exports PNG by default or SVG with `format: svg`. SVG accepts `raster_scale`. Batch policy and partial output contracts match CLI merge. Structured reports retain committed paths after row or manifest errors. There is no MCP variant tool.
 
 ## Not implemented
 

@@ -1,10 +1,11 @@
 //! `DrawGlyphRun` → PDF emission: real selectable text or filled outlines.
 //!
 //! A selectable run whose font was embedded (see [`super::font`]) emits real
-//! text — one `Tf` for the run, then a per-glyph text matrix + 2-byte CID show
+//! text with per-glyph text matrices and 2-byte CID shows
 //! (Identity-H) — plus a clickable `/Link` annotation when it carries a link.
 //! Everything else (a `selectable=false` run, or a font that failed to embed)
-//! falls back to filled glyph outlines, byte-identical to the historical output.
+//! falls back to filled glyph outlines. Optional strokes follow the fill.
+//! Runs without strokes retain historical output bytes.
 
 use pdf_writer::{Content, Str};
 use zenith_core::FontProvider;
@@ -30,6 +31,10 @@ pub(super) struct GlyphRun<'a> {
     pub(super) font_size: f32,
     /// Fill color of the glyph run.
     pub(super) color: &'a Color,
+    /// Optional outline color.
+    pub(super) stroke_color: Option<&'a Color>,
+    /// Outline width in scene pixels.
+    pub(super) stroke_width: Option<f64>,
     /// Optional hyperlink URL; emitted as a `/Link` annotation when the run is
     /// selectable and the run's font is embedded.
     pub(super) link: Option<&'a str>,
@@ -68,10 +73,9 @@ pub(super) fn emit_glyph_run(
     emit_outline_run(content, res, &face, units_per_em, run);
 }
 
-/// Emit a glyph run as real, selectable text: one `Tf` for the run, then a
-/// per-glyph text matrix + 2-byte CID show (Identity-H). Records the page's font
-/// usage and any link annotation. The per-glyph `Tm` reproduces the exact glyph
-/// positions the outline path uses, so text and raster output stay pixel-aligned.
+/// Emit selectable text and record one link annotation for the run.
+/// Stroked runs fill and stroke each glyph in raster paint order.
+/// Unstroked runs retain the historical text stream.
 fn emit_text_run(
     content: &mut Content,
     res: &mut PageResources,
@@ -84,7 +88,6 @@ fn emit_text_run(
         y,
         font_id,
         font_size,
-        color,
         link,
         glyphs,
         ..
@@ -96,27 +99,18 @@ fn emit_text_run(
     let scale = font_size / f32::from(units_per_em);
     res.font_indices.insert(font_idx);
 
-    content.save_state();
-    apply_alpha(content, res, color);
-    color::set_fill(content, color);
-    content.begin_text();
-    content.set_font(name(FONT_PREFIX, font_idx).as_name(), font_size);
-    for glyph in glyphs {
-        let Some((_, cid)) = font_plan.cid_of(font_id, glyph.glyph_id) else {
-            // A glyph not in the embedded subset (rare): skip its text — the
-            // outline path would have drawn it, but a selectable run trades that
-            // for extractable text. Missing-glyph runs are a documented edge.
-            continue;
-        };
-        let tx = x as f32 + glyph.dx;
-        let ty = y as f32 + glyph.dy;
-        // Tm = [1 0 0 -1 tx ty]: the -1 cancels the page's outer y-flip so glyphs
-        // sit upright; font_size scaling comes from `set_font`.
-        content.set_text_matrix([1.0, 0.0, 0.0, -1.0, tx, ty]);
-        content.show(Str(&[(cid >> 8) as u8, (cid & 0xFF) as u8]));
+    if glyph_stroke(run).is_some() {
+        for glyph in run.glyphs {
+            let single = GlyphRun {
+                glyphs: std::slice::from_ref(glyph),
+                ..run
+            };
+            emit_text_fill(content, res, font_plan, font_idx, single);
+            emit_stroke_run(content, res, face, scale, single);
+        }
+    } else {
+        emit_text_fill(content, res, font_plan, font_idx, run);
     }
-    content.end_text();
-    content.restore_state();
 
     // Link annotation over the run's glyph bounds (scene coords, y-down).
     if let Some(url) = link
@@ -146,7 +140,7 @@ fn emit_text_run(
 }
 
 /// Emit a glyph run as filled vector outlines (the `selectable=false` path and
-/// the embed-failure fallback). Byte-identical to the historical text rendering.
+/// the embed-failure fallback). Optional strokes follow the fill.
 fn emit_outline_run(
     content: &mut Content,
     res: &mut PageResources,
@@ -154,30 +148,102 @@ fn emit_outline_run(
     units_per_em: u16,
     run: GlyphRun<'_>,
 ) {
+    let scale = run.font_size / f32::from(units_per_em);
+
+    if glyph_stroke(run).is_some() {
+        for glyph in run.glyphs {
+            let single = GlyphRun {
+                glyphs: std::slice::from_ref(glyph),
+                ..run
+            };
+            emit_outline_fill(content, res, face, scale, single);
+            emit_stroke_run(content, res, face, scale, single);
+        }
+    } else {
+        emit_outline_fill(content, res, face, scale, run);
+    }
+}
+
+fn emit_stroke_run(
+    content: &mut Content,
+    res: &mut PageResources,
+    face: &ttf_parser::Face<'_>,
+    scale: f32,
+    run: GlyphRun<'_>,
+) {
+    if let Some((stroke, width)) = glyph_stroke(run) {
+        content.save_state();
+        apply_alpha(content, res, stroke);
+        color::set_stroke(content, stroke);
+        content.set_line_width(width);
+        content.set_miter_limit(tiny_skia::Stroke::default().miter_limit);
+        if emit_outlines(content, face, scale, run) {
+            content.stroke();
+        } else {
+            content.end_path();
+        }
+        content.restore_state();
+    }
+}
+
+fn glyph_stroke(run: GlyphRun<'_>) -> Option<(&Color, f32)> {
+    let color = run.stroke_color?;
+    let width = run.stroke_width?;
+    if !width.is_finite() || width <= 0.0 || width > f64::from(f32::MAX) {
+        return None;
+    }
+    let width = width as f32;
+    if width == 0.0 {
+        return None;
+    }
+    Some((color, width))
+}
+
+fn emit_positioned_cids(content: &mut Content, font_plan: &FontPlan, run: GlyphRun<'_>) {
+    let GlyphRun {
+        x,
+        y,
+        font_id,
+        glyphs,
+        ..
+    } = run;
+    for glyph in glyphs {
+        let Some((_, cid)) = font_plan.cid_of(font_id, glyph.glyph_id) else {
+            // A glyph not in the embedded subset (rare): skip its text — the
+            // outline path would have drawn it, but a selectable run trades that
+            // for extractable text. Missing-glyph runs are a documented edge.
+            continue;
+        };
+        let tx = x as f32 + glyph.dx;
+        let ty = y as f32 + glyph.dy;
+        // Tm = [1 0 0 -1 tx ty]: the -1 cancels the page's outer y-flip so glyphs
+        // sit upright; font_size scaling comes from `set_font`.
+        content.set_text_matrix([1.0, 0.0, 0.0, -1.0, tx, ty]);
+        content.show(Str(&[(cid >> 8) as u8, (cid & 0xFF) as u8]));
+    }
+}
+
+fn emit_outlines(
+    content: &mut Content,
+    face: &ttf_parser::Face<'_>,
+    scale: f32,
+    run: GlyphRun<'_>,
+) -> bool {
     let GlyphRun {
         x,
         y,
         font_size,
-        color,
         glyphs,
         ..
     } = run;
-    let scale = font_size / f32::from(units_per_em);
-
-    content.save_state();
-    apply_alpha(content, res, color);
-    color::set_fill(content, color);
-
-    // Build one combined path of all glyph outlines, then a single fill. Color
-    // bitmap (emoji) glyphs would return Some from `glyph_raster_image`; for PDF
-    // v0 they are skipped (documented). Outline fonts never hit that branch.
+    // Build one combined path. Preferred PNG glyphs belong to planned raster scopes.
     let mut any = false;
     for glyph in glyphs {
-        if face
-            .glyph_raster_image(ttf_parser::GlyphId(glyph.glyph_id), font_size as u16)
-            .is_some()
-        {
-            // Color-bitmap emoji: omitted in PDF v0 (no scenario uses emoji).
+        if crate::glyph_bitmap::preferred_png_glyph(
+            face,
+            ttf_parser::GlyphId(glyph.glyph_id),
+            font_size,
+        ) {
             continue;
         }
         let origin_x = x as f32 + glyph.dx;
@@ -190,6 +256,42 @@ fn emit_outline_run(
             any = true;
         }
     }
+    any
+}
+
+fn emit_text_fill(
+    content: &mut Content,
+    res: &mut PageResources,
+    font_plan: &FontPlan,
+    font_idx: usize,
+    run: GlyphRun<'_>,
+) {
+    let GlyphRun {
+        color, font_size, ..
+    } = run;
+    content.save_state();
+    apply_alpha(content, res, color);
+    color::set_fill(content, color);
+    content.begin_text();
+    content.set_font(name(FONT_PREFIX, font_idx).as_name(), font_size);
+    emit_positioned_cids(content, font_plan, run);
+    content.end_text();
+    content.restore_state();
+}
+
+fn emit_outline_fill(
+    content: &mut Content,
+    res: &mut PageResources,
+    face: &ttf_parser::Face<'_>,
+    scale: f32,
+    run: GlyphRun<'_>,
+) {
+    let color = run.color;
+    content.save_state();
+    apply_alpha(content, res, color);
+    color::set_fill(content, color);
+
+    let any = emit_outlines(content, face, scale, run);
     if any {
         content.fill_nonzero();
     } else {

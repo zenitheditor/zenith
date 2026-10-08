@@ -79,7 +79,7 @@ fn cubic_path_renders_ink_deterministically() {
         .rasterize(&scene, &provider, &no_assets())
         .expect("path render");
     assert!(
-        img.rgba.chunks_exact(4).any(|px| px[3] > 0),
+        img.rgba.as_chunks::<4>().0.iter().any(|px| px[3] > 0),
         "cubic path must render at least one ink pixel"
     );
 

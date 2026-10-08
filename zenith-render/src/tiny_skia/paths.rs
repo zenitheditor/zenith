@@ -268,7 +268,7 @@ pub(super) fn build_scene_path(segments: &[PathSegment]) -> Option<Path> {
 /// move-to top-left-start → right along top → top-right arc →
 /// down right side → bottom-right arc → left along bottom →
 /// bottom-left arc → up left side → top-left arc → close.
-pub(super) fn build_rounded_rect_path(
+pub(crate) fn build_rounded_rect_path(
     x: f32,
     y: f32,
     w: f32,

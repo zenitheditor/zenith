@@ -216,6 +216,22 @@ mod tests {
             "text.src_missing must not be governable (always-Error)"
         );
 
+        let svg_failed = lookup("render.svg_failed").expect("render.svg_failed catalog entry");
+        assert_eq!(svg_failed.severity, Severity::Error);
+        assert!(!svg_failed.is_governable());
+
+        let pdf_failed = lookup("render.pdf_failed").expect("PDF error catalog entry");
+        assert_eq!(pdf_failed.severity, Severity::Error);
+        assert!(!pdf_failed.is_governable());
+        let pdf_rasterized = lookup("render.pdf_rasterized").expect("PDF advisory catalog entry");
+        assert_eq!(pdf_rasterized.severity, Severity::Advisory);
+        assert!(pdf_rasterized.is_governable());
+
+        let svg_rasterized =
+            lookup("render.svg_rasterized").expect("render.svg_rasterized catalog entry");
+        assert_eq!(svg_rasterized.severity, Severity::Advisory);
+        assert!(svg_rasterized.is_governable());
+
         let image_overflow =
             lookup("image.overflow").expect("image.overflow must be in the diagnostic catalog");
         assert_eq!(image_overflow.severity, Severity::Advisory);

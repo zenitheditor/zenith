@@ -162,7 +162,22 @@ pub struct RenderOutput {
     pub outputs: Vec<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub images: Vec<RenderImageJson>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub rasterized_regions: Vec<RenderRasterizedRegionJson>,
     pub diagnostics: Vec<DiagnosticJson>,
+}
+
+/// One raster fallback range in a written vector output.
+#[derive(Debug, Serialize)]
+pub struct RenderRasterizedRegionJson {
+    pub path: String,
+    pub format: &'static str,
+    pub page: usize,
+    pub command_start: usize,
+    pub command_end: usize,
+    pub reason: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub raster_scale: Option<f64>,
 }
 
 /// One written PNG in the `render` envelope.
@@ -287,15 +302,19 @@ pub struct MergeOutput {
     pub written: usize,
     pub failed: usize,
     pub rows: Vec<MergeRowResult>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub diagnostics: Vec<DiagnosticJson>,
 }
 
-/// One row entry in the generation manifest (successful rows only).
+/// One manifest row with committed files, including partial writes.
 #[derive(Debug, Serialize)]
 pub struct ManifestRow {
     pub row: usize,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub key: Option<String>,
     pub outputs: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub status: Option<&'static str>,
 }
 
 /// Deterministic generation manifest for `zenith merge --manifest`.
@@ -324,6 +343,8 @@ pub struct VariantResultJson {
     pub outputs_zen: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub outputs_png: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub outputs_svg: Option<String>,
     pub diagnostics: Vec<DiagnosticJson>,
 }
 
@@ -335,15 +356,22 @@ pub struct VariantOutput {
     pub generated: usize,
     pub failed: usize,
     pub variants: Vec<VariantResultJson>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub diagnostics: Vec<DiagnosticJson>,
 }
 
-/// One target entry in the variant generation manifest (successful variants only).
+/// One manifest target with committed files, including partial writes.
 #[derive(Debug, Serialize)]
 pub struct VariantManifestTarget {
     pub id: String,
     pub source: String,
     pub outputs_zen: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
     pub outputs_png: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub outputs_svg: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub status: Option<&'static str>,
 }
 
 /// Deterministic generation manifest for `zenith variant --manifest`.

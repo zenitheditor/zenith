@@ -212,7 +212,7 @@ mod tests {
     /// A page filled with a semi-opaque backdrop, so no-op draws are visible.
     fn backdrop(w: u32, h: u32) -> Pixmap {
         let mut pm = Pixmap::new(w, h).expect("alloc");
-        for (i, px) in pm.data_mut().chunks_exact_mut(4).enumerate() {
+        for (i, px) in pm.data_mut().as_chunks_mut::<4>().0.iter_mut().enumerate() {
             let v = (i % 97) as u8;
             px[0] = v;
             px[1] = v / 2;

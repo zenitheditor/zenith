@@ -107,7 +107,7 @@ fn insert_thousands(integer_str: &str) -> String {
     let comma_count = (len - 1) / 3;
     let mut result = String::with_capacity(len + comma_count);
     for (i, ch) in chars.iter().enumerate() {
-        if i > 0 && (len - i) % 3 == 0 {
+        if i > 0 && (len - i).is_multiple_of(3) {
             result.push(',');
         }
         result.push(*ch);

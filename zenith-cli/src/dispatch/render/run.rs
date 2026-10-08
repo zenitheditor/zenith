@@ -1,10 +1,8 @@
 //! Dispatch logic for `zenith render`.
 //!
-//! Every requested output (spread, scene, PNG, PDF, all pages) renders in
-//! turn. Diagnostics from all of them merge, repeats removed, and print once:
-//! one `zenith-render-v1` envelope on stdout under `--json`, else grouped
-//! lines on stderr. The first output that fails stops the run with status
-//! `blocked` and every diagnostic known so far.
+//! Requested outputs stage before writing. Hard diagnostics block every staged output.
+//! Diagnostics merge and print once as JSON or grouped stderr lines.
+//! JSON uses the `zenith-render-v1` envelope with `ok` or `blocked` status.
 
 use std::path::Path;
 use std::process::ExitCode;
@@ -12,26 +10,27 @@ use std::process::ExitCode;
 use zenith_core::{DataContext, Diagnostic};
 
 use crate::cli::RenderArgs;
-use crate::cli_helpers::{parse_spread_spec, print_diagnostics_stderr, read_file, write_bytes};
+use crate::cli_helpers::{parse_spread_spec, read_file};
 use crate::commands;
 use crate::commands::render::{RenderCmdErr, RenderEntryOptions, SpreadRenderOpts};
-use crate::commands::serialize_pretty;
 use crate::config::CliPolicyFlags;
-use crate::json_types::{DiagnosticJson, RenderImageJson, RenderOutput};
+use crate::json_types::RenderImageJson;
 use crate::report::{CliError, ImportFiles};
 
-const RENDER_SCHEMA: &str = "zenith-render-v1";
+use super::output::gate;
 
-pub(super) fn dispatch_render(args: RenderArgs) -> ExitCode {
+pub(in crate::dispatch) fn dispatch_render(args: RenderArgs) -> ExitCode {
     let json = args.json;
     if args.scene.is_none()
         && args.png.is_none()
+        && args.svg.is_none()
+        && args.all_pages_svg.is_none()
         && args.pdf.is_none()
         && args.all_pages.is_none()
         && args.contact_sheet.is_none()
     {
         return CliError::usage(
-            "error: at least one of --scene <OUT>, --png <OUT>, --pdf <OUT>, --all-pages <DIR>, or --contact-sheet <OUT> is required",
+            "error: at least one of --scene <OUT>, --png <OUT>, --svg <OUT>, --pdf <OUT>, --all-pages <DIR>, --all-pages-svg <DIR>, or --contact-sheet <OUT> is required",
         )
         .emit(json);
     }
@@ -46,6 +45,25 @@ pub(super) fn dispatch_render(args: RenderArgs) -> ExitCode {
     {
         return CliError::usage(
             "error: --scale applies only to PNG outputs; add --png <OUT>, --all-pages <DIR>, or --contact-sheet <OUT>",
+        )
+        .emit(json);
+    }
+    let raster_scale = match args
+        .raster_scale
+        .as_deref()
+        .map(|raw| commands::render::parse_scale_flag(raw, "--raster-scale"))
+        .transpose()
+    {
+        Ok(scale) => scale.unwrap_or(1.0),
+        Err(message) => return CliError::usage(message).emit(json),
+    };
+    if args.raster_scale.is_some()
+        && args.pdf.is_none()
+        && args.svg.is_none()
+        && args.all_pages_svg.is_none()
+    {
+        return CliError::usage(
+            "error: --raster-scale requires --pdf <OUT>, --svg <OUT>, or --all-pages-svg <DIR>",
         )
         .emit(json);
     }
@@ -94,12 +112,17 @@ pub(super) fn dispatch_render(args: RenderArgs) -> ExitCode {
         flags: &flags,
         data: data_ctx.as_ref(),
         scale,
+        raster_scale,
+        pending: Vec::new(),
+        directories: Vec::new(),
+        messages: Vec::new(),
         outputs: Vec::new(),
         images: Vec::new(),
+        rasterized_regions: Vec::new(),
         diagnostics: Vec::new(),
         import_files: ImportFiles::default(),
     };
-    match run.render_all(spread) {
+    match run.render_all(spread).and_then(|()| run.flush()) {
         Ok(()) => run.finish_ok(),
         Err(stop) => run.finish_blocked(stop),
     }
@@ -107,19 +130,16 @@ pub(super) fn dispatch_render(args: RenderArgs) -> ExitCode {
 
 /// Parse a `--scale` value: a finite number with `0 < F <= 4`.
 fn parse_scale(raw: &str) -> Result<f64, String> {
-    // An unparsable value checks as NaN, so it gets the same message.
-    let parsed = raw.trim().parse::<f64>().unwrap_or(f64::NAN);
-    commands::render::check_render_scale(parsed, raw)
-        .map_err(|msg| format!("error: --scale: {msg}"))
+    commands::render::parse_scale_flag(raw, "--scale")
 }
 
 /// Why a render run stopped.
-struct Stop {
+pub(super) struct Stop {
     /// Diagnostics of the failing output. At least one is an error.
-    diagnostics: Vec<Diagnostic>,
-    exit_code: u8,
+    pub(super) diagnostics: Vec<Diagnostic>,
+    pub(super) exit_code: u8,
     /// Files of the composition imports behind the diagnostic spans.
-    import_files: ImportFiles,
+    pub(super) import_files: ImportFiles,
 }
 
 impl From<RenderCmdErr> for Stop {
@@ -133,21 +153,26 @@ impl From<RenderCmdErr> for Stop {
 }
 
 /// State of one `zenith render` invocation.
-struct RenderRun<'a> {
-    args: &'a RenderArgs,
-    src: &'a str,
-    flags: &'a CliPolicyFlags,
-    data: Option<&'a DataContext>,
+pub(super) struct RenderRun<'a> {
+    pub(super) args: &'a RenderArgs,
+    pub(super) src: &'a str,
+    pub(super) flags: &'a CliPolicyFlags,
+    pub(super) data: Option<&'a DataContext>,
     /// The checked `--scale`, when given.
-    scale: Option<f64>,
+    pub(super) scale: Option<f64>,
+    pub(super) raster_scale: f64,
+    pub(super) directories: Vec<std::path::PathBuf>,
+    pub(super) messages: Vec<String>,
+    pub(super) pending: Vec<(std::path::PathBuf, Vec<u8>)>,
     /// Written paths, in write order.
-    outputs: Vec<String>,
+    pub(super) outputs: Vec<String>,
     /// Written PNGs with size and scale, in write order.
-    images: Vec<RenderImageJson>,
+    pub(super) images: Vec<RenderImageJson>,
+    pub(super) rasterized_regions: Vec<crate::json_types::RenderRasterizedRegionJson>,
     /// Diagnostics of every finished output, in output order.
-    diagnostics: Vec<Diagnostic>,
+    pub(super) diagnostics: Vec<Diagnostic>,
     /// Files of the composition imports behind the diagnostic spans.
-    import_files: ImportFiles,
+    pub(super) import_files: ImportFiles,
 }
 
 impl RenderRun<'_> {
@@ -156,7 +181,7 @@ impl RenderRun<'_> {
         self.scale.unwrap_or(1.0)
     }
 
-    fn entry_options(&self) -> RenderEntryOptions<'_> {
+    pub(super) fn entry_options(&self) -> RenderEntryOptions<'_> {
         RenderEntryOptions {
             locked: self.args.locked,
             subset: !self.args.embed_full_fonts,
@@ -164,6 +189,7 @@ impl RenderRun<'_> {
             data: self.data,
             construction_overlay: self.args.construction_overlay,
             scale: self.output_scale(),
+            raster_scale: self.raster_scale,
         }
     }
 
@@ -188,7 +214,7 @@ impl RenderRun<'_> {
             let image = self.image(png_out, "spread", (artifact.width, artifact.height));
             self.write(
                 png_out,
-                &artifact.png,
+                artifact.png,
                 artifact.diagnostics,
                 &artifact.import_files,
                 "spread PNG",
@@ -207,7 +233,7 @@ impl RenderRun<'_> {
             )?;
             self.write(
                 scene_out,
-                artifact.json.as_bytes(),
+                artifact.json.into_bytes(),
                 artifact.diagnostics,
                 &artifact.import_files,
                 "scene",
@@ -224,7 +250,7 @@ impl RenderRun<'_> {
             let image = self.image(png_out, "png", (artifact.width, artifact.height));
             self.write(
                 png_out,
-                &artifact.png,
+                artifact.png,
                 artifact.diagnostics,
                 &artifact.import_files,
                 "PNG",
@@ -250,14 +276,27 @@ impl RenderRun<'_> {
                     self.entry_options(),
                 ),
             }?;
+            self.rasterized_regions
+                .extend(artifact.rasterized_regions.into_iter().map(|region| {
+                    crate::json_types::RenderRasterizedRegionJson {
+                        path: pdf_out.display().to_string(),
+                        format: "pdf",
+                        page: region.page,
+                        command_start: region.command_start,
+                        command_end: region.command_end,
+                        reason: format!("{:?}", region.reason),
+                        raster_scale: (self.raster_scale != 1.0).then_some(self.raster_scale),
+                    }
+                }));
             self.write(
                 pdf_out,
-                &artifact.pdf,
+                artifact.pdf,
                 artifact.diagnostics,
                 &artifact.import_files,
                 "PDF",
             )?;
         }
+        self.render_svg_outputs()?;
         if let Some(out_dir) = &args.all_pages {
             self.render_pages(out_dir)?;
         }
@@ -277,12 +316,9 @@ impl RenderRun<'_> {
             self.entry_options(),
         )?;
         gate(&sheet.diagnostics, &sheet.import_files)?;
-        if let Err(e) = write_bytes(out, &sheet.png) {
-            return Err(write_stop(out, &e));
-        }
-        self.outputs.push(out.display().to_string());
+        self.pending.push((out.to_path_buf(), sheet.png));
         if !self.args.json {
-            println!(
+            self.messages.push(format!(
                 "contact sheet written to '{}' ({}x{} px, {} page(s), {} column(s), scale {})",
                 out.display(),
                 sheet.width,
@@ -290,7 +326,7 @@ impl RenderRun<'_> {
                 sheet.pages.len(),
                 sheet.columns,
                 sheet.scale
-            );
+            ));
         }
         self.images.push(RenderImageJson {
             path: out.display().to_string(),
@@ -330,18 +366,16 @@ impl RenderRun<'_> {
     /// Record a written PNG and print its size in human mode.
     fn record_image(&mut self, image: RenderImageJson) {
         if !self.args.json {
-            println!(
+            self.messages.push(format!(
                 "  {}x{} px, scale {}",
                 image.width, image.height, image.scale
-            );
+            ));
         }
         self.images.push(image);
     }
 
     fn render_pages(&mut self, out_dir: &Path) -> Result<(), Stop> {
-        if let Err(e) = std::fs::create_dir_all(out_dir) {
-            return Err(write_stop(out_dir, &e));
-        }
+        self.directories.push(out_dir.to_path_buf());
         let artifact = commands::render::to_png_all_pages_options(
             self.src,
             self.args.path.parent(),
@@ -349,136 +383,26 @@ impl RenderRun<'_> {
         )?;
         // Block on hard diagnostics before any page reaches disk.
         gate(&artifact.diagnostics, &artifact.import_files)?;
-        for (i, (png, size)) in artifact.pages.iter().zip(&artifact.sizes).enumerate() {
+        let page_count = artifact.pages.len();
+        for (i, (png, size)) in artifact.pages.into_iter().zip(artifact.sizes).enumerate() {
             let page_path = out_dir.join(format!("page-{}.png", i + 1));
-            if let Err(e) = write_bytes(&page_path, png) {
-                return Err(write_stop(&page_path, &e));
-            }
-            self.outputs.push(page_path.display().to_string());
-            let image = self.image(&page_path, "page", *size);
+            let image = self.image(&page_path, "page", size);
+            self.pending.push((page_path, png));
             self.images.push(RenderImageJson {
                 pages: vec![i + 1],
                 ..image
             });
         }
         if !self.args.json {
-            println!(
+            self.messages.push(format!(
                 "{} page(s) written to '{}' (scale {})",
-                artifact.pages.len(),
+                page_count,
                 out_dir.display(),
                 self.output_scale()
-            );
+            ));
         }
         self.diagnostics.extend(artifact.diagnostics);
         self.import_files.extend(&artifact.import_files);
         Ok(())
     }
-
-    /// Gate on `diagnostics`, write `bytes` to `out`, and record the output.
-    fn write(
-        &mut self,
-        out: &Path,
-        bytes: &[u8],
-        diagnostics: Vec<Diagnostic>,
-        import_files: &ImportFiles,
-        label: &str,
-    ) -> Result<(), Stop> {
-        gate(&diagnostics, import_files)?;
-        if let Err(e) = write_bytes(out, bytes) {
-            return Err(write_stop(out, &e));
-        }
-        self.outputs.push(out.display().to_string());
-        if !self.args.json {
-            println!("{label} written to '{}'", out.display());
-        }
-        self.diagnostics.extend(diagnostics);
-        self.import_files.extend(import_files);
-        Ok(())
-    }
-
-    fn finish_ok(self) -> ExitCode {
-        let diagnostics = Diagnostic::dedup(self.diagnostics);
-        if self.args.json {
-            print_envelope(
-                "ok",
-                self.outputs,
-                self.images,
-                &diagnostics,
-                self.src,
-                &self.import_files,
-            );
-        } else {
-            print_diagnostics_stderr(&diagnostics, self.src, &self.import_files);
-        }
-        ExitCode::SUCCESS
-    }
-
-    fn finish_blocked(mut self, stop: Stop) -> ExitCode {
-        self.diagnostics.extend(stop.diagnostics);
-        self.import_files.extend(&stop.import_files);
-        let diagnostics = Diagnostic::dedup(self.diagnostics);
-        if self.args.json {
-            print_envelope(
-                "blocked",
-                self.outputs,
-                self.images,
-                &diagnostics,
-                self.src,
-                &self.import_files,
-            );
-        } else {
-            print_diagnostics_stderr(&diagnostics, self.src, &self.import_files);
-            eprintln!(
-                "render blocked by {} hard diagnostic(s)",
-                diagnostics.iter().filter(|d| d.is_error()).count()
-            );
-        }
-        ExitCode::from(stop.exit_code)
-    }
-}
-
-/// Stop with exit code 2 when any diagnostic is an error.
-fn gate(diagnostics: &[Diagnostic], import_files: &ImportFiles) -> Result<(), Stop> {
-    if Diagnostic::has_errors(diagnostics) {
-        return Err(Stop {
-            diagnostics: diagnostics.to_vec(),
-            exit_code: 2,
-            import_files: import_files.clone(),
-        });
-    }
-    Ok(())
-}
-
-fn write_stop(path: &Path, e: &std::io::Error) -> Stop {
-    Stop {
-        diagnostics: vec![Diagnostic::error(
-            "io.write_failed",
-            format!(
-                "cannot write '{}': {e}; check the directory exists and is writable",
-                path.display()
-            ),
-            None,
-            None,
-        )],
-        exit_code: 2,
-        import_files: ImportFiles::default(),
-    }
-}
-
-fn print_envelope(
-    status: &'static str,
-    outputs: Vec<String>,
-    images: Vec<RenderImageJson>,
-    diagnostics: &[Diagnostic],
-    src: &str,
-    import_files: &ImportFiles,
-) {
-    let out = RenderOutput {
-        schema: RENDER_SCHEMA,
-        status,
-        outputs,
-        images,
-        diagnostics: DiagnosticJson::located_all_in(diagnostics, src, import_files),
-    };
-    println!("{}", serialize_pretty(&out));
 }

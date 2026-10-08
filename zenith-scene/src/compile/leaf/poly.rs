@@ -919,11 +919,8 @@ pub(super) fn flat_points_centroid_center(flat: &[f64]) -> (f64, f64) {
     let mut max_x = f64::NEG_INFINITY;
     let mut min_y = f64::INFINITY;
     let mut max_y = f64::NEG_INFINITY;
-    // `chunks_exact(2)` yields each (x, y) pair and ignores any trailing odd
-    // element — byte-identical to the prior `while i + 1 < len` step-by-2 loop,
-    // but with no unchecked indexing.
-    for pair in flat.chunks_exact(2) {
-        let &[px, py] = pair else { continue };
+    // Pair arrays ignore a trailing odd element without unchecked indexing.
+    for &[px, py] in flat.as_chunks::<2>().0 {
         if px < min_x {
             min_x = px;
         }
