@@ -18,7 +18,7 @@ members = [
 [workspace.package]
 version = "0.0.8"
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.95"
 license = "Apache-2.0"
 repository = "https://github.com/zenitheditor/zenith"
 homepage = "https://github.com/zenitheditor/zenith"
@@ -32,17 +32,17 @@ publish = true
 # stamped at release time (see .github/workflows/release.yml). The `version`
 # requirement is what ships to crates.io; the `path` is used for local builds.
 [workspace.dependencies]
-zenith-core = { version = "0", path = "zenith-core" }
-zenith-layout = { version = "0", path = "zenith-layout" }
-zenith-raster = { version = "0", path = "zenith-raster" }
-zenith-perception = { version = "0", path = "zenith-perception" }
-zenith-geometry = { version = "0", path = "zenith-geometry" }
-zenith-scene = { version = "0", path = "zenith-scene" }
-zenith-render = { version = "0", path = "zenith-render" }
-zenith-tx = { version = "0", path = "zenith-tx" }
-zenith-session = { version = "0", path = "zenith-session" }
-zenith-zpx = { version = "0", path = "zenith-zpx" }
-zenith-producers = { version = "0", path = "zenith-producers" }
+zenith-core = { version = "=0.0.8", path = "zenith-core" }
+zenith-layout = { version = "=0.0.8", path = "zenith-layout" }
+zenith-raster = { version = "=0.0.8", path = "zenith-raster" }
+zenith-perception = { version = "=0.0.8", path = "zenith-perception" }
+zenith-geometry = { version = "=0.0.8", path = "zenith-geometry" }
+zenith-scene = { version = "=0.0.8", path = "zenith-scene" }
+zenith-render = { version = "=0.0.8", path = "zenith-render" }
+zenith-tx = { version = "=0.0.8", path = "zenith-tx" }
+zenith-session = { version = "=0.0.8", path = "zenith-session" }
+zenith-zpx = { version = "=0.0.8", path = "zenith-zpx" }
+zenith-producers = { version = "=0.0.8", path = "zenith-producers" }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

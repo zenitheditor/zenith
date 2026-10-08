@@ -56,7 +56,14 @@ fn collection_face_index_selects_the_registered_outline() {
     let svg = std::str::from_utf8(&output.bytes).expect("SVG text");
     assert!(svg.contains("<path"));
     let image = rasterize(&output.bytes);
-    assert!(image.rgba.chunks_exact(4).any(|pixel| pixel[3] != 0));
+    assert!(
+        image
+            .rgba
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .any(|pixel| pixel[3] != 0)
+    );
     assert_pixels_close(
         &image,
         &render_image(&scene, &fonts, &no_assets()).expect("collection reference"),
@@ -163,7 +170,14 @@ fn check_bitmap_fallback(character: char) {
     assert_eq!(region.reason, SvgRasterizationReason::BitmapGlyph);
     assert!(data_url_bytes(&output.bytes, "image/png").starts_with(b"\x89PNG"));
     let reference = render_image(&scene, &fonts, &no_assets()).expect("bitmap reference");
-    assert!(reference.rgba.chunks_exact(4).any(|pixel| pixel[3] != 0));
+    assert!(
+        reference
+            .rgba
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .any(|pixel| pixel[3] != 0)
+    );
     assert_eq!(embedded_png(&output.bytes).rgba, reference.rgba);
     assert_pixels_close(&rasterize(&output.bytes), &reference, 0.0);
 }
@@ -249,7 +263,9 @@ fn pdf_malformed_bitmap_retains_available_outline() {
         render_image(&scene, &fonts, &no_assets())
             .unwrap()
             .rgba
-            .chunks_exact(4)
+            .as_chunks::<4>()
+            .0
+            .iter()
             .any(|pixel| pixel[3] > 0)
     );
 }

@@ -67,7 +67,7 @@ pub fn bitmap_font(png: &[u8], character: char) -> (Vec<u8>, u16) {
     font[4..6].copy_from_slice(&(tables.len() as u16).to_be_bytes());
     font.resize(12 + tables.len() * 16, 0);
     for (index, (tag, bytes)) in tables.into_iter().enumerate() {
-        while font.len() % 4 != 0 {
+        while !font.len().is_multiple_of(4) {
             font.push(0);
         }
         let offset = font.len() as u32;

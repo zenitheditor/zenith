@@ -51,11 +51,11 @@ pub fn density_map(surface: &Surface) -> DensityReport {
             let column = cell_axis_index(x, width, columns);
             let row = cell_axis_index(y, height, rows);
             let energy = pixel.a() * (luminance(pixel) - mean).abs();
-            if let Some(index) = cell_index(row, column, columns) {
-                if let Some(cell) = cells.get_mut(index) {
-                    cell.energy += energy;
-                    cell.pixel_count += 1;
-                }
+            if let Some(index) = cell_index(row, column, columns)
+                && let Some(cell) = cells.get_mut(index)
+            {
+                cell.energy += energy;
+                cell.pixel_count += 1;
             }
         }
     }

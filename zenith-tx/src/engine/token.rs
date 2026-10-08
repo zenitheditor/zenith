@@ -118,15 +118,15 @@ fn build_filter_literal(ops: &[FilterOpInput]) -> Option<TokenLiteral> {
     let mut out = Vec::with_capacity(ops.len());
     for op in ops {
         let kind = FilterKind::from_op_name(op.kind.as_str())?;
-        if let Some(amount) = op.amount {
-            if !amount.is_finite() {
-                return None;
-            }
+        if let Some(amount) = op.amount
+            && !amount.is_finite()
+        {
+            return None;
         }
-        if let Some(scale) = op.scale {
-            if !scale.is_finite() || scale <= 0.0 {
-                return None;
-            }
+        if let Some(scale) = op.scale
+            && (!scale.is_finite() || scale <= 0.0)
+        {
+            return None;
         }
         // Duotone requires both color token refs at create time (not deferred
         // to post-validation).
@@ -175,20 +175,20 @@ fn build_gradient_literal(body: &CreateTokenBody<'_>) -> Option<TokenLiteral> {
 
     let is_radial = body.radial.unwrap_or(false);
     if is_radial {
-        if let Some(cx) = body.center_x {
-            if !cx.is_finite() {
-                return None;
-            }
+        if let Some(cx) = body.center_x
+            && !cx.is_finite()
+        {
+            return None;
         }
-        if let Some(cy) = body.center_y {
-            if !cy.is_finite() {
-                return None;
-            }
+        if let Some(cy) = body.center_y
+            && !cy.is_finite()
+        {
+            return None;
         }
-        if let Some(r) = body.radius {
-            if !r.is_finite() || r <= 0.0 {
-                return None;
-            }
+        if let Some(r) = body.radius
+            && (!r.is_finite() || r <= 0.0)
+        {
+            return None;
         }
         Some(TokenLiteral::Gradient(GradientLiteral {
             kind: GradientKind::Radial,

@@ -57,8 +57,7 @@ fn decode_jpeg(bytes: &[u8]) -> Option<Pixmap> {
 
     match info.pixel_format {
         PixelFormat::RGB24 => {
-            for (chunk, px) in pixels.chunks_exact(3).zip(dst.iter_mut()) {
-                let [r, g, b] = chunk else { continue };
+            for ([r, g, b], px) in pixels.as_chunks::<3>().0.iter().zip(dst.iter_mut()) {
                 // Opaque source: premultiplied == straight at alpha 255.
                 *px = PremultipliedColorU8::from_rgba(*r, *g, *b, 255)?;
             }

@@ -440,7 +440,7 @@ mod tests {
         let pts = wedge_polygon(geom, -PI / 2.0, 0.0);
 
         // Donut: even number of coords; at least 4 arc points (2 rings × 2+ pts).
-        assert!(pts.len() % 2 == 0);
+        assert!(pts.len().is_multiple_of(2));
         // Must not start with center point — first point should be on r_outer.
         let dx = pts[0] - geom.cx;
         let dy = pts[1] - geom.cy;

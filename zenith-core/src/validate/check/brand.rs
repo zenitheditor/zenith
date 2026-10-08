@@ -77,35 +77,35 @@ pub(super) fn check_brand_contract(
                 }
             }
             ResolvedValue::FontFamily(family) => {
-                if let Some(allowed) = &contract.allowed_fonts {
-                    if !allowed.contains(family) {
-                        diagnostics.push(Diagnostic::warning(
-                            "brand.font_not_allowed",
-                            format!(
-                                "token '{token_id}': font family '{family}' is not in the brand \
+                if let Some(allowed) = &contract.allowed_fonts
+                    && !allowed.contains(family)
+                {
+                    diagnostics.push(Diagnostic::warning(
+                        "brand.font_not_allowed",
+                        format!(
+                            "token '{token_id}': font family '{family}' is not in the brand \
                                  font list (allowed: {})",
-                                format_list(allowed)
-                            ),
-                            None,
-                            Some(token_id.clone()),
-                        ));
-                    }
+                            format_list(allowed)
+                        ),
+                        None,
+                        Some(token_id.clone()),
+                    ));
                 }
             }
             ResolvedValue::FontWeight(weight) => {
-                if let Some(allowed) = &contract.allowed_weights {
-                    if !allowed.contains(weight) {
-                        diagnostics.push(Diagnostic::warning(
-                            "brand.weight_not_allowed",
-                            format!(
-                                "token '{token_id}': font weight {weight} is not in the brand \
+                if let Some(allowed) = &contract.allowed_weights
+                    && !allowed.contains(weight)
+                {
+                    diagnostics.push(Diagnostic::warning(
+                        "brand.weight_not_allowed",
+                        format!(
+                            "token '{token_id}': font weight {weight} is not in the brand \
                                  weight list (allowed: {})",
-                                format_weight_list(allowed)
-                            ),
-                            None,
-                            Some(token_id.clone()),
-                        ));
-                    }
+                            format_weight_list(allowed)
+                        ),
+                        None,
+                        Some(token_id.clone()),
+                    ));
                 }
             }
             // Non-color / non-font values are not brand-governed.

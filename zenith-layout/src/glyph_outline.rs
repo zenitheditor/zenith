@@ -282,13 +282,13 @@ fn finish_contour(
     builder: Option<ContourBuilder>,
     closed: bool,
 ) {
-    if let Some(builder) = builder {
-        if !builder.anchors.is_empty() {
-            contours.push(GlyphOutlineContour {
-                anchors: builder.anchors,
-                closed,
-            });
-        }
+    if let Some(builder) = builder
+        && !builder.anchors.is_empty()
+    {
+        contours.push(GlyphOutlineContour {
+            anchors: builder.anchors,
+            closed,
+        });
     }
 }
 

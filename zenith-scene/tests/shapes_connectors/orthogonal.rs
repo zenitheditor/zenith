@@ -122,7 +122,9 @@ page id="page.co" w=(px)640 h=(px)360 {
     // Tip on the `to` anchor (300,100).
     let to_anchor = (300.0, 100.0);
     let has_tip = head
-        .chunks_exact(2)
+        .as_chunks::<2>()
+        .0
+        .iter()
         .any(|p| (p[0] - to_anchor.0).abs() < 1e-9 && (p[1] - to_anchor.1).abs() < 1e-9);
     assert!(
         has_tip,
@@ -132,7 +134,9 @@ page id="page.co" w=(px)640 h=(px)360 {
     // Axis-aligned to a horizontal entry: the two base vertices (everything but
     // the tip) share the same x.
     let base: Vec<(f64, f64)> = head
-        .chunks_exact(2)
+        .as_chunks::<2>()
+        .0
+        .iter()
         .map(|p| (p[0], p[1]))
         .filter(|p| (p.0 - to_anchor.0).abs() >= 1e-9 || (p.1 - to_anchor.1).abs() >= 1e-9)
         .collect();
@@ -183,7 +187,9 @@ page id="page.co" w=(px)640 h=(px)360 {
     );
     let to_anchor = (300.0, 100.0);
     let has_tip = heads[0]
-        .chunks_exact(2)
+        .as_chunks::<2>()
+        .0
+        .iter()
         .any(|p| (p[0] - to_anchor.0).abs() < 1e-9 && (p[1] - to_anchor.1).abs() < 1e-9);
     assert!(
         has_tip,

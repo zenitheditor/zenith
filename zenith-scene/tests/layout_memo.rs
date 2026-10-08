@@ -10,7 +10,11 @@ use zenith_scene::{DocumentPrep, PageCompiler};
 /// count.
 fn nested(depth: usize, leaves: usize) -> (String, usize) {
     fn frame(level: usize, depth: usize, leaves: usize, next: &mut usize, out: &mut String) {
-        let mode = if level % 2 == 0 { "row" } else { "column" };
+        let mode = if level.is_multiple_of(2) {
+            "row"
+        } else {
+            "column"
+        };
         *next += 1;
         let origin = if level == 0 {
             r#" x=(px)10 y=(px)10"#

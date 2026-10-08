@@ -328,18 +328,18 @@ fn parse_list_item(line: &str) -> Option<ListItemData<'_>> {
     let s = line.trim_start();
 
     // Unordered: `-`/`*`/`+` + space.
-    if let Some(first) = s.chars().next() {
-        if matches!(first, '-' | '*' | '+') {
-            let rest = s.get(1..).unwrap_or("");
-            if rest.starts_with(' ') {
-                let text = rest.get(1..).unwrap_or("").trim_end();
-                return Some(ListItemData {
-                    kind: ListKind::Unordered,
-                    depth,
-                    ordinal: None,
-                    text,
-                });
-            }
+    if let Some(first) = s.chars().next()
+        && matches!(first, '-' | '*' | '+')
+    {
+        let rest = s.get(1..).unwrap_or("");
+        if rest.starts_with(' ') {
+            let text = rest.get(1..).unwrap_or("").trim_end();
+            return Some(ListItemData {
+                kind: ListKind::Unordered,
+                depth,
+                ordinal: None,
+                text,
+            });
         }
     }
 

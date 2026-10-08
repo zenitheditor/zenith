@@ -103,7 +103,9 @@ fn whitespace_glyphs_draw_no_ink_and_missing_fonts_return_errors() {
     assert!(
         rasterize(&svg)
             .rgba
-            .chunks_exact(4)
+            .as_chunks::<4>()
+            .0
+            .iter()
             .all(|pixel| pixel[3] == 0)
     );
     let mut missing = text_scene("A", false);
@@ -215,8 +217,10 @@ fn raster_image_fits_crops_and_shape_clips_are_self_contained() {
     assert!(
         image
             .rgba
-            .chunks_exact(4)
-            .all(|pixel| pixel == [0, 0, 255, 255])
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .all(|pixel| *pixel == [0, 0, 255, 255])
     );
     assert_pixels_close(
         &rasterize(&svg),

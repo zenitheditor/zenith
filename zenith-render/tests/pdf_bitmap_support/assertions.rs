@@ -50,7 +50,9 @@ pub fn assert_image_planes(pdf: &[u8], raster: &RasterImage) {
     }
     let pixels: Vec<_> = raster
         .rgba
-        .chunks_exact(4)
+        .as_chunks::<4>()
+        .0
+        .iter()
         .enumerate()
         .filter(|(_, p)| p[3] > 0)
         .collect();

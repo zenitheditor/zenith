@@ -90,11 +90,13 @@ jobs:
           echo "Stamped workspace + internal deps to $VERSION"
       # Publish in dependency order. Each tier waits until crates.io indexes the
       # new versions before the next tier (which depends on them) publishes.
-      #   Tier 1: zenith-core, zenith-session  (no internal deps)
-      #   Tier 2: zenith-layout                (-> core)
-      #   Tier 3: zenith-scene                 (-> core, layout)
-      #   Tier 4: zenith-render, zenith-tx     (-> core, scene)
-      #   Tier 5: zenith-tool (zenith-cli)     (-> all)
+      # Include development dependencies when ordering packages.
+      #   Tier 1: geometry, session
+      #   Tier 2: core
+      #   Tier 3: layout, raster
+      #   Tier 4: scene, perception, zpx
+      #   Tier 5: render, tx, producers
+      #   Tier 6: tool (zenith-cli)
       - name: Publish to crates.io
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
@@ -142,11 +144,12 @@ jobs:
             echo "::endgroup::"
           }
 
-          publish_tier "1 (core, session)"  zenith-core zenith-session
-          publish_tier "2 (layout)"         zenith-layout
-          publish_tier "3 (scene)"          zenith-scene
-          publish_tier "4 (render, tx)"     zenith-render zenith-tx
-          publish_tier "5 (cli)"            zenith-tool
+          publish_tier "1 (geometry, session)"  zenith-geometry zenith-session
+          publish_tier "2 (core)"               zenith-core
+          publish_tier "3 (layout, raster)"     zenith-layout zenith-raster
+          publish_tier "4 (scene, perception, zpx)" zenith-scene zenith-perception zenith-zpx
+          publish_tier "5 (render, tx, producers)" zenith-render zenith-tx zenith-producers
+          publish_tier "6 (cli)"                zenith-tool
 
   build-binaries:
     name: Build (${{ matrix.label }})

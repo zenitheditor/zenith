@@ -34,8 +34,10 @@ pub fn assert_pixels_close(actual: &RasterImage, expected: &RasterImage, mean_li
     // Compare premultiplied channels so transparent edge colors do not dominate.
     let total: u64 = actual
         .rgba
-        .chunks_exact(4)
-        .zip(expected.rgba.chunks_exact(4))
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .zip(expected.rgba.as_chunks::<4>().0.iter())
         .map(|(a, b)| {
             let alpha = u64::from(a[3].abs_diff(b[3]));
             alpha

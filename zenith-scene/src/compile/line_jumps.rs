@@ -247,12 +247,10 @@ struct Snapshot {
 /// list. A trailing lone coordinate (malformed) is dropped.
 fn map_points(pts: &[f64], f: impl Fn((f64, f64)) -> (f64, f64)) -> Vec<f64> {
     let mut out = Vec::with_capacity(pts.len());
-    for pair in pts.chunks_exact(2) {
-        if let (Some(&x), Some(&y)) = (pair.first(), pair.get(1)) {
-            let (nx, ny) = f((x, y));
-            out.push(nx);
-            out.push(ny);
-        }
+    for &[x, y] in pts.as_chunks::<2>().0 {
+        let (nx, ny) = f((x, y));
+        out.push(nx);
+        out.push(ny);
     }
     out
 }
@@ -674,7 +672,9 @@ mod tests {
         assert_eq!(after_v, before_v, "vertical connector must be unchanged");
         // The bump should bulge toward -y (decreasing y) near x=50.
         let min_y = after_h
-            .chunks_exact(2)
+            .as_chunks::<2>()
+            .0
+            .iter()
             .map(|p| p[1])
             .fold(f64::INFINITY, f64::min);
         assert!(min_y < 50.0, "bump must dip above the line (smaller y)");

@@ -50,9 +50,9 @@ use std::path::PathBuf;
 #[command(
     name = "zenith",
     version,
-    about = "Author, validate, and render deterministic .zen design documents (KDL → PNG/PDF).",
+    about = "Author, validate, and render deterministic .zen design documents (KDL → PNG/SVG/PDF).",
     long_about = "Zenith turns a design into plain-text .zen source (KDL) you can read, diff, \
-validate, edit with typed transactions, and render deterministically to pixel-exact PNG or \
+validate, edit with typed transactions, and render deterministically to pixel-exact PNG, self-contained SVG, or \
 print-ready PDF — the opposite of a flat AI image.\n\n\
 The core loop: author/edit source → `validate` → `render` to inspect → iterate. Edits to \
 existing documents should go through `tx` (typed, dry-run by default). Every command accepts \
@@ -114,7 +114,7 @@ pub enum Command {
 
     /// Compile and render a `.zen` document.
     ///
-    /// Compile and render a .zen document to PNG, PDF, or a scene display-list.
+    /// Compile and render a .zen document to PNG, SVG, PDF, or a scene display-list.
     /// Rendering is deterministic (same source + backend → same bytes) and is blocked by hard
     /// diagnostics, so `validate` first. Use `--all-pages <DIR>` for a contact sheet and `--spread
     /// A-B` for facing pages.

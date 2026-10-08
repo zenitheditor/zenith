@@ -29,7 +29,9 @@ pub(super) fn check_raster(scene: &Scene) -> String {
         .unwrap_or_else(|| vec![255; image.width as usize * image.height as usize]);
     let nonzero: Vec<_> = raster
         .rgba
-        .chunks_exact(4)
+        .as_chunks::<4>()
+        .0
+        .iter()
         .enumerate()
         .filter(|(_, p)| p[3] > 0)
         .collect();

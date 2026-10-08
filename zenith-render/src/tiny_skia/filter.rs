@@ -33,7 +33,7 @@ pub(super) fn apply_filters(pm: &mut Pixmap, filters: &[FilterSpec]) {
         return;
     }
     let w = pm.width() as usize;
-    for (i, px) in pm.data_mut().chunks_exact_mut(4).enumerate() {
+    for (i, px) in pm.data_mut().as_chunks_mut::<4>().0.iter_mut().enumerate() {
         // tiny-skia premultiplied RGBA byte order: [r, g, b, a].
         let a = px[3];
         if a == 0 {

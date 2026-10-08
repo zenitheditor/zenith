@@ -81,10 +81,7 @@ pub(super) fn decoded_image_from_straight_rgba(
     let mut rgb = Vec::with_capacity(pixel_count * 3);
     let mut alpha = Vec::with_capacity(pixel_count);
     let mut any_transparent = false;
-    for chunk in rgba.chunks_exact(4) {
-        let [r, g, b, a] = chunk else {
-            return None;
-        };
+    for [r, g, b, a] in rgba.as_chunks::<4>().0 {
         rgb.push(*r);
         rgb.push(*g);
         rgb.push(*b);

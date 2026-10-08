@@ -115,10 +115,14 @@ fn tint_coverage(shadow: &mut Pixmap, ink: &Pixmap, region: Region, color: Scene
         let Some(src_row) = src_data.get(start..start + row_len) else {
             return;
         };
-        for (out, inp) in dst_row.chunks_exact_mut(4).zip(src_row.chunks_exact(4)) {
+        for (out, inp) in dst_row
+            .as_chunks_mut::<4>()
+            .0
+            .iter_mut()
+            .zip(src_row.as_chunks::<4>().0.iter())
+        {
             // tiny-skia premultiplied RGBA: byte 3 is alpha (coverage). The ink's
             // premultiplied alpha equals its straight alpha (alpha is never scaled).
-            // chunks_exact(4) guarantees exactly 4 bytes; direct indexing is safe.
             let ink_a = u32::from(inp[3]);
             // straight shadow alpha = ink_a * ca / 255, rounded.
             let a = ((ink_a * ca) + 127) / 255;
@@ -167,7 +171,7 @@ mod tests {
     /// A page filled with a varied semi-opaque backdrop.
     fn backdrop() -> Pixmap {
         let mut pm = Pixmap::new(W, H).expect("alloc");
-        for (i, px) in pm.data_mut().chunks_exact_mut(4).enumerate() {
+        for (i, px) in pm.data_mut().as_chunks_mut::<4>().0.iter_mut().enumerate() {
             let v = (i % 89) as u8;
             px[0] = v;
             px[1] = v / 2;

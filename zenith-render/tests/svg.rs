@@ -22,9 +22,20 @@ fn check_native(scene: &Scene, mean_limit: f64) -> String {
     assert!(output.rasterized_regions.is_empty());
     let image = rasterize(&output.bytes);
     let reference = render_image(scene, &fonts, &no_assets()).expect("PNG reference");
-    if reference.rgba.chunks_exact(4).any(|pixel| pixel[3] != 0) {
+    if reference
+        .rgba
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .any(|pixel| pixel[3] != 0)
+    {
         assert!(
-            image.rgba.chunks_exact(4).any(|pixel| pixel[3] != 0),
+            image
+                .rgba
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .any(|pixel| pixel[3] != 0),
             "native SVG contains ink"
         );
     }

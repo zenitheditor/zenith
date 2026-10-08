@@ -68,14 +68,18 @@ pub(super) fn premultiplied_to_straight_rgba(premul: &[u8]) -> Vec<u8> {
 
 fn map_rgb(src: &[u8], lut: &ChannelLut) -> Vec<u8> {
     let mut out = vec![0u8; src.len()];
-    for (dst, px) in out.chunks_exact_mut(4).zip(src.chunks_exact(4)) {
-        if let ([r, g, b, a], [dr, dg, db, da]) = (px, dst) {
-            let row = lut.row(*a);
-            *dr = row[usize::from(*r)];
-            *dg = row[usize::from(*g)];
-            *db = row[usize::from(*b)];
-            *da = *a;
-        }
+    for (dst, px) in out
+        .as_chunks_mut::<4>()
+        .0
+        .iter_mut()
+        .zip(src.as_chunks::<4>().0.iter())
+    {
+        let ([r, g, b, a], [dr, dg, db, da]) = (px, dst);
+        let row = lut.row(*a);
+        *dr = row[usize::from(*r)];
+        *dg = row[usize::from(*g)];
+        *db = row[usize::from(*b)];
+        *da = *a;
     }
     out
 }
@@ -119,7 +123,7 @@ mod tests {
     /// The former `encode_png` path, kept verbatim as the byte reference.
     fn reference_encode_png(image: &RasterImage) -> Vec<u8> {
         let mut premul = Vec::with_capacity(image.rgba.len());
-        for chunk in image.rgba.chunks_exact(4) {
+        for chunk in image.rgba.as_chunks::<4>().0 {
             let (r, g, b, a) = (chunk[0], chunk[1], chunk[2], chunk[3]);
             if a == 0 {
                 premul.extend_from_slice(&[0, 0, 0, 0]);
@@ -143,7 +147,7 @@ mod tests {
     /// The former per-pixel straight conversion in `rasterize`.
     fn reference_straight(premul: &[u8]) -> Vec<u8> {
         let mut rgba = Vec::with_capacity(premul.len());
-        for c in premul.chunks_exact(4) {
+        for c in premul.as_chunks::<4>().0 {
             let (r, g, b, a) = premultiplied_to_straight(c[0], c[1], c[2], c[3]);
             rgba.extend_from_slice(&[r, g, b, a]);
         }

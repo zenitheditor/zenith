@@ -135,19 +135,19 @@ fn composite_raster_blend_layer(
             "pixel buffer length mismatch during layer compositing",
         ));
     }
-    if target_data.len() % 4 != 0 {
+    if !target_data.len().is_multiple_of(4) {
         return Err(RenderError::new(
             "invalid RGBA pixel buffer length during layer compositing",
         ));
     }
 
     for (target_pixel, layer_pixel) in target_data
-        .chunks_exact_mut(4)
-        .zip(layer_data.chunks_exact(4))
+        .as_chunks_mut::<4>()
+        .0
+        .iter_mut()
+        .zip(layer_data.as_chunks::<4>().0.iter())
     {
-        let [_, _, _, source_alpha] = layer_pixel else {
-            return Err(RenderError::new("invalid premultiplied RGBA pixel length"));
-        };
+        let [_, _, _, source_alpha] = layer_pixel;
         if *source_alpha == 0 {
             continue;
         }
@@ -230,7 +230,7 @@ fn quantize_unit_to_u8(channel: f32) -> u8 {
         lower_int
     } else if fraction > 0.5 {
         lower_int + 1
-    } else if lower_int % 2 == 0 {
+    } else if lower_int.is_multiple_of(2) {
         lower_int
     } else {
         lower_int + 1

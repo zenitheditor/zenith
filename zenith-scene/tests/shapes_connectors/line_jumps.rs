@@ -45,7 +45,9 @@ fn line_jumps_arc_horizontal_hops() {
     );
     // Bump bulges above the line (smaller y) near the x=320 crossing.
     let min_y = horiz
-        .chunks_exact(2)
+        .as_chunks::<2>()
+        .0
+        .iter()
         .map(|p| p[1])
         .fold(f64::INFINITY, f64::min);
     assert!(min_y < 160.0, "bump must dip above the line: {horiz:?}");
@@ -76,7 +78,9 @@ fn line_jumps_apply_to_nested_connectors() {
         "nested vertical connector must keep its plain route"
     );
     let min_y = horiz
-        .chunks_exact(2)
+        .as_chunks::<2>()
+        .0
+        .iter()
         .map(|p| p[1])
         .fold(f64::INFINITY, f64::min);
     assert!(min_y < 160.0, "bump must dip above the line: {horiz:?}");

@@ -31,13 +31,13 @@ jobs:
       - name: Check formatting
         run: cargo fmt --all --check
       - name: Clippy (warnings are errors)
-        run: cargo clippy --workspace --all-targets -- -D warnings
+        run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
       - name: Build docs
         env:
           RUSTDOCFLAGS: -D warnings
-        run: cargo doc --workspace --no-deps
+        run: cargo doc --workspace --all-features --locked --no-deps
       - name: Doctests
-        run: cargo test --workspace --doc
+        run: cargo test --workspace --all-features --locked --doc
 
   test:
     name: Test (${{ matrix.os }})
@@ -54,4 +54,49 @@ jobs:
         with:
           prefix-key: test
       - name: Run tests
-        run: cargo test --workspace
+        run: cargo test --workspace --all-features --locked
+
+  msrv:
+    name: Minimum Rust version (1.95.0)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install Rust 1.95.0
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.95.0
+      - uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: msrv-1.95.0
+      - name: Check all targets and features
+        run: cargo check --workspace --all-targets --all-features --locked
+
+  package:
+    name: Package archives and embedded assets
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: release-packages
+          cache-directories: target/release-readiness
+      - name: Package all workspace crates
+        run: cargo package --workspace --all-features --locked --allow-dirty --target-dir target/release-readiness
+      - name: Check package contents
+        run: python3 scripts/check-release-packages.py target/release-readiness/package
+      - name: Smoke packaged CLI
+        run: |
+          target/release-readiness/debug/zenith --version
+          target/release-readiness/debug/zenith library list --json
+      - name: Create plugin smoke directory
+        run: mkdir -p "${{ runner.temp }}/zenith-plugin-smoke"
+      - name: Smoke packaged plugin assets
+        working-directory: ${{ runner.temp }}/zenith-plugin-smoke
+        run: |
+          "${{ github.workspace }}/target/release-readiness/debug/zenith" plugin install --codex --scope project
+          test -f .agents/skills/zenith/SKILL.md

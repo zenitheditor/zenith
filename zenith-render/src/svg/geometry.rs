@@ -89,14 +89,12 @@ pub(super) fn tiny_path(path: &tiny_skia::Path) -> String {
 
 pub(super) fn polygon(points: &[f64], closed: bool) -> Result<String, RenderError> {
     finite(points)?;
-    if points.len() % 2 != 0 {
+    if !points.len().is_multiple_of(2) {
         return Err(RenderError::new("SVG polygon has an unmatched coordinate"));
     }
     let mut result = String::new();
-    for (index, point) in points.chunks_exact(2).enumerate() {
-        if let [x, y] = point {
-            result.push_str(&format!("{}{x} {y}", if index == 0 { 'M' } else { 'L' }));
-        }
+    for (index, [x, y]) in points.as_chunks::<2>().0.iter().enumerate() {
+        result.push_str(&format!("{}{x} {y}", if index == 0 { 'M' } else { 'L' }));
     }
     if closed && !result.is_empty() {
         result.push('Z');
@@ -149,13 +147,11 @@ pub(super) fn path(segments: &[PathSegment]) -> Result<String, RenderError> {
 
 pub(super) fn points_box(points: &[f64]) -> BoxRect {
     let mut bounds: Option<(f64, f64, f64, f64)> = None;
-    for pair in points.chunks_exact(2) {
-        if let [x, y] = pair {
-            bounds = Some(match bounds {
-                None => (*x, *y, *x, *y),
-                Some((a, b, c, d)) => (a.min(*x), b.min(*y), c.max(*x), d.max(*y)),
-            });
-        }
+    for [x, y] in points.as_chunks::<2>().0 {
+        bounds = Some(match bounds {
+            None => (*x, *y, *x, *y),
+            Some((a, b, c, d)) => (a.min(*x), b.min(*y), c.max(*x), d.max(*y)),
+        });
     }
     bounds.map_or((0.0, 0.0, 0.0, 0.0), |(a, b, c, d)| (a, b, c - a, d - b))
 }

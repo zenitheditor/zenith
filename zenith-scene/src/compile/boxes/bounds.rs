@@ -180,11 +180,10 @@ pub(super) fn first_polyline(commands: &[SceneCommand], base: Affine) -> Option<
             let m = stack.top();
             return Some(
                 points
-                    .chunks_exact(2)
-                    .filter_map(|pair| match pair {
-                        [x, y] => Some(m.apply(*x, *y)),
-                        _ => None,
-                    })
+                    .as_chunks::<2>()
+                    .0
+                    .iter()
+                    .map(|[x, y]| m.apply(*x, *y))
                     .collect(),
             );
         }
@@ -239,10 +238,8 @@ impl Acc {
     /// by `grow` in local space (a stroke half-width), so the growth scales
     /// with `m` like the stroke the backends draw.
     fn points(&mut self, m: Affine, points: &[f64], grow: f64) {
-        for pair in points.chunks_exact(2) {
-            if let [x, y] = pair {
-                self.rect(m, (x - grow, y - grow, x + grow, y + grow));
-            }
+        for [x, y] in points.as_chunks::<2>().0 {
+            self.rect(m, (x - grow, y - grow, x + grow, y + grow));
         }
     }
 

@@ -70,10 +70,8 @@ fn crop_and_embed(content: &mut Content, res: &mut PageResources, rgba: &[u8], i
     let mut max_y = 0u32;
     let mut found = false;
     for (y, row) in rgba.chunks_exact(stride).enumerate() {
-        for (x, px) in row.chunks_exact(4).enumerate() {
-            if let [_, _, _, alpha] = px
-                && *alpha > 0
-            {
+        for (x, [_, _, _, alpha]) in row.as_chunks::<4>().0.iter().enumerate() {
+            if *alpha > 0 {
                 found = true;
                 let (xu, yu) = (x as u32, y as u32);
                 if xu < min_x {
