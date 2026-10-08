@@ -376,3 +376,23 @@ fn mcp_store_error_names_the_committed_requested_output() {
     assert!(message.contains("Resource storage failed"), "{message}");
     assert!(result["structuredContent"].get("resource").is_none());
 }
+
+#[test]
+fn explicit_render_output_cannot_replace_its_source_document() {
+    let directory = tempfile::tempdir().unwrap();
+    let store = tempfile::tempdir().unwrap();
+    let doc = directory.path().join("doc.zen");
+    fs::write(&doc, DOC).unwrap();
+    let responses = session(
+        store.path(),
+        &[render(1, json!({"doc":doc,"format":"svg","out":doc}))],
+    );
+    assert_eq!(responses[0]["result"]["isError"], true);
+    assert!(
+        responses[0]["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap()
+            .contains("destination collision")
+    );
+    assert_eq!(fs::read_to_string(doc).unwrap(), DOC);
+}

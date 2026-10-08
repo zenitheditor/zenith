@@ -143,6 +143,17 @@ pub fn run_variant_with_options(
     stem: &str,
     options: BatchExportOptions,
 ) -> Result<VariantReport, VariantCmdErr> {
+    run_variant_with_output_constraints(doc_src, project_dir, out_dir, stem, options, &[])
+}
+
+pub fn run_variant_with_output_constraints(
+    doc_src: &str,
+    project_dir: Option<&Path>,
+    out_dir: &Path,
+    stem: &str,
+    options: BatchExportOptions,
+    reserved: &[&Path],
+) -> Result<VariantReport, VariantCmdErr> {
     options.check().map_err(VariantCmdErr::new)?;
     let format = options.format;
     // ── 1. Parse the input document ───────────────────────────────────────
@@ -157,6 +168,26 @@ pub fn run_variant_with_options(
 
     // An empty expansion (no variants block) is not an error; we return an
     // empty report so the caller can produce a "0 generated" summary.
+
+    let mut output_guard = crate::output_file::OutputGuard::new(reserved)
+        .map_err(|error| VariantCmdErr::new(error.to_string()))?;
+    let mut planned_paths = Vec::new();
+    for result in &expansion.results {
+        if matches!(result.outcome, VariantOutcome::Generated(_)) {
+            for name in [
+                format!("{stem}-{}.zen", result.id),
+                format!("{stem}-{}.{}", result.id, format.extension()),
+            ] {
+                let path = out_dir.join(name);
+                output_guard
+                    .check(&path)
+                    .map_err(|error| VariantCmdErr::new(error.to_string()))?;
+                planned_paths.push(path);
+            }
+        }
+    }
+    crate::output_file::check_distinct(planned_paths.iter().map(|path| path.as_path()))
+        .map_err(|error| VariantCmdErr::new(error.to_string()))?;
 
     // ── 3. Build font + asset providers ONCE from the original doc ────────
     let fonts =
@@ -346,7 +377,7 @@ pub fn run_variant_with_options(
                     diagnostics.extend(compile_result.diagnostics);
                 }
 
-                if let Err(e) = crate::output_file::write_bytes(&zen_path, &zen_bytes) {
+                if let Err(e) = output_guard.write(&zen_path, &zen_bytes) {
                     records.push(VariantResultRecord {
                         id: result.id,
                         source: result.source,
@@ -359,7 +390,7 @@ pub fn run_variant_with_options(
 
                 // ── 6f. Write the image ─────────────────────────────────────────
                 let image_path = out_dir.join(&image_name);
-                if let Err(e) = crate::output_file::write_bytes(&image_path, &image_bytes) {
+                if let Err(e) = output_guard.write(&image_path, &image_bytes) {
                     records.push(VariantResultRecord {
                         id: result.id,
                         source: result.source,

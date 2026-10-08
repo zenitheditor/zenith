@@ -375,3 +375,29 @@ fn merge_schema_exposes_optional_format_and_svg_raster_scale_bounds() {
     );
     assert_eq!(schema["required"], json!(["doc", "data", "out_dir"]));
 }
+
+#[test]
+fn manifests_cannot_replace_inputs_or_planned_pages() {
+    for csv in ["title\nFirst\n", "title\n"] {
+        for manifest in ["doc.zen", "data.csv", "missing/row-0001-page-1.svg"] {
+            if csv == "title\n" && manifest.starts_with("missing") {
+                continue;
+            }
+            let env = Env::new(DOC, csv);
+            let mut args = env.arguments("missing");
+            args["format"] = json!("svg");
+            args["manifest"] = json!(env.dir.path().join(manifest));
+            let result = env.merge(args);
+            assert_eq!(result["isError"], true, "{result}");
+            assert!(!env.dir.path().join("missing").exists());
+            assert_eq!(
+                fs::read_to_string(env.dir.path().join("doc.zen")).unwrap(),
+                DOC
+            );
+            assert_eq!(
+                fs::read_to_string(env.dir.path().join("data.csv")).unwrap(),
+                csv
+            );
+        }
+    }
+}

@@ -309,3 +309,202 @@ fn human_render_error_lists_committed_paths_and_keeps_directory_conflict() {
     assert!(env.dir.path().join("committed.png").is_file());
     assert!(env.dir.path().join("blocked.svg").is_dir());
 }
+
+#[test]
+fn render_rejects_identical_relative_and_generated_destinations_before_writes() {
+    let env = Env::new();
+    for (png, svg) in [
+        ("missing/same", "missing/same"),
+        ("missing/same", "./missing/same"),
+    ] {
+        let output = env.run(&["render", "doc.zen", "--png", png, "--svg", svg, "--json"]);
+        assert!(!output.status.success());
+        let report: Value = serde_json::from_slice(&output.stdout).unwrap();
+        assert_eq!(report["outputs"], serde_json::json!([]));
+        assert!(!env.dir.path().join("missing").exists());
+    }
+    let output = env.run(&[
+        "render",
+        "doc.zen",
+        "--png",
+        "out/page-1.png",
+        "--all-pages",
+        "out",
+        "--json",
+    ]);
+    assert!(
+        !output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+    assert!(!env.dir.path().join("out").exists());
+}
+
+#[test]
+fn render_and_batch_manifests_preserve_inputs_and_planned_artifacts() {
+    let env = Env::new();
+    for destination in ["out/row-0001-page-1.svg", "doc.zen", "data.csv"] {
+        let output = env.run(&[
+            "merge",
+            "doc.zen",
+            "data.csv",
+            "--out-dir",
+            "out",
+            "--format",
+            "svg",
+            "--manifest",
+            destination,
+            "--json",
+        ]);
+        assert!(!output.status.success());
+        assert!(!env.dir.path().join("out").exists());
+        assert_eq!(
+            fs::read_to_string(env.dir.path().join("doc.zen")).unwrap(),
+            DOC
+        );
+    }
+    for destination in ["out/doc-square.zen", "out/doc-square.svg", "doc.zen"] {
+        let output = env.run(&[
+            "variant",
+            "doc.zen",
+            "--out-dir",
+            "out",
+            "--format",
+            "svg",
+            "--manifest",
+            destination,
+            "--json",
+        ]);
+        assert!(!output.status.success());
+        assert!(!env.dir.path().join("out").exists());
+        assert_eq!(
+            fs::read_to_string(env.dir.path().join("doc.zen")).unwrap(),
+            DOC
+        );
+    }
+    let output = env.run(&["render", "doc.zen", "--svg", "doc.zen", "--json"]);
+    assert!(!output.status.success());
+    assert_eq!(
+        fs::read_to_string(env.dir.path().join("doc.zen")).unwrap(),
+        DOC
+    );
+}
+
+#[test]
+fn empty_batches_reject_manifest_input_collisions() {
+    let env = Env::new();
+    fs::write(env.dir.path().join("data.csv"), "name,title\n").unwrap();
+    let output = env.run(&[
+        "merge",
+        "doc.zen",
+        "data.csv",
+        "--out-dir",
+        "out",
+        "--manifest",
+        "data.csv",
+        "--json",
+    ]);
+    assert!(!output.status.success());
+    assert_eq!(
+        fs::read_to_string(env.dir.path().join("data.csv")).unwrap(),
+        "name,title\n"
+    );
+    assert!(!env.dir.path().join("out").exists());
+    let source = DOC.replace(
+        "  variants { variant id=\"square\" source=\"second\" w=(px)100 h=(px)80 {} }\n",
+        "",
+    );
+    fs::write(env.dir.path().join("doc.zen"), &source).unwrap();
+    let output = env.run(&[
+        "variant",
+        "doc.zen",
+        "--out-dir",
+        "out",
+        "--manifest",
+        "doc.zen",
+        "--json",
+    ]);
+    assert!(!output.status.success());
+    assert_eq!(
+        fs::read_to_string(env.dir.path().join("doc.zen")).unwrap(),
+        source
+    );
+    assert!(!env.dir.path().join("out").exists());
+}
+
+#[cfg(unix)]
+#[test]
+fn render_rejects_parent_and_dangling_link_aliases_without_writes() {
+    use std::os::unix::fs::symlink;
+    let env = Env::new();
+    fs::create_dir(env.dir.path().join("real")).unwrap();
+    symlink("real", env.dir.path().join("alias")).unwrap();
+    symlink("real/new.svg", env.dir.path().join("link.svg")).unwrap();
+    for svg in ["alias/new.svg", "link.svg"] {
+        let output = env.run(&[
+            "render",
+            "doc.zen",
+            "--png",
+            "real/new.svg",
+            "--svg",
+            svg,
+            "--json",
+        ]);
+        assert!(!output.status.success());
+        assert!(!env.dir.path().join("real/new.svg").exists());
+    }
+    assert_eq!(
+        fs::read_link(env.dir.path().join("link.svg")).unwrap(),
+        std::path::Path::new("real/new.svg")
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn merge_alias_after_partial_row_cannot_replace_committed_page() {
+    use std::os::unix::fs::symlink;
+    let env = Env::new();
+    fs::write(
+        env.dir.path().join("data.csv"),
+        "name,title\nfirst,First\nsecond,Second\n",
+    )
+    .unwrap();
+    let out = env.dir.path().join("out");
+    fs::create_dir_all(out.join("first-page-2.svg")).unwrap();
+    symlink("first-page-1.svg", out.join("second-page-1.svg")).unwrap();
+    let (output, report) = env.json(&[
+        "merge",
+        "doc.zen",
+        "data.csv",
+        "--out-dir",
+        "out",
+        "--name-by",
+        "name",
+        "--format",
+        "svg",
+        "--json",
+    ]);
+    assert!(!output.status.success());
+    assert_eq!(report["written"], 0);
+    assert_eq!(report["failed"], 2);
+    assert_eq!(
+        report["rows"][0]["outputs"],
+        serde_json::json!(["first-page-1.svg"])
+    );
+    assert_eq!(report["rows"][1]["outputs"], serde_json::json!([]));
+    let baseline = env.dir.path().join("baseline");
+    zenith_cli::commands::merge::run_with_format(
+        DOC,
+        "name,title\nfirst,First\n",
+        None,
+        &baseline,
+        Some("name"),
+        zenith_cli::commands::render::BatchFormat::Svg,
+    )
+    .unwrap();
+    assert_eq!(
+        fs::read(out.join("first-page-1.svg")).unwrap(),
+        fs::read(baseline.join("first-page-1.svg")).unwrap()
+    );
+    assert!(!out.join("second-page-2.svg").exists());
+}

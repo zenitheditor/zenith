@@ -1,6 +1,6 @@
 //! Output staging, diagnostic gates, and render reports.
 use super::run::{RenderRun, Stop};
-use crate::cli_helpers::{print_diagnostics_stderr, write_bytes};
+use crate::cli_helpers::print_diagnostics_stderr;
 use crate::commands::serialize_pretty;
 use crate::json_types::{DiagnosticJson, RenderOutput};
 use crate::json_types::{RenderImageJson, RenderRasterizedRegionJson};
@@ -80,13 +80,24 @@ impl RenderRun<'_> {
     }
     pub(super) fn flush(&mut self) -> Result<(), Stop> {
         gate(&self.diagnostics, &self.import_files)?;
+        let mut protected = vec![self.args.path.as_path()];
+        protected.extend(self.args.data.as_deref());
+        let mut guard = crate::output_file::OutputGuard::new(&protected)
+            .map_err(|error| write_stop(&self.args.path, &error))?;
+        crate::output_file::check_distinct(self.pending.iter().map(|(path, _)| path.as_path()))
+            .map_err(|error| write_stop(&self.args.path, &error))?;
+        for (path, _) in &self.pending {
+            guard
+                .check(path)
+                .map_err(|error| write_stop(path, &error))?;
+        }
         for dir in &self.directories {
             if let Err(e) = std::fs::create_dir_all(dir) {
                 return Err(write_stop(dir, &e));
             }
         }
         for (path, bytes) in self.pending.drain(..) {
-            if let Err(e) = write_bytes(&path, &bytes) {
+            if let Err(e) = guard.write(&path, &bytes) {
                 return Err(write_stop(&path, &e));
             }
             self.outputs.push(path.display().to_string());

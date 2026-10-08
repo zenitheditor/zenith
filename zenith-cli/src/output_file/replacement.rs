@@ -2,10 +2,9 @@
 //! Directory creation remains caller-owned. Replacement provides no crash durability guarantee.
 
 use std::{
-    collections::BTreeSet,
     fs::{self, File},
     io::{self, Write},
-    path::{Path, PathBuf},
+    path::Path,
 };
 
 pub(crate) fn write_bytes(path: &Path, bytes: &[u8]) -> io::Result<()> {
@@ -13,7 +12,7 @@ pub(crate) fn write_bytes(path: &Path, bytes: &[u8]) -> io::Result<()> {
 }
 
 fn write_with(path: &Path, write: impl FnOnce(&mut File) -> io::Result<()>) -> io::Result<()> {
-    let destination = resolve_destination(path)?;
+    let destination = super::identity::replacement_destination(path)?;
     let permissions = match fs::metadata(&destination) {
         Ok(metadata) => {
             if !metadata.is_file() {
@@ -67,55 +66,10 @@ fn write_with(path: &Path, write: impl FnOnce(&mut File) -> io::Result<()>) -> i
     Ok(())
 }
 
-/// Follow final-component links while retaining the link itself, including dangling links.
-fn resolve_destination(path: &Path) -> io::Result<PathBuf> {
-    let mut destination = if path.is_absolute() {
-        path.to_path_buf()
-    } else {
-        std::env::current_dir()?.join(path)
-    };
-    let mut visited = BTreeSet::new();
-    for _ in 0..64 {
-        let parent = destination.parent().ok_or_else(|| {
-            io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "output lacks a parent directory",
-            )
-        })?;
-        let name = destination.file_name().ok_or_else(|| {
-            io::Error::new(io::ErrorKind::InvalidInput, "output lacks a file name")
-        })?;
-        let parent = fs::canonicalize(parent)?;
-        destination = parent.join(name);
-        if !visited.insert(destination.clone()) {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                format!("output '{}' contains a symlink cycle", path.display()),
-            ));
-        }
-        match fs::symlink_metadata(&destination) {
-            Ok(metadata) if metadata.file_type().is_symlink() => {
-                let target = fs::read_link(&destination)?;
-                destination = if target.is_absolute() {
-                    target
-                } else {
-                    parent.join(target)
-                };
-            }
-            Ok(_) => return Ok(destination),
-            Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(destination),
-            Err(error) => return Err(error),
-        }
-    }
-    Err(io::Error::new(
-        io::ErrorKind::InvalidInput,
-        format!("output '{}' exceeds 64 symlink targets", path.display()),
-    ))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
 
     fn entries(path: &Path) -> Vec<PathBuf> {
         let mut paths: Vec<_> = fs::read_dir(path)

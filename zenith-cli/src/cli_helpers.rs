@@ -159,10 +159,3 @@ pub(crate) fn read_file(path: &std::path::Path) -> Result<String, CliError> {
         )
     })
 }
-
-/// Write raw bytes to a file.
-///
-/// Returns a `std::io::Error` on failure.
-pub(crate) fn write_bytes(path: &std::path::Path, bytes: &[u8]) -> std::io::Result<()> {
-    crate::output_file::write_bytes(path, bytes)
-}

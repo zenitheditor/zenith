@@ -31,13 +31,16 @@ fn run(args: &Value) -> Result<(Value, bool), String> {
     let location = doc_ref::locate(doc)?;
     let source = read(&location.path)?;
     let csv = read(Path::new(data))?;
-    let report = merge::run_with_options(
+    let mut reserved = vec![location.path.as_path(), Path::new(data)];
+    reserved.extend(manifest_path);
+    let report = merge::run_with_output_constraints(
         &source,
         &csv,
         location.path.parent(),
         out_dir,
         name_by,
         options,
+        &reserved,
     )
     .map_err(|error| error.message)?;
     let output = merge::to_json_output(&report);
@@ -59,7 +62,15 @@ fn run(args: &Value) -> Result<(Value, bool), String> {
     let mut diagnostics = output.diagnostics;
     if let Some(path) = manifest_path {
         let manifest = merge::build_manifest(&source, &csv, name_by, &report);
-        if let Err(error) = write_manifest(path, &manifest) {
+        let mut protected = vec![location.path.clone(), Path::new(data).to_path_buf()];
+        protected.extend(
+            report
+                .rows
+                .iter()
+                .flat_map(|row| row.outputs.iter())
+                .map(|name| out_dir.join(name)),
+        );
+        if let Err(error) = write_manifest(path, &manifest, &protected) {
             diagnostics.push(DiagnosticJson::error("io.write_failed", format!(
                 "cannot write manifest '{}': {error}. Check the directory exists and is writable", path.display()
             )));
@@ -116,7 +127,14 @@ fn options(args: &Value) -> Result<render::BatchExportOptions, String> {
     })
 }
 
-fn write_manifest(path: &Path, manifest: &MergeManifest) -> std::io::Result<()> {
+fn write_manifest(
+    path: &Path,
+    manifest: &MergeManifest,
+    protected: &[std::path::PathBuf],
+) -> std::io::Result<()> {
+    let references: Vec<_> = protected.iter().map(|path| path.as_path()).collect();
+    let mut guard = crate::output_file::OutputGuard::new(&references)?;
+    guard.check(path)?;
     let bytes = serde_json::to_vec_pretty(manifest).map_err(std::io::Error::other)?;
     if let Some(parent) = path
         .parent()
@@ -124,5 +142,5 @@ fn write_manifest(path: &Path, manifest: &MergeManifest) -> std::io::Result<()> 
     {
         std::fs::create_dir_all(parent)?;
     }
-    crate::output_file::write_bytes(path, &bytes)
+    guard.write(path, &bytes)
 }

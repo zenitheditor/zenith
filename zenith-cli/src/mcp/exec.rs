@@ -259,7 +259,16 @@ fn run_fix(args: &Value) -> Result<Value, String> {
 }
 
 fn run_render(args: &Value) -> Result<Value, String> {
-    let (path, doc_id) = doc_ref::ensure(req_str(args, "doc")?)?;
+    let reference = req_str(args, "doc")?;
+    if let Some(out) = opt_str(args, "out") {
+        let location = doc_ref::locate(reference)?;
+        let mut guard = crate::output_file::OutputGuard::new(&[location.path.as_path()])
+            .map_err(|error| format!("error writing '{out}': {error}"))?;
+        guard
+            .check(Path::new(out))
+            .map_err(|error| format!("error writing '{out}': {error}"))?;
+    }
+    let (path, doc_id) = doc_ref::ensure(reference)?;
     let format = req_str(args, "format")?;
     // An explicit `page` selects one page; its absence means "default" — which
     // for PDF renders all pages, and for PNG/SVG/scene renders page 1.
@@ -399,8 +408,11 @@ fn run_render(args: &Value) -> Result<Value, String> {
 
     // Optional caller-chosen path, plus a stable per-doc preview file.
     if let Some(out) = opt_str(args, "out") {
-        crate::output_file::write_bytes(Path::new(out), &bytes)
-            .map_err(|e| format!("error writing '{out}': {e}"))?;
+        let mut guard = crate::output_file::OutputGuard::new(&[path.as_path()])
+            .map_err(|error| format!("error writing '{out}': {error}"))?;
+        guard
+            .write(Path::new(out), &bytes)
+            .map_err(|error| format!("error writing '{out}': {error}"))?;
     }
     // The preview slot holds page renders; a contact sheet is not one page.
     if !contact_sheet {

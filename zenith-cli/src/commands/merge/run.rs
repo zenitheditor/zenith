@@ -304,6 +304,26 @@ pub fn run_with_options(
     name_by: Option<&str>,
     options: BatchExportOptions,
 ) -> Result<MergeReport, MergeError> {
+    run_with_output_constraints(
+        doc_src,
+        csv_src,
+        project_dir,
+        out_dir,
+        name_by,
+        options,
+        &[],
+    )
+}
+
+pub fn run_with_output_constraints(
+    doc_src: &str,
+    csv_src: &str,
+    project_dir: Option<&Path>,
+    out_dir: &Path,
+    name_by: Option<&str>,
+    options: BatchExportOptions,
+    reserved: &[&Path],
+) -> Result<MergeReport, MergeError> {
     options.check().map_err(MergeError::new)?;
     let format = options.format;
     // ── 1. Parse the template document (once) ─────────────────────────────
@@ -414,6 +434,23 @@ pub fn run_with_options(
                 .ok_or_else(|| MergeError::new(format!("--name-by column {:?} not found", col)))?,
         ),
     };
+
+    let mut output_guard = crate::output_file::OutputGuard::new(reserved)
+        .map_err(|error| MergeError::new(error.to_string()))?;
+    // Check every planned page against reserved inputs and manifests before writes.
+    let mut planned_reader = csv::Reader::from_reader(csv_src.as_bytes());
+    for (row, record) in planned_reader.records().enumerate() {
+        let Ok(record) = record else { continue };
+        let stem = match name_by_index {
+            Some(index) => sanitize_filename(record.get(index).unwrap_or("")),
+            None => format!("row-{:04}", row + 1),
+        };
+        for page in 0..doc.body.pages.len() {
+            output_guard
+                .check(&out_dir.join(page_filename(&stem, page, doc.body.pages.len(), format)))
+                .map_err(|error| MergeError::new(error.to_string()))?;
+        }
+    }
 
     // ── 5. Build font + asset providers ONCE from the original doc ────────
     let fonts =
@@ -666,6 +703,17 @@ pub fn run_with_options(
             .map(|pi| page_filename(&row_stem, pi, page_count, format))
             .collect();
 
+        let planned_paths: Vec<_> = page_filenames
+            .iter()
+            .map(|name| out_dir.join(name))
+            .collect();
+        if let Err(error) =
+            crate::output_file::check_distinct(planned_paths.iter().map(|path| path.as_path()))
+        {
+            push_failure(&mut rows, row_idx, row_key, error.to_string());
+            continue;
+        }
+
         // Pre-flight collision check: if ANY filename is already taken, fail
         // the whole row without writing anything.
         let mut collided = false;
@@ -767,7 +815,7 @@ pub fn run_with_options(
         let mut newly_written: Vec<String> = Vec::new();
         for (fname, bytes) in page_images {
             let out_path = out_dir.join(&fname);
-            if let Err(e) = crate::output_file::write_bytes(&out_path, &bytes) {
+            if let Err(e) = output_guard.write(&out_path, &bytes) {
                 push_failure(
                     &mut rows,
                     row_idx,

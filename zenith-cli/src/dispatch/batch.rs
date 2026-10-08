@@ -25,13 +25,16 @@ pub(super) fn dispatch_merge(args: MergeArgs) -> ExitCode {
         Ok(s) => s,
         Err(e) => return e.emit(json),
     };
-    let report = match commands::merge::run_with_options(
+    let mut reserved = vec![args.doc.as_path(), args.data.as_path()];
+    reserved.extend(args.manifest.as_deref());
+    let report = match commands::merge::run_with_output_constraints(
         &doc_src,
         &csv_src,
         args.doc.parent(),
         &args.out_dir,
         args.name_by.as_deref(),
         options,
+        &reserved,
     ) {
         Ok(report) => report,
         Err(e) => return CliError::new("merge.setup_failed", e.message, e.exit_code).emit(json),
@@ -40,7 +43,20 @@ pub(super) fn dispatch_merge(args: MergeArgs) -> ExitCode {
     if let Some(manifest_path) = &args.manifest {
         let manifest =
             commands::merge::build_manifest(&doc_src, &csv_src, args.name_by.as_deref(), &report);
-        if let Err(e) = write_manifest(manifest_path, &serialize_pretty(&manifest)) {
+        let mut protected = reserved
+            .iter()
+            .copied()
+            .filter(|path| *path != manifest_path.as_path())
+            .map(Path::to_path_buf)
+            .collect::<Vec<_>>();
+        protected.extend(
+            report
+                .rows
+                .iter()
+                .flat_map(|row| row.outputs.iter())
+                .map(|name| args.out_dir.join(name)),
+        );
+        if let Err(e) = write_manifest(manifest_path, &serialize_pretty(&manifest), &protected) {
             manifest_error = Some(e);
         }
     }
@@ -108,12 +124,15 @@ pub(super) fn dispatch_variant(args: VariantArgs) -> ExitCode {
         .file_stem()
         .and_then(|s| s.to_str())
         .unwrap_or("doc");
-    let report = match commands::variant::run_variant_with_options(
+    let mut reserved = vec![args.doc.as_path()];
+    reserved.extend(args.manifest.as_deref());
+    let report = match commands::variant::run_variant_with_output_constraints(
         &doc_src,
         args.doc.parent(),
         &args.out_dir,
         stem,
         options,
+        &reserved,
     ) {
         Ok(report) => report,
         Err(e) => {
@@ -123,7 +142,21 @@ pub(super) fn dispatch_variant(args: VariantArgs) -> ExitCode {
     let mut manifest_error = None;
     if let Some(manifest_path) = &args.manifest {
         let manifest = commands::variant::build_manifest(&doc_src, &report);
-        if let Err(e) = write_manifest(manifest_path, &serialize_pretty(&manifest)) {
+        let mut protected = vec![args.doc.clone()];
+        for outputs in report
+            .variants
+            .iter()
+            .filter_map(|record| record.outputs.as_ref())
+        {
+            protected.push(args.out_dir.join(&outputs.zen));
+            if !outputs.png.is_empty() {
+                protected.push(args.out_dir.join(&outputs.png));
+            }
+            if let Some(svg) = &outputs.svg {
+                protected.push(args.out_dir.join(svg));
+            }
+        }
+        if let Err(e) = write_manifest(manifest_path, &serialize_pretty(&manifest), &protected) {
             manifest_error = Some(e);
         }
     }
@@ -181,14 +214,26 @@ pub(super) fn dispatch_variant(args: VariantArgs) -> ExitCode {
 }
 
 /// Write `manifest_json` to `path`, creating its parent directory.
-fn write_manifest(path: &Path, manifest_json: &str) -> Result<(), CliError> {
+fn write_manifest(
+    path: &Path,
+    manifest_json: &str,
+    protected: &[std::path::PathBuf],
+) -> Result<(), CliError> {
+    let references: Vec<_> = protected.iter().map(|path| path.as_path()).collect();
+    // Recheck against inputs and committed artifacts before creating directories.
+    let mut guard = crate::output_file::OutputGuard::new(&references)
+        .map_err(|error| write_error(path, &error))?;
+    guard
+        .check(path)
+        .map_err(|error| write_error(path, &error))?;
     if let Some(parent) = path.parent()
         && !parent.as_os_str().is_empty()
         && let Err(e) = std::fs::create_dir_all(parent)
     {
         return Err(create_dir_error(parent, &e));
     }
-    crate::output_file::write_bytes(path, manifest_json.as_bytes())
+    guard
+        .write(path, manifest_json.as_bytes())
         .map_err(|e| write_error(path, &e))
 }
 
