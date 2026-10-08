@@ -1,6 +1,6 @@
 {
   "name": "@zenitheditor/zenith-mcp",
-  "version": "0.0.8",
+  "version": "0.0.9",
   "description": "MCP launcher for the Zenith deterministic .zen design engine.",
   "keywords": [
     "mcp",

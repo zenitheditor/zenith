@@ -3,7 +3,7 @@
   "name": "io.github.zenitheditor/zenith",
   "title": "Zenith",
   "description": "Author, validate, edit, and render deterministic .zen design docs to PNG/SVG/PDF.",
-  "version": "0.0.8",
+  "version": "0.0.9",
   "repository": {
     "url": "https://github.com/zenitheditor/zenith",
     "source": "github"
@@ -19,7 +19,7 @@
     {
       "registryType": "npm",
       "identifier": "@zenitheditor/zenith-mcp",
-      "version": "0.0.8",
+      "version": "0.0.9",
       "runtimeHint": "npx",
       "transport": {
         "type": "stdio"
