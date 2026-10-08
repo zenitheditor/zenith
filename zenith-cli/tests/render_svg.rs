@@ -1,4 +1,5 @@
 use std::fs;
+use std::path::Path;
 use std::process::{Command, Output};
 
 use serde_json::Value;
@@ -101,7 +102,10 @@ fn svg_default_page_matches_selected_page_and_batch_bytes() {
     }
     assert_eq!(
         batch["outputs"],
-        serde_json::json!(["pages/page-1.svg", "pages/page-2.svg"])
+        serde_json::json!([
+            Path::new("pages").join("page-1.svg").display().to_string(),
+            Path::new("pages").join("page-2.svg").display().to_string()
+        ])
     );
     assert_eq!(batch["diagnostics"], default["diagnostics"]);
     assert_eq!(default["schema"], "zenith-render-v1");
