@@ -9,7 +9,9 @@
 
 use miniz_oxide::deflate::compress_to_vec_zlib;
 
-use crate::tiny_skia::decode_raster_to_pixmap;
+use zenith_scene::SrcRect;
+
+use crate::tiny_skia::{crop_raster_image, decode_raster_to_pixmap};
 
 /// A decoded image ready to embed: deflated RGB samples, the optional deflated
 /// alpha SMask, and the pixel dimensions.
@@ -25,11 +27,11 @@ pub(super) struct DecodedImage {
 
 /// Decode `bytes` (PNG or JPEG) and prepare it for embedding, or `None` when the
 /// format is unsupported / the data is malformed / dimensions are zero.
-pub(super) fn decode_for_pdf(bytes: &[u8]) -> Option<DecodedImage> {
+pub(super) fn decode_for_pdf(bytes: &[u8], crop: Option<&SrcRect>) -> Option<DecodedImage> {
     // Reuse the raster decoder (PNG via tiny-skia, JPEG via jpeg-decoder). The
     // returned Pixmap holds premultiplied RGBA; convert back to straight alpha
     // so the RGB plane and the SMask are independent (PDF composites them).
-    let pixmap = decode_raster_to_pixmap(bytes)?;
+    let pixmap = crop_raster_image(decode_raster_to_pixmap(bytes)?, crop)?;
     let width = pixmap.width();
     let height = pixmap.height();
     if width == 0 || height == 0 {
@@ -80,13 +82,14 @@ pub(super) fn decoded_image_from_straight_rgba(
     let mut alpha = Vec::with_capacity(pixel_count);
     let mut any_transparent = false;
     for chunk in rgba.chunks_exact(4) {
-        // chunks_exact(4) guarantees 4 bytes per chunk: no panic, no indexing risk.
-        rgb.push(chunk[0]);
-        rgb.push(chunk[1]);
-        rgb.push(chunk[2]);
-        let a = chunk[3];
-        alpha.push(a);
-        if a != 255 {
+        let [r, g, b, a] = chunk else {
+            return None;
+        };
+        rgb.push(*r);
+        rgb.push(*g);
+        rgb.push(*b);
+        alpha.push(*a);
+        if *a != 255 {
             any_transparent = true;
         }
     }

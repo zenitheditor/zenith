@@ -1,6 +1,7 @@
 //! Raster image decoding (PNG, JPEG) into premultiplied `Pixmap`s.
 
-use tiny_skia::Pixmap;
+use tiny_skia::{IntRect, Pixmap};
+use zenith_scene::SrcRect;
 
 /// Decode a raster image asset into a premultiplied `Pixmap`.
 ///
@@ -18,6 +19,28 @@ pub(crate) fn decode_raster_image(bytes: &[u8]) -> Option<Pixmap> {
         return decode_jpeg(bytes);
     }
     None
+}
+
+/// Clamp and truncate source-crop endpoints before copying premultiplied pixels.
+/// Absent crops return the original pixmap. Empty crops skip the image.
+pub(crate) fn crop_raster_image(decoded: Pixmap, crop: Option<&SrcRect>) -> Option<Pixmap> {
+    let Some(sr) = crop else {
+        return Some(decoded);
+    };
+    let (rx, ry, rw, rh) = (sr.x, sr.y, sr.w, sr.h);
+    let src_w = decoded.width() as f64;
+    let src_h = decoded.height() as f64;
+    let cx = rx.max(0.0).min(src_w) as i32;
+    let cy = ry.max(0.0).min(src_h) as i32;
+    let cx2 = (rx + rw).max(0.0).min(src_w) as i32;
+    let cy2 = (ry + rh).max(0.0).min(src_h) as i32;
+    let cw = (cx2 - cx).max(0) as u32;
+    let ch = (cy2 - cy).max(0) as u32;
+    if cw == 0 || ch == 0 {
+        return None;
+    }
+    let rect = IntRect::from_xywh(cx, cy, cw, ch)?;
+    decoded.as_ref().clone_rect(rect)
 }
 
 /// Decode a JPEG into an opaque premultiplied `Pixmap`. Handles RGB24 and L8

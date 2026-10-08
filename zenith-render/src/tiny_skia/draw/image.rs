@@ -7,15 +7,13 @@
 use resvg::usvg;
 use resvg::usvg::TreeParsing;
 use resvg::usvg::TreeTextToPath;
-use tiny_skia::{
-    FillRule, FilterQuality, IntRect, Mask, PathBuilder, Pixmap, PixmapPaint, Rect, Transform,
-};
+use tiny_skia::{FillRule, FilterQuality, Mask, PathBuilder, Pixmap, PixmapPaint, Rect, Transform};
 use zenith_core::{AssetKind, AssetProvider};
 use zenith_scene::{FitMode, ImageClip, SceneCommand};
 
 use super::super::commands::DrawCtx;
 use super::super::paths::build_rounded_rect_path;
-use super::super::raster::decode_raster_image;
+use super::super::raster::{crop_raster_image, decode_raster_image};
 
 pub(in crate::tiny_skia) fn draw_image(
     target: &mut Pixmap,
@@ -55,34 +53,10 @@ pub(in crate::tiny_skia) fn draw_image(
             let Some(decoded) = decode_raster_image(&asset.bytes) else {
                 return; // unsupported/malformed raster image: skip
             };
-            // Apply src-rect crop when present, before fit math.
-            // SVG assets skip this block (src_rect ignored for SVG).
-            if let Some(sr) = src_rect.as_ref() {
-                let (rx, ry, rw, rh) = (sr.x, sr.y, sr.w, sr.h);
-                let src_w = decoded.width() as f64;
-                let src_h = decoded.height() as f64;
-                // Clamp crop region to source image bounds.
-                let cx = rx.max(0.0).min(src_w) as i32;
-                let cy = ry.max(0.0).min(src_h) as i32;
-                let cx2 = (rx + rw).max(0.0).min(src_w) as i32;
-                let cy2 = (ry + rh).max(0.0).min(src_h) as i32;
-                let cw = (cx2 - cx).max(0) as u32;
-                let ch = (cy2 - cy).max(0) as u32;
-                if cw == 0 || ch == 0 {
-                    return; // degenerate crop after clamping: skip draw
-                }
-                if let Some(rect) = IntRect::from_xywh(cx, cy, cw, ch) {
-                    if let Some(cropped) = decoded.as_ref().clone_rect(rect) {
-                        cropped
-                    } else {
-                        return; // clone_rect returned None: degenerate
-                    }
-                } else {
-                    return; // IntRect construction failed: degenerate
-                }
-            } else {
-                decoded
-            }
+            let Some(cropped) = crop_raster_image(decoded, src_rect.as_ref()) else {
+                return;
+            };
+            cropped
         }
         AssetKind::Svg => {
             // Build the fontdb at most once per render, only when

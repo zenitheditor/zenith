@@ -19,10 +19,11 @@
 //!
 //! Submodules: `resources` (page-resource accumulator + name builder), `draw`
 //! (shared fill/alpha/line-style primitives), `command` (the scene-walk driver
-//! and per-command emitters).
+//! and per-command emitters), and `image` (raster placement and SVG dispatch).
 
 mod command;
 mod draw;
+mod image;
 mod resources;
 
 pub(in crate::pdf) use command::{emit_command, translate};
