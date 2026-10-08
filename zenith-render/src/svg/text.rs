@@ -70,24 +70,17 @@ pub(super) fn bitmap_glyphs(
             )));
         }
         finite(&[f64::from(glyph.dx), f64::from(glyph.dy)])?;
-        let raster = face.glyph_raster_image(id, *font_size as u16);
-        if let Some(image) = raster
-            && image.format == ttf_parser::RasterImageFormat::PNG
-            && image.pixels_per_em > 0
-            && tiny_skia::Pixmap::decode_png(image.data).is_ok()
-        {
-            bitmap = true;
-            continue;
-        }
-        let mut pen = OutlinePresence;
-        if face.outline_glyph(id, &mut pen).is_none() {
-            if raster.is_some() {
+        match crate::glyph_bitmap::representation(&face, id, *font_size) {
+            crate::glyph_bitmap::GlyphRepresentation::Png => bitmap = true,
+            crate::glyph_bitmap::GlyphRepresentation::Outline
+            | crate::glyph_bitmap::GlyphRepresentation::Empty => {}
+            crate::glyph_bitmap::GlyphRepresentation::UnsupportedBitmap => {
                 return Err(RenderError::new(format!(
                     "unsupported SVG bitmap glyph {} in font {font_id}; use PNG bitmap glyphs or an outline font",
                     glyph.glyph_id
                 )));
             }
-            if face.glyph_bounding_box(id).is_some() || face.glyph_svg_image(id).is_some() {
+            crate::glyph_bitmap::GlyphRepresentation::UnsupportedGlyph => {
                 return Err(RenderError::new(format!(
                     "unsupported SVG glyph {} in font {font_id}; use an outline font",
                     glyph.glyph_id
@@ -156,16 +149,6 @@ impl Writer {
         }
         Ok(())
     }
-}
-
-struct OutlinePresence;
-
-impl ttf_parser::OutlineBuilder for OutlinePresence {
-    fn move_to(&mut self, _x: f32, _y: f32) {}
-    fn line_to(&mut self, _x: f32, _y: f32) {}
-    fn quad_to(&mut self, _x1: f32, _y1: f32, _x: f32, _y: f32) {}
-    fn curve_to(&mut self, _x1: f32, _y1: f32, _x2: f32, _y2: f32, _x: f32, _y: f32) {}
-    fn close(&mut self) {}
 }
 
 struct Pen {

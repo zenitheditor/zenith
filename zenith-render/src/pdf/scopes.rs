@@ -2,9 +2,13 @@
 
 use crate::scopes::{ScopeError, ScopeTracker};
 use std::ops::Range;
+use zenith_core::FontProvider;
 use zenith_scene::{BlendMode, Scene, SceneCommand};
 
-pub(super) fn plan(scene: &Scene) -> Result<Vec<Range<usize>>, ScopeError> {
+pub(super) fn plan(
+    scene: &Scene,
+    fonts: &dyn FontProvider,
+) -> Result<Vec<Range<usize>>, ScopeError> {
     let mut tracker = ScopeTracker::default();
     let mut selected = false;
     let mut blend = false;
@@ -22,20 +26,27 @@ pub(super) fn plan(scene: &Scene) -> Result<Vec<Range<usize>>, ScopeError> {
             | SceneCommand::BeginShadow { .. }
             | SceneCommand::BeginMask { .. } => selected = true,
             SceneCommand::BeginFilter { filters } => selected |= !filters.is_empty(),
-            SceneCommand::FillRect { .. }
-            | SceneCommand::StrokeRect { .. }
-            | SceneCommand::FillRoundedRect { .. }
+            SceneCommand::FillRect { paint, .. }
+            | SceneCommand::FillRoundedRect { paint, .. }
+            | SceneCommand::FillEllipse { paint, .. }
+            | SceneCommand::FillPolygon { paint, .. }
+            | SceneCommand::FillPath { paint, .. } => match paint {
+                zenith_scene::Paint::Solid { .. } => {}
+                zenith_scene::Paint::Gradient(gradient) => {
+                    selected |= super::gradient::requires_raster(gradient)
+                }
+            },
+            SceneCommand::DrawGlyphRun { .. } => {
+                selected |= crate::glyph_bitmap::preferred_png(command, fonts)
+            }
+            SceneCommand::StrokeRect { .. }
             | SceneCommand::StrokeRoundedRect { .. }
-            | SceneCommand::FillEllipse { .. }
             | SceneCommand::StrokeEllipse { .. }
             | SceneCommand::StrokeLine { .. }
-            | SceneCommand::FillPolygon { .. }
             | SceneCommand::StrokePolyline { .. }
-            | SceneCommand::FillPath { .. }
             | SceneCommand::StrokePath { .. }
             | SceneCommand::DrawImage { .. }
             | SceneCommand::DrawSvgAsset { .. }
-            | SceneCommand::DrawGlyphRun { .. }
             | SceneCommand::PushClip { .. }
             | SceneCommand::PushClipRoundedRect { .. }
             | SceneCommand::PopClip

@@ -34,7 +34,7 @@
 //!   ExtGState allocation.
 //! - `geometry` — rounded-rect / ellipse bezier path builders and the glyph
 //!   outline pen.
-//! - `gradient` — linear gradient → PDF axial (Type 2) shading dictionaries.
+//! - `gradient` — linear and radial gradients → native PDF shading dictionaries.
 //! - `image`    — raster image → FlateDecode RGB image XObject (+ alpha SMask).
 //! - `svg`      — SVG asset → native PDF vector operators (paths + shadings).
 
@@ -64,3 +64,6 @@ mod tests;
 pub use document::{
     PdfOptions, render_pdf, render_pdf_multi, render_pdf_multi_with, render_pdf_with,
 };
+
+#[cfg(test)]
+mod gradient_tests;

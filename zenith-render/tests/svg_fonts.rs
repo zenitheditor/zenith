@@ -1,4 +1,5 @@
 mod common;
+mod pdf_bitmap_support;
 mod svg_font_support;
 mod svg_support;
 
@@ -165,4 +166,90 @@ fn check_bitmap_fallback(character: char) {
     assert!(reference.rgba.chunks_exact(4).any(|pixel| pixel[3] != 0));
     assert_eq!(embedded_png(&output.bytes).rgba, reference.rgba);
     assert_pixels_close(&rasterize(&output.bytes), &reference, 0.0);
+}
+
+#[test]
+fn pdf_bitmap_glyphs_capture_reference_pixels() {
+    for character in [' ', 'A'] {
+        let (bytes, glyph) = bitmap_font(SWATCH_PNG, character);
+        let mut fonts = BytesFontProvider::new();
+        let id = fonts.register(
+            "Bitmap",
+            400,
+            FontStyle::Normal,
+            Arc::from(bytes),
+            0,
+            zenith_core::FontSource::Project,
+        );
+        let glyph_scene = glyph_scene(id, glyph);
+        for transformed in [false, true] {
+            let mut scene = glyph_scene.clone();
+            if let SceneCommand::DrawGlyphRun { link, .. } = &mut scene.commands[0] {
+                *link = Some("custom:pdf-link".into());
+            }
+            if transformed {
+                scene.commands.insert(
+                    0,
+                    SceneCommand::PushScaleTranslate {
+                        sx: 0.8,
+                        sy: 0.8,
+                        tx: 3.0,
+                        ty: 1.0,
+                    },
+                );
+                scene.commands.insert(
+                    1,
+                    SceneCommand::PushClip {
+                        x: 2.0,
+                        y: 0.0,
+                        w: 24.0,
+                        h: 40.0,
+                    },
+                );
+                scene.commands.push(SceneCommand::PopClip);
+                scene.commands.push(SceneCommand::PopTransform);
+            }
+            let pdf = zenith_render::render_pdf(&scene, &fonts, &no_assets());
+            let reference = render_image(&scene, &fonts, &no_assets()).unwrap();
+            pdf_bitmap_support::assert_image_planes(&pdf, &reference);
+            assert_eq!(pdf, zenith_render::render_pdf(&scene, &fonts, &no_assets()));
+        }
+    }
+}
+
+#[test]
+fn pdf_malformed_bitmap_retains_available_outline() {
+    let mut png = SWATCH_PNG.to_vec();
+    png.truncate(40);
+    assert!(tiny_skia::Pixmap::decode_png(&png).is_err());
+    let (bytes, glyph) = bitmap_font(&png, 'A');
+    let face = ttf_parser::Face::parse(&bytes, 0).unwrap();
+    assert!(
+        face.glyph_raster_image(ttf_parser::GlyphId(glyph), 32)
+            .is_some()
+    );
+    let mut fonts = BytesFontProvider::new();
+    let id = fonts.register(
+        "Bitmap",
+        400,
+        FontStyle::Normal,
+        Arc::from(bytes),
+        0,
+        zenith_core::FontSource::Project,
+    );
+    let mut scene = glyph_scene(id, glyph);
+    if let SceneCommand::DrawGlyphRun { selectable, .. } = &mut scene.commands[0] {
+        *selectable = false;
+    }
+    let pdf = zenith_render::render_pdf(&scene, &fonts, &no_assets());
+    let text = String::from_utf8_lossy(&pdf);
+    assert!(!text.contains("/Subtype /Image"));
+    assert!(text.contains(" m\n"));
+    assert!(
+        render_image(&scene, &fonts, &no_assets())
+            .unwrap()
+            .rgba
+            .chunks_exact(4)
+            .any(|pixel| pixel[3] > 0)
+    );
 }

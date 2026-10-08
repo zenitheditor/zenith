@@ -11,7 +11,7 @@ use super::content::{
     translate,
 };
 use super::font::{self, FontPlan};
-use super::gradient::AxialGradient;
+use super::gradient::{GradientGeometry, PdfGradient};
 
 /// Options controlling PDF emission.
 #[derive(Clone, Copy)]
@@ -296,7 +296,7 @@ fn write_link_annotations(pdf: &mut Pdf, scene: &Scene, links: &[LinkAnnot], ann
     }
 }
 
-/// Indirect references backing one axial gradient: its shading dict and its
+/// Indirect references backing one native gradient: its shading dict and its
 /// stitching/exponential color function.
 struct GradientRefs {
     shading: Ref,
@@ -431,17 +431,24 @@ fn write_alpha_states(pdf: &mut Pdf, res: &PageResources, alpha_ids: &[Ref]) {
     }
 }
 
-/// Write each axial gradient as a Type 2 shading whose color function is a Type
-/// 3 stitching function over Type 2 (linear, exponent 1) exponential
-/// subfunctions — one per adjacent stop pair. Stops are DeviceRGB.
+/// Write native axial or radial shading with DeviceRGB color functions.
 fn write_gradients(pdf: &mut Pdf, res: &PageResources, refs: &[GradientRefs]) {
     for (g, gr) in res.gradients.iter().zip(refs) {
         write_gradient_function(pdf, gr, g);
 
         let mut shading = pdf.function_shading(gr.shading);
-        shading.shading_type(FunctionShadingType::Axial);
-        shading.color_space().device_rgb();
-        shading.coords(g.coords);
+        match g.geometry {
+            GradientGeometry::Axial(coords) => {
+                shading.shading_type(FunctionShadingType::Axial);
+                shading.color_space().device_rgb();
+                shading.coords(coords);
+            }
+            GradientGeometry::Radial(coords) => {
+                shading.shading_type(FunctionShadingType::Radial);
+                shading.color_space().device_rgb();
+                shading.coords(coords);
+            }
+        }
         shading.function(gr.function);
         // Clamp (don't extend) beyond the endpoints so the shading fills the
         // clipped shape with the edge colors, matching CSS `Pad` spread.
@@ -454,7 +461,7 @@ fn write_gradients(pdf: &mut Pdf, res: &PageResources, refs: &[GradientRefs]) {
 /// exponential (linear) function is emitted at `gr.function`; with more stops a
 /// Type 3 stitching function at `gr.function` combines one exponential
 /// subfunction per segment (refs in `gr.sub_functions`).
-fn write_gradient_function(pdf: &mut Pdf, gr: &GradientRefs, g: &AxialGradient) {
+fn write_gradient_function(pdf: &mut Pdf, gr: &GradientRefs, g: &PdfGradient) {
     // Two-stop (or defensively fewer): a single linear exponential function.
     if g.stops.len() <= 2 {
         let c0 = g.stops.first().map(|s| s.1).unwrap_or([0.0, 0.0, 0.0]);

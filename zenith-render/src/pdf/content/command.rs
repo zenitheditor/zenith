@@ -36,7 +36,7 @@ pub(in crate::pdf) fn translate(
 
     // Plan complete scopes before emitting any graphics state.
     // Planner errors produce empty ranges, so the vector emitter retains every command.
-    let ranges = super::super::scopes::plan(scene).unwrap_or_default();
+    let ranges = super::super::scopes::plan(scene, fonts).unwrap_or_default();
     let mut cursor = 0;
     for range in ranges {
         if let Some(commands) = scene.commands.get(cursor..range.start) {

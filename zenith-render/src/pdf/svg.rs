@@ -17,8 +17,8 @@
 //! - **Paths** (lines + quadratic/cubic béziers), **solid fills**, **linear
 //!   gradients** (`userSpaceOnUse` exactly; `objectBoundingBox` mapped via the
 //!   path's local bbox), **solid strokes**, and **fill-rule** are translated.
-//! - **Radial gradients** degrade to a solid fill of the first stop (matching
-//!   `fill_region`); **patterns**, **clip-paths**, **masks**, and **nested image
+//! - **Radial gradients** degrade to a solid fill of the first stop.
+//!   **Patterns**, **clip-paths**, **masks**, and **nested image
 //!   nodes** inside the SVG are skipped. Per-stop gradient alpha is not
 //!   representable in an axial shading and is treated as opaque.
 //! - Group/fill/stroke opacity and the placement opacity multiply into a single
@@ -33,7 +33,7 @@ use zenith_scene::{Color, FitMode, ImageClip, SvgStyle};
 use super::color;
 use super::content::{ALPHA_PREFIX, PageResources, SHADING_PREFIX, name, push_gradient};
 use super::geometry::{ellipse_path, rounded_rect_path};
-use super::gradient::AxialGradient;
+use super::gradient::{GradientGeometry, PdfGradient};
 
 /// Where and how an SVG asset is placed on the page. Mirrors the fields the
 /// raster image path uses; bundled into a `Copy` struct to stay within the
@@ -432,11 +432,7 @@ fn svg_color(c: usvg::Color) -> Color {
 /// axial gradient with endpoints in scene space. `userSpaceOnUse` maps the
 /// declared endpoints directly; `objectBoundingBox` maps them through the path's
 /// local bounding box first. Returns `None` with fewer than two stops.
-fn resolve_linear(
-    lg: &usvg::LinearGradient,
-    path: &usvg::Path,
-    t: Affine,
-) -> Option<AxialGradient> {
+fn resolve_linear(lg: &usvg::LinearGradient, path: &usvg::Path, t: Affine) -> Option<PdfGradient> {
     if lg.stops.len() < 2 {
         return None;
     }
@@ -474,8 +470,8 @@ fn resolve_linear(
             )
         })
         .collect();
-    Some(AxialGradient {
-        coords: [x0 as f32, y0 as f32, x1 as f32, y1 as f32],
+    Some(PdfGradient {
+        geometry: GradientGeometry::Axial([x0 as f32, y0 as f32, x1 as f32, y1 as f32]),
         stops,
     })
 }

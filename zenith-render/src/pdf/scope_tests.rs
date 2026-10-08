@@ -13,7 +13,7 @@ fn shape() -> SceneCommand {
     }
 }
 
-fn check_raster(scene: &Scene) -> String {
+pub(super) fn check_raster(scene: &Scene) -> String {
     let fonts = default_provider();
     let assets = BytesAssetProvider::new();
     let plan = build_plan(&Default::default(), &fonts, true);

@@ -4,7 +4,7 @@
 
 use std::collections::BTreeSet;
 
-use crate::pdf::gradient::AxialGradient;
+use crate::pdf::gradient::PdfGradient;
 use crate::pdf::image::DecodedImage;
 
 /// Page-level resources accumulated during [`translate`](crate::pdf::content::translate), keyed for
@@ -14,8 +14,8 @@ pub(in crate::pdf) struct PageResources {
     /// Distinct fill/stroke alpha values (< 255), in first-seen order.
     /// Each becomes one `/ExtGState` with `ca` + `CA`. Index = resource id.
     pub(in crate::pdf) alphas: Vec<u8>,
-    /// Axial gradient shadings, in first-seen (draw) order. Index = resource id.
-    pub(in crate::pdf) gradients: Vec<AxialGradient>,
+    /// Native gradient shadings, in first-seen (draw) order. Index = resource id.
+    pub(in crate::pdf) gradients: Vec<PdfGradient>,
     /// Decoded image XObjects, in first-seen order. Index = resource id.
     pub(in crate::pdf) images: Vec<DecodedImage>,
     /// Document-level font resource indices this page's content references (it

@@ -7,7 +7,7 @@ use zenith_scene::{Color, FillRule, LineCap, LineJoin, Paint as ScenePaint};
 
 use crate::pdf::color;
 use crate::pdf::content::resources::{ALPHA_PREFIX, PageResources, SHADING_PREFIX, name};
-use crate::pdf::gradient::{AxialGradient, resolve as resolve_gradient};
+use crate::pdf::gradient::{PdfGradient, resolve as resolve_gradient};
 
 /// Apply the fill-alpha ExtGState for `color` if it is non-opaque (interning the
 /// alpha into `res`). Returns nothing; emits `/ga<i> gs` when needed.
@@ -22,13 +22,10 @@ pub(in crate::pdf) fn apply_alpha(content: &mut Content, res: &mut PageResources
 /// Fill a region with a scene [`ScenePaint`] (solid or gradient), where
 /// `build_path` emits the path operators for the geometry and returns whether a
 /// path was produced. `bbox` is the geometry's bounding box, used to resolve a
-/// gradient's axial line.
+/// gradient's native shading geometry.
 ///
 /// - **Solid** → set the fill color and fill the path.
-/// - **Linear gradient** → clip to the path and paint an axial shading.
-/// - **Radial gradient** → PDF v0 has no axial-shading equivalent, so it degrades
-///   to a solid fill of the first stop color (consistent with the other v0 PDF
-///   degradations: blur, drop-shadow, SVG assets).
+/// - **Gradient** → clip to the path and paint native shading.
 pub(in crate::pdf::content) fn fill_region<F: Fn(&mut Content) -> bool>(
     content: &mut Content,
     res: &mut PageResources,
@@ -63,17 +60,6 @@ pub(in crate::pdf::content) fn fill_region<F: Fn(&mut Content) -> bool>(
             fill(content, produced);
             content.restore_state();
         }
-        ScenePaint::Gradient(gradient) if gradient.radial => {
-            // Radial PDF degrade: solid fill with the first stop color.
-            if let Some(first) = gradient.stops.first() {
-                content.save_state();
-                apply_alpha(content, res, &first.color);
-                color::set_fill(content, &first.color);
-                let produced = build_path(content);
-                fill(content, produced);
-                content.restore_state();
-            }
-        }
         ScenePaint::Gradient(gradient) => {
             let (x, y, w, h) = bbox;
             if let Some(g) = resolve_gradient(x, y, w, h, gradient) {
@@ -102,7 +88,7 @@ pub(in crate::pdf::content) fn fill_region<F: Fn(&mut Content) -> bool>(
 }
 
 /// Push a gradient and return its resource index.
-pub(in crate::pdf) fn push_gradient(res: &mut PageResources, g: AxialGradient) -> usize {
+pub(in crate::pdf) fn push_gradient(res: &mut PageResources, g: PdfGradient) -> usize {
     let id = res.gradients.len();
     res.gradients.push(g);
     id

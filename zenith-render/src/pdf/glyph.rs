@@ -236,16 +236,14 @@ fn emit_outlines(
         glyphs,
         ..
     } = run;
-    // Build one combined path of all glyph outlines, then a single fill. Color
-    // bitmap (emoji) glyphs would return Some from `glyph_raster_image`; for PDF
-    // v0 they are skipped (documented). Outline fonts never hit that branch.
+    // Build one combined path. Preferred PNG glyphs belong to planned raster scopes.
     let mut any = false;
     for glyph in glyphs {
-        if face
-            .glyph_raster_image(ttf_parser::GlyphId(glyph.glyph_id), font_size as u16)
-            .is_some()
-        {
-            // Color-bitmap emoji: omitted in PDF v0 (no scenario uses emoji).
+        if crate::glyph_bitmap::preferred_png_glyph(
+            face,
+            ttf_parser::GlyphId(glyph.glyph_id),
+            font_size,
+        ) {
             continue;
         }
         let origin_x = x as f32 + glyph.dx;

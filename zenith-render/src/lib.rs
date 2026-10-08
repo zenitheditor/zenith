@@ -8,6 +8,7 @@
 mod backend;
 mod compose;
 mod error;
+mod glyph_bitmap;
 mod intrinsic;
 mod pdf;
 mod render;
