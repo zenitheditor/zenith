@@ -521,7 +521,13 @@ zenith plugin list                     # see what's installed where
 Claude Code, Codex, and OpenCode get the full folder skill (reference packs, templates, and
 themes); other agents (Cursor, Windsurf, Aider, Zed, Gemini, Copilot, Continue, Kiro,
 Antigravity) get a single self-contained rule file that points back at the self-documenting
-CLI. Writes are idempotent — re-run any time to update, or `zenith plugin uninstall` to remove.
+CLI. Matching files remain unchanged. Upgrade installed assets with:
+
+```bash
+zenith plugin install --force
+```
+
+`--force` overwrites differing installed files, including user changes. Without it, differing files remain untouched. Remove installs with `zenith plugin uninstall`.
 
 ### MCP server (remote / CI / hosted agents)
 

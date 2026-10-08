@@ -6,9 +6,10 @@
 //! instead of carrying every schema in context. Every other tool returns a
 //! trimmed structured result and expands only on opt-in params.
 //!
-//! Every tool accepts `doc` as either a filesystem path or a 26-char `doc-id`
-//! (see [`super::doc_ref`]), so an agent can stop passing paths after the first
-//! call.
+//! A `doc` argument accepts a path or the 26-character `doc-id`.
+//! Schema, fonts, theme creation, and workspace `unbundle` do not require `doc`.
+//! Check tool schemas and operation requirements for document arguments.
+//! See [`super::doc_ref`] for document identity resolution.
 
 use serde_json::{Value, json};
 

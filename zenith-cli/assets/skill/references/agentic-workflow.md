@@ -62,7 +62,9 @@ Name a checkpoint before risky steps such as promotion.
 
 Prefer the CLI when it can run. Use `zenith mcp` for remote, CI, sandboxed, or hosted agents.
 
-- Every tool takes `doc` as a path or the 26-char `doc-id`.
+- A `doc` argument accepts a path or the 26-character `doc-id`.
+- Schema, fonts, theme creation, and workspace `unbundle` do not require `doc`.
+- Check each tool schema and operation requirements before calling.
 - Large and binary results come back as resource links. Read them with `resources/read`.
 - Transport is stdio. `zenith mcp --http <ADDR>` serves Streamable-HTTP (needs the `http` build feature).
 - History commands (`history`, `undo`, `redo`, `version`, `restore`, `sync`) are CLI-only.
