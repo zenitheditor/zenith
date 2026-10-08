@@ -11,8 +11,8 @@ use crate::pdf::image::DecodedImage;
 /// deduplication and emitted in a deterministic order by the document writer.
 #[derive(Default)]
 pub(in crate::pdf) struct PageResources {
-    /// Distinct fill/stroke alpha values (< 255) seen, each becoming one
-    /// `/ExtGState` with `ca` + `CA`. Sorted, deduped → stable resource names.
+    /// Distinct fill/stroke alpha values (< 255), in first-seen order.
+    /// Each becomes one `/ExtGState` with `ca` + `CA`. Index = resource id.
     pub(in crate::pdf) alphas: Vec<u8>,
     /// Axial gradient shadings, in first-seen (draw) order. Index = resource id.
     pub(in crate::pdf) gradients: Vec<AxialGradient>,
@@ -45,13 +45,12 @@ pub(in crate::pdf) struct LinkAnnot {
 impl PageResources {
     /// Intern an alpha byte, returning its stable `ExtGState` resource index.
     pub(in crate::pdf) fn intern_alpha(&mut self, a: u8) -> usize {
-        match self.alphas.binary_search(&a) {
-            Ok(i) => i,
-            Err(i) => {
-                self.alphas.insert(i, a);
-                i
-            }
+        if let Some(index) = self.alphas.iter().position(|alpha| *alpha == a) {
+            return index;
         }
+        let index = self.alphas.len();
+        self.alphas.push(a);
+        index
     }
 }
 
