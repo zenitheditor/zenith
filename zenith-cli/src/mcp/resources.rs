@@ -167,6 +167,7 @@ fn parse_uri(uri: &str) -> Result<ParsedUri, String> {
 pub fn mime_for_ext(ext: &str) -> (&'static str, bool) {
     match ext {
         "png" => ("image/png", false),
+        "svg" => ("image/svg+xml", true),
         "pdf" => ("application/pdf", false),
         "json" => ("application/json", true),
         "zen" => ("text/plain", true),

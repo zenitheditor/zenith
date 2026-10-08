@@ -144,15 +144,16 @@ the applied fixes and the remaining errors.",
         },
         Tool {
             name: "zenith_render",
-            description: "Render a document deterministically to png, pdf, or scene (display-list \
+            description: "Render a document deterministically to png, svg, pdf, or scene (display-list \
 JSON). Returns a resource link to the artifact (never inlines bytes); blocked by hard diagnostics \
 — validate first. Pass out to also write the file to a path you choose. For cheap visual checks \
-use png with scale 0.25-0.5, or contact_sheet=true to see every page in one image.",
+use png with scale 0.25-0.5, or contact_sheet=true to see every page in one image. \
+SVG exports page 1 by default, outlines text, embeds images, and reports raster fallback diagnostics.",
             schema: json!({
                 "type": "object",
                 "properties": {
                     "doc": doc_arg(),
-                    "format": { "type": "string", "enum": ["png", "pdf", "scene"] },
+                    "format": { "type": "string", "enum": ["png", "svg", "pdf", "scene"] },
                     "page": { "type": "integer", "minimum": 1, "description": "1-based page (default 1)." },
                     "locked": { "type": "boolean", "description": "Verify asset sha256 and fail on mismatch." },
                     "out": { "type": "string", "description": "Optional path to also write the artifact to." },

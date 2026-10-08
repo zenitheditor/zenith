@@ -129,12 +129,16 @@ pub struct RenderEntryOptions<'a> {
     /// Append page construction guides to the scene after canonical compile.
     pub construction_overlay: bool,
     /// Raster output scale for PNG outputs (`1.0` = page pixels). Each axis
-    /// is `max(1, round(page × scale))` pixels. Scene JSON and PDF ignore it.
+    /// is `max(1, round(page × scale))` pixels. Scene JSON, SVG, and PDF ignore it.
     pub scale: f64,
 }
 
 impl<'a> RenderEntryOptions<'a> {
-    fn png(flags: &'a CliPolicyFlags, locked: bool, data: Option<&'a DataContext>) -> Self {
+    pub(super) fn common(
+        flags: &'a CliPolicyFlags,
+        locked: bool,
+        data: Option<&'a DataContext>,
+    ) -> Self {
         Self {
             locked,
             subset: true,
@@ -327,7 +331,7 @@ pub fn to_png_with_dir(
         src,
         project_dir,
         page,
-        RenderEntryOptions::png(flags, locked, data),
+        RenderEntryOptions::common(flags, locked, data),
     )
 }
 
@@ -608,7 +612,7 @@ pub fn to_png_all_pages(
     to_png_all_pages_options(
         src,
         project_dir,
-        RenderEntryOptions::png(flags, locked, data),
+        RenderEntryOptions::common(flags, locked, data),
     )
 }
 
@@ -723,7 +727,7 @@ pub fn to_png_spread(
             .map(|px| px.max(0.0) as u32)
             .unwrap_or(0)
     });
-    let render_opts = RenderEntryOptions::png(flags, locked, data)
+    let render_opts = RenderEntryOptions::common(flags, locked, data)
         .with_construction_overlay(construction_overlay);
     let prep = DocumentPrep::new(&doc, data, Some(&scene_imports)).with_image_sizes(image_sizes(
         &doc,

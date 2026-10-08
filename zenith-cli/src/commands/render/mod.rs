@@ -31,6 +31,7 @@ mod pages;
 mod pipeline;
 mod scale;
 mod sheet;
+mod svg;
 mod text_source;
 
 #[cfg(test)]
@@ -56,3 +57,8 @@ pub use sheet::{
     to_contact_sheet,
 };
 pub(crate) use text_source::resolve_text_sources;
+
+pub use svg::{
+    SvgArtifact, SvgPageArtifact, SvgPagesArtifact, to_svg_all_pages_with_dir,
+    to_svg_all_pages_with_dir_options, to_svg_with_dir, to_svg_with_dir_options,
+};

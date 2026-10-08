@@ -6,13 +6,14 @@ use std::path::PathBuf;
 /// Arguments for `zenith render`.
 #[derive(Debug, Args)]
 #[command(
-    after_help = "At least one of --scene, --png, --pdf, --all-pages, or --contact-sheet is required.\n\n\
+    after_help = "At least one of --scene, --png, --svg, --pdf, --all-pages, --all-pages-svg, or --contact-sheet is required.\n\n\
 --scale F rasterizes PNG outputs at F x page pixels (0 < F <= 4). Each side is\n\
 max(1, round(page_px x F)), rounding half away from zero. Effects scale too.\n\
 --contact-sheet tiles pages in ceil(sqrt(n)) columns with a 16 px gutter and a\n\
 page-number label under each page. Without --scale it fits the sheet to 2048 px wide.\n\n\
 EXAMPLES:\n  \
 zenith render poster.zen --png out.png\n  \
+zenith render poster.zen --svg out.svg                     # page 1, outlined text\n  \
 zenith render deck.zen --contact-sheet sheet.png             # all pages, one image\n  \
 zenith render deck.zen --png slide.png --page 3 --scale 0.5  # cheap preview\n  \
 zenith render book.zen --all-pages pages/ --scale 0.25       # small PNG per page\n  \
@@ -30,6 +31,10 @@ pub struct RenderArgs {
     #[arg(long, value_name = "OUT")]
     pub png: Option<PathBuf>,
 
+    /// Write a self-contained RGB SVG with outlined text (default page 1).
+    #[arg(long, value_name = "OUT")]
+    pub svg: Option<PathBuf>,
+
     /// Write a vector PDF (with print boxes + DeviceCMYK) to this path.
     #[arg(long, value_name = "OUT")]
     pub pdf: Option<PathBuf>,
@@ -43,7 +48,7 @@ pub struct RenderArgs {
 
     /// 1-based page number to render; for `--pdf`, the default renders all pages.
     ///
-    /// Without `--page`, single-output flags (`--scene`/`--png`) render page 1,
+    /// Without `--page`, single-output flags (`--scene`/`--png`/`--svg`) render page 1,
     /// while `--pdf` renders every page into one multi-page PDF. Passing
     /// `--page N` selects exactly that page for all outputs.
     #[arg(long, value_name = "N")]
@@ -52,6 +57,10 @@ pub struct RenderArgs {
     /// Render every page to `<DIR>/page-<N>.png` (1-based) instead of a single page.
     #[arg(long, value_name = "DIR")]
     pub all_pages: Option<PathBuf>,
+
+    /// Write every page to `<DIR>/page-<N>.svg` in document order.
+    #[arg(long, value_name = "DIR")]
+    pub all_pages_svg: Option<PathBuf>,
 
     /// Write one PNG with every page (or the `--page` page) tiled in a grid.
     ///

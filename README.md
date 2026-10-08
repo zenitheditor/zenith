@@ -7,7 +7,7 @@
 <h3>A design-document format and engine built for the age of AI agents.</h3>
 
 <p>
-Plain-text <strong>.zen</strong> design files that you can read, diff, review, validate, and let an agent safely edit — compiled <strong>deterministically</strong> to pixel-exact PNG and print-ready PDF.
+Plain-text <strong>.zen</strong> design files that you can read, diff, review, validate, and let an agent safely edit — compiled <strong>deterministically</strong> to pixel-exact PNG, self-contained SVG, and print-ready PDF.
 </p>
 
 <p>
@@ -37,7 +37,7 @@ Plain-text <strong>.zen</strong> design files that you can read, diff, review, v
 
 Zenith is a plain-text format and engine for design files — posters, decks, books, social graphics, diagrams, and more. The idea is simple: **design should work the way code does.** You should be able to read it, diff it, review it, test it, and let an agent safely edit it.
 
-A `.zen` file is human-readable [KDL](https://kdl.dev) text. The engine parses it, validates it against a large diagnostic set, compiles it to a backend-neutral scene, and renders the same file to the **same pixels every time** — as a PNG or a print-ready PDF.
+A `.zen` file is human-readable [KDL](https://kdl.dev) text. The engine parses it, validates it against a large diagnostic set, compiles it to a backend-neutral scene, and renders the same file to the **same pixels every time** — as a PNG, self-contained SVG, or print-ready PDF.
 
 > The sections below are collapsed to keep this page skimmable — click any heading's ▸ to expand it. **Install** and **Quick start** are open by default.
 
@@ -127,12 +127,31 @@ zenith fmt examples/hello.zen               # canonical, idempotent formatting
 zenith fix draft.zen --apply                # apply machine fixes (tokens, typos) in one step
 zenith tokens examples/hello.zen            # list design tokens and their resolved values
 zenith inspect examples/hello.zen           # print the node tree (read-only)
-zenith render examples/hello.zen --out .    # compile + render to PNG
+zenith render examples/hello.zen --png hello.png          # render to PNG
 
 zenith render examples/multipage.zen --all-pages out/     # one PNG per page
 zenith render examples/hello.zen --pdf hello.pdf          # print-ready PDF
+zenith render examples/hello.zen --svg hello.svg          # self-contained SVG
+zenith render examples/multipage.zen --svg page.svg --page 2
+zenith render examples/multipage.zen --all-pages-svg svg-pages/
 zenith render examples/hello.zen --scene scene.json       # dump the scene IR
 ```
+
+| SVG flag | Output |
+| --- | --- |
+| `--svg OUT` | Page 1 by default. |
+| `--page N` | Selects one page for single-page SVG output. |
+| `--all-pages-svg DIR` | Writes `page-N.svg` in document order. |
+| `--deny render.svg_rasterized` | Blocks exports requiring raster fallback. |
+| `--scale F` | Applies only to PNG outputs. |
+
+- **Colors and assets:** SVG uses RGB colors and embeds image assets.
+- **Text:** Outlines preserve appearance while losing text editing and search.
+- **Effects:** Rasterize their complete containing scope.
+- **Non-normal blends:** Rasterize the entire page.
+- **Crossed scopes and bitmap glyphs:** Require raster fallback.
+- **Links:** Links inside rasterized ranges lose click targets.
+- **Diagnostics:** Each fallback emits `render.svg_rasterized` with its page, command range, and reason.
 
 The smallest valid document:
 
@@ -201,11 +220,11 @@ Zenith is built the other way around. The foundation is a programmatic, text-bas
 
 ## How it works
 
-<details><summary>One deterministic pipeline: parse + validate → AST → compile → scene IR → render (PNG/PDF).</summary>
+<details><summary>One deterministic pipeline: parse + validate → AST → compile → scene IR → render (PNG/SVG/PDF).</summary>
 
-A `.zen` document flows through a single deterministic pipeline. Each stage is a separate crate with a clean contract boundary, so a future GPU backend, SVG export, or visual editor consumes the same scene IR:
+A `.zen` document flows through a single deterministic pipeline. Each stage is a separate crate with a clean contract boundary, so a future GPU backend or visual editor consumes the same scene IR:
 
-<p align="center"><img src="assets/showcase/pipeline.png" alt="Pipeline: .zen source → validate → compile → scene IR → render → PNG/PDF" width="900"></p>
+<p align="center"><img src="assets/showcase/pipeline.png" alt="Pipeline: .zen source → validate → compile → scene IR → render" width="900"></p>
 
 <sub><i>Rendered by Zenith — source: <a href="assets/showcase/pipeline.zen"><code>assets/showcase/pipeline.zen</code></a>.</i></sub>
 
@@ -221,6 +240,7 @@ A `.zen` document flows through a single deterministic pipeline. Each stage is a
   Scene IR  (backend-neutral display list)
        │  render                     zenith-render
        ├─▶ PNG   (tiny-skia, byte-identical)
+       ├─▶ SVG   (outlined text, embedded assets)
        └─▶ PDF   (vector, native CMYK, bleed / trim / crop)
 
   local history / undo / versions    zenith-session   (off the render path; never affects pixels)
@@ -232,7 +252,7 @@ Everything that touches the render path is **deterministic and C-free**: no time
 
 ## What it does
 
-<details><summary>Tokens, a full node set, real typography, visual effects, anchors, recipes, a transaction engine, deterministic PNG/PDF, history, libraries, and data-merge.</summary>
+<details><summary>Tokens, a full node set, real typography, visual effects, anchors, recipes, a transaction engine, deterministic PNG/SVG/PDF, history, libraries, and data-merge.</summary>
 
 - **Scaffold & identity** — `zenith new` creates a ready-to-edit document (minimal valid template, default `.zen` extension, parent dirs created) with a stable `doc-id` minted on first write; any `.zen` gains its identity and workspace store transparently on the first edit — no manual setup step.
 - **Plain-text `.zen` format** — KDL v2 source with `project` / `tokens` / `styles` / `document` / `page` structure; every node carries a stable id.
@@ -416,7 +436,7 @@ Run `zenith <command> --help` for flags (each prints a description and an exampl
 | Group         | Commands                                                                                                  |
 | ------------- | --------------------------------------------------------------------------------------------------------- |
 | **Author**    | `new` · `validate` · `fmt` · `tokens` · `inspect`                                                         |
-| **Render**    | `render` (`--pdf` · `--scene` · `--all-pages` · `--spread` · `--page`)                                    |
+| **Render**    | `render` (`--png` · `--svg` · `--pdf` · `--scene` · `--all-pages` · `--all-pages-svg` · `--spread` · `--page`)                                    |
 | **Edit**      | `tx` (typed transactions, dry-run by default) · `fix` (machine fixes for diagnostics, dry-run by default) |
 | **Variants**  | `variant` (one design → many sizes/formats) · `merge` (CSV data mail-merge)                               |
 | **Library**   | `library list` · `library search` · `library show` · `library add`                                        |
@@ -551,7 +571,7 @@ Zenith is a Rust workspace. Each crate owns one concern and exposes a stable con
 | `zenith-core`    | KDL parser adapter, semantic AST, canonical formatter, tokens, validation, diagnostics    |
 | `zenith-layout`  | Text shaping & font metrics (`rustybuzz` + `ttf-parser`); third-party types confined here |
 | `zenith-scene`   | Backend-neutral scene IR + compilation (geometry, text wrap, anchors, opacity/clip)       |
-| `zenith-render`  | CPU PNG backend (tiny-skia) and vector PDF backend; determinism enforcement               |
+| `zenith-render`  | CPU PNG backend (tiny-skia), SVG export, and vector PDF backend; determinism enforcement               |
 | `zenith-tx`      | Transaction op set, apply/dry-run engine, diffs, and the audit-record contract            |
 | `zenith-session` | Local-machine doc identity, session DAG, durable versions (content-addressed store)       |
 | `zenith-cli`     | `zenith` command-line tool — dispatch, argument parsing, and JSON/human output            |
@@ -591,7 +611,7 @@ Only put files in the showcase if you have the rights to share them and you allo
 
 ## Status
 
-Zenith is in its first public release series. The author → validate → edit → render pipeline works end-to-end: parsing, the diagnostic set, the transaction engine, PNG/PDF rendering, local history, the library subsystem, and variable-data merge are implemented and tested. The format, wire types, and command surface may still evolve while the project matures.
+Zenith is in its first public release series. The author → validate → edit → render pipeline works end-to-end: parsing, the diagnostic set, the transaction engine, PNG/SVG/PDF rendering, local history, the library subsystem, and variable-data merge are implemented and tested. The format, wire types, and command surface may still evolve while the project matures.
 
 ## Contributing
 

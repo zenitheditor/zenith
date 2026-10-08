@@ -1,4 +1,4 @@
-//! CPU PNG reference renderer for Zenith.
+//! CPU PNG, self-contained SVG, and vector PDF renderers for Zenith.
 //!
 //! Owns the raster backend adapter trait (tiny-skia is the first engine),
 //! deterministic PNG production from a scene display list, SVG and raster

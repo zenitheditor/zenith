@@ -1,6 +1,6 @@
 ---
 name: zenith
-description: "Author, edit, and render deterministic .zen design documents (posters, decks/slides, social graphics, flyers, books, magazines, diagrams, ads) with the zenith CLI. Use when the task is to create or change a visual design as structured, editable, version-controllable source — not a flat AI image. Covers: themes with ui.* styles and defaults, auto-layout frames (row/column/grid, hug/fill), design tokens & color (sRGB + CMYK), typography and text fit, anchors, images, recipes & procedural backgrounds, transactions (typed edits), `zenith fix` auto-repair, layout/overlap lint, variants/mail-merge, PNG/PDF/contact-sheet rendering, brand kits, and the agent loop new --theme -> validate --json -> fix -> render --contact-sheet -> tx. Triggers: design, poster, deck, slide, social graphic, flyer, brochure, banner, diagram, flowchart, chart, bar chart, line chart, pie chart, donut chart, data visualization, graph, legend, .zen, zenith, brand kit, render to PNG/PDF."
+description: "Author, edit, and render deterministic .zen design documents (posters, decks/slides, social graphics, flyers, books, magazines, diagrams, ads) with the zenith CLI. Use when the task is to create or change a visual design as structured, editable, version-controllable source — not a flat AI image. Covers: themes with ui.* styles and defaults, auto-layout frames (row/column/grid, hug/fill), design tokens & color (sRGB + CMYK), typography and text fit, anchors, images, recipes & procedural backgrounds, transactions (typed edits), `zenith fix` auto-repair, layout/overlap lint, variants/mail-merge, PNG/SVG/PDF/contact-sheet rendering, brand kits, and the agent loop new --theme -> validate --json -> fix -> render --contact-sheet -> tx. Triggers: design, poster, deck, slide, social graphic, flyer, brochure, banner, diagram, flowchart, chart, bar chart, line chart, pie chart, donut chart, data visualization, graph, legend, .zen, zenith, brand kit, render to PNG/SVG/PDF."
 allowed-tools:
   - Bash(zenith:*)
   - Read
@@ -12,7 +12,7 @@ allowed-tools:
 
 # Zenith
 
-Plain-text `.zen` source (KDL) → validate → render to pixel-exact PNG or print PDF.
+Plain-text `.zen` source (KDL) → validate → render to pixel-exact PNG, self-contained SVG, or print PDF.
 Drive it with the `zenith` CLI, not an image model.
 
 - **Use** for posters, decks, social, flyers, diagrams, charts, ads, and variants.
@@ -121,3 +121,12 @@ Polish after structure works. Pick one motif: `pattern`, `mesh`, `light`, gradie
 | Live import of another `.zen` | `zenith schema node instance` · `zenith imports --help` |
 
 `zenith variant` varies size. `zenith merge` varies content rows. Prefer `imports` + `instance` over copying shared lockups.
+
+## SVG output
+
+- **Single page:** `zenith render <file> --svg <out.svg>` exports page 1. Add `--page N` to select another page.
+- **All pages:** `zenith render <file> --all-pages-svg <directory>` writes `page-N.svg` in document order.
+- **Required output:** Export the requested SVG alongside the `.zen` source. Keep PNG previews for visual critique.
+- **Export contract:** SVG embeds images and uses RGB colors. Text outlines preserve appearance and lose text editing/search.
+- **Raster fallback:** Effects rasterize their complete scope. Non-normal blends rasterize the page. Crossed scopes and bitmap glyphs also require fallback. Links inside rasterized ranges lose click targets.
+- **Diagnostic gate:** `--deny render.svg_rasterized` blocks raster fallback. `--scale` applies only to PNG outputs.

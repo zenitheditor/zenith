@@ -260,7 +260,7 @@ fn run_render(args: &Value) -> Result<Value, String> {
     let (path, doc_id) = doc_ref::ensure(req_str(args, "doc")?)?;
     let format = req_str(args, "format")?;
     // An explicit `page` selects one page; its absence means "default" — which
-    // for PDF renders all pages, and for PNG/scene renders page 1.
+    // for PDF renders all pages, and for PNG/SVG/scene renders page 1.
     let explicit_page: Option<usize> = opt_u64(args, "page").map(|p| p.max(1) as usize);
     let page = explicit_page.unwrap_or(1);
     let locked = flag(args, "locked");
@@ -325,6 +325,19 @@ fn run_render(args: &Value) -> Result<Value, String> {
             }));
             (art.png, "png", art.diagnostics)
         }
+        "svg" => {
+            let art = commands::render::to_svg_with_dir_options(&src, parent, page, png_opts)
+                .map_err(|e| e.message)?;
+            blocked(&art.diagnostics)?;
+            image_meta = Some(
+                json!({ "width": art.width, "height": art.height, "page": art.page,
+                "rasterized_regions": art.rasterized_regions.iter().map(|region| json!({
+                    "command_start": region.command_start, "command_end": region.command_end,
+                    "reason": format!("{:?}", region.reason),
+                })).collect::<Vec<_>>() }),
+            );
+            (art.svg, "svg", art.diagnostics)
+        }
         "pdf" => {
             let art = match explicit_page {
                 // MCP renders always subset (small PDFs); the full-font knob is a CLI flag.
@@ -347,7 +360,7 @@ fn run_render(args: &Value) -> Result<Value, String> {
         }
         other => {
             return Err(format!(
-                "invalid format '{other}' (expected png, pdf, or scene)"
+                "invalid format '{other}' (expected png, svg, pdf, or scene)"
             ));
         }
     };

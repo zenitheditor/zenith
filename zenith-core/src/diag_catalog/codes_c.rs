@@ -71,6 +71,12 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
         Severity::Error,
         "Rendering a page spread failed.",
     ),
+    info("render.svg_failed", Severity::Error, "SVG export failed."),
+    info(
+        "render.svg_rasterized",
+        Severity::Advisory,
+        "SVG export embeds a rasterized command range. Links in that range lose click targets.",
+    ),
     info(
         "safe_zone.violation",
         Severity::Advisory,
