@@ -21,12 +21,13 @@ pub(super) fn dispatch_merge(args: MergeArgs) -> ExitCode {
         Ok(s) => s,
         Err(e) => return e.emit(json),
     };
-    let report = match commands::merge::run(
+    let report = match commands::merge::run_with_format(
         &doc_src,
         &csv_src,
         args.doc.parent(),
         &args.out_dir,
         args.name_by.as_deref(),
+        args.format,
     ) {
         Ok(report) => report,
         Err(e) => return CliError::new("merge.setup_failed", e.message, e.exit_code).emit(json),
@@ -51,6 +52,15 @@ pub(super) fn dispatch_merge(args: MergeArgs) -> ExitCode {
             n_written,
             args.out_dir.display()
         );
+        for r in &report.rows {
+            for diagnostic in &r.diagnostics {
+                eprintln!(
+                    "row {}: {}",
+                    r.row + 1,
+                    commands::format_diagnostic_line(diagnostic)
+                );
+            }
+        }
         for r in report.failed() {
             eprintln!("row {}: {}", r.row + 1, r.failure.as_deref().unwrap_or(""));
         }
@@ -74,13 +84,18 @@ pub(super) fn dispatch_variant(args: VariantArgs) -> ExitCode {
         .file_stem()
         .and_then(|s| s.to_str())
         .unwrap_or("doc");
-    let report =
-        match commands::variant::run_variant(&doc_src, args.doc.parent(), &args.out_dir, stem) {
-            Ok(report) => report,
-            Err(e) => {
-                return CliError::new("variant.setup_failed", e.message, e.exit_code).emit(json);
-            }
-        };
+    let report = match commands::variant::run_variant_with_format(
+        &doc_src,
+        args.doc.parent(),
+        &args.out_dir,
+        stem,
+        args.format,
+    ) {
+        Ok(report) => report,
+        Err(e) => {
+            return CliError::new("variant.setup_failed", e.message, e.exit_code).emit(json);
+        }
+    };
     // The manifest goes first so a write error is the only output.
     if let Some(manifest_path) = &args.manifest {
         let manifest = commands::variant::build_manifest(&doc_src, &report);
@@ -100,6 +115,15 @@ pub(super) fn dispatch_variant(args: VariantArgs) -> ExitCode {
             report.generated(),
             args.out_dir.display()
         );
+        for r in &report.variants {
+            for diagnostic in &r.diagnostics {
+                eprintln!(
+                    "variant {}: {}",
+                    r.id,
+                    commands::format_diagnostic_line(diagnostic)
+                );
+            }
+        }
         for r in &failed {
             eprintln!("variant {}: {}", r.id, r.failure.as_deref().unwrap_or(""));
         }

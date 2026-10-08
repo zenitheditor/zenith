@@ -158,9 +158,9 @@ pub enum Command {
     /// judgments.
     Perceive(PerceiveArgs),
 
-    /// Mail-merge a `.zen` template with a CSV data file, writing one PNG per row.
+    /// Mail-merge a `.zen` template with CSV data, writing PNG or SVG row pages.
     ///
-    /// Mail-merge a .zen template with a CSV, writing one PNG per row. Mark variable
+    /// Render each CSV row as PNG pages by default, or SVG pages with `--format svg`. Mark variable
     /// nodes with `role="data.<column>"` (text nodes substitute their text; image nodes substitute
     /// their asset path) where `<column>` matches a CSV header. Use this for localized posts,
     /// personalized graphics, certificates, badges, and campaign variants. For a SINGLE
@@ -215,7 +215,7 @@ pub enum Command {
     /// Generate size/format variants of a document (one design → many sizes).
     ///
     /// Expands the `variants` block: one canonical page becomes N named target sizes (square,
-    /// story, banner), each written as a native `.zen` page plus a rendered PNG. Per-variant
+    /// story, banner), each written as a native `.zen` companion plus a PNG or SVG image. PNG is the default. Per-variant
     /// `override`s can hide/show nodes, swap text, or change visual properties; source token edits
     /// propagate to every variant. This varies DIMENSIONS — distinct from `merge`, which varies CONTENT
     /// across CSV rows. Deterministic: same source → byte-identical outputs.
@@ -477,7 +477,7 @@ pub struct VariantArgs {
     /// Input `.zen` document containing a `variants` block.
     pub doc: PathBuf,
 
-    /// Directory to write one `.zen` + one `.png` per generated variant into.
+    /// Directory for each generated `.zen` companion and image.
     #[arg(long, value_name = "DIR")]
     pub out_dir: PathBuf,
 
@@ -489,6 +489,9 @@ pub struct VariantArgs {
     /// reproducibility.  Independent of --json.
     #[arg(long, value_name = "PATH")]
     pub manifest: Option<PathBuf>,
+    /// Output image format.
+    #[arg(long, value_enum, default_value = "png")]
+    pub format: crate::commands::render::BatchFormat,
 }
 
 /// Arguments for `zenith new`.
@@ -851,11 +854,11 @@ pub struct MergeArgs {
     /// CSV data file; header row names the columns.
     pub data: PathBuf,
 
-    /// Directory to write one PNG per row into.
+    /// Directory for rendered row pages.
     #[arg(long, value_name = "DIR")]
     pub out_dir: PathBuf,
 
-    /// CSV column to name each output file by (default: row-NNNN.png).
+    /// CSV column for output names (default: row-NNNN with the chosen format extension).
     #[arg(long, value_name = "COL")]
     pub name_by: Option<String>,
 
@@ -867,6 +870,9 @@ pub struct MergeArgs {
     /// reproducibility. Independent of --json.
     #[arg(long, value_name = "PATH")]
     pub manifest: Option<PathBuf>,
+    /// Output image format.
+    #[arg(long, value_enum, default_value = "png")]
+    pub format: crate::commands::render::BatchFormat,
 }
 
 /// Arguments for `zenith history`.

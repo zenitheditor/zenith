@@ -470,3 +470,127 @@ fn no_variants_block_returns_empty_report() {
         "no files must be written for a doc with no variants"
     );
 }
+
+#[test]
+fn explicit_png_matches_default_bytes_and_manifest() {
+    use zenith_cli::commands::render::BatchFormat;
+    let first = tempfile::TempDir::new().unwrap();
+    let second = tempfile::TempDir::new().unwrap();
+    let default = run_variant(DOC_TWO_VARIANTS, None, first.path(), "doc").unwrap();
+    let explicit = zenith_cli::commands::variant::run_variant_with_format(
+        DOC_TWO_VARIANTS,
+        None,
+        second.path(),
+        "doc",
+        BatchFormat::Png,
+    )
+    .unwrap();
+    assert_eq!(
+        serde_json::to_vec(&build_manifest(DOC_TWO_VARIANTS, &default)).unwrap(),
+        serde_json::to_vec(&build_manifest(DOC_TWO_VARIANTS, &explicit)).unwrap()
+    );
+    for record in &default.variants {
+        let outputs = record.outputs.as_ref().unwrap();
+        assert_eq!(
+            std::fs::read(first.path().join(&outputs.png)).unwrap(),
+            std::fs::read(second.path().join(&outputs.png)).unwrap()
+        );
+        assert!(outputs.svg.is_none());
+    }
+}
+
+#[test]
+fn svg_variants_keep_companions_and_omit_png_fields() {
+    use zenith_cli::commands::render::BatchFormat;
+    let first = tempfile::TempDir::new().unwrap();
+    let second = tempfile::TempDir::new().unwrap();
+    let generate = |dir| {
+        zenith_cli::commands::variant::run_variant_with_format(
+            DOC_TWO_VARIANTS,
+            None,
+            dir,
+            "doc",
+            BatchFormat::Svg,
+        )
+        .unwrap()
+    };
+    let report = generate(first.path());
+    let again = generate(second.path());
+    assert_eq!(report.generated(), 2);
+    for record in &report.variants {
+        let outputs = record.outputs.as_ref().unwrap();
+        assert!(outputs.png.is_empty());
+        let name = outputs.svg.as_ref().unwrap();
+        assert_eq!(name, &format!("doc-{}.svg", record.id));
+        let bytes = std::fs::read(first.path().join(name)).unwrap();
+        assert_eq!(bytes, std::fs::read(second.path().join(name)).unwrap());
+        assert!(String::from_utf8(bytes).unwrap().contains("<svg"));
+        assert!(first.path().join(&outputs.zen).is_file());
+    }
+    let json = serde_json::to_value(to_json_output(&report)).unwrap();
+    assert!(json["variants"][0].get("outputs_png").is_none());
+    assert!(
+        json["variants"][0]["outputs_svg"]
+            .as_str()
+            .unwrap()
+            .ends_with(".svg")
+    );
+    let manifest = serde_json::to_value(build_manifest(DOC_TWO_VARIANTS, &report)).unwrap();
+    assert!(manifest["targets"][0].get("outputs_png").is_none());
+    assert!(
+        manifest["targets"][0]["outputs_svg"]
+            .as_str()
+            .unwrap()
+            .ends_with(".svg")
+    );
+    assert_eq!(
+        manifest,
+        serde_json::to_value(build_manifest(DOC_TWO_VARIANTS, &again)).unwrap()
+    );
+}
+
+#[test]
+fn svg_compile_advisory_keeps_node_subject_and_machine_fix() {
+    use zenith_cli::commands::render::BatchFormat;
+    let out = tempfile::TempDir::new().unwrap();
+    let report = zenith_cli::commands::variant::run_variant_with_format(
+        DOC_TWO_VARIANTS,
+        None,
+        out.path(),
+        "doc",
+        BatchFormat::Svg,
+    )
+    .unwrap();
+    let record = report
+        .variants
+        .iter()
+        .find(|r| r.id == "var.large")
+        .unwrap();
+    assert!(record.failure.is_none());
+    let original = record
+        .diagnostics
+        .iter()
+        .find(|d| d.code == "text.edge_crowding")
+        .unwrap();
+    assert_eq!(original.subject_id.as_deref(), Some("text.label"));
+    let original_json = serde_json::to_value(zenith_cli::json_types::DiagnosticJson::located(
+        original, "",
+    ))
+    .unwrap();
+    assert!(original_json.get("fix").is_some());
+    let json = serde_json::to_value(to_json_output(&report)).unwrap();
+    let variant = json["variants"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|v| v["id"] == "var.large")
+        .unwrap();
+    let diagnostic = variant["diagnostics"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|d| d["code"] == "text.edge_crowding")
+        .unwrap();
+    assert_eq!(diagnostic["subject_id"], "text.label");
+    assert_eq!(diagnostic["fix"], original_json["fix"]);
+}

@@ -24,6 +24,9 @@
 //! - [`data_input`] — load a [`DataContext`](zenith_core::DataContext) from a JSON or CSV file (`--data`).
 
 mod assets;
+mod batch;
+pub use batch::BatchFormat;
+pub(crate) use batch::{encode_batch_scene, load_batch_policy};
 mod check;
 pub mod data_input;
 mod entry;

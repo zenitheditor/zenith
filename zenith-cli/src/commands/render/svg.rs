@@ -189,12 +189,10 @@ fn render_pages(
             ));
             RenderCmdErr::blocked(all, 2).with_import_files(import_files.clone())
         })?;
-        let fallback = output.rasterized_regions.iter().map(|region| Diagnostic::advisory(
-            "render.svg_rasterized",
-            format!("page {page}: commands [{}..{}) rasterized: {:?}; links in this range lose click targets", region.command_start, region.command_end, region.reason),
-            None, None,
-        )).collect();
-        diagnostics.extend(govern_compile_diagnostics(fallback, &policy));
+        diagnostics.extend(govern_compile_diagnostics(
+            rasterization_diagnostics(&output.rasterized_regions, page),
+            &policy,
+        ));
         pages.push(SvgPageArtifact {
             svg: output.bytes,
             width: result.scene.width,
@@ -212,4 +210,15 @@ fn render_pages(
         diagnostics,
         import_files,
     })
+}
+
+pub(super) fn rasterization_diagnostics(
+    regions: &[SvgRasterizedRegion],
+    page: usize,
+) -> Vec<Diagnostic> {
+    regions.iter().map(|region| Diagnostic::advisory(
+        "render.svg_rasterized",
+        format!("page {page}: commands [{}..{}) rasterized: {:?}; links in this range lose click targets", region.command_start, region.command_end, region.reason),
+        None, None,
+    )).collect()
 }

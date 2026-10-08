@@ -2,7 +2,7 @@
 //!
 //! [`run_variant`] is the single public entry point.  It loads and parses the
 //! input `.zen`, calls [`expand_variants`], renders each generated variant to
-//! PNG, writes a side-by-side `.zen` for review, and optionally writes a
+//! PNG or SVG, writes a side-by-side `.zen` for review, and optionally writes a
 //! deterministic generation manifest.
 //!
 //! No clap parsing lives here — argument types are in `cli.rs`.  No FS I/O
@@ -11,12 +11,13 @@
 use std::collections::BTreeSet;
 use std::path::Path;
 
+use zenith_core::Diagnostic;
 use zenith_core::{BytesAssetProvider, KdlAdapter, KdlSource};
-use zenith_render::render_png;
 use zenith_scene::{DocumentPrep, PageCompiler};
 
 use crate::commands::render::{
-    build_asset_provider, build_font_provider, collect_missing_asset_diagnostics, image_sizes,
+    BatchFormat, build_asset_provider, build_font_provider, collect_missing_asset_diagnostics,
+    encode_batch_scene, image_sizes, load_batch_policy,
 };
 use crate::json_types::{
     DiagnosticJson, VariantManifest, VariantManifestTarget, VariantOutput, VariantResultJson,
@@ -55,6 +56,7 @@ pub struct VariantOutputs {
     pub zen: String,
     /// The rendered `.png` written to disk (relative filename within `out_dir`).
     pub png: String,
+    pub svg: Option<String>,
 }
 
 /// Result record for one variant (generated or failed).
@@ -68,6 +70,7 @@ pub struct VariantResultRecord {
     pub outputs: Option<VariantOutputs>,
     /// `None` = generated successfully; `Some(reason)` = failed.
     pub failure: Option<String>,
+    pub diagnostics: Vec<Diagnostic>,
 }
 
 /// Summary of a completed variant-generation run.
@@ -114,10 +117,22 @@ pub fn run_variant(
     out_dir: &Path,
     stem: &str,
 ) -> Result<VariantReport, VariantCmdErr> {
+    run_variant_with_format(doc_src, project_dir, out_dir, stem, BatchFormat::Png)
+}
+
+pub fn run_variant_with_format(
+    doc_src: &str,
+    project_dir: Option<&Path>,
+    out_dir: &Path,
+    stem: &str,
+    format: BatchFormat,
+) -> Result<VariantReport, VariantCmdErr> {
     // ── 1. Parse the input document ───────────────────────────────────────
     let doc = KdlAdapter
         .parse(doc_src.as_bytes())
         .map_err(|e| VariantCmdErr::new(crate::report::parse_error_line(doc_src, &e)))?;
+
+    let policy = load_batch_policy(format, &doc, project_dir).map_err(VariantCmdErr::new)?;
 
     // ── 2. Expand variants (pure engine — no I/O) ─────────────────────────
     let expansion = expand_variants(&doc);
@@ -154,8 +169,8 @@ pub fn run_variant(
             continue;
         }
         let zen_name = format!("{}-{}.zen", stem, result.id);
-        let png_name = format!("{}-{}.png", stem, result.id);
-        for name in [&zen_name, &png_name] {
+        let image_name = format!("{}-{}.{}", stem, result.id, format.extension());
+        for name in [&zen_name, &image_name] {
             if used_names.contains(name.as_str()) {
                 collision_err = Some(format!("output filename collision: {name}"));
                 break;
@@ -181,11 +196,12 @@ pub fn run_variant(
                     source: result.source,
                     outputs: None,
                     failure: Some(reason),
+                    diagnostics: Vec::new(),
                 });
             }
             VariantOutcome::Generated(materialized) => {
                 let zen_name = format!("{}-{}.zen", stem, result.id);
-                let png_name = format!("{}-{}.png", stem, result.id);
+                let image_name = format!("{}-{}.{}", stem, result.id, format.extension());
 
                 // ── 6a. Write the materialized `.zen` ─────────────────────
                 let zen_bytes = match KdlAdapter.format(&materialized) {
@@ -196,17 +212,21 @@ pub fn run_variant(
                             source: result.source,
                             outputs: None,
                             failure: Some(format!("format error: {}", e)),
+                            diagnostics: Vec::new(),
                         });
                         continue;
                     }
                 };
                 let zen_path = out_dir.join(&zen_name);
-                if let Err(e) = std::fs::write(&zen_path, &zen_bytes) {
+                if format == BatchFormat::Png
+                    && let Err(e) = std::fs::write(&zen_path, &zen_bytes)
+                {
                     records.push(VariantResultRecord {
                         id: result.id,
                         source: result.source,
                         outputs: None,
                         failure: Some(format!("write error '{}': {}", zen_path.display(), e)),
+                        diagnostics: Vec::new(),
                     });
                     continue;
                 }
@@ -222,7 +242,9 @@ pub fn run_variant(
                     None => {
                         // Source page missing in materialized doc — clean up the
                         // .zen we already wrote and record failure.
-                        let _ = std::fs::remove_file(&zen_path);
+                        if format == BatchFormat::Png {
+                            let _ = std::fs::remove_file(&zen_path);
+                        }
                         let failure = format!(
                             "source page '{}' not found in materialized document",
                             result.source
@@ -232,6 +254,7 @@ pub fn run_variant(
                             source: result.source,
                             outputs: None,
                             failure: Some(failure),
+                            diagnostics: Vec::new(),
                         });
                         continue;
                     }
@@ -246,12 +269,15 @@ pub fn run_variant(
                         .map(crate::commands::format_error_diag)
                         .collect();
                     if !hard.is_empty() {
-                        let _ = std::fs::remove_file(&zen_path);
+                        if format == BatchFormat::Png {
+                            let _ = std::fs::remove_file(&zen_path);
+                        }
                         records.push(VariantResultRecord {
                             id: result.id,
                             source: result.source,
                             outputs: None,
                             failure: Some(format!("asset error(s): {}", hard.join("; "))),
+                            diagnostics: Vec::new(),
                         });
                         continue;
                     }
@@ -260,7 +286,11 @@ pub fn run_variant(
                 // ── 6d. Compile the source page ───────────────────────────
                 let prep = DocumentPrep::new(&materialized, None, None)
                     .with_image_sizes(image_sizes(&materialized, None, &template_assets));
-                let compile_result = PageCompiler::new(&prep, &fonts).compile_page(page_index);
+                let mut compile_result = PageCompiler::new(&prep, &fonts).compile_page(page_index);
+                if let Some(policy) = &policy {
+                    compile_result.diagnostics =
+                        zenith_core::apply_policy(compile_result.diagnostics, policy);
+                }
 
                 let hard_diags: Vec<String> = compile_result
                     .diagnostics
@@ -269,52 +299,102 @@ pub fn run_variant(
                     .map(crate::commands::format_error_diag)
                     .collect();
                 if !hard_diags.is_empty() {
-                    let _ = std::fs::remove_file(&zen_path);
+                    if format == BatchFormat::Png {
+                        let _ = std::fs::remove_file(&zen_path);
+                    }
                     records.push(VariantResultRecord {
                         id: result.id,
                         source: result.source,
                         outputs: None,
                         failure: Some(format!("compile error(s): {}", hard_diags.join("; "))),
+                        diagnostics: if format == BatchFormat::Svg {
+                            compile_result.diagnostics
+                        } else {
+                            Vec::new()
+                        },
                     });
                     continue;
                 }
 
-                // ── 6e. Render to PNG ─────────────────────────────────────
-                let png_bytes = match render_png(&compile_result.scene, &fonts, &template_assets) {
-                    Ok(b) => b,
+                // ── 6e. Encode the scene ─────────────────────────────────────
+                let (image_bytes, mut diagnostics) = match encode_batch_scene(
+                    format,
+                    &compile_result.scene,
+                    &fonts,
+                    &template_assets,
+                    page_index + 1,
+                    policy.as_ref(),
+                ) {
+                    Ok(output) => output,
                     Err(e) => {
-                        let _ = std::fs::remove_file(&zen_path);
+                        if format == BatchFormat::Png {
+                            let _ = std::fs::remove_file(&zen_path);
+                        }
                         records.push(VariantResultRecord {
                             id: result.id,
                             source: result.source,
                             outputs: None,
-                            failure: Some(format!("render error: {}", e)),
+                            failure: Some(
+                                e.iter()
+                                    .map(|d| d.message.as_str())
+                                    .collect::<Vec<_>>()
+                                    .join("; "),
+                            ),
+                            diagnostics: if format == BatchFormat::Svg {
+                                e
+                            } else {
+                                Vec::new()
+                            },
                         });
                         continue;
                     }
                 };
 
-                // ── 6f. Write PNG ─────────────────────────────────────────
-                let png_path = out_dir.join(&png_name);
-                if let Err(e) = std::fs::write(&png_path, &png_bytes) {
+                if format == BatchFormat::Svg {
+                    diagnostics.extend(compile_result.diagnostics);
+                }
+
+                if format == BatchFormat::Svg
+                    && let Err(e) = std::fs::write(&zen_path, &zen_bytes)
+                {
+                    records.push(VariantResultRecord {
+                        id: result.id,
+                        source: result.source,
+                        outputs: None,
+                        failure: Some(format!("write error '{}': {}", zen_path.display(), e)),
+                        diagnostics,
+                    });
+                    continue;
+                }
+
+                // ── 6f. Write the image ─────────────────────────────────────────
+                let image_path = out_dir.join(&image_name);
+                if let Err(e) = std::fs::write(&image_path, &image_bytes) {
                     let _ = std::fs::remove_file(&zen_path);
                     records.push(VariantResultRecord {
                         id: result.id,
                         source: result.source,
                         outputs: None,
-                        failure: Some(format!("write error '{}': {}", png_path.display(), e)),
+                        failure: Some(format!("write error '{}': {}", image_path.display(), e)),
+                        diagnostics,
                     });
                     continue;
                 }
 
+                let (png, svg) = match format {
+                    BatchFormat::Png => (image_name, None),
+                    BatchFormat::Svg => (String::new(), Some(image_name)),
+                };
                 records.push(VariantResultRecord {
                     id: result.id,
                     source: result.source,
                     outputs: Some(VariantOutputs {
                         zen: zen_name,
-                        png: png_name,
+                        png,
+                        svg,
                     }),
                     failure: None,
+                    diagnostics,
                 });
             }
         }
@@ -350,6 +430,7 @@ pub fn build_manifest(doc_src: &str, report: &VariantReport) -> VariantManifest 
                 source: r.source.clone(),
                 outputs_zen: outputs.zen.clone(),
                 outputs_png: outputs.png.clone(),
+                outputs_svg: outputs.svg.clone(),
             })
         })
         .collect();
@@ -381,13 +462,28 @@ pub fn to_json_output(report: &VariantReport) -> VariantOutput {
                 source: r.source.clone(),
                 status: if r.failure.is_none() { "ok" } else { "failed" },
                 outputs_zen: r.outputs.as_ref().map(|o| o.zen.clone()),
-                outputs_png: r.outputs.as_ref().map(|o| o.png.clone()),
-                diagnostics: match &r.failure {
-                    None => Vec::new(),
-                    Some(reason) => vec![DiagnosticJson {
-                        subject_id: Some(r.id.clone()),
-                        ..DiagnosticJson::error("variant.failed", reason.clone())
-                    }],
+                outputs_png: r
+                    .outputs
+                    .as_ref()
+                    .filter(|o| !o.png.is_empty())
+                    .map(|o| o.png.clone()),
+                outputs_svg: r.outputs.as_ref().and_then(|o| o.svg.clone()),
+                diagnostics: {
+                    let mut diagnostics = DiagnosticJson::located_all(&r.diagnostics, "");
+                    for diagnostic in &mut diagnostics {
+                        if diagnostic.subject_id.is_none() {
+                            diagnostic.subject_id = Some(r.id.clone());
+                        }
+                    }
+                    if let Some(reason) = &r.failure
+                        && !Diagnostic::has_errors(&r.diagnostics)
+                    {
+                        diagnostics.push(DiagnosticJson {
+                            subject_id: Some(r.id.clone()),
+                            ..DiagnosticJson::error("variant.failed", reason.clone())
+                        });
+                    }
+                    diagnostics
                 },
             })
             .collect(),

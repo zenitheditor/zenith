@@ -333,7 +333,10 @@ variants {
 
 ```bash
 zenith variant poster.zen --out-dir out/ --manifest manifest.json
+zenith variant poster.zen --out-dir svg/ --format svg
 ```
+
+`--format png|svg` selects the rendered format. PNG is the default. SVG variants retain their `.zen` companions. SVG fallback diagnostics respect document, local, and global policy. Denied fallback writes no files for that variant.
 
 Generation is deterministic (same source → byte-identical outputs + manifest, `schema: zenith-variant-manifest-v1`).
 
@@ -348,7 +351,10 @@ text id="hero.name" role="data.name" x=(px)60 y=(px)160 w=(px)680 h=(px)90 fill=
 
 ```bash
 zenith merge poster.zen people.csv --out-dir out/ --name-by name --manifest manifest.json
+zenith merge poster.zen people.csv --out-dir svg/ --name-by name --format svg
 ```
+
+`--format png|svg` selects the rendered format. PNG is the default. Multi-page filenames include `-page-N` before `.png` or `.svg`. SVG fallback diagnostics respect document, local, and global policy. Denied fallback writes no files for that row.
 
 Every row renders independently and deterministically. `--name-by` names files by a column (`Alice.png`, `Bob.png`); `--manifest` writes a byte-reproducible batch record (template + data hashes and per-row provenance) for CI. Image columns work too — a `role="data.logo"` image node swaps its asset path per row.
 

@@ -324,6 +324,8 @@ pub struct VariantResultJson {
     pub outputs_zen: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub outputs_png: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub outputs_svg: Option<String>,
     pub diagnostics: Vec<DiagnosticJson>,
 }
 
@@ -343,7 +345,10 @@ pub struct VariantManifestTarget {
     pub id: String,
     pub source: String,
     pub outputs_zen: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
     pub outputs_png: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub outputs_svg: Option<String>,
 }
 
 /// Deterministic generation manifest for `zenith variant --manifest`.
