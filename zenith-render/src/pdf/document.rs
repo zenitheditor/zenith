@@ -16,9 +16,8 @@ use super::gradient::{GradientGeometry, PdfGradient};
 /// Options controlling PDF emission.
 #[derive(Clone, Copy)]
 pub struct PdfOptions {
-    /// Subset embedded fonts to just the glyphs used (`true`, default → small
-    /// files) or embed the whole font program (`false`). Either way the text is
-    /// selectable and searchable.
+    /// Subset embedded fonts to used glyphs (`true`, default) or embed whole fonts (`false`).
+    /// Native text remains selectable and searchable. Rasterized text loses these capabilities.
     pub subset: bool,
 }
 

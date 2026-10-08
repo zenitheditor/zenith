@@ -41,8 +41,8 @@ pub struct RenderArgs {
 
     /// Embed whole font programs in the PDF instead of subsetting to used glyphs.
     ///
-    /// PDF text is always selectable and searchable; this only trades a larger
-    /// file for embedding the complete face (default: subset for small files).
+    /// Native PDF text remains selectable and searchable with either mode.
+    /// Rasterized text loses selection and search (default: subset fonts).
     #[arg(long)]
     pub embed_full_fonts: bool,
 
@@ -131,7 +131,7 @@ pub struct RenderArgs {
     /// (`{"a":{"b":1}}` → `"a.b"`); a JSON array uses the first element. CSV
     /// header row gives field names; the first data row supplies values.
     /// Produces a SINGLE render bound to the first object/row; for BATCH output
-    /// (one PNG per CSV row with a provenance manifest) use `zenith merge` instead.
+    /// (PNG or SVG pages per CSV row with a provenance manifest) use `zenith merge` instead.
     #[arg(long, value_name = "FILE")]
     pub data: Option<PathBuf>,
 }

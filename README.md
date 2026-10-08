@@ -137,21 +137,33 @@ zenith render examples/multipage.zen --all-pages-svg svg-pages/
 zenith render examples/hello.zen --scene scene.json       # dump the scene IR
 ```
 
-| SVG flag | Output |
+| Export flag | Output |
 | --- | --- |
-| `--svg OUT` | Page 1 by default. |
-| `--page N` | Selects one page for single-page SVG output. |
+| `--svg OUT` | Page 1 by default, with outlined text. |
+| `--pdf OUT` | Every page in one PDF by default. |
+| `--page N` | Selects one page for single-output flags, including PDF. |
 | `--all-pages-svg DIR` | Writes `page-N.svg` in document order. |
-| `--deny render.svg_rasterized` | Blocks exports requiring raster fallback. |
-| `--scale F` | Applies only to PNG outputs. |
+| `--raster-scale F` | SVG/PDF fallback resolution. Finite `0 < F <= 4`, default 1. |
+| `--scale F` | PNG output scale. Finite `0 < F <= 4`, default 1. |
+| `--deny render.svg_rasterized` | Blocks SVG exports requiring raster fallback. |
+| `--deny render.pdf_rasterized` | Blocks PDF exports requiring raster fallback. |
 
-- **Colors and assets:** SVG uses RGB colors and embeds image assets.
-- **Text:** Outlines preserve appearance while losing text editing and search.
-- **Effects:** Rasterize their complete containing scope.
-- **Non-normal blends:** Rasterize the entire page.
-- **Crossed scopes and bitmap glyphs:** Require raster fallback.
-- **Links:** Links inside rasterized ranges lose click targets.
-- **Diagnostics:** Each fallback emits `render.svg_rasterized` with its page, command range, and reason.
+- **SVG assets:** RGB colors and embedded image assets keep the artifact self-contained.
+- **SVG text:** Outlines preserve appearance and lose editing, selection, and search.
+- **SVG fallback:** Effects capture their complete scope. Non-normal blends capture the page. Crossed scopes and bitmap glyphs require capture.
+- **PDF fallback:** Unsupported features capture their required scope or page. Captured text loses selection and search. Captured links lose click targets.
+- **Resolution:** `--raster-scale` changes fallback pixels without changing vector geometry or page dimensions. Existing bitmap assets retain source resolution.
+- **Reports:** `render.svg_rasterized` and `render.pdf_rasterized` report pages, command ranges, and reasons. JSON includes structured rasterized regions.
+- **PDF errors:** CLI and MCP reject capture and resource errors. Legacy library APIs returning `Vec<u8>` retain compatibility emission. Use report APIs for strict errors.
+- **Policy:** Blocking diagnostics prevent output writes. Read the export report after source validation.
+- **Writes:** Each file uses a temporary sibling and rename. Write errors preserve existing destinations. Earlier committed outputs can remain after later I/O errors.
+- **Batch reports:** Partial rows and variants retain committed paths with failed status. Manifest write errors retain batch error counts.
+- **Filesystem limits:** Writes reject read-only destinations. Symlink outputs replace the resolved target and retain the link. Replacement preserves permissions and leaves other hard links unchanged. Crash durability is not guaranteed.
+
+```bash
+zenith render examples/multipage.zen --pdf book.pdf --raster-scale 2 --json
+zenith render examples/hello.zen --svg hello.svg --raster-scale 2 --json
+```
 
 The smallest valid document:
 
@@ -320,7 +332,7 @@ Two complementary ways to generate many outputs from one design — one varies *
 
 ### Size / format variants (`zenith variant`)
 
-Declare a `variants` block and expand one canonical page into many named target sizes (square, story, banner, ad slots) — each written as a native `.zen` page plus a rendered PNG, with optional per-target `override`s (hide/show a node, swap text, change a fill). Source token edits propagate to every variant automatically, and anchored nodes reflow to each size.
+A `variants` block expands one canonical page into named target sizes. Each target produces a `.zen` companion and PNG or SVG image. Per-target `override`s change visibility, text, and visual properties. Source token edits propagate to every variant. Anchored nodes reflow to each size.
 
 ```kdl
 variants {
@@ -333,10 +345,16 @@ variants {
 
 ```bash
 zenith variant poster.zen --out-dir out/ --manifest manifest.json
-zenith variant poster.zen --out-dir svg/ --format svg
+zenith variant poster.zen --out-dir svg/ --format svg --raster-scale 2
 ```
 
-`--format png|svg` selects the rendered format. PNG is the default. SVG variants retain their `.zen` companions. SVG fallback diagnostics respect document, local, and global policy. Denied fallback writes no files for that variant.
+| Batch flag | Contract |
+| --- | --- |
+| `--format png\|svg` | Selects PNG or SVG. PNG is the default. SVG variants retain `.zen` companions. |
+| `--raster-scale F` | SVG only. Finite `0 < F <= 4`, default 1. |
+| `--manifest PATH` | Records committed outputs, including partial entries with failed status. |
+
+Batch commands have no `--deny` flags. Document, local, and global policy govern fallback diagnostics. Denied fallback prevents writes for that variant. I/O errors can leave earlier outputs. There is no batch rollback.
 
 Generation is deterministic (same source → byte-identical outputs + manifest, `schema: zenith-variant-manifest-v1`).
 
@@ -351,10 +369,10 @@ text id="hero.name" role="data.name" x=(px)60 y=(px)160 w=(px)680 h=(px)90 fill=
 
 ```bash
 zenith merge poster.zen people.csv --out-dir out/ --name-by name --manifest manifest.json
-zenith merge poster.zen people.csv --out-dir svg/ --name-by name --format svg
+zenith merge poster.zen people.csv --out-dir svg/ --name-by name --format svg --raster-scale 2
 ```
 
-`--format png|svg` selects the rendered format. PNG is the default. Multi-page filenames include `-page-N` before `.png` or `.svg`. SVG fallback diagnostics respect document, local, and global policy. Denied fallback writes no files for that row.
+PNG is the default merge format. Multi-page filenames include `-page-N` before `.png` or `.svg`. SVG fallback diagnostics respect document, local, and global policy. Denied fallback prevents writes for that row. I/O errors can leave earlier committed outputs. Reports retain those paths.
 
 Every row renders independently and deterministically. `--name-by` names files by a column (`Alice.png`, `Bob.png`); `--manifest` writes a byte-reproducible batch record (template + data hashes and per-row provenance) for CI. Image columns work too — a `role="data.logo"` image node swaps its asset path per row.
 
@@ -516,6 +534,17 @@ store instead of being inlined, and documents are addressable by `doc-id` so age
 juggling paths. The full author loop is exposed — `zenith_schema`, `zenith_validate`,
 `zenith_inspect`, `zenith_tokens`, `zenith_tx`, `zenith_fix`, `zenith_render`, `zenith_fmt`, `zenith_merge`,
 `zenith_theme_new`, plus the scratch/candidate/promote/finalize workspace tools.
+
+| MCP render parameter | Contract |
+| --- | --- |
+| `format` | Required: `png`, `svg`, `pdf`, or `scene`. |
+| `page` | One-based. Defaults to every PDF page and page 1 for other formats. |
+| `raster_scale` | SVG/PDF fallback resolution. Finite `0 < F <= 4`, default 1. |
+| `scale` / `contact_sheet` | PNG only. |
+| `out` | Optional protected file write alongside the artifact resource link. |
+| `diagnostics` | Includes soft diagnostics. Fallback reports remain visible when false. |
+
+MCP `zenith_merge` exports PNG only. There is no MCP variant tool. Use CLI merge and variant for SVG batches.
 
 Run it over stdio (the default transport):
 

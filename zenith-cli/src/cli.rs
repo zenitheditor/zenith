@@ -116,8 +116,8 @@ pub enum Command {
     ///
     /// Compile and render a .zen document to PNG, SVG, PDF, or a scene display-list.
     /// Rendering is deterministic (same source + backend → same bytes) and is blocked by hard
-    /// diagnostics, so `validate` first. Use `--all-pages <DIR>` for a contact sheet and `--spread
-    /// A-B` for facing pages.
+    /// diagnostics, so `validate` first. Use `--all-pages <DIR>` for individual PNGs,
+    /// `--contact-sheet <PNG>` for a page grid, and `--spread A-B` for facing pages.
     Render(Box<RenderArgs>),
 
     /// Apply a transaction to a `.zen` document (dry-run by default).

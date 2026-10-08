@@ -154,7 +154,7 @@ SVG exports page 1 by default, outlines text, embeds images, and reports raster 
                 "properties": {
                     "doc": doc_arg(),
                     "format": { "type": "string", "enum": ["png", "svg", "pdf", "scene"] },
-                    "page": { "type": "integer", "minimum": 1, "description": "1-based page (default 1)." },
+                    "page": { "type": "integer", "minimum": 1, "description": "1-based page. Omit for every PDF page or page 1 in other formats." },
                     "locked": { "type": "boolean", "description": "Verify asset sha256 and fail on mismatch." },
                     "out": { "type": "string", "description": "Optional path to also write the artifact to." },
                     "diagnostics": { "type": "boolean", "description": "Include soft diagnostics (default false)." },

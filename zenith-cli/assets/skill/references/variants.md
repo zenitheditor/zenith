@@ -9,9 +9,7 @@ Zenith has two distinct "variant" tools — don't confuse them:
 
 ## Size/format variants (`zenith variant`)
 
-Turn **one canonical page into many named target sizes** — square, story, banner, ad slots —
-deterministically. This varies **dimensions** (and small per-target tweaks). Reach for `variant`
-for "the same design at 4 sizes"; reach for `merge` for "this design for 200 people".
+Turn **one canonical page into many named target sizes** — square, story, banner, ad slots — deterministically. This varies **dimensions** (and small per-target tweaks). Reach for `variant` for "the same design at 4 sizes". Reach for `merge` for "this design for 200 people".
 
 For the `variants` block syntax, `override` props, and all command flags, run:
 
@@ -21,40 +19,43 @@ zenith variant --help
 
 ### Why it's reliable
 
-- **Token propagation is free.** Variants are overrides *on* the canonical page, so they inherit
-  the source tokens — change a brand token once and every size re-renders on-brand.
-- **Anchored nodes reflow.** Use `anchor` / `anchor-zone` (see `references/layout.md`) so logos,
-  CTAs, and page numbers stay correctly placed at every size; only free-coordinate decorative
-  nodes need per-variant repositioning.
-- **Deterministic.** Same source → byte-identical `.zen`, PNG, and manifest across runs.
+- **Token propagation:** Variants inherit canonical page tokens. One token modification propagates to every size.
+- **Anchored nodes:** Use `anchor` and `anchor-zone` from `layout.md` for placement across sizes. Free-coordinate decoration needs per-variant repositioning.
+- **Deterministic.** Same source → byte-identical `.zen`, PNG or SVG, and manifest across runs.
 
 ### Workflow
 
-1. Build and `zenith validate` the canonical page first — a broken source fails every variant.
-   Variant-specific diagnostics: `variant.duplicate_id`, `variant.unknown_source`,
-   `variant.invalid_dimension` (non-px or ≤ 0), `variant.override_unknown_node`.
+1. Build and `zenith validate` the canonical page first — a broken source fails every variant. Variant-specific diagnostics: `variant.duplicate_id`, `variant.unknown_source`, `variant.invalid_dimension` (non-px or ≤ 0), `variant.override_unknown_node`.
 2. Generate, then open a couple of the PNGs to eyeball reflow at the widest/tallest sizes.
 3. For CI, pass `--manifest` and commit it so the batch is auditable and reproducible.
 
-Run `zenith variant --help` for exact flags.
+| Flag | Contract |
+| --- | --- |
+| `--format png` | Default image format. |
+| `--format svg` | SVG images alongside `.zen` companions. |
+| `--raster-scale F` | SVG fallback resolution. Finite `0 < F <= 4`, default 1. |
+| `--manifest PATH` | Deterministic record of committed outputs. |
+| `--json` | Per-variant report with diagnostics and committed paths. |
+
+```bash
+zenith variant poster.zen --out-dir out/ --format svg --raster-scale 2 --manifest run.json --json
+```
+
+Read `export.md` for fallback policy and partial output behavior.
 
 ---
 
 ## Data-driven variants / mail-merge (`zenith merge`)
 
-Turn **one template + a data table into many rendered designs** — deterministically. This is
-the high-volume path: localized posts (one row per language), personalized graphics (one row
-per recipient), campaign/product variants, certificates, badges, price cards. One template,
-N rows, N PNGs, each reproducible.
+Turn **one template + a data table into many rendered designs** — deterministically. Each row represents one locale, recipient, or product. Certificates and badges use the same bindings. One template, N rows, rendered PNG or SVG pages, each reproducible.
 
 ### How it works
 
 1. Author a normal `.zen` template (tokens, layout, stable ids — all the usual discipline).
-2. Mark the **variable** nodes with `role="data.<column>"`, where `<column>` matches a CSV
-   header. Supported on:
-   - **text nodes** — the node's text is replaced per row.
-   - **image nodes** — the node's asset path is replaced per row (the CSV cell is a path).
-     A `data.*` role on any other node kind is an error.
+2. Mark the **variable** nodes with `role="data.<column>"`, where `<column>` matches a CSV header.
+   - **Text nodes:** The row replaces the node's text.
+   - **Image nodes:** The row replaces the asset path. The CSV cell contains a path.
+   - **Other node kinds:** A `data.*` role produces an error.
 3. Provide a CSV whose header row names the columns.
 4. Run `merge` — one render per data row.
 
@@ -80,21 +81,21 @@ zenith merge --help
 
 ### Workflow
 
-1. Build the template and `zenith validate` it once — fix every hard diagnostic before batching
-   (a broken template fails every row).
-2. Keep the placeholder text/image realistic (e.g. a long sample name) so you can eyeball that
-   the box fits the widest row; text-fit/overflow is per-row, so the longest value matters.
+1. Build the template and `zenith validate` it once — fix every hard diagnostic before batching (a broken template fails every row).
+2. Keep the placeholder text/image realistic (e.g. a long sample name) so you can eyeball that the box fits the widest row. Text-fit/overflow is per-row, so the longest value matters.
 3. Dry-run small: merge the first few rows, open a couple of PNGs, then run the full set.
-4. For production/CI, pass `--manifest` (and render assets with `--locked` where applicable via
-   the template's `sha256` asset hashes) so the batch is auditable and reproducible.
+4. For production or CI, pass `--manifest` for reproducible output records. Declare asset `sha256` hashes for locked rendering where supported.
 
 ### Tips
 
-- Everything stays tokenized — a brand/palette change re-renders all variants from one edit
-  (see `references/brand.md`, `references/themes.md`).
-- Pages vs rows: `merge` varies **content** across CSV rows; different **sizes** (square/story/
-  banner) are separate pages in the template handled by `zenith variant` — see above.
-- Localization: one column per text slot, one row per locale; keep type large enough for the
-  longest translation.
+- Everything stays tokenized — a brand/palette change re-renders all variants from one edit (see `references/brand.md`, `references/themes.md`).
+- Pages vs rows: `merge` varies **content** across CSV rows. Different **sizes** (square/story/ banner) are separate pages in the template handled by `zenith variant` — see above.
+- Localization: one column per text slot, one row per locale. Keep type large enough for the longest translation.
 
-Run `zenith merge --help` for the exact flags.
+```bash
+zenith merge card.zen people.csv --out-dir out/ --name-by name --format svg --raster-scale 2 --manifest run.json --json
+```
+
+CLI merge supports `--format png|svg`. PNG is the default. `--raster-scale` requires SVG output. MCP `zenith_merge` remains PNG only. No MCP variant tool exists.
+
+Batch commands apply document, local, and global diagnostic policy. They have no `--deny` flags. Denied fallback writes nothing for the affected row or variant. I/O errors can leave earlier committed files. Reports and manifests retain those paths with failed status. Read `export.md` before production export.
