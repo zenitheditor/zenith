@@ -1,5 +1,4 @@
-//! The scene-walk driver ([`translate`]), effect-bracket classification, the
-//! per-command emitter ([`emit_command`]).
+//! Scene-walk driver ([`translate`]) and per-command emitter ([`emit_command`]).
 
 use pdf_writer::Content;
 use zenith_core::{AssetProvider, FontProvider};
@@ -35,135 +34,35 @@ pub(in crate::pdf) fn translate(
 
     let page = (scene.width, scene.height);
 
-    // Inclusive effect buffer. The four non-vector effect brackets — blur,
-    // drop-shadow, per-pixel color filter, and mask — have no vector PDF
-    // primitive, so while one is open we BUFFER the WHOLE bracket INCLUSIVE (the
-    // `Begin*`, its body, and the matching `End*`) instead of emitting, then
-    // render it as a standalone sub-scene whose raster backend self-applies every
-    // effect (see `embed_rasterized_region`). `depth` counts nested effect
-    // brackets so the buffer closes only at the matching outermost `End*`; a
-    // mask>blur nesting closes correctly because every inner `Begin*` bumps the
-    // count and every `End*` lowers it. A bracket is intercepted only at top
-    // level; once a buffer is open, any nested effect is just more buffered
-    // content handled by that one sub-scene render. `None` means draws emit
-    // directly.
-    let mut effect_buf: Option<(u32, Vec<SceneCommand>)> = None;
-
-    for cmd in &scene.commands {
-        let is_open = is_effect_open(cmd);
-        let is_close = is_effect_close(cmd);
-
-        // While a bracket is open, buffer everything, tracking nesting depth, and
-        // render the region when the outermost bracket closes.
-        if let Some((depth, buffered)) = effect_buf.as_mut() {
-            buffered.push(cmd.clone());
-            if is_open {
-                *depth += 1;
-            } else if is_close {
-                *depth = depth.saturating_sub(1);
-                if *depth == 0
-                    && let Some((_, region)) = effect_buf.take()
-                {
-                    crate::pdf::raster_embed::embed_rasterized_region(
-                        &mut content,
-                        &mut res,
-                        &region,
-                        page,
-                        fonts,
-                        assets,
-                        font_plan,
-                    );
-                }
+    // Plan complete scopes before emitting any graphics state.
+    // Planner errors produce empty ranges, so the vector emitter retains every command.
+    let ranges = super::super::scopes::plan(scene).unwrap_or_default();
+    let mut cursor = 0;
+    for range in ranges {
+        if let Some(commands) = scene.commands.get(cursor..range.start) {
+            for cmd in commands {
+                emit_command(&mut content, &mut res, cmd, page, fonts, assets, font_plan);
             }
-            continue;
         }
-
-        // No buffer open: a top-level effect-open starts one (the Begin is
-        // buffered too so the sub-scene self-applies the effect). An empty
-        // `BeginFilter` is a no-op — it stays vector and falls through to
-        // `emit_command` (which no-ops it); blur/shadow/mask always open.
-        if is_open && !is_empty_filter(cmd) {
-            effect_buf = Some((1, vec![cmd.clone()]));
-            continue;
+        if let Some(commands) = scene.commands.get(range.clone()) {
+            crate::pdf::raster_embed::embed_rasterized_region(
+                &mut content,
+                &mut res,
+                commands,
+                page,
+                fonts,
+                assets,
+                font_plan,
+            );
         }
-
-        emit_command(&mut content, &mut res, cmd, page, fonts, assets, font_plan);
+        cursor = range.end;
     }
-
+    if let Some(commands) = scene.commands.get(cursor..) {
+        for cmd in commands {
+            emit_command(&mut content, &mut res, cmd, page, fonts, assets, font_plan);
+        }
+    }
     (content, res)
-}
-
-/// A scene command's role in non-vector effect bracketing.
-enum EffectBracket {
-    /// Opens an offscreen capture (blur, shadow, filter, or mask).
-    Open,
-    /// Closes the innermost offscreen capture.
-    Close,
-    /// Not an effect bracket — a plain draw, clip, layer, or transform command.
-    None,
-}
-
-/// Exhaustively classify a command's effect-bracket role. Every `SceneCommand`
-/// variant is listed explicitly (no wildcard arm), so adding a new variant
-/// forces a compile error here and can never be silently treated as a plain draw.
-fn effect_bracket(cmd: &SceneCommand) -> EffectBracket {
-    match cmd {
-        // ── Effect openers ────────────────────────────────────────────────
-        SceneCommand::BeginShadow { .. }
-        | SceneCommand::BeginBlur { .. }
-        | SceneCommand::BeginFilter { .. }
-        | SceneCommand::BeginMask { .. } => EffectBracket::Open,
-
-        // ── Effect closers ────────────────────────────────────────────────
-        SceneCommand::EndShadow
-        | SceneCommand::EndBlur
-        | SceneCommand::EndFilter
-        | SceneCommand::EndMask => EffectBracket::Close,
-
-        // ── Plain draw / clip / layer / transform commands ─────────────────
-        SceneCommand::FillRect { .. }
-        | SceneCommand::StrokeRect { .. }
-        | SceneCommand::FillRoundedRect { .. }
-        | SceneCommand::StrokeRoundedRect { .. }
-        | SceneCommand::FillEllipse { .. }
-        | SceneCommand::StrokeEllipse { .. }
-        | SceneCommand::StrokeLine { .. }
-        | SceneCommand::FillPolygon { .. }
-        | SceneCommand::StrokePolyline { .. }
-        | SceneCommand::FillPath { .. }
-        | SceneCommand::StrokePath { .. }
-        | SceneCommand::DrawImage { .. }
-        | SceneCommand::DrawSvgAsset { .. }
-        | SceneCommand::DrawGlyphRun { .. }
-        | SceneCommand::PushClip { .. }
-        | SceneCommand::PushClipRoundedRect { .. }
-        | SceneCommand::PopClip
-        | SceneCommand::PushLayer { .. }
-        | SceneCommand::PopLayer
-        | SceneCommand::PushTransform { .. }
-        | SceneCommand::PushScaleTranslate { .. }
-        | SceneCommand::PushTransformMatrix { .. }
-        | SceneCommand::PopTransform => EffectBracket::None,
-    }
-}
-
-/// True for a command that opens a non-vector effect bracket (shadow, blur,
-/// filter, or mask).
-fn is_effect_open(cmd: &SceneCommand) -> bool {
-    matches!(effect_bracket(cmd), EffectBracket::Open)
-}
-
-/// True for a command that closes a non-vector effect bracket — the matching
-/// `End*` for each [`is_effect_open`] case.
-fn is_effect_close(cmd: &SceneCommand) -> bool {
-    matches!(effect_bracket(cmd), EffectBracket::Close)
-}
-
-/// True for a `BeginFilter` carrying no filters — a no-op bracket that must not
-/// open a buffer (it stays vector). The compiler never emits empty filters; the
-/// guard is preserved defensively. All other commands return false.
-fn is_empty_filter(cmd: &SceneCommand) -> bool {
-    matches!(cmd, SceneCommand::BeginFilter { filters } if filters.is_empty())
 }
 
 pub(in crate::pdf) fn emit_command(
@@ -704,14 +603,8 @@ pub(in crate::pdf) fn emit_command(
         }
 
         // ── Compositing layers ────────────────────────────────────────────
-        // Layer opacity is applied per-draw via the color alpha cascade already
-        // resolved into each command's color in the scene IR, so a layer
-        // bracket needs only a save/restore to scope any state it sets. (No
-        // group transparency object in v0; matched explicitly, not dropped.)
-        //
-        // v0 limitation: the `blend_mode` field is ignored — the PDF backend has
-        // no ExtGState soft-mask / blend-mode group, so blended content renders
-        // source-over. Documented honest limitation (the PNG backend honors it).
+        // Planned raster ranges handle group opacity and backdrop blends.
+        // Identity layers retain their existing vector save/restore operators.
         SceneCommand::PushLayer { .. } => {
             content.save_state();
         }
@@ -720,12 +613,8 @@ pub(in crate::pdf) fn emit_command(
         }
 
         // ── Non-vector effect brackets ────────────────────────────────────
-        // `translate` intercepts every BALANCED effect bracket (blur, shadow,
-        // filter, mask) before dispatch, buffering it inclusive and rendering it
-        // as a self-applying sub-scene (see `embed_rasterized_region`). These
-        // arms are therefore unreachable in normal flow; kept (no wildcard) for
-        // exhaustiveness, and a no-op is the safe fallback so a malformed or
-        // standalone End* / empty Begin* reaching here can never panic.
+        // Planned ranges capture balanced effects. Malformed scopes and raster
+        // errors retain their draw commands through these marker no-ops.
         SceneCommand::BeginShadow { .. } => {}
         SceneCommand::EndShadow => {}
         SceneCommand::BeginBlur { .. } => {}

@@ -1,10 +1,8 @@
-//! Raster-fallback embedding for non-vector effect brackets.
+//! Raster embedding for complete compositing scopes.
 //!
-//! Blur, drop-shadow, per-pixel color filter, and mask brackets have no vector
-//! PDF equivalent, so they are rendered as a standalone sub-scene via the raster
-//! backend (which self-applies the effect), cropped to the tight opaque bounding
-//! box, and embedded as an image XObject. Split out of [`super::content`] to keep
-//! that module focused on the vector scene-command → content-operator translation.
+//! Effects, opacity layers, and crossed scopes include their enclosing state.
+//! Non-normal blends include the full page backdrop. Integer-pixel crops retain
+//! their scene offsets and dimensions under the page transform.
 
 use pdf_writer::Content;
 use zenith_core::{AssetProvider, FontProvider};
@@ -14,19 +12,10 @@ use super::content::{IMAGE_PREFIX, PageResources, emit_command, name};
 use super::font::FontPlan;
 use super::image::decoded_image_from_straight_rgba;
 
-/// Rasterize a self-applying effect bracket (blur, shadow, filter, or mask —
-/// including any effect nested inside it) and embed it as an image XObject.
-///
-/// `sub_commands` is the WHOLE bracket inclusive (`Begin*` … matching `End*`), so
-/// the raster backend ([`crate::render::render_image`]) self-applies every effect
-/// — no post-pass is needed here. This helper builds the standalone full-page
-/// sub-scene (default transparent canvas, so only the bracket's ink is opaque),
-/// renders it, crops to the tight opaque bounding box, and embeds the crop at its
-/// scene position. All arithmetic is deterministic (fixed rounding, fixed deflate
-/// level) so the PDF stays byte-identical across runs.
-///
-/// On render failure the buffered commands are emitted via [`emit_command`] so
-/// content is never lost (the region then draws unmasked rather than vanishing).
+/// Rasterize a complete structural range and embed its integer-pixel crop.
+/// Enclosing transforms, clips, and layers live inside `sub_commands`.
+/// The caller emits the image under the page transform alone.
+/// Raster errors retain all commands through the vector emitter.
 pub(super) fn embed_rasterized_region(
     content: &mut Content,
     res: &mut PageResources,
@@ -43,15 +32,14 @@ pub(super) fn embed_rasterized_region(
     let img = match crate::render::render_image(&sub_scene, fonts, assets) {
         Ok(i) => i,
         Err(_) => {
-            // Never lose content: emit the buffered commands (the BeginMask/
-            // EndMask no-op arms drop the bracket markers; the body draws
-            // unmasked).
+            // Retain the region body when raster rendering returns an error.
             for c in sub_commands {
                 emit_command(content, res, c, page, fonts, assets, font_plan);
             }
             return;
         }
     };
+    drop(sub_scene);
     crop_and_embed(content, res, &img.rgba, img.width, img.height);
 }
 
@@ -83,7 +71,9 @@ fn crop_and_embed(content: &mut Content, res: &mut PageResources, rgba: &[u8], i
     let mut found = false;
     for (y, row) in rgba.chunks_exact(stride).enumerate() {
         for (x, px) in row.chunks_exact(4).enumerate() {
-            if px[3] > 0 {
+            if let [_, _, _, alpha] = px
+                && *alpha > 0
+            {
                 found = true;
                 let (xu, yu) = (x as u32, y as u32);
                 if xu < min_x {

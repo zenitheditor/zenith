@@ -47,12 +47,15 @@ mod glyph;
 mod gradient;
 mod image;
 mod raster_embed;
+mod scopes;
 mod svg;
 
 #[cfg(test)]
 mod alpha_tests;
 #[cfg(test)]
 mod image_tests;
+#[cfg(test)]
+mod scope_tests;
 #[cfg(test)]
 mod stroke_tests;
 #[cfg(test)]

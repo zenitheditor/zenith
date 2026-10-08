@@ -10,12 +10,10 @@
 //! at its arm is color-bitmap (emoji) glyphs (omitted; the print scenarios use
 //! none).
 //!
-//! Non-vector effect brackets — blur, drop-shadow, per-pixel color filter, and
-//! mask — have no vector PDF equivalent, so [`translate`] buffers each bracket
-//! INCLUSIVE (the `Begin*`, its body, and the matching `End*`), renders it as a
-//! standalone sub-scene via the raster backend (which self-applies the effect),
-//! crops to the opaque bounding box, and embeds the result as an image XObject.
-//! All four are honored, not no-ops.
+//! Complete structural ranges containing effects or group opacity rasterize under
+//! the page transform. Non-normal blends rasterize the whole page with its backdrop.
+//! Unaffected ranges retain native operators. Structural errors retain every
+//! command through the vector emitter. Raster errors use the same fallback.
 //!
 //! Submodules: `resources` (page-resource accumulator + name builder), `draw`
 //! (shared fill/alpha/line-style primitives), `command` (the scene-walk driver

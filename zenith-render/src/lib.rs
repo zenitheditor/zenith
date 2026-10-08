@@ -11,6 +11,7 @@ mod error;
 mod intrinsic;
 mod pdf;
 mod render;
+mod scopes;
 mod svg;
 mod svg_style;
 mod tiny_skia;
