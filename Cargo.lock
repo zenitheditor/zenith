@@ -1462,6 +1462,7 @@ dependencies = [
 name = "zenith-render"
 version = "0.0.8"
 dependencies = [
+ "gif",
  "jpeg-decoder",
  "miniz_oxide",
  "pdf-writer",

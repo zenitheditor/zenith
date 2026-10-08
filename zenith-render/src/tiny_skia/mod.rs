@@ -31,6 +31,7 @@ mod raster;
 mod scale;
 mod shadow;
 
+pub(crate) use paths::build_rounded_rect_path;
 pub(crate) use raster::decode_raster_image as decode_raster_to_pixmap;
 pub(crate) use scale::scaled_px;
 
