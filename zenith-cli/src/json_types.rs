@@ -176,6 +176,8 @@ pub struct RenderRasterizedRegionJson {
     pub command_start: usize,
     pub command_end: usize,
     pub reason: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub raster_scale: Option<f64>,
 }
 
 /// One written PNG in the `render` envelope.

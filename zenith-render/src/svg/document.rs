@@ -4,6 +4,18 @@ use zenith_scene::Scene;
 use super::{assets, scopes, writer::Writer};
 use crate::RenderError;
 
+/// SVG export options. Raster scale affects fallback images only.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SvgOptions {
+    /// Raster fallback resolution multiplier in the interval (0, 4].
+    pub raster_scale: f64,
+}
+impl Default for SvgOptions {
+    fn default() -> Self {
+        Self { raster_scale: 1.0 }
+    }
+}
+
 /// Why an SVG region contains embedded raster pixels.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SvgRasterizationReason {
@@ -56,6 +68,17 @@ pub fn render_svg_with(
     fonts: &dyn FontProvider,
     assets: &dyn AssetProvider,
 ) -> Result<SvgOutput, RenderError> {
+    render_svg_with_options(scene, fonts, assets, SvgOptions::default())
+}
+
+/// Export SVG with raster reports and explicit fallback resolution.
+pub fn render_svg_with_options(
+    scene: &Scene,
+    fonts: &dyn FontProvider,
+    assets: &dyn AssetProvider,
+    options: SvgOptions,
+) -> Result<SvgOutput, RenderError> {
+    crate::raster_capture::check_scale(options.raster_scale)?;
     if !scene.width.is_finite()
         || !scene.height.is_finite()
         || scene.width <= 0.0
@@ -84,8 +107,23 @@ pub fn render_svg_with(
             .ok_or_else(|| RenderError::new("invalid SVG raster range"))?
             .to_vec();
         // The PNG backend skips unresolved resources. Check each fallback before rasterization.
-        for command in &part.commands {
-            writer.check_command(command, fonts, assets)?;
+        for (offset, command) in part.commands.iter().enumerate() {
+            if let Some(capture) = writer.check_command(command, fonts, assets)? {
+                crate::raster_capture::check_svg_size(
+                    capture.intrinsic,
+                    capture.destination,
+                    options.raster_scale,
+                )
+                .map_err(|error| {
+                    RenderError::new(format!(
+                        "SVG commands {}..{} capture command {} asset {}: {error}",
+                        region.command_start,
+                        region.command_end,
+                        region.command_start + offset,
+                        capture.asset_id
+                    ))
+                })?;
+            }
         }
         for command in &mut part.commands {
             if let zenith_scene::SceneCommand::DrawSvgAsset { x, y, w, h, asset } = command {
@@ -94,7 +132,7 @@ pub fn render_svg_with(
                     y: *y,
                     w: *w,
                     h: *h,
-                    asset_id: asset.clone(),
+                    asset_id: std::mem::take(asset),
                     fit: zenith_scene::FitMode::Stretch,
                     pos_x: 0.0,
                     pos_y: 0.0,
@@ -105,12 +143,21 @@ pub fn render_svg_with(
                 };
             }
         }
-        let image = crate::render_image(&part, fonts, assets)?;
+        let image = crate::render_image_scaled(&part, options.raster_scale, fonts, assets)?;
+        drop(part);
+        let width = f64::from(image.width) / options.raster_scale;
+        let height = f64::from(image.height) / options.raster_scale;
+        if !width.is_finite() || !height.is_finite() {
+            return Err(RenderError::new(format!(
+                "SVG raster capture placement exceeds supported coordinates at scale {}; increase raster capture scale",
+                options.raster_scale
+            )));
+        }
         let png = crate::encode_png(&image)?;
         writer.body.push_str(&assets::image_element(
             &png,
             "image/png",
-            (0.0, 0.0, f64::from(image.width), f64::from(image.height)),
+            (0.0, 0.0, width, height),
             1.0,
         ));
         index = region.command_end;

@@ -49,8 +49,9 @@ mod image;
 mod raster_embed;
 mod report;
 pub use report::{
-    PdfOutput, PdfRasterizationReason, PdfRasterizedRegion, render_pdf_multi_report,
-    render_pdf_report,
+    PdfExportOptions, PdfOutput, PdfRasterizationReason, PdfRasterizedRegion,
+    render_pdf_multi_report, render_pdf_multi_report_with_options, render_pdf_report,
+    render_pdf_report_with_options,
 };
 mod scopes;
 mod svg;

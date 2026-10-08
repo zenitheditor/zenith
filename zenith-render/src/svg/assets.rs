@@ -179,13 +179,19 @@ fn raster(
     )))
 }
 
+pub(super) struct SvgCapture<'a> {
+    pub(super) asset_id: &'a str,
+    pub(super) intrinsic: (f64, f64),
+    pub(super) destination: (f64, f64),
+}
+
 impl Writer {
-    pub(super) fn image(
+    pub(super) fn image<'a>(
         &mut self,
-        command: &SceneCommand,
+        command: &'a SceneCommand,
         fonts: &dyn FontProvider,
         assets: &dyn AssetProvider,
-    ) -> Result<(), RenderError> {
+    ) -> Result<Option<SvgCapture<'a>>, RenderError> {
         let (x, y, w, h, id, fit, pos_x, pos_y, opacity, clip, crop, style) =
             if let SceneCommand::DrawImage {
                 x,
@@ -246,7 +252,7 @@ impl Writer {
         let (bytes, sw, sh, mime) = match asset.kind {
             AssetKind::Image => {
                 let Some((bytes, w, h)) = raster(&asset.bytes, crop)? else {
-                    return Ok(());
+                    return Ok(None);
                 };
                 (bytes, w, h, "image/png")
             }
@@ -262,7 +268,7 @@ impl Writer {
         };
         let (x, y, w, h) = bounds;
         if w <= 0.0 || h <= 0.0 {
-            return Ok(());
+            return Ok(None);
         }
         let (rw, rh) = match fit {
             FitMode::Stretch => (w, h),
@@ -293,6 +299,14 @@ impl Writer {
             opacity.clamp(0.0, 1.0),
         ));
         self.body.push_str("</g>");
-        Ok(())
+        Ok(if mime == "image/svg+xml" {
+            Some(SvgCapture {
+                asset_id: id,
+                intrinsic: (sw, sh),
+                destination: (w, h),
+            })
+        } else {
+            None
+        })
     }
 }

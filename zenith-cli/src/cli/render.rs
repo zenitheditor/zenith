@@ -79,6 +79,10 @@ pub struct RenderArgs {
     #[arg(long, value_name = "F", allow_hyphen_values = true)]
     pub scale: Option<String>,
 
+    /// Raster fallback resolution for PDF and SVG: 0 < F <= 4 (default 1).
+    #[arg(long, value_name = "F", allow_hyphen_values = true)]
+    pub raster_scale: Option<String>,
+
     /// Render two facing pages side by side as a single PNG, e.g. `--spread 10-11`
     /// (1-based page numbers; A on the left, B on the right). Requires `--png`.
     #[arg(long, value_name = "A-B")]

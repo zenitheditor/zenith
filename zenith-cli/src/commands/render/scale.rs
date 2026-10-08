@@ -16,6 +16,17 @@ pub fn check_render_scale(scale: f64, shown: &str) -> Result<f64, String> {
     ))
 }
 
+pub(crate) fn parse_scale_flag(raw: &str, flag: &str) -> Result<f64, String> {
+    let parsed = raw.trim().parse::<f64>().unwrap_or(f64::NAN);
+    check_render_scale(parsed, raw).map_err(|message| format!("error: {flag}: {message}"))
+}
+
+pub(super) fn check_vector_raster_scale(scale: f64) -> Result<(), super::entry::RenderCmdErr> {
+    check_render_scale(scale, &scale.to_string())
+        .map(|_| ())
+        .map_err(|message| super::entry::RenderCmdErr::new("cli.invalid_argument", message, 2))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

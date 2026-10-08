@@ -31,7 +31,7 @@ pub fn run() -> ExitCode {
         Command::Fmt(args) => document::dispatch_fmt(args),
         Command::Fix(args) => fix::dispatch_fix(args),
         Command::Tokens(args) => document::dispatch_tokens(args),
-        Command::Render(args) => render::dispatch_render(args),
+        Command::Render(args) => render::dispatch_render(*args),
         Command::Inspect(args) => document::dispatch_inspect(args),
         Command::Imports(args) => document::dispatch_imports(args),
         Command::Perceive(args) => document::dispatch_perceive(args),

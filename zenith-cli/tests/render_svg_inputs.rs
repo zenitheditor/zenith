@@ -14,6 +14,7 @@ fn options(flags: &CliPolicyFlags) -> RenderEntryOptions<'_> {
         data: None,
         construction_overlay: false,
         scale: 1.0,
+        raster_scale: 1.0,
     }
 }
 

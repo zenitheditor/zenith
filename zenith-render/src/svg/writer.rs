@@ -101,13 +101,22 @@ impl Writer {
         Ok(())
     }
 
-    pub(super) fn check_command(
+    pub(super) fn check_command<'a>(
         &self,
-        command: &SceneCommand,
+        command: &'a SceneCommand,
         fonts: &dyn FontProvider,
         assets: &dyn AssetProvider,
-    ) -> Result<(), RenderError> {
-        Self::new(self.width, self.height).command(command, fonts, assets)
+    ) -> Result<Option<super::assets::SvgCapture<'a>>, RenderError> {
+        let mut writer = Self::new(self.width, self.height);
+        if matches!(
+            command,
+            SceneCommand::DrawImage { .. } | SceneCommand::DrawSvgAsset { .. }
+        ) {
+            writer.image(command, fonts, assets)
+        } else {
+            writer.command(command, fonts, assets)?;
+            Ok(None)
+        }
     }
 
     pub(super) fn command(
@@ -345,7 +354,7 @@ impl Writer {
                 )
             }
             SceneCommand::DrawImage { .. } | SceneCommand::DrawSvgAsset { .. } => {
-                self.image(command, fonts, assets)
+                self.image(command, fonts, assets).map(|_| ())
             }
             SceneCommand::DrawGlyphRun { .. } => self.text(command, fonts),
             SceneCommand::PushClip { x, y, w, h } => {

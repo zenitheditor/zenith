@@ -11,6 +11,7 @@ impl RenderRun<'_> {
                 self.args.page.unwrap_or(1),
                 self.entry_options(),
             )?;
+            self.record_svg_regions(out, art.page, art.rasterized_regions);
             self.write(out, art.svg, art.diagnostics, &art.import_files, "SVG")?;
         }
         if let Some(dir) = &self.args.all_pages_svg {
@@ -29,12 +30,32 @@ impl RenderRun<'_> {
                 ));
             }
             for page in art.pages {
-                self.pending
-                    .push((dir.join(format!("page-{}.svg", page.page)), page.svg));
+                let path = dir.join(format!("page-{}.svg", page.page));
+                self.record_svg_regions(&path, page.page, page.rasterized_regions);
+                self.pending.push((path, page.svg));
             }
             self.diagnostics.extend(art.diagnostics);
             self.import_files.extend(&art.import_files);
         }
         Ok(())
+    }
+    fn record_svg_regions(
+        &mut self,
+        path: &std::path::Path,
+        page: usize,
+        regions: Vec<zenith_render::SvgRasterizedRegion>,
+    ) {
+        self.rasterized_regions
+            .extend(regions.into_iter().map(|region| {
+                crate::json_types::RenderRasterizedRegionJson {
+                    path: path.display().to_string(),
+                    format: "svg",
+                    page,
+                    command_start: region.command_start,
+                    command_end: region.command_end,
+                    reason: format!("{:?}", region.reason),
+                    raster_scale: (self.raster_scale != 1.0).then_some(self.raster_scale),
+                }
+            }));
     }
 }

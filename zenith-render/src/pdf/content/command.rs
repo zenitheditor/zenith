@@ -71,6 +71,7 @@ pub(in crate::pdf) fn translate_strict(
     assets: &dyn AssetProvider,
     font_plan: &FontPlan,
     regions: &[crate::pdf::report::PlannedRegion],
+    raster_scale: f64,
 ) -> Result<(Content, PageResources), crate::RenderError> {
     let mut content = Content::new();
     let mut res = PageResources::default();
@@ -95,6 +96,7 @@ pub(in crate::pdf) fn translate_strict(
             page,
             fonts,
             assets,
+            raster_scale,
         )
         .map_err(|error| {
             crate::RenderError::new(format!(

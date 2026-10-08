@@ -11,6 +11,7 @@ mod error;
 mod glyph_bitmap;
 mod intrinsic;
 mod pdf;
+mod raster_capture;
 mod render;
 mod scopes;
 mod svg;
@@ -22,15 +23,16 @@ pub use compose::composite_over;
 pub use error::RenderError;
 pub use intrinsic::{asset_intrinsic_size, asset_intrinsic_sizes};
 pub use pdf::{
-    PdfOptions, PdfOutput, PdfRasterizationReason, PdfRasterizedRegion, render_pdf,
-    render_pdf_multi, render_pdf_multi_report, render_pdf_multi_with, render_pdf_report,
-    render_pdf_with,
+    PdfExportOptions, PdfOptions, PdfOutput, PdfRasterizationReason, PdfRasterizedRegion,
+    render_pdf, render_pdf_multi, render_pdf_multi_report, render_pdf_multi_report_with_options,
+    render_pdf_multi_with, render_pdf_report, render_pdf_report_with_options, render_pdf_with,
 };
 pub use render::{
     composite_spread, encode_png, render_image, render_image_scaled, render_png, render_png_scaled,
     render_spread_png, render_spread_png_scaled, scaled_size,
 };
 pub use svg::{
-    SvgOutput, SvgRasterizationReason, SvgRasterizedRegion, render_svg, render_svg_with,
+    SvgOptions, SvgOutput, SvgRasterizationReason, SvgRasterizedRegion, render_svg,
+    render_svg_with, render_svg_with_options,
 };
 pub use tiny_skia::TinySkiaBackend;

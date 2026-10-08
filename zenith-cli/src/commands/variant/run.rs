@@ -16,8 +16,8 @@ use zenith_core::{BytesAssetProvider, KdlAdapter, KdlSource};
 use zenith_scene::{DocumentPrep, PageCompiler};
 
 use crate::commands::render::{
-    BatchFormat, build_asset_provider, build_font_provider, collect_missing_asset_diagnostics,
-    encode_batch_scene, image_sizes, load_batch_policy,
+    BatchExportOptions, BatchFormat, build_asset_provider, build_font_provider,
+    collect_missing_asset_diagnostics, encode_batch_scene, image_sizes, load_batch_policy,
 };
 use crate::json_types::{
     DiagnosticJson, VariantManifest, VariantManifestTarget, VariantOutput, VariantResultJson,
@@ -127,6 +127,24 @@ pub fn run_variant_with_format(
     stem: &str,
     format: BatchFormat,
 ) -> Result<VariantReport, VariantCmdErr> {
+    run_variant_with_options(
+        doc_src,
+        project_dir,
+        out_dir,
+        stem,
+        BatchExportOptions::from(format),
+    )
+}
+
+pub fn run_variant_with_options(
+    doc_src: &str,
+    project_dir: Option<&Path>,
+    out_dir: &Path,
+    stem: &str,
+    options: BatchExportOptions,
+) -> Result<VariantReport, VariantCmdErr> {
+    options.check().map_err(VariantCmdErr::new)?;
+    let format = options.format;
     // ── 1. Parse the input document ───────────────────────────────────────
     let doc = KdlAdapter
         .parse(doc_src.as_bytes())
@@ -318,7 +336,7 @@ pub fn run_variant_with_format(
 
                 // ── 6e. Encode the scene ─────────────────────────────────────
                 let (image_bytes, mut diagnostics) = match encode_batch_scene(
-                    format,
+                    options,
                     &compile_result.scene,
                     &fonts,
                     &template_assets,

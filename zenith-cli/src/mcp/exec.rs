@@ -282,26 +282,46 @@ fn run_render(args: &Value) -> Result<Value, String> {
             )
         }
     };
+    let raster_scale = match args.get("raster_scale") {
+        None | Some(Value::Null) => None,
+        Some(value) => {
+            if format != "svg" && format != "pdf" {
+                return Err(format!(
+                    "error[cli.invalid_argument]: raster_scale applies only to format 'svg' or 'pdf', got '{format}'. Set format to svg or pdf"
+                ));
+            }
+            Some(
+                commands::render::check_render_scale(
+                    value.as_f64().unwrap_or(f64::NAN),
+                    &value.to_string(),
+                )
+                .map_err(|message| {
+                    format!("error[cli.invalid_argument]: raster_scale: {message}")
+                })?,
+            )
+        }
+    };
     let contact_sheet = flag(args, "contact_sheet");
     if (scale.is_some() || contact_sheet) && format != "png" {
         return Err(format!(
             "error[cli.invalid_argument]: scale and contact_sheet apply only to format 'png', got '{format}'; set format to png"
         ));
     }
-    let png_opts = commands::render::RenderEntryOptions {
+    let render_opts = commands::render::RenderEntryOptions {
         locked,
         subset: true,
         flags: &flags,
         data: None,
         construction_overlay: false,
         scale: scale.unwrap_or(1.0),
+        raster_scale: raster_scale.unwrap_or(1.0),
     };
     let mut image_meta: Option<Value> = None;
 
     let (bytes, ext, mime_diags): (Vec<u8>, &str, Vec<zenith_core::Diagnostic>) = match format {
         "png" if contact_sheet => {
             let art =
-                commands::render::to_contact_sheet(&src, parent, explicit_page, scale, png_opts)
+                commands::render::to_contact_sheet(&src, parent, explicit_page, scale, render_opts)
                     .map_err(|e| e.message)?;
             blocked(&art.diagnostics)?;
             image_meta = Some(json!({
@@ -315,18 +335,18 @@ fn run_render(args: &Value) -> Result<Value, String> {
             (art.png, "png", art.diagnostics)
         }
         "png" => {
-            let art = commands::render::to_png_with_dir_options(&src, parent, page, png_opts)
+            let art = commands::render::to_png_with_dir_options(&src, parent, page, render_opts)
                 .map_err(|e| e.message)?;
             blocked(&art.diagnostics)?;
             image_meta = Some(json!({
                 "width": art.width,
                 "height": art.height,
-                "scale": png_opts.scale,
+                "scale": render_opts.scale,
             }));
             (art.png, "png", art.diagnostics)
         }
         "svg" => {
-            let art = commands::render::to_svg_with_dir_options(&src, parent, page, png_opts)
+            let art = commands::render::to_svg_with_dir_options(&src, parent, page, render_opts)
                 .map_err(|e| e.message)?;
             blocked(&art.diagnostics)?;
             image_meta = Some(
@@ -341,12 +361,10 @@ fn run_render(args: &Value) -> Result<Value, String> {
         "pdf" => {
             let art = match explicit_page {
                 // MCP renders always subset (small PDFs); the full-font knob is a CLI flag.
-                Some(n) => {
-                    commands::render::to_pdf_with_dir(&src, parent, n, locked, true, &flags, None)
+                Some(n) => commands::render::to_pdf_with_dir_options(&src, parent, n, render_opts),
+                None => {
+                    commands::render::to_pdf_all_pages_with_dir_options(&src, parent, render_opts)
                 }
-                None => commands::render::to_pdf_all_pages_with_dir(
-                    &src, parent, locked, true, &flags, None,
-                ),
             }
             .map_err(|e| e.message)?;
             blocked(&art.diagnostics)?;
@@ -370,6 +388,12 @@ fn run_render(args: &Value) -> Result<Value, String> {
             ));
         }
     };
+
+    if let Some(scale) = raster_scale.filter(|scale| *scale != 1.0)
+        && let Some(metadata) = &mut image_meta
+    {
+        insert(metadata, "raster_scale", json!(scale));
+    }
 
     // Optional caller-chosen path, plus a stable per-doc preview file.
     if let Some(out) = opt_str(args, "out") {

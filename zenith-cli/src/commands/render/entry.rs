@@ -115,6 +115,8 @@ pub struct RenderEntryOptions<'a> {
     /// Raster output scale for PNG outputs (`1.0` = page pixels). Each axis
     /// is `max(1, round(page × scale))` pixels. Scene JSON, SVG, and PDF ignore it.
     pub scale: f64,
+    /// Raster fallback resolution for SVG and PDF (`1.0` = page pixels).
+    pub raster_scale: f64,
 }
 
 impl<'a> RenderEntryOptions<'a> {
@@ -130,6 +132,7 @@ impl<'a> RenderEntryOptions<'a> {
             data,
             construction_overlay: false,
             scale: 1.0,
+            raster_scale: 1.0,
         }
     }
 
@@ -141,6 +144,7 @@ impl<'a> RenderEntryOptions<'a> {
             data,
             construction_overlay: false,
             scale: 1.0,
+            raster_scale: 1.0,
         }
     }
 
@@ -157,6 +161,7 @@ impl<'a> RenderEntryOptions<'a> {
             data,
             construction_overlay: false,
             scale: 1.0,
+            raster_scale: 1.0,
         }
     }
 
@@ -169,6 +174,11 @@ impl<'a> RenderEntryOptions<'a> {
     /// Return a copy with raster output `scale` (see [`Self::scale`]).
     pub fn with_scale(mut self, scale: f64) -> Self {
         self.scale = scale;
+        self
+    }
+    /// Return a copy with vector fallback raster resolution.
+    pub fn with_raster_scale(mut self, raster_scale: f64) -> Self {
+        self.raster_scale = raster_scale;
         self
     }
 }

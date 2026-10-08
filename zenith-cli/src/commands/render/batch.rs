@@ -3,7 +3,7 @@
 use crate::config::{CliPolicyFlags, find_local_policy, load_global_policy, merge_policy};
 use std::path::Path;
 use zenith_core::{AssetProvider, Diagnostic, DiagnosticPolicy, Document, FontProvider};
-use zenith_render::{render_png, render_svg_with};
+use zenith_render::{SvgOptions, render_png, render_svg_with_options};
 use zenith_scene::Scene;
 
 /// Output format for merge and variant generation.
@@ -20,6 +20,38 @@ impl BatchFormat {
             Self::Png => "png",
             Self::Svg => "svg",
         }
+    }
+}
+
+/// Output format and vector fallback resolution for batch generation.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct BatchExportOptions {
+    pub format: BatchFormat,
+    pub raster_scale: f64,
+}
+
+impl Default for BatchExportOptions {
+    fn default() -> Self {
+        Self::from(BatchFormat::Png)
+    }
+}
+
+impl From<BatchFormat> for BatchExportOptions {
+    fn from(format: BatchFormat) -> Self {
+        Self {
+            format,
+            raster_scale: 1.0,
+        }
+    }
+}
+
+impl BatchExportOptions {
+    pub(crate) fn check(self) -> Result<(), String> {
+        super::scale::check_render_scale(self.raster_scale, &self.raster_scale.to_string())?;
+        if self.format == BatchFormat::Png && self.raster_scale != 1.0 {
+            return Err("raster_scale requires SVG batch output. Set format to svg".to_owned());
+        }
+        Ok(())
     }
 }
 
@@ -47,14 +79,14 @@ pub(crate) fn load_batch_policy(
 }
 
 pub(crate) fn encode_batch_scene(
-    format: BatchFormat,
+    options: BatchExportOptions,
     scene: &Scene,
     fonts: &dyn FontProvider,
     assets: &dyn AssetProvider,
     page: usize,
     policy: Option<&DiagnosticPolicy>,
 ) -> Result<(Vec<u8>, Vec<Diagnostic>), Vec<Diagnostic>> {
-    match format {
+    match options.format {
         BatchFormat::Png => render_png(scene, fonts, assets)
             .map(|bytes| (bytes, Vec::new()))
             .map_err(|e| {
@@ -66,7 +98,7 @@ pub(crate) fn encode_batch_scene(
                 )]
             }),
         BatchFormat::Svg => {
-            let output = render_svg_with(scene, fonts, assets).map_err(|e| vec![Diagnostic::error("render.svg_failed", format!("SVG export failed on page {page}: {e}. Check page resources and scene commands"), None, None)])?;
+            let output = render_svg_with_options(scene, fonts, assets, SvgOptions { raster_scale: options.raster_scale }).map_err(|e| vec![Diagnostic::error("render.svg_failed", format!("SVG export failed on page {page}: {e}. Check page resources and scene commands"), None, None)])?;
             let diagnostics =
                 super::svg::rasterization_diagnostics(&output.rasterized_regions, page);
             let diagnostics = match policy {

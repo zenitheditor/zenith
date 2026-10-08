@@ -118,7 +118,7 @@ pub enum Command {
     /// Rendering is deterministic (same source + backend → same bytes) and is blocked by hard
     /// diagnostics, so `validate` first. Use `--all-pages <DIR>` for a contact sheet and `--spread
     /// A-B` for facing pages.
-    Render(RenderArgs),
+    Render(Box<RenderArgs>),
 
     /// Apply a transaction to a `.zen` document (dry-run by default).
     ///
@@ -492,6 +492,9 @@ pub struct VariantArgs {
     /// Output image format.
     #[arg(long, value_enum, default_value = "png")]
     pub format: crate::commands::render::BatchFormat,
+    /// Raster fallback resolution for SVG: 0 < F <= 4 (default 1).
+    #[arg(long, value_name = "F", allow_hyphen_values = true)]
+    pub raster_scale: Option<String>,
 }
 
 /// Arguments for `zenith new`.
@@ -873,6 +876,9 @@ pub struct MergeArgs {
     /// Output image format.
     #[arg(long, value_enum, default_value = "png")]
     pub format: crate::commands::render::BatchFormat,
+    /// Raster fallback resolution for SVG: 0 < F <= 4 (default 1).
+    #[arg(long, value_name = "F", allow_hyphen_values = true)]
+    pub raster_scale: Option<String>,
 }
 
 /// Arguments for `zenith history`.

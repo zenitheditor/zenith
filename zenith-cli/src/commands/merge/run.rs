@@ -15,8 +15,9 @@ use zenith_scene::{DocumentPrep, PageCompiler};
 use zenith_tx::{AddAssetMetadata, Op, OpSpan, Transaction, TxStatus, run_transaction};
 
 use crate::commands::render::{
-    BatchFormat, build_asset_provider, build_font_provider, collect_missing_asset_diagnostics,
-    encode_batch_scene, image_sizes, load_batch_policy, resolve_text_sources,
+    BatchExportOptions, BatchFormat, build_asset_provider, build_font_provider,
+    collect_missing_asset_diagnostics, encode_batch_scene, image_sizes, load_batch_policy,
+    resolve_text_sources,
 };
 
 // ── Error type ────────────────────────────────────────────────────────────────
@@ -285,6 +286,26 @@ pub fn run_with_format(
     name_by: Option<&str>,
     format: BatchFormat,
 ) -> Result<MergeReport, MergeError> {
+    run_with_options(
+        doc_src,
+        csv_src,
+        project_dir,
+        out_dir,
+        name_by,
+        BatchExportOptions::from(format),
+    )
+}
+
+pub fn run_with_options(
+    doc_src: &str,
+    csv_src: &str,
+    project_dir: Option<&Path>,
+    out_dir: &Path,
+    name_by: Option<&str>,
+    options: BatchExportOptions,
+) -> Result<MergeReport, MergeError> {
+    options.check().map_err(MergeError::new)?;
+    let format = options.format;
     // ── 1. Parse the template document (once) ─────────────────────────────
     let doc = KdlAdapter
         .parse(doc_src.as_bytes())
@@ -704,7 +725,7 @@ pub fn run_with_format(
 
             // Encode the scene with row-scoped assets.
             let image_result = encode_batch_scene(
-                format,
+                options,
                 &compile_result.scene,
                 &fonts,
                 row_provider,

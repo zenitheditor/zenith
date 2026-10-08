@@ -159,6 +159,7 @@ SVG exports page 1 by default, outlines text, embeds images, and reports raster 
                     "out": { "type": "string", "description": "Optional path to also write the artifact to." },
                     "diagnostics": { "type": "boolean", "description": "Include soft diagnostics (default false)." },
                     "scale": { "type": "number", "exclusiveMinimum": 0, "maximum": 4, "description": "png only: raster scale, 0 < scale <= 4 (default 1). Each side is max(1, round(page_px * scale)); drawn at that scale, not resampled." },
+                    "raster_scale": { "type": "number", "exclusiveMinimum": 0, "maximum": 4, "description": "svg/pdf only: raster fallback resolution, 0 < raster_scale <= 4 (default 1). Vector page dimensions and geometry remain unchanged." },
                     "contact_sheet": { "type": "boolean", "description": "png only: tile every page (or `page`) into one labelled PNG, ceil(sqrt(n)) columns. Without scale, fits 2048 px wide." }
                 },
                 "required": ["doc", "format"]

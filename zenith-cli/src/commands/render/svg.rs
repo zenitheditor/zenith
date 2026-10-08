@@ -14,7 +14,7 @@ use crate::config::CliPolicyFlags;
 use crate::report::ImportFiles;
 use std::path::Path;
 use zenith_core::{BytesAssetProvider, DataContext, Diagnostic};
-use zenith_render::{SvgRasterizedRegion, render_svg_with};
+use zenith_render::{SvgOptions, SvgRasterizedRegion, render_svg_with_options};
 use zenith_scene::{DocumentPrep, PageCompiler};
 
 /// One self-contained RGB SVG with outlined text.
@@ -118,6 +118,7 @@ fn render_pages(
     page: Option<usize>,
     opts: RenderEntryOptions<'_>,
 ) -> Result<SvgPagesArtifact, RenderCmdErr> {
+    super::scale::check_vector_raster_scale(opts.raster_scale)?;
     let ValidatedParts {
         mut doc,
         policy,
@@ -177,8 +178,16 @@ fn render_pages(
     let mut pages = Vec::with_capacity(indices.len());
     for (result, index) in compiled.into_iter().zip(indices) {
         let page = index + 1;
-        let output = render_svg_with(&result.scene, &fonts, &assets).map_err(|e| {
-            let mut all = diagnostics.clone();
+        let output = render_svg_with_options(
+            &result.scene,
+            &fonts,
+            &assets,
+            SvgOptions {
+                raster_scale: opts.raster_scale,
+            },
+        )
+        .map_err(|e| {
+            let mut all = std::mem::take(&mut diagnostics);
             all.push(Diagnostic::error(
                 "render.svg_failed",
                 format!(

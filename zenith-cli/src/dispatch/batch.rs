@@ -13,6 +13,10 @@ use super::output::{create_dir_error, write_error};
 
 pub(super) fn dispatch_merge(args: MergeArgs) -> ExitCode {
     let json = args.json;
+    let options = match batch_options(args.format, args.raster_scale.as_deref()) {
+        Ok(options) => options,
+        Err(error) => return error.emit(json),
+    };
     let doc_src = match read_file(&args.doc) {
         Ok(s) => s,
         Err(e) => return e.emit(json),
@@ -21,13 +25,13 @@ pub(super) fn dispatch_merge(args: MergeArgs) -> ExitCode {
         Ok(s) => s,
         Err(e) => return e.emit(json),
     };
-    let report = match commands::merge::run_with_format(
+    let report = match commands::merge::run_with_options(
         &doc_src,
         &csv_src,
         args.doc.parent(),
         &args.out_dir,
         args.name_by.as_deref(),
-        args.format,
+        options,
     ) {
         Ok(report) => report,
         Err(e) => return CliError::new("merge.setup_failed", e.message, e.exit_code).emit(json),
@@ -74,6 +78,10 @@ pub(super) fn dispatch_merge(args: MergeArgs) -> ExitCode {
 
 pub(super) fn dispatch_variant(args: VariantArgs) -> ExitCode {
     let json = args.json;
+    let options = match batch_options(args.format, args.raster_scale.as_deref()) {
+        Ok(options) => options,
+        Err(error) => return error.emit(json),
+    };
     let doc_src = match read_file(&args.doc) {
         Ok(s) => s,
         Err(e) => return e.emit(json),
@@ -84,12 +92,12 @@ pub(super) fn dispatch_variant(args: VariantArgs) -> ExitCode {
         .file_stem()
         .and_then(|s| s.to_str())
         .unwrap_or("doc");
-    let report = match commands::variant::run_variant_with_format(
+    let report = match commands::variant::run_variant_with_options(
         &doc_src,
         args.doc.parent(),
         &args.out_dir,
         stem,
-        args.format,
+        options,
     ) {
         Ok(report) => report,
         Err(e) => {
@@ -144,4 +152,24 @@ fn write_manifest(path: &Path, manifest_json: &str) -> Result<(), CliError> {
         return Err(create_dir_error(parent, &e));
     }
     std::fs::write(path, manifest_json.as_bytes()).map_err(|e| write_error(path, &e))
+}
+
+fn batch_options(
+    format: commands::render::BatchFormat,
+    raw: Option<&str>,
+) -> Result<commands::render::BatchExportOptions, CliError> {
+    if raw.is_some() && format != commands::render::BatchFormat::Svg {
+        return Err(CliError::usage(
+            "error: --raster-scale requires --format svg",
+        ));
+    }
+    let raster_scale = raw
+        .map(|raw| commands::render::parse_scale_flag(raw, "--raster-scale"))
+        .transpose()
+        .map_err(CliError::usage)?
+        .unwrap_or(1.0);
+    Ok(commands::render::BatchExportOptions {
+        format,
+        raster_scale,
+    })
 }

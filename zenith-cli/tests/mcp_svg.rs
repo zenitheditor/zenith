@@ -1,3 +1,6 @@
+#[path = "common/vector_capture.rs"]
+mod vector_capture;
+
 use std::fs;
 use std::io::Write;
 use std::path::Path;
@@ -155,5 +158,173 @@ fn svg_mcp_fallback_policy_blocks_resource_and_output_creation() {
             .expect("content")
             .iter()
             .all(|entry| entry["type"] != "resource_link")
+    );
+}
+
+#[test]
+fn mcp_vector_raster_scale_matches_cli_captures_and_preserves_geometry() {
+    let directory = tempfile::tempdir().unwrap();
+    let store = tempfile::tempdir().unwrap();
+    let doc = directory.path().join("doc.zen");
+    let shadow =
+        fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("../examples/shadow.zen"))
+            .unwrap();
+    fs::write(&doc, shadow).unwrap();
+    let normal = directory.path().join("normal.svg");
+    let scaled = directory.path().join("scaled.svg");
+    let pdf = directory.path().join("scaled.pdf");
+    let responses = session(
+        store.path(),
+        &[
+            render(1, json!({"doc":doc,"format":"svg","out":normal})),
+            render(
+                2,
+                json!({"doc":doc,"format":"svg","out":scaled,"raster_scale":2,"diagnostics":true}),
+            ),
+            render(
+                3,
+                json!({"doc":doc,"format":"pdf","out":pdf,"raster_scale":2}),
+            ),
+        ],
+    );
+    for response in &responses {
+        assert_eq!(response["result"]["isError"], false, "{response}");
+    }
+    assert!(
+        responses[0]["result"]["structuredContent"]["image"]
+            .get("raster_scale")
+            .is_none()
+    );
+    for response in &responses[1..] {
+        assert_eq!(
+            response["result"]["structuredContent"]["image"]["raster_scale"],
+            2.0
+        );
+        assert!(
+            !response["result"]["structuredContent"]["image"]["rasterized_regions"]
+                .as_array()
+                .unwrap()
+                .is_empty()
+        );
+    }
+    let first = fs::read_to_string(&normal).unwrap();
+    let second = fs::read_to_string(&scaled).unwrap();
+    assert_eq!(
+        vector_capture::svg_capture_dimensions(&second),
+        vector_capture::svg_capture_dimensions(&first)
+            .iter()
+            .map(|&(w, h)| (w * 2, h * 2))
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        vector_capture::svg_without_capture_data(&first),
+        vector_capture::svg_without_capture_data(&second)
+    );
+    let output = Command::new(env!("CARGO_BIN_EXE_zenith"))
+        .args([
+            "render",
+            doc.to_str().unwrap(),
+            "--svg",
+            directory.path().join("cli.svg").to_str().unwrap(),
+            "--pdf",
+            directory.path().join("cli.pdf").to_str().unwrap(),
+            "--raster-scale",
+            "2",
+            "--json",
+        ])
+        .env("ZENITH_DATA_DIR", store.path())
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+    assert_eq!(
+        fs::read(scaled).unwrap(),
+        fs::read(directory.path().join("cli.svg")).unwrap()
+    );
+    assert_eq!(
+        fs::read(pdf).unwrap(),
+        fs::read(directory.path().join("cli.pdf")).unwrap()
+    );
+    fs::write(
+        directory.path().join(".zenith.kdl"),
+        "diagnostics { deny \"render.svg_rasterized\"; deny \"render.pdf_rasterized\"; }",
+    )
+    .unwrap();
+    for format in ["svg", "pdf"] {
+        let out = directory.path().join(format!("blocked.{format}"));
+        let response = session(
+            store.path(),
+            &[render(
+                1,
+                json!({"doc":doc,"format":format,"out":out,"raster_scale":2}),
+            )],
+        );
+        assert_eq!(response[0]["result"]["isError"], true, "{response:?}");
+        assert!(!out.exists());
+        assert!(
+            response[0]["result"]["structuredContent"]
+                .get("resource")
+                .is_none()
+        );
+    }
+}
+
+#[test]
+fn mcp_rejects_invalid_and_nonvector_raster_scale_without_writes() {
+    let directory = tempfile::tempdir().unwrap();
+    let store = tempfile::tempdir().unwrap();
+    let doc = directory.path().join("doc.zen");
+    fs::write(&doc, DOC).unwrap();
+    for format in ["svg", "pdf", "png", "scene"] {
+        let bad = if format == "svg" || format == "pdf" {
+            vec![json!(0), json!(-1), json!(4.01), json!("NaN"), json!("inf")]
+        } else {
+            vec![json!(1), json!(2)]
+        };
+        for scale in bad {
+            let out = directory.path().join(format!("out.{format}"));
+            let responses = session(
+                store.path(),
+                &[render(
+                    1,
+                    json!({"doc":doc,"format":format,"out":out,"raster_scale":scale}),
+                )],
+            );
+            assert_eq!(responses[0]["result"]["isError"], true, "{responses:?}");
+            assert!(!out.exists());
+            assert!(
+                responses[0]["result"]["structuredContent"]
+                    .get("resource")
+                    .is_none()
+            );
+        }
+    }
+}
+
+#[test]
+fn mcp_render_schema_exposes_vector_raster_scale_bounds() {
+    let store = tempfile::tempdir().unwrap();
+    let responses = session(
+        store.path(),
+        &[json!({"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}})],
+    );
+    let tool = responses[0]["result"]["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|tool| tool["name"] == "zenith_render")
+        .unwrap();
+    let scale = &tool["inputSchema"]["properties"]["raster_scale"];
+    assert_eq!(scale["type"], "number");
+    assert_eq!(scale["exclusiveMinimum"], 0);
+    assert_eq!(scale["maximum"], 4);
+    assert!(
+        scale["description"]
+            .as_str()
+            .unwrap()
+            .contains("svg/pdf only")
     );
 }

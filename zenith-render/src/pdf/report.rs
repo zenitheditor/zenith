@@ -6,6 +6,23 @@ use std::{collections::BTreeMap, ops::Range};
 use zenith_core::{AssetKind, AssetProvider, FontProvider};
 use zenith_scene::{Scene, SceneCommand};
 
+/// Strict PDF export options. Raster scale affects captures only.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct PdfExportOptions {
+    /// Subset embedded selectable fonts.
+    pub subset: bool,
+    /// Raster fallback resolution multiplier in the interval (0, 4].
+    pub raster_scale: f64,
+}
+impl Default for PdfExportOptions {
+    fn default() -> Self {
+        Self {
+            subset: true,
+            raster_scale: 1.0,
+        }
+    }
+}
+
 /// Deterministic PDF bytes and the command ranges rendered as raster images.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PdfOutput {
@@ -71,6 +88,35 @@ pub fn render_pdf_multi_report(
     assets: &dyn AssetProvider,
     options: PdfOptions,
 ) -> Result<PdfOutput, RenderError> {
+    render_pdf_multi_report_with_options(
+        scenes,
+        fonts,
+        assets,
+        PdfExportOptions {
+            subset: options.subset,
+            raster_scale: 1.0,
+        },
+    )
+}
+
+/// Render one PDF page with explicit raster fallback resolution.
+pub fn render_pdf_report_with_options(
+    scene: &Scene,
+    fonts: &dyn FontProvider,
+    assets: &dyn AssetProvider,
+    options: PdfExportOptions,
+) -> Result<PdfOutput, RenderError> {
+    render_pdf_multi_report_with_options(std::slice::from_ref(scene), fonts, assets, options)
+}
+
+/// Render ordered PDF pages with explicit raster fallback resolution.
+pub fn render_pdf_multi_report_with_options(
+    scenes: &[Scene],
+    fonts: &dyn FontProvider,
+    assets: &dyn AssetProvider,
+    options: PdfExportOptions,
+) -> Result<PdfOutput, RenderError> {
+    crate::raster_capture::check_scale(options.raster_scale)?;
     let mut checked_assets = BTreeMap::new();
     let mut plans = Vec::with_capacity(scenes.len());
     let mut rasterized_regions = Vec::new();
@@ -83,7 +129,7 @@ pub fn render_pdf_multi_report(
                 "PDF page {page} malformed scopes: {error:?}; balance scene scopes"
             ))
         })?;
-        check_capture_assets(scene, &plan, &checked_assets, 1.0)
+        check_capture_assets(scene, &plan, &checked_assets, options.raster_scale)
             .map_err(|error| RenderError::new(format!("PDF page {page}: {error}")))?;
         rasterized_regions.extend(plan.iter().map(|region| PdfRasterizedRegion {
             page,
@@ -94,7 +140,16 @@ pub fn render_pdf_multi_report(
         plans.push(plan);
     }
     Ok(PdfOutput {
-        bytes: assemble(scenes, fonts, assets, options, Some(&plans))?,
+        bytes: assemble(
+            scenes,
+            fonts,
+            assets,
+            PdfOptions {
+                subset: options.subset,
+            },
+            Some(&plans),
+            options.raster_scale,
+        )?,
         rasterized_regions,
     })
 }
@@ -294,31 +349,13 @@ fn check_capture_assets(
             } = command
                 && let Some(Some((svw, svh))) = checked.get(&asset_key(asset_id, *svg_style))
             {
-                // Match tiny-skia's destination-resolution SVG intermediate.
-                let scale = ((*w / svw).max(*h / svh) * device_scale).clamp(0.01, 16.0);
-                let width = (svw * scale).ceil();
-                let height = (svh * scale).ceil();
-                let dimensions = |width: f64, height: f64| {
-                    if !width.is_finite()
-                        || !height.is_finite()
-                        || width < 1.0
-                        || height < 1.0
-                        || width > f64::from(u32::MAX)
-                        || height > f64::from(u32::MAX)
-                    {
-                        return None;
-                    }
-                    let row = i32::try_from(width as u32).ok()?.checked_mul(4)?;
-                    (row as usize)
-                        .checked_mul(height as usize)
-                        .filter(|bytes| *bytes <= isize::MAX as usize)
-                };
-                if dimensions(width, height).is_none() {
-                    return Err(RenderError::new(format!(
-                        "commands {}..{} capture command {index} SVG asset {asset_id} requires unsupported intermediate dimensions {width}x{height}; reduce SVG intrinsic dimensions",
-                        region.range.start, region.range.end
-                    )));
-                }
+                crate::raster_capture::check_svg_size((*svw, *svh), (*w, *h), device_scale)
+                    .map_err(|error| {
+                        RenderError::new(format!(
+                            "commands {}..{} capture command {index} SVG asset {asset_id}: {error}",
+                            region.range.start, region.range.end
+                        ))
+                    })?;
             }
         }
     }

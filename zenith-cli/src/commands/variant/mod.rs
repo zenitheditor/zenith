@@ -11,5 +11,5 @@ mod run;
 pub use engine::{VariantExpansion, VariantOutcome, VariantResult, expand_variants};
 pub use run::{
     VariantCmdErr, VariantOutputs, VariantReport, VariantResultRecord, build_manifest, run_variant,
-    run_variant_with_format, to_json_output,
+    run_variant_with_format, run_variant_with_options, to_json_output,
 };

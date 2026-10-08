@@ -11,5 +11,6 @@ mod text;
 mod writer;
 
 pub use document::{
-    SvgOutput, SvgRasterizationReason, SvgRasterizedRegion, render_svg, render_svg_with,
+    SvgOptions, SvgOutput, SvgRasterizationReason, SvgRasterizedRegion, render_svg,
+    render_svg_with, render_svg_with_options,
 };

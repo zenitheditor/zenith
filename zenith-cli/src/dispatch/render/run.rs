@@ -48,6 +48,25 @@ pub(in crate::dispatch) fn dispatch_render(args: RenderArgs) -> ExitCode {
         )
         .emit(json);
     }
+    let raster_scale = match args
+        .raster_scale
+        .as_deref()
+        .map(|raw| commands::render::parse_scale_flag(raw, "--raster-scale"))
+        .transpose()
+    {
+        Ok(scale) => scale.unwrap_or(1.0),
+        Err(message) => return CliError::usage(message).emit(json),
+    };
+    if args.raster_scale.is_some()
+        && args.pdf.is_none()
+        && args.svg.is_none()
+        && args.all_pages_svg.is_none()
+    {
+        return CliError::usage(
+            "error: --raster-scale requires --pdf <OUT>, --svg <OUT>, or --all-pages-svg <DIR>",
+        )
+        .emit(json);
+    }
     if args.spread.is_some() && args.png.is_none() {
         return CliError::usage("error: --spread requires --png <OUT>").emit(json);
     }
@@ -93,6 +112,7 @@ pub(in crate::dispatch) fn dispatch_render(args: RenderArgs) -> ExitCode {
         flags: &flags,
         data: data_ctx.as_ref(),
         scale,
+        raster_scale,
         pending: Vec::new(),
         directories: Vec::new(),
         messages: Vec::new(),
@@ -110,10 +130,7 @@ pub(in crate::dispatch) fn dispatch_render(args: RenderArgs) -> ExitCode {
 
 /// Parse a `--scale` value: a finite number with `0 < F <= 4`.
 fn parse_scale(raw: &str) -> Result<f64, String> {
-    // An unparsable value checks as NaN, so it gets the same message.
-    let parsed = raw.trim().parse::<f64>().unwrap_or(f64::NAN);
-    commands::render::check_render_scale(parsed, raw)
-        .map_err(|msg| format!("error: --scale: {msg}"))
+    commands::render::parse_scale_flag(raw, "--scale")
 }
 
 /// Why a render run stopped.
@@ -143,6 +160,7 @@ pub(super) struct RenderRun<'a> {
     pub(super) data: Option<&'a DataContext>,
     /// The checked `--scale`, when given.
     pub(super) scale: Option<f64>,
+    pub(super) raster_scale: f64,
     pub(super) directories: Vec<std::path::PathBuf>,
     pub(super) messages: Vec<String>,
     pub(super) pending: Vec<(std::path::PathBuf, Vec<u8>)>,
@@ -171,6 +189,7 @@ impl RenderRun<'_> {
             data: self.data,
             construction_overlay: self.args.construction_overlay,
             scale: self.output_scale(),
+            raster_scale: self.raster_scale,
         }
     }
 
@@ -266,6 +285,7 @@ impl RenderRun<'_> {
                         command_start: region.command_start,
                         command_end: region.command_end,
                         reason: format!("{:?}", region.reason),
+                        raster_scale: (self.raster_scale != 1.0).then_some(self.raster_scale),
                     }
                 }));
             self.write(

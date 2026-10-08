@@ -25,7 +25,7 @@
 
 mod assets;
 mod batch;
-pub use batch::BatchFormat;
+pub use batch::{BatchExportOptions, BatchFormat};
 pub(crate) use batch::{encode_batch_scene, load_batch_policy};
 mod check;
 pub mod data_input;
@@ -53,6 +53,7 @@ pub use entry::{
     SpreadRenderOpts, to_png, to_png_all_pages, to_png_all_pages_options, to_png_spread,
     to_png_with_dir, to_png_with_dir_options, to_scene_json, to_scene_json_with_options,
 };
+pub(crate) use scale::parse_scale_flag;
 pub use scale::{MAX_RENDER_SCALE, check_render_scale};
 pub use sheet::{
     ContactSheetArtifact, SHEET_AUTO_MAX_WIDTH_PX, SHEET_GUTTER_PX, SHEET_LABEL_BAND_PX,

@@ -2,7 +2,7 @@
 
 use std::path::Path;
 use zenith_core::{BytesAssetProvider, DataContext, Diagnostic};
-use zenith_render::{PdfOptions, PdfRasterizedRegion, render_pdf_multi_report};
+use zenith_render::{PdfExportOptions, PdfRasterizedRegion, render_pdf_multi_report_with_options};
 use zenith_scene::{DocumentPrep, PageCompiler};
 
 use super::assets::{
@@ -84,6 +84,7 @@ fn render_pages(
     page: Option<usize>,
     opts: RenderEntryOptions<'_>,
 ) -> Result<PdfArtifact, RenderCmdErr> {
+    super::scale::check_vector_raster_scale(opts.raster_scale)?;
     let ValidatedParts {
         mut doc,
         policy,
@@ -138,12 +139,13 @@ fn render_pages(
     if Diagnostic::has_errors(&diagnostics) {
         return Err(RenderCmdErr::blocked(diagnostics, 2).with_import_files(import_files));
     }
-    let mut output = render_pdf_multi_report(
+    let mut output = render_pdf_multi_report_with_options(
         &scenes,
         &fonts,
         &assets,
-        PdfOptions {
+        PdfExportOptions {
             subset: opts.subset,
+            raster_scale: opts.raster_scale,
         },
     )
     .map_err(|e| {

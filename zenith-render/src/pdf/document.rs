@@ -97,7 +97,7 @@ pub fn render_pdf_multi_with(
     assets: &dyn AssetProvider,
     options: PdfOptions,
 ) -> Vec<u8> {
-    assemble(scenes, fonts, assets, options, None).unwrap_or_default()
+    assemble(scenes, fonts, assets, options, None, 1.0).unwrap_or_default()
 }
 
 pub(super) fn assemble(
@@ -106,6 +106,7 @@ pub(super) fn assemble(
     assets: &dyn AssetProvider,
     options: PdfOptions,
     plans: Option<&[Vec<super::report::PlannedRegion>]>,
+    raster_scale: f64,
 ) -> Result<Vec<u8>, crate::RenderError> {
     let mut pdf = Pdf::new();
 
@@ -132,9 +133,9 @@ pub(super) fn assemble(
             let regions = plans
                 .get(index)
                 .ok_or_else(|| crate::RenderError::new("missing PDF page capture plan"))?;
-            translate_strict(scene, fonts, assets, &font_plan, regions).map_err(|error| {
-                crate::RenderError::new(format!("PDF page {}: {error}", index + 1))
-            })?
+            translate_strict(scene, fonts, assets, &font_plan, regions, raster_scale).map_err(
+                |error| crate::RenderError::new(format!("PDF page {}: {error}", index + 1)),
+            )?
         } else {
             translate(scene, fonts, assets, &font_plan)
         };
