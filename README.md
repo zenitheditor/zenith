@@ -544,7 +544,7 @@ juggling paths. The full author loop is exposed — `zenith_schema`, `zenith_val
 | `out` | Optional protected file write alongside the artifact resource link. |
 | `diagnostics` | Includes soft diagnostics. Fallback reports remain visible when false. |
 
-MCP `zenith_merge` exports PNG only. There is no MCP variant tool. Use CLI merge and variant for SVG batches.
+MCP `zenith_merge` supports `format: png|svg`, with PNG as the default. SVG accepts finite `raster_scale` values within `0 < F <= 4`, default 1. Document, local, and global batch policy apply. Structured responses retain committed paths and partial rows. Manifest write errors retain row counts and mark the tool result as an error. There is no MCP variant tool.
 
 Run it over stdio (the default transport):
 

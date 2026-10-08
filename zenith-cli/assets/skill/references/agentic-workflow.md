@@ -79,7 +79,7 @@ Prefer the CLI when it can run. Use `zenith mcp` for remote, CI, sandboxed, or h
 | `workspace finalize` / `bundle` / `unbundle` | `zenith_workspace_finalize` |
 | `merge` / `theme new` | `zenith_merge` / `zenith_theme_new` |
 
-Render parameters and fallback contracts: `export.md`. PDF defaults to every page. SVG defaults to page 1. Fallback diagnostics remain visible with `diagnostics=false`. MCP merge exports PNG only. Use CLI batch commands for SVG. There is no MCP variant tool.
+Render parameters and fallback contracts: `export.md`. PDF defaults to every page. SVG defaults to page 1. Fallback diagnostics remain visible with `diagnostics=false`. MCP merge exports PNG by default or SVG with `format: svg`. SVG accepts `raster_scale`. Batch policy and partial output contracts match CLI merge. Structured reports retain committed paths after row or manifest errors. There is no MCP variant tool.
 
 ## Not implemented
 

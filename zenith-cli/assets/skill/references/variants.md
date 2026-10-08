@@ -96,6 +96,8 @@ zenith merge --help
 zenith merge card.zen people.csv --out-dir out/ --name-by name --format svg --raster-scale 2 --manifest run.json --json
 ```
 
-CLI merge supports `--format png|svg`. PNG is the default. `--raster-scale` requires SVG output. MCP `zenith_merge` remains PNG only. No MCP variant tool exists.
+CLI merge supports `--format png|svg`. PNG is the default. `--raster-scale` requires SVG output. MCP `zenith_merge` also supports `format: png|svg`, with PNG as the default. SVG accepts finite `raster_scale` within `0 < F <= 4`, default 1. No MCP variant tool exists.
 
 Batch commands apply document, local, and global diagnostic policy. They have no `--deny` flags. Denied fallback writes nothing for the affected row or variant. I/O errors can leave earlier committed files. Reports and manifests retain those paths with failed status. Read `export.md` before production export.
+
+MCP merge applies the same batch policy. Its structured report retains committed paths for partial rows. Manifest write errors retain row counts and mark the tool result as an error. Read `export.md` for MCP parameters and a tool call.

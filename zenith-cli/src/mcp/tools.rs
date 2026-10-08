@@ -177,16 +177,18 @@ changed and its content hash.",
         },
         Tool {
             name: "zenith_merge",
-            description: "Mail-merge a .zen template with a CSV, writing one PNG per row. Mark \
+            description: "Mail-merge a .zen template with CSV data, writing PNG or SVG pages per row. Mark \
 variable nodes with role=\"data.<column>\". Use for localized/personalized/batch variants.",
             schema: json!({
                 "type": "object",
                 "properties": {
                     "doc": doc_arg(),
                     "data": { "type": "string", "description": "CSV data file path." },
-                    "out_dir": { "type": "string", "description": "Directory for the output PNGs." },
+                    "out_dir": { "type": "string", "description": "Directory for committed row pages." },
                     "name_by": { "type": "string", "description": "CSV column to name files by." },
-                    "manifest": { "type": "string", "description": "Write a reproducibility manifest here." }
+                    "manifest": { "type": "string", "description": "Write a reproducibility manifest here." },
+                    "format": { "type": "string", "enum": ["png", "svg"], "default": "png", "description": "Output image format (default png)." },
+                    "raster_scale": { "type": "number", "exclusiveMinimum": 0, "maximum": 4, "description": "svg only: raster fallback resolution, 0 < raster_scale <= 4 (default 1). Vector geometry remains unchanged." }
                 },
                 "required": ["doc", "data", "out_dir"]
             }),

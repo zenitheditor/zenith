@@ -79,4 +79,40 @@ Inspect committed paths after an I/O error. A blocked status does not imply zero
 | `out` | Optional protected filesystem write, alongside the artifact resource link. |
 | `diagnostics` | Includes soft diagnostics when true. Fallback diagnostics remain visible regardless. |
 
-`zenith_render` returns resource links instead of inline artifact bytes. Read them through `resources/read`. A failed `out` write reports the write error. `zenith_merge` exports PNG only. There is no MCP variant tool. Use CLI commands for batch SVG.
+`zenith_render` returns resource links instead of inline artifact bytes. Read them through `resources/read`. A failed `out` write reports the write error. There is no MCP variant tool. Use CLI variant for size batches.
+
+## MCP merge
+
+| Parameter | Contract |
+| --- | --- |
+| `doc` | Required template path or document identity. |
+| `data` | Required CSV path. |
+| `out_dir` | Required directory for committed row pages. |
+| `format` | `png` or `svg`. Defaults to `png`. |
+| `raster_scale` | SVG only. Finite `0 < F <= 4`, default 1. |
+| `name_by` | Optional CSV column for output names. |
+| `manifest` | Optional protected manifest write. |
+
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/call",
+  "params": {
+    "name": "zenith_merge",
+    "arguments": {
+      "doc": "card.zen",
+      "data": "people.csv",
+      "out_dir": "out/",
+      "format": "svg",
+      "raster_scale": 2,
+      "name_by": "name",
+      "manifest": "out/run.json"
+    }
+  }
+}
+```
+
+MCP merge applies the same document, local, and global batch policy as CLI merge. PNG rejects `raster_scale`, including an explicit value of 1. Denied fallback prevents writes for the affected row.
+
+Structured responses include `total_rows`, `written`, `failed`, `files_written`, `outputs`, and `rows`. Partial rows retain committed paths with failed status. `outputs` lists committed paths including `out_dir`. A manifest write error adds `io.write_failed` and marks the tool result as an error. Row counts and committed paths remain available. Other successful files remain. There is no batch rollback.

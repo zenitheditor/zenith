@@ -6,6 +6,8 @@
 //! pure command functions, writes any outputs, and returns a [`ToolResult`]
 //! carrying a trimmed `structuredContent` object (never raw human stdout).
 
+mod merge;
+
 use std::path::Path;
 
 use serde_json::{Value, json};
@@ -31,7 +33,7 @@ pub fn call(name: &str, args: &Value) -> ToolResult {
         "zenith_tx" => run_tx(args),
         "zenith_fix" => run_fix(args),
         "zenith_render" => run_render(args),
-        "zenith_merge" => run_merge(args),
+        "zenith_merge" => return merge::call(args),
         "zenith_theme_new" => run_theme_new(args),
         "zenith_workspace_scratch" => run_workspace_scratch(args),
         "zenith_workspace_candidate" => run_workspace_candidate(args),
@@ -441,47 +443,6 @@ fn run_render(args: &Value) -> Result<Value, String> {
 }
 
 // ── Authoring tools ───────────────────────────────────────────────────────────
-
-fn run_merge(args: &Value) -> Result<Value, String> {
-    let loc = doc_ref::locate(req_str(args, "doc")?)?;
-    let data = req_str(args, "data")?;
-    let out_dir = req_str(args, "out_dir")?;
-    let name_by = opt_str(args, "name_by");
-    let doc_src = read(&loc.path)?;
-    let csv_src = read(Path::new(data))?;
-
-    let report = commands::merge::run(
-        &doc_src,
-        &csv_src,
-        loc.path.parent(),
-        Path::new(out_dir),
-        name_by,
-    )
-    .map_err(|e| e.message)?;
-
-    if let Some(manifest) = opt_str(args, "manifest") {
-        let m = commands::merge::build_manifest(&doc_src, &csv_src, name_by, &report);
-        let txt = serde_json::to_string_pretty(&m).map_err(|e| e.to_string())?;
-        std::fs::write(manifest, txt).map_err(|e| format!("error writing '{manifest}': {e}"))?;
-    }
-
-    let failures: Vec<Value> = report
-        .rows
-        .iter()
-        .filter_map(|r| {
-            r.failure
-                .as_ref()
-                .map(|f| json!({ "row": r.row + 1, "error": f }))
-        })
-        .collect();
-    let written = report.rows.iter().filter(|r| r.failure.is_none()).count();
-    Ok(json!({
-        "total_rows": report.rows.len(),
-        "written": written,
-        "failed": failures.len(),
-        "failures": failures,
-    }))
-}
 
 fn run_theme_new(args: &Value) -> Result<Value, String> {
     let name = req_str(args, "name")?;
