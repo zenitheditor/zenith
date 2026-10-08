@@ -50,6 +50,8 @@ mod raster_embed;
 mod svg;
 
 #[cfg(test)]
+mod stroke_tests;
+#[cfg(test)]
 mod tests;
 
 pub use document::{

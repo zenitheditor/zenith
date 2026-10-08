@@ -166,3 +166,21 @@ pub(in crate::pdf::content) fn set_miter_limit(
 pub(in crate::pdf::content) fn rect_ok(x: f64, y: f64, w: f64, h: f64) -> bool {
     finite(x) && finite(y) && finite(w) && finite(h) && w > 0.0 && h > 0.0
 }
+
+/// Match raster dash intervals after conversion to scene float precision.
+pub(in crate::pdf::content) fn set_dash(
+    content: &mut Content,
+    dash: Option<f64>,
+    gap: Option<f64>,
+) {
+    let Some(dash) = dash else {
+        return;
+    };
+    if dash <= 0.0 {
+        return;
+    }
+    let intervals = [dash as f32, gap.unwrap_or(dash).max(0.0) as f32];
+    if tiny_skia::StrokeDash::new(intervals.to_vec(), 0.0).is_some() {
+        content.set_dash_pattern(intervals, 0.0);
+    }
+}

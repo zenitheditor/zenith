@@ -10,8 +10,8 @@ use zenith_scene::{
 
 use crate::pdf::color;
 use crate::pdf::content::draw::{
-    apply_alpha, apply_fill_rule, fill_region, finite, rect_ok, set_line_cap, set_line_join,
-    set_miter_limit,
+    apply_alpha, apply_fill_rule, fill_region, finite, rect_ok, set_dash, set_line_cap,
+    set_line_join, set_miter_limit,
 };
 use crate::pdf::content::resources::{ALPHA_PREFIX, IMAGE_PREFIX, PageResources, name};
 use crate::pdf::font::FontPlan;
@@ -201,8 +201,9 @@ pub(in crate::pdf) fn emit_command(
             h,
             color,
             stroke_width,
-            // PDF v0 renders solid strokes only; dash params are intentionally ignored here.
-            ..
+            stroke_dash,
+            stroke_gap,
+            stroke_linecap,
         } => {
             if !rect_ok(*x, *y, *w, *h) || !finite(*stroke_width) {
                 return;
@@ -211,6 +212,10 @@ pub(in crate::pdf) fn emit_command(
             apply_alpha(content, res, color);
             color::set_stroke(content, color);
             content.set_line_width(*stroke_width as f32);
+            set_dash(content, *stroke_dash, *stroke_gap);
+            if stroke_linecap.is_some() {
+                set_line_cap(content, *stroke_linecap);
+            }
             content.rect(*x as f32, *y as f32, *w as f32, *h as f32);
             content.stroke();
             content.restore_state();
@@ -251,8 +256,9 @@ pub(in crate::pdf) fn emit_command(
             radii,
             color,
             stroke_width,
-            // PDF v0 renders solid strokes only; dash params are intentionally ignored here.
-            ..
+            stroke_dash,
+            stroke_gap,
+            stroke_linecap,
         } => {
             if !rect_ok(*x, *y, *w, *h) || !finite(*radius) || !finite(*stroke_width) {
                 return;
@@ -262,6 +268,10 @@ pub(in crate::pdf) fn emit_command(
             apply_alpha(content, res, color);
             color::set_stroke(content, color);
             content.set_line_width(*stroke_width as f32);
+            set_dash(content, *stroke_dash, *stroke_gap);
+            if stroke_linecap.is_some() {
+                set_line_cap(content, *stroke_linecap);
+            }
             rounded_rect_path(content, *x, *y, *w, *h, corner_radii);
             content.stroke();
             content.restore_state();
@@ -301,8 +311,9 @@ pub(in crate::pdf) fn emit_command(
             ry,
             color,
             stroke_width,
-            // PDF v0 renders solid strokes only; dash params are intentionally ignored here.
-            ..
+            stroke_dash,
+            stroke_gap,
+            stroke_linecap,
         } => {
             if !rect_ok(*x, *y, *w, *h) || !finite(*stroke_width) {
                 return;
@@ -311,6 +322,10 @@ pub(in crate::pdf) fn emit_command(
             apply_alpha(content, res, color);
             color::set_stroke(content, color);
             content.set_line_width(*stroke_width as f32);
+            set_dash(content, *stroke_dash, *stroke_gap);
+            if stroke_linecap.is_some() {
+                set_line_cap(content, *stroke_linecap);
+            }
             ellipse_path(content, *x, *y, *w, *h, *rx, *ry);
             content.stroke();
             content.restore_state();
@@ -323,8 +338,9 @@ pub(in crate::pdf) fn emit_command(
             y2,
             color,
             stroke_width,
-            // PDF v0 renders solid strokes only; dash params are intentionally ignored here.
-            ..
+            stroke_dash,
+            stroke_gap,
+            stroke_linecap,
         } => {
             if !finite(*x1)
                 || !finite(*y1)
@@ -338,6 +354,10 @@ pub(in crate::pdf) fn emit_command(
             apply_alpha(content, res, color);
             color::set_stroke(content, color);
             content.set_line_width(*stroke_width as f32);
+            set_dash(content, *stroke_dash, *stroke_gap);
+            if stroke_linecap.is_some() {
+                set_line_cap(content, *stroke_linecap);
+            }
             content.move_to(*x1 as f32, *y1 as f32);
             content.line_to(*x2 as f32, *y2 as f32);
             content.stroke();
@@ -518,11 +538,7 @@ pub(in crate::pdf) fn emit_command(
                     }
                     StrokeAlign::Center => {}
                 }
-                let stroke_width = if aligned {
-                    *stroke_width * 2.0
-                } else {
-                    *stroke_width
-                };
+                let stroke_width = *stroke_width * 2.0;
                 if !stroke_width.is_finite() || stroke_width > f64::from(f32::MAX) {
                     content.restore_state();
                     return;
@@ -566,10 +582,8 @@ pub(in crate::pdf) fn emit_command(
             font_id,
             font_size,
             color,
-            // v0: glyph stroke is fill-only in PDF output; stroke_color/stroke_width
-            // are intentionally ignored here.
-            stroke_color: _,
-            stroke_width: _,
+            stroke_color,
+            stroke_width,
             link,
             selectable,
             source_node_id: _,
@@ -586,6 +600,8 @@ pub(in crate::pdf) fn emit_command(
                     font_id,
                     font_size: *font_size,
                     color,
+                    stroke_color: stroke_color.as_ref(),
+                    stroke_width: *stroke_width,
                     link: link.as_deref(),
                     selectable: *selectable,
                     glyphs,
