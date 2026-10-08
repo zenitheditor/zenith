@@ -42,18 +42,7 @@ pub(super) fn embed_strict(
     raster_scale: f64,
 ) -> Result<(), crate::RenderError> {
     let (pw, ph) = page;
-    let (width, height) = crate::scaled_size(pw, ph, raster_scale)?;
-    if [
-        f64::from(width) / raster_scale,
-        f64::from(height) / raster_scale,
-    ]
-    .iter()
-    .any(|value| !value.is_finite() || *value > f64::from(f32::MAX))
-    {
-        return Err(crate::RenderError::new(format!(
-            "PDF raster capture placement exceeds supported coordinates at scale {raster_scale}; increase raster capture scale"
-        )));
-    }
+    crate::raster_capture::check_capture(page, raster_scale)?;
     let mut sub_scene = Scene::new(pw, ph);
     sub_scene.commands = sub_commands.to_vec();
     let img = crate::render::render_image_scaled(&sub_scene, raster_scale, fonts, assets)?;

@@ -27,9 +27,15 @@ pub(crate) fn crop_raster_image(decoded: Pixmap, crop: Option<&SrcRect>) -> Opti
     let Some(sr) = crop else {
         return Some(decoded);
     };
+    let rect = crop_raster_rect((decoded.width(), decoded.height()), sr)?;
+    decoded.as_ref().clone_rect(rect)
+}
+
+/// Resolve effective crop dimensions without copying raster pixels.
+pub(crate) fn crop_raster_rect(dimensions: (u32, u32), sr: &SrcRect) -> Option<IntRect> {
     let (rx, ry, rw, rh) = (sr.x, sr.y, sr.w, sr.h);
-    let src_w = decoded.width() as f64;
-    let src_h = decoded.height() as f64;
+    let src_w = dimensions.0 as f64;
+    let src_h = dimensions.1 as f64;
     let cx = rx.max(0.0).min(src_w) as i32;
     let cy = ry.max(0.0).min(src_h) as i32;
     let cx2 = (rx + rw).max(0.0).min(src_w) as i32;
@@ -39,8 +45,7 @@ pub(crate) fn crop_raster_image(decoded: Pixmap, crop: Option<&SrcRect>) -> Opti
     if cw == 0 || ch == 0 {
         return None;
     }
-    let rect = IntRect::from_xywh(cx, cy, cw, ch)?;
-    decoded.as_ref().clone_rect(rect)
+    IntRect::from_xywh(cx, cy, cw, ch)
 }
 
 /// Decode a JPEG into an opaque premultiplied `Pixmap`. Handles RGB24 and L8

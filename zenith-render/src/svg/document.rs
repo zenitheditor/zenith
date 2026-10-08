@@ -90,6 +90,9 @@ pub fn render_svg_with_options(
         )));
     }
     let regions = scopes::plan(scene, fonts)?;
+    if !regions.is_empty() {
+        crate::raster_capture::check_capture((scene.width, scene.height), options.raster_scale)?;
+    }
     let mut writer = Writer::new(scene.width, scene.height);
     let mut index = 0;
     for region in &regions {
@@ -106,6 +109,12 @@ pub fn render_svg_with_options(
             .get(region.command_start..region.command_end)
             .ok_or_else(|| RenderError::new("invalid SVG raster range"))?
             .to_vec();
+        crate::raster_capture::check_transforms(
+            &part.commands,
+            region.command_start,
+            options.raster_scale,
+            "SVG",
+        )?;
         // The PNG backend skips unresolved resources. Check each fallback before rasterization.
         for (offset, command) in part.commands.iter().enumerate() {
             if let Some(capture) = writer.check_command(command, fonts, assets)? {

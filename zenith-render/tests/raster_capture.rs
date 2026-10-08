@@ -345,3 +345,139 @@ fn oversized_svg_intermediates_error_in_both_scaled_captures() {
         .contains("unsupported intermediate dimensions")
     );
 }
+
+#[test]
+fn tiny_capture_scales_return_errors_before_allocating_while_native_bytes_remain_identical() {
+    let fonts = default_provider();
+    let assets = BytesAssetProvider::new();
+    for scale in [1e-100, 1e-40] {
+        let native = scene(16.0, 16.0, false);
+        assert_eq!(
+            render_svg_with_options(
+                &native,
+                &fonts,
+                &assets,
+                SvgOptions {
+                    raster_scale: scale
+                }
+            )
+            .unwrap()
+            .bytes,
+            render_svg_with(&native, &fonts, &assets).unwrap().bytes
+        );
+        assert_eq!(
+            render_pdf_report_with_options(
+                &native,
+                &fonts,
+                &assets,
+                PdfExportOptions {
+                    raster_scale: scale,
+                    ..Default::default()
+                }
+            )
+            .unwrap()
+            .bytes,
+            render_pdf_report(&native, &fonts, &assets, PdfOptions::default())
+                .unwrap()
+                .bytes
+        );
+        let captured = scene(16.0, 16.0, true);
+        assert!(
+            render_svg_with_options(
+                &captured,
+                &fonts,
+                &assets,
+                SvgOptions {
+                    raster_scale: scale
+                }
+            )
+            .is_err()
+        );
+        assert!(
+            render_pdf_report_with_options(
+                &captured,
+                &fonts,
+                &assets,
+                PdfExportOptions {
+                    raster_scale: scale,
+                    ..Default::default()
+                }
+            )
+            .is_err()
+        );
+    }
+}
+
+#[test]
+fn large_rotations_preserve_native_math_and_captures_check_device_transform_overflow() {
+    let fonts = default_provider();
+    let assets = BytesAssetProvider::new();
+    for angle in [1e100, f64::from(f32::MAX)] {
+        let mut native = scene(16.0, 16.0, false);
+        native.commands.insert(
+            0,
+            SceneCommand::PushTransform {
+                angle_deg: angle,
+                cx: 0.0,
+                cy: 0.0,
+            },
+        );
+        native.commands.push(SceneCommand::PopTransform);
+        assert_eq!(
+            render_svg_with(&native, &fonts, &assets).is_ok(),
+            angle <= f64::from(f32::MAX)
+        );
+        assert!(render_pdf_report(&native, &fonts, &assets, PdfOptions::default()).is_ok());
+        native
+            .commands
+            .insert(0, SceneCommand::BeginBlur { radius: 1.0 });
+        native.commands.push(SceneCommand::EndBlur);
+        assert_eq!(
+            render_svg_with(&native, &fonts, &assets).is_ok(),
+            angle <= f64::from(f32::MAX)
+        );
+        assert_eq!(
+            render_pdf_report(&native, &fonts, &assets, PdfOptions::default()).is_ok(),
+            angle <= f64::from(f32::MAX)
+        );
+    }
+    let mut transformed = Scene::new(16.0, 16.0);
+    transformed.commands = vec![
+        SceneCommand::PushScaleTranslate {
+            sx: f64::from(f32::MAX) / 2.0,
+            sy: 1.0,
+            tx: 0.0,
+            ty: 0.0,
+        },
+        SceneCommand::BeginBlur { radius: 1.0 },
+        SceneCommand::EndBlur,
+        SceneCommand::PopTransform,
+    ];
+    assert!(render_svg_with(&transformed, &fonts, &assets).is_ok());
+    assert!(render_pdf_report(&transformed, &fonts, &assets, PdfOptions::default()).is_ok());
+    assert!(
+        render_svg_with_options(
+            &transformed,
+            &fonts,
+            &assets,
+            SvgOptions { raster_scale: 4.0 }
+        )
+        .unwrap_err()
+        .message
+        .contains("raster transform")
+    );
+    assert!(
+        render_pdf_report_with_options(
+            &transformed,
+            &fonts,
+            &assets,
+            PdfExportOptions {
+                raster_scale: 4.0,
+                ..Default::default()
+            }
+        )
+        .unwrap_err()
+        .message
+        .contains("raster transform")
+    );
+}

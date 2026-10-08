@@ -100,35 +100,7 @@ pub(super) fn emit_image(
 
     // Fit transform (sx, sy, tx, ty) in scene space — identical math to the
     // raster backend's DrawImage arm.
-    let (sx, sy, tx, ty) = match fit {
-        FitMode::Stretch => (w / sw, h / sh, x, y),
-        FitMode::Contain => {
-            let s = (w / sw).min(h / sh);
-            let (rw, rh) = (sw * s, sh * s);
-            (
-                s,
-                s,
-                x + (w - rw) * pos_x / 100.0,
-                y + (h - rh) * pos_y / 100.0,
-            )
-        }
-        FitMode::Cover => {
-            let s = (w / sw).max(h / sh);
-            let (rw, rh) = (sw * s, sh * s);
-            (
-                s,
-                s,
-                x - (rw - w) * pos_x / 100.0,
-                y - (rh - h) * pos_y / 100.0,
-            )
-        }
-        FitMode::None => (
-            1.0,
-            1.0,
-            x - (sw - w) * pos_x / 100.0,
-            y - (sh - h) * pos_y / 100.0,
-        ),
-    };
+    let (sx, sy, tx, ty) = fit_transform((x, y, w, h), (sw, sh), fit, (pos_x, pos_y));
     if !finite(sx) || !finite(sy) || !finite(tx) || !finite(ty) || sx <= 0.0 || sy <= 0.0 {
         return;
     }
@@ -180,4 +152,45 @@ pub(super) fn emit_image(
     content.x_object(name(IMAGE_PREFIX, id).as_name());
 
     content.restore_state();
+}
+
+/// Shared fit arithmetic preserves image placement operation order.
+pub(in crate::pdf) fn fit_transform(
+    destination: (f64, f64, f64, f64),
+    source: (f64, f64),
+    fit: FitMode,
+    position: (f64, f64),
+) -> (f64, f64, f64, f64) {
+    let (x, y, w, h) = destination;
+    let (sw, sh) = source;
+    let (pos_x, pos_y) = position;
+    match fit {
+        FitMode::Stretch => (w / sw, h / sh, x, y),
+        FitMode::Contain => {
+            let s = (w / sw).min(h / sh);
+            let (rw, rh) = (sw * s, sh * s);
+            (
+                s,
+                s,
+                x + (w - rw) * pos_x / 100.0,
+                y + (h - rh) * pos_y / 100.0,
+            )
+        }
+        FitMode::Cover => {
+            let s = (w / sw).max(h / sh);
+            let (rw, rh) = (sw * s, sh * s);
+            (
+                s,
+                s,
+                x - (rw - w) * pos_x / 100.0,
+                y - (rh - h) * pos_y / 100.0,
+            )
+        }
+        FitMode::None => (
+            1.0,
+            1.0,
+            x - (sw - w) * pos_x / 100.0,
+            y - (sh - h) * pos_y / 100.0,
+        ),
+    }
 }

@@ -117,18 +117,57 @@ pub fn render_pdf_multi_report_with_options(
     options: PdfExportOptions,
 ) -> Result<PdfOutput, RenderError> {
     crate::raster_capture::check_scale(options.raster_scale)?;
+    let mut raster_dimensions = super::numeric::RasterDimensions::new();
+    for (index, scene) in scenes.iter().enumerate() {
+        super::numeric::check_scene(scene, index + 1)?;
+        for (command, value) in scene.commands.iter().enumerate() {
+            super::numeric::check_image(value, index + 1, command, assets, &mut raster_dimensions)?;
+        }
+    }
     let mut checked_assets = BTreeMap::new();
     let mut plans = Vec::with_capacity(scenes.len());
     let mut rasterized_regions = Vec::new();
     for (index, scene) in scenes.iter().enumerate() {
         let page = index + 1;
-        preflight(scene, fonts, assets, &mut checked_assets)
-            .map_err(|error| RenderError::new(format!("PDF page {page}: {error}")))?;
+        preflight(
+            scene,
+            fonts,
+            assets,
+            &mut checked_assets,
+            &raster_dimensions,
+        )
+        .map_err(|error| RenderError::new(format!("PDF page {page}: {error}")))?;
         let plan = super::scopes::plan_report(scene, fonts, assets).map_err(|error| {
             RenderError::new(format!(
                 "PDF page {page} malformed scopes: {error:?}; balance scene scopes"
             ))
         })?;
+        if let Some(first) = plan.first() {
+            crate::raster_capture::check_capture((scene.width, scene.height), options.raster_scale)
+                .map_err(|error| {
+                    RenderError::new(format!(
+                        "PDF page {page} commands {}..{} capture error: {error}",
+                        first.range.start, first.range.end
+                    ))
+                })?;
+            for region in &plan {
+                let commands = scene.commands.get(region.range.clone()).ok_or_else(|| {
+                    RenderError::new("PDF capture range error. Balance scene commands")
+                })?;
+                crate::raster_capture::check_transforms(
+                    commands,
+                    region.range.start,
+                    options.raster_scale,
+                    &format!("PDF page {page}"),
+                )?;
+                super::numeric::check_capture_commands(
+                    commands,
+                    page,
+                    region.range.start,
+                    options.raster_scale,
+                )?;
+            }
+        }
         check_capture_assets(scene, &plan, &checked_assets, options.raster_scale)
             .map_err(|error| RenderError::new(format!("PDF page {page}: {error}")))?;
         rasterized_regions.extend(plan.iter().map(|region| PdfRasterizedRegion {
@@ -159,6 +198,7 @@ fn preflight(
     fonts: &dyn FontProvider,
     assets: &dyn AssetProvider,
     checked_assets: &mut CheckedAssets,
+    raster_dimensions: &super::numeric::RasterDimensions,
 ) -> Result<(), RenderError> {
     if !scene.width.is_finite()
         || !scene.height.is_finite()
@@ -181,7 +221,14 @@ fn preflight(
                 asset_id,
                 svg_style,
                 ..
-            } => check_asset(asset_id, *svg_style, fonts, assets, checked_assets),
+            } => check_asset(
+                asset_id,
+                *svg_style,
+                fonts,
+                assets,
+                checked_assets,
+                raster_dimensions,
+            ),
             SceneCommand::DrawGlyphRun {
                 font_id,
                 glyphs,
@@ -228,6 +275,7 @@ fn check_asset(
     fonts: &dyn FontProvider,
     assets: &dyn AssetProvider,
     checked_assets: &mut CheckedAssets,
+    raster_dimensions: &super::numeric::RasterDimensions,
 ) -> Result<(), RenderError> {
     let key = asset_key(id, style);
     if checked_assets.contains_key(&key) {
@@ -238,7 +286,7 @@ fn check_asset(
         .ok_or_else(|| RenderError::new(format!("unresolved asset {id}; register its bytes")))?;
     let intrinsic = match asset.kind {
         AssetKind::Image => {
-            if crate::tiny_skia::decode_raster_to_pixmap(&asset.bytes).is_none() {
+            if raster_dimensions.get(id).copied().flatten().is_none() {
                 return Err(RenderError::new(format!(
                     "invalid raster asset {id}; supply supported image bytes"
                 )));

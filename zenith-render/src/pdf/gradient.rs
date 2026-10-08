@@ -67,7 +67,26 @@ pub(super) fn resolve(
             )
         })
         .collect();
-    let geometry = if gradient.radial {
+    let geometry = geometry_coordinates(x, y, w, h, gradient);
+    let valid = match geometry {
+        GradientGeometry::Axial(coords) => coords.iter().all(|value| value.is_finite()),
+        GradientGeometry::Radial(coords) => {
+            coords.iter().all(|value| value.is_finite())
+                && coords.last().is_some_and(|radius| *radius > 0.0)
+        }
+    };
+    valid.then_some(PdfGradient { geometry, stops })
+}
+
+/// Resolve raw coordinates without conflating unsupported numbers and degenerate geometry.
+pub(super) fn geometry_coordinates(
+    x: f64,
+    y: f64,
+    w: f64,
+    h: f64,
+    gradient: &GradientPaint,
+) -> GradientGeometry {
+    if gradient.radial {
         let cx = (x + w * gradient.center_x.unwrap_or(0.5)) as f32;
         let cy = (y + h * gradient.center_y.unwrap_or(0.5)) as f32;
         let radius = (gradient.radius_frac.unwrap_or(1.0) * (w / 2.0).hypot(h / 2.0)) as f32;
@@ -85,13 +104,5 @@ pub(super) fn resolve(
             (cy + dir_y * half) as f32,
         ];
         GradientGeometry::Axial(coords)
-    };
-    let valid = match geometry {
-        GradientGeometry::Axial(coords) => coords.iter().all(|value| value.is_finite()),
-        GradientGeometry::Radial(coords) => {
-            coords.iter().all(|value| value.is_finite())
-                && coords.last().is_some_and(|radius| *radius > 0.0)
-        }
-    };
-    valid.then_some(PdfGradient { geometry, stops })
+    }
 }

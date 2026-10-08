@@ -46,6 +46,7 @@ mod geometry;
 mod glyph;
 mod gradient;
 mod image;
+mod numeric;
 mod raster_embed;
 mod report;
 pub use report::{

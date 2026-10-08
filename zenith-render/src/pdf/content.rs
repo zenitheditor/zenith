@@ -21,7 +21,7 @@
 
 mod command;
 mod draw;
-mod image;
+pub(in crate::pdf) mod image;
 mod resources;
 
 pub(in crate::pdf) use command::{emit_command, translate, translate_strict};
