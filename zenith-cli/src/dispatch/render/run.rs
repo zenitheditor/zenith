@@ -98,6 +98,7 @@ pub(in crate::dispatch) fn dispatch_render(args: RenderArgs) -> ExitCode {
         messages: Vec::new(),
         outputs: Vec::new(),
         images: Vec::new(),
+        rasterized_regions: Vec::new(),
         diagnostics: Vec::new(),
         import_files: ImportFiles::default(),
     };
@@ -149,6 +150,7 @@ pub(super) struct RenderRun<'a> {
     pub(super) outputs: Vec<String>,
     /// Written PNGs with size and scale, in write order.
     pub(super) images: Vec<RenderImageJson>,
+    pub(super) rasterized_regions: Vec<crate::json_types::RenderRasterizedRegionJson>,
     /// Diagnostics of every finished output, in output order.
     pub(super) diagnostics: Vec<Diagnostic>,
     /// Files of the composition imports behind the diagnostic spans.
@@ -255,6 +257,17 @@ impl RenderRun<'_> {
                     self.entry_options(),
                 ),
             }?;
+            self.rasterized_regions
+                .extend(artifact.rasterized_regions.into_iter().map(|region| {
+                    crate::json_types::RenderRasterizedRegionJson {
+                        path: pdf_out.display().to_string(),
+                        format: "pdf",
+                        page: region.page,
+                        command_start: region.command_start,
+                        command_end: region.command_end,
+                        reason: format!("{:?}", region.reason),
+                    }
+                }));
             self.write(
                 pdf_out,
                 artifact.pdf,

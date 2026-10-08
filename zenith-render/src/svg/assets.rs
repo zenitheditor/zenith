@@ -112,6 +112,19 @@ fn normalize_svg(
     style: Option<SvgStyle>,
     fonts: &dyn FontProvider,
 ) -> Result<(Vec<u8>, f64, f64), RenderError> {
+    let tree = checked_svg(bytes, style, fonts)?;
+    Ok((
+        tree.to_string(&usvg::XmlOptions::default()).into_bytes(),
+        f64::from(tree.size.width()),
+        f64::from(tree.size.height()),
+    ))
+}
+
+pub(crate) fn checked_svg(
+    bytes: &[u8],
+    style: Option<SvgStyle>,
+    fonts: &dyn FontProvider,
+) -> Result<usvg::Tree, RenderError> {
     let rejected = Arc::new(AtomicBool::new(false));
     let options = svg_options(rejected.clone());
     let bytes = crate::svg_style::styled_svg_bytes(bytes, style);
@@ -130,11 +143,7 @@ fn normalize_svg(
         database.load_font_data(font.bytes.to_vec());
     }
     super::asset_text::outline(&tree.root, &database)?;
-    Ok((
-        tree.to_string(&usvg::XmlOptions::default()).into_bytes(),
-        f64::from(tree.size.width()),
-        f64::from(tree.size.height()),
-    ))
+    Ok(tree)
 }
 
 fn raster(

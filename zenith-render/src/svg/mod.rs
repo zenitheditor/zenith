@@ -1,6 +1,7 @@
 //! Deterministic SVG export with explicit raster fallback reports.
 mod asset_text;
 mod assets;
+pub(crate) use assets::checked_svg;
 mod document;
 mod effects;
 mod geometry;

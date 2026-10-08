@@ -8,9 +8,9 @@ use zenith_scene::Scene;
 
 use super::content::{
     ALPHA_PREFIX, FONT_PREFIX, IMAGE_PREFIX, LinkAnnot, PageResources, SHADING_PREFIX, name,
-    translate,
+    translate, translate_strict,
 };
-use super::font::{self, FontPlan};
+use super::font;
 use super::gradient::{GradientGeometry, PdfGradient};
 
 /// Options controlling PDF emission.
@@ -35,6 +35,9 @@ impl Default for PdfOptions {
 /// (MediaBox / TrimBox / BleedBox / CropBox) and native DeviceCMYK colors for
 /// CMYK-origin tokens. Identical input yields byte-identical output: no
 /// timestamps, no document id, ordered iteration throughout.
+///
+/// Capture errors retain compatibility vector emission, which can lose effect appearance.
+/// Use [`super::render_pdf_report`] for strict capture and resource errors.
 ///
 /// Mirrors the shape of [`crate::render_png`] (`scene`, `fonts`, `assets`).
 ///
@@ -94,6 +97,16 @@ pub fn render_pdf_multi_with(
     assets: &dyn AssetProvider,
     options: PdfOptions,
 ) -> Vec<u8> {
+    assemble(scenes, fonts, assets, options, None).unwrap_or_default()
+}
+
+pub(super) fn assemble(
+    scenes: &[Scene],
+    fonts: &dyn FontProvider,
+    assets: &dyn AssetProvider,
+    options: PdfOptions,
+    plans: Option<&[Vec<super::report::PlannedRegion>]>,
+) -> Result<Vec<u8>, crate::RenderError> {
     let mut pdf = Pdf::new();
 
     let catalog_id = Ref::new(1);
@@ -114,8 +127,18 @@ pub fn render_pdf_multi_with(
     // Translate each scene and reserve all of its object ids in order, so the
     // page-tree's /Kids can list every page id before any page body is written.
     let mut pages: Vec<PreparedPage<'_>> = Vec::with_capacity(scenes.len());
-    for scene in scenes {
-        pages.push(prepare_page(scene, fonts, assets, &font_plan, &mut alloc));
+    for (index, scene) in scenes.iter().enumerate() {
+        let translated = if let Some(plans) = plans {
+            let regions = plans
+                .get(index)
+                .ok_or_else(|| crate::RenderError::new("missing PDF page capture plan"))?;
+            translate_strict(scene, fonts, assets, &font_plan, regions).map_err(|error| {
+                crate::RenderError::new(format!("PDF page {}: {error}", index + 1))
+            })?
+        } else {
+            translate(scene, fonts, assets, &font_plan)
+        };
+        pages.push(prepare_page(scene, translated, &mut alloc));
     }
 
     // ── Catalog + page tree ──────────────────────────────────────────────
@@ -135,7 +158,7 @@ pub fn render_pdf_multi_with(
         write_prepared_page(&mut pdf, page_tree_id, prepared);
     }
 
-    pdf.finish()
+    Ok(pdf.finish())
 }
 
 /// One scene translated to its content stream and resources, with every object
@@ -160,16 +183,14 @@ struct PreparedPage<'a> {
 /// SMask). Matches the historical single-page allocation order.
 fn prepare_page<'a>(
     scene: &'a Scene,
-    fonts: &dyn FontProvider,
-    assets: &dyn AssetProvider,
-    font_plan: &FontPlan,
+    translated: (pdf_writer::Content, PageResources),
     alloc: &mut impl FnMut() -> Ref,
 ) -> PreparedPage<'a> {
     let page_id = alloc();
     let content_id = alloc();
 
     // Translate the scene to a content stream + the resources it references.
-    let (content, res) = translate(scene, fonts, assets, font_plan);
+    let (content, res) = translated;
 
     // Reserve one ref per link annotation (in res.links order), before the
     // resource refs, so the page's /Annots array can list them.

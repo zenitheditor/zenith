@@ -1,7 +1,7 @@
 //! Complete raster ranges under the page transform.
 
+use super::report::{PdfRasterizationReason, PlannedRegion};
 use crate::scopes::{ScopeError, ScopeTracker};
-use std::ops::Range;
 use zenith_core::{AssetProvider, FontProvider};
 use zenith_scene::{BlendMode, Scene, SceneCommand};
 
@@ -9,10 +9,21 @@ pub(super) fn plan(
     scene: &Scene,
     fonts: &dyn FontProvider,
     assets: &dyn AssetProvider,
-) -> Result<Vec<Range<usize>>, ScopeError> {
+) -> Result<Vec<std::ops::Range<usize>>, ScopeError> {
+    Ok(plan_report(scene, fonts, assets)?
+        .into_iter()
+        .map(|region| region.range)
+        .collect())
+}
+
+pub(super) fn plan_report(
+    scene: &Scene,
+    fonts: &dyn FontProvider,
+    assets: &dyn AssetProvider,
+) -> Result<Vec<PlannedRegion>, ScopeError> {
     let mut capabilities = super::svg_capability::SvgCapabilities::default();
     let mut tracker = ScopeTracker::default();
-    let mut selected = false;
+    let mut reason = None;
     let mut blend = false;
     let mut ranges = Vec::new();
     for (index, command) in scene.commands.iter().enumerate() {
@@ -21,28 +32,46 @@ pub(super) fn plan(
                 opacity,
                 blend_mode,
             } => {
-                selected |= *opacity != 1.0;
+                select(
+                    &mut reason,
+                    *opacity != 1.0,
+                    PdfRasterizationReason::GroupOpacity,
+                );
                 blend |= blend_mode.is_some_and(|mode| mode != BlendMode::Normal);
             }
             SceneCommand::BeginBlur { .. }
             | SceneCommand::BeginShadow { .. }
-            | SceneCommand::BeginMask { .. } => selected = true,
-            SceneCommand::BeginFilter { filters } => selected |= !filters.is_empty(),
+            | SceneCommand::BeginMask { .. } => {
+                select(&mut reason, true, PdfRasterizationReason::Effects)
+            }
+            SceneCommand::BeginFilter { filters } => select(
+                &mut reason,
+                !filters.is_empty(),
+                PdfRasterizationReason::Effects,
+            ),
             SceneCommand::FillRect { paint, .. }
             | SceneCommand::FillRoundedRect { paint, .. }
             | SceneCommand::FillEllipse { paint, .. }
             | SceneCommand::FillPolygon { paint, .. }
             | SceneCommand::FillPath { paint, .. } => match paint {
                 zenith_scene::Paint::Solid { .. } => {}
-                zenith_scene::Paint::Gradient(gradient) => {
-                    selected |= super::gradient::requires_raster(gradient)
-                }
+                zenith_scene::Paint::Gradient(gradient) => select(
+                    &mut reason,
+                    super::gradient::requires_raster(gradient),
+                    PdfRasterizationReason::Gradient,
+                ),
             },
-            SceneCommand::DrawGlyphRun { .. } => {
-                selected |= crate::glyph_bitmap::preferred_png(command, fonts)
-            }
+            SceneCommand::DrawGlyphRun { .. } => select(
+                &mut reason,
+                crate::glyph_bitmap::preferred_png(command, fonts),
+                PdfRasterizationReason::BitmapGlyph,
+            ),
             SceneCommand::DrawImage { .. } => {
-                selected |= capabilities.requires_raster(command, fonts, assets);
+                select(
+                    &mut reason,
+                    capabilities.requires_raster(command, fonts, assets),
+                    PdfRasterizationReason::SvgAsset,
+                );
             }
             SceneCommand::StrokeRect { .. }
             | SceneCommand::StrokeRoundedRect { .. }
@@ -65,18 +94,36 @@ pub(super) fn plan(
             | SceneCommand::EndMask => {}
         }
         let step = tracker.advance(index, command)?;
-        selected |= step.crossed_now;
+        select(
+            &mut reason,
+            step.crossed_now,
+            PdfRasterizationReason::CrossedScopes,
+        );
         if let Some(range) = step.completed {
-            if selected {
-                ranges.push(range);
+            if let Some(reason) = reason {
+                ranges.push(PlannedRegion { range, reason });
             }
-            selected = false;
+            reason = None;
         }
     }
     tracker.finish()?;
     if blend {
-        Ok(std::iter::once(0..scene.commands.len()).collect())
+        Ok(std::iter::once(PlannedRegion {
+            range: 0..scene.commands.len(),
+            reason: PdfRasterizationReason::NonNormalBlend,
+        })
+        .collect())
     } else {
         Ok(ranges)
+    }
+}
+
+fn select(
+    reason: &mut Option<PdfRasterizationReason>,
+    selected: bool,
+    candidate: PdfRasterizationReason,
+) {
+    if selected && reason.is_none_or(|current| candidate < current) {
+        *reason = Some(candidate);
     }
 }

@@ -53,6 +53,38 @@ fn structured(resp: &Value) -> &Value {
     &resp["result"]["structuredContent"]
 }
 
+#[test]
+fn pdf_mcp_reports_fallback_and_blocks_denied_resource_creation() {
+    let dir = tempfile::tempdir().expect("document directory");
+    let store = tempfile::tempdir().expect("store directory");
+    let source = std::fs::read_to_string(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../examples/shadow.zen"),
+    )
+    .expect("shadow fixture");
+    let doc = dir.path().join("doc.zen");
+    std::fs::write(&doc, source).expect("write source");
+    let out = dir.path().join("out.pdf");
+    let request = || json!({"jsonrpc":"2.0", "id":1, "method":"tools/call", "params":{"name":"zenith_render", "arguments":{"doc":doc,"format":"pdf","out":out}}});
+    let responses = mcp_session(store.path(), &[request()]);
+    let report = structured(&responses[0]);
+    assert_eq!(responses[0]["result"]["isError"], false, "{responses:?}");
+    assert_eq!(
+        report["image"]["rasterized_regions"][0]["page"], 1,
+        "{report}"
+    );
+    assert!(out.exists());
+    std::fs::remove_file(&out).expect("remove successful output");
+    std::fs::write(
+        dir.path().join(".zenith.kdl"),
+        "diagnostics { deny \"render.pdf_rasterized\"; }\n",
+    )
+    .expect("write policy");
+    let responses = mcp_session(store.path(), &[request()]);
+    assert_eq!(responses[0]["result"]["isError"], true, "{responses:?}");
+    assert!(!out.exists());
+    assert!(structured(&responses[0]).get("resource").is_none());
+}
+
 // ── Protocol ──────────────────────────────────────────────────────────────
 
 #[test]

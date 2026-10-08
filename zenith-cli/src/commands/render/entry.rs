@@ -3,11 +3,8 @@
 use std::path::Path;
 
 use zenith_core::{BytesAssetProvider, DataContext, Diagnostic, dim_to_px};
-use zenith_render::{
-    PdfOptions, composite_spread, encode_png, render_image_scaled, render_pdf_multi_with,
-    render_pdf_with,
-};
-use zenith_scene::{DocumentPrep, PageCompiler, Scene};
+use zenith_render::{composite_spread, encode_png, render_image_scaled};
+use zenith_scene::{DocumentPrep, PageCompiler};
 
 use crate::config::CliPolicyFlags;
 use crate::report::ImportFiles;
@@ -17,8 +14,7 @@ use super::assets::{
     disk_diagnostics_with_imports, image_sizes, read_image_sizes,
 };
 use super::pages::{
-    PageSelection, compile_for_render, compile_local_for_render, map_pages, map_slice,
-    rasterize_pages,
+    PageSelection, compile_for_render, compile_local_for_render, map_slice, rasterize_pages,
 };
 use super::pipeline::{
     ValidatedParts, govern_compile_diagnostics, parse_validate, resolve_page_index,
@@ -103,18 +99,6 @@ pub struct PngArtifact {
     pub import_files: ImportFiles,
 }
 
-/// Rendered vector PDF bytes plus the compile-stage diagnostics that produced
-/// them.
-#[derive(Debug)]
-pub struct PdfArtifact {
-    /// The encoded PDF bytes.
-    pub pdf: Vec<u8>,
-    /// Validation diagnostics, then compile-stage diagnostics.
-    pub diagnostics: Vec<Diagnostic>,
-    /// Files of the composition imports, for locating diagnostic spans.
-    pub import_files: ImportFiles,
-}
-
 /// Shared options for render entry points.
 #[derive(Clone, Copy)]
 pub struct RenderEntryOptions<'a> {
@@ -160,7 +144,7 @@ impl<'a> RenderEntryOptions<'a> {
         }
     }
 
-    fn pdf(
+    pub(super) fn pdf(
         flags: &'a CliPolicyFlags,
         locked: bool,
         subset: bool,
@@ -381,190 +365,6 @@ pub fn to_png_with_dir_options(
         png,
         width: image.width,
         height: image.height,
-        diagnostics,
-        import_files,
-    })
-}
-
-/// Parse `src`, validate it with the merged diagnostic policy, compile the
-/// requested `page`, and render a vector PDF, sourcing image/SVG and font asset
-/// bytes from `project_dir` when provided (exactly like [`to_png_with_dir`]).
-///
-/// The PDF carries print box metadata (MediaBox / TrimBox / BleedBox /
-/// CropBox) and native DeviceCMYK for CMYK-origin colors. Output is
-/// deterministic. `page` is the 1-based page number.
-///
-/// `data` is an optional data context for resolving `(data)"field"` property
-/// references at compile time. When `None`, data refs produce non-fatal
-/// advisories.
-///
-/// `flags` carries the `--allow`/`--warn`/`--deny` CLI overrides; pass
-/// `&CliPolicyFlags::default()` when no flags are available (e.g. MCP).
-pub fn to_pdf_with_dir(
-    src: &str,
-    project_dir: Option<&Path>,
-    page: usize,
-    locked: bool,
-    subset: bool,
-    flags: &CliPolicyFlags,
-    data: Option<&DataContext>,
-) -> Result<PdfArtifact, RenderCmdErr> {
-    to_pdf_with_dir_options(
-        src,
-        project_dir,
-        page,
-        RenderEntryOptions::pdf(flags, locked, subset, data),
-    )
-}
-
-pub fn to_pdf_with_dir_options(
-    src: &str,
-    project_dir: Option<&Path>,
-    page: usize,
-    opts: RenderEntryOptions<'_>,
-) -> Result<PdfArtifact, RenderCmdErr> {
-    let ValidatedParts {
-        mut doc,
-        policy,
-        imports,
-        diagnostics: validation,
-        import_diagnostics,
-        import_files,
-    } = parse_validate(src, project_dir, opts.flags)?.into_parts();
-    let scene_imports = imports.to_scene_graph();
-    let mut text_src_diagnostics: Vec<Diagnostic> = Vec::new();
-    resolve_text_sources(&mut doc, project_dir, &mut text_src_diagnostics);
-    let fonts = build_font_provider_with_imports(&doc, project_dir, &imports, opts.locked)?;
-    let page_index = resolve_page_index(&doc, page)?;
-    let assets = match project_dir {
-        Some(dir) => build_asset_provider_with_imports(&doc, dir, &imports, opts.locked)?,
-        None => BytesAssetProvider::new(),
-    };
-    let prep = DocumentPrep::new(&doc, opts.data, Some(&scene_imports))
-        .with_image_sizes(image_sizes(&doc, Some(&imports), &assets));
-    let compiler = PageCompiler::new(&prep, &fonts);
-    let compile_result = compile_for_render(&doc, &compiler, page_index, opts);
-    let pdf = render_pdf_with(
-        &compile_result.scene,
-        &fonts,
-        &assets,
-        PdfOptions {
-            subset: opts.subset,
-        },
-    );
-    let mut diagnostics = validation;
-    diagnostics.extend(text_src_diagnostics);
-    diagnostics.extend(import_diagnostics);
-    diagnostics.extend(disk_diagnostics_with_imports(&doc, project_dir, &imports));
-    diagnostics.extend(govern_compile_diagnostics(
-        compile_result.diagnostics,
-        &policy,
-    ));
-    let diagnostics = Diagnostic::dedup(diagnostics);
-    Ok(PdfArtifact {
-        pdf,
-        diagnostics,
-        import_files,
-    })
-}
-
-/// Parse `src`, validate it with the merged diagnostic policy, compile EVERY
-/// page (in document order, page 1 first), and render them into a single
-/// multi-page vector PDF, sourcing image/SVG and font asset bytes from
-/// `project_dir` when provided (exactly like [`to_pdf_with_dir`]).
-///
-/// This is the default `--pdf` behavior: a multi-page document produces a
-/// multi-page PDF. Use [`to_pdf_with_dir`] to select one explicit page.
-///
-/// Diagnostics from disk plus every page's governed compile diagnostics are
-/// merged in document order (page 1's first), document diagnostics once and
-/// repeats removed. The
-/// PDF carries print box metadata and native DeviceCMYK exactly as the
-/// single-page path; a one-page document yields byte-identical output to
-/// [`to_pdf_with_dir`] for page 1.
-///
-/// `data` is applied to every page. `flags` carries the
-/// `--allow`/`--warn`/`--deny` CLI overrides; pass `&CliPolicyFlags::default()`
-/// when no flags are available (e.g. MCP).
-///
-/// Returns `Err` on parse failure (exit 2), validation errors (exit 1), an
-/// empty document (exit 2), or an asset/font failure (exit 2).
-pub fn to_pdf_all_pages_with_dir(
-    src: &str,
-    project_dir: Option<&Path>,
-    locked: bool,
-    subset: bool,
-    flags: &CliPolicyFlags,
-    data: Option<&DataContext>,
-) -> Result<PdfArtifact, RenderCmdErr> {
-    to_pdf_all_pages_with_dir_options(
-        src,
-        project_dir,
-        RenderEntryOptions::pdf(flags, locked, subset, data),
-    )
-}
-
-pub fn to_pdf_all_pages_with_dir_options(
-    src: &str,
-    project_dir: Option<&Path>,
-    opts: RenderEntryOptions<'_>,
-) -> Result<PdfArtifact, RenderCmdErr> {
-    let ValidatedParts {
-        mut doc,
-        policy,
-        imports,
-        diagnostics: validation,
-        import_diagnostics,
-        import_files,
-    } = parse_validate(src, project_dir, opts.flags)?.into_parts();
-    let scene_imports = imports.to_scene_graph();
-    let mut diagnostics: Vec<Diagnostic> = validation;
-    resolve_text_sources(&mut doc, project_dir, &mut diagnostics);
-    diagnostics.extend(import_diagnostics);
-    let fonts = build_font_provider_with_imports(&doc, project_dir, &imports, opts.locked)?;
-    let page_count = doc.body.pages.len();
-    if page_count == 0 {
-        return Err(RenderCmdErr::new(
-            "render.no_pages",
-            "document has no pages to render; add a page node",
-            2,
-        ));
-    }
-    let assets = match project_dir {
-        Some(dir) => build_asset_provider_with_imports(&doc, dir, &imports, opts.locked)?,
-        None => BytesAssetProvider::new(),
-    };
-    let mut scenes: Vec<Scene> = Vec::with_capacity(page_count);
-    diagnostics.extend(disk_diagnostics_with_imports(&doc, project_dir, &imports));
-    let prep = DocumentPrep::new(&doc, opts.data, Some(&scene_imports))
-        .with_image_sizes(image_sizes(&doc, Some(&imports), &assets));
-    let compiler = PageCompiler::new(&prep, &fonts);
-    diagnostics.extend(govern_compile_diagnostics(
-        compiler.document_diagnostics(),
-        &policy,
-    ));
-    // Pages compile in parallel. Results merge here in page order.
-    let compiled = map_pages(page_count, |page_index| {
-        compile_local_for_render(&doc, &compiler, page_index, opts)
-    });
-    for compile_result in compiled {
-        scenes.push(compile_result.scene);
-        diagnostics.extend(govern_compile_diagnostics(
-            compile_result.diagnostics,
-            &policy,
-        ));
-    }
-    let diagnostics = Diagnostic::dedup(diagnostics);
-    let pdf = render_pdf_multi_with(
-        &scenes,
-        &fonts,
-        &assets,
-        PdfOptions {
-            subset: opts.subset,
-        },
-    );
-    Ok(PdfArtifact {
-        pdf,
         diagnostics,
         import_files,
     })

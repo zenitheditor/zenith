@@ -65,6 +65,51 @@ pub(in crate::pdf) fn translate(
     (content, res)
 }
 
+pub(in crate::pdf) fn translate_strict(
+    scene: &Scene,
+    fonts: &dyn FontProvider,
+    assets: &dyn AssetProvider,
+    font_plan: &FontPlan,
+    regions: &[crate::pdf::report::PlannedRegion],
+) -> Result<(Content, PageResources), crate::RenderError> {
+    let mut content = Content::new();
+    let mut res = PageResources::default();
+    content.transform([1.0, 0.0, 0.0, -1.0, 0.0, scene.height as f32]);
+    let page = (scene.width, scene.height);
+    let mut cursor = 0;
+    for region in regions {
+        for cmd in scene
+            .commands
+            .get(cursor..region.range.start)
+            .unwrap_or_default()
+        {
+            emit_command(&mut content, &mut res, cmd, page, fonts, assets, font_plan);
+        }
+        let commands = scene.commands.get(region.range.clone()).ok_or_else(|| {
+            crate::RenderError::new("invalid PDF capture range; correct scene commands")
+        })?;
+        crate::pdf::raster_embed::embed_strict(
+            &mut content,
+            &mut res,
+            commands,
+            page,
+            fonts,
+            assets,
+        )
+        .map_err(|error| {
+            crate::RenderError::new(format!(
+                "PDF commands {}..{} capture error: {error}; correct scene dimensions or resources",
+                region.range.start, region.range.end
+            ))
+        })?;
+        cursor = region.range.end;
+    }
+    for cmd in scene.commands.get(cursor..).unwrap_or_default() {
+        emit_command(&mut content, &mut res, cmd, page, fonts, assets, font_plan);
+    }
+    Ok((content, res))
+}
+
 pub(in crate::pdf) fn emit_command(
     content: &mut Content,
     res: &mut PageResources,

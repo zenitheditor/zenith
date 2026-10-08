@@ -2,8 +2,8 @@
 use super::run::{RenderRun, Stop};
 use crate::cli_helpers::{print_diagnostics_stderr, write_bytes};
 use crate::commands::serialize_pretty;
-use crate::json_types::RenderImageJson;
 use crate::json_types::{DiagnosticJson, RenderOutput};
+use crate::json_types::{RenderImageJson, RenderRasterizedRegionJson};
 use crate::report::ImportFiles;
 use std::collections::BTreeSet;
 use std::path::Path;
@@ -37,7 +37,7 @@ impl RenderRun<'_> {
             print_envelope(
                 "ok",
                 self.outputs,
-                self.images,
+                (self.images, self.rasterized_regions),
                 &diagnostics,
                 self.src,
                 &self.import_files,
@@ -52,6 +52,8 @@ impl RenderRun<'_> {
         let written: BTreeSet<_> = self.outputs.iter().map(String::as_str).collect();
         self.images
             .retain(|image| written.contains(image.path.as_str()));
+        self.rasterized_regions
+            .retain(|region| written.contains(region.path.as_str()));
         self.diagnostics.extend(stop.diagnostics);
         self.import_files.extend(&stop.import_files);
         let diagnostics = Diagnostic::dedup(self.diagnostics);
@@ -59,7 +61,7 @@ impl RenderRun<'_> {
             print_envelope(
                 "blocked",
                 self.outputs,
-                self.images,
+                (self.images, self.rasterized_regions),
                 &diagnostics,
                 self.src,
                 &self.import_files,
@@ -123,7 +125,7 @@ fn write_stop(path: &Path, e: &std::io::Error) -> Stop {
 fn print_envelope(
     status: &'static str,
     outputs: Vec<String>,
-    images: Vec<RenderImageJson>,
+    metadata: (Vec<RenderImageJson>, Vec<RenderRasterizedRegionJson>),
     diagnostics: &[Diagnostic],
     src: &str,
     import_files: &ImportFiles,
@@ -132,7 +134,8 @@ fn print_envelope(
         schema: RENDER_SCHEMA,
         status,
         outputs,
-        images,
+        images: metadata.0,
+        rasterized_regions: metadata.1,
         diagnostics: DiagnosticJson::located_all_in(diagnostics, src, import_files),
     };
     println!("{}", serialize_pretty(&out));

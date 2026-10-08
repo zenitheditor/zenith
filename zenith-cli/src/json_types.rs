@@ -162,7 +162,20 @@ pub struct RenderOutput {
     pub outputs: Vec<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub images: Vec<RenderImageJson>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub rasterized_regions: Vec<RenderRasterizedRegionJson>,
     pub diagnostics: Vec<DiagnosticJson>,
+}
+
+/// One raster fallback range in a written vector output.
+#[derive(Debug, Serialize)]
+pub struct RenderRasterizedRegionJson {
+    pub path: String,
+    pub format: &'static str,
+    pub page: usize,
+    pub command_start: usize,
+    pub command_end: usize,
+    pub reason: String,
 }
 
 /// One written PNG in the `render` envelope.

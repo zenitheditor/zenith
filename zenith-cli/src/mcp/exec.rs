@@ -350,6 +350,12 @@ fn run_render(args: &Value) -> Result<Value, String> {
             }
             .map_err(|e| e.message)?;
             blocked(&art.diagnostics)?;
+            image_meta = Some(
+                json!({"rasterized_regions": art.rasterized_regions.iter().map(|region| json!({
+                "page": region.page, "command_start": region.command_start, "command_end": region.command_end,
+                "reason": format!("{:?}", region.reason),
+            })).collect::<Vec<_>>() }),
+            );
             (art.pdf, "pdf", art.diagnostics)
         }
         "scene" => {

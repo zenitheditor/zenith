@@ -24,7 +24,7 @@ mod draw;
 mod image;
 mod resources;
 
-pub(in crate::pdf) use command::{emit_command, translate};
+pub(in crate::pdf) use command::{emit_command, translate, translate_strict};
 pub(in crate::pdf) use draw::{apply_alpha, push_gradient};
 pub(in crate::pdf) use resources::{
     ALPHA_PREFIX, FONT_PREFIX, IMAGE_PREFIX, LinkAnnot, PageResources, SHADING_PREFIX, name,

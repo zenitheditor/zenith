@@ -25,22 +25,28 @@ pub(super) fn embed_rasterized_region(
     assets: &dyn AssetProvider,
     font_plan: &FontPlan,
 ) {
+    if embed_strict(content, res, sub_commands, page, fonts, assets).is_err() {
+        for c in sub_commands {
+            emit_command(content, res, c, page, fonts, assets, font_plan);
+        }
+    }
+}
+
+pub(super) fn embed_strict(
+    content: &mut Content,
+    res: &mut PageResources,
+    sub_commands: &[SceneCommand],
+    page: (f64, f64),
+    fonts: &dyn FontProvider,
+    assets: &dyn AssetProvider,
+) -> Result<(), crate::RenderError> {
     let (pw, ph) = page;
     let mut sub_scene = Scene::new(pw, ph);
     sub_scene.commands = sub_commands.to_vec();
-
-    let img = match crate::render::render_image(&sub_scene, fonts, assets) {
-        Ok(i) => i,
-        Err(_) => {
-            // Retain the region body when raster rendering returns an error.
-            for c in sub_commands {
-                emit_command(content, res, c, page, fonts, assets, font_plan);
-            }
-            return;
-        }
-    };
+    let img = crate::render::render_image(&sub_scene, fonts, assets)?;
     drop(sub_scene);
     crop_and_embed(content, res, &img.rgba, img.width, img.height);
+    Ok(())
 }
 
 /// Crop a rendered straight-alpha RGBA buffer to its tight opaque bounding box

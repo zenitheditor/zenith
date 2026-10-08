@@ -21,7 +21,11 @@ pub use backend::{RasterBackend, RasterImage};
 pub use compose::composite_over;
 pub use error::RenderError;
 pub use intrinsic::{asset_intrinsic_size, asset_intrinsic_sizes};
-pub use pdf::{PdfOptions, render_pdf, render_pdf_multi, render_pdf_multi_with, render_pdf_with};
+pub use pdf::{
+    PdfOptions, PdfOutput, PdfRasterizationReason, PdfRasterizedRegion, render_pdf,
+    render_pdf_multi, render_pdf_multi_report, render_pdf_multi_with, render_pdf_report,
+    render_pdf_with,
+};
 pub use render::{
     composite_spread, encode_png, render_image, render_image_scaled, render_png, render_png_scaled,
     render_spread_png, render_spread_png_scaled, scaled_size,

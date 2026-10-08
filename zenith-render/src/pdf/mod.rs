@@ -47,6 +47,11 @@ mod glyph;
 mod gradient;
 mod image;
 mod raster_embed;
+mod report;
+pub use report::{
+    PdfOutput, PdfRasterizationReason, PdfRasterizedRegion, render_pdf_multi_report,
+    render_pdf_report,
+};
 mod scopes;
 mod svg;
 mod svg_capability;
@@ -56,6 +61,8 @@ mod svg_parse;
 mod alpha_tests;
 #[cfg(test)]
 mod image_tests;
+#[cfg(test)]
+mod report_tests;
 #[cfg(test)]
 mod scope_tests;
 #[cfg(test)]
