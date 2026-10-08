@@ -7,6 +7,7 @@
 //! carrying a trimmed `structuredContent` object (never raw human stdout).
 
 mod merge;
+mod render_request;
 
 use std::path::Path;
 
@@ -259,8 +260,9 @@ fn run_fix(args: &Value) -> Result<Value, String> {
 }
 
 fn run_render(args: &Value) -> Result<Value, String> {
-    let reference = req_str(args, "doc")?;
-    if let Some(out) = opt_str(args, "out") {
+    let request = render_request::RenderRequest::parse(args)?;
+    let reference = request.doc;
+    if let Some(out) = request.out {
         let location = doc_ref::locate(reference)?;
         let mut guard = crate::output_file::OutputGuard::new(&[location.path.as_path()])
             .map_err(|error| format!("error writing '{out}': {error}"))?;
@@ -269,55 +271,20 @@ fn run_render(args: &Value) -> Result<Value, String> {
             .map_err(|error| format!("error writing '{out}': {error}"))?;
     }
     let (path, doc_id) = doc_ref::ensure(reference)?;
-    let format = req_str(args, "format")?;
+    let format = request.format;
     // An explicit `page` selects one page; its absence means "default" — which
     // for PDF renders all pages, and for PNG/SVG/scene renders page 1.
-    let explicit_page: Option<usize> = opt_u64(args, "page").map(|p| p.max(1) as usize);
+    let explicit_page = request.page;
     let page = explicit_page.unwrap_or(1);
-    let locked = flag(args, "locked");
+    let locked = request.locked;
     let parent = path.parent();
     let src = read(&path)?;
     // MCP carries no policy flags; in-document `diagnostics {}` and config files
     // are still resolved on the render path via the project directory.
     let flags = crate::config::CliPolicyFlags::default();
-    // `scale` sets the PNG raster scale (0 < scale <= 4, default 1).
-    // `contact_sheet` tiles every page (or `page`) into one PNG.
-    let scale = match args.get("scale") {
-        None | Some(Value::Null) => None,
-        Some(v) => {
-            let shown = v.to_string();
-            let f = v.as_f64().unwrap_or(f64::NAN);
-            Some(
-                commands::render::check_render_scale(f, &shown)
-                    .map_err(|m| format!("error[cli.invalid_argument]: {m}"))?,
-            )
-        }
-    };
-    let raster_scale = match args.get("raster_scale") {
-        None | Some(Value::Null) => None,
-        Some(value) => {
-            if format != "svg" && format != "pdf" {
-                return Err(format!(
-                    "error[cli.invalid_argument]: raster_scale applies only to format 'svg' or 'pdf', got '{format}'. Set format to svg or pdf"
-                ));
-            }
-            Some(
-                commands::render::check_render_scale(
-                    value.as_f64().unwrap_or(f64::NAN),
-                    &value.to_string(),
-                )
-                .map_err(|message| {
-                    format!("error[cli.invalid_argument]: raster_scale: {message}")
-                })?,
-            )
-        }
-    };
-    let contact_sheet = flag(args, "contact_sheet");
-    if (scale.is_some() || contact_sheet) && format != "png" {
-        return Err(format!(
-            "error[cli.invalid_argument]: scale and contact_sheet apply only to format 'png', got '{format}'; set format to png"
-        ));
-    }
+    let scale = request.scale;
+    let raster_scale = request.raster_scale;
+    let contact_sheet = request.contact_sheet;
     let render_opts = commands::render::RenderEntryOptions {
         locked,
         subset: true,
@@ -330,7 +297,7 @@ fn run_render(args: &Value) -> Result<Value, String> {
     let mut image_meta: Option<Value> = None;
 
     let (bytes, ext, mime_diags): (Vec<u8>, &str, Vec<zenith_core::Diagnostic>) = match format {
-        "png" if contact_sheet => {
+        render_request::RenderFormat::Png if contact_sheet => {
             let art =
                 commands::render::to_contact_sheet(&src, parent, explicit_page, scale, render_opts)
                     .map_err(|e| e.message)?;
@@ -345,7 +312,7 @@ fn run_render(args: &Value) -> Result<Value, String> {
             }));
             (art.png, "png", art.diagnostics)
         }
-        "png" => {
+        render_request::RenderFormat::Png => {
             let art = commands::render::to_png_with_dir_options(&src, parent, page, render_opts)
                 .map_err(|e| e.message)?;
             blocked(&art.diagnostics)?;
@@ -356,7 +323,7 @@ fn run_render(args: &Value) -> Result<Value, String> {
             }));
             (art.png, "png", art.diagnostics)
         }
-        "svg" => {
+        render_request::RenderFormat::Svg => {
             let art = commands::render::to_svg_with_dir_options(&src, parent, page, render_opts)
                 .map_err(|e| e.message)?;
             blocked(&art.diagnostics)?;
@@ -369,7 +336,7 @@ fn run_render(args: &Value) -> Result<Value, String> {
             );
             (art.svg, "svg", art.diagnostics)
         }
-        "pdf" => {
+        render_request::RenderFormat::Pdf => {
             let art = match explicit_page {
                 // MCP renders always subset (small PDFs); the full-font knob is a CLI flag.
                 Some(n) => commands::render::to_pdf_with_dir_options(&src, parent, n, render_opts),
@@ -387,16 +354,11 @@ fn run_render(args: &Value) -> Result<Value, String> {
             );
             (art.pdf, "pdf", art.diagnostics)
         }
-        "scene" => {
+        render_request::RenderFormat::Scene => {
             let art = commands::render::to_scene_json(&src, parent, page, &flags, None)
                 .map_err(|e| e.message)?;
             blocked(&art.diagnostics)?;
             (art.json.into_bytes(), "json", art.diagnostics)
-        }
-        other => {
-            return Err(format!(
-                "invalid format '{other}' (expected png, svg, pdf, or scene)"
-            ));
         }
     };
 
@@ -407,7 +369,7 @@ fn run_render(args: &Value) -> Result<Value, String> {
     }
 
     // Optional caller-chosen path, plus a stable per-doc preview file.
-    if let Some(out) = opt_str(args, "out") {
+    if let Some(out) = request.out {
         let mut guard = crate::output_file::OutputGuard::new(&[path.as_path()])
             .map_err(|error| format!("error writing '{out}': {error}"))?;
         guard
@@ -422,15 +384,14 @@ fn run_render(args: &Value) -> Result<Value, String> {
     let name = if contact_sheet {
         "render-contact-sheet".to_owned()
     } else {
-        format!("render-{format}")
+        format!("render-{}", format.as_str())
     };
-    let link =
-        store_link(&doc_id, &bytes, ext, &name).map_err(|error| match opt_str(args, "out") {
-            Some(out) => format!("artifact written to '{out}'. Resource storage failed: {error}"),
-            None => error,
-        })?;
+    let link = store_link(&doc_id, &bytes, ext, &name).map_err(|error| match request.out {
+        Some(out) => format!("artifact written to '{out}'. Resource storage failed: {error}"),
+        None => error,
+    })?;
     let mut out = json!({
-        "format": format,
+        "format": format.as_str(),
         "resource": link,
         "blocked": false,
         "error_count": 0,
@@ -444,7 +405,7 @@ fn run_render(args: &Value) -> Result<Value, String> {
         };
         insert(&mut out, key, meta);
     }
-    if flag(args, "diagnostics") {
+    if request.diagnostics {
         let diags: Vec<Value> = mime_diags
             .iter()
             .map(|d| json!({ "code": d.code, "severity": severity_word(d.severity), "message": d.message }))

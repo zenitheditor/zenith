@@ -396,3 +396,144 @@ fn explicit_render_output_cannot_replace_its_source_document() {
     );
     assert_eq!(fs::read_to_string(doc).unwrap(), DOC);
 }
+
+#[test]
+fn malformed_render_arguments_leave_source_store_and_existing_output_unchanged() {
+    let directory = tempfile::tempdir().unwrap();
+    let store = tempfile::tempdir().unwrap();
+    let doc = directory.path().join("doc.zen");
+    let out = directory.path().join("out.svg");
+    let sentinel = store.path().join("sentinel");
+    fs::write(&doc, DOC).unwrap();
+    fs::write(&out, b"previous output").unwrap();
+    fs::write(&sentinel, b"previous store").unwrap();
+    let mut arguments = Vec::new();
+    for (field, values) in [
+        ("doc", vec![Value::Null, json!(false), json!(1)]),
+        (
+            "format",
+            vec![Value::Null, json!(false), json!(1), json!("jpeg")],
+        ),
+        ("out", vec![Value::Null, json!(false), json!(1)]),
+        (
+            "page",
+            vec![
+                Value::Null,
+                json!(false),
+                json!(0),
+                json!(-1),
+                json!(1.5),
+                json!("2"),
+            ],
+        ),
+        ("locked", vec![Value::Null, json!(1), json!("false")]),
+        ("diagnostics", vec![Value::Null, json!(1), json!("true")]),
+        (
+            "contact_sheet",
+            vec![
+                Value::Null,
+                json!(1),
+                json!("true"),
+                json!(false),
+                json!(true),
+            ],
+        ),
+        (
+            "scale",
+            vec![
+                Value::Null,
+                json!(false),
+                json!("NaN"),
+                json!(0),
+                json!(-1),
+                json!(4.01),
+                json!(1),
+            ],
+        ),
+        (
+            "raster_scale",
+            vec![
+                Value::Null,
+                json!(false),
+                json!("inf"),
+                json!(0),
+                json!(-1),
+                json!(4.01),
+            ],
+        ),
+    ] {
+        for value in values {
+            let mut args = json!({"doc":doc,"format":"svg","out":out});
+            args[field] = value;
+            arguments.push(args);
+        }
+    }
+    for format in ["png", "scene"] {
+        for scale in [Value::Null, json!(1)] {
+            arguments.push(json!({"doc":doc,"format":format,"out":out,"raster_scale":scale}));
+        }
+    }
+    let requests: Vec<_> = arguments
+        .iter()
+        .enumerate()
+        .map(|(index, args)| render(index as u64 + 1, args.clone()))
+        .collect();
+    let responses = session(store.path(), &requests);
+    assert_eq!(responses.len(), requests.len());
+    for (response, args) in responses.iter().zip(&arguments) {
+        assert_eq!(response["result"]["isError"], true, "{args}: {response}");
+        assert!(
+            response["result"]["structuredContent"]
+                .get("resource")
+                .is_none()
+        );
+    }
+    assert_eq!(fs::read_to_string(doc).unwrap(), DOC);
+    assert_eq!(fs::read(out).unwrap(), b"previous output");
+    assert_eq!(fs::read(sentinel).unwrap(), b"previous store");
+    assert_eq!(fs::read_dir(store.path()).unwrap().count(), 1);
+    assert_eq!(fs::read_dir(directory.path()).unwrap().count(), 2);
+}
+
+#[test]
+fn omitted_page_and_unknown_fields_keep_default_render_selection() {
+    let directory = tempfile::tempdir().unwrap();
+    let store = tempfile::tempdir().unwrap();
+    let doc = directory.path().join("doc.zen");
+    let png = directory.path().join("out.png");
+    let pdf = directory.path().join("out.pdf");
+    fs::write(&doc, DOC).unwrap();
+    let responses = session(
+        store.path(),
+        &[
+            render(
+                1,
+                json!({"doc":doc,"format":"png","out":png,"future":true,"contact_sheet":false}),
+            ),
+            render(2, json!({"doc":doc,"format":"pdf","out":pdf,"future":true})),
+        ],
+    );
+    for response in &responses {
+        assert_eq!(response["result"]["isError"], false, "{response}");
+    }
+    assert_eq!(
+        responses[0]["result"]["structuredContent"]["image"]["width"],
+        100
+    );
+    assert_eq!(
+        responses[0]["result"]["structuredContent"]["image"]["height"],
+        80
+    );
+    let source = fs::read_to_string(&doc).unwrap();
+    let flags = zenith_cli::config::CliPolicyFlags::default();
+    let expected = zenith_cli::commands::render::to_pdf_all_pages_with_dir(
+        &source,
+        Some(directory.path()),
+        false,
+        true,
+        &flags,
+        None,
+    )
+    .unwrap();
+    assert_eq!(fs::read(pdf).unwrap(), expected.pdf);
+}
