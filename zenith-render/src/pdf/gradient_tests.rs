@@ -193,7 +193,7 @@ fn incomplete_and_nonfinite_stop_layouts_select_raster_scopes() {
         let mut paint = gradient(false);
         paint.stops = stops;
         assert_eq!(
-            super::scopes::plan(&scene(paint), &fonts).unwrap(),
+            super::scopes::plan(&scene(paint), &fonts, &BytesAssetProvider::new()).unwrap(),
             vec![0..1]
         );
     }

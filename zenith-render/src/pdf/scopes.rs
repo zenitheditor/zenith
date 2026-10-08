@@ -2,13 +2,15 @@
 
 use crate::scopes::{ScopeError, ScopeTracker};
 use std::ops::Range;
-use zenith_core::FontProvider;
+use zenith_core::{AssetProvider, FontProvider};
 use zenith_scene::{BlendMode, Scene, SceneCommand};
 
 pub(super) fn plan(
     scene: &Scene,
     fonts: &dyn FontProvider,
+    assets: &dyn AssetProvider,
 ) -> Result<Vec<Range<usize>>, ScopeError> {
+    let mut capabilities = super::svg_capability::SvgCapabilities::default();
     let mut tracker = ScopeTracker::default();
     let mut selected = false;
     let mut blend = false;
@@ -39,13 +41,15 @@ pub(super) fn plan(
             SceneCommand::DrawGlyphRun { .. } => {
                 selected |= crate::glyph_bitmap::preferred_png(command, fonts)
             }
+            SceneCommand::DrawImage { .. } => {
+                selected |= capabilities.requires_raster(command, fonts, assets);
+            }
             SceneCommand::StrokeRect { .. }
             | SceneCommand::StrokeRoundedRect { .. }
             | SceneCommand::StrokeEllipse { .. }
             | SceneCommand::StrokeLine { .. }
             | SceneCommand::StrokePolyline { .. }
             | SceneCommand::StrokePath { .. }
-            | SceneCommand::DrawImage { .. }
             | SceneCommand::DrawSvgAsset { .. }
             | SceneCommand::PushClip { .. }
             | SceneCommand::PushClipRoundedRect { .. }

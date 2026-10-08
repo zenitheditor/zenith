@@ -49,6 +49,8 @@ mod image;
 mod raster_embed;
 mod scopes;
 mod svg;
+mod svg_capability;
+mod svg_parse;
 
 #[cfg(test)]
 mod alpha_tests;
@@ -67,3 +69,6 @@ pub use document::{
 
 #[cfg(test)]
 mod gradient_tests;
+
+#[cfg(test)]
+mod svg_asset_tests;

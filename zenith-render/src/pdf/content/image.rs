@@ -62,8 +62,8 @@ pub(super) fn emit_image(
         return;
     };
     // Dispatch on asset kind. Raster images embed as a Flate XObject below; SVG
-    // assets translate to native PDF vector operators (paths + shadings) via the
-    // `svg` module — true vector output, not a rasterized embed. Font/Unknown
+    // assets use native operators after capability planning captures unsupported
+    // trees through the raster renderer. Font/Unknown
     // kinds are not drawable images.
     match asset.kind {
         zenith_core::AssetKind::Image => {}

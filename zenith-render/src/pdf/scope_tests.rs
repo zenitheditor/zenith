@@ -1,6 +1,6 @@
 use super::{content::translate, font::build_plan};
 use miniz_oxide::inflate::decompress_to_vec_zlib;
-use zenith_core::{BytesAssetProvider, default_provider};
+use zenith_core::{AssetProvider, BytesAssetProvider, default_provider};
 use zenith_scene::{Color, Paint, Scene, SceneCommand};
 
 fn shape() -> SceneCommand {
@@ -14,11 +14,14 @@ fn shape() -> SceneCommand {
 }
 
 pub(super) fn check_raster(scene: &Scene) -> String {
+    check_raster_with_assets(scene, &BytesAssetProvider::new())
+}
+
+pub(super) fn check_raster_with_assets(scene: &Scene, assets: &dyn AssetProvider) -> String {
     let fonts = default_provider();
-    let assets = BytesAssetProvider::new();
     let plan = build_plan(&Default::default(), &fonts, true);
-    let (content, resources) = translate(scene, &fonts, &assets, &plan);
-    let raster = crate::render_image(scene, &fonts, &assets).unwrap();
+    let (content, resources) = translate(scene, &fonts, assets, &plan);
+    let raster = crate::render_image(scene, &fonts, assets).unwrap();
     assert_eq!(resources.images.len(), 1);
     let image = &resources.images[0];
     let rgb = decompress_to_vec_zlib(&image.rgb_flate).unwrap();
