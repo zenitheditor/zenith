@@ -77,6 +77,19 @@ export async function cursorAt(page, pos) {
   await page.eval(`(() => { const v = ${A}.code.view; v.dispatch({ selection: { anchor: ${pos} } }); v.focus(); return true; })()`);
 }
 
+/**
+ * Emulate device pixel ratio `dpr` at a `width` × `height` viewport the way
+ * browser zoom changes it: together with a resize. From Chrome 154 on, a
+ * ratio change alone through `Emulation.setDeviceMetricsOverride` fires no
+ * `resize`, no `(resolution)` media query change, and no ResizeObserver
+ * entry, so no page can see it. Waits until the view took the new ratio.
+ */
+export async function setDpr(page, dpr, width = 1440, height = 900) {
+  await page.viewport(width + 1, height, false, dpr);
+  await page.viewport(width, height, false, dpr);
+  await page.waitFor(`devicePixelRatio === ${dpr} && ${A}.view.dpr === ${dpr}`, `DPR ${dpr} in the view`);
+}
+
 /** Zoom to `z` about the viewport center; wait for the render at that scale. */
 export async function zoomTo(page, z) {
   await page.eval(`(() => { ${A}.view.zoomTo(${z}); return true; })()`);

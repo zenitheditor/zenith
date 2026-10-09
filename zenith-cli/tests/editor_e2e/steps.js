@@ -13,6 +13,7 @@ import {
   boxOf,
   cursorAt,
   zoomTo,
+  setDpr,
   sharpness,
   checkSharp,
   changedLines,
@@ -335,8 +336,7 @@ export const steps = [
   [
     "device pixel ratio 2 renders at twice the scale",
     async ({ page, shot }) => {
-      await page.viewport(1440, 900, false, 2);
-      await page.waitFor(`devicePixelRatio === 2`, "DPR 2");
+      await setDpr(page, 2);
       await page.waitFor(
         `(() => { const a = ${A}; const s = a.renderer.shown; return !!s && Math.abs(s.scale - a.view.zoom * 2) < 1e-9 && a.renderer.idle(); })()`,
         "a render at zoom × 2",
@@ -349,8 +349,7 @@ export const steps = [
       const m81 = await sharpness(page);
       checkSharp(m81, "DPR 2 at 81%");
       await shot("dpr2-zoom-81");
-      await page.viewport(1440, 900);
-      await page.waitFor(`devicePixelRatio === 1`, "DPR 1");
+      await setDpr(page, 1);
       await page.clickSelector("#zoom-fit");
       await settle(page);
       return { scale: m.scale, rect: m.rect, scale81: m81.scale };

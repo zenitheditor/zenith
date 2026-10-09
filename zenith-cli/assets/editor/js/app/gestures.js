@@ -160,7 +160,7 @@ export class GestureController {
   update(drag) {
     const params = drag.params();
     const overlay = this.app.overlay;
-    if (drag.action === "move" && drag.item?.corners && !drag.mods.shift) {
+    if (drawsGhost(drag)) {
       const shift = (corners) => corners.map(([x, y]) => [x + params.dx, y + params.dy]);
       const members = params.nodes ? overlay.selection.filter((s) => s.corners).map((s) => ({ corners: shift(s.corners) })) : undefined;
       overlay.setGhost({
@@ -205,9 +205,14 @@ export class GestureController {
       return;
     }
     const r = env.result;
-    app.overlay.setGhost({ corners: r.corners ?? null, members: r.members, blocked: false });
-    app.overlay.setGuides(r.snap?.guides ?? []);
-    this.hint(this.describe(drag, params, r), drag.point);
+    // A newer pointer position waits: `update` already drew its hint, and
+    // for a plain move its ghost. This older reply must not move them back.
+    const newer = this.want?.drag === drag;
+    if (!newer || !drawsGhost(drag)) {
+      app.overlay.setGhost({ corners: r.corners ?? null, members: r.members, blocked: false });
+      app.overlay.setGuides(r.snap?.guides ?? []);
+    }
+    if (!newer) this.hint(this.describe(drag, params, r), drag.point);
     if (!env.image || !r.rect) return;
     let bitmap;
     try {
@@ -373,6 +378,11 @@ export class GestureController {
     else if (item && app.selectionIds.includes(app.selection.hoverId)) app.view.setCursor("move");
     else app.view.setCursor("");
   }
+}
+
+/** `true` when `update` draws the ghost of `drag` itself: a move off any axis lock. */
+function drawsGhost(drag) {
+  return drag.action === "move" && !!drag.item?.corners && !drag.mods.shift;
 }
 
 function fmt(n) {

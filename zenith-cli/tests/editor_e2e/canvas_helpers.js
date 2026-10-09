@@ -91,20 +91,27 @@ export async function handleOf(page, id, handle) {
   return h;
 }
 
-/** Press at page point `from`, move to `to` in `steps`, run `mid`, release. */
+/**
+ * Press at page point `from`, move to `to` in `steps`, run `mid`, release.
+ * The button goes up even when `mid` throws, so a failed step leaves no
+ * drag running into the next one.
+ */
 export async function drag(page, from, to, { steps = 8, modifiers = 0, mid = null } = {}) {
   const a = await clientOf(page, from.x, from.y);
   const b = await clientOf(page, to.x, to.y);
   await page.mouse("mouseMoved", a.x, a.y, { button: "none", modifiers });
   await page.mouse("mousePressed", a.x, a.y, { modifiers });
-  for (let i = 1; i <= steps; i++) {
-    const x = a.x + ((b.x - a.x) * i) / steps;
-    const y = a.y + ((b.y - a.y) * i) / steps;
-    await page.mouse("mouseMoved", x, y, { buttons: 1, modifiers });
-    await sleep(16);
+  try {
+    for (let i = 1; i <= steps; i++) {
+      const x = a.x + ((b.x - a.x) * i) / steps;
+      const y = a.y + ((b.y - a.y) * i) / steps;
+      await page.mouse("mouseMoved", x, y, { buttons: 1, modifiers });
+      await sleep(16);
+    }
+    if (mid) await mid();
+  } finally {
+    await page.mouse("mouseReleased", b.x, b.y, { modifiers });
   }
-  if (mid) await mid();
-  await page.mouse("mouseReleased", b.x, b.y, { modifiers });
 }
 
 /** Click page point `p`. */
@@ -119,7 +126,12 @@ export async function dismissNotices(page) {
   await sleep(100);
 }
 
-/** Select `id` by a click on its centre (notices dismissed first), unless it is the one selected node. */
+/**
+ * Select `id` by a click on its centre (notices dismissed first), unless it
+ * is the one selected node. Returns once the overlay outlines `id` and the
+ * inspector shows it: the selection draws the outline before `node.inspect`
+ * returns, and until then the inspector fields edit the node selected before.
+ */
 export async function select(page, id) {
   await dismissNotices(page);
   // Already the one selected node: a click could only race the check below
@@ -128,6 +140,7 @@ export async function select(page, id) {
   if (!already) await clickPage(page, await centerOf(page, id));
   await page.waitFor(`JSON.stringify(${A}.selectionIds) === ${JSON.stringify(JSON.stringify([id]))}`, `${id} selected`);
   await page.waitFor(`(() => { const s = ${A}.overlay.single(); return !!s && s.id === ${JSON.stringify(id)}; })()`, `${id} outlined`);
+  await page.waitFor(`${A}.inspector.shownId === ${JSON.stringify(id)}`, `${id} in the inspector`);
 }
 
 /** Wait until a live preview image shows. */
@@ -167,6 +180,7 @@ export async function selectedAs(page, ids) {
   await page.waitFor(`JSON.stringify(${A}.selectionIds) === ${JSON.stringify(want)}`, `selection ${want}`);
   const drawn = ids.length > 1 ? `!!${A}.overlay.group && ${A}.overlay.selection.length === ${ids.length}` : `${A}.overlay.single()?.id === ${JSON.stringify(ids[0])}`;
   if (ids.length) await page.waitFor(`(${drawn}) && !${A}.overlay.ghost`, `the overlay of ${want}`);
+  if (ids.length === 1) await page.waitFor(`${A}.inspector.shownId === ${JSON.stringify(ids[0])}`, `${ids[0]} in the inspector`);
 }
 
 /** Select `ids`: a click on the first node's centre, Shift+clicks on the rest. */

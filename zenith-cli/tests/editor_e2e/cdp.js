@@ -12,6 +12,7 @@ export class Browser {
   /**
    * Launch `chromium` headless and connect to it. `ZENITH_E2E_NO_SANDBOX=1`
    * adds `--no-sandbox` for hosts that block user namespaces (CI containers).
+   * `ZENITH_E2E_CPU_THROTTLE` slows each page (see `Page.init`).
    */
   static async launch(chromium) {
     const profile = mkdtempSync(path.join(tmpdir(), "zenith-e2e-chromium-"));
@@ -151,6 +152,10 @@ export class Page {
     await this.send("Page.enable");
     await this.send("Runtime.enable");
     await this.send("Log.enable");
+    // `ZENITH_E2E_CPU_THROTTLE=<rate>` slows the page's CPU `rate` times,
+    // to expose races a fast machine hides.
+    const rate = Number(process.env.ZENITH_E2E_CPU_THROTTLE ?? 1);
+    if (rate > 1) await this.send("Emulation.setCPUThrottlingRate", { rate });
   }
 
   async viewport(width, height, mobile = false, deviceScaleFactor = 1) {

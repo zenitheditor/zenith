@@ -53,9 +53,13 @@ export const steps = [
       await drag(page, from, { x: from.x + 30, y: from.y + 20 }, {
         mid: async () => {
           await previewShown(page);
-          await page.waitFor("!document.getElementById('gesture-hint').hidden", "the drag hint");
-          const text = await page.eval("document.getElementById('gesture-hint').textContent");
-          check(text.includes("Δx 30") && text.includes("Δy 20"), `hint ${text}`);
+          // The page handles the last pointer move, and the reply of its
+          // preview, after `drag` sent it: wait for both.
+          await page.waitFor(
+            `(() => { const g = ${A}.gestures; const h = document.getElementById('gesture-hint');
+              return !h.hidden && h.textContent.startsWith('Δx 30  Δy 20') && !g.want && !g.flight; })()`,
+            "the drag hint at the release point",
+          );
           check((await state(page)).text === before.text, "the text changed during the drag");
           await shot("gesture-mid-drag");
         },
