@@ -12,7 +12,7 @@ use zenith_producers::{
 use zenith_tx::{AddAssetMetadata, Op, Permissions, Transaction, TxResult, run_transaction};
 
 use crate::commands::serialize_pretty;
-use crate::commands::tx::{status_exit_code, status_json, status_label};
+use crate::commands::tx::{status_exit_code, status_json, status_label, written_source};
 use crate::json_types::DiagnosticJson;
 
 #[derive(Debug)]
@@ -32,6 +32,9 @@ pub struct AssetImportInput<'a> {
 #[derive(Debug)]
 pub struct AssetImportOutcome {
     pub result: TxResult,
+    /// The text `--apply` writes: the input source patched in place, or
+    /// canonical text when the patcher falls back.
+    pub written: zenith_core::Patched,
     pub produced: ProducedAsset,
     pub human: String,
     pub json_str: String,
@@ -109,9 +112,11 @@ fn finish_asset_run(
     let exit_code = status_exit_code(&result.status);
     let human = render_human(&result, &input, &produced);
     let json_str = render_json(&result, &input, &produced);
+    let written = written_source(doc_src, &doc, &result);
 
     Ok(AssetImportOutcome {
         result,
+        written,
         produced,
         human,
         json_str,

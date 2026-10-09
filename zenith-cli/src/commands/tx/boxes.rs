@@ -115,7 +115,8 @@ pub(super) struct BoxSides<'a> {
 /// whose page box changed. A subject below an already reported subject is
 /// not reported again. A `tx.flow_placed` for the same subject moves out of
 /// `diagnostics` into the warning's cause. Ids missing on either side are
-/// skipped. `after_tree` is the id tree of the result.
+/// skipped. A subject that a later op in the transaction edits is skipped:
+/// that op moves it on purpose. `after_tree` is the id tree of the result.
 pub(super) fn page_box_warnings(
     ops: &[Op],
     before: &Document,
@@ -135,14 +136,23 @@ pub(super) fn page_box_warnings(
         })
         .map(|(id, _)| id.as_str())
         .collect();
-    for op in ops {
+    for (index, op) in ops.iter().enumerate() {
         let Some(subjects) = op.position_preserving_subjects(before) else {
             continue;
         };
         let name = op_name(op);
         let subject_set: BTreeSet<&str> = subjects.iter().map(String::as_str).collect();
+        // A later op that edits a subject moves it on purpose.
+        let edited_later: BTreeSet<&str> = ops
+            .iter()
+            .skip(index + 1)
+            .flat_map(Op::edited_node_ids)
+            .collect();
         let mut covered: BTreeSet<&str> = BTreeSet::new();
         for id in &subjects {
+            if edited_later.contains(id.as_str()) {
+                continue;
+            }
             if before_tree
                 .parent
                 .get(id)

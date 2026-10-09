@@ -1,25 +1,49 @@
-//! Document write path shared by the CLI dispatchers and the MCP server.
+//! Document write path shared by the CLI dispatchers, the MCP server, and the
+//! `zenith edit` server.
 //!
-//! Every write to a `.zen` document goes through [`apply_edit`] so the edit is
-//! recorded in version history before the bytes reach disk.
+//! Every write to a `.zen` document goes through [`write_document`] so the
+//! edit is recorded in version history before the bytes reach disk. The bytes
+//! replace the file atomically through the protected output path: a sibling
+//! temporary is written and flushed, then renamed over the destination. A
+//! symlinked destination keeps its link and replaces the target.
 
 use std::path::Path;
 
 use crate::history;
+use crate::output_file;
 use crate::report::CliError;
 
-/// Record `bytes` in history, then write them to `path`.
+/// The bytes one document write put on disk.
+pub(crate) struct Written {
+    /// The bytes written. They differ from the input when history stamps a
+    /// `doc-id` into the document.
+    pub(crate) bytes: Vec<u8>,
+    /// A non-fatal history warning.
+    pub(crate) warning: Option<String>,
+}
+
+/// Record `bytes` in history under `label`, then replace `path` with them.
 ///
-/// A history warning is printed to stderr and never blocks the write.
-/// Returns the bytes written, which differ from `bytes` when history stamps a
-/// `doc-id` into the document.
-pub(crate) fn apply_edit(path: &Path, bytes: &[u8], label: &str) -> Result<Vec<u8>, CliError> {
+/// A history error never blocks the write. It comes back as
+/// [`Written::warning`].
+pub(crate) fn write_document(path: &Path, bytes: &[u8], label: &str) -> Result<Written, CliError> {
     let recorded = history::record_edit(bytes, path, label);
-    if let Some(w) = &recorded.warning {
+    output_file::write_bytes(path, &recorded.bytes).map_err(|e| write_error(path, &e))?;
+    Ok(Written {
+        bytes: recorded.bytes,
+        warning: recorded.warning,
+    })
+}
+
+/// [`write_document`], printing a history warning to stderr.
+///
+/// Returns the bytes written.
+pub(crate) fn apply_edit(path: &Path, bytes: &[u8], label: &str) -> Result<Vec<u8>, CliError> {
+    let written = write_document(path, bytes, label)?;
+    if let Some(w) = &written.warning {
         eprintln!("warning: {w}");
     }
-    std::fs::write(path, &recorded.bytes).map_err(|e| write_error(path, &e))?;
-    Ok(recorded.bytes)
+    Ok(written.bytes)
 }
 
 /// An `io.write_failed` error for `path` (exit code 2).

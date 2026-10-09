@@ -4,11 +4,11 @@ use crate::cli_helpers::print_diagnostics_stderr;
 use crate::commands::serialize_pretty;
 use crate::json_types::{DiagnosticJson, RenderOutput};
 use crate::json_types::{RenderImageJson, RenderRasterizedRegionJson};
-use crate::report::ImportFiles;
 use std::collections::BTreeSet;
 use std::path::Path;
 use std::process::ExitCode;
 use zenith_core::Diagnostic;
+use zenith_pipeline::imports::ImportFiles;
 const RENDER_SCHEMA: &str = "zenith-render-v1";
 impl RenderRun<'_> {
     /// Gate diagnostics and stage output bytes.

@@ -13,10 +13,10 @@ use zenith_cli::commands::theme::{
     ThemeInput, apply_run, kit_document_source, new as theme_new,
 };
 use zenith_cli::commands::validate;
-use zenith_cli::config::CliPolicyFlags;
 use zenith_cli::library::{EMBEDDED_PACKS, resolve_theme_pack};
 use zenith_core::theme::Scheme;
 use zenith_core::{DefaultsKind, Document, KdlAdapter, KdlSource as _, default_provider};
+use zenith_pipeline::PolicyFlags;
 use zenith_session::StorePaths;
 
 const STYLE_IDS: &[&str] = THEME_STYLE_IDS;
@@ -87,7 +87,7 @@ fn assert_theme_blocks(doc: &Document, label: &str) {
 
 /// Validate `src` as the CLI does; returns (exit code, diagnostic codes).
 fn validate_codes(src: &str, dir: Option<&Path>) -> (u8, Vec<String>) {
-    let out = validate::run(src, dir, true, &CliPolicyFlags::default());
+    let out = validate::run(src, dir, true, &PolicyFlags::default());
     let value: serde_json::Value =
         serde_json::from_str(&out.stdout).expect("validate --json output parses");
     let codes = value["diagnostics"]

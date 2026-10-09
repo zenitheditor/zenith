@@ -12,10 +12,10 @@ use zenith_core::{DataContext, Diagnostic};
 use crate::cli::RenderArgs;
 use crate::cli_helpers::{parse_spread_spec, read_file};
 use crate::commands;
-use crate::commands::render::{RenderCmdErr, RenderEntryOptions, SpreadRenderOpts};
-use crate::config::CliPolicyFlags;
 use crate::json_types::RenderImageJson;
-use crate::report::{CliError, ImportFiles};
+use crate::report::CliError;
+use zenith_pipeline::imports::ImportFiles;
+use zenith_pipeline::{PipelineError, PolicyFlags, RenderOptions, SpreadOptions};
 
 use super::output::gate;
 
@@ -101,7 +101,7 @@ pub(in crate::dispatch) fn dispatch_render(args: RenderArgs) -> ExitCode {
         },
         None => None,
     };
-    let flags = CliPolicyFlags {
+    let flags = PolicyFlags {
         allow: args.allow.clone(),
         warn: args.warn.clone(),
         deny: args.deny.clone(),
@@ -142,8 +142,8 @@ pub(super) struct Stop {
     pub(super) import_files: ImportFiles,
 }
 
-impl From<RenderCmdErr> for Stop {
-    fn from(e: RenderCmdErr) -> Self {
+impl From<PipelineError> for Stop {
+    fn from(e: PipelineError) -> Self {
         Self {
             diagnostics: e.diagnostics,
             exit_code: e.exit_code,
@@ -156,7 +156,7 @@ impl From<RenderCmdErr> for Stop {
 pub(super) struct RenderRun<'a> {
     pub(super) args: &'a RenderArgs,
     pub(super) src: &'a str,
-    pub(super) flags: &'a CliPolicyFlags,
+    pub(super) flags: &'a PolicyFlags,
     pub(super) data: Option<&'a DataContext>,
     /// The checked `--scale`, when given.
     pub(super) scale: Option<f64>,
@@ -181,8 +181,8 @@ impl RenderRun<'_> {
         self.scale.unwrap_or(1.0)
     }
 
-    pub(super) fn entry_options(&self) -> RenderEntryOptions<'_> {
-        RenderEntryOptions {
+    pub(super) fn entry_options(&self) -> RenderOptions<'_> {
+        RenderOptions {
             locked: self.args.locked,
             subset: !self.args.embed_full_fonts,
             flags: self.flags,
@@ -190,6 +190,7 @@ impl RenderRun<'_> {
             construction_overlay: self.args.construction_overlay,
             scale: self.output_scale(),
             raster_scale: self.raster_scale,
+            parsed: None,
         }
     }
 
@@ -203,7 +204,7 @@ impl RenderRun<'_> {
                 page_a,
                 page_b,
                 args.gutter,
-                SpreadRenderOpts {
+                SpreadOptions {
                     locked: args.locked,
                     flags: self.flags,
                     data: self.data,

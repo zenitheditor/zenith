@@ -29,6 +29,5 @@ pub mod variant;
 pub mod workspace;
 
 pub(crate) use format::{
-    format_diagnostic_line, format_error_diag, format_located_diagnostic_line, serialize_compact,
-    serialize_pretty,
+    format_diagnostic_line, format_located_diagnostic_line, serialize_compact, serialize_pretty,
 };

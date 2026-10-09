@@ -1,0 +1,448 @@
+/* Page shell: top bar, notices, workspace (panels, split panes), bottom
+   diagnostics, status bar. Collapsed panels and fullscreen modes are
+   `data-*` attributes on `.app`. */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--ui-size);
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.skip-link {
+  position: absolute;
+  left: var(--space-2);
+  top: -48px;
+  z-index: 100;
+  padding: var(--space-2) var(--space-3);
+  background: var(--surface);
+  color: var(--accent);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-pop);
+}
+
+.skip-link:focus {
+  top: var(--space-2);
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.app {
+  display: grid;
+  grid-template-rows: var(--bar-h) auto minmax(0, 1fr) auto var(--status-h);
+  grid-template-areas: "top" "notices" "work" "bottom" "status";
+  height: 100vh;
+  height: 100dvh;
+  width: 100%;
+  overflow: hidden;
+}
+
+/* Top bar */
+
+.topbar {
+  grid-area: top;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+  padding: 0 var(--space-4);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.doc-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.doc-name {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dirty-mark {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--warning);
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex: none;
+}
+
+.tool-group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+/* Notices */
+
+.banners {
+  grid-area: notices;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* Workspace */
+
+.workspace {
+  grid-area: work;
+  display: flex;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.panel-left {
+  flex: 0 0 var(--panel-left);
+  border-right: 1px solid var(--border);
+}
+
+.panel-right {
+  flex: 0 0 var(--panel-right);
+  border-left: 1px solid var(--border);
+}
+
+.app[data-left="closed"] .panel-left,
+.app[data-right="closed"] .panel-right {
+  display: none;
+}
+
+.center {
+  --split: 0.5;
+  display: flex;
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+}
+
+.pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  background: var(--surface);
+}
+
+.pane-code {
+  flex: 0 0 calc(var(--split) * 100% - 3px);
+}
+
+.pane-canvas {
+  flex: 1 1 0;
+  background: var(--canvas-bg);
+}
+
+.code-host {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.code-host .cm-editor {
+  height: 100%;
+}
+
+.pane-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  min-height: 40px;
+  padding: 0 var(--space-2) 0 var(--space-4);
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.pane-title {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.pane-meta {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+/* Divider */
+
+.divider {
+  position: relative;
+  flex: 0 0 6px;
+  margin: 0 -2px;
+  z-index: 5;
+  cursor: col-resize;
+  touch-action: none;
+  background: transparent;
+}
+
+.divider::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  transform: translateX(-50%);
+  background: var(--border);
+  transition: background var(--dur) var(--ease), width var(--dur) var(--ease);
+}
+
+.divider:hover::before,
+.divider.dragging::before,
+.divider:focus-visible::before {
+  width: 3px;
+  background: var(--accent);
+}
+
+.divider:focus-visible {
+  outline: none;
+}
+
+.divider-grip {
+  display: none;
+}
+
+/* Bottom diagnostics */
+
+.panel-bottom {
+  grid-area: bottom;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+}
+
+.panel-bottom .diag-list {
+  height: var(--diag-h);
+}
+
+.app[data-bottom="closed"] .panel-bottom .diag-list {
+  display: none;
+}
+
+.app[data-bottom="closed"] .panel-bottom .pane-head {
+  border-bottom: 0;
+}
+
+/* Status bar */
+
+.statusbar {
+  grid-area: status;
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  min-width: 0;
+  padding: 0 var(--space-4);
+  background: var(--surface-2);
+  border-top: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.status-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.status-item .icon {
+  width: 14px;
+  height: 14px;
+}
+
+.status-spacer {
+  flex: 1 1 auto;
+}
+
+.muted {
+  color: var(--text-faint);
+}
+
+/* Fullscreen modes */
+
+.app[data-full="code"] .panel,
+.app[data-full="code"] .divider,
+.app[data-full="code"] .pane-canvas,
+.app[data-full="code"] .panel-bottom,
+.app[data-full="canvas"] .panel,
+.app[data-full="canvas"] .divider,
+.app[data-full="canvas"] .pane-code,
+.app[data-full="canvas"] .panel-bottom {
+  display: none;
+}
+
+.app[data-full="code"] .pane-code {
+  flex: 1 1 0;
+}
+
+/* Phone width: one column. The panes stack; panels follow below. */
+
+@media (max-width: 720px) {
+  .topbar {
+    padding: 0 var(--space-2) 0 var(--space-4);
+  }
+
+  .toolbar {
+    gap: var(--space-1);
+  }
+
+  .toolbar .button span {
+    display: none;
+  }
+
+  /* Room for the title: Save already downloads where the browser cannot
+     write the file, and a phone seldom picks a folder. */
+  #download,
+  #open-folder {
+    display: none;
+  }
+
+  .workspace {
+    flex-direction: column;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+
+  /* The panes fill the visible workspace; panels scroll in below. */
+  .center {
+    flex: none;
+    flex-direction: column;
+    height: 100%;
+    min-height: 420px;
+  }
+
+  #theme {
+    display: none;
+  }
+
+  .app[data-full="code"] .center,
+  .app[data-full="canvas"] .center {
+    height: 100%;
+    min-height: 0;
+    flex: 1 1 0;
+  }
+
+  .pane-code {
+    flex: 0 0 calc(var(--split) * 100% - 3px);
+  }
+
+  .divider {
+    flex: 0 0 12px;
+    margin: -4px 0;
+    cursor: row-resize;
+  }
+
+  .divider::before {
+    top: 50%;
+    bottom: auto;
+    left: 0;
+    right: 0;
+    width: auto;
+    height: 1px;
+    transform: translateY(-50%);
+  }
+
+  .divider:hover::before,
+  .divider.dragging::before,
+  .divider:focus-visible::before {
+    width: auto;
+    height: 3px;
+  }
+
+  .divider-grip {
+    display: block;
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 36px;
+    height: 4px;
+    transform: translate(-50%, -50%);
+    border-radius: 2px;
+    background: var(--border-strong);
+  }
+
+  .panel-left,
+  .panel-right {
+    flex: none;
+    border: 0;
+    border-top: 1px solid var(--border);
+    overflow: visible;
+  }
+
+  .panel-right {
+    order: 2;
+  }
+
+  .panel-left {
+    order: 3;
+  }
+
+  .statusbar {
+    gap: var(--space-3);
+  }
+}

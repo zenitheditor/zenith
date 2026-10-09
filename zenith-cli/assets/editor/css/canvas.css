@@ -1,0 +1,237 @@
+/* Canvas: the viewport, the page frame, the page raster, and the selection
+   overlay. */
+
+.viewport {
+  position: relative;
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+  cursor: default;
+  touch-action: none;
+  user-select: none;
+  background-color: var(--canvas-bg);
+  background-image: radial-gradient(var(--canvas-dot) 1px, transparent 1px);
+  background-size: 16px 16px;
+}
+
+.viewport:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+
+/* Panning wins over the gesture cursor set in script. */
+.viewport.panning,
+.viewport.space {
+  cursor: grab !important;
+}
+
+.viewport.panning:active {
+  cursor: grabbing !important;
+}
+
+.stage {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
+  will-change: transform;
+}
+
+/* The page box under the raster: white paper, edge, and shadow. Parts of the
+   page outside the rendered window show as paper until their render lands. */
+.page-frame {
+  display: block;
+  box-shadow: var(--page-shadow);
+  outline: 1px solid var(--page-edge);
+  background: #ffffff;
+}
+
+.page-frame[hidden] {
+  display: none;
+}
+
+/* The page raster (see js/canvas/paint.js): sized and placed in script so its
+   backing store maps 1:1 to device pixels. */
+.page-canvas {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: block;
+  pointer-events: none;
+}
+
+.overlay {
+  position: absolute;
+  left: 0;
+  top: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+
+/* Overlay strokes sit on page content of any color, in either theme: each
+   line has a light halo under it and each handle a dark one around it. */
+.overlay .hover-halo,
+.overlay .selected-halo {
+  fill: none;
+  stroke: rgb(255 255 255 / 0.7);
+  stroke-width: 3px;
+  vector-effect: non-scaling-stroke;
+}
+
+.overlay .hover {
+  fill: none;
+  stroke: var(--hover);
+  stroke-width: 1px;
+  vector-effect: non-scaling-stroke;
+}
+
+.overlay .selected {
+  fill: none;
+  stroke: var(--sel);
+  stroke-width: 1.5px;
+  vector-effect: non-scaling-stroke;
+}
+
+.overlay .ghost {
+  fill: none;
+  stroke: var(--sel);
+  stroke-width: 1.5px;
+  stroke-dasharray: 5 3;
+  vector-effect: non-scaling-stroke;
+}
+
+.overlay .ghost.blocked {
+  stroke: var(--grip-blocked);
+}
+
+/* Several nodes selected: thin outlines per node, and the selection box
+   whose grips act on all of them. */
+.overlay .selected.member,
+.overlay .ghost.member {
+  stroke-width: 1px;
+}
+
+.overlay .group {
+  fill: none;
+  stroke: var(--sel);
+  stroke-width: 1.5px;
+  stroke-dasharray: 6 3;
+  vector-effect: non-scaling-stroke;
+}
+
+/* The marquee band of an area selection. */
+.overlay .marquee-halo {
+  fill: none;
+  stroke: rgb(255 255 255 / 0.7);
+  stroke-width: 3px;
+  vector-effect: non-scaling-stroke;
+}
+
+.overlay .marquee {
+  fill: var(--marquee-fill);
+  stroke: var(--sel);
+  stroke-width: 1px;
+  vector-effect: non-scaling-stroke;
+}
+
+/* Snap guides: where the dragged box lines up with another box or the
+   page. */
+.overlay .guide-halo {
+  stroke: rgb(255 255 255 / 0.75);
+  stroke-width: 3px;
+  vector-effect: non-scaling-stroke;
+}
+
+.overlay .guide {
+  stroke: var(--guide);
+  stroke-width: 1px;
+  vector-effect: non-scaling-stroke;
+}
+
+.overlay .stem {
+  stroke: var(--sel);
+  stroke-width: 1px;
+  vector-effect: non-scaling-stroke;
+}
+
+.overlay .handle {
+  fill: #ffffff;
+  stroke: var(--sel);
+  stroke-width: 1.5px;
+  vector-effect: non-scaling-stroke;
+  filter: drop-shadow(0 0 1px rgb(0 0 0 / 0.55));
+}
+
+.overlay .handle.vertex,
+.overlay .handle.endpoint {
+  fill: var(--sel);
+  stroke: #ffffff;
+}
+
+.overlay .handle.control {
+  fill: #ffffff;
+  stroke-width: 1px;
+}
+
+.overlay .handle.off {
+  fill: #e5e8ee;
+  stroke: var(--grip-off);
+  stroke-dasharray: 2 1.5;
+}
+
+.overlay .stale .selected,
+.overlay .stale .handle {
+  stroke-dasharray: 4 3;
+}
+
+.overlay .lock-bg {
+  fill: var(--grip-blocked);
+  filter: drop-shadow(0 0 1px rgb(0 0 0 / 0.5));
+}
+
+.overlay .lock-glyph {
+  fill: none;
+  stroke: #ffffff;
+  stroke-width: 1.4;
+}
+
+/* The gesture hint: what a drag does now, or why the engine refuses it. */
+.gesture-hint {
+  position: absolute;
+  z-index: 2;
+  max-width: min(360px, calc(100% - 16px));
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--hint-bg);
+  color: var(--hint-text);
+  box-shadow: var(--shadow-pop);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.4;
+  pointer-events: none;
+}
+
+.gesture-hint.blocked {
+  background: var(--grip-blocked);
+  color: #ffffff;
+}
+
+.gesture-hint[hidden] {
+  display: none;
+}
+
+.canvas-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-5);
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.canvas-empty p {
+  max-width: 360px;
+  margin: 0;
+}

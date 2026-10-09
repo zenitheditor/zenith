@@ -10,13 +10,8 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use zenith_core::{Diagnostic, Document, default_provider};
-use zenith_scene::{CompiledBox, DocumentPrep, LayoutBox, PageCompiler};
-
-use crate::commands::composition_imports::load_import_graph;
-use crate::commands::render::{
-    build_font_provider_with_imports, read_image_sizes, resolve_text_sources,
-};
+use zenith_core::Document;
+use zenith_scene::{CompiledBox, LayoutBox};
 
 use super::document::NodeEntry;
 
@@ -83,29 +78,18 @@ impl From<LayoutBox> for NodeBox {
     }
 }
 
-/// The final geometry of every compiled node of each page of `doc`, by id, from
-/// [`PageCompiler::compiled_boxes`]. `project_dir` locates project fonts,
-/// text sources, imports, and image assets, as on render.
+/// The final geometry of every compiled node of each page of `doc`, by id,
+/// from [`zenith_pipeline::resolved_boxes`] on the native host.
+/// `project_dir` locates project fonts, text sources, imports, and image
+/// assets, as on render.
 pub fn resolved_boxes(
     doc: &Document,
     project_dir: Option<&Path>,
 ) -> Vec<BTreeMap<String, BoxInfo>> {
-    let mut doc = doc.clone();
-    let mut ignored: Vec<Diagnostic> = Vec::new();
-    resolve_text_sources(&mut doc, project_dir, &mut ignored);
-    let imports = load_import_graph(&doc, project_dir);
-    // A font load error leaves the bundled fonts, as `validate` does.
-    let fonts = build_font_provider_with_imports(&doc, project_dir, &imports, false)
-        .unwrap_or_else(|_| default_provider());
-    let scene_imports = imports.to_scene_graph();
-    let prep = DocumentPrep::new(&doc, None, Some(&scene_imports))
-        .with_image_sizes(read_image_sizes(&doc, project_dir, &imports));
-    let compiler = PageCompiler::new(&prep, &fonts);
-    (0..compiler.page_count())
-        .map(|index| {
-            compiler
-                .compiled_boxes(index)
-                .into_iter()
+    zenith_pipeline::resolved_boxes(crate::native::host(), doc, project_dir)
+        .into_iter()
+        .map(|page| {
+            page.into_iter()
                 .map(|(id, b)| (id, BoxInfo::from(b)))
                 .collect()
         })

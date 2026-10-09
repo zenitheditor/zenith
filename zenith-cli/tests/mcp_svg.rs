@@ -338,7 +338,7 @@ fn mcp_store_error_names_the_committed_requested_output() {
     let paths = zenith_session::StorePaths::new(store.path());
     let identity = zenith_cli::history::ensure_doc_id_in(&paths, &doc).unwrap();
     let source = fs::read_to_string(&doc).unwrap();
-    let flags = zenith_cli::config::CliPolicyFlags::default();
+    let flags = zenith_pipeline::PolicyFlags::default();
     let bytes = zenith_cli::commands::render::to_svg_with_dir(
         &source,
         Some(directory.path()),
@@ -525,7 +525,7 @@ fn omitted_page_and_unknown_fields_keep_default_render_selection() {
         80
     );
     let source = fs::read_to_string(&doc).unwrap();
-    let flags = zenith_cli::config::CliPolicyFlags::default();
+    let flags = zenith_pipeline::PolicyFlags::default();
     let expected = zenith_cli::commands::render::to_pdf_all_pages_with_dir(
         &source,
         Some(directory.path()),

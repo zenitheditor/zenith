@@ -1,6 +1,6 @@
 //! Read-only `zenith imports list` — dump the composition import graph.
 //!
-//! Reuses [`super::load_import_graph`]; does not re-walk the filesystem itself.
+//! Reuses [`load_import_graph`]; does not re-walk the filesystem itself.
 //! Host parse failure is exit 2; graph edge failures stay exit 0 and appear in
 //! the edge/status (and optional diagnostics) data.
 
@@ -8,10 +8,11 @@ use std::path::Path;
 
 use zenith_core::{Diagnostic, KdlAdapter, KdlSource as _};
 
-use super::load_import_graph;
-use super::loaded::ImportEdge;
+use zenith_pipeline::imports::{ImportEdge, load_import_graph};
+
 use crate::commands::{format_diagnostic_line, serialize_pretty};
 use crate::json_types::DiagnosticJson;
+use crate::native::NativeFs;
 
 const SCHEMA: &str = "zenith-imports-list-v1";
 
@@ -79,7 +80,7 @@ pub(crate) fn run(src: &str, document_path: &Path, json: bool) -> Result<String,
     })?;
 
     let project_dir = document_path.parent();
-    let graph = load_import_graph(&doc, project_dir);
+    let graph = load_import_graph(&NativeFs, &doc, project_dir);
     let document_label = document_path.display().to_string();
 
     if json {

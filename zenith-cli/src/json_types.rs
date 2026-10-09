@@ -6,7 +6,7 @@
 
 use serde::Serialize;
 
-use crate::report::ImportFiles;
+use zenith_pipeline::imports::ImportFiles;
 
 /// JSON representation of a [`zenith_core::Diagnostic`].
 ///

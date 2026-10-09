@@ -1,13 +1,12 @@
 use std::fs;
 
 use zenith_cli::commands::render::{
-    RenderEntryOptions, load_data_context, to_svg_all_pages_with_dir_options,
-    to_svg_with_dir_options,
+    load_data_context, to_svg_all_pages_with_dir_options, to_svg_with_dir_options,
 };
-use zenith_cli::config::CliPolicyFlags;
+use zenith_pipeline::{PolicyFlags, RenderOptions};
 
-fn options(flags: &CliPolicyFlags) -> RenderEntryOptions<'_> {
-    RenderEntryOptions {
+fn options(flags: &PolicyFlags) -> RenderOptions<'_> {
+    RenderOptions {
         locked: false,
         subset: true,
         flags,
@@ -15,6 +14,7 @@ fn options(flags: &CliPolicyFlags) -> RenderEntryOptions<'_> {
         construction_overlay: false,
         scale: 1.0,
         raster_scale: 1.0,
+        parsed: None,
     }
 }
 
@@ -47,7 +47,7 @@ fn svg_data_values_match_literal_scene_bytes() {
         "",
         r#"      rect id="rect.a" x=(px)0 y=(px)0 w=(px)80 h=(px)60 fill=(data)"fill""#,
     );
-    let flags = CliPolicyFlags::default();
+    let flags = PolicyFlags::default();
     let mut opts = options(&flags);
     opts.data = Some(&data);
     let from_data = to_svg_with_dir_options(&src, Some(dir.path()), 1, opts).expect("data SVG");
@@ -72,7 +72,7 @@ fn svg_external_text_matches_inline_glyph_outlines() {
         r#"      text id="text.a" x=(px)0 y=(px)0 w=(px)110 h=(px)60 src="copy.txt""#,
     );
     let inline = external.replace(r#"src="copy.txt""#, r#"{ span "SVG outlines"; }"#);
-    let flags = CliPolicyFlags::default();
+    let flags = PolicyFlags::default();
     let from_file = to_svg_with_dir_options(&external, Some(dir.path()), 1, options(&flags))
         .expect("external text");
     let from_inline = to_svg_with_dir_options(&inline, Some(dir.path()), 1, options(&flags))
@@ -120,7 +120,7 @@ fn svg_imported_page_keeps_geometry_and_document_dimensions() {
     page id="page.host" source="slide#page.page.inputs" fit="fill" w=(px)240 h=(px)160
   }
 }"#;
-    let flags = CliPolicyFlags::default();
+    let flags = PolicyFlags::default();
     let single =
         to_svg_with_dir_options(src, Some(dir.path()), 1, options(&flags)).expect("imported SVG");
     assert_eq!(
@@ -150,7 +150,7 @@ fn svg_image_is_embedded_and_locked_assets_keep_hash_checks() {
         r#"asset id="asset.a" kind="image" src="image.png""#,
         r#"      image id="image.a" asset="asset.a" x=(px)0 y=(px)0 w=(px)8 h=(px)8 fit="stretch""#,
     );
-    let flags = CliPolicyFlags::default();
+    let flags = PolicyFlags::default();
     let artifact = to_svg_with_dir_options(&src, Some(dir.path()), 1, options(&flags))
         .expect("embedded image");
     let svg = String::from_utf8(artifact.svg).expect("UTF-8 SVG");
@@ -186,7 +186,7 @@ fn svg_construction_overlay_is_deterministic_and_changes_scene() {
       }
       rect id="rect.a" x=(px)10 y=(px)10 w=(px)30 h=(px)20 fill=(token)"color.ink""##,
     );
-    let flags = CliPolicyFlags::default();
+    let flags = PolicyFlags::default();
     let plain = to_svg_with_dir_options(&src, None, 1, options(&flags)).expect("plain SVG");
     let mut opts = options(&flags);
     opts.construction_overlay = true;

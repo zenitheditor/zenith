@@ -1,0 +1,46 @@
+zenith version=1 {
+  project id="proj.canvas" name="Canvas"
+  tokens format="zenith-token-v1" {
+    token id="color.bg" type="color" value="#f8fafc"
+    token id="color.ink" type="color" value="#1e293b"
+    token id="color.accent" type="color" value="#2563eb"
+    token id="color.warm" type="color" value="#f97316"
+    token id="color.mint" type="color" value="#10b981"
+    token id="space.x" type="dimension" value=(px)40
+    token id="size.rule" type="dimension" value=(px)2
+    token id="size.body" type="dimension" value=(px)16
+    token id="font.sans" type="fontFamily" value="Noto Sans"
+    token id="font.serif" type="fontFamily" value="Noto Serif"
+    token id="weight.bold" type="fontWeight" value=700
+  }
+  styles {}
+  document id="doc.canvas" title="Canvas" {
+    // The selection fixture: each e2e step edits these nodes.
+    page id="pg" w=(px)600 h=(px)420 background=(token)"color.bg" {
+      // Moved, resized, and turned together.
+      rect id="a" x=(px)40 y=(px)40 w=(px)100 h=(px)60 fill=(token)"color.accent"
+      rect id="b" x=(px)180 y=(px)60 w=(px)80 h=(px)50 fill=(token)"color.warm"
+      // A turned group: its child maps through the group's turn.
+      group id="grp" x=(px)320 y=(px)30 w=(px)120 h=(px)80 rotate=(deg)20 {
+        rect id="inner" x=(px)10 y=(px)10 w=(px)60 h=(px)30 fill=(token)"color.mint"
+      }
+      // Its x is bound to a token.
+      rect id="tok" x=(token)"space.x" y=(px)140 w=(px)60 h=(px)40 fill=(token)"color.ink"
+      // The snap target.
+      rect id="dock" x=(px)460 y=(px)170 w=(px)100 h=(px)60 fill=(token)"color.ink"
+      // Locked: a marquee skips it.
+      rect id="pin" x=(px)140 y=(px)150 w=(px)30 h=(px)30 fill=(token)"color.warm" locked=#true
+      // A curve with control handles.
+      path id="wave" stroke=(token)"color.ink" stroke-width=(token)"size.rule" {
+        anchor x=(px)360 y=(px)330 out-x=(px)400 out-y=(px)270
+        anchor x=(px)460 y=(px)330 in-x=(px)420 in-y=(px)390 out-x=(px)500 out-y=(px)270
+        anchor x=(px)560 y=(px)330 in-x=(px)520 in-y=(px)390
+      }
+      text id="title" x=(px)40 y=(px)250 w=(px)260 h=(px)40 fill=(token)"color.ink" font-family=(token)"font.sans" font-size=(token)"size.body" { span "Canvas" }
+      text id="rich" x=(px)40 y=(px)320 w=(px)280 h=(px)40 fill=(token)"color.ink" font-family=(token)"font.sans" font-size=(token)"size.body" {
+        span "Plain "
+        span "bold" font-weight=(token)"weight.bold"
+      }
+    }
+  }
+}

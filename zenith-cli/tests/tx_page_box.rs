@@ -1,6 +1,7 @@
-//! `tx.page_box_changed`: reparent, group, and ungroup warn when a subject's
-//! compiled page box changes. The warning sets the status, keeps exit 0,
-//! and does not stop `--apply`.
+//! `tx.page_box_changed`: reparent, group, ungroup, and detach_anchor warn
+//! when a subject's compiled page box changes. The warning sets the status,
+//! keeps exit 0, and does not stop `--apply`. A later op that edits the
+//! subject suppresses the warning.
 
 mod common;
 
@@ -120,5 +121,34 @@ fn group_outside_flow_keeps_box_and_does_not_warn() {
     let v = json(&out);
     assert_eq!(v["status"], "accepted", "{v:#}");
     assert_eq!(v["changed"], true);
+    assert!(diags_with(&v, "tx.page_box_changed").is_empty(), "{v:#}");
+}
+
+#[test]
+fn later_edit_of_the_subject_does_not_warn() {
+    let env = Env::with_doc(CARDS);
+    let out = env.tx(
+        r#"{"ops":[{"op":"reparent","node":"card.3","new_parent":"free"},{"op":"nudge_geometry","node":"card.3","dx":12}]}"#,
+        &["--json"],
+    );
+    assert_eq!(out.status.code(), Some(0));
+    let v = json(&out);
+    assert_eq!(v["status"], "accepted", "{v:#}");
+    assert!(diags_with(&v, "tx.page_box_changed").is_empty(), "{v:#}");
+}
+
+#[test]
+fn detach_anchor_keeps_box_and_does_not_warn() {
+    let env = Env::with_doc(&CARDS.replace(
+        r#"rect id="card.3" x=(px)526 y=(px)40"#,
+        r#"rect id="card.3" anchor="top-right""#,
+    ));
+    let out = env.tx(
+        r#"{"ops":[{"op":"detach_anchor","node":"card.3"}]}"#,
+        &["--json"],
+    );
+    assert_eq!(out.status.code(), Some(0));
+    let v = json(&out);
+    assert_eq!(v["status"], "accepted", "{v:#}");
     assert!(diags_with(&v, "tx.page_box_changed").is_empty(), "{v:#}");
 }

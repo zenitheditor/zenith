@@ -1,0 +1,47 @@
+zenith version=1 {
+  project id="proj.gestures" name="Gestures"
+  tokens format="zenith-token-v1" {
+    token id="color.bg" type="color" value="#f8fafc"
+    token id="color.ink" type="color" value="#1e293b"
+    token id="color.accent" type="color" value="#2563eb"
+    token id="color.warm" type="color" value="#f97316"
+    token id="space.x" type="dimension" value=(px)300
+    token id="size.rule" type="dimension" value=(px)2
+    token id="size.caption" type="dimension" value=(px)16
+    token id="font.sans" type="fontFamily" value="Noto Sans"
+  }
+  styles {}
+  document id="doc.gestures" title="Gestures" {
+    // The canvas gesture fixture: each e2e step edits one node.
+    page id="pg" w=(px)600 h=(px)420 background=(token)"color.bg" {
+      // Moved by a drag and by the arrow keys.
+      rect id="box" x=(px)40 y=(px)40 w=(px)120 h=(px)80 fill=(token)"color.accent"
+      // Resized from each corner.
+      rect id="sizer" x=(px)220 y=(px)40 w=(px)120 h=(px)80 fill=(token)"color.warm"
+      // Rotated by its grip.
+      rect id="spin" x=(px)420 y=(px)40 w=(px)120 h=(px)80 fill=(token)"color.ink"
+      // Its x is bound to a token.
+      rect id="bound" x=(token)"space.x" y=(px)200 w=(px)80 h=(px)60 fill=(token)"color.accent"
+      // Placed below box by an edge anchor.
+      rect id="follow" anchor-sibling="box" anchor-edge="below" anchor-gap=(px)20 w=(px)120 h=(px)40 fill=(token)"color.warm"
+      // A thin rule.
+      line id="rule" x1=(px)420 y1=(px)330 x2=(px)560 y2=(px)330 stroke=(token)"color.ink" stroke-width=(token)"size.rule"
+      // A row layout places its cells.
+      frame id="row" x=(px)40 y=(px)320 w=(px)300 h=(px)60 layout="row" gap=(px)10 {
+        rect id="cell.a" w=(px)60 h=(px)40 fill=(token)"color.accent"
+        rect id="cell.b" w=(px)60 h=(px)40 fill=(token)"color.warm"
+      }
+      // A column layout fills its child's width.
+      frame id="col" x=(px)180 y=(px)200 w=(px)100 h=(px)60 layout="column" {
+        rect id="grow" w="fill" h=(px)20 fill=(token)"color.ink"
+      }
+      // A triangle: its vertices drag one by one.
+      polygon id="tri" fill=(token)"color.warm" {
+        point x=(px)440 y=(px)250
+        point x=(px)480 y=(px)300
+        point x=(px)400 y=(px)300
+      }
+      text id="caption" x=(px)420 y=(px)200 w=(px)160 h=(px)30 fill=(token)"color.ink" font-family=(token)"font.sans" font-size=(token)"size.caption" { span "Caption" }
+    }
+  }
+}

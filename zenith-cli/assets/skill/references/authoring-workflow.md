@@ -18,6 +18,7 @@ This skill is judgment and routing. Syntax lives in the CLI. Never invent attrib
 | Path geometry and logo outlines | `zenith inspect path <doc> <id> --json` · `zenith outline-text --help` · `zenith perceive --help` |
 | Font features and alternates | `zenith fonts features <family> --json` · `zenith fonts alternates <family> --char A --json` |
 | Live document imports | `zenith schema node instance` · `zenith imports --help` |
+| Pointer edits with a live preview (hit-test, drag, undo) | `zenith edit <file> --no-open --json` · `zenith edit --help` |
 
 If `zenith --version` fails, give the installer from https://github.com/zenitheditor/zenith#install. Never fake a workflow.
 
@@ -34,7 +35,8 @@ If `zenith --version` fails, give the installer from https://github.com/zenithed
 5. **Preview.** `zenith render <file> --contact-sheet <png> --scale 0.5 --json`. Open the PNG. `status: blocked` means Errors remain.
 6. **Iterate** with `zenith tx <file> <tx.json>` (dry-run, then `--apply`). `zenith inspect <file> --json` gives each node's final `box`.
    - The dry-run prints the source diff and every moved or resized box. Check them before `--apply`.
-   - `tx --apply` rewrites the file in canonical form. Re-read it before text edits.
+   - `tx --apply` patches the file in place and keeps comments, node add, remove, move, group, and reparent included. A removed node takes the comment lines directly above it. A few layouts rewrite the file in canonical form: a new child inside an inline `{ … }` block, or a node sharing its line with another node. The file changes on every apply. Re-read it before text edits.
+   - `set_geometry` writes absolute px. To move or resize by a delta and keep tokens and units, use `nudge_geometry`. Anchored nodes take `nudge_anchor_gap`, `set_anchor`, or `detach_anchor`. `zenith schema op <name>` gives the fields.
 7. **Finish.** Render full scale with `--png <out.png>`, `--all-pages <DIR>`, `--svg <out.svg>`, or `--pdf <out.pdf>`. Report the changed ids, the validate result, and the output path.
 
 Successful validation does not establish design quality. Critique the PNG with `references/design-critique.md`.

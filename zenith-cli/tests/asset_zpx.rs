@@ -2,7 +2,7 @@ use std::fs;
 use std::process::Command;
 
 use zenith_cli::commands::render::to_png_with_dir;
-use zenith_cli::config::CliPolicyFlags;
+use zenith_pipeline::PolicyFlags;
 
 fn minimal_doc() -> &'static str {
     r#"zenith version=1 {
@@ -121,7 +121,7 @@ fn asset_zpx_apply_renders_attached_asset_deterministically() {
         Some(tmp.path()),
         1,
         true,
-        &CliPolicyFlags::default(),
+        &PolicyFlags::default(),
         None,
     )
     .unwrap_or_else(|e| panic!("first render failed (exit {}): {}", e.exit_code, e.message))
@@ -131,7 +131,7 @@ fn asset_zpx_apply_renders_attached_asset_deterministically() {
         Some(tmp.path()),
         1,
         true,
-        &CliPolicyFlags::default(),
+        &PolicyFlags::default(),
         None,
     )
     .unwrap_or_else(|e| panic!("second render failed (exit {}): {}", e.exit_code, e.message))

@@ -5,8 +5,9 @@
 //! dimensions are produced via `tiny_skia::Pixmap::new(W, H).encode_png()`.
 
 use tempfile::TempDir;
-use zenith_cli::commands::render::collect_image_dimension_diagnostics;
+use zenith_cli::native::NativeFs;
 use zenith_core::{KdlAdapter, KdlSource};
+use zenith_pipeline::assets::collect_image_dimension_diagnostics;
 
 // ── Fixture helpers ───────────────────────────────────────────────────────────
 
@@ -66,7 +67,7 @@ fn image_overflow_emitted_when_intrinsic_exceeds_none_box() {
     );
 
     let doc = parse(&src);
-    let diags = collect_image_dimension_diagnostics(&doc, tmp.path());
+    let diags = collect_image_dimension_diagnostics(&NativeFs, &doc, tmp.path());
 
     let codes: Vec<&str> = diags.iter().map(|d| d.code.as_str()).collect();
     assert!(
@@ -104,7 +105,7 @@ fn image_upscale_emitted_for_contain_scale_up() {
     );
 
     let doc = parse(&src);
-    let diags = collect_image_dimension_diagnostics(&doc, tmp.path());
+    let diags = collect_image_dimension_diagnostics(&NativeFs, &doc, tmp.path());
 
     let codes: Vec<&str> = diags.iter().map(|d| d.code.as_str()).collect();
     assert!(
@@ -137,7 +138,7 @@ fn no_advisory_for_contain_scale_down() {
     );
 
     let doc = parse(&src);
-    let diags = collect_image_dimension_diagnostics(&doc, tmp.path());
+    let diags = collect_image_dimension_diagnostics(&NativeFs, &doc, tmp.path());
 
     let codes: Vec<&str> = diags.iter().map(|d| d.code.as_str()).collect();
     assert!(
@@ -169,7 +170,7 @@ fn no_advisory_for_svg_asset() {
     );
 
     let doc = parse(&src);
-    let diags = collect_image_dimension_diagnostics(&doc, tmp.path());
+    let diags = collect_image_dimension_diagnostics(&NativeFs, &doc, tmp.path());
 
     let codes: Vec<&str> = diags.iter().map(|d| d.code.as_str()).collect();
     assert!(
@@ -202,7 +203,7 @@ fn no_advisory_for_fit_none_intrinsic_within_box() {
     );
 
     let doc = parse(&src);
-    let diags = collect_image_dimension_diagnostics(&doc, tmp.path());
+    let diags = collect_image_dimension_diagnostics(&NativeFs, &doc, tmp.path());
 
     let codes: Vec<&str> = diags.iter().map(|d| d.code.as_str()).collect();
     assert!(

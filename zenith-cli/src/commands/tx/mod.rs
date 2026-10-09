@@ -5,13 +5,16 @@
 //! - `collapse` — fold rigid subtrees of the box delta into one entry.
 //! - `tree`     — the id tree: parent, siblings, descendants, ancestors.
 //! - `render`   — human and JSON output.
+//! - `written`  — the patched source an `--apply` writes.
 
 mod boxes;
 mod collapse;
 mod render;
 mod run;
 mod tree;
+mod written;
 
 pub use boxes::BoxDelta;
 pub use render::{TxView, render_human, status_json, status_label};
 pub use run::{TxCmdErr, TxCtx, TxOutcome, run, run_outline_text, run_with, status_exit_code};
+pub use written::written_source;

@@ -94,6 +94,9 @@ pub struct ApplyOutcome {
     /// The underlying transaction result (source before/after, diagnostics,
     /// affected ids, status).
     pub result: zenith_tx::TxResult,
+    /// The text `--apply` writes: the input source patched in place, or
+    /// canonical text when the patcher falls back.
+    pub written: zenith_core::Patched,
     /// Ids of tokens created (present in the theme, absent from the doc).
     pub added_tokens: Vec<String>,
     /// Theme tokens left untouched, with the reason.
@@ -121,7 +124,7 @@ pub struct ApplyOutcome {
 /// through [`crate::commands::tx::run`], and return an [`ApplyOutcome`].
 ///
 /// This function never touches the filesystem itself (the caller reads
-/// `doc_src` and, on `--apply`, persists `result.source_after`).
+/// `doc_src` and, on `--apply`, persists `written`).
 ///
 /// When the theme has no encodable changes to offer at all (every theme
 /// token already matches, or every candidate op was skipped), the built
@@ -186,6 +189,7 @@ pub fn run(
 
     Ok(ApplyOutcome {
         result: outcome.result,
+        written: outcome.written,
         added_tokens,
         skipped,
         added_styles: blocks.added_styles,

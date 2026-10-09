@@ -49,7 +49,7 @@ pub(crate) fn targets_from_flags(f: &cli::AgentFlags) -> commands::plugin::Targe
 pub(crate) fn print_diagnostics_stderr(
     diagnostics: &[zenith_core::Diagnostic],
     src: &str,
-    files: &crate::report::ImportFiles,
+    files: &zenith_pipeline::imports::ImportFiles,
 ) {
     let mut locator = crate::report::Locator::with_files(src, files);
     for line in crate::report::human_diagnostic_lines(diagnostics, &mut locator) {

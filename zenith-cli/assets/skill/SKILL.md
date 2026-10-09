@@ -30,6 +30,7 @@ If the CLI is unavailable, use the installer at https://github.com/zenitheditor/
 | Brand kit | `references/brand.md` |
 | Icons | `references/icons.md` |
 | Candidates, history, MCP workflow | `references/agentic-workflow.md` |
+| Pointer edits with a live preview (`zenith edit`, `zenith_editor_*` MCP tools) | `references/authoring-workflow.md`, `references/agentic-workflow.md` |
 | Size variants or CSV mail-merge | `references/variants.md` |
 | Patterns | `references/pattern.md` |
 | Recipe provenance | `references/recipes-model.md` |

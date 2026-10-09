@@ -8,7 +8,7 @@
 use std::io::Write;
 
 use zenith_cli::commands::render::{load_data_context, to_png_with_dir, to_scene_json};
-use zenith_cli::config::CliPolicyFlags;
+use zenith_pipeline::PolicyFlags;
 
 // ── Helper: write a temp file ─────────────────────────────────────────────────
 
@@ -128,7 +128,7 @@ fn render_with_data_ctx_succeeds() {
         None,
         1,
         false,
-        &CliPolicyFlags::default(),
+        &PolicyFlags::default(),
         Some(&ctx),
     )
     .expect("render must succeed");
@@ -142,14 +142,7 @@ fn render_with_data_ctx_succeeds() {
 /// only — the render still succeeds).
 #[test]
 fn render_without_data_ctx_is_non_fatal() {
-    let result = to_png_with_dir(
-        DATA_REF_DOC,
-        None,
-        1,
-        false,
-        &CliPolicyFlags::default(),
-        None,
-    );
+    let result = to_png_with_dir(DATA_REF_DOC, None, 1, false, &PolicyFlags::default(), None);
     // The render must not return Err — data refs without a context are advisories.
     assert!(
         result.is_ok(),
@@ -165,7 +158,7 @@ fn plain_doc_byte_identical_with_and_without_data() {
     let (_dir, data_path) = temp_file(".json", br#"{"irrelevant": "value"}"#);
     let ctx = load_data_context(&data_path).expect("load");
 
-    let png_without = to_png_with_dir(PLAIN_DOC, None, 1, false, &CliPolicyFlags::default(), None)
+    let png_without = to_png_with_dir(PLAIN_DOC, None, 1, false, &PolicyFlags::default(), None)
         .expect("render without data must succeed")
         .png;
 
@@ -174,7 +167,7 @@ fn plain_doc_byte_identical_with_and_without_data() {
         None,
         1,
         false,
-        &CliPolicyFlags::default(),
+        &PolicyFlags::default(),
         Some(&ctx),
     )
     .expect("render with irrelevant data must succeed")
@@ -192,14 +185,8 @@ fn plain_doc_byte_identical_with_and_without_data() {
 fn scene_json_with_data_ctx_succeeds() {
     let (_dir, data_path) = temp_file(".json", br##"{"c": "#0000ff"}"##);
     let ctx = load_data_context(&data_path).expect("load");
-    let artifact = to_scene_json(
-        DATA_REF_DOC,
-        None,
-        1,
-        &CliPolicyFlags::default(),
-        Some(&ctx),
-    )
-    .expect("scene JSON must succeed with data ctx");
+    let artifact = to_scene_json(DATA_REF_DOC, None, 1, &PolicyFlags::default(), Some(&ctx))
+        .expect("scene JSON must succeed with data ctx");
     // The scene JSON must be non-empty and schema-bearing.
     assert!(
         artifact.json.contains("zenith-scene-v1"),

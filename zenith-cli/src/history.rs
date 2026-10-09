@@ -13,7 +13,7 @@
 
 use std::path::Path;
 
-use zenith_core::{KdlAdapter, KdlSource as _};
+use zenith_core::{Document, KdlAdapter, KdlSource as _, patch_source};
 use zenith_session::adapter::{OsClock, OsFs, OsRng};
 use zenith_session::{
     Outcome, RecordOutcome, StorePaths, VersionMeta, VersionOutcome, current_content,
@@ -76,7 +76,7 @@ pub fn record_edit_in(
     let rng = OsRng;
 
     // Parse to read the embedded doc-id (if any).
-    let mut doc = match KdlAdapter.parse(content) {
+    let doc = match KdlAdapter.parse(content) {
         Ok(d) => d,
         Err(e) => {
             return Recorded {
@@ -98,18 +98,18 @@ pub fn record_edit_in(
         }
     };
 
-    // If a new id was minted or forked, stamp it into the document and re-format
-    // so the written file carries the identity.
+    // If a new id was minted or forked, stamp it into the document so the
+    // written file carries the identity. The stamp patches the `doc-id`
+    // property in place; the rest of the source keeps its bytes.
     let final_bytes: Vec<u8> = match reconciled.outcome {
         Outcome::Minted | Outcome::Copied { .. } => {
-            doc.doc_id = Some(reconciled.doc_id.clone());
-            match KdlAdapter.format(&doc) {
+            match stamp_doc_id(content, &doc, &reconciled.doc_id) {
                 Ok(b) => b,
-                Err(e) => {
+                Err(message) => {
                     return Recorded {
                         bytes: content.to_vec(),
                         doc_id: reconciled.doc_id,
-                        warning: Some(format!("history: format failed: {}", e.message)),
+                        warning: Some(format!("history: {message}")),
                     };
                 }
             }
@@ -207,6 +207,19 @@ pub enum NavOutcome {
 }
 
 // ── Navigation helpers ────────────────────────────────────────────────────────
+
+/// `content` with `doc-id` set to `doc_id`. `doc` is the parse of `content`.
+///
+/// The patcher sets the root `doc-id` property and leaves every other byte.
+/// It falls back to the canonical text only when it cannot patch.
+fn stamp_doc_id(content: &[u8], doc: &Document, doc_id: &str) -> Result<Vec<u8>, String> {
+    let text = std::str::from_utf8(content).map_err(|e| format!("source is not UTF-8: {e}"))?;
+    let mut stamped = doc.clone();
+    stamped.doc_id = Some(doc_id.to_owned());
+    patch_source(text, doc, &stamped)
+        .map(|p| p.text.into_bytes())
+        .map_err(|e| format!("format failed: {}", e.message))
+}
 
 /// Read `doc_path` and return its raw bytes plus its embedded `doc-id`.
 ///
@@ -500,4 +513,44 @@ pub fn restore_in(
         version_id,
         warning: recorded.warning,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const SRC: &str = r##"zenith version=1 {
+  // Palette.
+  tokens format="zenith-token-v1" {}
+  styles {}
+  document id="d" {
+    page id="p" w=(px)100 h=(px)100 {
+        rect id="r" x=(px)0 y=(px)0 w=(px)10 h=(px)10 // box
+    }
+  }
+}
+"##;
+
+    #[test]
+    fn stamp_sets_only_the_root_property() {
+        let doc = KdlAdapter.parse(SRC.as_bytes()).expect("parse");
+        let out = stamp_doc_id(SRC.as_bytes(), &doc, "01HZXDOC").expect("stamp");
+        let expected = SRC.replacen(
+            "zenith version=1 {",
+            "zenith version=1 doc-id=\"01HZXDOC\" {",
+            1,
+        );
+        assert_eq!(String::from_utf8(out).expect("utf8"), expected);
+    }
+
+    #[test]
+    fn restamp_replaces_the_existing_id() {
+        let src = SRC.replacen("zenith version=1 {", "zenith version=1 doc-id=\"OLD\" {", 1);
+        let doc = KdlAdapter.parse(src.as_bytes()).expect("parse");
+        let out = stamp_doc_id(src.as_bytes(), &doc, "NEW").expect("stamp");
+        assert_eq!(
+            String::from_utf8(out).expect("utf8"),
+            src.replacen("doc-id=\"OLD\"", "doc-id=\"NEW\"", 1)
+        );
+    }
 }

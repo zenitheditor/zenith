@@ -1,8 +1,8 @@
 //! Typed MCP render arguments are checked before filesystem access.
 
 use super::req_str;
-use crate::commands::render::check_render_scale;
 use serde_json::Value;
+use zenith_pipeline::render::check_render_scale;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum RenderFormat {

@@ -593,7 +593,7 @@ mod tests {
             &src,
             None,
             1,
-            &crate::config::CliPolicyFlags::default(),
+            &zenith_pipeline::PolicyFlags::default(),
             None,
         )
         .expect("compile ok");
@@ -750,7 +750,7 @@ mod tests {
             &applied_src,
             None,
             1,
-            &crate::config::CliPolicyFlags::default(),
+            &zenith_pipeline::PolicyFlags::default(),
             None,
         )
         .expect("compile ok");
@@ -807,7 +807,7 @@ mod tests {
             Some(dir.path()),
             1,
             true,
-            &crate::config::CliPolicyFlags::default(),
+            &zenith_pipeline::PolicyFlags::default(),
             None,
         )
         .expect("locked render ok with native Lucide icon");

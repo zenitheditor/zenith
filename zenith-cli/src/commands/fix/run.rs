@@ -8,9 +8,10 @@ use std::path::Path;
 use serde::Serialize;
 use zenith_core::fix::{AppliedFix, FixOutcome, fix_source_with, unified_diff};
 
-use crate::commands::validate::{Collected, collect};
+use zenith_pipeline::{PolicyFlags, Validation};
+
+use crate::commands::validate::collect;
 use crate::commands::{format_diagnostic_line, serialize_pretty};
-use crate::config::CliPolicyFlags;
 use crate::json_types::DiagnosticJson;
 
 /// An error that stops `zenith fix` before any fix runs.
@@ -29,7 +30,7 @@ pub struct FixCmdOutcome {
     pub outcome: FixOutcome,
     /// What `zenith validate` reports for `outcome.source_after`, including
     /// compile-stage diagnostics once no error remains.
-    pub remaining: Collected,
+    pub remaining: Validation,
     /// Human summary plus unified diff.
     pub human: String,
     /// The `zenith-fix-v1` JSON envelope.
@@ -80,7 +81,7 @@ pub fn run(
 ) -> Result<FixCmdOutcome, FixCmdErr> {
     // Compile-stage diagnostics carry fixes too (`text.ink_overlap`); the
     // core validate inside `fix_source_with` does not compile pages.
-    let before = collect(src, project_dir, &CliPolicyFlags::default());
+    let before = collect(src, project_dir, &PolicyFlags::default());
     let outcome = fix_source_with(src, &before.diagnostics).map_err(|e| FixCmdErr {
         message: format!(
             "{}; fix the syntax, then run `zenith fix` again",
@@ -88,11 +89,7 @@ pub fn run(
         ),
         exit_code: 2,
     })?;
-    let remaining = collect(
-        &outcome.source_after,
-        project_dir,
-        &CliPolicyFlags::default(),
-    );
+    let remaining = collect(&outcome.source_after, project_dir, &PolicyFlags::default());
     let exit_code = remaining.exit_code;
     let human = render_human(&outcome, &remaining, label, apply, show_diff);
     let json_str = render_json(&outcome, &remaining);
@@ -114,7 +111,7 @@ fn applied_line(f: &AppliedFix) -> String {
 
 fn render_human(
     outcome: &FixOutcome,
-    remaining: &Collected,
+    remaining: &Validation,
     label: &str,
     apply: bool,
     show_diff: bool,
@@ -163,7 +160,7 @@ fn render_human(
     out
 }
 
-fn render_json(outcome: &FixOutcome, remaining: &Collected) -> String {
+fn render_json(outcome: &FixOutcome, remaining: &Validation) -> String {
     serialize_pretty(&FixOutputJson {
         schema: "zenith-fix-v1",
         applied: outcome

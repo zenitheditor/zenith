@@ -1,34 +1,13 @@
-//! Filesystem-backed `.zen` composition import graph loading.
+//! `zenith imports list` and `zenith imports materialize`.
 //!
-//! Core owns syntax and local validation. This module owns CLI-time file I/O:
-//! resolving import paths relative to the importing document, parsing imported
-//! documents, checking declared source hashes, and detecting graph cycles.
-//!
-//! Wiring only; the concerns live in submodules:
-//! - `loaded` — the [`LoadedImportGraph`] result type and import edge records.
-//! - `loader` — recursive traversal, parsing, hash verification, cycle detection.
+//! The import graph itself (resolution, parsing, hash checks, cycles, root
+//! target validation) loads in `zenith_pipeline::imports` through the native
+//! host. Wiring only; the commands live in submodules:
 //! - `list` — read-only `zenith imports list` formatting over the loaded graph.
 //! - `materialize` — copy an imported component into the host with provenance.
-//! - `validate` — root-target validation and expanded-id collision detection.
-//! - `diagnostics` — the `import.*` diagnostic constructors.
-//! - `source` — import-source string parsing.
-//! - `walk` — node-tree walks and page-size comparison.
-//! - `path` — import-path normalization.
 
-mod diagnostics;
 mod list;
-mod loaded;
-mod loader;
 mod materialize;
-mod path;
-mod source;
-mod validate;
-mod walk;
-
-#[cfg(test)]
-mod tests;
 
 pub(crate) use list::run as list_imports;
-pub(crate) use loaded::LoadedImportGraph;
-pub(crate) use loader::load_import_graph;
 pub(crate) use materialize::{format_json as format_materialize_json, run as materialize_import};

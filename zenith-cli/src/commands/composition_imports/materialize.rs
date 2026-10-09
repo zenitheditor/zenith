@@ -13,12 +13,15 @@ use zenith_core::{
     ProvenanceDef, Style, Token, validate,
 };
 
-use super::load_import_graph;
-use super::loaded::{ImportEdge, ImportEdgeStatus, LoadedImportGraph};
-use super::path::normalize_import_path;
-use super::source::{ImportSource, parse_import_source};
+use zenith_pipeline::imports::{
+    ImportEdge, ImportEdgeStatus, ImportSource, LoadedImportGraph, load_import_graph,
+    parse_import_source,
+};
+use zenith_pipeline::path::normalize_import_path;
+
 use crate::commands::{format_diagnostic_line, serialize_pretty};
 use crate::library::{collect_all_ids, px, unique_id};
+use crate::native::NativeFs;
 
 const SCHEMA: &str = "zenith-imports-materialize-v1";
 
@@ -110,10 +113,10 @@ pub(crate) fn run(
     let (import_id, component_id) = parse_component_target(target)?;
 
     let host_dir = host_path.parent().filter(|p| !p.as_os_str().is_empty());
-    let graph = load_import_graph(&host, host_dir);
+    let graph = load_import_graph(&NativeFs, &host, host_dir);
 
     let edge = resolve_target_edge(&graph, &host, import_id)?;
-    let import_doc = graph.documents.get(import_id).ok_or_else(|| {
+    let import_doc = graph.document(import_id).ok_or_else(|| {
         MaterializeCmdErr::fail(format!(
             "import '{import_id}' did not load a document (status={})",
             edge.status.as_str()
@@ -174,9 +177,7 @@ pub(crate) fn run(
 
     // 3. Copy assets; rewrite paths so host resolves relative to host dir.
     let import_dir = graph
-        .document_dirs
-        .get(import_id)
-        .map(PathBuf::as_path)
+        .document_dir(import_id)
         .or_else(|| edge.resolved_path.as_ref().and_then(|p| p.parent()));
     copy_assets_rewritten(
         &import_doc.assets.assets,

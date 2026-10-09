@@ -5,8 +5,8 @@
 
 use serde_json::{Value, json};
 use zenith_cli::commands::inspect::run;
-use zenith_cli::config::CliPolicyFlags;
 use zenith_cli::mcp::handle_message;
+use zenith_pipeline::PolicyFlags;
 
 /// A row frame with two flow chips and an absolute badge, a free rect, and a
 /// group (origin 100,300) holding a column frame and a plain rect.
@@ -193,7 +193,7 @@ fn schema_frame_example_validates() {
 }}
 "##
     );
-    let out = zenith_cli::commands::validate::run(&src, None, true, &CliPolicyFlags::default());
+    let out = zenith_cli::commands::validate::run(&src, None, true, &PolicyFlags::default());
     assert_eq!(out.exit_code, 0, "{}", out.stdout);
     let report: Value = serde_json::from_str(&out.stdout).expect("validate JSON");
     let errors: Vec<&Value> = report["diagnostics"]

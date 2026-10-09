@@ -14,16 +14,18 @@
 //!   operating on in-memory bytes, never touching the FS.
 //! - `json_types` — serialisable DTOs for JSON output.
 //! - `report` — failure envelopes and grouped human diagnostic lines.
+//! - `edit` — the `zenith edit` server and the shared editor document state.
 //! - `lib.rs` — this file: wiring + `run()` dispatcher + file I/O edge.
 
 pub mod cli;
 pub mod commands;
-pub mod config;
+pub mod edit;
 mod edit_io;
 pub mod history;
 pub mod json_types;
 pub mod library;
 pub mod mcp;
+pub mod native;
 pub mod selfupdate;
 
 mod cli_helpers;

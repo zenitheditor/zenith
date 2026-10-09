@@ -1,13 +1,13 @@
 //! Pure logic for `zenith tx` and `zenith outline-text`.
 //!
 //! The entry points operate on in-memory source text. The caller does all
-//! filesystem I/O and decides whether to persist `source_after` (the
+//! filesystem I/O and decides whether to persist `written` (the
 //! `--apply` flag lives in the dispatcher, not here).
 
 use std::path::Path;
 
 use zenith_core::fix::unified_diff;
-use zenith_core::{Document, KdlAdapter, KdlSource, Severity};
+use zenith_core::{Document, KdlAdapter, KdlSource, Patched, Severity};
 use zenith_scene::collect_text_outline_paths;
 use zenith_tx::{
     Op, TextOutlineRequest, Transaction, TxResult, TxStatus, apply_text_outline_paths,
@@ -17,6 +17,7 @@ use zenith_tx::{
 use super::boxes::{BoxSides, box_deltas, page_box_warnings, page_boxes};
 use super::render::{TxView, render_human, render_json};
 use super::tree::Tree;
+use super::written::written_source;
 
 // ── Error type ────────────────────────────────────────────────────────────────
 
@@ -39,6 +40,9 @@ pub struct TxCmdErr {
 pub struct TxOutcome {
     /// The structured result from the engine.
     pub result: TxResult,
+    /// The text `--apply` writes: the input source patched in place, or
+    /// canonical text when the patcher falls back (`written.reformatted`).
+    pub written: Patched,
     /// Human-readable summary string (ready to print).
     pub human: String,
     /// JSON summary string (ready to print).
@@ -94,7 +98,7 @@ fn run_inner(doc_src: &str, tx_json: &str, ctx: Option<&TxCtx<'_>>) -> Result<Tx
     })?;
 
     let result = run_transaction(&doc, &tx).map_err(engine_err)?;
-    Ok(finish(&doc, &tx.ops, result, ctx))
+    Ok(finish(doc_src, &doc, &tx.ops, result, ctx))
 }
 
 /// Parse the document source, build the render-path font provider, materialize
@@ -108,13 +112,16 @@ pub fn run_outline_text(
 ) -> Result<TxOutcome, TxCmdErr> {
     let doc = parse_doc(doc_src)?;
 
-    let fonts =
-        super::super::render::build_font_provider(&doc, ctx.project_dir, locked).map_err(|e| {
-            TxCmdErr {
-                message: e.message,
-                exit_code: e.exit_code,
-            }
-        })?;
+    let fonts = zenith_pipeline::assets::build_font_provider(
+        crate::native::host(),
+        &doc,
+        ctx.project_dir,
+        locked,
+    )
+    .map_err(|e| TxCmdErr {
+        message: e.message,
+        exit_code: e.exit_code,
+    })?;
 
     // Validate source before multi-page compile (parity with pre-split short-circuit).
     let result = match check_text_outline_source(&doc, node) {
@@ -133,7 +140,7 @@ pub fn run_outline_text(
     }
     .map_err(engine_err)?;
 
-    Ok(finish(&doc, &[], result, Some(ctx)))
+    Ok(finish(doc_src, &doc, &[], result, Some(ctx)))
 }
 
 // ── Shared tail ───────────────────────────────────────────────────────────────
@@ -152,21 +159,25 @@ fn engine_err(e: zenith_tx::TxError) -> TxCmdErr {
     }
 }
 
-/// Add the compiled review when `ctx` is set, recompute the status, and
-/// render both outputs.
-fn finish(doc: &Document, ops: &[Op], mut result: TxResult, ctx: Option<&TxCtx<'_>>) -> TxOutcome {
+/// Patch the source, add the compiled review when `ctx` is set, recompute
+/// the status, and render both outputs. The source diff shows `doc_src`
+/// against the text `--apply` writes.
+fn finish(
+    doc_src: &str,
+    doc: &Document,
+    ops: &[Op],
+    mut result: TxResult,
+    ctx: Option<&TxCtx<'_>>,
+) -> TxOutcome {
     let mut view = TxView::default();
     let changed = result.source_before != result.source_after;
+    let written = written_source(doc_src, doc, &result);
     if let Some(ctx) = ctx
         && result.status != TxStatus::Rejected
         && changed
     {
         if ctx.show_diff {
-            view.source_diff = Some(unified_diff(
-                ctx.label,
-                &result.source_before,
-                &result.source_after,
-            ));
+            view.source_diff = Some(unified_diff(ctx.label, doc_src, &written.text));
         }
         // `source_after` is canonical output, so it parses. A parse error
         // leaves the box delta out.
@@ -198,6 +209,7 @@ fn finish(doc: &Document, ops: &[Op], mut result: TxResult, ctx: Option<&TxCtx<'
     let json_str = render_json(&result, view);
     TxOutcome {
         result,
+        written,
         human,
         json_str,
         exit_code,

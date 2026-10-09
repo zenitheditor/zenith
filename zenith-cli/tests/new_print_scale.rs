@@ -8,10 +8,10 @@ use std::path::{Path, PathBuf};
 use tempfile::TempDir;
 use zenith_cli::commands::new::{self, PaperFormat, resolve_page};
 use zenith_cli::commands::validate;
-use zenith_cli::config::CliPolicyFlags;
 use zenith_cli::library::resolve_theme_pack;
 use zenith_core::ast::{Dimension, Token, TokenLiteral, TokenType, TokenValue, Unit};
 use zenith_core::{Document, KdlAdapter, KdlSource as _};
+use zenith_pipeline::PolicyFlags;
 use zenith_scene::sizes_read_as_one;
 use zenith_session::StorePaths;
 
@@ -74,7 +74,7 @@ fn type_steps(doc: &Document) -> Vec<f64> {
 
 /// Diagnostic codes of `validate --json` on `src`; asserts exit code 0.
 fn validate_codes(src: &str, dir: Option<&Path>) -> Vec<String> {
-    let out = validate::run(src, dir, true, &CliPolicyFlags::default());
+    let out = validate::run(src, dir, true, &PolicyFlags::default());
     assert_eq!(out.exit_code, 0, "validates; got:\n{}", out.stdout);
     let value: serde_json::Value = serde_json::from_str(&out.stdout).expect("json");
     value["diagnostics"]

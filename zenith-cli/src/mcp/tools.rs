@@ -1,4 +1,4 @@
-//! The MCP tool catalog: 15 tools with token-lean JSON-Schema inputs.
+//! The MCP tool catalog: 20 tools with token-lean JSON-Schema inputs.
 //!
 //! The surface is deliberately small and stable (clients cache `tools/list`
 //! once). All node/op/surface schema detail lives behind the single
@@ -265,6 +265,73 @@ op=unbundle restores one from a bundle path. Read any preview resources BEFORE f
                     "bundle": { "type": "string", "description": "Bundle file path (out for op=bundle, in for op=unbundle)." }
                 },
                 "required": ["op"]
+            }),
+        },
+        Tool {
+            name: "zenith_editor_open",
+            description: "Open a .zen file in an editor session (selection, gestures, undo, live \
+render). Returns the session id. Reopening a clean session rereads the file; a dirty one needs \
+discard=true. Commands: send command commands.list via zenith_editor_command.",
+            schema: json!({
+                "type": "object",
+                "properties": {
+                    "path": { "type": "string", "description": "Document path." },
+                    "root": { "type": "string", "description": "Directory project reads stay under (default: the document's directory)." },
+                    "discard": { "type": "boolean", "description": "Reopen even with unsaved edits, dropping them." }
+                },
+                "required": ["path"]
+            }),
+        },
+        Tool {
+            name: "zenith_editor_command",
+            description: "Run one editor command on a session: select.hit, gesture.commit, \
+tx.apply, history.undo, doc.outline, and more. See commands.list for every command and its \
+params. Text-changing commands need the session version and return a delta and a unified diff. \
+Host commands: file.save, file.reload, file.state. doc.render and gesture.preview return a PNG.",
+            schema: json!({
+                "type": "object",
+                "properties": {
+                    "session": { "type": "string", "description": "Session id from zenith_editor_open or zenith_editor_attach." },
+                    "path": { "type": "string", "description": "Document path instead of a session id (opens a session when none exists)." },
+                    "command": { "type": "string", "description": "Command id, e.g. commands.list." },
+                    "params": { "type": "object", "description": "Command params (see commands.list)." },
+                    "version": { "type": "integer", "minimum": 0, "description": "Session version the edit was made at." }
+                },
+                "required": ["command"]
+            }),
+        },
+        Tool {
+            name: "zenith_editor_render",
+            description: "Render a session page to PNG. Returns an MCP image plus width, height, \
+and sha256. Renders the last valid text while the text has errors (stale: true).",
+            schema: json!({
+                "type": "object",
+                "properties": {
+                    "session": { "type": "string", "description": "Session id." },
+                    "path": { "type": "string", "description": "Document path instead of a session id." },
+                    "page": { "type": "integer", "minimum": 1, "description": "1-based page (default: the session page)." },
+                    "scale": { "type": "number", "exclusiveMinimum": 0, "maximum": 4, "description": "Raster scale (default: the session zoom)." }
+                }
+            }),
+        },
+        Tool {
+            name: "zenith_editor_sessions",
+            description: "List the editor sessions of this server: id, kind (local or attached), \
+path, version, dirty, valid, conflict.",
+            schema: json!({ "type": "object", "properties": {} }),
+        },
+        Tool {
+            name: "zenith_editor_attach",
+            description: "Attach to a running `zenith edit` on this machine, so a human watching \
+the page sees your edits live. Pass the URL it printed (and the token when the URL lacks it). \
+Then use the returned session id with zenith_editor_command and zenith_editor_render.",
+            schema: json!({
+                "type": "object",
+                "properties": {
+                    "url": { "type": "string", "description": "The http://127.0.0.1:<port>/?token=... URL `zenith edit` printed." },
+                    "token": { "type": "string", "description": "The token, when the URL has none." }
+                },
+                "required": ["url"]
             }),
         },
     ]

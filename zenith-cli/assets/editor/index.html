@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Zenith editor</title>
+<link rel="stylesheet" href="css/tokens.css">
+<link rel="stylesheet" href="css/layout.css">
+<link rel="stylesheet" href="css/controls.css">
+<link rel="stylesheet" href="css/panels.css">
+<link rel="stylesheet" href="css/canvas.css">
+<script type="module" src="js/main.js"></script>
+</head>
+<body>
+<a class="skip-link" href="#code-host">Skip to source</a>
+<div class="app" id="app" data-full="none">
+  <header class="topbar">
+    <div class="doc-title">
+      <span class="doc-name" id="doc-name">Loading</span>
+      <span class="dirty-mark" id="dirty-mark" hidden title="Unsaved changes" aria-label="Unsaved changes"></span>
+    </div>
+    <div class="toolbar" role="toolbar" aria-label="Editor">
+      <div class="tool-group">
+        <button type="button" class="tool" id="toggle-left" aria-pressed="true" aria-controls="panel-left" title="Pages and layers"><i data-icon="panelLeft"></i><span class="sr-only">Pages and layers</span></button>
+        <button type="button" class="tool" id="toggle-bottom" aria-pressed="true" aria-controls="panel-bottom" title="Diagnostics"><i data-icon="panelBottom"></i><span class="sr-only">Diagnostics</span></button>
+        <button type="button" class="tool" id="toggle-right" aria-pressed="true" aria-controls="panel-right" title="Inspector"><i data-icon="panelRight"></i><span class="sr-only">Inspector</span></button>
+      </div>
+      <div class="tool-group" id="file-tools" role="group" aria-label="File" hidden>
+        <button type="button" class="tool" id="open-file" title="Open a .zen file (Ctrl+O)"><i data-icon="open"></i><span class="sr-only">Open a .zen file</span></button>
+        <button type="button" class="tool" id="open-folder" title="Open a project folder"><i data-icon="folder"></i><span class="sr-only">Open a project folder</span></button>
+        <button type="button" class="tool" id="download" title="Download a copy"><i data-icon="download"></i><span class="sr-only">Download a copy</span></button>
+      </div>
+      <div class="tool-group">
+        <button type="button" class="tool" id="undo" title="Undo (Ctrl+Z)"><i data-icon="undo"></i><span class="sr-only">Undo</span></button>
+        <button type="button" class="tool" id="redo" title="Redo (Ctrl+Shift+Z)"><i data-icon="redo"></i><span class="sr-only">Redo</span></button>
+      </div>
+      <div class="tool-group">
+        <button type="button" class="tool" id="theme" title="Theme: system"><i data-icon="theme"></i><span class="sr-only" id="theme-label">Theme: system</span></button>
+      </div>
+      <button type="button" class="button primary" id="save" title="Save (Ctrl+S)"><i data-icon="save"></i><span>Save</span></button>
+    </div>
+  </header>
+
+  <div class="banners" id="banners" role="region" aria-label="Notices"></div>
+
+  <main class="workspace" id="workspace">
+    <aside class="panel panel-left" id="panel-left" aria-label="Pages and layers">
+      <section class="panel-section" aria-labelledby="pages-title">
+        <h2 class="panel-title" id="pages-title">Pages</h2>
+        <ul class="page-list" id="pages"></ul>
+      </section>
+      <section class="panel-section grow" aria-labelledby="layers-title">
+        <h2 class="panel-title" id="layers-title">Layers</h2>
+        <div class="layer-tree" id="layers" role="tree" aria-labelledby="layers-title"></div>
+      </section>
+    </aside>
+
+    <div class="center" id="center">
+      <section class="pane pane-code" id="pane-code" aria-labelledby="code-title">
+        <div class="pane-head">
+          <h2 class="pane-title" id="code-title">Source</h2>
+          <span class="pane-meta" id="cursor-pos" aria-hidden="true"></span>
+          <button type="button" class="tool small" id="full-code" aria-pressed="false" title="Fullscreen source (Esc restores)"><i data-icon="expand"></i><span class="sr-only">Fullscreen source</span></button>
+        </div>
+        <div class="code-host" id="code-host"></div>
+      </section>
+
+      <div class="divider" id="divider" role="separator" tabindex="0" aria-orientation="vertical" aria-controls="pane-code" aria-label="Resize source and canvas" aria-valuemin="0" aria-valuemax="100" aria-valuenow="50"><span class="divider-grip" aria-hidden="true"></span></div>
+
+      <section class="pane pane-canvas" id="pane-canvas" aria-labelledby="canvas-title">
+        <div class="pane-head">
+          <h2 class="pane-title" id="canvas-title">Canvas</h2>
+          <span class="badge warn" id="stale-badge" hidden>Showing last valid preview</span>
+          <span class="badge" id="render-badge" hidden role="status">Rendering</span>
+          <div class="zoom" role="group" aria-label="Zoom">
+            <button type="button" class="tool small" id="zoom-out" title="Zoom out (-)"><i data-icon="zoomOut"></i><span class="sr-only">Zoom out</span></button>
+            <button type="button" class="zoom-value" id="zoom-100" title="Zoom to 100% (0)" aria-label="Zoom to 100 percent"><span id="zoom-value">100%</span></button>
+            <button type="button" class="tool small" id="zoom-in" title="Zoom in (+)"><i data-icon="zoomIn"></i><span class="sr-only">Zoom in</span></button>
+            <button type="button" class="tool small" id="zoom-fit" title="Fit page (1)"><i data-icon="fit"></i><span class="sr-only">Fit page</span></button>
+          </div>
+          <button type="button" class="tool small" id="snap-toggle" aria-pressed="true" title="Snap to nodes and the page (hold Ctrl or Cmd while moving to skip)"><i data-icon="magnet"></i><span class="sr-only">Snap to nodes and the page</span></button>
+          <button type="button" class="tool small" id="full-canvas" aria-pressed="false" title="Fullscreen canvas (Esc restores)"><i data-icon="expand"></i><span class="sr-only">Fullscreen canvas</span></button>
+        </div>
+        <div class="viewport" id="viewport" tabindex="0" role="application" aria-roledescription="canvas" aria-label="Page canvas. Click selects a node, Shift click adds to the selection. Drag on empty canvas to select with a band (Alt: only nodes wholly inside, Shift: add). Drag a node, the selection, or its handles to move, resize, or rotate it; moves and resizes snap to other nodes and the page while Snap is on. Space and drag, the middle button, or two fingers pan. With nodes selected: arrows move it (Shift: 10 px), Ctrl or Cmd with arrows resizes it, Alt detaches a token or an anchor, the bracket keys rotate it, Delete removes it, Escape cancels a drag or clears the selection. Without a selection arrows pan. Plus and minus zoom, 0 shows 100 percent, 1 fits the page.">
+          <div class="stage" id="stage"><div class="page-frame" id="page-frame" hidden></div></div>
+          <canvas class="page-canvas" id="page-canvas" aria-hidden="true"></canvas>
+          <div class="stage" id="stage-over"><svg class="overlay" id="overlay" aria-hidden="true"></svg></div>
+          <div class="gesture-hint" id="gesture-hint" hidden></div>
+          <div class="canvas-empty" id="canvas-empty" hidden></div>
+        </div>
+      </section>
+    </div>
+
+    <aside class="panel panel-right" id="panel-right" aria-label="Inspector">
+      <section class="panel-section grow" aria-labelledby="inspector-title">
+        <h2 class="panel-title" id="inspector-title">Inspector</h2>
+        <div class="inspector" id="inspector"></div>
+      </section>
+    </aside>
+  </main>
+
+  <section class="panel-bottom" id="panel-bottom" aria-labelledby="diag-title">
+    <div class="pane-head">
+      <h2 class="pane-title" id="diag-title">Diagnostics</h2>
+      <span class="diag-counts" id="diag-counts" aria-live="polite"></span>
+    </div>
+    <ul class="diag-list" id="diag-list"></ul>
+  </section>
+
+  <footer class="statusbar">
+    <span class="status-item" id="status-valid" aria-live="polite"></span>
+    <span class="status-item" id="status-save" aria-live="polite"></span>
+    <span class="status-spacer"></span>
+    <span class="status-item" id="status-conn" aria-live="polite"></span>
+    <span class="status-item muted" id="status-version"></span>
+  </footer>
+</div>
+<dialog class="doc-dialog" id="doc-dialog" aria-labelledby="doc-dialog-title">
+  <h2 class="pane-title" id="doc-dialog-title">Open a document</h2>
+  <p class="doc-dialog-note" id="doc-dialog-note"></p>
+  <ul class="doc-dialog-list" id="doc-dialog-list"></ul>
+  <div class="doc-dialog-actions"><button type="button" class="button" id="doc-dialog-cancel">Cancel</button></div>
+</dialog>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+<div class="sr-only" id="announce" role="status" aria-live="polite"></div>
+</body>
+</html>

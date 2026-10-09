@@ -8,6 +8,7 @@
 //!
 //! Submodules:
 //! - `asset` — `AssetArgs`, `AssetSub`, `AssetImportArgs`, `AssetZpxBakeArgs`.
+//! - `edit` — `EditArgs`.
 //! - `fix` — `FixArgs`.
 //! - `library` — `LibraryArgs`, `LibrarySub`, and library item arg types.
 //! - `plugin` — `PluginArgs`, `PluginSub`, `ScopeArg`, `AgentFlags`, and install/uninstall args.
@@ -16,6 +17,7 @@
 //! - `workspace` — `WorkspaceArgs`, `WorkspaceSub`, scratch, candidate, and promote arg types.
 
 mod asset;
+mod edit;
 mod fix;
 mod library;
 mod perceive;
@@ -26,6 +28,7 @@ mod tx;
 mod workspace;
 
 pub use asset::{AssetArgs, AssetImportArgs, AssetSub, AssetZpxBakeArgs};
+pub use edit::EditArgs;
 pub use fix::FixArgs;
 pub use library::{
     LibraryAddArgs, LibraryArgs, LibraryListArgs, LibrarySearchArgs, LibraryShowArgs, LibrarySub,
@@ -127,6 +130,18 @@ pub enum Command {
     /// and moved/resized node boxes), enforces id-uniqueness and referential integrity, and only
     /// writes with `--apply` (`--diff` prints the diff and boxes then too).
     Tx(TxArgs),
+
+    /// Serve a `.zen` document to the browser editor and to agents over local HTTP.
+    ///
+    /// Starts a loopback HTTP server for one document and prints its URL with a
+    /// per-run token. The page and agents share one editor session: an agent's
+    /// `POST /api/cmd` edits appear live in the page through `GET /api/events`.
+    /// Commands are the editor protocol (`commands.list` lists them). Saves keep
+    /// comments, record history, and replace the file atomically. A disk change
+    /// reloads a clean session, or marks a dirty one as a conflict to resolve with
+    /// `file.reload` or `file.save {overwrite: true}`. Runs until
+    /// `POST /api/shutdown` or Ctrl-C.
+    Edit(EditArgs),
 
     /// Materialize a text/code node into editable path outlines.
     ///

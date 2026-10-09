@@ -8,10 +8,9 @@ use std::fs;
 use std::process::Command;
 
 use zenith_cli::commands::render::{
-    RenderEntryOptions, to_pdf_all_pages_with_dir_options, to_png_all_pages_options,
-    to_png_with_dir_options,
+    to_pdf_all_pages_with_dir_options, to_png_all_pages_options, to_png_with_dir_options,
 };
-use zenith_cli::config::CliPolicyFlags;
+use zenith_pipeline::{PolicyFlags, RenderOptions};
 
 const PAGE_COUNT: usize = 12;
 
@@ -60,8 +59,8 @@ fn multi_page_src() -> String {
     )
 }
 
-fn opts(flags: &CliPolicyFlags) -> RenderEntryOptions<'_> {
-    RenderEntryOptions {
+fn opts(flags: &PolicyFlags) -> RenderOptions<'_> {
+    RenderOptions {
         locked: false,
         subset: true,
         flags,
@@ -69,13 +68,14 @@ fn opts(flags: &CliPolicyFlags) -> RenderEntryOptions<'_> {
         construction_overlay: false,
         scale: 1.0,
         raster_scale: 1.0,
+        parsed: None,
     }
 }
 
 #[test]
 fn all_pages_png_is_stable_and_matches_single_page_renders() {
     let src = multi_page_src();
-    let flags = CliPolicyFlags::default();
+    let flags = PolicyFlags::default();
     let first = to_png_all_pages_options(&src, None, opts(&flags)).expect("first all-pages run");
     let second = to_png_all_pages_options(&src, None, opts(&flags)).expect("second all-pages run");
     assert_eq!(first.pages.len(), PAGE_COUNT);
@@ -107,7 +107,7 @@ fn all_pages_png_is_stable_and_matches_single_page_renders() {
 #[test]
 fn all_pages_pdf_is_stable_across_runs() {
     let src = multi_page_src();
-    let flags = CliPolicyFlags::default();
+    let flags = PolicyFlags::default();
     let first = to_pdf_all_pages_with_dir_options(&src, None, opts(&flags)).expect("first PDF");
     let second = to_pdf_all_pages_with_dir_options(&src, None, opts(&flags)).expect("second PDF");
     assert_eq!(first.pdf, second.pdf, "PDF bytes differ across runs");
@@ -154,7 +154,7 @@ fn all_pages_cli_writes_identical_files_across_runs() {
         "diagnostic JSON differs across runs"
     );
 
-    let flags = CliPolicyFlags::default();
+    let flags = PolicyFlags::default();
     for page in 1..=PAGE_COUNT {
         let name = format!("page-{page}.png");
         let a = fs::read(out_a.join(&name)).expect("page file in run a");

@@ -1,8 +1,11 @@
 //! Shared encoding for compiled batch scenes.
 
-use crate::config::{CliPolicyFlags, find_local_policy, load_global_policy, merge_policy};
+use crate::native::NativeConfig;
 use std::path::Path;
 use zenith_core::{AssetProvider, Diagnostic, DiagnosticPolicy, Document, FontProvider};
+use zenith_pipeline::PolicyFlags;
+use zenith_pipeline::policy::{load_policy_layers, merge_policy};
+use zenith_pipeline::render::{check_render_scale, rasterization_diagnostics};
 use zenith_render::{SvgOptions, render_png, render_svg_with_options};
 use zenith_scene::Scene;
 
@@ -47,7 +50,7 @@ impl From<BatchFormat> for BatchExportOptions {
 
 impl BatchExportOptions {
     pub(crate) fn check(self) -> Result<(), String> {
-        super::scale::check_render_scale(self.raster_scale, &self.raster_scale.to_string())?;
+        check_render_scale(self.raster_scale, &self.raster_scale.to_string())?;
         if self.format == BatchFormat::Png && self.raster_scale != 1.0 {
             return Err("raster_scale requires SVG batch output. Set format to svg".to_owned());
         }
@@ -63,16 +66,12 @@ pub(crate) fn load_batch_policy(
     match format {
         BatchFormat::Png => Ok(None),
         BatchFormat::Svg => {
-            let global = load_global_policy()?;
-            let local = match dir {
-                Some(dir) => find_local_policy(dir)?,
-                None => DiagnosticPolicy::default(),
-            };
+            let (global, local) = load_policy_layers(&NativeConfig, dir)?;
             Ok(Some(merge_policy(
                 &global,
                 &local,
                 &doc.diagnostic_policy,
-                &CliPolicyFlags::default(),
+                &PolicyFlags::default(),
             )))
         }
     }
@@ -99,8 +98,7 @@ pub(crate) fn encode_batch_scene(
             }),
         BatchFormat::Svg => {
             let output = render_svg_with_options(scene, fonts, assets, SvgOptions { raster_scale: options.raster_scale }).map_err(|e| vec![Diagnostic::error("render.svg_failed", format!("SVG export failed on page {page}: {e}. Check page resources and scene commands"), None, None)])?;
-            let diagnostics =
-                super::svg::rasterization_diagnostics(&output.rasterized_regions, page);
+            let diagnostics = rasterization_diagnostics(&output.rasterized_regions, page);
             let diagnostics = match policy {
                 Some(policy) => zenith_core::apply_policy(diagnostics, policy),
                 None => diagnostics,

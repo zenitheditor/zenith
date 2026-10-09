@@ -48,7 +48,7 @@ fn creates_valid_document_with_doc_id() {
         &src,
         path.parent(),
         false,
-        &zenith_cli::config::CliPolicyFlags::default(),
+        &zenith_pipeline::PolicyFlags::default(),
     );
     assert_eq!(
         out.exit_code, 0,
@@ -200,7 +200,7 @@ fn format_sets_page_dimensions() {
         &src,
         path.parent(),
         false,
-        &zenith_cli::config::CliPolicyFlags::default(),
+        &zenith_pipeline::PolicyFlags::default(),
     );
     assert_eq!(
         out.exit_code, 0,
@@ -237,7 +237,7 @@ fn explicit_dimensions_and_multiple_pages() {
         &src,
         path.parent(),
         false,
-        &zenith_cli::config::CliPolicyFlags::default(),
+        &zenith_pipeline::PolicyFlags::default(),
     );
     assert_eq!(
         out.exit_code, 0,
@@ -303,7 +303,7 @@ fn theme_scaffold_carries_full_token_contract() {
         &src,
         path.parent(),
         false,
-        &zenith_cli::config::CliPolicyFlags::default(),
+        &zenith_pipeline::PolicyFlags::default(),
     );
     assert_eq!(
         out.exit_code, 0,
@@ -410,7 +410,7 @@ fn theme_scaffold_reports_set_partially_used_not_per_token_unused() {
         &src,
         path.parent(),
         false,
-        &zenith_cli::config::CliPolicyFlags::default(),
+        &zenith_pipeline::PolicyFlags::default(),
     );
     assert_eq!(
         out.exit_code, 0,

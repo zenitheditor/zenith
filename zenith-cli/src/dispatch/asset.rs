@@ -145,10 +145,5 @@ fn apply_asset_outcome(
     }
     std::fs::write(&asset_path, outcome.produced.bytes.as_ref())
         .map_err(|e| write_error(&asset_path, &e))?;
-    apply_edit(
-        doc_path,
-        outcome.result.source_after.as_bytes(),
-        history_label,
-    )
-    .map(|_| ())
+    apply_edit(doc_path, outcome.written.text.as_bytes(), history_label).map(|_| ())
 }

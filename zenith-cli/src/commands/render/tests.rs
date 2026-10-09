@@ -1,11 +1,10 @@
 use std::path::Path;
 
-use crate::config::CliPolicyFlags;
-
 use super::{
-    RenderEntryOptions, to_pdf_all_pages_with_dir, to_png, to_png_all_pages, to_png_with_dir,
-    to_scene_json, to_scene_json_with_options,
+    to_pdf_all_pages_with_dir, to_png, to_png_all_pages, to_png_with_dir, to_scene_json,
+    to_scene_json_with_options,
 };
+use zenith_pipeline::{PolicyFlags, RenderOptions};
 
 const VALID_DOC: &str = r##"zenith version=1 {
   project id="proj.r" name="Render Test"
@@ -130,7 +129,7 @@ fn to_png_with_dir_surfaces_import_diagnostics() {
         Some(dir.path()),
         1,
         false,
-        &CliPolicyFlags::default(),
+        &PolicyFlags::default(),
         None,
     )
     .expect("render artifact should carry import diagnostics");
@@ -187,7 +186,7 @@ fn to_scene_json_expands_loaded_composition_import() {
 }
 "#;
 
-    let artifact = to_scene_json(src, Some(dir.path()), 1, &CliPolicyFlags::default(), None)
+    let artifact = to_scene_json(src, Some(dir.path()), 1, &PolicyFlags::default(), None)
         .expect("scene JSON render must succeed");
 
     assert!(
@@ -241,7 +240,7 @@ fn to_scene_json_expands_loaded_page_source_import() {
 }
 "##;
 
-    let artifact = to_scene_json(src, Some(dir.path()), 1, &CliPolicyFlags::default(), None)
+    let artifact = to_scene_json(src, Some(dir.path()), 1, &PolicyFlags::default(), None)
         .expect("scene JSON render must succeed");
 
     assert!(
@@ -298,14 +297,9 @@ fn all_page_render_paths_expand_loaded_page_source_import() {
 }
 "##;
 
-    let png_artifacts = to_png_all_pages(
-        src,
-        Some(dir.path()),
-        false,
-        &CliPolicyFlags::default(),
-        None,
-    )
-    .expect("all-pages PNG render must succeed");
+    let png_artifacts =
+        to_png_all_pages(src, Some(dir.path()), false, &PolicyFlags::default(), None)
+            .expect("all-pages PNG render must succeed");
     assert_eq!(
         png_artifacts.pages.len(),
         2,
@@ -328,7 +322,7 @@ fn all_page_render_paths_expand_loaded_page_source_import() {
         Some(dir.path()),
         false,
         true,
-        &CliPolicyFlags::default(),
+        &PolicyFlags::default(),
         None,
     )
     .expect("all-pages PDF render must succeed");
@@ -346,7 +340,7 @@ fn all_page_render_paths_expand_loaded_page_source_import() {
 
 #[test]
 fn construction_guides_do_not_affect_default_scene_json() {
-    let artifact = to_scene_json(CONSTRUCTION_DOC, None, 1, &CliPolicyFlags::default(), None)
+    let artifact = to_scene_json(CONSTRUCTION_DOC, None, 1, &PolicyFlags::default(), None)
         .expect("scene render must succeed");
 
     assert!(!artifact.json.contains("\"op\": \"StrokeLine\""));
@@ -355,14 +349,15 @@ fn construction_guides_do_not_affect_default_scene_json() {
 
 #[test]
 fn construction_overlay_appends_guide_commands_to_scene_json() {
-    let opts = RenderEntryOptions {
+    let opts = RenderOptions {
         locked: false,
         subset: true,
-        flags: &CliPolicyFlags::default(),
+        flags: &PolicyFlags::default(),
         data: None,
         construction_overlay: true,
         scale: 1.0,
         raster_scale: 1.0,
+        parsed: None,
     };
     let artifact = to_scene_json_with_options(CONSTRUCTION_DOC, None, 1, opts)
         .expect("scene render must succeed");
@@ -374,7 +369,7 @@ fn construction_overlay_appends_guide_commands_to_scene_json() {
 
 #[test]
 fn to_scene_json_surfaces_compile_diagnostics() {
-    let artifact = to_scene_json(UNKNOWN_NODE_DOC, None, 1, &CliPolicyFlags::default(), None)
+    let artifact = to_scene_json(UNKNOWN_NODE_DOC, None, 1, &PolicyFlags::default(), None)
         .expect("scene must succeed");
     assert!(
         artifact
@@ -401,7 +396,7 @@ fn to_png_with_validation_error_returns_err() {
 
 #[test]
 fn to_scene_json_contains_schema_field() {
-    let json = to_scene_json(VALID_DOC, None, 1, &CliPolicyFlags::default(), None)
+    let json = to_scene_json(VALID_DOC, None, 1, &PolicyFlags::default(), None)
         .expect("scene JSON must succeed")
         .json;
     assert!(
@@ -413,7 +408,7 @@ fn to_scene_json_contains_schema_field() {
 
 #[test]
 fn to_scene_json_with_validation_error_returns_err() {
-    let result = to_scene_json(INVALID_DOC, None, 1, &CliPolicyFlags::default(), None);
+    let result = to_scene_json(INVALID_DOC, None, 1, &PolicyFlags::default(), None);
     assert!(result.is_err(), "invalid doc must not produce scene JSON");
 }
 
@@ -463,7 +458,7 @@ fn to_png_page_zero_is_err_exit_2() {
 
 #[test]
 fn to_png_all_pages_returns_one_artifact_per_page() {
-    let artifacts = to_png_all_pages(TWO_PAGE_DOC, None, false, &CliPolicyFlags::default(), None)
+    let artifacts = to_png_all_pages(TWO_PAGE_DOC, None, false, &PolicyFlags::default(), None)
         .expect("all-pages render must succeed");
     assert_eq!(
         artifacts.pages.len(),
@@ -492,7 +487,7 @@ fn to_png_all_pages_empty_doc_is_err() {
   document id="doc.e" title="E" {}
 }
 "##;
-    let err = to_png_all_pages(empty, None, false, &CliPolicyFlags::default(), None)
+    let err = to_png_all_pages(empty, None, false, &PolicyFlags::default(), None)
         .expect_err("a doc with no pages must error");
     // A zero-page document is now rejected at validation (document.no_pages,
     // exit 1) rather than later at the render stage (exit 2).
@@ -605,7 +600,7 @@ fn to_png_missing_asset_has_asset_missing_error_diagnostic() {
         Some(dir),
         1,
         false,
-        &CliPolicyFlags::default(),
+        &PolicyFlags::default(),
         None,
     )
     .expect("render must not hard-fail; missing asset is carried as a diagnostic");
@@ -631,7 +626,7 @@ fn to_scene_json_missing_asset_has_asset_missing_error_diagnostic() {
         MISSING_ASSET_DOC,
         Some(dir),
         1,
-        &CliPolicyFlags::default(),
+        &PolicyFlags::default(),
         None,
     )
     .expect("scene JSON must succeed");
@@ -681,7 +676,7 @@ fn to_pdf_all_pages_produces_one_pdf_page_per_document_page() {
         None,
         false,
         true,
-        &CliPolicyFlags::default(),
+        &PolicyFlags::default(),
         None,
     )
     .expect("all-pages PDF render must succeed");
@@ -704,7 +699,7 @@ fn to_pdf_all_pages_is_deterministic() {
         None,
         false,
         true,
-        &CliPolicyFlags::default(),
+        &PolicyFlags::default(),
         None,
     )
     .expect("render must succeed");
@@ -713,7 +708,7 @@ fn to_pdf_all_pages_is_deterministic() {
         None,
         false,
         true,
-        &CliPolicyFlags::default(),
+        &PolicyFlags::default(),
         None,
     )
     .expect("render must succeed");
@@ -786,7 +781,7 @@ fn text_src_loads_file_and_renders_png() {
         Some(dir.path()),
         1,
         false,
-        &CliPolicyFlags::default(),
+        &PolicyFlags::default(),
         None,
     )
     .expect("render with src file must succeed");
@@ -819,7 +814,7 @@ fn text_src_missing_file_yields_error_diagnostic() {
         Some(dir.path()),
         1,
         false,
-        &CliPolicyFlags::default(),
+        &PolicyFlags::default(),
         None,
     )
     .expect("render must still return Ok (gate is at lib.rs dispatch level)");

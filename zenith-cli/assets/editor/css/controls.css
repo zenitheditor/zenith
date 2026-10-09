@@ -1,0 +1,323 @@
+/* Controls: tool buttons, text buttons, badges, notices, toasts. */
+
+button {
+  font: inherit;
+  color: inherit;
+}
+
+.icon {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.tool {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--tool);
+  height: var(--tool);
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: background var(--dur) var(--ease), color var(--dur) var(--ease);
+}
+
+.tool.small {
+  width: var(--tool-small);
+  height: var(--tool-small);
+}
+
+.tool:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.tool:active {
+  background: var(--surface-active);
+}
+
+.tool[aria-pressed="true"] {
+  color: var(--accent);
+}
+
+.tool[aria-pressed="true"]:hover {
+  background: var(--accent-soft);
+}
+
+.tool:disabled,
+.button:disabled {
+  opacity: 0.45;
+  cursor: default;
+  pointer-events: none;
+}
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: var(--tool);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: background var(--dur) var(--ease), border-color var(--dur) var(--ease);
+}
+
+.button:hover {
+  background: var(--surface-hover);
+}
+
+.button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
+
+.button.primary:hover {
+  background: var(--accent-hover);
+  border-color: var(--accent-hover);
+}
+
+.button.danger {
+  color: var(--danger);
+  border-color: var(--danger);
+  background: transparent;
+}
+
+.button.danger:hover {
+  background: var(--danger-soft);
+}
+
+.button.compact {
+  height: 28px;
+  padding: 0 10px;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 11px;
+  background: var(--surface-active);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.badge.warn {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+.zoom {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+}
+
+.zoom-value {
+  min-width: 56px;
+  height: var(--tool-small);
+  padding: 0 6px;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.zoom-value:hover {
+  background: var(--surface-hover);
+}
+
+/* Notices: one row per notice, under the top bar. */
+
+.notice {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  min-width: 0;
+  padding: var(--space-2) var(--space-4);
+  border-bottom: 1px solid var(--border);
+  background: var(--info-soft);
+}
+
+.notice.error {
+  background: var(--danger-soft);
+}
+
+.notice.warning {
+  background: var(--warning-soft);
+}
+
+.notice-icon {
+  display: flex;
+  color: var(--info);
+}
+
+.notice.error .notice-icon {
+  color: var(--danger);
+}
+
+.notice.warning .notice-icon {
+  color: var(--warning);
+}
+
+.notice-text {
+  flex: 1 1 280px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.notice-text strong {
+  font-weight: 600;
+}
+
+.notice-code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-right: 6px;
+}
+
+.notice-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.notice-detail {
+  flex: 1 0 100%;
+  max-height: 160px;
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* Toasts */
+
+.toasts {
+  position: fixed;
+  right: var(--space-4);
+  bottom: calc(var(--status-h) + var(--space-3));
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--space-2);
+  max-width: calc(100vw - 2 * var(--space-4));
+  pointer-events: none;
+}
+
+.toast {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow-pop);
+  pointer-events: auto;
+  animation: toast-in var(--dur) var(--ease);
+}
+
+.toast .icon {
+  color: var(--ok);
+}
+
+.toast.info .icon {
+  color: var(--info);
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toast {
+    animation: none;
+  }
+}
+
+/* Document chooser of the static host (a project folder with several .zen files). */
+
+.doc-dialog {
+  max-width: min(420px, calc(100vw - 2 * var(--space-4)));
+  max-height: min(70vh, 560px);
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow-pop);
+}
+
+.doc-dialog::backdrop {
+  background: rgb(18 24 33 / 0.4);
+}
+
+.doc-dialog[open] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.doc-dialog-note {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.doc-dialog-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-y: auto;
+}
+
+.doc-dialog-list .button {
+  width: 100%;
+  justify-content: flex-start;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.doc-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+}

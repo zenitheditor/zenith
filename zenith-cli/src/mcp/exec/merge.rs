@@ -12,11 +12,10 @@ use crate::mcp::serialize::compact;
 
 pub(super) fn call(args: &Value) -> ToolResult {
     match run(args) {
-        Ok((value, is_error)) => ToolResult {
-            text: compact(&value),
-            structured: Some(value),
-            is_error,
-        },
+        Ok((value, is_error)) => {
+            let text = compact(&value);
+            ToolResult::report(value, text, is_error)
+        }
         Err(message) => ToolResult::err(message),
     }
 }
@@ -115,10 +114,11 @@ fn options(args: &Value) -> Result<render::BatchExportOptions, String> {
             if format != render::BatchFormat::Svg {
                 return Err("error[cli.invalid_argument]: raster_scale requires format 'svg'. Set format to svg".to_owned());
             }
-            render::check_render_scale(value.as_f64().unwrap_or(f64::NAN), &value.to_string())
-                .map_err(|message| {
-                    format!("error[cli.invalid_argument]: raster_scale: {message}")
-                })?
+            zenith_pipeline::render::check_render_scale(
+                value.as_f64().unwrap_or(f64::NAN),
+                &value.to_string(),
+            )
+            .map_err(|message| format!("error[cli.invalid_argument]: raster_scale: {message}"))?
         }
     };
     Ok(render::BatchExportOptions {

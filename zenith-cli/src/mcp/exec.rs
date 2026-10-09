@@ -40,6 +40,11 @@ pub fn call(name: &str, args: &Value) -> ToolResult {
         "zenith_workspace_candidate" => run_workspace_candidate(args),
         "zenith_workspace_promote" => run_workspace_promote(args),
         "zenith_workspace_finalize" => run_workspace_finalize(args),
+        "zenith_editor_open" => return super::editor::open(args),
+        "zenith_editor_command" => return super::editor::command(args),
+        "zenith_editor_render" => return super::editor::render(args),
+        "zenith_editor_sessions" => return super::editor::sessions(args),
+        "zenith_editor_attach" => return super::editor::attach(args),
         other => Err(format!("unknown tool '{other}'")),
     };
     match result {
@@ -92,7 +97,7 @@ fn run_fonts(_args: &Value) -> Result<Value, String> {
 fn run_validate(args: &Value) -> Result<Value, String> {
     let loc = doc_ref::locate(req_str(args, "doc")?)?;
     let src = read(&loc.path)?;
-    let flags = crate::config::CliPolicyFlags::default();
+    let flags = zenith_pipeline::PolicyFlags::default();
     let out = commands::validate::run(&src, loc.path.parent(), true, &flags);
     let parsed = parse_json(&out.stdout)?;
     let diags = parsed
@@ -188,14 +193,10 @@ fn run_tx(args: &Value) -> Result<Value, String> {
     let outcome = commands::tx::run_with(&src, &tx_json, &ctx).map_err(|e| e.message)?;
 
     // The bytes on disk after an apply; history can stamp a `doc-id` into them.
-    let mut after_bytes = outcome.result.source_after.clone().into_bytes();
+    let mut after_bytes = outcome.written.text.clone().into_bytes();
     if flag(args, "apply") && outcome.exit_code != 1 {
-        after_bytes = apply_edit(
-            &loc.path,
-            outcome.result.source_after.as_bytes(),
-            "tx.apply",
-        )
-        .map_err(|e| e.human)?;
+        after_bytes = apply_edit(&loc.path, outcome.written.text.as_bytes(), "tx.apply")
+            .map_err(|e| e.human)?;
     }
 
     let parsed = parse_json(&outcome.json_str)?;
@@ -281,11 +282,11 @@ fn run_render(args: &Value) -> Result<Value, String> {
     let src = read(&path)?;
     // MCP carries no policy flags; in-document `diagnostics {}` and config files
     // are still resolved on the render path via the project directory.
-    let flags = crate::config::CliPolicyFlags::default();
+    let flags = zenith_pipeline::PolicyFlags::default();
     let scale = request.scale;
     let raster_scale = request.raster_scale;
     let contact_sheet = request.contact_sheet;
-    let render_opts = commands::render::RenderEntryOptions {
+    let render_opts = zenith_pipeline::RenderOptions {
         locked,
         subset: true,
         flags: &flags,
@@ -293,6 +294,7 @@ fn run_render(args: &Value) -> Result<Value, String> {
         construction_overlay: false,
         scale: scale.unwrap_or(1.0),
         raster_scale: raster_scale.unwrap_or(1.0),
+        parsed: None,
     };
     let mut image_meta: Option<Value> = None;
 

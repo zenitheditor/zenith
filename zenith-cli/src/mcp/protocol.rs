@@ -29,6 +29,8 @@ pub struct ToolResult {
     pub text: String,
     /// Whether this result represents a tool-execution error.
     pub is_error: bool,
+    /// Base64 PNGs sent as MCP image content blocks after the text.
+    pub images: Vec<String>,
 }
 
 impl ToolResult {
@@ -38,7 +40,25 @@ impl ToolResult {
             structured: Some(structured),
             text,
             is_error: false,
+            images: Vec::new(),
         }
+    }
+
+    /// A structured result that is an error when `is_error` (for example a
+    /// batch with failed rows, or an editor command the engine refused).
+    pub fn report(structured: Value, text: String, is_error: bool) -> Self {
+        Self {
+            structured: Some(structured),
+            text,
+            is_error,
+            images: Vec::new(),
+        }
+    }
+
+    /// This result with `png` as an image content block.
+    pub fn with_png(mut self, png: &[u8]) -> Self {
+        self.images.push(super::base64::encode(png));
+        self
     }
 
     /// A tool-execution error carrying a human-readable message.
@@ -47,16 +67,20 @@ impl ToolResult {
             structured: None,
             text: message.into(),
             is_error: true,
+            images: Vec::new(),
         }
     }
 
     /// Render this result as the `tools/call` result object.
     pub fn into_payload(self) -> Value {
         let mut obj = serde_json::Map::new();
-        obj.insert(
-            "content".into(),
-            json!([{ "type": "text", "text": self.text }]),
+        let mut content = vec![json!({ "type": "text", "text": self.text })];
+        content.extend(
+            self.images
+                .iter()
+                .map(|data| json!({ "type": "image", "data": data, "mimeType": "image/png" })),
         );
+        obj.insert("content".into(), Value::Array(content));
         if let Some(structured) = self.structured {
             obj.insert("structuredContent".into(), structured);
         }

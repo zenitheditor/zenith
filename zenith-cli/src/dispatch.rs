@@ -14,6 +14,7 @@ mod asset;
 mod batch;
 mod document;
 mod edit;
+mod editor;
 mod fix;
 mod history;
 mod library;
@@ -44,6 +45,7 @@ pub fn run() -> ExitCode {
         Command::Version(args) => history::dispatch_version(args),
         Command::Restore(args) => history::dispatch_restore(args),
         Command::Sync(args) => history::dispatch_sync(args),
+        Command::Edit(args) => editor::dispatch_edit(args),
         Command::Tx(args) => edit::dispatch_tx(args),
         Command::OutlineText(args) => edit::dispatch_outline_text(args),
         Command::Variant(args) => batch::dispatch_variant(args),

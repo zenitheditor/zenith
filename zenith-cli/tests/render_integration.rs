@@ -3,7 +3,7 @@
 //! byte-identical determinism across two back-to-back renders.
 
 use zenith_cli::commands::render::to_png_with_dir;
-use zenith_cli::config::CliPolicyFlags;
+use zenith_pipeline::PolicyFlags;
 
 /// Render `examples/<name>.zen` twice and assert the output is a valid,
 /// byte-identical PNG.  All per-fixture tests delegate here.
@@ -25,7 +25,7 @@ fn assert_example_renders(name: &str) {
         Some(&examples_dir),
         1,
         false,
-        &CliPolicyFlags::default(),
+        &PolicyFlags::default(),
         None,
     )
     .unwrap_or_else(|e| panic!("render failed (exit {}): {}", e.exit_code, e.message))
@@ -52,7 +52,7 @@ fn assert_example_renders(name: &str) {
         Some(&examples_dir),
         1,
         false,
-        &CliPolicyFlags::default(),
+        &PolicyFlags::default(),
         None,
     )
     .unwrap_or_else(|e| panic!("second render failed (exit {}): {}", e.exit_code, e.message))
@@ -282,7 +282,7 @@ fn locked_correct_sha256_renders_ok() {
         Some(&examples_dir()),
         1,
         true,
-        &CliPolicyFlags::default(),
+        &PolicyFlags::default(),
         None,
     );
     assert!(
@@ -302,7 +302,7 @@ fn locked_wrong_sha256_errors_exit_2() {
         Some(&examples_dir()),
         1,
         true,
-        &CliPolicyFlags::default(),
+        &PolicyFlags::default(),
         None,
     )
     .expect_err("wrong sha256 in --locked mode must error");
@@ -317,7 +317,7 @@ fn locked_missing_sha256_errors_exit_2() {
         Some(&examples_dir()),
         1,
         true,
-        &CliPolicyFlags::default(),
+        &PolicyFlags::default(),
         None,
     )
     .expect_err("missing sha256 in --locked mode must error");
@@ -333,7 +333,7 @@ fn unlocked_wrong_sha256_renders_ok() {
         Some(&examples_dir()),
         1,
         false,
-        &CliPolicyFlags::default(),
+        &PolicyFlags::default(),
         None,
     );
     assert!(
@@ -379,7 +379,7 @@ fn render_missing_asset_yields_asset_missing_error_diagnostic() {
         Some(&examples_dir()),
         1,
         false,
-        &CliPolicyFlags::default(),
+        &PolicyFlags::default(),
         None,
     )
     .expect("render must not hard-fail; the missing asset is carried as a diagnostic");
@@ -405,7 +405,7 @@ fn validate_missing_asset_reports_error_exit_1() {
         &src,
         Some(&examples_dir()),
         false,
-        &zenith_cli::config::CliPolicyFlags::default(),
+        &zenith_pipeline::PolicyFlags::default(),
     );
     assert_eq!(
         out.exit_code, 1,
@@ -426,7 +426,7 @@ fn validate_missing_asset_json_reports_error() {
         &src,
         Some(&examples_dir()),
         true,
-        &zenith_cli::config::CliPolicyFlags::default(),
+        &zenith_pipeline::PolicyFlags::default(),
     );
     assert!(
         out.stdout.contains("asset.missing"),

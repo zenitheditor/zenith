@@ -14,18 +14,22 @@ use zenith_core::{AssetKind, BytesAssetProvider, KdlAdapter, KdlSource};
 use zenith_scene::{DocumentPrep, PageCompiler};
 use zenith_tx::{AddAssetMetadata, Op, OpSpan, Transaction, TxStatus, run_transaction};
 
-use crate::commands::render::{
-    BatchExportOptions, BatchFormat, build_asset_provider, build_font_provider,
-    collect_missing_asset_diagnostics, encode_batch_scene, image_sizes, load_batch_policy,
+use zenith_pipeline::assets::{
+    build_asset_provider, build_font_provider, collect_missing_asset_diagnostics, image_sizes,
     resolve_text_sources,
 };
+
+use crate::commands::render::{
+    BatchExportOptions, BatchFormat, encode_batch_scene, load_batch_policy,
+};
+use crate::native::{self, NativeFs};
 
 // ── Error type ────────────────────────────────────────────────────────────────
 
 /// A fatal error that prevents the merge from starting.
 ///
 /// Exit code 2 for all setup/template errors (consistent with the other
-/// commands whose `RenderCmdErr`/`FmtErr`/`TxCmdErr` all use 2 for this class
+/// commands whose `PipelineError`/`FmtErr`/`TxCmdErr` all use 2 for this class
 /// of failure).
 #[derive(Debug)]
 pub struct MergeError {
@@ -453,13 +457,12 @@ pub fn run_with_output_constraints(
     }
 
     // ── 5. Build font + asset providers ONCE from the original doc ────────
-    let fonts =
-        build_font_provider(&doc, project_dir, false).map_err(|e| MergeError::new(e.message))?;
+    let fonts = build_font_provider(native::host(), &doc, project_dir, false)
+        .map_err(|e| MergeError::new(e.message))?;
     // Template assets are loaded once; per-row image bytes are layered on top.
     let template_assets = match project_dir {
-        Some(dir) => {
-            build_asset_provider(&doc, dir, false).map_err(|e| MergeError::new(e.message))?
-        }
+        Some(dir) => build_asset_provider(&NativeFs, &doc, dir, false)
+            .map_err(|e| MergeError::new(e.message))?,
         None => BytesAssetProvider::new(),
     };
 
@@ -587,11 +590,11 @@ pub fn run_with_output_constraints(
         // Any text.src_missing Error is a per-row failure (same gate as asset.missing).
         {
             let mut text_src_diags: Vec<zenith_core::Diagnostic> = Vec::new();
-            resolve_text_sources(&mut row_doc, project_dir, &mut text_src_diags);
+            resolve_text_sources(&NativeFs, &mut row_doc, project_dir, &mut text_src_diags);
             let hard: Vec<String> = text_src_diags
                 .iter()
                 .filter(|d| d.is_error())
-                .map(crate::commands::format_error_diag)
+                .map(zenith_pipeline::format_error_diag)
                 .collect();
             if !hard.is_empty() {
                 push_failure(
@@ -622,8 +625,8 @@ pub fn run_with_output_constraints(
                 continue;
             };
             // Start with template assets.
-            let mut row_provider =
-                build_asset_provider(&doc, dir, false).map_err(|e| MergeError::new(e.message))?;
+            let mut row_provider = build_asset_provider(&NativeFs, &doc, dir, false)
+                .map_err(|e| MergeError::new(e.message))?;
             // Layer in per-row images.
             let mut row_asset_missing = false;
             for (binding, &col_idx) in asset_bindings.iter().zip(asset_binding_indices.iter()) {
@@ -663,11 +666,11 @@ pub fn run_with_output_constraints(
         // Also gate on collect_missing_asset_diagnostics for any declared-but-missing
         // template assets now embedded in row_doc (includes the AddAsset entries).
         if let Some(dir) = project_dir {
-            let missing_diags = collect_missing_asset_diagnostics(&row_doc, dir);
+            let missing_diags = collect_missing_asset_diagnostics(&NativeFs, &row_doc, dir);
             let hard: Vec<String> = missing_diags
                 .iter()
                 .filter(|d| d.is_error())
-                .map(crate::commands::format_error_diag)
+                .map(zenith_pipeline::format_error_diag)
                 .collect();
             if !hard.is_empty() {
                 push_failure(
@@ -757,7 +760,7 @@ pub fn run_with_output_constraints(
                 .diagnostics
                 .iter()
                 .filter(|d| d.is_error())
-                .map(crate::commands::format_error_diag)
+                .map(zenith_pipeline::format_error_diag)
                 .collect();
             if policy.is_some() {
                 diagnostics.extend(std::mem::take(&mut compile_result.diagnostics));

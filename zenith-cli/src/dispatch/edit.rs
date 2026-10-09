@@ -34,11 +34,7 @@ pub(super) fn dispatch_tx(args: TxArgs) -> ExitCode {
     };
     if args.apply
         && outcome.exit_code != 1
-        && let Err(e) = apply_edit(
-            &args.path,
-            outcome.result.source_after.as_bytes(),
-            "tx.apply",
-        )
+        && let Err(e) = apply_edit(&args.path, outcome.written.text.as_bytes(), "tx.apply")
     {
         return e.emit(json);
     }
@@ -72,7 +68,7 @@ pub(super) fn dispatch_outline_text(args: OutlineTextArgs) -> ExitCode {
         && outcome.exit_code != 1
         && let Err(e) = apply_edit(
             &args.path,
-            outcome.result.source_after.as_bytes(),
+            outcome.written.text.as_bytes(),
             "text_outline.apply",
         )
     {
@@ -153,11 +149,7 @@ fn dispatch_theme_apply(a: cli::ThemeApplyArgs) -> ExitCode {
     };
     if a.apply
         && outcome.exit_code != 1
-        && let Err(e) = apply_edit(
-            &a.doc,
-            outcome.result.source_after.as_bytes(),
-            "theme.apply",
-        )
+        && let Err(e) = apply_edit(&a.doc, outcome.written.text.as_bytes(), "theme.apply")
     {
         return e.emit(json);
     }

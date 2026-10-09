@@ -18,7 +18,7 @@ pub(super) fn dispatch_validate(args: ValidateArgs) -> ExitCode {
         Ok(s) => s,
         Err(e) => return e.emit(args.json),
     };
-    let flags = crate::config::CliPolicyFlags {
+    let flags = zenith_pipeline::PolicyFlags {
         allow: args.allow,
         warn: args.warn,
         deny: args.deny,

@@ -11,7 +11,7 @@ use std::fs;
 
 use tempfile::TempDir;
 use zenith_cli::commands::render::to_png_with_dir;
-use zenith_cli::config::CliPolicyFlags;
+use zenith_pipeline::PolicyFlags;
 
 // ── Fixture ──────────────────────────────────────────────────────────────────
 
@@ -63,7 +63,7 @@ fn render_succeeds_without_flags() {
         None,
         1,
         false,
-        &CliPolicyFlags::default(),
+        &PolicyFlags::default(),
         None,
     );
     assert!(
@@ -77,7 +77,7 @@ fn render_succeeds_without_flags() {
 /// must fail (Err with exit_code 1).
 #[test]
 fn deny_flag_turns_advisory_into_render_failure() {
-    let flags = CliPolicyFlags {
+    let flags = PolicyFlags {
         deny: vec!["token.unused".to_owned()],
         ..Default::default()
     };
@@ -121,7 +121,7 @@ fn local_config_deny_blocks_render() {
         Some(tmp.path()),
         1,
         false,
-        &CliPolicyFlags::default(),
+        &PolicyFlags::default(),
         None,
     );
     assert!(
@@ -156,7 +156,7 @@ fn local_config_allow_keeps_render_clean() {
         Some(tmp.path()),
         1,
         false,
-        &CliPolicyFlags::default(),
+        &PolicyFlags::default(),
         None,
     );
     assert!(
@@ -171,7 +171,7 @@ fn local_config_allow_keeps_render_clean() {
 /// additive byte-identical behaviour (allow on a non-Error advisory is a no-op).
 #[test]
 fn allow_flag_on_advisory_is_transparent() {
-    let flags = CliPolicyFlags {
+    let flags = PolicyFlags {
         allow: vec!["token.unused".to_owned()],
         ..Default::default()
     };
@@ -188,7 +188,7 @@ fn allow_flag_on_advisory_is_transparent() {
         None,
         1,
         false,
-        &CliPolicyFlags::default(),
+        &PolicyFlags::default(),
         None,
     )
     .expect("baseline render must succeed")
@@ -211,7 +211,7 @@ fn unresolved_font_advisory_shown_and_render_succeeds() {
         None,
         1,
         false,
-        &CliPolicyFlags::default(),
+        &PolicyFlags::default(),
         None,
     );
     let artifact = result.expect("render must succeed with the font advisory present");
@@ -231,7 +231,7 @@ fn unresolved_font_advisory_shown_and_render_succeeds() {
 /// responsible for the non-zero exit code — not the entry function.
 #[test]
 fn deny_unresolved_font_elevates_to_error_severity() {
-    let flags = CliPolicyFlags {
+    let flags = PolicyFlags {
         deny: vec!["font.unresolved".to_owned()],
         ..Default::default()
     };
@@ -254,7 +254,7 @@ fn deny_unresolved_font_elevates_to_error_severity() {
 /// still succeeds and the advisory is absent from the artifact's diagnostics.
 #[test]
 fn allow_unresolved_font_suppresses_advisory() {
-    let flags = CliPolicyFlags {
+    let flags = PolicyFlags {
         allow: vec!["font.unresolved".to_owned()],
         ..Default::default()
     };
@@ -283,7 +283,7 @@ fn malformed_local_config_causes_render_error_exit_2() {
         Some(tmp.path()),
         1,
         false,
-        &CliPolicyFlags::default(),
+        &PolicyFlags::default(),
         None,
     );
     assert!(

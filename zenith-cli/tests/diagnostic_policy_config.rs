@@ -1,22 +1,35 @@
 //! Integration tests for CLI-layer diagnostic-policy and brand-contract
 //! resolution.
 //!
-//! These exercise the public `zenith_cli::config` loaders/merge plus
-//! `zenith_core::validate_with_policy`, and the `validate::run` exit-code path
-//! for a malformed local config. All filesystem state is rooted in tempdirs and
-//! the injectable loaders are used with explicit paths — no `$HOME`/cwd mutation,
-//! so the tests are parallel-safe.
+//! These exercise `zenith_pipeline`'s config layers and merge over the
+//! native file system, plus `zenith_core::validate_with_policy`, and the
+//! `validate::run` exit-code path for a malformed local config. All
+//! filesystem state is rooted in tempdirs and the global config path is
+//! passed explicitly — no `$HOME`/cwd mutation, so the tests are
+//! parallel-safe.
 
 use std::fs;
+use std::path::{Path, PathBuf};
 
 use tempfile::TempDir;
-use zenith_cli::config::{
-    CliPolicyFlags, find_local_brand, find_local_policy, load_brand_file, load_global_brand_in,
-    load_global_policy_in, load_policy_file, merge_policy,
-};
+use zenith_cli::native::NativeFs;
 use zenith_core::{
     BrandContract, KdlAdapter, KdlSource as _, merge_brand_contract, validate_with_policy,
 };
+use zenith_pipeline::policy::{ConfigLayers, merge_policy};
+use zenith_pipeline::{FsConfig, PolicyFlags};
+
+/// Config layers read from disk: the global file at `global` (when given)
+/// and the nearest `.zenith.kdl` walking up from `local_dir` (when given).
+fn layers(global: Option<PathBuf>, local_dir: Option<&Path>) -> ConfigLayers {
+    ConfigLayers::load(&FsConfig::new(&NativeFs, global), local_dir).expect("config must load")
+}
+
+/// The global config file under a config base directory, as
+/// `<base>/zenith/config.kdl`.
+fn global_in(base: &Path) -> Option<PathBuf> {
+    Some(base.join("zenith").join("config.kdl"))
+}
 
 // ── Fixture ─────────────────────────────────────────────────────────────────
 
@@ -81,13 +94,13 @@ fn local_config_discovered_by_walk_up() {
     let nested = tmp.path().join("a").join("b");
     fs::create_dir_all(&nested).expect("mkdir");
 
-    let local = find_local_policy(&nested).expect("walk-up must succeed");
+    let local = layers(None, Some(&nested)).local_policy;
     let doc = parse(DOC);
     let merged = merge_policy(
         &zenith_core::DiagnosticPolicy::default(),
         &local,
         &doc.diagnostic_policy,
-        &CliPolicyFlags::default(),
+        &PolicyFlags::default(),
     );
     let report = validate_with_policy(&doc, &merged, &doc.brand_contract);
     assert!(
@@ -110,9 +123,9 @@ fn cli_deny_overrides_global_allow() {
     )
     .expect("write global");
 
-    let global = load_global_policy_in(tmp.path()).expect("global load");
+    let global = layers(global_in(tmp.path()), None).global_policy;
     let doc = parse(DOC);
-    let flags = CliPolicyFlags {
+    let flags = PolicyFlags {
         deny: vec!["token.unused".to_owned()],
         ..Default::default()
     };
@@ -141,7 +154,7 @@ fn cli_deny_overrides_in_file_allow() {
         "in-file allow should suppress token.unused"
     );
 
-    let flags = CliPolicyFlags {
+    let flags = PolicyFlags {
         deny: vec!["token.unused".to_owned()],
         ..Default::default()
     };
@@ -168,7 +181,7 @@ fn in_file_beats_local_and_global() {
         &global,
         &local,
         &doc.diagnostic_policy,
-        &CliPolicyFlags::default(),
+        &PolicyFlags::default(),
     );
     let report = validate_with_policy(&doc, &merged, &doc.brand_contract);
     assert!(
@@ -185,12 +198,8 @@ fn malformed_local_config_exits_two() {
     fs::write(tmp.path().join(".zenith.kdl"), b"diagnostics {{{ not kdl")
         .expect("write bad config");
 
-    let out = zenith_cli::commands::validate::run(
-        DOC,
-        Some(tmp.path()),
-        false,
-        &CliPolicyFlags::default(),
-    );
+    let out =
+        zenith_cli::commands::validate::run(DOC, Some(tmp.path()), false, &PolicyFlags::default());
     assert_eq!(
         out.exit_code, 2,
         "malformed local config must exit 2; stdout: {}",
@@ -252,7 +261,7 @@ fn local_config_brand_picked_up_for_doc_with_no_in_file_brand() {
     let nested = tmp.path().join("sub");
     fs::create_dir_all(&nested).expect("mkdir");
 
-    let local_brand = find_local_brand(&nested).expect("walk-up must succeed");
+    let local_brand = layers(None, Some(&nested)).local_brand;
     let doc = KdlAdapter
         .parse(DOC_WITH_COLOR_TOKEN.as_bytes())
         .expect("parse");
@@ -287,7 +296,7 @@ fn in_file_brand_overrides_local_config_per_category() {
     )
     .expect("write config");
 
-    let local_brand = find_local_brand(tmp.path()).expect("local brand load");
+    let local_brand = layers(None, Some(tmp.path())).local_brand;
     let doc = KdlAdapter
         .parse(DOC_WITH_IN_FILE_BRAND_ALLOW.as_bytes())
         .expect("parse");
@@ -324,7 +333,7 @@ fn global_config_brand_picked_up() {
     )
     .expect("write global");
 
-    let global_brand = load_global_brand_in(tmp.path()).expect("global brand load");
+    let global_brand = layers(global_in(tmp.path()), None).global_brand;
     let doc = KdlAdapter
         .parse(DOC_WITH_COLOR_TOKEN.as_bytes())
         .expect("parse");
@@ -368,8 +377,8 @@ fn brand_precedence_in_file_over_local_over_global() {
     )
     .expect("write local");
 
-    let global_brand = load_global_brand_in(tmp_global.path()).expect("global");
-    let local_brand = find_local_brand(tmp_local.path()).expect("local");
+    let loaded = layers(global_in(tmp_global.path()), Some(tmp_local.path()));
+    let (global_brand, local_brand) = (loaded.global_brand, loaded.local_brand);
     let doc = KdlAdapter
         .parse(DOC_WITH_IN_FILE_BRAND_ALLOW.as_bytes())
         .expect("parse");
@@ -394,9 +403,8 @@ fn brand_precedence_in_file_over_local_over_global() {
 }
 
 #[test]
-fn load_brand_file_missing_is_default() {
-    let brand = load_brand_file(std::path::Path::new("/no/such/brand.kdl"))
-        .expect("missing file must be ok");
+fn missing_global_config_yields_default_brand() {
+    let brand = layers(Some(PathBuf::from("/no/such/brand.kdl")), None).global_brand;
     assert!(
         brand.is_empty(),
         "missing file must yield default brand contract"
@@ -404,8 +412,8 @@ fn load_brand_file_missing_is_default() {
 }
 
 #[test]
-fn find_local_brand_root_walk_terminates() {
-    let brand = find_local_brand(std::path::Path::new("/")).expect("root walk must be ok");
+fn local_brand_root_walk_terminates() {
+    let brand = layers(None, Some(Path::new("/"))).local_brand;
     assert!(
         brand.is_empty(),
         "root walk with no config must yield default"
@@ -414,10 +422,10 @@ fn find_local_brand_root_walk_terminates() {
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
-/// Write `body` to a temp `.zenith.kdl` and load it (exercises `load_policy_file`).
+/// Write `body` to a temp config file and load its policy as the global tier.
 fn load_policy_inline(body: &str) -> zenith_core::DiagnosticPolicy {
     let tmp = TempDir::new().expect("tempdir");
     let path = tmp.path().join("inline.kdl");
     fs::write(&path, body.as_bytes()).expect("write");
-    load_policy_file(&path).expect("policy must load")
+    layers(Some(path), None).global_policy
 }

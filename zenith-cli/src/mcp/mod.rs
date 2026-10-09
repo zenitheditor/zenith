@@ -19,6 +19,7 @@
 
 mod base64;
 mod doc_ref;
+mod editor;
 mod exec;
 #[cfg(feature = "http")]
 mod http;
@@ -47,7 +48,9 @@ document by its path or its doc-id (returned once identity is attached). Typical
 (learn node/op shapes on demand) → zenith_tx to edit → zenith_validate (hard Error diagnostics block \
 rendering) → zenith_render (returns a resource link; read it via resources/read). Keep design \
 iterations as scratch candidates and promote the chosen one into the export page rather than editing \
-the deliverable directly. Results are trimmed by default; opt into detail with the documented params.";
+the deliverable directly. Results are trimmed by default; opt into detail with the documented params. \
+For pointer-style edits (hit-test, drag, undo) use the zenith_editor_* tools: they keep an editor \
+session and return deltas, diffs, and PNGs; zenith_editor_attach drives a running `zenith edit` page.";
 
 /// Run the stdio MCP server until stdin closes. Always returns success.
 pub fn run() -> u8 {

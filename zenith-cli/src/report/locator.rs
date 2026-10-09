@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 
 use zenith_core::{Diagnostic, ParseError, line_col};
 
-use super::source::ImportFiles;
+use zenith_pipeline::imports::ImportFiles;
 
 /// Where a diagnostic span points.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]

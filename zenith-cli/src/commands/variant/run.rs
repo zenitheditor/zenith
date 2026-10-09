@@ -15,13 +15,17 @@ use zenith_core::Diagnostic;
 use zenith_core::{BytesAssetProvider, KdlAdapter, KdlSource};
 use zenith_scene::{DocumentPrep, PageCompiler};
 
+use zenith_pipeline::assets::{
+    build_asset_provider, build_font_provider, collect_missing_asset_diagnostics, image_sizes,
+};
+
 use crate::commands::render::{
-    BatchExportOptions, BatchFormat, build_asset_provider, build_font_provider,
-    collect_missing_asset_diagnostics, encode_batch_scene, image_sizes, load_batch_policy,
+    BatchExportOptions, BatchFormat, encode_batch_scene, load_batch_policy,
 };
 use crate::json_types::{
     DiagnosticJson, VariantManifest, VariantManifestTarget, VariantOutput, VariantResultJson,
 };
+use crate::native::{self, NativeFs};
 
 use super::engine::{VariantOutcome, expand_variants};
 
@@ -190,12 +194,11 @@ pub fn run_variant_with_output_constraints(
         .map_err(|error| VariantCmdErr::new(error.to_string()))?;
 
     // ── 3. Build font + asset providers ONCE from the original doc ────────
-    let fonts =
-        build_font_provider(&doc, project_dir, false).map_err(|e| VariantCmdErr::new(e.message))?;
+    let fonts = build_font_provider(native::host(), &doc, project_dir, false)
+        .map_err(|e| VariantCmdErr::new(e.message))?;
     let template_assets = match project_dir {
-        Some(dir) => {
-            build_asset_provider(&doc, dir, false).map_err(|e| VariantCmdErr::new(e.message))?
-        }
+        Some(dir) => build_asset_provider(&NativeFs, &doc, dir, false)
+            .map_err(|e| VariantCmdErr::new(e.message))?,
         None => BytesAssetProvider::new(),
     };
 
@@ -294,11 +297,12 @@ pub fn run_variant_with_output_constraints(
 
                 // ── 6c. Gate on hard asset diagnostics ────────────────────
                 if let Some(dir) = project_dir {
-                    let missing_diags = collect_missing_asset_diagnostics(&materialized, dir);
+                    let missing_diags =
+                        collect_missing_asset_diagnostics(&NativeFs, &materialized, dir);
                     let hard: Vec<String> = missing_diags
                         .iter()
                         .filter(|d| d.is_error())
-                        .map(crate::commands::format_error_diag)
+                        .map(zenith_pipeline::format_error_diag)
                         .collect();
                     if !hard.is_empty() {
                         records.push(VariantResultRecord {
@@ -325,7 +329,7 @@ pub fn run_variant_with_output_constraints(
                     .diagnostics
                     .iter()
                     .filter(|d| d.is_error())
-                    .map(crate::commands::format_error_diag)
+                    .map(zenith_pipeline::format_error_diag)
                     .collect();
                 if !hard_diags.is_empty() {
                     records.push(VariantResultRecord {

@@ -3,7 +3,7 @@
 
 use tempfile::TempDir;
 use zenith_cli::commands::render::{to_png_with_dir, to_scene_json};
-use zenith_cli::config::CliPolicyFlags;
+use zenith_pipeline::PolicyFlags;
 
 fn write_fixtures(dir: &TempDir) {
     let pixmap = tiny_skia::Pixmap::new(120, 60).expect("pixmap");
@@ -59,8 +59,8 @@ fn image_boxes(json: &str) -> Vec<(f64, f64, f64, f64)> {
 fn scene_json_sizes_hugging_images_from_their_files() {
     let dir = TempDir::new().expect("tempdir");
     write_fixtures(&dir);
-    let artifact = to_scene_json(DOC, Some(dir.path()), 1, &CliPolicyFlags::default(), None)
-        .expect("scene json");
+    let artifact =
+        to_scene_json(DOC, Some(dir.path()), 1, &PolicyFlags::default(), None).expect("scene json");
     assert!(
         !artifact
             .diagnostics
@@ -85,7 +85,7 @@ fn png_render_sizes_hugging_images_from_their_files() {
         Some(dir.path()),
         1,
         false,
-        &CliPolicyFlags::default(),
+        &PolicyFlags::default(),
         None,
     )
     .expect("png");
@@ -101,7 +101,7 @@ fn png_render_sizes_hugging_images_from_their_files() {
 
 #[test]
 fn scene_json_without_project_dir_reports_unsized_images() {
-    let artifact = to_scene_json(DOC, None, 1, &CliPolicyFlags::default(), None);
+    let artifact = to_scene_json(DOC, None, 1, &PolicyFlags::default(), None);
     let diagnostics = match artifact {
         Ok(a) => a.diagnostics,
         Err(e) => e.diagnostics,
@@ -146,7 +146,7 @@ fn component_layout_sizes_images_on_a_page_without_layout() {
         COMPONENT_DOC,
         Some(dir.path()),
         1,
-        &CliPolicyFlags::default(),
+        &PolicyFlags::default(),
         None,
     )
     .expect("scene json");
