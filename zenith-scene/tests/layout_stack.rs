@@ -3,8 +3,14 @@
 //! out-of-flow children.
 
 mod common;
-use common::*;
+use common::parse;
+#[path = "common/fill_rects.rs"]
+mod fill_rects;
+use fill_rects::fill_rects;
 use std::collections::BTreeMap;
+use zenith_core::default_provider;
+use zenith_scene::ir::SceneCommand;
+use zenith_scene::{CompileResult, compile};
 use zenith_scene::{LayoutBox, layout_boxes};
 
 /// A one-page document with the color tokens the fixtures use.

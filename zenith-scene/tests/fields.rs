@@ -1,8 +1,108 @@
 mod common;
-use common::*;
+use common::parse;
 use zenith_core::default_provider;
 use zenith_scene::ir::SceneCommand;
 use zenith_scene::{CompileResult, compile, compile_page};
+
+/// Collect the `(x, y)` origin of every glyph run in a scene, in order.
+fn glyph_run_origins(result: &CompileResult) -> Vec<(f64, f64)> {
+    result
+        .scene
+        .commands
+        .iter()
+        .filter_map(|c| match c {
+            SceneCommand::DrawGlyphRun { x, y, .. } => Some((*x, *y)),
+            _ => None,
+        })
+        .collect()
+}
+
+/// Find the running-head run's `(x, glyph_count)` on a compiled page (the run
+/// whose baseline sits just below y=80).
+fn running_head_x_and_glyphs(r: &CompileResult) -> Option<(f64, usize)> {
+    r.scene.commands.iter().find_map(|c| match c {
+        SceneCommand::DrawGlyphRun { x, y, glyphs, .. } if *y > 80.0 && *y < 130.0 => {
+            Some((*x, glyphs.len()))
+        }
+        _ => None,
+    })
+}
+
+/// A 4-page mirror-margin book whose master carries a running-head + a
+/// page-number field; each page sets `master="m.body"` and has one body text.
+const BOOK_SRC: &str = r##"zenith version=1 mirror-margins=#true {
+  project id="proj.book" name="Book"
+  tokens format="zenith-token-v1" {
+token id="color.ink" type="color" value="#111111"
+  }
+  styles {}
+  masters {
+master id="m.body" {
+  field id="rh" type="running-head" recto="Chapter One: A Long Recto Title" verso="Verso" y=(px)80 h=(px)40 fill=(token)"color.ink"
+  field id="folio" type="page-number" y=(px)1820 h=(px)40 fill=(token)"color.ink"
+}
+  }
+  document id="doc.book" title="Book" {
+page id="p1" w=(px)1200 h=(px)1900 margin-inner=(px)160 margin-outer=(px)100 margin-top=(px)80 margin-bottom=(px)80 master="m.body" {
+  text id="b1" x=(px)160 y=(px)200 w=(px)900 h=(px)40 fill=(token)"color.ink" { span "Body one" }
+}
+page id="p2" w=(px)1200 h=(px)1900 margin-inner=(px)160 margin-outer=(px)100 margin-top=(px)80 margin-bottom=(px)80 master="m.body" {
+  text id="b2" x=(px)160 y=(px)200 w=(px)900 h=(px)40 fill=(token)"color.ink" { span "Body two" }
+}
+page id="p3" w=(px)1200 h=(px)1900 margin-inner=(px)160 margin-outer=(px)100 margin-top=(px)80 margin-bottom=(px)80 master="m.body" {
+  text id="b3" x=(px)160 y=(px)200 w=(px)900 h=(px)40 fill=(token)"color.ink" { span "Body three" }
+}
+page id="p4" w=(px)1200 h=(px)1900 margin-inner=(px)160 margin-outer=(px)100 margin-top=(px)80 margin-bottom=(px)80 master="m.body" {
+  text id="b4" x=(px)160 y=(px)200 w=(px)900 h=(px)40 fill=(token)"color.ink" { span "Body four" }
+}
+  }
+}
+"##;
+
+/// The same book, but with `page-parity-start="verso"` so page 1 is a VERSO.
+const BOOK_SRC_VERSO_START: &str = r##"zenith version=1 mirror-margins=#true page-parity-start="verso" {
+  project id="proj.book" name="Book"
+  tokens format="zenith-token-v1" {
+token id="color.ink" type="color" value="#111111"
+  }
+  styles {}
+  masters {
+master id="m.body" {
+  field id="rh" type="running-head" recto="Chapter One: A Long Recto Title" verso="Verso" y=(px)80 h=(px)40 fill=(token)"color.ink"
+  field id="folio" type="page-number" y=(px)1820 h=(px)40 fill=(token)"color.ink"
+}
+  }
+  document id="doc.book" title="Book" {
+page id="p1" w=(px)1200 h=(px)1900 margin-inner=(px)160 margin-outer=(px)100 margin-top=(px)80 margin-bottom=(px)80 master="m.body" {
+  text id="b1" x=(px)160 y=(px)200 w=(px)900 h=(px)40 fill=(token)"color.ink" { span "Body one" }
+}
+page id="p2" w=(px)1200 h=(px)1900 margin-inner=(px)160 margin-outer=(px)100 margin-top=(px)80 margin-bottom=(px)80 master="m.body" {
+  text id="b2" x=(px)160 y=(px)200 w=(px)900 h=(px)40 fill=(token)"color.ink" { span "Body two" }
+}
+  }
+}
+"##;
+
+/// A margined page carrying a body text node with a `footnote-ref` span
+/// plus one page-level footnote.
+const FOOTNOTE_ONE_SRC: &str = r##"zenith version=1 {
+  project id="proj.fn1" name="FN1"
+  tokens format="zenith-token-v1" {
+  }
+  styles {}
+  document id="doc.fn1" title="FN1" {
+page id="page.fn1" w=(px)600 h=(px)900 margin-inner=(px)60 margin-outer=(px)60 margin-top=(px)80 margin-bottom=(px)80 {
+  text id="body" x=(px)60 y=(px)80 w=(px)480 h=(px)200 {
+    span "Strong evidence" footnote-ref="fn.1"
+    span " supports the claim."
+  }
+  footnote id="fn.1" {
+    span "See also Chapter 4."
+  }
+}
+  }
+}
+"##;
 
 #[test]
 fn master_projects_running_head_and_folio_on_every_page() {

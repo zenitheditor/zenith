@@ -1,5 +1,5 @@
 mod common;
-use common::*;
+use common::parse;
 use zenith_core::default_provider;
 use zenith_scene::compile;
 use zenith_scene::ir::SceneCommand;

@@ -176,13 +176,16 @@ struct Hop {
 /// `"gap"` (split each hopping polyline into pieces, which changes the command
 /// count). Any other value is a no-op. Deterministic: connectors are visited in
 /// the given order and crossings are ordered by total-ordered float compares.
+///
+/// Returns the new index of every old command (one entry past the last old
+/// command) when `"gap"` changed the command count, else `None`.
 pub(in crate::compile) fn apply_line_jumps(
     commands: &mut Vec<SceneCommand>,
     connector_strokes: &[usize],
     mode: &str,
-) {
+) -> Option<Vec<usize>> {
     if mode != "arc" && mode != "gap" {
-        return;
+        return None;
     }
 
     // Snapshot every PARTICIPATING connector up front so all crossings are
@@ -227,8 +230,9 @@ pub(in crate::compile) fn apply_line_jumps(
 
     if mode == "arc" {
         apply_arc(commands, &snapshots, &hops_per_connector);
+        None
     } else {
-        apply_gap(commands, &snapshots, &hops_per_connector);
+        apply_gap(commands, &snapshots, &hops_per_connector)
     }
 }
 
@@ -509,7 +513,7 @@ fn apply_gap(
     commands: &mut Vec<SceneCommand>,
     snapshots: &[Snapshot],
     hops_per_connector: &[Vec<Hop>],
-) {
+) -> Option<Vec<usize>> {
     use std::collections::BTreeMap;
 
     // Map: command index → (transform, on-page route, ordered hops), only for
@@ -528,11 +532,13 @@ fn apply_gap(
     }
     if split_at.is_empty() {
         // No-op: leave the commands exactly as they are.
-        return;
+        return None;
     }
 
     let mut new_cmds: Vec<SceneCommand> = Vec::with_capacity(commands.len());
+    let mut remap: Vec<usize> = Vec::with_capacity(commands.len() + 1);
     for (idx, cmd) in commands.iter().enumerate() {
+        remap.push(new_cmds.len());
         match split_at.get(&idx) {
             Some((transform, on_page, hops)) => {
                 if let SceneCommand::StrokePolyline {
@@ -562,7 +568,9 @@ fn apply_gap(
             None => new_cmds.push(cmd.clone()),
         }
     }
+    remap.push(new_cmds.len());
     *commands = new_cmds;
+    Some(remap)
 }
 
 /// Split a flat polyline into pieces, opening a gap of half-length `JUMP_R` on

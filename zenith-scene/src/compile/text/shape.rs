@@ -17,6 +17,8 @@ use super::ctx::{NodeShape, ShapeEnv};
 
 /// The bundled monospace family used for `code` spans and the `code` node.
 pub(in crate::compile) const CODE_MONO_FAMILY: &str = "Noto Sans Mono";
+/// The always-embedded proportional default family.
+const SANS_FAMILY: &str = "Noto Sans";
 
 /// Default background color for inline `code` spans: a light neutral gray
 /// (#F0F0F0). Internal only — no author token required.
@@ -581,6 +583,13 @@ pub(in crate::compile) fn resolve_font_weight(
 /// The probe weight/style match the shaping request. The bundled default is
 /// always [`FontSource::Bundled`], so the fast path (and any fallback to the
 /// default) is never flagged local.
+///
+/// A build that drops part of the bundled set (`zenith-core` without
+/// `bundled-fonts-extended`) can lack `default_family` itself, for example
+/// "Noto Sans Mono" for a `code` node. The result is then `("Noto Sans",
+/// true, false)`: the caller emits `font.unresolved` and shapes with the
+/// always-embedded Noto Sans. When even Noto Sans is absent (a custom
+/// provider), the result is unchanged from the plain default path.
 pub(in crate::compile) fn resolve_family_with_fallback(
     fonts: &dyn FontProvider,
     requested: &str,
@@ -588,8 +597,14 @@ pub(in crate::compile) fn resolve_family_with_fallback(
     weight: u16,
     style: FontStyle,
 ) -> (String, bool, bool) {
-    // Fast path: requested == default → always available (bundled), no check.
     if requested.eq_ignore_ascii_case(default_family) {
+        let probe = |family: &str| fonts.resolve(&[family.to_owned()], weight, style).is_some();
+        if probe(default_family) {
+            return (requested.to_owned(), false, false);
+        }
+        if !default_family.eq_ignore_ascii_case(SANS_FAMILY) && probe(SANS_FAMILY) {
+            return (SANS_FAMILY.to_owned(), true, false);
+        }
         return (requested.to_owned(), false, false);
     }
     match fonts.resolve(&[requested.to_owned()], weight, style) {
@@ -750,5 +765,63 @@ mod tests {
             .map(|feature| (feature.tag(), feature.value()))
             .collect();
         assert_eq!(pairs, vec![(*b"liga", 0), (*b"cv02", 3), (*b"ss01", 1)]);
+    }
+
+    fn sans_only() -> zenith_core::BytesFontProvider {
+        let sans = zenith_core::default_provider()
+            .resolve(&["Noto Sans".to_owned()], 400, FontStyle::Normal)
+            .expect("bundled sans");
+        let mut provider = zenith_core::BytesFontProvider::new();
+        provider.register(
+            "Noto Sans",
+            400,
+            FontStyle::Normal,
+            sans.bytes,
+            0,
+            FontSource::Bundled,
+        );
+        provider
+    }
+
+    #[test]
+    fn missing_default_mono_falls_back_to_sans_with_a_notice() {
+        let (family, fell_back, is_local) = resolve_family_with_fallback(
+            &sans_only(),
+            CODE_MONO_FAMILY,
+            CODE_MONO_FAMILY,
+            400,
+            FontStyle::Normal,
+        );
+        assert_eq!(family, "Noto Sans");
+        assert!(fell_back, "the caller must emit font.unresolved");
+        assert!(!is_local);
+    }
+
+    #[test]
+    fn present_default_family_keeps_the_fast_path() {
+        let (family, fell_back, is_local) = resolve_family_with_fallback(
+            &sans_only(),
+            "noto sans",
+            "Noto Sans",
+            400,
+            FontStyle::Normal,
+        );
+        assert_eq!(family, "noto sans");
+        assert!(!fell_back);
+        assert!(!is_local);
+    }
+
+    #[test]
+    fn empty_provider_keeps_the_requested_default() {
+        let empty = zenith_core::BytesFontProvider::new();
+        let (family, fell_back, _) = resolve_family_with_fallback(
+            &empty,
+            CODE_MONO_FAMILY,
+            CODE_MONO_FAMILY,
+            400,
+            FontStyle::Normal,
+        );
+        assert_eq!(family, CODE_MONO_FAMILY);
+        assert!(!fell_back);
     }
 }

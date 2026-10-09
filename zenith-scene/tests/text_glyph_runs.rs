@@ -1,8 +1,25 @@
 mod common;
-use common::*;
+use common::parse;
 use zenith_core::default_provider;
 use zenith_scene::compile;
-use zenith_scene::ir::SceneCommand;
+use zenith_scene::ir::{Color, SceneCommand};
+
+/// Collect every `DrawGlyphRun` (x, color, font_id) in source order.
+fn glyph_runs(src: &str) -> Vec<(f64, Color, String)> {
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+    result
+        .scene
+        .commands
+        .iter()
+        .filter_map(|c| match c {
+            SceneCommand::DrawGlyphRun {
+                x, color, font_id, ..
+            } => Some((*x, *color, font_id.clone())),
+            _ => None,
+        })
+        .collect()
+}
 
 // ── Text node with token-resolved fill/font/size → DrawGlyphRun ───────
 

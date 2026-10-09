@@ -4,7 +4,9 @@
 //! `defaults` row acting as the node style.
 
 mod common;
-use common::*;
+use common::parse;
+use zenith_core::default_provider;
+use zenith_scene::compile;
 use zenith_scene::ir::SceneCommand;
 
 /// A document with style `s` holding `style_body` and `page_body` on the page.

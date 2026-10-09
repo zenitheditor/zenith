@@ -16,9 +16,13 @@
 //!    non-markdown equivalent.
 
 mod common;
-use common::*;
+use common::parse;
+#[path = "common/fill_rects.rs"]
+mod fill_rects;
+use fill_rects::fill_rects;
 use zenith_core::default_provider;
 use zenith_scene::ir::SceneCommand;
+use zenith_scene::{CompileResult, compile};
 
 /// All `DrawGlyphRun` records as `(x, y, font_size)` in emission order.
 fn glyph_run_rows(result: &CompileResult) -> Vec<(f64, f64, f32)> {

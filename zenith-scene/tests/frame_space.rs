@@ -6,7 +6,13 @@
 mod common;
 use std::collections::BTreeMap;
 
-use common::*;
+use common::parse;
+#[path = "common/fill_rects.rs"]
+mod fill_rects;
+#[path = "common/glyph_run_positions.rs"]
+mod glyph_run_positions;
+use fill_rects::fill_rects;
+use glyph_run_positions::glyph_run_positions;
 use zenith_core::default_provider;
 use zenith_scene::ir::SceneCommand;
 use zenith_scene::{DocumentPrep, PageCompiler, compile, layout_boxes};

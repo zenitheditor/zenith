@@ -8,7 +8,8 @@ use crate::ir::SceneCommand;
 use crate::layout::LayoutBox;
 
 use super::super::text::ShapeEnv;
-use super::bounds::{Affine, Stack, map_box};
+use super::affine::Affine2;
+use super::bounds::{Stack, map_box};
 
 /// The drawn glyph ink of one source node, in page px.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -68,8 +69,8 @@ pub(in crate::compile) fn glyph_inks(
     origin: (f64, f64),
     shape: ShapeEnv<'_>,
 ) -> BTreeMap<String, TextInk> {
-    let mut full = Stack::new(Affine::IDENTITY);
-    let mut local = Stack::new(Affine::IDENTITY);
+    let mut full = Stack::new(Affine2::IDENTITY);
+    let mut local = Stack::new(Affine2::IDENTITY);
     let mut out: BTreeMap<String, TextInk> = BTreeMap::new();
     // Glyph boxes repeat across runs: look each one up once.
     let mut memo: BTreeMap<(&str, u16, u32), Option<GlyphInkBox>> = BTreeMap::new();

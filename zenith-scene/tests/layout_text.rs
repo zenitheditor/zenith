@@ -2,7 +2,13 @@
 //! the cap, height at the final width).
 
 mod common;
-use common::*;
+use common::parse;
+#[path = "common/fill_rects.rs"]
+mod fill_rects;
+use fill_rects::fill_rects;
+use zenith_core::default_provider;
+use zenith_scene::compile;
+use zenith_scene::ir::SceneCommand;
 use zenith_scene::layout_boxes;
 
 fn doc(children: &str) -> String {

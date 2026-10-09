@@ -5,9 +5,11 @@
 //! Content that fits emits no clip bracket in any mode.
 
 mod common;
-use common::*;
+use common::parse;
 use zenith_core::{Diagnostic, Severity, default_provider};
+use zenith_scene::CompileResult;
 use zenith_scene::compile;
+use zenith_scene::ir::SceneCommand;
 
 const TITLE: &str = "Quarterly revenue grew across every region this year";
 

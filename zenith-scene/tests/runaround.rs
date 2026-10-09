@@ -1,7 +1,34 @@
 mod common;
-use common::*;
-use zenith_core::default_provider;
+use common::parse;
+#[path = "common/glyph_run_positions.rs"]
+mod glyph_run_positions;
+use glyph_run_positions::glyph_run_positions;
+use zenith_core::{Document, default_provider};
 use zenith_scene::compile;
+use zenith_scene::ir::SceneCommand;
+
+/// Build a runaround page doc. `extra` is injected before the text node;
+/// `exclusion_attr` is appended to the text line.
+fn runaround_doc(extra: &str, exclusion_attr: &str) -> Document {
+    let src = format!(
+        r##"zenith version=1 {{
+  project id="proj.ra" name="RA"
+  tokens format="zenith-token-v1" {{
+  }}
+  styles {{}}
+  document id="doc.ra" title="RA" {{
+    page id="page.ra" w=(px)600 h=(px)600 {{
+      {extra}
+      text id="body" x=(px)0 y=(px)0 w=(px)400 h=(px)560 font-size=(px)20 {exclusion_attr} {{
+        span "The quick brown fox jumps over the lazy dog and then keeps running far beyond the box edge to force wrapping across many lines of body text here"
+      }}
+    }}
+  }}
+}}
+"##
+    );
+    parse(&src)
+}
 
 /// A wrapping text node WITHOUT `text-exclusion` must emit a command stream
 /// identical to the same node with no exclusion attribute — the determinism gate.

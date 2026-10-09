@@ -4,8 +4,10 @@
 //! lint judges chart text size and contrast per role.
 
 mod common;
-use common::*;
+use common::parse;
 use zenith_core::{Diagnostic, default_provider};
+use zenith_scene::CompileResult;
+use zenith_scene::ir::SceneCommand;
 use zenith_scene::{DocumentPrep, PageCompiler};
 
 /// A one-page document. `tokens`, `styles`, and `top` (a `defaults` block)

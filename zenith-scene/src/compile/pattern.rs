@@ -105,6 +105,14 @@ pub(in crate::compile) fn compile_pattern(
     // else the style's) brackets it as one unit. Without a shadow the tiling
     // lands verbatim.
     let mut tiles: Vec<SceneCommand> = Vec::new();
+    let effect = pattern
+        .shadow
+        .as_ref()
+        .or_else(|| style_prop(&pattern.style, cx.style_map, "shadow"))
+        .and_then(|p| resolve_property_shadow(p, cx.resolved, &pattern.id))
+        .map(NodeEffect::Shadow);
+    // Commands the effect bracket puts before the tiling.
+    let lead = usize::from(effect.is_some());
 
     // Clip every instance to the bounds box (in device space).
     tiles.push(SceneCommand::PushClip {
@@ -135,7 +143,7 @@ pub(in crate::compile) fn compile_pattern(
             // Each instance records under `<pattern-id>/<index>/`, in a
             // recorder that knows the transform open where `tiles` lands.
             Some(recorder) => {
-                let nested = recorder.nested(commands);
+                let nested = recorder.nested(commands, lead);
                 let instance_cx = NodeCtx {
                     boxes: Some(&nested),
                     ..cx
@@ -149,12 +157,6 @@ pub(in crate::compile) fn compile_pattern(
 
     tiles.push(SceneCommand::PopClip);
 
-    let effect = pattern
-        .shadow
-        .as_ref()
-        .or_else(|| style_prop(&pattern.style, cx.style_map, "shadow"))
-        .and_then(|p| resolve_property_shadow(p, cx.resolved, &pattern.id))
-        .map(NodeEffect::Shadow);
     emit_node_with_effects(commands, tiles, effect, None);
 
     0.0

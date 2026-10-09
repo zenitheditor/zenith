@@ -7,7 +7,7 @@
 //!   colors as before (byte-identical additive guarantee).
 
 mod common;
-use common::*;
+use common::parse;
 use zenith_core::default_provider;
 use zenith_scene::compile_page;
 use zenith_scene::ir::{Color, Paint, SceneCommand};

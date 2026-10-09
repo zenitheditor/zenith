@@ -1,7 +1,16 @@
 mod common;
-use common::*;
+use common::parse;
 use zenith_core::default_provider;
-use zenith_scene::compile;
+use zenith_scene::ir::SceneCommand;
+use zenith_scene::{CompileResult, compile};
+
+/// Collect the font_size of every DrawGlyphRun; returns the first run's size.
+fn first_glyph_font_size(result: &CompileResult) -> Option<f32> {
+    result.scene.commands.iter().find_map(|c| match c {
+        SceneCommand::DrawGlyphRun { font_size, .. } => Some(*font_size),
+        _ => None,
+    })
+}
 
 /// A long single-span title in a box too short at the declared 96px size but
 /// fittable when shrunk, with a low font-size-min → NO `text.fit_failed`, and

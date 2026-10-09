@@ -2,7 +2,7 @@
 //! `type.near_duplicate_size`.
 
 mod common;
-use common::*;
+use common::parse;
 use zenith_core::{Diagnostic, FixHint, default_provider};
 use zenith_scene::{DocumentPrep, PageCompiler};
 

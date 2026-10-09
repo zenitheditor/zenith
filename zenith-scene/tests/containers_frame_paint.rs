@@ -2,7 +2,10 @@
 //! the children, and a radius turns the frame clip into a rounded clip.
 
 mod common;
-use common::*;
+use common::parse;
+use zenith_core::default_provider;
+use zenith_scene::compile;
+use zenith_scene::ir::{Color, Paint, SceneCommand};
 
 /// A document whose page holds `frame_attrs` on a frame at (40,40,120,100)
 /// with one child rect. `styles` is the body of the styles block.

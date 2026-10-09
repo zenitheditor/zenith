@@ -7,7 +7,10 @@
 
 mod common;
 
-use common::{Paint, SceneCommand, compile, default_provider, parse};
+use common::parse;
+use zenith_core::default_provider;
+use zenith_scene::compile;
+use zenith_scene::ir::{Paint, SceneCommand};
 
 // ── Header-row styling tests ──────────────────────────────────────────────────
 

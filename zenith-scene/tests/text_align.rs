@@ -1,8 +1,44 @@
 mod common;
-use common::*;
+use common::parse;
 use zenith_core::default_provider;
 use zenith_scene::compile;
 use zenith_scene::ir::SceneCommand;
+
+/// Helper: compile a single-span text node with the given align and w,
+/// return the x of the sole DrawGlyphRun.
+fn text_align_run_x(align: Option<&str>, node_x: f64, node_w: Option<f64>) -> f64 {
+    let w_attr = node_w.map_or(String::new(), |w| format!(" w=(px){w}"));
+    let align_attr = align.map_or(String::new(), |a| format!(" align=\"{a}\""));
+    let src = format!(
+        r##"zenith version=1 {{
+  project id="proj.al" name="AL"
+  tokens format="zenith-token-v1" {{}}
+  styles {{}}
+  document id="doc.al" title="AL" {{
+page id="page.al" w=(px)800 h=(px)400 {{
+  text id="text.al" x=(px){node_x} y=(px)20{w_attr}{align_attr} {{
+    span "Hello"
+  }}
+}}
+  }}
+}}
+"##
+    );
+    let doc = parse(&src);
+    let result = compile(&doc, &default_provider());
+    result
+        .scene
+        .commands
+        .iter()
+        .find_map(|c| {
+            if let SceneCommand::DrawGlyphRun { x, .. } = c {
+                Some(*x)
+            } else {
+                None
+            }
+        })
+        .expect("a DrawGlyphRun must be emitted")
+}
 
 // ── Text alignment ────────────────────────────────────────────────────
 

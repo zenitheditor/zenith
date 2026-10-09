@@ -1,8 +1,47 @@
 mod common;
-use common::*;
+use common::parse;
+#[path = "common/fill_rects.rs"]
+mod fill_rects;
+use fill_rects::fill_rects;
 use zenith_core::{DataContext, default_provider};
 use zenith_scene::ir::SceneCommand;
 use zenith_scene::{compile, compile_page};
+
+/// Source with a `panel.master` component (bg rect + text label) instanced
+/// three times at three x positions, each overriding the label text.
+const COMPONENT_SRC: &str = r##"zenith version=1 {
+  project id="proj.c" name="C"
+  tokens format="zenith-token-v1" {
+    token id="color.bg" type="color" value="#101010"
+    token id="color.fg" type="color" value="#fafafa"
+    token id="color.alt" type="color" value="#ff0000"
+    token id="size.body" type="dimension" value=(pt)18
+    token id="font.fam" type="fontFamily" value="Noto Sans"
+  }
+  styles {}
+  components {
+    component id="panel.master" {
+      rect id="bg" x=(px)0 y=(px)0 w=(px)100 h=(px)60 fill=(token)"color.bg"
+      text id="label" x=(px)5 y=(px)5 w=(px)90 h=(px)30 fill=(token)"color.fg" font-family=(token)"font.fam" font-size=(token)"size.body" {
+        span "Default"
+      }
+    }
+  }
+  document id="doc.c" title="C" {
+    page id="page.c" w=(px)640 h=(px)360 {
+      instance id="inst.1" component="panel.master" x=(px)0 y=(px)0 {
+        override ref="label" { span "Back" }
+      }
+      instance id="inst.2" component="panel.master" x=(px)200 y=(px)0 {
+        override ref="label" fill=(token)"color.alt" { span "Center" }
+      }
+      instance id="inst.3" component="panel.master" x=(px)400 y=(px)0 {
+        override ref="label" { span "Cover" }
+      }
+    }
+  }
+}
+"##;
 
 #[test]
 fn instance_expands_component_translated_three_times() {

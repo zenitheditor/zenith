@@ -2,7 +2,7 @@
 //! reports `footnote.unresolved_ref` at the catalogued Warning severity.
 
 mod common;
-use common::*;
+use common::parse;
 use zenith_core::{Severity, default_provider};
 use zenith_scene::compile;
 

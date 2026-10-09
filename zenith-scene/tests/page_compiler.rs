@@ -8,8 +8,10 @@ mod common;
 
 use std::path::PathBuf;
 
-use common::{Document, compile_page, default_provider, parse};
+use common::parse;
 use zenith_core::{BytesFontProvider, DataContext};
+use zenith_core::{Document, default_provider};
+use zenith_scene::compile_page;
 use zenith_scene::{DocumentPrep, PageCompiler};
 
 /// Compile every page plus one out-of-range index both ways and compare.

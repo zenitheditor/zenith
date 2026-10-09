@@ -2,7 +2,8 @@
 //! a bounded number of times, and the result is deterministic.
 
 mod common;
-use common::*;
+use common::parse;
+use zenith_core::default_provider;
 use zenith_scene::{DocumentPrep, PageCompiler};
 
 /// `depth` levels of hugging row / column frames, two per level, with

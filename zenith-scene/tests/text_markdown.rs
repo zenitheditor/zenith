@@ -9,7 +9,7 @@
 //!    pre-pass) is also parsed as markdown.
 
 mod common;
-use common::*;
+use common::parse;
 use zenith_core::{DataContext, default_provider};
 use zenith_scene::{compile, compile_page, ir::SceneCommand};
 

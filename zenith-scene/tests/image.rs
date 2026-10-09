@@ -1,8 +1,29 @@
 mod common;
-use common::*;
+use common::parse;
 use zenith_core::default_provider;
 use zenith_scene::compile;
-use zenith_scene::ir::{FitMode, ImageClip, SceneCommand, SrcRect};
+use zenith_scene::ir::{FitMode, ImageClip, Paint, SceneCommand, SrcRect};
+
+/// Source for a page with `bleed` and a token-filled full-bleed background plus
+/// a single hero rect at authored origin.
+fn bleed_doc_src(bleed_attr: &str) -> String {
+    format!(
+        r##"zenith version=1 {{
+  project id="proj.bleed" name="Bleed"
+  tokens format="zenith-token-v1" {{
+    token id="color.bg" type="color" value="#102030"
+    token id="color.hero" type="color" value="#ff8800"
+  }}
+  styles {{}}
+  document id="doc.bleed" title="Bleed" {{
+    page id="page.bleed" w=(px)400 h=(px)600{bleed_attr} background=(token)"color.bg" {{
+      rect id="rect.hero" x=(px)0 y=(px)0 w=(px)100 h=(px)100 fill=(token)"color.hero"
+    }}
+  }}
+}}
+"##
+    )
+}
 
 #[test]
 fn image_emits_pushclip_drawimage_popclip() {

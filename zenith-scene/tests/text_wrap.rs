@@ -1,8 +1,42 @@
 mod common;
-use common::*;
+use common::parse;
 use zenith_core::default_provider;
 use zenith_scene::compile;
 use zenith_scene::ir::SceneCommand;
+
+/// Helper: collect (x, y) of every DrawGlyphRun emitted for a single
+/// text node with the given box width, align, and span text.
+fn wrap_runs(node_x: f64, box_w: f64, align: &str, span: &str) -> Vec<(f64, f64)> {
+    let src = format!(
+        r##"zenith version=1 {{
+  project id="proj.wr" name="WR"
+  tokens format="zenith-token-v1" {{}}
+  styles {{}}
+  document id="doc.wr" title="WR" {{
+page id="page.wr" w=(px)1000 h=(px)600 {{
+  text id="text.wr" x=(px){node_x} y=(px)20 w=(px){box_w} align="{align}" {{
+    span "{span}"
+  }}
+}}
+  }}
+}}
+"##
+    );
+    let doc = parse(&src);
+    let result = compile(&doc, &default_provider());
+    result
+        .scene
+        .commands
+        .iter()
+        .filter_map(|c| {
+            if let SceneCommand::DrawGlyphRun { x, y, .. } = c {
+                Some((*x, *y))
+            } else {
+                None
+            }
+        })
+        .collect()
+}
 
 // ── Text wrapping (word wrap) ─────────────────────────────────────────
 

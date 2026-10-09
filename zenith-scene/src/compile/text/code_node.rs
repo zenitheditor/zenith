@@ -191,18 +191,20 @@ fn compile_code_impl(
         FontStyle::Normal,
     );
     if fell_back {
-        diagnostics.push(Diagnostic::advisory(
-            "font.unresolved",
-            format!(
-                "code node '{}': font family '{}' not available, falling back to 'Noto Sans Mono'",
-                code.id, raw_family_name
-            ),
-            code.source_span,
-            Some(code.id.clone()),
-        )
-        .with_cause(format!(
-            "font family '{raw_family_name}' not available, falling back to 'Noto Sans Mono'"
-        )));
+        diagnostics.push(
+            Diagnostic::advisory(
+                "font.unresolved",
+                format!(
+                    "code node '{}': font family '{}' not available, falling back to '{}'",
+                    code.id, raw_family_name, family_name
+                ),
+                code.source_span,
+                Some(code.id.clone()),
+            )
+            .with_cause(format!(
+                "font family '{raw_family_name}' not available, falling back to '{family_name}'"
+            )),
+        );
     }
     if is_local {
         diagnostics.push(Diagnostic::advisory(

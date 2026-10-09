@@ -1,8 +1,103 @@
 mod common;
-use common::*;
-use zenith_core::default_provider;
-use zenith_scene::compile;
+use common::parse;
+#[path = "common/distinct_line_count.rs"]
+mod distinct_line_count;
+use distinct_line_count::distinct_line_count;
+use zenith_core::{Document, default_provider};
 use zenith_scene::ir::SceneCommand;
+use zenith_scene::{CompileResult, compile};
+
+/// Build a single-box wrapping paragraph with a narrow box, optionally with
+/// `hyphenate=#true`. Returns the compiled scene's full command stream.
+fn hyphenate_commands(hyphenate: bool, body: &str) -> Vec<SceneCommand> {
+    let hy = if hyphenate { " hyphenate=#true" } else { "" };
+    let src = format!(
+        r##"zenith version=1 {{
+  project id="proj.hy" name="HY"
+  tokens format="zenith-token-v1" {{}}
+  styles {{}}
+  document id="doc.hy" title="HY" {{
+page id="page.hy" w=(px)1200 h=(px)2000 {{
+  text id="text.hy" x=(px)100 y=(px)100 w=(px)360 h=(px)1600 font-size=(px)40{hy} {{
+    span "{body}"
+  }}
+}}
+  }}
+}}
+"##
+    );
+    let doc = parse(&src);
+    compile(&doc, &default_provider()).scene.commands
+}
+
+/// Count DrawGlyphRun commands.
+fn glyph_run_count(cmds: &[SceneCommand]) -> usize {
+    cmds.iter()
+        .filter(|c| matches!(c, SceneCommand::DrawGlyphRun { .. }))
+        .count()
+}
+
+/// Compile a single text node, optionally in tab-leader mode, and return its
+/// command stream. The box is `x=100 y=100 w=600 h=400`, font-size 40.
+fn tab_leader_commands(tab_leader: bool, body: &str) -> Vec<SceneCommand> {
+    let tl = if tab_leader { " tab-leader=\".\"" } else { "" };
+    let src = format!(
+        r##"zenith version=1 {{
+  project id="proj.tl" name="TL"
+  tokens format="zenith-token-v1" {{}}
+  styles {{}}
+  document id="doc.tl" title="TL" {{
+page id="page.tl" w=(px)1200 h=(px)900 {{
+  text id="text.tl" x=(px)100 y=(px)100 w=(px)600 h=(px)400 font-size=(px)40{tl} {{
+    span "{body}"
+  }}
+}}
+  }}
+}}
+"##
+    );
+    let doc = parse(&src);
+    compile(&doc, &default_provider()).scene.commands
+}
+
+/// Build a doc with one overlong unbreakable token in a narrow box.
+fn break_word_doc(attr: &str) -> Document {
+    let src = format!(
+        r##"zenith version=1 {{
+  project id="proj.bw" name="BW"
+  tokens format="zenith-token-v1" {{}}
+  styles {{}}
+  document id="doc.bw" title="BW" {{
+page id="page.bw" w=(px)400 h=(px)400 {{
+  text id="col.bw" x=(px)10 y=(px)20 w=(px)120 h=(px)300 {attr} {{
+    span "https://very-long.example.com/some/very/deep/path/segment"
+  }}
+}}
+  }}
+}}
+"##
+    );
+    parse(&src)
+}
+
+/// The distinct baseline-y values of the emitted glyph runs (one per line).
+fn glyph_line_ys(result: &CompileResult) -> Vec<f64> {
+    let mut ys: Vec<f64> = result
+        .scene
+        .commands
+        .iter()
+        .filter_map(|c| match c {
+            SceneCommand::DrawGlyphRun { y, .. } => Some(*y),
+            _ => None,
+        })
+        .collect();
+    ys.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    ys.dedup();
+    ys
+}
+
+const HYPH_BODY: &str = "extraordinarily complicated hyphenation demonstrates \
+remarkable typographical sophistication consistently";
 
 /// With `overflow-wrap="break-word"` the single overlong token is split across
 /// >= 2 lines.

@@ -1,7 +1,8 @@
 //! Page lint: `chart.overflow`, chart text ink outside the chart box.
 
 mod common;
-use common::*;
+use common::parse;
+use zenith_core::default_provider;
 use zenith_core::{Diagnostic, FixHint};
 use zenith_scene::{DocumentPrep, PageCompiler};
 

@@ -4,8 +4,11 @@
 
 mod common;
 
-use common::*;
+use common::parse;
 use zenith_core::{DefaultsEntry, DefaultsKind, Node, Style, defaults, resolve_tokens};
+use zenith_core::{Document, default_provider};
+use zenith_scene::ir::{Paint, SceneCommand};
+use zenith_scene::{CompileResult, compile, compile_page};
 use zenith_scene::{ImportGraph, compile_page_with_imports};
 
 fn glyph_colors(result: &CompileResult) -> Vec<(u8, u8, u8)> {

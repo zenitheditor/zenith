@@ -1,7 +1,45 @@
 mod common;
-use common::*;
+use common::parse;
 use zenith_core::default_provider;
-use zenith_scene::{compile, compile_page};
+use zenith_scene::ir::{Paint, SceneCommand};
+use zenith_scene::{CompileResult, compile, compile_page};
+
+/// The solid-`FillRect` color red-channel values present in a scene.
+fn fill_reds(result: &CompileResult) -> Vec<u8> {
+    result
+        .scene
+        .commands
+        .iter()
+        .filter_map(|c| match c {
+            SceneCommand::FillRect {
+                paint: Paint::Solid { color },
+                ..
+            } => Some(color.r),
+            _ => None,
+        })
+        .collect()
+}
+
+/// A two-page document. Page 1 has a full-bleed rect filled `#252525`
+/// (r=0x25); page 2 a full-bleed rect filled `#dcdcdc` (r=0xdc). The page
+/// fill color uniquely identifies which page was compiled.
+const TWO_PAGE_DOC: &str = r##"zenith version=1 {
+  project id="proj.mp" name="MP"
+  tokens format="zenith-token-v1" {
+token id="color.p1" type="color" value="#252525"
+token id="color.p2" type="color" value="#dcdcdc"
+  }
+  styles {}
+  document id="doc.mp" title="MP" {
+page id="page.p1" w=(px)100 h=(px)100 {
+  rect id="rect.p1" x=(px)0 y=(px)0 w=(px)100 h=(px)100 fill=(token)"color.p1"
+}
+page id="page.p2" w=(px)200 h=(px)200 {
+  rect id="rect.p2" x=(px)0 y=(px)0 w=(px)200 h=(px)200 fill=(token)"color.p2"
+}
+  }
+}
+"##;
 
 #[test]
 fn json_schema_field_value() {

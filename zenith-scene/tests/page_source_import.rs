@@ -1,9 +1,11 @@
 mod common;
 
-use common::{Paint, SceneCommand, default_provider, parse};
+use common::parse;
+use zenith_core::{Document, default_provider};
+use zenith_scene::ir::{Paint, SceneCommand};
 use zenith_scene::{ImportGraph, compile_page, compile_page_with_imports};
 
-fn imported_doc(page_w: f64, page_h: f64) -> common::Document {
+fn imported_doc(page_w: f64, page_h: f64) -> Document {
     parse(&format!(
         r##"zenith version=1 {{
   project id="proj.imported" name="Imported"
@@ -21,7 +23,7 @@ fn imported_doc(page_w: f64, page_h: f64) -> common::Document {
     ))
 }
 
-fn imported_doc_with_image() -> common::Document {
+fn imported_doc_with_image() -> Document {
     parse(
         r##"zenith version=1 {
   project id="proj.imported" name="Imported"
@@ -38,7 +40,7 @@ fn imported_doc_with_image() -> common::Document {
     )
 }
 
-fn host_doc(source: &str, fit: Option<&str>, page_w: f64, page_h: f64) -> common::Document {
+fn host_doc(source: &str, fit: Option<&str>, page_w: f64, page_h: f64) -> Document {
     let fit_attr = fit.map_or(String::new(), |value| format!(r#" fit="{value}""#));
     parse(&format!(
         r##"zenith version=1 {{

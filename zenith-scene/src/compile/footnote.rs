@@ -401,6 +401,9 @@ pub(in crate::compile) fn compile_footnote_zone(
                 start,
                 page_origin: ctx.page_origin,
                 shape: ShapeEnv { engine, fonts },
+                rank: recorder.enter(),
+                hidden: false,
+                exact: false,
             });
         }
         cursor_y += h + FOOTNOTE_GAP;

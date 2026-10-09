@@ -4,7 +4,8 @@
 mod common;
 use std::collections::BTreeMap;
 
-use common::*;
+use common::parse;
+use zenith_core::default_provider;
 use zenith_scene::{DocumentPrep, PageCompiler};
 
 fn doc(children: &str) -> String {

@@ -5,141 +5,80 @@ use crate::ir::{SceneCommand, path_segments_bbox};
 use crate::layout::LayoutBox;
 
 use super::super::text::{ShapeEnv, ink_bounds};
+use super::affine::Affine2;
 
-/// A 2-D affine map: `x' = a·x + c·y + e`, `y' = b·x + d·y + f` (the
-/// render backends' `PushTransformMatrix` convention).
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub(super) struct Affine {
-    a: f64,
-    b: f64,
-    c: f64,
-    d: f64,
-    e: f64,
-    f: f64,
-}
-
-impl Affine {
-    pub(super) const IDENTITY: Affine = Affine {
-        a: 1.0,
-        b: 0.0,
-        c: 0.0,
-        d: 1.0,
-        e: 0.0,
-        f: 0.0,
-    };
-
-    /// Rotation by `deg` about `(cx, cy)` (`PushTransform`).
-    pub(super) fn rotate_at(deg: f64, cx: f64, cy: f64) -> Affine {
-        let (sin, cos) = deg.to_radians().sin_cos();
-        Affine {
-            a: cos,
-            b: sin,
-            c: -sin,
-            d: cos,
-            e: cx - cos * cx + sin * cy,
-            f: cy - sin * cx - cos * cy,
+/// The local transform a push command opens, or `None` for any other
+/// command.
+fn of_push(cmd: &SceneCommand) -> Option<Affine2> {
+    match cmd {
+        SceneCommand::PushTransform { angle_deg, cx, cy } => {
+            Some(Affine2::rotate_at(*angle_deg, *cx, *cy))
         }
-    }
-
-    /// `self ∘ local`: `local` maps a point first, then `self` (the
-    /// backends' `pre_concat`).
-    pub(super) fn then(self, l: Affine) -> Affine {
-        Affine {
-            a: self.a * l.a + self.c * l.b,
-            b: self.b * l.a + self.d * l.b,
-            c: self.a * l.c + self.c * l.d,
-            d: self.b * l.c + self.d * l.d,
-            e: self.a * l.e + self.c * l.f + self.e,
-            f: self.b * l.e + self.d * l.f + self.f,
-        }
-    }
-
-    pub(super) fn apply(self, x: f64, y: f64) -> (f64, f64) {
-        (
-            self.a * x + self.c * y + self.e,
-            self.b * x + self.d * y + self.f,
-        )
-    }
-
-    /// The coefficients `[a, b, c, d, e, f]`.
-    pub(super) fn coefficients(self) -> [f64; 6] {
-        [self.a, self.b, self.c, self.d, self.e, self.f]
-    }
-
-    /// `true` when the map keeps axis-aligned boxes axis-aligned: no
-    /// rotation off a quarter turn, no shear.
-    pub(super) fn is_axis_aligned(self) -> bool {
-        const EPS: f64 = 1e-9;
-        (self.b.abs() < EPS && self.c.abs() < EPS) || (self.a.abs() < EPS && self.d.abs() < EPS)
-    }
-
-    /// The local transform a push command opens, or `None` for any other
-    /// command.
-    fn of_push(cmd: &SceneCommand) -> Option<Affine> {
-        match cmd {
-            SceneCommand::PushTransform { angle_deg, cx, cy } => {
-                Some(Affine::rotate_at(*angle_deg, *cx, *cy))
-            }
-            SceneCommand::PushScaleTranslate { sx, sy, tx, ty } => Some(Affine {
-                a: *sx,
-                b: 0.0,
-                c: 0.0,
-                d: *sy,
-                e: *tx,
-                f: *ty,
-            }),
-            SceneCommand::PushTransformMatrix { a, b, c, d, e, f } => Some(Affine {
-                a: *a,
-                b: *b,
-                c: *c,
-                d: *d,
-                e: *e,
-                f: *f,
-            }),
-            SceneCommand::FillRect { .. }
-            | SceneCommand::StrokeRect { .. }
-            | SceneCommand::FillRoundedRect { .. }
-            | SceneCommand::StrokeRoundedRect { .. }
-            | SceneCommand::FillEllipse { .. }
-            | SceneCommand::StrokeEllipse { .. }
-            | SceneCommand::StrokeLine { .. }
-            | SceneCommand::FillPolygon { .. }
-            | SceneCommand::StrokePolyline { .. }
-            | SceneCommand::FillPath { .. }
-            | SceneCommand::StrokePath { .. }
-            | SceneCommand::DrawImage { .. }
-            | SceneCommand::DrawSvgAsset { .. }
-            | SceneCommand::DrawGlyphRun { .. }
-            | SceneCommand::PushClip { .. }
-            | SceneCommand::PushClipRoundedRect { .. }
-            | SceneCommand::PopClip
-            | SceneCommand::PushLayer { .. }
-            | SceneCommand::PopLayer
-            | SceneCommand::PopTransform
-            | SceneCommand::BeginShadow { .. }
-            | SceneCommand::EndShadow
-            | SceneCommand::BeginBlur { .. }
-            | SceneCommand::EndBlur
-            | SceneCommand::BeginFilter { .. }
-            | SceneCommand::EndFilter
-            | SceneCommand::BeginMask { .. }
-            | SceneCommand::EndMask => None,
-        }
+        SceneCommand::PushScaleTranslate { sx, sy, tx, ty } => Some(Affine2 {
+            a: *sx,
+            b: 0.0,
+            c: 0.0,
+            d: *sy,
+            e: *tx,
+            f: *ty,
+        }),
+        SceneCommand::PushTransformMatrix { a, b, c, d, e, f } => Some(Affine2 {
+            a: *a,
+            b: *b,
+            c: *c,
+            d: *d,
+            e: *e,
+            f: *f,
+        }),
+        SceneCommand::FillRect { .. }
+        | SceneCommand::StrokeRect { .. }
+        | SceneCommand::FillRoundedRect { .. }
+        | SceneCommand::StrokeRoundedRect { .. }
+        | SceneCommand::FillEllipse { .. }
+        | SceneCommand::StrokeEllipse { .. }
+        | SceneCommand::StrokeLine { .. }
+        | SceneCommand::FillPolygon { .. }
+        | SceneCommand::StrokePolyline { .. }
+        | SceneCommand::FillPath { .. }
+        | SceneCommand::StrokePath { .. }
+        | SceneCommand::DrawImage { .. }
+        | SceneCommand::DrawSvgAsset { .. }
+        | SceneCommand::DrawGlyphRun { .. }
+        | SceneCommand::PushClip { .. }
+        | SceneCommand::PushClipRoundedRect { .. }
+        | SceneCommand::PopClip
+        | SceneCommand::PushLayer { .. }
+        | SceneCommand::PopLayer
+        | SceneCommand::PopTransform
+        | SceneCommand::BeginShadow { .. }
+        | SceneCommand::EndShadow
+        | SceneCommand::BeginBlur { .. }
+        | SceneCommand::EndBlur
+        | SceneCommand::BeginFilter { .. }
+        | SceneCommand::EndFilter
+        | SceneCommand::BeginMask { .. }
+        | SceneCommand::EndMask => None,
     }
 }
 
 /// A transform stack driven by push / pop commands.
 pub(super) struct Stack {
-    open: Vec<Affine>,
+    open: Vec<Affine2>,
 }
 
 impl Stack {
-    pub(super) fn new(base: Affine) -> Self {
+    pub(super) fn new(base: Affine2) -> Self {
         Self { open: vec![base] }
     }
 
-    pub(super) fn top(&self) -> Affine {
-        self.open.last().copied().unwrap_or(Affine::IDENTITY)
+    pub(super) fn top(&self) -> Affine2 {
+        self.open.last().copied().unwrap_or(Affine2::IDENTITY)
+    }
+
+    /// Open a level that keeps the current transform: a push the caller
+    /// leaves out.
+    pub(super) fn hold(&mut self) {
+        self.open.push(self.top());
     }
 
     /// Track `cmd`. With `skip_rotation`, a rotation opens as identity.
@@ -150,7 +89,7 @@ impl Stack {
             }
             return;
         }
-        if let Some(local) = Affine::of_push(cmd) {
+        if let Some(local) = of_push(cmd) {
             let rotation = matches!(cmd, SceneCommand::PushTransform { .. });
             let next = if rotation && skip_rotation {
                 self.top()
@@ -162,18 +101,9 @@ impl Stack {
     }
 }
 
-/// The transform open at the end of `commands`, under `base`.
-pub(super) fn open_transform(base: Affine, commands: &[SceneCommand]) -> Affine {
-    let mut stack = Stack::new(base);
-    for cmd in commands {
-        stack.step(cmd, false);
-    }
-    stack.top()
-}
-
 /// The points of the first `StrokePolyline` in `commands`, every transform
 /// open under `base` applied. A connector draws its routed path as one.
-pub(super) fn first_polyline(commands: &[SceneCommand], base: Affine) -> Option<Vec<(f64, f64)>> {
+pub(super) fn first_polyline(commands: &[SceneCommand], base: Affine2) -> Option<Vec<(f64, f64)>> {
     let mut stack = Stack::new(base);
     for cmd in commands {
         if let SceneCommand::StrokePolyline { points, .. } = cmd {
@@ -227,7 +157,7 @@ impl Acc {
     }
 
     /// The four corners of `[x0, x1] × [y0, y1]` under `m`.
-    fn rect(&mut self, m: Affine, (x0, y0, x1, y1): (f64, f64, f64, f64)) {
+    fn rect(&mut self, m: Affine2, (x0, y0, x1, y1): (f64, f64, f64, f64)) {
         for (x, y) in [(x0, y0), (x1, y0), (x0, y1), (x1, y1)] {
             let (px, py) = m.apply(x, y);
             self.point(px, py, 0.0);
@@ -237,7 +167,7 @@ impl Acc {
     /// A flat `[x0, y0, x1, y1, …]` point list under `m`. Each point grows
     /// by `grow` in local space (a stroke half-width), so the growth scales
     /// with `m` like the stroke the backends draw.
-    fn points(&mut self, m: Affine, points: &[f64], grow: f64) {
+    fn points(&mut self, m: Affine2, points: &[f64], grow: f64) {
         for [x, y] in points.as_chunks::<2>().0 {
             self.rect(m, (x - grow, y - grow, x + grow, y + grow));
         }
@@ -255,33 +185,87 @@ impl Acc {
 }
 
 /// The axis-aligned box of `b` under `m`.
-pub(super) fn map_box(m: Affine, b: LayoutBox) -> LayoutBox {
+pub(super) fn map_box(m: Affine2, b: LayoutBox) -> LayoutBox {
     let mut acc = Acc::default();
     acc.rect(m, (b.x, b.y, b.x + b.w, b.y + b.h));
     acc.into_box().unwrap_or(b)
 }
 
-/// The painted extent of `commands` under the open transform `base`: shapes,
-/// strokes (grown by half their width), images, and glyph ink. With
-/// `skip_rotation`, rotations opened inside `commands` are left out. Clips
-/// and effect brackets add nothing. `None` when nothing paints.
-pub(super) fn painted(
-    commands: &[SceneCommand],
-    base: Affine,
-    skip_rotation: bool,
-    shape: ShapeEnv<'_>,
-) -> Option<LayoutBox> {
-    let mut stack = Stack::new(base);
-    let mut acc = Acc::default();
-    for cmd in commands {
-        let m = stack.top();
+/// Where one [`measure`] walk starts.
+#[derive(Clone, Copy)]
+pub(super) struct Bases {
+    /// The transform open where the commands start.
+    pub(super) open: Affine2,
+    /// The base of the `local` extent.
+    pub(super) local: Affine2,
+    /// The first command opens the node's own rotation, which `local` leaves
+    /// out.
+    pub(super) skip_spin: bool,
+}
+
+/// The painted extents of one command range: shapes, strokes (grown by half
+/// their width), images, and glyph ink. Clips and effect brackets add
+/// nothing. Each is `None` when nothing paints.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub(super) struct Extents {
+    /// Under `Bases::open`, every rotation opened inside the range left out.
+    pub(super) unrotated: Option<LayoutBox>,
+    /// Under `Bases::local`, only the node's own rotation left out.
+    pub(super) local: Option<LayoutBox>,
+    /// Under `Bases::open`, every transform applied.
+    pub(super) visual: Option<LayoutBox>,
+}
+
+/// One extent being measured: its transform stack and its accumulator.
+struct Lane {
+    stack: Stack,
+    acc: Acc,
+}
+
+impl Lane {
+    fn new(base: Affine2) -> Self {
+        Self {
+            stack: Stack::new(base),
+            acc: Acc::default(),
+        }
+    }
+}
+
+/// The three lanes of [`measure`]: unrotated, local, visual.
+struct Lanes([Lane; 3]);
+
+impl Lanes {
+    fn rect(&mut self, r: (f64, f64, f64, f64)) {
+        for lane in &mut self.0 {
+            let m = lane.stack.top();
+            lane.acc.rect(m, r);
+        }
+    }
+
+    fn points(&mut self, points: &[f64], grow: f64) {
+        for lane in &mut self.0 {
+            let m = lane.stack.top();
+            lane.acc.points(m, points, grow);
+        }
+    }
+}
+
+/// The painted extents of `commands` from `bases`, in one walk. Each glyph
+/// run's ink is read once.
+pub(super) fn measure(commands: &[SceneCommand], bases: Bases, shape: ShapeEnv<'_>) -> Extents {
+    let mut lanes = Lanes([
+        Lane::new(bases.open),
+        Lane::new(bases.local),
+        Lane::new(bases.open),
+    ]);
+    for (index, cmd) in commands.iter().enumerate() {
         match cmd {
             SceneCommand::FillRect { x, y, w, h, .. }
             | SceneCommand::FillRoundedRect { x, y, w, h, .. }
             | SceneCommand::FillEllipse { x, y, w, h, .. }
             | SceneCommand::DrawImage { x, y, w, h, .. }
             | SceneCommand::DrawSvgAsset { x, y, w, h, .. } => {
-                acc.rect(m, (*x, *y, x + w, y + h));
+                lanes.rect((*x, *y, x + w, y + h));
             }
             SceneCommand::StrokeRect {
                 x,
@@ -308,7 +292,7 @@ pub(super) fn painted(
                 ..
             } => {
                 let g = stroke_width / 2.0;
-                acc.rect(m, (x - g, y - g, x + w + g, y + h + g));
+                lanes.rect((x - g, y - g, x + w + g, y + h + g));
             }
             SceneCommand::StrokeLine {
                 x1,
@@ -317,16 +301,16 @@ pub(super) fn painted(
                 y2,
                 stroke_width,
                 ..
-            } => acc.points(m, &[*x1, *y1, *x2, *y2], stroke_width / 2.0),
-            SceneCommand::FillPolygon { points, .. } => acc.points(m, points, 0.0),
+            } => lanes.points(&[*x1, *y1, *x2, *y2], stroke_width / 2.0),
+            SceneCommand::FillPolygon { points, .. } => lanes.points(points, 0.0),
             SceneCommand::StrokePolyline {
                 points,
                 stroke_width,
                 ..
-            } => acc.points(m, points, stroke_width / 2.0),
+            } => lanes.points(points, stroke_width / 2.0),
             SceneCommand::FillPath { segments, .. } => {
                 if let Some((x, y, w, h)) = path_segments_bbox(segments) {
-                    acc.rect(m, (x, y, x + w, y + h));
+                    lanes.rect((x, y, x + w, y + h));
                 }
             }
             SceneCommand::StrokePath {
@@ -336,18 +320,27 @@ pub(super) fn painted(
             } => {
                 if let Some((x, y, w, h)) = path_segments_bbox(segments) {
                     let g = stroke_width / 2.0;
-                    acc.rect(m, (x - g, y - g, x + w + g, y + h + g));
+                    lanes.rect((x - g, y - g, x + w + g, y + h + g));
                 }
             }
             SceneCommand::DrawGlyphRun { .. } => {
                 if let Some(ink) = ink_bounds(std::slice::from_ref(cmd), shape) {
-                    acc.rect(m, (ink.left, ink.top, ink.right, ink.bottom));
+                    lanes.rect((ink.left, ink.top, ink.right, ink.bottom));
                 }
             }
             SceneCommand::PushTransform { .. }
             | SceneCommand::PushScaleTranslate { .. }
             | SceneCommand::PushTransformMatrix { .. }
-            | SceneCommand::PopTransform => stack.step(cmd, skip_rotation),
+            | SceneCommand::PopTransform => {
+                let [unrotated, local, visual] = &mut lanes.0;
+                unrotated.stack.step(cmd, true);
+                if index == 0 && bases.skip_spin {
+                    local.stack.hold();
+                } else {
+                    local.stack.step(cmd, false);
+                }
+                visual.stack.step(cmd, false);
+            }
             SceneCommand::PushClip { .. }
             | SceneCommand::PushClipRoundedRect { .. }
             | SceneCommand::PopClip
@@ -363,37 +356,17 @@ pub(super) fn painted(
             | SceneCommand::EndMask => {}
         }
     }
-    acc.into_box()
+    let [unrotated, local, visual] = lanes.0;
+    Extents {
+        unrotated: unrotated.acc.into_box(),
+        local: local.acc.into_box(),
+        visual: visual.acc.into_box(),
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn rotation_about_a_center_keeps_the_center() {
-        let m = Affine::rotate_at(90.0, 10.0, 20.0);
-        let (x, y) = m.apply(10.0, 20.0);
-        assert!((x - 10.0).abs() < 1e-9 && (y - 20.0).abs() < 1e-9);
-        // y-down: +90° turns +x into +y.
-        let (x, y) = m.apply(11.0, 20.0);
-        assert!((x - 10.0).abs() < 1e-9 && (y - 21.0).abs() < 1e-9);
-    }
-
-    #[test]
-    fn then_applies_local_first() {
-        let scale = Affine {
-            a: 2.0,
-            d: 2.0,
-            ..Affine::IDENTITY
-        };
-        let shift = Affine {
-            e: 5.0,
-            ..Affine::IDENTITY
-        };
-        // shift ∘ scale: scale first, then shift.
-        assert_eq!(shift.then(scale).apply(1.0, 1.0), (7.0, 2.0));
-    }
 
     #[test]
     fn stroke_growth_scales_with_the_enclosing_transform() {
@@ -405,7 +378,7 @@ mod tests {
             fonts: &fonts,
         };
         let stroke = |cmd: SceneCommand| {
-            painted(
+            measure(
                 &[
                     SceneCommand::PushScaleTranslate {
                         sx: 2.0,
@@ -416,10 +389,14 @@ mod tests {
                     cmd,
                     SceneCommand::PopTransform,
                 ],
-                Affine::IDENTITY,
-                false,
+                Bases {
+                    open: Affine2::IDENTITY,
+                    local: Affine2::IDENTITY,
+                    skip_spin: false,
+                },
                 shape,
             )
+            .visual
         };
         let color = crate::ir::Color::srgb(0, 0, 0, 255);
         // A 2px line under scale 2 draws 4px wide: 2px each side.
@@ -473,7 +450,7 @@ mod tests {
             w: 40.0,
             h: 20.0,
         };
-        let m = Affine::rotate_at(90.0, 20.0, 10.0);
+        let m = Affine2::rotate_at(90.0, 20.0, 10.0);
         let r = map_box(m, b);
         assert!(
             (r.w - 20.0).abs() < 1e-9 && (r.h - 40.0).abs() < 1e-9,

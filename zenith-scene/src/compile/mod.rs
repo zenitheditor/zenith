@@ -57,7 +57,9 @@ pub(super) type ComponentMap<'a> = BTreeMap<&'a str, &'a ComponentDef>;
 pub(super) type MasterMap<'a> = BTreeMap<&'a str, &'a MasterDef>;
 
 pub(crate) use anchor::{AnchorMap, ParentCtx, PrePassEnv, anchor_origin, anchor_sibling_of};
-pub use boxes::CompiledBox;
+pub use boxes::{
+    Affine2, ClipShape, CompiledBox, HitShape, hit_region, hit_test, hit_test_within, selectable_id,
+};
 pub(in crate::compile) use ctx::NodeCtx;
 pub(in crate::compile) use dispatch::compile_node;
 pub use entry::{compile, compile_page, compile_page_with_imports, layout_boxes};

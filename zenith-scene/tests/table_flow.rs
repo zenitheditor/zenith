@@ -6,12 +6,15 @@
 
 mod common;
 
-use common::{SceneCommand, compile_page, default_provider, parse};
+use common::parse;
+use zenith_core::default_provider;
+use zenith_scene::ir::SceneCommand;
+use zenith_scene::{CompileResult, compile_page};
 
 /// Count the `DrawGlyphRun` text strings on a compiled page, by collecting the
 /// first span text of each run is not exposed; instead count runs and, where the
 /// span text matters, count `DrawGlyphRun` commands (one per shaped run).
-fn glyph_run_count(result: &common::CompileResult) -> usize {
+fn glyph_run_count(result: &CompileResult) -> usize {
     result
         .scene
         .commands

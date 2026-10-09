@@ -1,8 +1,9 @@
 //! Page lint: `layout.block_overlap` between sibling blocks.
 
 mod common;
-use common::*;
+use common::parse;
 use zenith_core::Diagnostic;
+use zenith_core::default_provider;
 use zenith_scene::{DocumentPrep, PageCompiler};
 
 /// A one-page 800 x 600 document with `body` on the page.

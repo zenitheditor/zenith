@@ -9,7 +9,10 @@
 
 mod common;
 
-use common::{SceneCommand, compile, default_provider, parse};
+use common::parse;
+use zenith_core::default_provider;
+use zenith_scene::compile;
+use zenith_scene::ir::SceneCommand;
 
 /// A 2-row × 3-col table: one explicit column (160px) plus two auto columns,
 /// with a colspan=2 cell in the first row. Border + fill use color tokens.

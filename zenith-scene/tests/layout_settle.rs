@@ -3,7 +3,9 @@
 //! laid-out box must equal the rendered extent.
 
 mod common;
-use common::*;
+use common::parse;
+use zenith_core::default_provider;
+use zenith_scene::ir::SceneCommand;
 use zenith_scene::{DocumentPrep, LayoutBox, PageCompiler};
 
 const LONG: &str = "The quick brown fox jumps over the lazy dog and then keeps running far \

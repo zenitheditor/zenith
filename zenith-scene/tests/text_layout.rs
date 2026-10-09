@@ -1,8 +1,132 @@
 mod common;
-use common::*;
-use zenith_core::default_provider;
+use common::parse;
+#[path = "common/distinct_line_count.rs"]
+mod distinct_line_count;
+use distinct_line_count::distinct_line_count;
+use zenith_core::{Document, default_provider};
 use zenith_scene::ir::SceneCommand;
 use zenith_scene::{compile, compile_page};
+
+/// Build a wrapping body-paragraph document, optionally with `drop-cap-lines`.
+/// The body text is long enough to overflow the box width (forcing the wrap
+/// path). Returns the compiled scene's DrawGlyphRun list as `(x, y, font_size)`.
+fn dropcap_runs(drop_cap_lines: Option<u32>, body: &str) -> Vec<(f64, f64, f32)> {
+    let dc_attr = drop_cap_lines.map_or(String::new(), |n| format!(" drop-cap-lines={n}"));
+    let src = format!(
+        r##"zenith version=1 {{
+  project id="proj.dc" name="DC"
+  tokens format="zenith-token-v1" {{}}
+  styles {{}}
+  document id="doc.dc" title="DC" {{
+page id="page.dc" w=(px)1800 h=(px)2700 {{
+  text id="text.dc" x=(px)180 y=(px)600 w=(px)600 h=(px)1200 align="justify" font-size=(px)32{dc_attr} {{
+    span "{body}"
+  }}
+}}
+  }}
+}}
+"##
+    );
+    let doc = parse(&src);
+    let result = compile(&doc, &default_provider());
+    result
+        .scene
+        .commands
+        .iter()
+        .filter_map(|c| {
+            if let SceneCommand::DrawGlyphRun {
+                x, y, font_size, ..
+            } = c
+            {
+                Some((*x, *y, *font_size))
+            } else {
+                None
+            }
+        })
+        .collect()
+}
+
+/// Build a 2-page chain with widow/orphan toggle, returns
+/// `(page0_line_count, page1_line_count)`.
+fn widow_orphan_line_counts(widow_orphan: bool) -> (usize, usize) {
+    let wo = if widow_orphan { " widow-orphan=2" } else { "" };
+    let p1 = "alpha bravo charlie delta echo foxtrot golf hotel";
+    let p2 = "victor whiskey xray yankee zulu aurora borealis cascade delta \
+estuary fjord glacier harbor island jungle kelp lagoon marsh nimbus quill \
+raven storm thicket umbra";
+    let body = format!("{p1}\\n{p2}");
+    let src = format!(
+        r##"zenith version=1 {{
+  project id="proj.wo" name="WO"
+  tokens format="zenith-token-v1" {{}}
+  styles {{}}
+  document id="doc.wo" title="WO" {{
+page id="page.a" w=(px)1200 h=(px)2000 {{
+  text id="body.1" x=(px)100 y=(px)100 w=(px)500 h=(px)180 chain="ch" font-size=(px)40 overflow="visible"{wo} {{
+    span "{body}"
+  }}
+}}
+page id="page.b" w=(px)1200 h=(px)2000 {{
+  text id="body.2" x=(px)100 y=(px)100 w=(px)500 h=(px)1200 chain="ch" font-size=(px)40 overflow="visible" {{
+  }}
+}}
+  }}
+}}
+"##
+    );
+    let doc = parse(&src);
+    let p0 = compile_page(&doc, &default_provider(), 0, None)
+        .scene
+        .commands;
+    let p1c = compile_page(&doc, &default_provider(), 1, None)
+        .scene
+        .commands;
+    (distinct_line_count(&p0), distinct_line_count(&p1c))
+}
+
+/// Build a doc with one multi-line wrapping text node for baseline-grid tests.
+fn baseline_grid_doc(grid_attr: &str) -> Document {
+    let src = format!(
+        r##"zenith version=1 {{
+  project id="proj.bg" name="BG"
+  tokens format="zenith-token-v1" {{
+token id="font.body" type="fontFamily" value="Noto Sans"
+  }}
+  styles {{}}
+  document id="doc.bg" title="BG" {{
+page id="page.bg" w=(px)400 h=(px)600 {grid_attr} {{
+  text id="col1" x=(px)10 y=(px)25 w=(px)150 h=(px)500 font-family=(token)"font.body" font-size=(px)18 {{
+    span "The quick brown fox jumps over the lazy dog again and again across the line."
+  }}
+}}
+  }}
+}}
+"##
+    );
+    parse(&src)
+}
+
+/// Baseline y of every emitted glyph run, in command order.
+fn glyph_run_ys(cmds: &[SceneCommand]) -> Vec<f64> {
+    cmds.iter()
+        .filter_map(|c| match c {
+            SceneCommand::DrawGlyphRun { y, .. } => Some(*y),
+            _ => None,
+        })
+        .collect()
+}
+
+/// DISTINCT baseline y values (one per wrapped line), ascending.
+fn distinct_line_ys(cmds: &[SceneCommand]) -> Vec<f64> {
+    let mut ys = glyph_run_ys(cmds);
+    ys.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    ys.dedup_by(|a, b| (*a - *b).abs() < 1e-9);
+    ys
+}
+
+const DROPCAP_BODY: &str = "The quick brown fox jumps over the lazy dog and then \
+continues running across the wide green meadow under a bright morning sky while \
+birds sing and the river flows gently past the old stone bridge nearby downstream.";
 
 /// With `drop-cap-lines=3`: an oversized initial glyph is emitted (its
 /// font_size is far larger than the 32px body), and the first three body lines

@@ -3,8 +3,9 @@
 //! cell children, master projections, and laid-out children.
 
 mod common;
-use common::*;
+use common::parse;
 use std::collections::BTreeMap;
+use zenith_core::default_provider;
 use zenith_scene::{CompiledBox, DocumentPrep, PageCompiler};
 
 const DOC: &str = r##"zenith version=1 {

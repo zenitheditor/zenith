@@ -6,7 +6,7 @@ use zenith_core::{Diagnostic, Node, Page, dim_to_px};
 use crate::ir::SceneCommand;
 use crate::layout::LayoutBox;
 
-use super::super::boxes::{BoxRecorder, Recorded, glyph_inks};
+use super::super::boxes::{Recorded, glyph_inks};
 use super::super::imports::ImportScopes;
 use super::super::text::ShapeEnv;
 use super::arrange::arrangement;
@@ -43,14 +43,14 @@ pub(in crate::compile) struct LintEnv<'a> {
 
 /// The lint diagnostics of one page: `text.ink_overlap`, `text.occluded`,
 /// `label.overflow`, the contrast of every text and label, legibility,
-/// arrangement, `layout.block_overlap`, and `chart.overflow`. `recorder` is
-/// the page compile's box recorder.
-pub(in crate::compile) fn lint_page(env: &LintEnv<'_>, recorder: BoxRecorder) -> Vec<Diagnostic> {
+/// arrangement, `layout.block_overlap`, and `chart.overflow`. `recorded` is
+/// what the page compile's box recorder collected.
+pub(in crate::compile) fn lint_page(env: &LintEnv<'_>, recorded: &Recorded) -> Vec<Diagnostic> {
     let Recorded {
         boxes,
         expansions,
         routes,
-    } = recorder.into_parts();
+    } = recorded;
     let authored = env
         .authored
         .map(|p| authored_facts(&p.children))
@@ -61,8 +61,8 @@ pub(in crate::compile) fn lint_page(env: &LintEnv<'_>, recorder: BoxRecorder) ->
         &LedgerInput {
             master: env.master,
             children: &env.page.children,
-            boxes: &boxes,
-            expansions: &expansions,
+            boxes,
+            expansions,
             authored: &authored,
             paint: env.paint,
         },
@@ -71,9 +71,9 @@ pub(in crate::compile) fn lint_page(env: &LintEnv<'_>, recorder: BoxRecorder) ->
     let mut out = ink_overlap(&ledger, &authored);
     out.extend(occluded(&ledger));
     out.extend(label_overflow(&ledger, env.compiled));
-    out.extend(content_contrast(env, &expansions, &texts));
+    out.extend(content_contrast(env, expansions, &texts));
     out.extend(legibility(env, &ledger, &authored));
-    out.extend(arrangement(&ledger, &authored, &routes));
+    out.extend(arrangement(&ledger, &authored, routes));
     let trim = match (
         dim_to_px(env.page.width.value, &env.page.width.unit),
         dim_to_px(env.page.height.value, &env.page.height.unit),

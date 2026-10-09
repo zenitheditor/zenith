@@ -2,8 +2,10 @@
 //! drawn glyphs land, on the defaults-lowered document, on every page.
 
 mod common;
-use common::*;
+use common::parse;
 use zenith_core::Diagnostic;
+use zenith_core::default_provider;
+use zenith_scene::compile;
 
 fn src(tokens: &str, styles: &str, top: &str, page_body: &str) -> String {
     format!(

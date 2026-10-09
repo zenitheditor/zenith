@@ -7,7 +7,10 @@
 
 mod common;
 
-use common::{SceneCommand, compile, default_provider, parse};
+use common::parse;
+use zenith_core::default_provider;
+use zenith_scene::compile;
+use zenith_scene::ir::SceneCommand;
 
 /// Build a single-cell table document whose cell text omits w/h/align, with the
 /// given table-level `attrs` appended to the cell open (e.g. `h-align="center"`).

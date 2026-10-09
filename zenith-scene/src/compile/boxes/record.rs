@@ -1,6 +1,6 @@
 //! The per-page box recorder and the declared box of a compiled node.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::BTreeMap;
 
 use zenith_core::{Node, PropertyValue, ScopeFit};
@@ -14,19 +14,11 @@ use super::super::pipeline::RenderCtx;
 use super::super::text::ShapeEnv;
 use super::super::toc::resolve_toc_to_text;
 use super::super::util::resolve_geometry_px;
-use super::bounds::{Affine, first_polyline, map_box, open_transform, painted};
-
-/// The final geometry of one compiled node, in page-absolute px.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct CompiledBox {
-    /// The unrotated box the compile used.
-    pub rect: LayoutBox,
-    /// The node's own rotation in degrees, when set and non-zero.
-    pub rotate: Option<f64>,
-    /// The axis-aligned bounds of what the node paints, every transform
-    /// applied; `rect` (rotated by `rotate`) when nothing paints.
-    pub visual: LayoutBox,
-}
+use super::affine::Affine2;
+use super::bounds::{Bases, first_polyline, map_box, measure};
+use super::clip::Open;
+use super::compiled::CompiledBox;
+use super::shape::hit_shape;
 
 /// The lowered subtree one `instance` expanded to, as the compile drew it.
 #[derive(Debug, Clone)]
@@ -67,8 +59,13 @@ pub(in crate::compile) struct BoxRecorder {
     boxes: RefCell<BTreeMap<String, CompiledBox>>,
     expansions: RefCell<BTreeMap<String, Expansion>>,
     routes: RefCell<BTreeMap<String, Vec<(f64, f64)>>>,
-    /// The transform open where this recorder's command stream starts.
-    base: Affine,
+    /// The transform and clips open where this recorder's command stream
+    /// starts.
+    base: Open,
+    /// Index of this recorder's first command in the page stream.
+    offset: usize,
+    /// The next paint rank.
+    next_rank: Cell<usize>,
 }
 
 impl Default for BoxRecorder {
@@ -77,7 +74,9 @@ impl Default for BoxRecorder {
             boxes: RefCell::new(BTreeMap::new()),
             expansions: RefCell::new(BTreeMap::new()),
             routes: RefCell::new(BTreeMap::new()),
-            base: Affine::IDENTITY,
+            base: Open::default(),
+            offset: 0,
+            next_rank: Cell::new(0),
         }
     }
 }
@@ -97,6 +96,8 @@ pub(in crate::compile) struct Compiled<'a> {
     pub(in crate::compile) start: usize,
     /// The measured content height (`text` / `code`), else `0.0`.
     pub(in crate::compile) content_h: f64,
+    /// The paint rank [`BoxRecorder::enter`] gave the node.
+    pub(in crate::compile) rank: usize,
 }
 
 /// One node placed into a command stream, in render space.
@@ -115,33 +116,59 @@ pub(in crate::compile) struct Placed<'a> {
     pub(in crate::compile) page_origin: (f64, f64),
     /// Fonts for glyph ink.
     pub(in crate::compile) shape: ShapeEnv<'a>,
+    /// The paint rank [`BoxRecorder::enter`] gave the node.
+    pub(in crate::compile) rank: usize,
+    /// The node has `visible=false`.
+    pub(in crate::compile) hidden: bool,
+    /// Hit tests use the painted shape (see [`CompiledBox::shape`]): the
+    /// node is a line, polygon, polyline, path, or connector.
+    pub(in crate::compile) exact: bool,
 }
 
 impl BoxRecorder {
+    /// The paint rank of a node whose compile starts now. Call it before
+    /// the node emits its first command.
+    pub(in crate::compile) fn enter(&self) -> usize {
+        let rank = self.next_rank.get();
+        self.next_rank.set(rank + 1);
+        rank
+    }
+
     /// A recorder for a separate command stream that is spliced into this
-    /// recorder's stream after `outer` (the commands emitted so far).
-    pub(in crate::compile) fn nested(&self, outer: &[SceneCommand]) -> BoxRecorder {
+    /// recorder's stream after `outer` (the commands emitted so far) and
+    /// `lead` more commands. Paint ranks continue from this recorder's.
+    pub(in crate::compile) fn nested(&self, outer: &[SceneCommand], lead: usize) -> BoxRecorder {
         BoxRecorder {
             boxes: RefCell::new(BTreeMap::new()),
             expansions: RefCell::new(BTreeMap::new()),
             routes: RefCell::new(BTreeMap::new()),
-            base: open_transform(self.base, outer),
+            base: self.base.after(outer),
+            offset: self.offset + outer.len() + lead,
+            next_rank: Cell::new(self.next_rank.get()),
         }
     }
 
     /// Move every box record of `child` into this recorder under `prefix` +
-    /// id. The expansions and routes of `child` (pattern motif copies) are
-    /// dropped.
+    /// id, and continue paint ranks after the child's. The expansions and
+    /// routes of `child` (pattern motif copies) are dropped.
     pub(in crate::compile) fn absorb(&self, child: BoxRecorder, prefix: &str) {
+        self.next_rank
+            .set(self.next_rank.get().max(child.next_rank.get()));
         let mut boxes = self.boxes.borrow_mut();
         for (id, b) in child.boxes.into_inner() {
             boxes.entry(format!("{prefix}{id}")).or_insert(b);
         }
     }
 
-    /// The recorded boxes, by id.
-    pub(in crate::compile) fn into_boxes(self) -> BTreeMap<String, CompiledBox> {
-        self.boxes.into_inner()
+    /// Move every recorded `command_index` through `map` (old index to new
+    /// index, one entry past the last old command), after a pass rewrote
+    /// the command stream.
+    pub(in crate::compile) fn remap_commands(&self, map: &[usize]) {
+        for b in self.boxes.borrow_mut().values_mut() {
+            if let Some(&index) = map.get(b.command_index) {
+                b.command_index = index;
+            }
+        }
     }
 
     /// Everything recorded.
@@ -216,6 +243,9 @@ impl BoxRecorder {
                 engine: c.cx.engine,
                 fonts: c.cx.fonts,
             },
+            rank: c.rank,
+            hidden: c.node.visible() == Some(false),
+            exact: exact_kind(c.node),
         });
     }
 
@@ -224,9 +254,11 @@ impl BoxRecorder {
         if self.routes.borrow().contains_key(id) {
             return;
         }
-        let prefix = open_transform(self.base, c.commands.get(..c.start).unwrap_or_default());
+        let open = self
+            .base
+            .after(c.commands.get(..c.start).unwrap_or_default());
         let own = c.commands.get(c.start..).unwrap_or_default();
-        let Some(points) = first_polyline(own, prefix) else {
+        let Some(points) = first_polyline(own, open.transform) else {
             return;
         };
         let (ox, oy) = c.ctx.page_origin;
@@ -239,28 +271,51 @@ impl BoxRecorder {
         if self.boxes.borrow().contains_key(p.id) {
             return;
         }
-        let prefix = open_transform(self.base, p.commands.get(..p.start).unwrap_or_default());
+        let open = self
+            .base
+            .after(p.commands.get(..p.start).unwrap_or_default());
+        let prefix = open.transform;
         let own = p.commands.get(p.start..).unwrap_or_default();
-        let Some(rect) = p
-            .declared
-            .map(|b| map_box(prefix, b))
-            .or_else(|| painted(own, prefix, true, p.shape))
-        else {
+        let (ox, oy) = p.page_origin;
+        // Render space to page px, and back.
+        let to_page = Affine2::translate(-ox, -oy);
+        let from_page = Affine2::translate(ox, oy);
+        let spin = own_spin(own, p.rotate);
+        let extents = measure(
+            own,
+            Bases {
+                open: prefix,
+                local: to_page,
+                skip_spin: spin.is_some(),
+            },
+            p.shape,
+        );
+        let Some(rect) = p.declared.map(|b| map_box(prefix, b)).or(extents.unrotated) else {
             return;
         };
-        let visual =
-            painted(own, prefix, false, p.shape).unwrap_or_else(|| match (p.declared, p.rotate) {
+        let visual = extents
+            .visual
+            .unwrap_or_else(|| match (p.declared, p.rotate) {
                 (Some(b), Some(deg)) => {
-                    let spin = Affine::rotate_at(deg, b.x + b.w / 2.0, b.y + b.h / 2.0);
-                    map_box(prefix.then(spin), b)
+                    let turn = Affine2::rotate_at(deg, b.x + b.w / 2.0, b.y + b.h / 2.0);
+                    map_box(prefix.then(turn), b)
                 }
                 _ => rect,
             });
-        let (ox, oy) = p.page_origin;
         let page = |b: LayoutBox| LayoutBox {
             x: b.x - ox,
             y: b.y - oy,
             ..b
+        };
+        // The exact box: `local` in the node's space (render space shifted
+        // to page px), `world` from there to page px.
+        let (local, world, spin) = match p.declared.map(page).or(extents.local) {
+            Some(local) => (
+                local,
+                to_page.then(prefix).then(from_page),
+                spin.map_or(Affine2::IDENTITY, |s| to_page.then(s).then(from_page)),
+            ),
+            None => (page(rect), Affine2::IDENTITY, Affine2::IDENTITY),
         };
         self.boxes.borrow_mut().insert(
             p.id.to_owned(),
@@ -268,8 +323,60 @@ impl BoxRecorder {
                 rect: page(rect),
                 rotate: p.rotate,
                 visual: page(visual),
+                local,
+                spin,
+                world,
+                clip: open.page_clips(p.page_origin),
+                paint_order: p.rank,
+                command_index: self.offset + p.start,
+                hidden: p.hidden,
+                shape: if p.exact {
+                    hit_shape(own, to_page.then(prefix))
+                } else {
+                    None
+                },
             },
         );
+    }
+}
+
+/// The node's own rotation as its first command draws it, in render space.
+/// Every node kind opens its own rotation as its outermost bracket. `None`
+/// when the node has no rotation or the compile skipped it.
+fn own_spin(own: &[SceneCommand], rotate: Option<f64>) -> Option<Affine2> {
+    let deg = rotate?;
+    let SceneCommand::PushTransform { angle_deg, cx, cy } = own.first()? else {
+        return None;
+    };
+    (*angle_deg == deg).then(|| Affine2::rotate_at(deg, *cx, *cy))
+}
+
+/// `true` for the kinds whose hit test uses their painted shape.
+fn exact_kind(node: &Node) -> bool {
+    match node {
+        Node::Line(_)
+        | Node::Polygon(_)
+        | Node::Polyline(_)
+        | Node::Path(_)
+        | Node::Connector(_) => true,
+        Node::Rect(_)
+        | Node::Ellipse(_)
+        | Node::Text(_)
+        | Node::Code(_)
+        | Node::Frame(_)
+        | Node::Group(_)
+        | Node::Image(_)
+        | Node::Instance(_)
+        | Node::Field(_)
+        | Node::Toc(_)
+        | Node::Footnote(_)
+        | Node::Table(_)
+        | Node::Shape(_)
+        | Node::Pattern(_)
+        | Node::Chart(_)
+        | Node::Light(_)
+        | Node::Mesh(_)
+        | Node::Unknown(_) => false,
     }
 }
 

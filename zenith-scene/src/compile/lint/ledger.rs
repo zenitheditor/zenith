@@ -43,6 +43,27 @@ pub(super) struct ConnectorFacts {
     pub(super) route: String,
 }
 
+/// The axis-aligned facts of a [`CompiledBox`] the checks read.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(super) struct Drawn {
+    /// See [`CompiledBox::rect`].
+    pub(super) rect: LayoutBox,
+    /// See [`CompiledBox::rotate`].
+    pub(super) rotate: Option<f64>,
+    /// See [`CompiledBox::visual`].
+    pub(super) visual: LayoutBox,
+}
+
+impl From<&CompiledBox> for Drawn {
+    fn from(b: &CompiledBox) -> Self {
+        Self {
+            rect: b.rect,
+            rotate: b.rotate,
+            visual: b.visual,
+        }
+    }
+}
+
 /// One compiled node. `role="decoration"` / `"background"` (own or
 /// inherited) folds into `exempt`; `role="guide"` nodes never compile and
 /// have no entry.
@@ -55,7 +76,7 @@ pub(super) struct Entry {
     pub(super) kind: &'static str,
     pub(super) span: Option<Span>,
     /// The final box, when the compile recorded one.
-    pub(super) compiled: Option<CompiledBox>,
+    pub(super) compiled: Option<Drawn>,
     /// Own opacity times every ancestor's.
     pub(super) opacity: f64,
     /// Opaque solid fill or opaque image at full effective opacity.
@@ -183,7 +204,7 @@ impl PageLedger {
         let visible = node.is_visible();
         let opacity = inherit.opacity * node.opacity().unwrap_or(1.0).clamp(0.0, 1.0);
         let exempt = inherit.exempt || node.is_decorative();
-        let compiled = input.boxes.get(id).copied();
+        let compiled = input.boxes.get(id).map(Drawn::from);
         let own_effects = own_effects(node);
         let occluder = match compiled {
             Some(b)
@@ -432,6 +453,6 @@ impl PageLedger {
 }
 
 /// `true` when the node's own rotation turns its children.
-fn node_rotates(compiled: Option<CompiledBox>) -> bool {
+fn node_rotates(compiled: Option<Drawn>) -> bool {
     compiled.is_some_and(|b| b.rotate.is_some())
 }

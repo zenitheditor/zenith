@@ -11,8 +11,12 @@
 //!    pre-existing chain path (the block path is never entered for it).
 
 mod common;
-use common::*;
+use common::parse;
+#[path = "common/glyph_runs_in_y.rs"]
+mod glyph_runs_in_y;
+use glyph_runs_in_y::glyph_runs_in_y;
 use zenith_core::default_provider;
+use zenith_scene::compile;
 use zenith_scene::ir::SceneCommand;
 
 /// Every `DrawGlyphRun` `(y, font_size, glyph_count)` in emission order.

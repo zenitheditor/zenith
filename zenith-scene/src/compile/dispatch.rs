@@ -50,8 +50,11 @@ pub(in crate::compile) fn compile_node(
         return 0.0;
     }
     let start = commands.len();
+    // The rank is taken before the children compile: a parent ranks below
+    // them.
+    let rank = cx.boxes.map(|recorder| recorder.enter());
     let content_h = compile_kind(node, cx, commands, diagnostics, connector_strokes, ctx);
-    if let Some(recorder) = cx.boxes {
+    if let (Some(recorder), Some(rank)) = (cx.boxes, rank) {
         recorder.record(Compiled {
             node,
             cx,
@@ -59,6 +62,7 @@ pub(in crate::compile) fn compile_node(
             commands,
             start,
             content_h,
+            rank,
         });
     }
     content_h

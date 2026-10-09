@@ -7,10 +7,11 @@
 //! - compile_page with data: None and a data ref → data.no_context advisory
 
 mod common;
-use common::*;
+use common::parse;
 use zenith_core::{DataContext, default_provider};
 use zenith_scene::compile_page;
 use zenith_scene::ir::Paint;
+use zenith_scene::ir::SceneCommand;
 
 // A minimal document with a rect whose fill is a data ref.
 const DATA_SRC: &str = r##"zenith version=1 {

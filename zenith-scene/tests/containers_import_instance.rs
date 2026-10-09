@@ -1,11 +1,13 @@
 mod common;
 
-use common::{Paint, SceneCommand, default_provider, parse};
+use common::parse;
+use zenith_core::{Document, default_provider};
+use zenith_scene::ir::{Paint, SceneCommand};
 use zenith_scene::{ImportGraph, compile_page, compile_page_with_imports};
 
 type FillRectSummary = (f64, f64, f64, f64, (u8, u8, u8));
 
-fn imported_doc() -> common::Document {
+fn imported_doc() -> Document {
     parse(
         r##"zenith version=1 {
   project id="proj.imported" name="Imported"
@@ -44,13 +46,13 @@ fn imported_doc() -> common::Document {
     )
 }
 
-fn host_doc(source: &str) -> common::Document {
+fn host_doc(source: &str) -> Document {
     host_doc_with_instance_body(&format!(
         r#"instance id="inst.imported" source="{source}" x=(px)5 y=(px)7"#
     ))
 }
 
-fn host_doc_with_instance_body(instance_body: &str) -> common::Document {
+fn host_doc_with_instance_body(instance_body: &str) -> Document {
     let src = format!(
         r##"zenith version=1 {{
   project id="proj.host" name="Host"
@@ -136,7 +138,7 @@ fn scale_translates(result: &zenith_scene::CompileResult) -> Vec<(f64, f64, f64,
 
 /// A host document declaring a `token-map from="color.brand" to="{map_to}"` on
 /// the `library` import, plus a single imported-card instance.
-fn host_doc_with_token_map(map_to: &str) -> common::Document {
+fn host_doc_with_token_map(map_to: &str) -> Document {
     parse(&format!(
         r##"zenith version=1 {{
   project id="proj.host" name="Host"

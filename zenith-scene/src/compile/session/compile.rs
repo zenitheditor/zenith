@@ -9,7 +9,7 @@ use std::collections::BTreeMap;
 
 use super::super::anchor::build_anchor_map;
 use super::super::backdrop::page_backdrop;
-use super::super::boxes::{BoxRecorder, CompiledBox};
+use super::super::boxes::{BoxRecorder, CompiledBox, Recorded};
 use super::super::container;
 use super::super::crop;
 use super::super::ctx::NodeCtx;
@@ -38,7 +38,7 @@ impl<F: ?Sized + FontProvider> PageCompiler<'_, F> {
     /// `scene.page_out_of_range` advisory.
     #[must_use]
     pub fn compile_page(&self, page_index: usize) -> CompileResult {
-        self.compile_page_with(page_index, true, None, true)
+        self.compile_page_with(page_index, true, true).0
     }
 
     /// Compile the page at `page_index` with only its own diagnostics.
@@ -49,22 +49,39 @@ impl<F: ?Sized + FontProvider> PageCompiler<'_, F> {
     /// scene is identical to [`PageCompiler::compile_page`].
     #[must_use]
     pub fn compile_page_local(&self, page_index: usize) -> CompileResult {
-        self.compile_page_with(page_index, false, None, true)
+        self.compile_page_with(page_index, false, true).0
     }
 
-    /// The final geometry of every node compiled on page `page_index`, by id,
-    /// in page-absolute px: the unrotated box (anchors resolved, text heights
-    /// measured, footnotes in their zone, line / path / connector boxes from
-    /// their stroked bounds), the node's rotation, and its visual bounds.
-    /// Master projections record as `<page-id>/<id>`, instance content as
+    /// Compile the page at `page_index` and record the final geometry of
+    /// every node it compiles, in one pass.
+    ///
+    /// With `lint`, the result equals [`PageCompiler::compile_page`]. Without
+    /// it, the page lint diagnostics (ink overlap, occlusion, contrast,
+    /// arrangement, and the rest) are left out and the lint cost is saved.
+    /// The scene is the same either way.
+    ///
+    /// The boxes are by id, in page-absolute px (see [`CompiledBox`]):
+    /// anchors resolved, text heights measured, footnotes in their zone,
+    /// line / path / connector boxes from their stroked bounds. Master
+    /// projections record as `<page-id>/<id>`, instance content as
     /// `<instance-id>/<id>`, and pattern motif instances as
     /// `<pattern-id>/<index>/<motif-id>`. Guide nodes and nodes that fail to
     /// compile have no box. Empty for an out-of-range index.
     #[must_use]
+    pub fn compile_page_with_boxes(
+        &self,
+        page_index: usize,
+        lint: bool,
+    ) -> (CompileResult, BTreeMap<String, CompiledBox>) {
+        let (result, recorded) = self.compile_page_with(page_index, true, lint);
+        (result, recorded.map(|r| r.boxes).unwrap_or_default())
+    }
+
+    /// The boxes of [`PageCompiler::compile_page_with_boxes`] without lint,
+    /// the scene dropped.
+    #[must_use]
     pub fn compiled_boxes(&self, page_index: usize) -> BTreeMap<String, CompiledBox> {
-        let recorder = BoxRecorder::default();
-        let _ = self.compile_page_with(page_index, false, Some(&recorder), false);
-        recorder.into_boxes()
+        self.compile_page_with_boxes(page_index, false).1
     }
 
     /// Document diagnostics, reported once per document.
@@ -79,16 +96,17 @@ impl<F: ?Sized + FontProvider> PageCompiler<'_, F> {
         Diagnostic::dedup(diagnostics)
     }
 
+    /// Compile one page and record its boxes. The lint, when on, reads the
+    /// boxes of this same compile. `None` boxes only for a page that fails
+    /// before any node compiles.
     fn compile_page_with(
         &self,
         page_index: usize,
         with_document: bool,
-        boxes: Option<&BoxRecorder>,
         lint: bool,
-    ) -> CompileResult {
-        // The lint reads the final boxes of this same compile.
-        let lint_recorder = lint.then(BoxRecorder::default);
-        let boxes = boxes.or(lint_recorder.as_ref());
+    ) -> (CompileResult, Option<Recorded>) {
+        let recorder = BoxRecorder::default();
+        let boxes = Some(&recorder);
         let prep = self.prep;
         let doc: &zenith_core::Document = &self.lowered;
         let mut diagnostics: Vec<Diagnostic> = if with_document {
@@ -99,13 +117,13 @@ impl<F: ?Sized + FontProvider> PageCompiler<'_, F> {
 
         let Some(page) = doc.body.pages.get(page_index) else {
             diagnostics.push(missing_page_diagnostic(doc, page_index));
-            return empty_result(diagnostics);
+            return (empty_result(diagnostics), None);
         };
         let Some(page_w) = page_dimension_px(page, "width", &mut diagnostics) else {
-            return empty_result(diagnostics);
+            return (empty_result(diagnostics), None);
         };
         let Some(page_h) = page_dimension_px(page, "height", &mut diagnostics) else {
-            return empty_result(diagnostics);
+            return (empty_result(diagnostics), None);
         };
 
         let bleed = page_bleed(page);
@@ -271,8 +289,10 @@ impl<F: ?Sized + FontProvider> PageCompiler<'_, F> {
         // Opt-in connector line-jumps. Only "arc" and "gap" change commands.
         if let Some(mode) = page.line_jumps.as_deref()
             && (mode == "arc" || mode == "gap")
+            && let Some(remap) =
+                line_jumps::apply_line_jumps(&mut scene.commands, &connector_strokes, mode)
         {
-            line_jumps::apply_line_jumps(&mut scene.commands, &connector_strokes, mode);
+            recorder.remap_commands(&remap);
         }
 
         // Footnote zone, on top of body content and inside the media clip.
@@ -311,7 +331,8 @@ impl<F: ?Sized + FontProvider> PageCompiler<'_, F> {
 
         // Visual QA over the final geometry: ink overlap, occlusion, label
         // overflow, and text / label contrast.
-        if let Some(recorder) = lint_recorder {
+        let recorded = recorder.into_parts();
+        if lint {
             let env = LintEnv {
                 page,
                 authored: prep.document().body.pages.get(page_index),
@@ -334,17 +355,20 @@ impl<F: ?Sized + FontProvider> PageCompiler<'_, F> {
                     i.is_some() || o.is_some() || t.is_some() || b.is_some()
                 },
             };
-            let found = lint_page(&env, recorder);
+            let found = lint_page(&env, &recorded);
             diagnostics.extend(found);
         }
 
         // Internal defaults copy ids never leave the compile.
         prep.id_aliases.scrub(&mut diagnostics);
 
-        CompileResult {
-            scene,
-            diagnostics: Diagnostic::dedup(diagnostics),
-        }
+        (
+            CompileResult {
+                scene,
+                diagnostics: Diagnostic::dedup(diagnostics),
+            },
+            Some(recorded),
+        )
     }
 
     /// Fill the whole media box with the page background, when one is set.
