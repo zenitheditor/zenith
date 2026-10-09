@@ -17,5 +17,9 @@ zenith-core = { workspace = true }
 zenith-geometry = { workspace = true }
 zenith-raster = { workspace = true }
 
+[dev-dependencies]
+# Tests use the serif and mono faces.
+zenith-core = { workspace = true, features = ["bundled-fonts-extended"] }
+
 [lints]
 workspace = true

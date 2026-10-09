@@ -96,7 +96,11 @@ jobs:
       #   Tier 3: layout, raster
       #   Tier 4: scene, perception, zpx
       #   Tier 5: render, tx, producers
-      #   Tier 6: tool (zenith-cli)
+      #   Tier 6: pipeline
+      #   Tier 7: editor
+      #   Tier 8: tool (zenith-cli)
+      # `zenith-editor-wasm` and `zenith-editor-bench` have `publish = false`
+      # and are not published.
       - name: Publish to crates.io
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
@@ -149,7 +153,9 @@ jobs:
           publish_tier "3 (layout, raster)"     zenith-layout zenith-raster
           publish_tier "4 (scene, perception, zpx)" zenith-scene zenith-perception zenith-zpx
           publish_tier "5 (render, tx, producers)" zenith-render zenith-tx zenith-producers
-          publish_tier "6 (cli)"                zenith-tool
+          publish_tier "6 (pipeline)"           zenith-pipeline
+          publish_tier "7 (editor)"             zenith-editor
+          publish_tier "8 (cli)"                zenith-tool
 
   build-binaries:
     name: Build (${{ matrix.label }})

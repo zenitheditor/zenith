@@ -14,6 +14,9 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
+  # The editor browser tests start Chrome. Ubuntu 24.04 runners can block the
+  # user namespaces its sandbox needs, so the tests pass `--no-sandbox`.
+  ZENITH_E2E_NO_SANDBOX: "1"
 
 jobs:
   lint:
@@ -50,11 +53,53 @@ jobs:
       - uses: actions/checkout@v6
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
+      # The page tests need Node 22 (built-in `WebSocket`).
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
       - uses: Swatinem/rust-cache@v2
         with:
           prefix-key: test
+      # `zenith-cli/tests/editor_page.rs` prints `SKIP ...` and passes when the
+      # wasm module, Node, or Chromium is missing. This job builds no wasm
+      # module, so the static-host and native-vs-wasm tests skip here on
+      # purpose. The `editor-wasm` job runs them with every prerequisite
+      # required.
       - name: Run tests
         run: cargo test --workspace --all-features --locked
+
+  editor-wasm:
+    name: Editor on wasm (native-vs-wasm byte equality)
+    runs-on: ubuntu-latest
+    env:
+      # A missing prerequisite is an error here, never a silent skip.
+      ZENITH_E2E_REQUIRED: "1"
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install Rust with the wasm32-wasip1 target
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-wasip1
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: editor-wasm
+      - name: Build the editor wasm module
+        run: cargo build --profile release-wasm --target wasm32-wasip1 -p zenith-editor-wasm --locked
+      - name: Locate Chromium
+        # ubuntu-latest ships Google Chrome. The tests read the path from
+        # ZENITH_E2E_CHROMIUM.
+        run: |
+          chrome="$(command -v google-chrome || command -v chromium || command -v chromium-browser)"
+          "$chrome" --version
+          echo "ZENITH_E2E_CHROMIUM=$chrome" >> "$GITHUB_ENV"
+          echo "ZENITH_E2E_WASM=$GITHUB_WORKSPACE/target/wasm32-wasip1/release-wasm/zenith-editor-wasm.wasm" >> "$GITHUB_ENV"
+      - name: Page, static-host and native-vs-wasm tests
+        # Runs the hash sweep over examples/*.zen: native `zenith edit` vs the
+        # wasm engine in Chromium. Any byte difference fails the test.
+        run: cargo test -p zenith-tool --test editor_page --locked -- --nocapture
 
   msrv:
     name: Minimum Rust version (1.95.0)
@@ -85,8 +130,11 @@ jobs:
         with:
           prefix-key: release-packages
           cache-directories: target/release-readiness
+      # `publish = false` crates are not released. Cargo packages them with
+      # `--workspace` unless excluded, and the bench crate reads files outside
+      # its directory.
       - name: Package all workspace crates
-        run: cargo package --workspace --all-features --locked --allow-dirty --target-dir target/release-readiness
+        run: cargo package --workspace --exclude zenith-editor-bench --exclude zenith-editor-wasm --all-features --locked --allow-dirty --target-dir target/release-readiness
       - name: Check package contents
         run: python3 scripts/check-release-packages.py target/release-readiness/package
       - name: Smoke packaged CLI

@@ -27,6 +27,8 @@ ttf-parser = "0.25"
 resvg = "0.36"
 
 [dev-dependencies]
+# Tests use the serif and mono faces.
+zenith-core = { workspace = true, features = ["bundled-fonts-extended"] }
 zenith-layout = { workspace = true }
 tiny-skia = "0.11"
 

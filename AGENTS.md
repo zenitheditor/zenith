@@ -19,9 +19,11 @@ stable contract; `zenith-geometry` depends on no other Zenith crate; `zenith-cor
 - `zenith-session/` — local doc identity (ULID), ephemeral session DAG, durable content-addressed version store. Never on the render path.
 - `zenith-zpx/` — packaged design export (manifest + bake).
 - `zenith-producers/` — higher-level produce/export helpers (SVG native, ZPX bake).
-- `zenith-cli/` — the `zenith` binary (crate package name `zenith-tool`): command dispatch, clap, JSON/human output, MCP. `src/main.rs` is thin; logic lives in `src/lib.rs` and `src/commands/`.
+- `zenith-pipeline/` — config policy, imports, fonts, assets, validate, compile, and render over host I/O traits (`SourceFs`, `ConfigSource`, `LocalFontSource`, `PageRunner`). Shared by the CLI and the wasm editor. NEVER `std::fs` / `std::thread` / time in it; the CLI's native host lives in `zenith-cli/src/native.rs`.
+- `zenith-editor/` — the editor engine: stateless `execute(env, session, request)` over a serializable `Session` (selection, gestures to tx ops, text-delta history, render). Shared by the browser module, `zenith edit`, and MCP; wasm-safe like `zenith-pipeline`.
+- `zenith-cli/` — the `zenith` binary (crate package name `zenith-tool`): command dispatch, clap, JSON/human output, MCP; render/validate logic goes in `zenith-pipeline`, not here. `src/main.rs` is thin; logic lives in `src/lib.rs` and `src/commands/`.
 - `examples/` — runnable `.zen` documents (keep them valid against the current parser).
-- `assets/` — bundled fonts (`assets/fonts/`) and embedded library presets (`assets/libraries/`). **Committed.**
+- `assets/` — bundled fonts (`zenith-core/assets/fonts/`) and embedded library presets (`assets/libraries/`). **Committed.**
 - `conformance/` — regenerable rendered proof of simulation scenarios. **Gitignored**; never stage it.
 - `resource/`, `.agents/`, `.claude/`, `.codex/` — local planning/research/session scratch. **Gitignored.**
 

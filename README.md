@@ -226,7 +226,7 @@ Most design tools are built for a human dragging boxes, and an automation API ge
 
 Zenith is built the other way around. The foundation is a programmatic, text-based, deterministic engine. Agents, scripts, and the command line drive it directly. So automation isn't a side door; it's the front door.
 
-**Where this is going.** Today Zenith is the engine and the CLI — the surface an AI agent drives. The roadmap is a **visual editor where humans and AI agents co-edit the same `.zen` documents**: a designer nudges a box, an agent restyles a hundred variants, and both operate on the identical deterministic core with the same validation, transactions, and version history. The GUI is a client on top of the engine — not a separate product with automation bolted on. Agent-first now; **agent + human, together, next.**
+**The editor.** The engine and the CLI are the surface an AI agent drives. The [browser editor](#browser-editor) is a client on top of the same engine: a designer nudges a box, an agent restyles a hundred variants, and both operate on the identical deterministic core with the same validation, transactions, and version history. The GUI is not a separate product with automation bolted on.
 
 </details>
 
@@ -234,7 +234,7 @@ Zenith is built the other way around. The foundation is a programmatic, text-bas
 
 <details><summary>One deterministic pipeline: parse + validate → AST → compile → scene IR → render (PNG/SVG/PDF).</summary>
 
-A `.zen` document flows through a single deterministic pipeline. Each stage is a separate crate with a clean contract boundary, so a future GPU backend or visual editor consumes the same scene IR:
+A `.zen` document flows through a single deterministic pipeline. Each stage is a separate crate with a clean contract boundary, so a GPU backend or an editor can consume the same scene IR:
 
 <p align="center"><img src="assets/showcase/pipeline.png" alt="Pipeline: .zen source → validate → compile → scene IR → render" width="900"></p>
 
@@ -461,13 +461,111 @@ Run `zenith <command> --help` for flags (each prints a description and an exampl
 | ------------- | --------------------------------------------------------------------------------------------------------- |
 | **Author**    | `new` · `validate` · `fmt` · `tokens` · `inspect`                                                         |
 | **Render**    | `render` (`--png` · `--svg` · `--pdf` · `--scene` · `--all-pages` · `--all-pages-svg` · `--spread` · `--page`)                                    |
-| **Edit**      | `tx` (typed transactions, dry-run by default) · `fix` (machine fixes for diagnostics, dry-run by default) |
+| **Edit**      | `tx` (typed transactions, dry-run by default) · `fix` (machine fixes for diagnostics, dry-run by default) · `edit` (browser editor and agent HTTP API, see [Browser editor](#browser-editor)) |
 | **Variants**  | `variant` (one design → many sizes/formats) · `merge` (CSV data mail-merge)                               |
 | **Library**   | `library list` · `library search` · `library show` · `library add`                                        |
 | **Theme**     | `theme new` (synthesize a token pack from brand colours)                                                  |
 | **History**   | `history` · `undo` · `redo` · `version` · `restore` · `sync`                                              |
 | **Workspace** | `scratch new/list/show` · `candidate <status>` · `promote --into <page>` · `finalize` · `bundle/unbundle` |
 | **Agent**     | `plugin install` · `plugin uninstall` · `plugin list` · `mcp`                                             |
+
+</details>
+
+## Browser editor
+
+<details><summary>Edit a <code>.zen</code> file in the browser: source on one side, the rendered page on the other. Local server or static site.</summary>
+
+The source pane is the source of truth. The canvas shows the engine render of that text. Canvas edits (move, resize, rotate, inspector fields) become transactions that modify the text.
+
+### `zenith edit`
+
+```bash
+zenith edit poster.zen
+```
+
+The command serves one document on a local port, prints the URL with a per-run token, and opens the browser. Run `zenith edit --help` for the routes.
+
+| Flag | Meaning |
+| --- | --- |
+| `--port <N>` | Port. Default: a free port. |
+| `--host <ADDR>` | Bind address: an IP address or `localhost`. Default `127.0.0.1`. |
+| `--allow-remote` | Allow a non-loopback `--host`. Anyone who reaches the port can try the token. |
+| `--root <DIR>` | Directory the editor may read project files from. Default: the document's directory. |
+| `--no-open` | Do not open the browser. |
+| `--json` | Print the start line as JSON: `{schema, url, host, port, token, path}`. |
+
+Security model:
+
+- **Bind.** Loopback by default. A non-loopback `--host` needs `--allow-remote` and prints a warning.
+- **Token.** 64 hex characters from the OS RNG, new on every run. Every route needs it, static files included. Agents send `Authorization: Bearer <token>`. The page loads `/?token=<token>`, receives an `HttpOnly`, `SameSite=Strict` cookie, and removes the token from the address bar.
+- **Host and Origin.** `Host` must be `localhost`, an IP address, or the `--host` name, with the bound port. Otherwise the server answers 403 `edit.bad_host`. A DNS-rebinding page fails here. When a request has an `Origin`, it must be `http://<Host>`. A cross-site fetch gets 403 `edit.bad_origin`. The server sends no CORS headers. POST bodies must be `application/json`.
+- **Files.** The server serves only the embedded page files. The engine reads the document, imports, assets, and fonts only under the document's directory (or `--root`). `..` and symlinks that leave it are errors.
+- **Writes.** A save keeps comments, records history, stamps the `doc-id` as `tx --apply` does, and replaces the file atomically.
+
+The server runs until Ctrl-C or `POST /api/shutdown`. Shutdown returns 409 while unsaved edits remain, unless `{"force": true}`.
+
+### Using the editor
+
+- **Layout.** Source and canvas sit side by side (stacked on a narrow screen). Drag the divider, or focus it and use the arrow keys, to resize. The fullscreen buttons expand either pane. Escape restores. Toolbar buttons hide the pages and layers panel, the inspector, and the diagnostics panel. The layout and theme (system, light, dark) persist per browser.
+- **Canvas view.** `+` and `-` zoom, `0` shows 100%, `1` fits the page. Ctrl or Cmd with the wheel, or a pinch, zooms about the pointer. The wheel, two fingers, Space and drag, or the middle button pan. The canvas renders only the visible region at device resolution.
+- **Selection.** Click a node to select it. Shift-click adds to the selection. Drag on empty canvas to select with a band (Alt: only nodes wholly inside, Shift: add). Layers, the source cursor, and the canvas share one selection.
+- **Move, resize, rotate.** Drag the node or its handles. Shift keeps one axis, keeps the aspect ratio, or rotates in 15 degree steps. Ctrl or Cmd resizes about the centre and skips snapping while moving. Alt detaches a token-bound value or an anchor. The edit lands on release. A ghost outline and a live preview follow the pointer.
+- **Snapping.** The magnet button toggles snapping to other nodes and the page.
+- **Keyboard on a selection.** Arrows move by 1 px (Shift: 10 px). Ctrl or Cmd with arrows resizes. `[` and `]` rotate by 15 degrees. Delete removes. Escape cancels a drag or clears the selection. Without a selection, arrows pan.
+- **Inspector.** Shows the selected node and edits its fields, including fill and stroke from the color tokens.
+- **Shortcuts.** Ctrl or Cmd with: `S` save, `Z` undo, `Shift+Z` or `Y` redo, `D` duplicate the selection, `O` open a file (static site). Undo and redo cover typing and canvas edits in one history.
+- **Diagnostics.** The bottom panel lists errors, warnings, and advisories. A row with a position jumps to it in the source.
+- **Save and conflicts.** Save writes the text to disk. If the file changed on disk, a clean session reloads it. A session with unsaved edits shows a conflict notice: Reload takes the disk text (undo brings back yours), Overwrite writes the editor text. The browser asks before closing a tab with unsaved edits.
+
+### Source of truth
+
+- Typing in the source pane is never overwritten. The engine merges other changes (canvas, agents, disk) into the pane without losing keystrokes.
+- Canvas and inspector edits patch the text in place. Comments and layout survive. When a patch has no exact form, the engine rewrites the document in canonical form, shows a warning that comments are gone, and undo restores them. This happens when the layout at the edit point has no exact patch, for example a node on the same line as other text, an inline `{ ... }` child block, or a new top-level node. Removing a node also removes the `//` comment lines directly above it, and the page says so.
+- While the source has errors, the canvas keeps the last valid render, marked "Showing last valid preview", and the diagnostics panel lists the errors.
+
+### Static site
+
+The editor also runs as a static site. The engine runs in a Worker as a WebAssembly module. No server is involved. Documents open from the user's disk and save back to it.
+
+Build the site:
+
+```bash
+cargo build --target wasm32-wasip1 -p zenith-editor-wasm --profile release-wasm
+node zenith-cli/scripts/build-static-editor.mjs --out dist/editor
+```
+
+The script reads the module from `target/wasm32-wasip1/release-wasm/` (or `$CARGO_TARGET_DIR`). Pass `--wasm <file>` to name another. It copies the page, the module, the bundled fonts, and `samples/` (the examples) into `--out`. Every URL is relative, so the site can live in a subdirectory. Test it locally with any file server, for example `python3 -m http.server -d dist/editor`.
+
+Host requirements:
+
+- Serve over `https://`, or `http://localhost`. The File System Access pickers and `crypto.subtle` need a secure context.
+- Serve `.wasm` as `application/wasm`. A wrong type still loads, but without streaming compilation.
+- Allow `'wasm-unsafe-eval'` in `script-src`. The browser compiles the module under that source.
+- Allow a Worker from the same origin: `worker-src 'self'`. The Worker script is `js/engine/wasm/worker.js`.
+- Allow `blob:` and `data:` in `img-src`. The page draws PNGs from blobs.
+- Keep `connect-src 'self'`. The page fetches the module, fonts, and samples from the same origin.
+- `build-static-editor.mjs` writes a `_headers` file (Netlify and Cloudflare Pages) with this policy: `default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'`. Other hosts need the same headers set by hand.
+
+How it behaves:
+
+- The page picks its host at startup. `<meta name="zenith-host" content="wasm">` (written by the build) selects the wasm engine. Without the meta, the page asks `/api/state` once. `zenith edit` answers and the page uses it.
+- Open a `.zen` file or a project folder with the toolbar buttons. A folder gives the document its imports and assets. Chromium writes saves back to the file. Other browsers read through `<input type=file>` and save by download.
+- Bundled fonts beyond Noto Sans Regular and Bold load on demand from `fonts/`.
+- `?doc=samples/<name>.zen` opens a sample. The default is `samples/stack.zen`.
+- Each engine call sends the session and the project files to the module. A 1 MiB project adds about 1.4 ms per call. Keep large images out of a project folder.
+- A save on the static site does not stamp a `doc-id` into the file.
+
+### Agents and MCP
+
+Agents drive the same session the page shows. Over HTTP, `POST /api/cmd` runs an editor command (`{"command":"commands.list"}` lists them). Edits from an agent appear live in the page. Over MCP, five tools expose the engine:
+
+| Tool | Purpose |
+| --- | --- |
+| `zenith_editor_open` | Open a `.zen` file in an editor session. Returns the session id. A dirty session needs `discard=true` to reopen. |
+| `zenith_editor_command` | Run one editor command on a session (`select.hit`, `gesture.commit`, `tx.apply`, `history.undo`, `file.save`, and more). Text edits need the session `version`. |
+| `zenith_editor_render` | Render a session page to PNG. Renders the last valid text while the text has errors (`stale: true`). |
+| `zenith_editor_sessions` | List the sessions: id, kind (local or attached), path, version, dirty, valid, conflict. |
+| `zenith_editor_attach` | Attach to a running `zenith edit` on this machine, so the person watching the page sees the agent's edits. Pass the URL it printed. |
 
 </details>
 
@@ -539,7 +637,7 @@ artifacts (renders, big trees, diffs) come back as **resource links** into a con
 store instead of being inlined, and documents are addressable by `doc-id` so agents stop
 juggling paths. The full author loop is exposed — `zenith_schema`, `zenith_validate`,
 `zenith_inspect`, `zenith_tokens`, `zenith_tx`, `zenith_fix`, `zenith_render`, `zenith_fmt`, `zenith_merge`,
-`zenith_theme_new`, plus the scratch/candidate/promote/finalize workspace tools.
+`zenith_theme_new`, plus the scratch/candidate/promote/finalize workspace tools. Pointer-style editing (hit-test, drag, undo, live render) uses the `zenith_editor_*` tools described under [Browser editor](#agents-and-mcp).
 
 | MCP render parameter | Contract |
 | --- | --- |
@@ -603,19 +701,27 @@ directories and can be launched by clients through `npx -y @zenitheditor/zenith-
 
 ## Workspace
 
-<details><summary>A 7-crate Rust workspace; <code>zenith-core</code> depends on nothing else in the tree.</summary>
+<details><summary>A Rust workspace of one-concern crates; <code>zenith-geometry</code> depends on no other Zenith crate.</summary>
 
-Zenith is a Rust workspace. Each crate owns one concern and exposes a stable contract; `zenith-core` depends on nothing else in the tree.
+Each crate owns one concern and exposes a stable contract. `zenith-geometry` depends on no other Zenith crate. `zenith-core` depends only on `zenith-geometry` among them.
 
-| Crate            | Responsibility                                                                            |
-| ---------------- | ----------------------------------------------------------------------------------------- |
-| `zenith-core`    | KDL parser adapter, semantic AST, canonical formatter, tokens, validation, diagnostics    |
-| `zenith-layout`  | Text shaping & font metrics (`rustybuzz` + `ttf-parser`); third-party types confined here |
-| `zenith-scene`   | Backend-neutral scene IR + compilation (geometry, text wrap, anchors, opacity/clip)       |
-| `zenith-render`  | CPU PNG backend (tiny-skia), SVG export, and vector PDF backend; determinism enforcement               |
-| `zenith-tx`      | Transaction op set, apply/dry-run engine, diffs, and the audit-record contract            |
-| `zenith-session` | Local-machine doc identity, session DAG, durable versions (content-addressed store)       |
-| `zenith-cli`     | `zenith` command-line tool — dispatch, argument parsing, and JSON/human output            |
+| Crate                 | Responsibility                                                                                         |
+| --------------------- | ------------------------------------------------------------------------------------------------------ |
+| `zenith-geometry`     | Pure geometry: paths, contours, booleans                                                               |
+| `zenith-core`         | KDL parser adapter, semantic AST, canonical formatter, comment-preserving source patcher, tokens, validation, diagnostics |
+| `zenith-layout`       | Text shaping & font metrics (`rustybuzz` + `ttf-parser`); third-party types confined here              |
+| `zenith-raster`       | Raster surface, blend modes, adjustments                                                               |
+| `zenith-perception`   | Visual QA reports over geometry and raster                                                             |
+| `zenith-scene`        | Backend-neutral scene IR + compilation (geometry, text wrap, anchors, opacity/clip, hit data)          |
+| `zenith-render`       | CPU PNG backend (tiny-skia), SVG export, and vector PDF backend; determinism enforcement               |
+| `zenith-tx`           | Transaction op set, apply/dry-run engine, diffs, and the audit-record contract                         |
+| `zenith-session`      | Local-machine doc identity, session DAG, durable versions (content-addressed store)                    |
+| `zenith-zpx`          | Packaged design export (manifest + bake)                                                               |
+| `zenith-producers`    | Higher-level produce/export helpers (SVG native, ZPX bake)                                             |
+| `zenith-pipeline`     | Config policy, imports, fonts, assets, validate, compile, and render over host I/O traits; shared by the CLI and the wasm editor |
+| `zenith-editor`       | Editor engine: a stateless command registry over a serializable session; shared by the browser, `zenith edit`, and MCP |
+| `zenith-editor-wasm`  | The editor engine as a `wasm32-wasip1` command module for the static site (not published)              |
+| `zenith-cli`          | `zenith` command-line tool (crate `zenith-tool`): dispatch, argument parsing, JSON/human output, MCP    |
 
 </details>
 

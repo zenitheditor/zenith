@@ -15,5 +15,9 @@ description = "Zenith deterministic raster surfaces and color transfer math."
 [dependencies]
 zenith-core = { workspace = true }
 
+[dev-dependencies]
+# Tests use the serif and mono faces.
+zenith-core = { workspace = true, features = ["bundled-fonts-extended"] }
+
 [lints]
 workspace = true

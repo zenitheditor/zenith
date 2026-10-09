@@ -12,6 +12,15 @@ publish.workspace = true
 readme.workspace = true
 description = "Zenith core: KDL parser adapter, semantic AST, canonical formatter, tokens, validation, and diagnostics."
 
+[features]
+# Noto Sans Regular and Bold are always embedded. This feature adds the other
+# eight bundled faces (Sans Italic and Bold Italic, Sans Mono, Serif; about
+# 5.2 MB). It is on by default so the native build renders as before. A
+# size-sensitive build (the browser module) depends on `zenith-core` with
+# `default-features = false` and fetches the dropped faces on demand.
+default = ["bundled-fonts-extended"]
+bundled-fonts-extended = []
+
 [dependencies]
 kdl = "6.7.1"
 oxidoc-highlight = "0.1.1"

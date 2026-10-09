@@ -18,5 +18,9 @@ zenith-session = { workspace = true }
 zenith-zpx = { workspace = true }
 usvg = "0.36"
 
+[dev-dependencies]
+# Tests use the serif and mono faces.
+zenith-core = { workspace = true, features = ["bundled-fonts-extended"] }
+
 [lints]
 workspace = true
