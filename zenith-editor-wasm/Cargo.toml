@@ -1,0 +1,32 @@
+[package]
+name = "zenith-editor-wasm"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+publish = false
+description = "Zenith engine as a wasm32-wasip1 command module: one JSON request on stdin, one JSON response on stdout."
+
+[[bin]]
+name = "zenith-editor-wasm"
+path = "src/main.rs"
+
+[features]
+# Embed every bundled font (about 5.2 MB more). Off by default: the module
+# embeds Noto Sans Regular and Bold, and the page fetches the other faces.
+bundled-fonts-extended = ["zenith-core/bundled-fonts-extended"]
+
+[dependencies]
+zenith-core = { workspace = true }
+zenith-pipeline = { workspace = true }
+zenith-editor = { workspace = true }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# Pure Rust and already in Cargo.lock at this version, so no new crate enters
+# the graph and the C-free invariant holds.
+base64 = "0.21"
+
+[lints]
+workspace = true

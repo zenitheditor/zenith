@@ -1,0 +1,38 @@
+# Benches of the editor loops on the showcase deck (fluxbench).
+#
+#   cargo bench -p zenith-editor-bench --bench editor            time, with the p95 gates
+#   cargo bench -p zenith-editor-bench --bench editor_counts     instruction and allocation counts
+#
+# See `editor_counts.rs` for the `perf stat` recipe.
+[package]
+name = "zenith-editor-bench"
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.95"
+publish = false
+autobenches = false
+
+[lints]
+workspace = true
+
+[lib]
+path = "lib.rs"
+test = false
+bench = false
+
+[dependencies]
+zenith-editor = { workspace = true }
+# The faces the CLI and `zenith edit` bundle.
+zenith-core = { workspace = true, features = ["bundled-fonts-extended"] }
+serde_json = "1"
+fluxbench = "0.2.0"
+
+[[bench]]
+name = "editor"
+path = "editor.rs"
+harness = false
+
+[[bench]]
+name = "editor_counts"
+path = "editor_counts.rs"
+harness = false

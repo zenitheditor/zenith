@@ -1,0 +1,36 @@
+[package]
+name = "zenith-editor"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+categories.workspace = true
+publish.workspace = true
+readme.workspace = true
+description = "Zenith editor engine: a stateless command registry over a serializable session (selection, gestures, history, render)."
+# `benches/` is its own package (`zenith-editor-bench`, `publish = false`),
+# so the fluxbench dependency stays out of the published crate.
+autobenches = false
+
+# Every dependency is pure Rust, so the C-free invariant holds. The crate
+# performs no I/O of its own and uses no time, threads, or randomness: it
+# builds for wasm32-wasip1 unchanged.
+[dependencies]
+zenith-core = { workspace = true }
+zenith-scene = { workspace = true }
+zenith-tx = { workspace = true }
+zenith-pipeline = { workspace = true }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+kdl = "6.7.1"
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+# Tests render with the serif and mono faces, as the CLI does.
+zenith-core = { workspace = true, features = ["bundled-fonts-extended"] }
