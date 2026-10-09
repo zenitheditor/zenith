@@ -2,7 +2,7 @@
 
 use serde_json::json;
 
-use crate::support::{DOC, raw, start, start_on, status_only};
+use crate::support::{raw, start, status_only};
 
 #[test]
 fn wrong_or_missing_token_is_unauthorized() {
@@ -242,6 +242,8 @@ fn oversize_and_malformed_requests_get_json_errors() {
 #[cfg(unix)]
 #[test]
 fn symlink_out_of_the_root_reads_as_an_error() {
+    use crate::support::{DOC, start_on};
+
     let outside = tempfile::tempdir().expect("outside");
     std::fs::write(outside.path().join("secret.zen"), DOC).expect("write");
     let dir = tempfile::tempdir().expect("dir");

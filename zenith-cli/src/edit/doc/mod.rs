@@ -2,6 +2,7 @@
 //! MCP `zenith_editor_*` tools. Wiring only.
 //!
 //! - `target` — [`Target`]: the canonical document path and its root.
+//! - `canonical` — `canonicalize`: canonical paths without `\\?\` on Windows.
 //! - `confined` — `ConfinedFs`: project reads limited to the root.
 //! - `disk` — file stamps and text reads.
 //! - `event` — [`Event`]: one live notification.
@@ -9,6 +10,7 @@
 //! - `state` — [`DocState`]: session, saved text, conflict policy.
 //! - `file_cmds` — `file.save`, `file.reload`, `file.state`.
 
+mod canonical;
 mod confined;
 mod disk;
 mod event;

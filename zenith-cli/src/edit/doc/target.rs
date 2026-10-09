@@ -5,6 +5,8 @@ use std::path::{Path, PathBuf};
 
 use zenith_editor::EditorError;
 
+use super::canonical::canonicalize;
+
 /// A resolved document: canonical path, its directory, and the confinement
 /// root (the directory, or a `--root` that contains it).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -27,7 +29,7 @@ impl Target {
     /// - `edit.bad_root` when `root` does not exist or does not hold the
     ///   document.
     pub(crate) fn resolve(path: &Path, root: Option<&Path>) -> Result<Target, EditorError> {
-        let canonical = std::fs::canonicalize(path).map_err(|e| {
+        let canonical = canonicalize(path).map_err(|e| {
             if e.kind() == std::io::ErrorKind::NotFound {
                 EditorError::new(
                     "edit.missing_file",
@@ -70,7 +72,7 @@ impl Target {
         let root = match root {
             None => dir.clone(),
             Some(r) => {
-                let canonical_root = std::fs::canonicalize(r).map_err(|e| {
+                let canonical_root = canonicalize(r).map_err(|e| {
                     EditorError::new(
                         "edit.bad_root",
                         format!(
@@ -119,7 +121,7 @@ mod tests {
         std::fs::create_dir_all(doc.parent().expect("parent")).expect("mkdir");
         std::fs::write(&doc, "x").expect("write");
         let t = Target::resolve(&doc, Some(dir.path())).expect("resolve");
-        assert_eq!(t.root, std::fs::canonicalize(dir.path()).expect("canon"));
+        assert_eq!(t.root, canonicalize(dir.path()).expect("canon"));
         assert_eq!(t.dir, t.path.parent().expect("parent"));
         let other = tempfile::tempdir().expect("other");
         let err = Target::resolve(&doc, Some(other.path())).expect_err("outside");

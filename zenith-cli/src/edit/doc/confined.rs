@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use zenith_pipeline::path::normalize_lexically;
 use zenith_pipeline::{FsError, SourceFs};
 
+use super::canonical::canonicalize;
 use crate::native::NativeFs;
 
 /// Reads project files through [`NativeFs`], but only under `root`.
@@ -18,7 +19,7 @@ pub(crate) struct ConfinedFs<'a> {
 }
 
 impl<'a> ConfinedFs<'a> {
-    /// Confine reads to `root`, a canonical directory.
+    /// Confine reads to `root`, a directory from [`canonicalize`].
     pub(crate) fn new(root: &'a Path) -> Self {
         Self { root }
     }
@@ -34,7 +35,7 @@ impl<'a> ConfinedFs<'a> {
         if !lexical.starts_with(self.root) {
             return Err(self.outside(path));
         }
-        let canonical = std::fs::canonicalize(&lexical).map_err(|e| {
+        let canonical = canonicalize(&lexical).map_err(|e| {
             if e.kind() == std::io::ErrorKind::NotFound {
                 FsError::not_found(e.to_string())
             } else {
@@ -79,7 +80,7 @@ mod tests {
 
     fn root() -> (tempfile::TempDir, PathBuf) {
         let dir = tempfile::tempdir().expect("tempdir");
-        let root = std::fs::canonicalize(dir.path()).expect("canonical");
+        let root = canonicalize(dir.path()).expect("canonical");
         (dir, root)
     }
 
