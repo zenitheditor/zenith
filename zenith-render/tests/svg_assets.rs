@@ -3,10 +3,25 @@ mod svg_support;
 
 use std::sync::Arc;
 
-use common::*;
+use common::pixel;
+#[path = "common/no_assets.rs"]
+mod no_assets;
+use no_assets::no_assets;
+#[path = "common/red.rs"]
+mod red;
+use red::red;
+#[path = "common/three_column_rgb_png.rs"]
+mod three_column_rgb_png;
 use svg_support::{assert_pixels_close, data_url_bytes, embedded_png, rasterize};
+use three_column_rgb_png::three_column_rgb_png;
+use zenith_core::{AssetKind, BytesAssetProvider, BytesFontProvider, FontStyle, default_provider};
+use zenith_layout::{
+    FontFaceStore, RustybuzzEngine, ShapeRequest, TextDirection, TextLayoutEngine,
+};
+use zenith_render::render_image;
 use zenith_render::{render_svg, render_svg_with};
 use zenith_scene::ir::SvgStyle;
+use zenith_scene::{Color, FitMode, ImageClip, Scene, SceneCommand, SceneGlyph, SrcRect};
 
 fn text_scene(text: &str, stroke: bool) -> Scene {
     let fonts = default_provider();

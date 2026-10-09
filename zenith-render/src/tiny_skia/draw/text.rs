@@ -9,6 +9,7 @@ use zenith_scene::SceneCommand;
 
 use super::super::commands::DrawCtx;
 use super::super::paths::GlyphOutlinePen;
+use super::super::surface::{draw_pixmap, fill_path, stroke_path};
 
 pub(in crate::tiny_skia) fn draw_glyph_run(
     target: &mut Pixmap,
@@ -107,9 +108,9 @@ pub(in crate::tiny_skia) fn draw_glyph_run(
                 quality: FilterQuality::Bilinear,
                 ..Default::default()
             };
-            target.draw_pixmap(
-                0,
-                0,
+            draw_pixmap(
+                target,
+                ctx.surface,
                 decoded.as_ref(),
                 &emoji_paint,
                 emoji_ts,
@@ -136,7 +137,9 @@ pub(in crate::tiny_skia) fn draw_glyph_run(
             None => continue,
         };
 
-        target.fill_path(
+        fill_path(
+            target,
+            ctx.surface,
             &path,
             &paint,
             FillRule::Winding,
@@ -156,7 +159,15 @@ pub(in crate::tiny_skia) fn draw_glyph_run(
                 width: *sw as f32,
                 ..Default::default()
             };
-            target.stroke_path(&path, &spaint, &sstroke, ctx.current_ts, mask.as_ref());
+            stroke_path(
+                target,
+                ctx.surface,
+                &path,
+                &spaint,
+                &sstroke,
+                ctx.current_ts,
+                mask.as_ref(),
+            );
         }
     }
 }

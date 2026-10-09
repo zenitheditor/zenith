@@ -3,7 +3,16 @@
 //! `TinySkiaBackend` directly.
 
 mod common;
-use common::*;
+use common::pixel;
+#[path = "common/make_solid_red_scene.rs"]
+mod make_solid_red_scene;
+use make_solid_red_scene::make_solid_red_scene;
+#[path = "common/no_assets.rs"]
+mod no_assets;
+use no_assets::no_assets;
+use zenith_core::default_provider;
+use zenith_render::{RasterBackend, TinySkiaBackend};
+use zenith_scene::{BlendMode, Color, Paint, Scene, SceneCommand, ShadowSpec};
 
 // ── Shadow (SHAD-2) ───────────────────────────────────────────────────
 

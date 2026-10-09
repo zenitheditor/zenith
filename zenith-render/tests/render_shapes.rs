@@ -3,8 +3,20 @@
 //! `TinySkiaBackend` directly.
 
 mod common;
-use common::*;
+use common::pixel;
+#[path = "common/make_solid_red_scene.rs"]
+mod make_solid_red_scene;
+use make_solid_red_scene::make_solid_red_scene;
+#[path = "common/no_assets.rs"]
+mod no_assets;
+use no_assets::no_assets;
+#[path = "common/red.rs"]
+mod red;
+use red::red;
+use zenith_core::default_provider;
+use zenith_render::{RasterBackend, TinySkiaBackend, render_png};
 use zenith_scene::ir::{FillRule, PathSegment};
+use zenith_scene::{Color, Paint, Scene, SceneCommand, StrokeAlign};
 
 // ── pixel correctness ─────────────────────────────────────────────────
 

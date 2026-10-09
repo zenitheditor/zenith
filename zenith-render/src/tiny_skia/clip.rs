@@ -20,6 +20,7 @@ use std::rc::Rc;
 use tiny_skia::{FillRule, Mask, Path, PathBuilder, Rect, Transform};
 
 use super::paths::{build_rounded_rect_path, clip_mask};
+use super::surface::{Surface, mask_fill_path};
 
 /// True when `ts` maps rectangles to axis-aligned rectangles (scale and
 /// translate only, no rotation or skew).
@@ -31,20 +32,19 @@ pub(super) fn is_axis_aligned(ts: Transform) -> bool {
 ///
 /// An axis-aligned `ts` keeps the `parent` shape (its bounds go into the rect
 /// part). Otherwise the rect is filled under `ts` (anti-aliased) into a
-/// `width × height` mask and multiplied with `parent`. Returns an all-zero
+/// surface-sized mask and multiplied with `parent`. Returns an all-zero
 /// mask for a degenerate rect, so the clip hides everything.
 pub(super) fn push_clip_shape(
     parent: Option<&Rc<Mask>>,
     ts: Transform,
     (x, y, w, h): (f64, f64, f64, f64),
-    width: u32,
-    height: u32,
+    surface: Surface,
 ) -> Option<Rc<Mask>> {
     if is_axis_aligned(ts) {
         return parent.cloned();
     }
     let path = Rect::from_xywh(x as f32, y as f32, w as f32, h as f32).map(PathBuilder::from_rect);
-    shape_mask(parent, path.as_ref(), ts, width, height)
+    shape_mask(parent, path.as_ref(), ts, surface)
 }
 
 /// The clip shape after pushing the user-space rounded rect `(x, y, w, h)`
@@ -57,26 +57,24 @@ pub(super) fn push_rounded_clip_shape(
     ts: Transform,
     (x, y, w, h): (f64, f64, f64, f64),
     radius: f64,
-    width: u32,
-    height: u32,
+    surface: Surface,
 ) -> Option<Rc<Mask>> {
     let r = radius as f32;
     let path = build_rounded_rect_path(x as f32, y as f32, w as f32, h as f32, [r; 4]);
-    shape_mask(parent, path.as_ref(), ts, width, height)
+    shape_mask(parent, path.as_ref(), ts, surface)
 }
 
-/// Fill `path` under `ts` (anti-aliased) into a page-sized mask and multiply
-/// it with `parent`. A missing path yields an all-zero mask.
+/// Fill `path` under `ts` (anti-aliased) into a surface-sized mask and
+/// multiply it with `parent`. A missing path yields an all-zero mask.
 fn shape_mask(
     parent: Option<&Rc<Mask>>,
     path: Option<&Path>,
     ts: Transform,
-    width: u32,
-    height: u32,
+    surface: Surface,
 ) -> Option<Rc<Mask>> {
-    let mut mask = Mask::new(width, height)?;
+    let mut mask = Mask::new(surface.w, surface.h)?;
     if let Some(path) = path {
-        mask.fill_path(path, FillRule::Winding, true, ts);
+        mask_fill_path(&mut mask, surface, path, FillRule::Winding, true, ts);
     }
     if let Some(parent) = parent {
         intersect_masks(&mut mask, parent);
@@ -103,11 +101,10 @@ pub(super) fn intersect_masks(dst: &mut Mask, other: &Mask) {
 /// exactly [`clip_mask`].
 pub(super) fn draw_clip_mask(
     rect: (f64, f64, f64, f64),
-    width: u32,
-    height: u32,
+    surface: Surface,
     shape: Option<&Mask>,
 ) -> Option<Option<Mask>> {
-    let base = clip_mask(rect, width, height)?;
+    let base = clip_mask(rect, surface)?;
     let Some(shape) = shape else {
         return Some(base);
     };
@@ -128,13 +125,14 @@ mod tests {
     fn axis_aligned_push_keeps_parent() {
         let ts = Transform::from_scale(0.5, 2.0).post_translate(3.0, 4.0);
         assert!(is_axis_aligned(ts));
-        assert!(push_clip_shape(None, ts, (0.0, 0.0, 10.0, 10.0), 20, 20).is_none());
+        assert!(push_clip_shape(None, ts, (0.0, 0.0, 10.0, 10.0), Surface::page(20, 20)).is_none());
     }
 
     #[test]
     fn rotated_push_builds_quad() {
         let ts = Transform::from_rotate_at(45.0, 10.0, 10.0);
-        let shape = push_clip_shape(None, ts, (5.0, 5.0, 10.0, 10.0), 20, 20).expect("quad mask");
+        let shape = push_clip_shape(None, ts, (5.0, 5.0, 10.0, 10.0), Surface::page(20, 20))
+            .expect("quad mask");
         let at = |x: u32, y: u32| shape.data()[(y * 20 + x) as usize];
         assert_eq!(at(10, 10), 255, "center inside the diamond");
         assert_eq!(at(5, 5), 0, "bbox corner outside the diamond");
@@ -142,8 +140,8 @@ mod tests {
 
     #[test]
     fn draw_mask_without_shape_is_rect_mask() {
-        let a = draw_clip_mask((0.0, 0.0, 5.0, 5.0), 10, 10, None);
-        let b = clip_mask((0.0, 0.0, 5.0, 5.0), 10, 10);
+        let a = draw_clip_mask((0.0, 0.0, 5.0, 5.0), Surface::page(10, 10), None);
+        let b = clip_mask((0.0, 0.0, 5.0, 5.0), Surface::page(10, 10));
         assert_eq!(
             a.map(|m| m.map(|m| m.data().to_vec())),
             b.map(|m| m.map(|m| m.data().to_vec()))

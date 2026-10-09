@@ -3,7 +3,24 @@
 //! `TinySkiaBackend` directly.
 
 mod common;
-use common::*;
+use common::pixel;
+#[path = "common/no_assets.rs"]
+mod no_assets;
+use no_assets::no_assets;
+use zenith_core::{BytesFontProvider, FontStyle, default_provider};
+use zenith_layout::{
+    FontFaceStore, RustybuzzEngine, ShapeRequest, TextDirection, TextLayoutEngine,
+};
+use zenith_render::{RasterBackend, TinySkiaBackend, render_image, render_png};
+use zenith_scene::{Color, Scene, SceneCommand, SceneGlyph};
+
+fn backend_render(scene: &Scene, provider: &BytesFontProvider) -> Vec<u8> {
+    let backend = TinySkiaBackend;
+    backend
+        .rasterize(scene, provider, &no_assets())
+        .expect("rasterize must succeed")
+        .rgba
+}
 
 // ── glyph: draws pixels ───────────────────────────────────────────────
 

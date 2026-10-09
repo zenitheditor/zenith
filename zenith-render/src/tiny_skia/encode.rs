@@ -61,6 +61,46 @@ fn png_channel(alpha: u8, straight: u8) -> u8 {
     (f64::from(premul) / a + 0.5) as u8
 }
 
+/// Premultiplied channel → the byte the PNG holds: [`straight_lut`] then
+/// [`png_lut`] folded into one table (a composition of two tables is exact).
+fn premul_png_lut() -> &'static ChannelLut {
+    static LUT: OnceLock<ChannelLut> = OnceLock::new();
+    LUT.get_or_init(|| {
+        ChannelLut::build(|alpha, value| {
+            png_channel(alpha, premultiplied_to_straight(value, 0, 0, alpha).0)
+        })
+    })
+}
+
+/// Encode premultiplied RGBA8 `rows` (each `width * 4` bytes, `height` of
+/// them) to the PNG bytes [`encode_straight_png`] gives for their straight
+/// image, in one pass and one pixel buffer.
+pub(super) fn encode_premultiplied_rows<'a>(
+    width: u32,
+    height: u32,
+    rows: impl Iterator<Item = &'a [u8]>,
+) -> Result<Vec<u8>, RenderError> {
+    let lut = premul_png_lut();
+    let row_len = width as usize * 4;
+    let mut pixels = vec![0u8; row_len * height as usize];
+    let mut filled = 0;
+    for (dst, row) in pixels.chunks_exact_mut(row_len.max(1)).zip(rows) {
+        if row.len() != row_len {
+            return Err(RenderError::new(
+                "pixel row length mismatch during PNG encoding",
+            ));
+        }
+        map_rgb_into(dst, row, lut);
+        filled += 1;
+    }
+    if filled != height as usize {
+        return Err(RenderError::new(
+            "pixel buffer length mismatch during PNG encoding",
+        ));
+    }
+    write_png(width, height, &pixels)
+}
+
 /// Convert premultiplied RGBA8 to straight RGBA8. Alpha passes through.
 pub(super) fn premultiplied_to_straight_rgba(premul: &[u8]) -> Vec<u8> {
     map_rgb(premul, straight_lut())
@@ -68,6 +108,12 @@ pub(super) fn premultiplied_to_straight_rgba(premul: &[u8]) -> Vec<u8> {
 
 fn map_rgb(src: &[u8], lut: &ChannelLut) -> Vec<u8> {
     let mut out = vec![0u8; src.len()];
+    map_rgb_into(&mut out, src, lut);
+    out
+}
+
+/// [`map_rgb`] into `out` (as long as `src`).
+fn map_rgb_into(out: &mut [u8], src: &[u8], lut: &ChannelLut) {
     for (dst, px) in out
         .as_chunks_mut::<4>()
         .0
@@ -81,7 +127,6 @@ fn map_rgb(src: &[u8], lut: &ChannelLut) -> Vec<u8> {
         *db = row[usize::from(*b)];
         *da = *a;
     }
-    out
 }
 
 /// Encode a straight-alpha image to PNG bytes.
@@ -103,14 +148,24 @@ pub(super) fn encode_straight_png(image: &RasterImage) -> Result<Vec<u8>, Render
     }
 
     let pixels = map_rgb(&image.rgba, png_lut());
+    write_png(image.width, image.height, &pixels)
+}
 
+/// Write PNG-ready RGBA8 `pixels` as PNG bytes, with the settings of
+/// [`encode_straight_png`].
+fn write_png(width: u32, height: u32, pixels: &[u8]) -> Result<Vec<u8>, RenderError> {
+    if width == 0 || height == 0 {
+        return Err(RenderError::new(format!(
+            "failed to allocate pixmap for encoding ({width}×{height})"
+        )));
+    }
     let png_err = |e: png::EncodingError| RenderError::new(format!("PNG encoding failed: {e}"));
     let mut data = Vec::new();
-    let mut encoder = png::Encoder::new(&mut data, image.width, image.height);
+    let mut encoder = png::Encoder::new(&mut data, width, height);
     encoder.set_color(png::ColorType::Rgba);
     encoder.set_depth(png::BitDepth::Eight);
     let mut writer = encoder.write_header().map_err(png_err)?;
-    writer.write_image_data(&pixels).map_err(png_err)?;
+    writer.write_image_data(pixels).map_err(png_err)?;
     writer.finish().map_err(png_err)?;
     Ok(data)
 }

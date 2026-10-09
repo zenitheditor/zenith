@@ -5,10 +5,22 @@ mod svg_support;
 
 use std::sync::Arc;
 
-use common::*;
+use common::pixel;
+#[path = "common/no_assets.rs"]
+mod no_assets;
+use no_assets::no_assets;
+#[path = "common/red.rs"]
+mod red;
+use red::red;
+#[path = "common/swatch_png.rs"]
+mod swatch_png;
 use svg_font_support::{bitmap_font, font_collection};
 use svg_support::{assert_pixels_close, data_url_bytes, embedded_png, rasterize};
+use swatch_png::SWATCH_PNG;
+use zenith_core::{BytesFontProvider, FontStyle};
+use zenith_render::render_image;
 use zenith_render::{SvgRasterizationReason, render_svg_with};
+use zenith_scene::{Paint, Scene, SceneCommand, SceneGlyph};
 
 fn glyph_scene(font_id: String, glyph_id: u16) -> Scene {
     let mut scene = Scene::new(40.0, 40.0);

@@ -11,6 +11,7 @@ use zenith_scene::ShadowSpec;
 
 use super::blur::{BlurScratch, gaussian_blur_premul};
 use super::crop::{Region, blur_crop, copy_region, draw_at, draw_region, ink_bbox};
+use super::pool::Dirty;
 
 /// Local alias for the scene `Color` carried inside a `ShadowSpec`, so this
 /// helper does not need to import the scene `Color` name (which would collide
@@ -22,10 +23,15 @@ type SceneColor = zenith_scene::Color;
 /// Layers are painted in REVERSE declared order so the first-declared layer ends
 /// up on top of later layers (all behind the ink). `canvas` and `ink` are
 /// page-sized. Each layer works only on the ink's bounding box grown by the
-/// layer's blur reach (see `crop`). Empty ink draws nothing.
-pub(super) fn composite_shadows(canvas: &mut Pixmap, ink: &Pixmap, shadows: &[ShadowSpec]) {
+/// layer's blur reach (see `crop`). Empty ink draws nothing. Returns where
+/// `ink` can hold non-zero bytes (its bounding box), for reuse.
+pub(super) fn composite_shadows(
+    canvas: &mut Pixmap,
+    ink: &Pixmap,
+    shadows: &[ShadowSpec],
+) -> Dirty {
     let Some(bbox) = ink_bbox(ink) else {
-        return;
+        return Dirty::Clean;
     };
     let (width, height) = (ink.width(), ink.height());
     let paint = PixmapPaint::default(); // source-over, opacity 1.0
@@ -54,28 +60,31 @@ pub(super) fn composite_shadows(canvas: &mut Pixmap, ink: &Pixmap, shadows: &[Sh
 
     // Crisp ink on top of every shadow.
     draw_region(canvas, ink, bbox, &paint);
+    Dirty::Region(bbox)
 }
 
 /// Blur page-sized `ink` by `sigma` and composite it onto `target`.
 ///
 /// The blur runs on the ink's bounding box grown by the blur reach. Empty ink
 /// draws nothing. On allocation failure the full page is blurred in place.
-pub(super) fn composite_blur(target: &mut Pixmap, mut ink: Pixmap, sigma: f64) {
-    let Some(bbox) = ink_bbox(&ink) else {
-        return;
+/// Returns where `ink` can hold non-zero bytes afterwards, for reuse.
+pub(super) fn composite_blur(target: &mut Pixmap, ink: &mut Pixmap, sigma: f64) -> Dirty {
+    let Some(bbox) = ink_bbox(ink) else {
+        return Dirty::Clean;
     };
     let paint = PixmapPaint::default();
     let mut scratch = BlurScratch::default();
     let crop = blur_crop(bbox, sigma, ink.width(), ink.height());
     if let Some(crop) = crop
-        && let Some(mut part) = copy_region(&ink, crop)
+        && let Some(mut part) = copy_region(ink, crop)
     {
         gaussian_blur_premul(&mut part, sigma, &mut scratch);
         draw_at(target, &part, i64::from(crop.x), i64::from(crop.y), &paint);
-        return;
+        return Dirty::Region(bbox);
     }
-    gaussian_blur_premul(&mut ink, sigma, &mut scratch);
-    draw_at(target, &ink, 0, 0, &paint);
+    gaussian_blur_premul(ink, sigma, &mut scratch);
+    draw_at(target, ink, 0, 0, &paint);
+    Dirty::All
 }
 
 /// Round a shadow offset to the nearest integer pixel, deterministically and
@@ -98,14 +107,11 @@ fn round_offset(v: f64) -> i32 {
 /// alpha of `region` of the page-sized `ink`.
 ///
 /// For each pixel: straight alpha = `ink_alpha * (color.a / 255)`, color =
-/// `color.rgb`; written PREMULTIPLIED. `shadow` has the size of `region`.
-/// Iterates in lockstep via `chunks_exact(4)`, which guarantees exactly 4 bytes
-/// per chunk; direct indexing is panic-free. Rows outside `ink` stay zero.
+/// `color.rgb`; written PREMULTIPLIED. The output depends on the ink alpha
+/// alone, so the 256 possible pixels come from a table built once per call.
+/// `shadow` has the size of `region`. Rows outside `ink` stay zero.
 fn tint_coverage(shadow: &mut Pixmap, ink: &Pixmap, region: Region, color: SceneColor) {
-    let ca = u32::from(color.a);
-    let cr = u32::from(color.r);
-    let cg = u32::from(color.g);
-    let cb = u32::from(color.b);
+    let table = tint_table(color);
     let ink_stride = ink.width() as usize * 4;
     let row_len = region.w as usize * 4;
     let x_off = region.x as usize * 4;
@@ -123,19 +129,26 @@ fn tint_coverage(shadow: &mut Pixmap, ink: &Pixmap, region: Region, color: Scene
         {
             // tiny-skia premultiplied RGBA: byte 3 is alpha (coverage). The ink's
             // premultiplied alpha equals its straight alpha (alpha is never scaled).
-            let ink_a = u32::from(inp[3]);
-            // straight shadow alpha = ink_a * ca / 255, rounded.
-            let a = ((ink_a * ca) + 127) / 255;
-            // Premultiply the (constant) color by this alpha.
-            let pr = ((cr * a) + 127) / 255;
-            let pg = ((cg * a) + 127) / 255;
-            let pb = ((cb * a) + 127) / 255;
-            out[0] = pr.min(255) as u8;
-            out[1] = pg.min(255) as u8;
-            out[2] = pb.min(255) as u8;
-            out[3] = a.min(255) as u8;
+            if let Some(px) = table.get(usize::from(inp[3])) {
+                *out = *px;
+            }
         }
     }
+}
+
+/// The premultiplied shadow pixel for each ink alpha: straight alpha
+/// `a = (ink_a * color.a + 127) / 255`, then each color channel
+/// `(c * a + 127) / 255`.
+fn tint_table(color: SceneColor) -> [[u8; 4]; 256] {
+    let ca = u32::from(color.a);
+    let (cr, cg, cb) = (u32::from(color.r), u32::from(color.g), u32::from(color.b));
+    let mut table = [[0u8; 4]; 256];
+    for (ink_a, px) in (0u32..).zip(table.iter_mut()) {
+        let a = ((ink_a * ca) + 127) / 255;
+        let premul = |c: u32| (((c * a) + 127) / 255).min(255) as u8;
+        *px = [premul(cr), premul(cg), premul(cb), a.min(255) as u8];
+    }
+    table
 }
 
 #[cfg(test)]
@@ -284,7 +297,8 @@ mod tests {
         let mut full = backdrop();
         reference_blur(&mut full, ink.clone(), sigma);
         let mut cropped = backdrop();
-        composite_blur(&mut cropped, ink.clone(), sigma);
+        let mut ink = ink.clone();
+        composite_blur(&mut cropped, &mut ink, sigma);
         assert_eq!(
             full.data(),
             cropped.data(),
@@ -295,6 +309,40 @@ mod tests {
     /// Circle centres that touch the left, right, top and bottom page edge.
     fn edge_centres() -> [(f32, f32); 4] {
         [(1.0, 24.0), (63.0, 20.0), (30.0, 1.0), (34.0, 47.0)]
+    }
+
+    /// The former per-pixel tint, kept as the byte reference.
+    fn reference_tint(ink_a: u8, color: SceneColor) -> [u8; 4] {
+        let ca = u32::from(color.a);
+        let a = ((u32::from(ink_a) * ca) + 127) / 255;
+        let premul = |c: u8| (((u32::from(c) * a) + 127) / 255).min(255) as u8;
+        [
+            premul(color.r),
+            premul(color.g),
+            premul(color.b),
+            a.min(255) as u8,
+        ]
+    }
+
+    #[test]
+    fn tint_table_matches_the_per_pixel_formula() {
+        for (r, g, b, a) in [
+            (0, 0, 0, 160),
+            (255, 255, 255, 255),
+            (8, 32, 63, 43),
+            (37, 194, 228, 102),
+            (1, 2, 3, 0),
+        ] {
+            let color = SceneColor::srgb(r, g, b, a);
+            let table = tint_table(color);
+            for ink_a in 0..=255u8 {
+                assert_eq!(
+                    table[usize::from(ink_a)],
+                    reference_tint(ink_a, color),
+                    "{color:?} at {ink_a}"
+                );
+            }
+        }
     }
 
     #[test]

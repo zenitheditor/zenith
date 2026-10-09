@@ -4,8 +4,9 @@
 //! each face at most once, on first use. Parsed faces borrow the store, so no
 //! struct refers to itself and no `unsafe` is needed.
 
-use std::cell::OnceCell;
+use std::cell::{OnceCell, RefCell};
 use std::collections::BTreeMap;
+use std::rc::Rc;
 use std::sync::Arc;
 
 use zenith_core::{FontData, FontProvider};
@@ -81,13 +82,31 @@ impl FontFaceStore {
 pub(super) struct FaceCache<'s> {
     store: &'s FontFaceStore,
     slots: Vec<OnceCell<Option<rustybuzz::Face<'s>>>>,
+    /// Shape plans by face slot, segment properties, and features.
+    plans: RefCell<BTreeMap<PlanKey, Rc<rustybuzz::ShapePlan>>>,
+}
+
+/// What a shape plan depends on besides the face: the slot, the direction,
+/// the script tag, the language, and the features (tag, value, start, end).
+type PlanKey = (usize, u8, u32, Option<String>, Vec<(u32, u32, u32, u32)>);
+
+/// The segment properties a shape plan is built for.
+pub(super) struct Segment<'a> {
+    pub(super) direction: rustybuzz::Direction,
+    pub(super) script: rustybuzz::Script,
+    pub(super) language: Option<&'a rustybuzz::Language>,
+    pub(super) features: &'a [rustybuzz::Feature],
 }
 
 impl<'s> FaceCache<'s> {
     /// Build an empty cache over `store`. Nothing parses yet.
     pub(super) fn new(store: &'s FontFaceStore) -> Self {
         let slots = store.faces.iter().map(|_| OnceCell::new()).collect();
-        Self { store, slots }
+        Self {
+            store,
+            slots,
+            plans: RefCell::new(BTreeMap::new()),
+        }
     }
 
     /// The store this cache reads from.
@@ -107,6 +126,47 @@ impl<'s> FaceCache<'s> {
                 rustybuzz::Face::from_slice(&data.bytes, data.index)
             })
             .as_ref()
+    }
+
+    /// The shape plan of the face at `slot` for `segment`, built on first
+    /// use. `rustybuzz::shape` builds the same plan from the same inputs on
+    /// every call, so a cached plan shapes exactly as it does.
+    pub(super) fn plan(
+        &self,
+        slot: usize,
+        segment: &Segment<'_>,
+    ) -> Option<Rc<rustybuzz::ShapePlan>> {
+        let direction = match segment.direction {
+            rustybuzz::Direction::Invalid => 0,
+            rustybuzz::Direction::LeftToRight => 1,
+            rustybuzz::Direction::RightToLeft => 2,
+            rustybuzz::Direction::TopToBottom => 3,
+            rustybuzz::Direction::BottomToTop => 4,
+        };
+        let key: PlanKey = (
+            slot,
+            direction,
+            segment.script.tag().as_u32(),
+            segment.language.map(|l| l.as_str().to_owned()),
+            segment
+                .features
+                .iter()
+                .map(|f| (f.tag.as_u32(), f.value, f.start, f.end))
+                .collect(),
+        );
+        if let Some(plan) = self.plans.borrow().get(&key) {
+            return Some(Rc::clone(plan));
+        }
+        let face = self.face(slot)?;
+        let plan = Rc::new(rustybuzz::ShapePlan::new(
+            face,
+            segment.direction,
+            Some(segment.script),
+            segment.language,
+            segment.features,
+        ));
+        self.plans.borrow_mut().insert(key, Rc::clone(&plan));
+        Some(plan)
     }
 
     /// Number of slots that hold a parse result.
@@ -145,10 +205,11 @@ mod tests {
             .expect("bundled face");
         assert!(store.slot_of(&own).is_some(), "same Arc must hit the store");
 
-        // A second provider holds the same font in a different allocation.
-        let other = default_provider()
-            .by_id("noto-sans-400-normal")
-            .expect("bundled face");
+        // The same font in a different allocation.
+        let other = FontData {
+            bytes: Arc::from(&own.bytes[..]),
+            ..own.clone()
+        };
         assert!(
             store.slot_of(&other).is_none(),
             "different bytes must miss the store"

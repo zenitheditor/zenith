@@ -6,6 +6,8 @@ use crate::engine::{
 };
 use crate::error::LayoutError;
 
+use super::face_cache::{FaceCache, Segment};
+
 /// One shaping call against an already-parsed face.
 ///
 /// `'r` is the request borrow. `'f` is the font-bytes borrow inside the face.
@@ -18,6 +20,8 @@ pub(super) struct FaceShapeRequest<'r, 'f> {
     features: &'r [FontFeature],
     kerning_pairs: &'r [KerningPairAdjustment],
     letter_spacing_px: f32,
+    /// The face cache and slot `face` came from, for cached shape plans.
+    plans: Option<(&'r FaceCache<'f>, usize)>,
 }
 
 impl<'r, 'f> FaceShapeRequest<'r, 'f> {
@@ -37,7 +41,15 @@ impl<'r, 'f> FaceShapeRequest<'r, 'f> {
             features: req.features,
             kerning_pairs: req.kerning_pairs,
             letter_spacing_px: req.letter_spacing_px,
+            plans: None,
         }
+    }
+
+    /// This request with `face` known as slot `slot` of `cache`: shape
+    /// plans come from the cache.
+    pub(super) fn with_plans(mut self, cache: &'r FaceCache<'f>, slot: usize) -> Self {
+        self.plans = Some((cache, slot));
+        self
     }
 }
 
@@ -89,7 +101,29 @@ pub(super) fn shape_run_with_face(
     });
 
     let features = rustybuzz_features(req.features);
-    let glyph_buffer = rustybuzz::shape(req.face, &features, buffer);
+    // `rustybuzz::shape` guesses the segment properties, builds a plan from
+    // them, and shapes with it. A stored face reuses the plan of equal
+    // properties. A buffer with no script keeps the plain call: the plan
+    // then gets no script, which `UnicodeBuffer::script` cannot express.
+    buffer.guess_segment_properties();
+    let script = buffer.script();
+    let language = buffer.language();
+    let plan = match req.plans {
+        Some((cache, slot)) if script != rustybuzz::script::UNKNOWN => cache.plan(
+            slot,
+            &Segment {
+                direction: buffer.direction(),
+                script,
+                language: language.as_ref(),
+                features: &features,
+            },
+        ),
+        Some(_) | None => None,
+    };
+    let glyph_buffer = match plan {
+        Some(plan) => rustybuzz::shape_with_plan(req.face, &plan, buffer),
+        None => rustybuzz::shape(req.face, &features, buffer),
+    };
 
     let infos = glyph_buffer.glyph_infos();
     let positions = glyph_buffer.glyph_positions();

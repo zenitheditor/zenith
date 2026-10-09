@@ -1,10 +1,20 @@
-mod common;
 mod svg_support;
 
-use common::*;
+#[path = "common/no_assets.rs"]
+mod no_assets;
+use no_assets::no_assets;
+#[path = "common/red.rs"]
+mod red;
+use red::red;
 use svg_support::{assert_pixels_close, data_url_bytes, embedded_png, rasterize};
+use zenith_core::default_provider;
+use zenith_render::render_image;
 use zenith_render::{SvgRasterizationReason, render_svg, render_svg_with};
 use zenith_scene::ir::{FillRule, FilterSpec, LineCap, MaskShape, MaskSpec, PathSegment};
+use zenith_scene::{
+    BlendMode, Color, GradientPaint, GradientStop, Paint, Scene, SceneCommand, ShadowSpec,
+    StrokeAlign,
+};
 
 fn rect(x: f64, y: f64, w: f64, h: f64) -> SceneCommand {
     SceneCommand::FillRect {

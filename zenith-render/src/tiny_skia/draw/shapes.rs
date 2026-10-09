@@ -3,7 +3,7 @@
 //! [`SceneCommand`] variant and draws into `target` under the shared
 //! [`DrawCtx`]; behavior is byte-identical to the prior inline match arms.
 
-use tiny_skia::{FillRule, Mask, Paint, PathBuilder, Pixmap, Rect, Stroke, Transform};
+use tiny_skia::{FillRule, Mask, Paint, PathBuilder, Pixmap, Rect, Stroke};
 use zenith_scene::{
     Paint as ScenePaint, SceneCommand, StrokeAlign, ir::path_segments_bbox,
     ir::path_segments_finite,
@@ -14,6 +14,9 @@ use super::super::gradient::gradient_shader;
 use super::super::paths::{
     build_align_mask, build_path_align_mask, build_poly_path, build_rounded_rect_path,
     build_scene_path, device_bounds, intersect_rects, tiny_skia_fill_rule,
+};
+use super::super::surface::{
+    fill_device_rect, fill_path as fill_path_on, stroke_path as stroke_path_on,
 };
 
 /// Build a tiny-skia fill paint from a scene [`ScenePaint`] over the bounding
@@ -106,7 +109,7 @@ pub(in crate::tiny_skia) fn fill_rect(target: &mut Pixmap, ctx: DrawCtx, cmd: &S
                 paint.anti_alias = false; // deterministic: no edge AA variance
 
                 // Drawing outside the pixmap simply touches no pixels; not an error.
-                target.fill_rect(rect, &paint, Transform::identity(), None);
+                fill_device_rect(target, ctx.surface, rect, &paint, None);
             } else {
                 // ── Rotated path: fill the rect as a path under the current
                 // transform, AA-on, masked by the (axis-aligned) clip. ──
@@ -121,7 +124,9 @@ pub(in crate::tiny_skia) fn fill_rect(target: &mut Pixmap, ctx: DrawCtx, cmd: &S
                 let mut paint = Paint::default();
                 paint.set_color_rgba8(color.r, color.g, color.b, color.a);
                 paint.anti_alias = true;
-                target.fill_path(
+                fill_path_on(
+                    target,
+                    ctx.surface,
                     &path,
                     &paint,
                     FillRule::Winding,
@@ -161,7 +166,9 @@ pub(in crate::tiny_skia) fn fill_rect(target: &mut Pixmap, ctx: DrawCtx, cmd: &S
             let Some(paint_ts) = ts_fill_paint(paint, *x, *y, *w, *h) else {
                 return;
             };
-            target.fill_path(
+            fill_path_on(
+                target,
+                ctx.surface,
                 &path,
                 &paint_ts,
                 FillRule::Winding,
@@ -239,7 +246,9 @@ pub(in crate::tiny_skia) fn fill_ellipse(target: &mut Pixmap, ctx: DrawCtx, cmd:
         return;
     };
 
-    target.fill_path(
+    fill_path_on(
+        target,
+        ctx.surface,
         &path,
         &paint_ts,
         FillRule::Winding,
@@ -333,7 +342,15 @@ pub(in crate::tiny_skia) fn stroke_ellipse(target: &mut Pixmap, ctx: DrawCtx, cm
     // AA-on: curved stroke edge, deterministic same-machine.
     paint.anti_alias = true;
 
-    target.stroke_path(&path, &paint, &stroke, ctx.current_ts, mask.as_ref());
+    stroke_path_on(
+        target,
+        ctx.surface,
+        &path,
+        &paint,
+        &stroke,
+        ctx.current_ts,
+        mask.as_ref(),
+    );
 }
 
 pub(in crate::tiny_skia) fn stroke_line(target: &mut Pixmap, ctx: DrawCtx, cmd: &SceneCommand) {
@@ -414,7 +431,15 @@ pub(in crate::tiny_skia) fn stroke_line(target: &mut Pixmap, ctx: DrawCtx, cmd: 
     // same-machine like ellipse/glyph fills.
     paint.anti_alias = true;
 
-    target.stroke_path(&path, &paint, &stroke, ctx.current_ts, mask.as_ref());
+    stroke_path_on(
+        target,
+        ctx.surface,
+        &path,
+        &paint,
+        &stroke,
+        ctx.current_ts,
+        mask.as_ref(),
+    );
 }
 
 pub(in crate::tiny_skia) fn fill_polygon(target: &mut Pixmap, ctx: DrawCtx, cmd: &SceneCommand) {
@@ -453,7 +478,9 @@ pub(in crate::tiny_skia) fn fill_polygon(target: &mut Pixmap, ctx: DrawCtx, cmd:
         return;
     };
 
-    target.fill_path(
+    fill_path_on(
+        target,
+        ctx.surface,
         &path,
         &paint_ts,
         tiny_skia_fill_rule(*fill_rule),
@@ -513,8 +540,7 @@ pub(in crate::tiny_skia) fn stroke_polyline(target: &mut Pixmap, ctx: DrawCtx, c
             *align,
             *clip_fill_rule,
             effective_clip,
-            ctx.width,
-            ctx.height,
+            ctx.surface,
             ctx.current_ts,
         )
         .map(|m| ctx.restrict(m)),
@@ -538,7 +564,15 @@ pub(in crate::tiny_skia) fn stroke_polyline(target: &mut Pixmap, ctx: DrawCtx, c
         None => mask.as_ref(),
     };
 
-    target.stroke_path(&path, &paint, &stroke, ctx.current_ts, draw_mask);
+    stroke_path_on(
+        target,
+        ctx.surface,
+        &path,
+        &paint,
+        &stroke,
+        ctx.current_ts,
+        draw_mask,
+    );
 }
 
 pub(in crate::tiny_skia) fn fill_path(target: &mut Pixmap, ctx: DrawCtx, cmd: &SceneCommand) {
@@ -567,7 +601,9 @@ pub(in crate::tiny_skia) fn fill_path(target: &mut Pixmap, ctx: DrawCtx, cmd: &S
     let Some(paint_ts) = ts_fill_paint(paint, bx, by, bw, bh) else {
         return;
     };
-    target.fill_path(
+    fill_path_on(
+        target,
+        ctx.surface,
         &path,
         &paint_ts,
         tiny_skia_fill_rule(*fill_rule),
@@ -617,8 +653,7 @@ pub(in crate::tiny_skia) fn stroke_path(target: &mut Pixmap, ctx: DrawCtx, cmd: 
             *align,
             *clip_fill_rule,
             effective_clip,
-            ctx.width,
-            ctx.height,
+            ctx.surface,
             ctx.current_ts,
         )
         .map(|m| ctx.restrict(m)),
@@ -650,7 +685,15 @@ pub(in crate::tiny_skia) fn stroke_path(target: &mut Pixmap, ctx: DrawCtx, cmd: 
         Some(m) => Some(m),
         None => mask.as_ref(),
     };
-    target.stroke_path(&path, &paint, &stroke, ctx.current_ts, draw_mask);
+    stroke_path_on(
+        target,
+        ctx.surface,
+        &path,
+        &paint,
+        &stroke,
+        ctx.current_ts,
+        draw_mask,
+    );
 }
 
 pub(in crate::tiny_skia) fn stroke_rect(target: &mut Pixmap, ctx: DrawCtx, cmd: &SceneCommand) {
@@ -720,7 +763,15 @@ pub(in crate::tiny_skia) fn stroke_rect(target: &mut Pixmap, ctx: DrawCtx, cmd: 
     paint.set_color_rgba8(color.r, color.g, color.b, color.a);
     paint.anti_alias = true;
 
-    target.stroke_path(&path, &paint, &stroke, ctx.current_ts, mask.as_ref());
+    stroke_path_on(
+        target,
+        ctx.surface,
+        &path,
+        &paint,
+        &stroke,
+        ctx.current_ts,
+        mask.as_ref(),
+    );
 }
 
 pub(in crate::tiny_skia) fn fill_rounded_rect(
@@ -778,7 +829,9 @@ pub(in crate::tiny_skia) fn fill_rounded_rect(
         return;
     };
 
-    target.fill_path(
+    fill_path_on(
+        target,
+        ctx.surface,
         &path,
         &paint_ts,
         FillRule::Winding,
@@ -862,5 +915,13 @@ pub(in crate::tiny_skia) fn stroke_rounded_rect(
     paint.set_color_rgba8(color.r, color.g, color.b, color.a);
     paint.anti_alias = true;
 
-    target.stroke_path(&path, &paint, &stroke, ctx.current_ts, mask.as_ref());
+    stroke_path_on(
+        target,
+        ctx.surface,
+        &path,
+        &paint,
+        &stroke,
+        ctx.current_ts,
+        mask.as_ref(),
+    );
 }

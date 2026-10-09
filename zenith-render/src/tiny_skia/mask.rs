@@ -19,6 +19,7 @@ use zenith_scene::{MaskShape, MaskSpec};
 use super::blur::{BlurScratch, gaussian_blur_premul};
 use super::crop::{Region, blur_crop};
 use super::paths::build_rounded_rect_path;
+use super::surface::{Surface, mask_fill_path};
 
 /// Attenuate `pm` (premultiplied RGBA8) in place by the coverage field described
 /// by `spec`.
@@ -32,9 +33,14 @@ use super::paths::build_rounded_rect_path;
 /// preserved). If the coverage buffer cannot be built (allocation failure), `pm`
 /// is left untouched — the ink then composites unmasked (a safe degrade, never a
 /// panic).
-pub(super) fn attenuate_by_mask(pm: &mut Pixmap, spec: &MaskSpec, region: Region) {
-    let (width, height) = (pm.width(), pm.height());
-    let Some(coverage) = build_mask_coverage(spec, width, height, region) else {
+pub(super) fn attenuate_by_mask(
+    pm: &mut Pixmap,
+    spec: &MaskSpec,
+    region: Region,
+    surface: Surface,
+) {
+    let width = pm.width();
+    let Some(coverage) = build_mask_coverage(spec, surface, region) else {
         return; // alloc failure → degrade: leave ink unmasked
     };
 
@@ -59,22 +65,19 @@ pub(super) fn attenuate_by_mask(pm: &mut Pixmap, spec: &MaskSpec, region: Region
     }
 }
 
-/// Build the coverage of `region` for `spec` on a `width` x `height` page.
+/// Build the coverage of `region` for `spec` on `surface`.
 ///
-/// The result holds one byte `0..=255` per pixel of `region`, row-major. The
-/// shape is rasterized page-sized, so its anti-aliasing matches the full page.
+/// `spec` is in full-page device space. `region` is in surface pixels. The
+/// result holds one byte `0..=255` per pixel of `region`, row-major. The shape
+/// is rasterized surface-sized, so its anti-aliasing matches the full page.
 /// A feather blurs only `region` grown by the blur reach (see `crop`). Pixels at
 /// least that far inside an interior crop edge read the same window as a
 /// full-page blur, so the coverage in `region` is byte-identical.
 ///
 /// Returns `None` on any allocation failure or degenerate geometry, in which
 /// case the caller leaves the ink unmasked.
-fn build_mask_coverage(
-    spec: &MaskSpec,
-    width: u32,
-    height: u32,
-    region: Region,
-) -> Option<Vec<u8>> {
+fn build_mask_coverage(spec: &MaskSpec, surface: Surface, region: Region) -> Option<Vec<u8>> {
+    let (width, height) = (surface.w, surface.h);
     let mut mask = Mask::new(width, height)?;
 
     // Build the shape path in device space at (x, y, w, h).
@@ -98,7 +101,14 @@ fn build_mask_coverage(
     // AA on: curved shapes need sub-pixel coverage; deterministic same-machine
     // (matches build_align_mask). Identity transform — spec coords are already
     // device/page-absolute pixels.
-    mask.fill_path(&path, FillRule::Winding, true, Transform::identity());
+    mask_fill_path(
+        &mut mask,
+        surface,
+        &path,
+        FillRule::Winding,
+        true,
+        Transform::identity(),
+    );
 
     // Coverage = the mask's single alpha channel, optionally feathered.
     let mut coverage: Vec<u8> = if spec.feather > 0.0 {
@@ -206,14 +216,24 @@ mod tests {
     fn full_rect_no_invert_leaves_pixmap_unchanged() {
         let mut pm = red_pixmap(8, 6);
         let before = pm.data().to_vec();
-        attenuate_by_mask(&mut pm, &rect_spec(8.0, 6.0, false), full(8, 6));
+        attenuate_by_mask(
+            &mut pm,
+            &rect_spec(8.0, 6.0, false),
+            full(8, 6),
+            Surface::page(8, 6),
+        );
         assert_eq!(pm.data(), &before[..], "coverage 255 → no change");
     }
 
     #[test]
     fn full_rect_inverted_makes_pixmap_transparent() {
         let mut pm = red_pixmap(8, 6);
-        attenuate_by_mask(&mut pm, &rect_spec(8.0, 6.0, true), full(8, 6));
+        attenuate_by_mask(
+            &mut pm,
+            &rect_spec(8.0, 6.0, true),
+            full(8, 6),
+            Surface::page(8, 6),
+        );
         assert!(
             pm.data().iter().all(|&b| b == 0),
             "inverted full coverage → fully transparent",
@@ -234,7 +254,7 @@ mod tests {
             w: f64::from(w),
             h: f64::from(h),
         };
-        attenuate_by_mask(&mut pm, &spec, full(w, h));
+        attenuate_by_mask(&mut pm, &spec, full(w, h), Surface::page(w, h));
         let data = pm.data();
         // Corner pixel (0,0) is outside the inscribed ellipse → transparent.
         assert_eq!(data.get(3).copied(), Some(0), "corner alpha is 0");
@@ -261,15 +281,17 @@ mod tests {
             w: 30.0,
             h: 20.0,
         };
-        let a = build_mask_coverage(&spec, 32, 24, full(32, 24)).expect("coverage a");
-        let b = build_mask_coverage(&spec, 32, 24, full(32, 24)).expect("coverage b");
+        let page = Surface::page(32, 24);
+        let a = build_mask_coverage(&spec, page, full(32, 24)).expect("coverage a");
+        let b = build_mask_coverage(&spec, page, full(32, 24)).expect("coverage b");
         assert_eq!(a, b, "two identical calls must be byte-identical");
     }
 
     /// Cropped feather coverage equals the full-page coverage inside `region`.
     fn assert_region_coverage_matches(spec: &MaskSpec, w: u32, h: u32, region: Region) {
-        let page = build_mask_coverage(spec, w, h, full(w, h)).expect("page coverage");
-        let cropped = build_mask_coverage(spec, w, h, region).expect("region coverage");
+        let surface = Surface::page(w, h);
+        let page = build_mask_coverage(spec, surface, full(w, h)).expect("page coverage");
+        let cropped = build_mask_coverage(spec, surface, region).expect("region coverage");
         let mut expected = Vec::new();
         for y in region.y..region.y + region.h {
             let start = (y * w + region.x) as usize;
@@ -369,7 +391,7 @@ mod tests {
             }
         }
         let mut full_page = ink.clone();
-        attenuate_by_mask(&mut full_page, &spec, full(w, h));
+        attenuate_by_mask(&mut full_page, &spec, full(w, h), Surface::page(w, h));
         let mut cropped = ink.clone();
         let bbox = Region {
             x: 10,
@@ -377,7 +399,7 @@ mod tests {
             w: 6,
             h: 6,
         };
-        attenuate_by_mask(&mut cropped, &spec, bbox);
+        attenuate_by_mask(&mut cropped, &spec, bbox, Surface::page(w, h));
         assert_eq!(full_page.data(), cropped.data());
     }
 }

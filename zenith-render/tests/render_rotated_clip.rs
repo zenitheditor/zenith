@@ -2,7 +2,21 @@
 //! axis-aligned bounding box. Axis-aligned clips keep the exact rect path.
 
 mod common;
-use common::*;
+use common::pixel;
+#[path = "common/no_assets.rs"]
+mod no_assets;
+use no_assets::no_assets;
+#[path = "common/red.rs"]
+mod red;
+use red::red;
+#[path = "common/swatch_png.rs"]
+mod swatch_png;
+#[path = "common/swatch_provider.rs"]
+mod swatch_provider;
+use swatch_provider::swatch_provider;
+use zenith_core::default_provider;
+use zenith_render::{render_image, render_png};
+use zenith_scene::{FitMode, Paint, Scene, SceneCommand};
 
 /// A 100×100 transparent page with a 40×20 box centered at (50, 50), rotated
 /// 45° about its center, holding the swatch with `fit="cover"` (2×2 source

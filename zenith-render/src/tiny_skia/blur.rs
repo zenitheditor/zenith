@@ -8,6 +8,8 @@
 
 use tiny_skia::Pixmap;
 
+use super::crop::first_non_zero;
+
 /// Largest box window that divides by multiply-shift. Wider boxes use `/`.
 ///
 /// Exactness proof: let `d` be the window and `m = ceil(2^32 / d)`, so
@@ -18,14 +20,32 @@ use tiny_skia::Pixmap;
 /// `mul_shift_matches_division_for_every_window` checks every case exhaustively.
 const MUL_SHIFT_MAX_WINDOW: u32 = 1023;
 
+/// Largest box window that divides by a 32-bit multiply-shift
+/// ([`MulShift32`]). Wider boxes use [`MulShift`].
+///
+/// Exactness proof: let `d` be the window and `m = ceil(2^23 / d)`, so
+/// `m * d = 2^23 + e` with `0 < e < d` (`d` is odd). For `n = q * d + r`
+/// with `r < d`, `floor(n * m / 2^23) = q` when `n * e < 2^23`. A window sum
+/// plus `d / 2` is below `256 * d`, so `n * e < 256 * d^2 <= 2^23` for
+/// `d <= 181`. The product stays below `2^31 + 256 * d < 2^32`, so it fits in
+/// `u32`. The test `mul_shift_matches_division_for_every_window` checks
+/// every case exhaustively.
+const MUL_SHIFT32_MAX_WINDOW: u32 = 181;
+
+/// Largest box window whose sums run in `u16` lanes ([`MulHi16`]): a window
+/// sum plus `window / 2` is at most `255 * 255 + 127 < 2^16`.
+const LANE16_MAX_WINDOW: u32 = 255;
+
 /// Reusable buffers for `gaussian_blur_premul`. Reuse avoids an allocation
 /// per blur when several layers blur in a row.
 #[derive(Debug, Default)]
 pub(super) struct BlurScratch {
     /// Horizontal-pass output, one pixmap's worth of bytes.
     pixels: Vec<u8>,
-    /// Vertical running sums, one per byte of a row.
+    /// Vertical running sums, one per byte of a row (`u32` lanes).
     sums: Vec<u32>,
+    /// Vertical running sums, one per byte of a row (`u16` lanes).
+    sums16: Vec<u16>,
     /// `true` marks a horizontal-pass input row that is all zero.
     zero_rows: Vec<bool>,
 }
@@ -118,12 +138,7 @@ pub(super) fn gaussian_blur_premul(pm: &mut Pixmap, sigma: f64, scratch: &mut Bl
         };
         // `radius < 2^31`, so the window fits in `u32`.
         let window = 2 * radius + 1;
-        let done = if window <= MUL_SHIFT_MAX_WINDOW {
-            box_blur(data, scratch, pass, MulShift::new(window))
-        } else {
-            box_blur(data, scratch, pass, Divide::new(window))
-        };
-        if done.is_none() {
+        if box_blur_window(data, scratch, pass, window).is_none() {
             return;
         }
     }
@@ -137,9 +152,127 @@ struct Pass {
     radius: usize,
 }
 
+/// A running-sum lane. Sums and weights wrap; a window sum itself always
+/// fits the lane (see [`LANE16_MAX_WINDOW`] for `u16`).
+trait Lane: Copy + Default {
+    fn from_byte(v: u8) -> Self;
+    /// A window weight, at most the window width.
+    fn from_weight(w: u32) -> Self;
+    fn add(self, other: Self) -> Self;
+    fn sub(self, other: Self) -> Self;
+    fn mul(self, other: Self) -> Self;
+    /// The vertical sums buffer of this lane type.
+    fn sums<'s>(sums: &'s mut Vec<u32>, sums16: &'s mut Vec<u16>) -> &'s mut Vec<Self>;
+}
+
+impl Lane for u32 {
+    #[inline(always)]
+    fn from_byte(v: u8) -> Self {
+        u32::from(v)
+    }
+    #[inline(always)]
+    fn from_weight(w: u32) -> Self {
+        w
+    }
+    #[inline(always)]
+    fn add(self, other: Self) -> Self {
+        self.wrapping_add(other)
+    }
+    #[inline(always)]
+    fn sub(self, other: Self) -> Self {
+        self.wrapping_sub(other)
+    }
+    #[inline(always)]
+    fn mul(self, other: Self) -> Self {
+        self.wrapping_mul(other)
+    }
+    fn sums<'s>(sums: &'s mut Vec<u32>, _: &'s mut Vec<u16>) -> &'s mut Vec<Self> {
+        sums
+    }
+}
+
+impl Lane for u16 {
+    #[inline(always)]
+    fn from_byte(v: u8) -> Self {
+        u16::from(v)
+    }
+    #[inline(always)]
+    fn from_weight(w: u32) -> Self {
+        // A weight is at most the window, at most `LANE16_MAX_WINDOW`.
+        w as u16
+    }
+    #[inline(always)]
+    fn add(self, other: Self) -> Self {
+        self.wrapping_add(other)
+    }
+    #[inline(always)]
+    fn sub(self, other: Self) -> Self {
+        self.wrapping_sub(other)
+    }
+    #[inline(always)]
+    fn mul(self, other: Self) -> Self {
+        self.wrapping_mul(other)
+    }
+    fn sums<'s>(_: &'s mut Vec<u32>, sums16: &'s mut Vec<u16>) -> &'s mut Vec<Self> {
+        sums16
+    }
+}
+
 /// Maps a window sum to its output byte: `((sum + window / 2) / window).min(255)`.
 trait Quotient: Copy {
-    fn byte(self, sum: u32) -> u8;
+    type Lane: Lane;
+    fn byte(self, sum: Self::Lane) -> u8;
+}
+
+/// Exact quotient by a 16-bit multiply-high and shift, in `u16` lanes, for
+/// the windows [`MulHi16::new`] accepts. Eight lanes per SSE2 register.
+///
+/// Exactness proof: with `n = sum + window / 2 <= n_max = 255 * d + d / 2`,
+/// `m = ceil(2^k / d)` and `e = m * d - 2^k`, `floor(n * m / 2^k) = floor(n /
+/// d)` whenever `n_max * e < 2^k` (the [`MulShift`] argument). `new` picks
+/// the smallest `k >= 16` that meets it with `m < 2^16`, and
+/// `floor(floor(n * m / 2^16) / 2^(k - 16)) = floor(n * m / 2^k)`.
+#[derive(Debug, Clone, Copy)]
+struct MulHi16 {
+    half: u16,
+    mul: u16,
+    shift: u32,
+}
+
+impl MulHi16 {
+    /// The multiplier for odd `window`, or `None` when no `k` works or the
+    /// sums do not fit `u16`.
+    fn new(window: u32) -> Option<Self> {
+        if window > LANE16_MAX_WINDOW {
+            return None;
+        }
+        let d = u64::from(window.max(1));
+        let n_max = 255 * d + d / 2;
+        for k in 16..32u32 {
+            let pow = 1u64 << k;
+            let m = pow.div_ceil(d);
+            let mul = u16::try_from(m).ok()?;
+            if n_max * (m * d - pow) < pow {
+                return Some(Self {
+                    half: u16::try_from(d / 2).ok()?,
+                    mul,
+                    shift: k - 16,
+                });
+            }
+        }
+        None
+    }
+}
+
+impl Quotient for MulHi16 {
+    type Lane = u16;
+    #[inline(always)]
+    fn byte(self, sum: u16) -> u8 {
+        // The 16-bit multiply-high (`pmulhuw`), then the shift. The quotient
+        // of a window sum is at most 255, so the cast keeps it whole.
+        let high = ((u32::from(sum.wrapping_add(self.half)) * u32::from(self.mul)) >> 16) as u16;
+        (high >> self.shift) as u8
+    }
 }
 
 /// Exact quotient by multiply-shift, for windows up to `MUL_SHIFT_MAX_WINDOW`.
@@ -160,9 +293,37 @@ impl MulShift {
 }
 
 impl Quotient for MulShift {
+    type Lane = u32;
     #[inline(always)]
     fn byte(self, sum: u32) -> u8 {
         let q = (u64::from(sum.wrapping_add(self.half)) * self.mul) >> 32;
+        q.min(255) as u8
+    }
+}
+
+/// Exact quotient by a 32-bit multiply-shift, for windows up to
+/// `MUL_SHIFT32_MAX_WINDOW`. All `u32`, so the passes vectorize.
+#[derive(Debug, Clone, Copy)]
+struct MulShift32 {
+    half: u32,
+    mul: u32,
+}
+
+impl MulShift32 {
+    /// `mul = ceil(2^23 / window)`. `window` is odd, so `2^23` is never a multiple.
+    fn new(window: u32) -> Self {
+        Self {
+            half: window / 2,
+            mul: (1 << 23) / window.max(1) + 1,
+        }
+    }
+}
+
+impl Quotient for MulShift32 {
+    type Lane = u32;
+    #[inline(always)]
+    fn byte(self, sum: u32) -> u8 {
+        let q = sum.wrapping_add(self.half).wrapping_mul(self.mul) >> 23;
         q.min(255) as u8
     }
 }
@@ -184,9 +345,28 @@ impl Divide {
 }
 
 impl Quotient for Divide {
+    type Lane = u32;
     #[inline(always)]
     fn byte(self, sum: u32) -> u8 {
         (sum.wrapping_add(self.half) / self.window).min(255) as u8
+    }
+}
+
+/// One box pass of odd width `window`, with the fastest exact quotient.
+fn box_blur_window(
+    data: &mut [u8],
+    scratch: &mut BlurScratch,
+    pass: Pass,
+    window: u32,
+) -> Option<()> {
+    if let Some(q) = MulHi16::new(window) {
+        box_blur(data, scratch, pass, q)
+    } else if window <= MUL_SHIFT32_MAX_WINDOW {
+        box_blur(data, scratch, pass, MulShift32::new(window))
+    } else if window <= MUL_SHIFT_MAX_WINDOW {
+        box_blur(data, scratch, pass, MulShift::new(window))
+    } else {
+        box_blur(data, scratch, pass, Divide::new(window))
     }
 }
 
@@ -200,9 +380,11 @@ fn box_blur<Q: Quotient>(
     let BlurScratch {
         pixels,
         sums,
+        sums16,
         zero_rows,
     } = scratch;
     box_blur_h(data, pixels, zero_rows, pass, q);
+    let sums = <Q::Lane as Lane>::sums(sums, sums16);
     box_blur_v(pixels, data, sums, zero_rows, pass, q)
 }
 
@@ -218,23 +400,24 @@ fn window_weights(radius: usize, last: usize) -> impl Iterator<Item = (usize, u3
 }
 
 /// `acc[i] += weight * src[i]`, wrapping.
-fn add_scaled(acc: &mut [u32], src: &[u8], weight: u32) {
+fn add_scaled<L: Lane>(acc: &mut [L], src: &[u8], weight: u32) {
+    let w = L::from_weight(weight);
     for (a, &v) in acc.iter_mut().zip(src) {
-        *a = a.wrapping_add(u32::from(v).wrapping_mul(weight));
+        *a = a.add(L::from_byte(v).mul(w));
     }
 }
 
 /// Slide a four-channel sum: add `add`, then remove `sub`.
 #[inline(always)]
-fn slide(sum: &mut [u32; 4], add: &[u8], sub: &[u8]) {
+fn slide<L: Lane>(sum: &mut [L; 4], add: &[u8], sub: &[u8]) {
     for ((s, &a), &b) in sum.iter_mut().zip(add).zip(sub) {
-        *s = s.wrapping_add(u32::from(a)).wrapping_sub(u32::from(b));
+        *s = s.add(L::from_byte(a)).sub(L::from_byte(b));
     }
 }
 
 /// Write one output pixel from a four-channel sum.
 #[inline(always)]
-fn store<Q: Quotient>(out: &mut [u8], sum: &[u32; 4], q: Q) {
+fn store<Q: Quotient>(out: &mut [u8], sum: &[Q::Lane; 4], q: Q) {
     for (o, &s) in out.iter_mut().zip(sum) {
         *o = q.byte(s);
     }
@@ -251,7 +434,7 @@ fn box_blur_h<Q: Quotient>(src: &[u8], dst: &mut [u8], zero_rows: &mut [bool], p
         .zip(dst.chunks_exact_mut(stride))
         .zip(zero_rows.iter_mut());
     for ((src_row, dst_row), zero) in rows {
-        *zero = src_row.iter().all(|&b| b == 0);
+        *zero = first_non_zero(src_row).is_none();
         if *zero {
             dst_row.fill(0);
         } else if pass.width <= pass.radius.saturating_mul(2)
@@ -273,7 +456,7 @@ fn blur_row_zoned<Q: Quotient>(src: &[u8], dst: &mut [u8], radius: usize, q: Q) 
     let mid_len = w.checked_sub(2 * r + 1)?;
     let first = src.get(..4)?;
     let end = src.get(last * 4..)?;
-    let mut sum = [0u32; 4];
+    let mut sum = [Q::Lane::default(); 4];
     for (k, weight) in window_weights(r, last) {
         add_scaled(&mut sum, src.get(k * 4..k * 4 + 4)?, weight);
     }
@@ -321,7 +504,7 @@ fn blur_row_zoned<Q: Quotient>(src: &[u8], dst: &mut [u8], radius: usize, q: Q) 
 fn blur_row_clamped<Q: Quotient>(src: &[u8], dst: &mut [u8], radius: usize, q: Q) {
     let last = (src.len() / 4).saturating_sub(1);
     let px = |k: usize| src.get(k * 4..k * 4 + 4).unwrap_or(&[]);
-    let mut sum = [0u32; 4];
+    let mut sum = [Q::Lane::default(); 4];
     for (k, weight) in window_weights(radius, last) {
         add_scaled(&mut sum, px(k), weight);
     }
@@ -341,7 +524,7 @@ fn blur_row_clamped<Q: Quotient>(src: &[u8], dst: &mut [u8], radius: usize, q: Q
 fn box_blur_v<Q: Quotient>(
     src: &[u8],
     dst: &mut [u8],
-    sums: &mut Vec<u32>,
+    sums: &mut Vec<Q::Lane>,
     zero_rows: &[bool],
     pass: Pass,
     q: Q,
@@ -353,7 +536,7 @@ fn box_blur_v<Q: Quotient>(
     let nonzero = |k: usize| !zero_rows.get(k).copied().unwrap_or(false);
 
     sums.clear();
-    sums.resize(stride, 0);
+    sums.resize(stride, Q::Lane::default());
     let mut live: u64 = 0;
     for (k, weight) in window_weights(r, last) {
         add_scaled(sums, row(k)?, weight);
@@ -372,13 +555,13 @@ fn box_blur_v<Q: Quotient>(
             if live == 0 {
                 out_row.fill(0);
                 for ((s, &a), &b) in sums.iter_mut().zip(add).zip(sub) {
-                    *s = s.wrapping_add(u32::from(a)).wrapping_sub(u32::from(b));
+                    *s = s.add(Q::Lane::from_byte(a)).sub(Q::Lane::from_byte(b));
                 }
             } else {
                 let cells = out_row.iter_mut().zip(sums.iter_mut()).zip(add).zip(sub);
                 for (((o, s), &a), &b) in cells {
                     *o = q.byte(*s);
-                    *s = s.wrapping_add(u32::from(a)).wrapping_sub(u32::from(b));
+                    *s = s.add(Q::Lane::from_byte(a)).sub(Q::Lane::from_byte(b));
                 }
             }
             live = live + u64::from(nonzero(add_y)) - u64::from(nonzero(sub_y));
@@ -576,12 +759,7 @@ mod tests {
             radius,
         };
         let window = (2 * radius + 1) as u32;
-        let done = if window <= MUL_SHIFT_MAX_WINDOW {
-            box_blur(&mut got, scratch, pass, MulShift::new(window))
-        } else {
-            box_blur(&mut got, scratch, pass, Divide::new(window))
-        };
-        assert!(done.is_some());
+        assert!(box_blur_window(&mut got, scratch, pass, window).is_some());
         assert!(got == expected, "box pass {w}x{h} radius {radius} differs");
     }
 
@@ -603,6 +781,23 @@ mod tests {
             let pm = random_pixmap(w, h, w * 31 + h);
             for radius in [510, 511, 512, 513, 700] {
                 assert_pass_matches(&pm, radius, &mut scratch);
+            }
+        }
+    }
+
+    #[test]
+    fn box_pass_matches_reference_at_the_lane_bounds() {
+        // Saturated pixmaps give the largest window sums: 255 * window. The
+        // radii straddle the 16-bit lane bound (window 255) and the 32-bit
+        // multiplier bound (window 181).
+        let mut scratch = BlurScratch::default();
+        for &(w, h) in &[(300u32, 3u32), (3, 300), (260, 260)] {
+            let mut full = Pixmap::new(w, h).expect("alloc");
+            full.data_mut().fill(255);
+            let noisy = random_pixmap(w, h, w ^ h);
+            for radius in [89, 90, 91, 126, 127, 128, 129] {
+                assert_pass_matches(&full, radius, &mut scratch);
+                assert_pass_matches(&noisy, radius, &mut scratch);
             }
         }
     }
@@ -642,14 +837,38 @@ mod tests {
     }
 
     #[test]
+    fn sixteen_bit_lanes_cover_the_common_windows() {
+        // Shadow and blur sigmas up to about 28 px use windows up to 57.
+        let covered = (3..=255u32)
+            .step_by(2)
+            .filter(|&w| MulHi16::new(w).is_some())
+            .count();
+        assert!(
+            (3..=127u32).step_by(2).all(|w| MulHi16::new(w).is_some()),
+            "a window below 128 has no 16-bit multiplier"
+        );
+        assert!(covered >= 63, "{covered} windows have 16-bit multipliers");
+        assert!(MulHi16::new(257).is_none());
+    }
+
+    #[test]
     fn mul_shift_matches_division_for_every_window() {
         for window in (1..=MUL_SHIFT_MAX_WINDOW).step_by(2) {
             let fast = MulShift::new(window);
             let exact = Divide::new(window);
+            let narrow = (window <= MUL_SHIFT32_MAX_WINDOW).then(|| MulShift32::new(window));
+            let lane16 = MulHi16::new(window);
             for sum in 0..=255 * window {
                 let want = ((sum + window / 2) / window).min(255) as u8;
                 assert_eq!(fast.byte(sum), want, "window {window} sum {sum}");
                 assert_eq!(exact.byte(sum), want, "window {window} sum {sum}");
+                if let Some(narrow) = narrow {
+                    assert_eq!(narrow.byte(sum), want, "32-bit window {window} sum {sum}");
+                }
+                if let Some(q) = lane16 {
+                    let s16 = u16::try_from(sum).expect("u16 sum");
+                    assert_eq!(q.byte(s16), want, "16-bit window {window} sum {sum}");
+                }
             }
         }
     }

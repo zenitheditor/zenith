@@ -25,8 +25,10 @@ use super::filter::apply_filters;
 use super::mask::attenuate_by_mask;
 use super::paths::{device_bounds, intersect_rects};
 use super::pixels::premultiplied_to_straight;
+use super::pool::{CapturePool, Dirty};
 use super::scale::{scale_filters, scale_mask, scale_shadows, scaled_px};
 use super::shadow::{composite_blur, composite_shadows};
+use super::surface::Surface;
 use crate::backend::{RasterBackend, RasterImage};
 use crate::error::RenderError;
 
@@ -260,369 +262,397 @@ impl RasterBackend for TinySkiaBackend {
         // Device size: `max(1, round(page × scale))` per axis (see `scale`).
         let width = scaled_px(scene.width, scale, "width")?;
         let height = scaled_px(scene.height, scale, "height")?;
-
-        let mut pixmap = Pixmap::new(width, height).ok_or_else(|| {
-            RenderError::new(format!("failed to allocate pixmap ({width}×{height})"))
-        })?;
-        // Background starts fully transparent (0,0,0,0) — the deterministic default.
-
-        // Clip stack: each entry is (x, y, x2, y2) in device coordinates.
-        // The outermost clip is the page rectangle at the output scale.
-        let page_clip = (0.0_f64, 0.0_f64, scene.width * scale, scene.height * scale);
-        let mut clip_stack: Vec<(f64, f64, f64, f64)> = vec![page_clip];
-        // Parallel to `clip_stack`: the coverage of the active non-axis-aligned
-        // clips (see `clip`). `None` while every active clip is axis-aligned,
-        // so documents without rotated clips draw exactly as before.
-        let mut shape_stack: Vec<Option<Rc<Mask>>> = vec![None];
-
-        // Transform stack: the top entry is the current affine transform applied
-        // to every draw. The base entry is the output scale. At scale 1 it is
-        // identity, so unrotated scenes pass `Transform::identity()` to every
-        // draw call (byte-identical to an unscaled render).
-        let base_ts = if scale == 1.0 {
-            Transform::identity()
-        } else {
-            Transform::from_scale(scale as f32, scale as f32)
-        };
-        let mut transform_stack: Vec<Transform> = vec![base_ts];
-
-        // Lazily-built fontdb for SVG text→path conversion. Initialised at most
-        // once per render, only when an SVG asset is actually drawn. Never loads
-        // system fonts — only the registered faces from `fonts`.
-        let mut svg_fontdb: Option<resvg::usvg::fontdb::Database> = None;
-
-        // The effect-capture stack. The innermost active capture (topmost entry
-        // with `Some(pm)`) is the current draw target; an empty stack means
-        // draws target the top blend layer or the real canvas — byte-identical
-        // to before this stack existed.
-        let mut capture_stack: Vec<CaptureLayer> = Vec::new();
-
-        // Active compositing layers. Each entry is a full-page offscreen pixmap
-        // that buffers the ink of a blend-mode node (or its children), plus the
-        // opacity and blend route used to composite it back onto its parent at
-        // the matching PopLayer. Empty in the common case — with no layers
-        // active the draw target resolution is byte-identical to before (the
-        // layer check below short-circuits on an empty Vec).
-        let mut layer_stack: Vec<(Pixmap, f32, LayerBlend)> = Vec::new();
-
-        for cmd in &scene.commands {
-            // Hoist once per iteration. Push/pop arms mutate the stack and
-            // never consume current_ts; draw arms read it and never mutate the
-            // stack — so hoisting is behavior-identical to reading in each arm.
-            let current_ts = *transform_stack.last().unwrap_or(&base_ts);
-
-            // ── Structural / capture commands first ───────────────────────────
-            // These never draw into a target pixmap; they mutate the clip /
-            // transform stacks or open/close the shadow capture, then `continue`
-            // so the drawing dispatch below is reached only by drawing commands.
-            match cmd {
-                SceneCommand::PushClip { x, y, w, h } => {
-                    let new_rect = device_bounds(current_ts, (*x, *y, x + w, y + h));
-                    let current = *clip_stack.last().unwrap_or(&page_clip);
-                    // Push the intersection so the stack always represents the
-                    // effective clip at the current nesting depth.
-                    let intersected =
-                        intersect_rects(current, new_rect).unwrap_or((0.0, 0.0, 0.0, 0.0)); // empty → degenerate
-                    clip_stack.push(intersected);
-                    let parent = shape_stack.last().and_then(Option::as_ref);
-                    shape_stack.push(push_clip_shape(
-                        parent,
-                        current_ts,
-                        (*x, *y, *w, *h),
-                        width,
-                        height,
-                    ));
-                    continue;
-                }
-
-                // Same rect part as `PushClip`; the shape part adds the AA
-                // rounded path under the current transform.
-                SceneCommand::PushClipRoundedRect { x, y, w, h, radius } => {
-                    let new_rect = device_bounds(current_ts, (*x, *y, x + w, y + h));
-                    let current = *clip_stack.last().unwrap_or(&page_clip);
-                    let intersected =
-                        intersect_rects(current, new_rect).unwrap_or((0.0, 0.0, 0.0, 0.0));
-                    clip_stack.push(intersected);
-                    let parent = shape_stack.last().and_then(Option::as_ref);
-                    shape_stack.push(push_rounded_clip_shape(
-                        parent,
-                        current_ts,
-                        (*x, *y, *w, *h),
-                        *radius,
-                        width,
-                        height,
-                    ));
-                    continue;
-                }
-
-                // Never pop below the page clip (index 0).
-                SceneCommand::PopClip => {
-                    if clip_stack.len() > 1 {
-                        clip_stack.pop();
-                    }
-                    if shape_stack.len() > 1 {
-                        shape_stack.pop();
-                    }
-                    continue;
-                }
-
-                SceneCommand::PushTransform { angle_deg, cx, cy } => {
-                    let rot = Transform::from_rotate_at(*angle_deg as f32, *cx as f32, *cy as f32);
-                    transform_stack.push(current_ts.pre_concat(rot));
-                    continue;
-                }
-
-                SceneCommand::PushScaleTranslate { sx, sy, tx, ty } => {
-                    let scale_translate = Transform::from_row(
-                        *sx as f32, 0.0, 0.0, *sy as f32, *tx as f32, *ty as f32,
-                    );
-                    transform_stack.push(current_ts.pre_concat(scale_translate));
-                    continue;
-                }
-
-                SceneCommand::PushTransformMatrix { a, b, c, d, e, f } => {
-                    let matrix = Transform::from_row(
-                        *a as f32, *b as f32, *c as f32, *d as f32, *e as f32, *f as f32,
-                    );
-                    transform_stack.push(current_ts.pre_concat(matrix));
-                    continue;
-                }
-
-                SceneCommand::PopTransform => {
-                    if transform_stack.len() > 1 {
-                        transform_stack.pop();
-                    }
-                    continue;
-                }
-
-                // Open an offscreen capture for shadowed ink. Always pushes a
-                // capture layer so Begin/End stay balanced and captures nest.
-                // On allocation failure `pm` is `None` — pushed anyway so the
-                // ink draws crisp (no shadow) and the matching End* is balanced.
-                SceneCommand::BeginShadow { shadows } => {
-                    let pm = Pixmap::new(width, height);
-                    capture_stack.push(CaptureLayer {
-                        pm,
-                        effect: CaptureEffect::Shadow(scale_shadows(shadows, scale)),
-                    });
-                    continue;
-                }
-
-                // Close the active shadow capture: paint the blurred shadow
-                // layers onto the target below this capture, then composite the
-                // crisp ink. After the pop, `current_target` sees the stack
-                // without this layer — the next capture, blend layer, or base.
-                SceneCommand::EndShadow => {
-                    if let Some(layer) = capture_stack.pop()
-                        && let (Some(ink), CaptureEffect::Shadow(shadows)) =
-                            (layer.pm, layer.effect)
-                    {
-                        let shadow_target =
-                            current_target(&mut capture_stack, &mut layer_stack, &mut pixmap);
-                        composite_shadows(shadow_target, &ink, &shadows);
-                    }
-                    continue;
-                }
-
-                // Open an offscreen capture for a Gaussian-blurred element.
-                // Always pushes (nesting); `None` buffer on alloc failure draws
-                // crisp and keeps Begin/End balanced.
-                SceneCommand::BeginBlur { radius } => {
-                    let pm = Pixmap::new(width, height);
-                    capture_stack.push(CaptureLayer {
-                        pm,
-                        effect: CaptureEffect::Blur(radius * scale),
-                    });
-                    continue;
-                }
-
-                // Close the active blur capture: blur the ink, then composite
-                // it onto the target below this capture.
-                SceneCommand::EndBlur => {
-                    if let Some(layer) = capture_stack.pop()
-                        && let (Some(ink), CaptureEffect::Blur(sigma)) = (layer.pm, layer.effect)
-                    {
-                        let blur_target =
-                            current_target(&mut capture_stack, &mut layer_stack, &mut pixmap);
-                        composite_blur(blur_target, ink, sigma);
-                    }
-                    continue;
-                }
-
-                // Open an offscreen capture for a color-filtered element. Always
-                // pushes (nesting). An empty filter list — or allocation failure
-                // — yields a `None` buffer: draws fall through (crisp, no
-                // filter) and the matching EndFilter skips compositing, exactly
-                // as the old empty-list/alloc-failure no-op did.
-                SceneCommand::BeginFilter { filters } => {
-                    let pm = if filters.is_empty() {
-                        None
-                    } else {
-                        Pixmap::new(width, height)
-                    };
-                    capture_stack.push(CaptureLayer {
-                        pm,
-                        effect: CaptureEffect::Filter(scale_filters(filters, scale)),
-                    });
-                    continue;
-                }
-
-                // Close the active filter capture: transform the captured ink
-                // in place, then composite it onto the target below this capture.
-                // A filter never changes a zero-alpha pixel or makes alpha zero,
-                // so the ink box is the same before and after the filter. Empty
-                // ink draws nothing.
-                SceneCommand::EndFilter => {
-                    if let Some(layer) = capture_stack.pop()
-                        && let (Some(mut ink), CaptureEffect::Filter(filters)) =
-                            (layer.pm, layer.effect)
-                        && let Some(bbox) = ink_bbox(&ink)
-                    {
-                        apply_filters(&mut ink, &filters);
-                        let filter_target =
-                            current_target(&mut capture_stack, &mut layer_stack, &mut pixmap);
-                        draw_region(filter_target, &ink, bbox, &PixmapPaint::default());
-                    }
-                    continue;
-                }
-
-                // Open an offscreen capture for a masked element. Always pushes
-                // (nesting). On allocation failure `pm` is `None` — draws fall
-                // through (unmasked) and the matching EndMask skips compositing,
-                // keeping Begin/End balanced.
-                SceneCommand::BeginMask { mask } => {
-                    let pm = Pixmap::new(width, height);
-                    capture_stack.push(CaptureLayer {
-                        pm,
-                        effect: CaptureEffect::Mask(scale_mask(*mask, scale)),
-                    });
-                    continue;
-                }
-
-                // Close the active mask capture: attenuate the captured ink by
-                // the coverage field, then composite it onto the target below.
-                // Attenuation keeps zero bytes zero, so only the ink box is
-                // masked and drawn. Empty ink draws nothing.
-                SceneCommand::EndMask => {
-                    if let Some(layer) = capture_stack.pop()
-                        && let (Some(mut ink), CaptureEffect::Mask(spec)) = (layer.pm, layer.effect)
-                        && let Some(bbox) = ink_bbox(&ink)
-                    {
-                        attenuate_by_mask(&mut ink, &spec, bbox);
-                        let target =
-                            current_target(&mut capture_stack, &mut layer_stack, &mut pixmap);
-                        draw_region(target, &ink, bbox, &PixmapPaint::default());
-                    }
-                    continue;
-                }
-
-                // Open a compositing layer: allocate a full-page offscreen pixmap
-                // that the following draws (and any nested layers/shadows) paint
-                // into, to be composited back at PopLayer. On allocation failure
-                // we skip pushing — draws then fall through to the previous
-                // target and paint source-over (degraded, never a crash).
-                SceneCommand::PushLayer {
-                    opacity,
-                    blend_mode,
-                } => {
-                    if let Some(pm) = Pixmap::new(width, height) {
-                        layer_stack.push((pm, *opacity as f32, map_layer_blend(*blend_mode)));
-                    }
-                    continue;
-                }
-
-                // Close the most-recent layer: composite its buffered ink onto
-                // the NEW current target — the next layer down if one remains,
-                // else the active shadow capture, else the canvas — using the
-                // layer's opacity and blend route.
-                SceneCommand::PopLayer => {
-                    if let Some((layer_pm, op, bm)) = layer_stack.pop() {
-                        // After popping this blend layer, composite onto the new
-                        // current target: the next blend layer down if any, else
-                        // the innermost active capture, else the base canvas.
-                        // `current_target` resolves capture-first, so when a
-                        // capture is open and no blend layer remains it returns
-                        // the capture pixmap — byte-identical to the old order.
-                        let target_after_pop =
-                            current_target(&mut capture_stack, &mut layer_stack, &mut pixmap);
-                        match bm {
-                            // Transparent layer pixels leave the target unchanged,
-                            // so only the layer's ink box is drawn.
-                            LayerBlend::SourceOver => {
-                                draw_ink_region(
-                                    target_after_pop,
-                                    &layer_pm,
-                                    &PixmapPaint {
-                                        opacity: op.clamp(0.0, 1.0),
-                                        blend_mode: tiny_skia::BlendMode::SourceOver,
-                                        quality: FilterQuality::Nearest,
-                                    },
-                                );
-                            }
-                            LayerBlend::Raster(mode) => {
-                                composite_raster_blend_layer(
-                                    target_after_pop,
-                                    &layer_pm,
-                                    op,
-                                    mode,
-                                )?;
-                            }
-                        }
-                    }
-                    continue;
-                }
-
-                // Drawing commands: fall through to the dispatch below (no
-                // `continue`). Listed explicitly so this structural match stays
-                // exhaustive over `SceneCommand` — no wildcard arm.
-                SceneCommand::FillRect { .. }
-                | SceneCommand::StrokeRect { .. }
-                | SceneCommand::FillRoundedRect { .. }
-                | SceneCommand::StrokeRoundedRect { .. }
-                | SceneCommand::FillEllipse { .. }
-                | SceneCommand::StrokeEllipse { .. }
-                | SceneCommand::StrokeLine { .. }
-                | SceneCommand::FillPolygon { .. }
-                | SceneCommand::StrokePolyline { .. }
-                | SceneCommand::FillPath { .. }
-                | SceneCommand::StrokePath { .. }
-                | SceneCommand::DrawImage { .. }
-                | SceneCommand::DrawSvgAsset { .. }
-                | SceneCommand::DrawGlyphRun { .. } => {}
-            }
-
-            // The active drawing target, innermost-first: the topmost effect
-            // capture holding a buffer (capture ink is always the innermost draw
-            // target), else the top compositing layer if any, else the real
-            // canvas. Computed once per drawing command, after the structural
-            // match above has run (so no borrow overlaps). With no capture and no
-            // layer active this resolves to `&mut pixmap` exactly as before —
-            // the no-layer path is byte-identical.
-            let target: &mut Pixmap =
-                current_target(&mut capture_stack, &mut layer_stack, &mut pixmap);
-
-            let ctx = DrawCtx {
-                current_ts,
-                effective_clip: *clip_stack.last().unwrap_or(&page_clip),
-                width,
-                height,
-                device_scale: scale,
-                clip_shape: shape_stack.last().and_then(Option::as_deref),
-            };
-            draw_command(target, ctx, cmd, fonts, assets, &mut svg_fontdb);
-        }
-
-        // Convert tiny-skia's premultiplied RGBA8 to straight-alpha RGBA8.
-        let rgba = premultiplied_to_straight_rgba(pixmap.data());
-
-        Ok(RasterImage {
-            width,
-            height,
-            rgba,
-        })
+        let pixmap = rasterize_surface(scene, scale, Surface::page(width, height), fonts, assets)?;
+        Ok(straight_image(&pixmap))
     }
 
     fn encode_png(&self, image: &RasterImage) -> Result<Vec<u8>, RenderError> {
         encode_straight_png(image)
     }
+}
+
+/// Convert tiny-skia's premultiplied RGBA8 to a straight-alpha image.
+pub(super) fn straight_image(pixmap: &Pixmap) -> RasterImage {
+    RasterImage {
+        width: pixmap.width(),
+        height: pixmap.height(),
+        rgba: premultiplied_to_straight_rgba(pixmap.data()),
+    }
+}
+
+/// Rasterize `scene` at `scale` onto `surface`, a device window of the page.
+///
+/// Every target pixmap (base canvas, layers, effect captures) covers
+/// `surface`. The transform and clip stacks stay in full-page device space
+/// (see `surface`). With `Surface::page` this is the full-page render.
+///
+/// # Errors
+///
+/// Returns [`RenderError`] when the surface pixmap cannot be allocated or a
+/// blend layer fails to composite.
+pub(super) fn rasterize_surface(
+    scene: &Scene,
+    scale: f64,
+    surface: Surface,
+    fonts: &dyn FontProvider,
+    assets: &dyn AssetProvider,
+) -> Result<Pixmap, RenderError> {
+    let (width, height) = (surface.w, surface.h);
+    let mut pixmap = Pixmap::new(width, height)
+        .ok_or_else(|| RenderError::new(format!("failed to allocate pixmap ({width}×{height})")))?;
+    // Background starts fully transparent (0,0,0,0) — the deterministic default.
+
+    // Clip stack: each entry is (x, y, x2, y2) in device coordinates.
+    // The outermost clip is the page rectangle at the output scale.
+    let page_clip = (0.0_f64, 0.0_f64, scene.width * scale, scene.height * scale);
+    let mut clip_stack: Vec<(f64, f64, f64, f64)> = vec![page_clip];
+    // Parallel to `clip_stack`: the coverage of the active non-axis-aligned
+    // clips (see `clip`). `None` while every active clip is axis-aligned,
+    // so documents without rotated clips draw exactly as before.
+    let mut shape_stack: Vec<Option<Rc<Mask>>> = vec![None];
+
+    // Transform stack: the top entry is the current affine transform applied
+    // to every draw. The base entry is the output scale. At scale 1 it is
+    // identity, so unrotated scenes pass `Transform::identity()` to every
+    // draw call (byte-identical to an unscaled render).
+    let base_ts = if scale == 1.0 {
+        Transform::identity()
+    } else {
+        Transform::from_scale(scale as f32, scale as f32)
+    };
+    let mut transform_stack: Vec<Transform> = vec![base_ts];
+
+    // Lazily-built fontdb for SVG text→path conversion. Initialised at most
+    // once per render, only when an SVG asset is actually drawn. Never loads
+    // system fonts — only the registered faces from `fonts`.
+    let mut svg_fontdb: Option<resvg::usvg::fontdb::Database> = None;
+
+    // The effect-capture stack. The innermost active capture (topmost entry
+    // with `Some(pm)`) is the current draw target; an empty stack means
+    // draws target the top blend layer or the real canvas — byte-identical
+    // to before this stack existed.
+    let mut capture_stack: Vec<CaptureLayer> = Vec::new();
+    // Capture buffers, all zero while idle: one allocation serves every
+    // capture that does not nest.
+    let mut pool = CapturePool::new(width, height);
+
+    // Active compositing layers. Each entry is a full-page offscreen pixmap
+    // that buffers the ink of a blend-mode node (or its children), plus the
+    // opacity and blend route used to composite it back onto its parent at
+    // the matching PopLayer. Empty in the common case — with no layers
+    // active the draw target resolution is byte-identical to before (the
+    // layer check below short-circuits on an empty Vec).
+    let mut layer_stack: Vec<(Pixmap, f32, LayerBlend)> = Vec::new();
+
+    for cmd in &scene.commands {
+        // Hoist once per iteration. Push/pop arms mutate the stack and
+        // never consume current_ts; draw arms read it and never mutate the
+        // stack — so hoisting is behavior-identical to reading in each arm.
+        let current_ts = *transform_stack.last().unwrap_or(&base_ts);
+
+        // ── Structural / capture commands first ───────────────────────────
+        // These never draw into a target pixmap; they mutate the clip /
+        // transform stacks or open/close the shadow capture, then `continue`
+        // so the drawing dispatch below is reached only by drawing commands.
+        match cmd {
+            SceneCommand::PushClip { x, y, w, h } => {
+                let new_rect = device_bounds(current_ts, (*x, *y, x + w, y + h));
+                let current = *clip_stack.last().unwrap_or(&page_clip);
+                // Push the intersection so the stack always represents the
+                // effective clip at the current nesting depth.
+                let intersected =
+                    intersect_rects(current, new_rect).unwrap_or((0.0, 0.0, 0.0, 0.0)); // empty → degenerate
+                clip_stack.push(intersected);
+                let parent = shape_stack.last().and_then(Option::as_ref);
+                shape_stack.push(push_clip_shape(
+                    parent,
+                    current_ts,
+                    (*x, *y, *w, *h),
+                    surface,
+                ));
+                continue;
+            }
+
+            // Same rect part as `PushClip`; the shape part adds the AA
+            // rounded path under the current transform.
+            SceneCommand::PushClipRoundedRect { x, y, w, h, radius } => {
+                let new_rect = device_bounds(current_ts, (*x, *y, x + w, y + h));
+                let current = *clip_stack.last().unwrap_or(&page_clip);
+                let intersected =
+                    intersect_rects(current, new_rect).unwrap_or((0.0, 0.0, 0.0, 0.0));
+                clip_stack.push(intersected);
+                let parent = shape_stack.last().and_then(Option::as_ref);
+                shape_stack.push(push_rounded_clip_shape(
+                    parent,
+                    current_ts,
+                    (*x, *y, *w, *h),
+                    *radius,
+                    surface,
+                ));
+                continue;
+            }
+
+            // Never pop below the page clip (index 0).
+            SceneCommand::PopClip => {
+                if clip_stack.len() > 1 {
+                    clip_stack.pop();
+                }
+                if shape_stack.len() > 1 {
+                    shape_stack.pop();
+                }
+                continue;
+            }
+
+            SceneCommand::PushTransform { angle_deg, cx, cy } => {
+                let rot = Transform::from_rotate_at(*angle_deg as f32, *cx as f32, *cy as f32);
+                transform_stack.push(current_ts.pre_concat(rot));
+                continue;
+            }
+
+            SceneCommand::PushScaleTranslate { sx, sy, tx, ty } => {
+                let scale_translate =
+                    Transform::from_row(*sx as f32, 0.0, 0.0, *sy as f32, *tx as f32, *ty as f32);
+                transform_stack.push(current_ts.pre_concat(scale_translate));
+                continue;
+            }
+
+            SceneCommand::PushTransformMatrix { a, b, c, d, e, f } => {
+                let matrix = Transform::from_row(
+                    *a as f32, *b as f32, *c as f32, *d as f32, *e as f32, *f as f32,
+                );
+                transform_stack.push(current_ts.pre_concat(matrix));
+                continue;
+            }
+
+            SceneCommand::PopTransform => {
+                if transform_stack.len() > 1 {
+                    transform_stack.pop();
+                }
+                continue;
+            }
+
+            // Open an offscreen capture for shadowed ink. Always pushes a
+            // capture layer so Begin/End stay balanced and captures nest.
+            // On allocation failure `pm` is `None` — pushed anyway so the
+            // ink draws crisp (no shadow) and the matching End* is balanced.
+            SceneCommand::BeginShadow { shadows } => {
+                let pm = pool.take();
+                capture_stack.push(CaptureLayer {
+                    pm,
+                    effect: CaptureEffect::Shadow(scale_shadows(shadows, scale)),
+                });
+                continue;
+            }
+
+            // Close the active shadow capture: paint the blurred shadow
+            // layers onto the target below this capture, then composite the
+            // crisp ink. After the pop, `current_target` sees the stack
+            // without this layer — the next capture, blend layer, or base.
+            SceneCommand::EndShadow => {
+                if let Some(layer) = capture_stack.pop()
+                    && let (Some(ink), CaptureEffect::Shadow(shadows)) = (layer.pm, layer.effect)
+                {
+                    let shadow_target =
+                        current_target(&mut capture_stack, &mut layer_stack, &mut pixmap);
+                    let dirty = composite_shadows(shadow_target, &ink, &shadows);
+                    pool.give(ink, dirty);
+                }
+                continue;
+            }
+
+            // Open an offscreen capture for a Gaussian-blurred element.
+            // Always pushes (nesting); `None` buffer on alloc failure draws
+            // crisp and keeps Begin/End balanced.
+            SceneCommand::BeginBlur { radius } => {
+                let pm = pool.take();
+                capture_stack.push(CaptureLayer {
+                    pm,
+                    effect: CaptureEffect::Blur(radius * scale),
+                });
+                continue;
+            }
+
+            // Close the active blur capture: blur the ink, then composite
+            // it onto the target below this capture.
+            SceneCommand::EndBlur => {
+                if let Some(layer) = capture_stack.pop()
+                    && let (Some(mut ink), CaptureEffect::Blur(sigma)) = (layer.pm, layer.effect)
+                {
+                    let blur_target =
+                        current_target(&mut capture_stack, &mut layer_stack, &mut pixmap);
+                    let dirty = composite_blur(blur_target, &mut ink, sigma);
+                    pool.give(ink, dirty);
+                }
+                continue;
+            }
+
+            // Open an offscreen capture for a color-filtered element. Always
+            // pushes (nesting). An empty filter list — or allocation failure
+            // — yields a `None` buffer: draws fall through (crisp, no
+            // filter) and the matching EndFilter skips compositing, exactly
+            // as the old empty-list/alloc-failure no-op did.
+            SceneCommand::BeginFilter { filters } => {
+                let pm = if filters.is_empty() {
+                    None
+                } else {
+                    pool.take()
+                };
+                capture_stack.push(CaptureLayer {
+                    pm,
+                    effect: CaptureEffect::Filter(scale_filters(filters, scale)),
+                });
+                continue;
+            }
+
+            // Close the active filter capture: transform the captured ink
+            // in place, then composite it onto the target below this capture.
+            // A filter never changes a zero-alpha pixel or makes alpha zero,
+            // so the ink box is the same before and after the filter. Empty
+            // ink draws nothing.
+            SceneCommand::EndFilter => {
+                if let Some(layer) = capture_stack.pop()
+                    && let (Some(mut ink), CaptureEffect::Filter(filters)) =
+                        (layer.pm, layer.effect)
+                {
+                    let dirty = match ink_bbox(&ink) {
+                        Some(bbox) => {
+                            apply_filters(&mut ink, &filters, surface.origin());
+                            let filter_target =
+                                current_target(&mut capture_stack, &mut layer_stack, &mut pixmap);
+                            draw_region(filter_target, &ink, bbox, &PixmapPaint::default());
+                            Dirty::Region(bbox)
+                        }
+                        None => Dirty::Clean,
+                    };
+                    pool.give(ink, dirty);
+                }
+                continue;
+            }
+
+            // Open an offscreen capture for a masked element. Always pushes
+            // (nesting). On allocation failure `pm` is `None` — draws fall
+            // through (unmasked) and the matching EndMask skips compositing,
+            // keeping Begin/End balanced.
+            SceneCommand::BeginMask { mask } => {
+                let pm = pool.take();
+                capture_stack.push(CaptureLayer {
+                    pm,
+                    effect: CaptureEffect::Mask(scale_mask(*mask, scale)),
+                });
+                continue;
+            }
+
+            // Close the active mask capture: attenuate the captured ink by
+            // the coverage field, then composite it onto the target below.
+            // Attenuation keeps zero bytes zero, so only the ink box is
+            // masked and drawn. Empty ink draws nothing.
+            SceneCommand::EndMask => {
+                if let Some(layer) = capture_stack.pop()
+                    && let (Some(mut ink), CaptureEffect::Mask(spec)) = (layer.pm, layer.effect)
+                {
+                    let dirty = match ink_bbox(&ink) {
+                        Some(bbox) => {
+                            attenuate_by_mask(&mut ink, &spec, bbox, surface);
+                            let target =
+                                current_target(&mut capture_stack, &mut layer_stack, &mut pixmap);
+                            draw_region(target, &ink, bbox, &PixmapPaint::default());
+                            Dirty::Region(bbox)
+                        }
+                        None => Dirty::Clean,
+                    };
+                    pool.give(ink, dirty);
+                }
+                continue;
+            }
+
+            // Open a compositing layer: allocate a full-page offscreen pixmap
+            // that the following draws (and any nested layers/shadows) paint
+            // into, to be composited back at PopLayer. On allocation failure
+            // we skip pushing — draws then fall through to the previous
+            // target and paint source-over (degraded, never a crash).
+            SceneCommand::PushLayer {
+                opacity,
+                blend_mode,
+            } => {
+                if let Some(pm) = Pixmap::new(width, height) {
+                    layer_stack.push((pm, *opacity as f32, map_layer_blend(*blend_mode)));
+                }
+                continue;
+            }
+
+            // Close the most-recent layer: composite its buffered ink onto
+            // the NEW current target — the next layer down if one remains,
+            // else the active shadow capture, else the canvas — using the
+            // layer's opacity and blend route.
+            SceneCommand::PopLayer => {
+                if let Some((layer_pm, op, bm)) = layer_stack.pop() {
+                    // After popping this blend layer, composite onto the new
+                    // current target: the next blend layer down if any, else
+                    // the innermost active capture, else the base canvas.
+                    // `current_target` resolves capture-first, so when a
+                    // capture is open and no blend layer remains it returns
+                    // the capture pixmap — byte-identical to the old order.
+                    let target_after_pop =
+                        current_target(&mut capture_stack, &mut layer_stack, &mut pixmap);
+                    match bm {
+                        // Transparent layer pixels leave the target unchanged,
+                        // so only the layer's ink box is drawn.
+                        LayerBlend::SourceOver => {
+                            draw_ink_region(
+                                target_after_pop,
+                                &layer_pm,
+                                &PixmapPaint {
+                                    opacity: op.clamp(0.0, 1.0),
+                                    blend_mode: tiny_skia::BlendMode::SourceOver,
+                                    quality: FilterQuality::Nearest,
+                                },
+                            );
+                        }
+                        LayerBlend::Raster(mode) => {
+                            composite_raster_blend_layer(target_after_pop, &layer_pm, op, mode)?;
+                        }
+                    }
+                }
+                continue;
+            }
+
+            // Drawing commands: fall through to the dispatch below (no
+            // `continue`). Listed explicitly so this structural match stays
+            // exhaustive over `SceneCommand` — no wildcard arm.
+            SceneCommand::FillRect { .. }
+            | SceneCommand::StrokeRect { .. }
+            | SceneCommand::FillRoundedRect { .. }
+            | SceneCommand::StrokeRoundedRect { .. }
+            | SceneCommand::FillEllipse { .. }
+            | SceneCommand::StrokeEllipse { .. }
+            | SceneCommand::StrokeLine { .. }
+            | SceneCommand::FillPolygon { .. }
+            | SceneCommand::StrokePolyline { .. }
+            | SceneCommand::FillPath { .. }
+            | SceneCommand::StrokePath { .. }
+            | SceneCommand::DrawImage { .. }
+            | SceneCommand::DrawSvgAsset { .. }
+            | SceneCommand::DrawGlyphRun { .. } => {}
+        }
+
+        // The active drawing target, innermost-first: the topmost effect
+        // capture holding a buffer (capture ink is always the innermost draw
+        // target), else the top compositing layer if any, else the real
+        // canvas. Computed once per drawing command, after the structural
+        // match above has run (so no borrow overlaps). With no capture and no
+        // layer active this resolves to `&mut pixmap` exactly as before —
+        // the no-layer path is byte-identical.
+        let target: &mut Pixmap = current_target(&mut capture_stack, &mut layer_stack, &mut pixmap);
+
+        let ctx = DrawCtx {
+            current_ts,
+            effective_clip: *clip_stack.last().unwrap_or(&page_clip),
+            surface,
+            device_scale: scale,
+            clip_shape: shape_stack.last().and_then(Option::as_deref),
+        };
+        draw_command(target, ctx, cmd, fonts, assets, &mut svg_fontdb);
+    }
+
+    Ok(pixmap)
 }

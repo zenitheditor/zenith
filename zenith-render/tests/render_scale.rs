@@ -1,8 +1,16 @@
 //! Raster-time output scale: identity at 1, exact sizes, scaled effects.
 
 mod common;
-use common::*;
-use zenith_render::{render_image_scaled, render_png_scaled, scaled_size};
+use common::pixel;
+#[path = "common/no_assets.rs"]
+mod no_assets;
+use no_assets::no_assets;
+#[path = "common/red.rs"]
+mod red;
+use red::red;
+use zenith_core::default_provider;
+use zenith_render::{RasterImage, render_image_scaled, render_png, render_png_scaled, scaled_size};
+use zenith_scene::{Color, Paint, Scene, SceneCommand, ShadowSpec};
 
 /// A page with a solid backdrop, a shadowed square, a blurred circle, a
 /// stroked line, and a clipped rect.

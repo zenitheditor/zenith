@@ -25,10 +25,11 @@ use super::pixels::premultiplied_to_straight;
 /// Each pixel is un-pre-multiplied to straight `[0,1]` RGB, transformed by each
 /// filter in turn (clamped after every op), then re-premultiplied. Iteration is
 /// over `chunks_exact_mut(4)`, which guarantees exactly 4 bytes per chunk; no
-/// manual indexing, no panics. The enumeration index yields the page-absolute
-/// pixel `(x, y)` (the capture pixmap is page-sized), which the noise filter
-/// uses for its deterministic per-cell grain.
-pub(super) fn apply_filters(pm: &mut Pixmap, filters: &[FilterSpec]) {
+/// manual indexing, no panics. The enumeration index plus `origin` (the
+/// full-page device pixel of `pm`'s pixel `(0, 0)`) yields the page-absolute
+/// pixel `(x, y)`, which the noise filter uses for its deterministic per-cell
+/// grain.
+pub(super) fn apply_filters(pm: &mut Pixmap, filters: &[FilterSpec], origin: (i64, i64)) {
     if filters.is_empty() {
         return;
     }
@@ -45,8 +46,8 @@ pub(super) fn apply_filters(pm: &mut Pixmap, filters: &[FilterSpec]) {
         let mut g = f64::from(sg) / 255.0;
         let mut b = f64::from(sb) / 255.0;
 
-        let x = (i % w) as i64;
-        let y = (i / w) as i64;
+        let x = (i % w) as i64 + origin.0;
+        let y = (i / w) as i64 + origin.1;
 
         for spec in filters {
             let (nr, ng, nb) = apply_one(spec, r, g, b, x, y);
@@ -236,7 +237,7 @@ mod tests {
     #[test]
     fn apply_filters_grayscale_collapses_to_luma() {
         let mut pm = opaque_pixel(255, 0, 0);
-        apply_filters(&mut pm, &[FilterSpec::Grayscale(1.0)]);
+        apply_filters(&mut pm, &[FilterSpec::Grayscale(1.0)], (0, 0));
         let (r, g, b, a) = read_pixel(&pm);
         // luma of pure red = 0.2126 → 0.2126*255 ≈ 54.
         assert_eq!(r, g, "grayscale: R == G");
@@ -249,7 +250,7 @@ mod tests {
     #[test]
     fn apply_filters_invert_flips_channels() {
         let mut pm = opaque_pixel(10, 20, 30);
-        apply_filters(&mut pm, &[FilterSpec::Invert(1.0)]);
+        apply_filters(&mut pm, &[FilterSpec::Invert(1.0)], (0, 0));
         let (r, g, b, a) = read_pixel(&pm);
         assert_eq!((r, g, b), (245, 235, 225), "1 - channel");
         assert_eq!(a, 255, "alpha is unchanged");
@@ -259,7 +260,7 @@ mod tests {
     #[test]
     fn apply_filters_brightness_zero_is_black() {
         let mut pm = opaque_pixel(200, 100, 50);
-        apply_filters(&mut pm, &[FilterSpec::Brightness(0.0)]);
+        apply_filters(&mut pm, &[FilterSpec::Brightness(0.0)], (0, 0));
         let (r, g, b, a) = read_pixel(&pm);
         assert_eq!((r, g, b), (0, 0, 0), "brightness 0 → black");
         assert_eq!(a, 255, "alpha is unchanged");
@@ -269,7 +270,7 @@ mod tests {
     #[test]
     fn apply_filters_skips_transparent_pixel() {
         let mut pm = Pixmap::new(1, 1).expect("1x1 pixmap"); // all zero (transparent)
-        apply_filters(&mut pm, &[FilterSpec::Invert(1.0)]);
+        apply_filters(&mut pm, &[FilterSpec::Invert(1.0)], (0, 0));
         assert_eq!(read_pixel(&pm), (0, 0, 0, 0), "transparent pixel untouched");
     }
 
@@ -280,8 +281,8 @@ mod tests {
         let filters = [FilterSpec::Sepia(1.0), FilterSpec::HueRotate(90.0)];
         let mut a = opaque_pixel(123, 45, 200);
         let mut b = opaque_pixel(123, 45, 200);
-        apply_filters(&mut a, &filters);
-        apply_filters(&mut b, &filters);
+        apply_filters(&mut a, &filters, (0, 0));
+        apply_filters(&mut b, &filters, (0, 0));
         assert_eq!(a.data(), b.data(), "same input + filters → identical bytes");
     }
 
@@ -298,12 +299,12 @@ mod tests {
 
         // Pure black input → luma 0 → shadow color (black).
         let mut black = opaque_pixel(0, 0, 0);
-        apply_filters(&mut black, &[duo]);
+        apply_filters(&mut black, &[duo], (0, 0));
         assert_eq!(read_pixel(&black), (0, 0, 0, 255), "black → shadow");
 
         // Pure white input → luma 1 → highlight color (white).
         let mut white = opaque_pixel(255, 255, 255);
-        apply_filters(&mut white, &[duo]);
+        apply_filters(&mut white, &[duo], (0, 0));
         assert_eq!(
             read_pixel(&white),
             (255, 255, 255, 255),
@@ -312,7 +313,7 @@ mod tests {
 
         // Mid-gray input → luma ≈ 0.5 → gray; R==G==B and ~mid.
         let mut gray = opaque_pixel(128, 128, 128);
-        apply_filters(&mut gray, &[duo]);
+        apply_filters(&mut gray, &[duo], (0, 0));
         let (r, g, b, a) = read_pixel(&gray);
         assert_eq!(r, g, "duotone gray: R == G");
         assert_eq!(g, b, "duotone gray: G == B");
@@ -325,8 +326,8 @@ mod tests {
         // Determinism: two identical inputs → identical bytes.
         let mut c1 = opaque_pixel(70, 140, 210);
         let mut c2 = opaque_pixel(70, 140, 210);
-        apply_filters(&mut c1, &[duo]);
-        apply_filters(&mut c2, &[duo]);
+        apply_filters(&mut c1, &[duo], (0, 0));
+        apply_filters(&mut c2, &[duo], (0, 0));
         assert_eq!(c1.data(), c2.data(), "duotone is deterministic");
     }
 
@@ -350,8 +351,8 @@ mod tests {
         };
         let mut a = opaque_fill(8, 8, 128, 128, 128);
         let mut b = opaque_fill(8, 8, 128, 128, 128);
-        apply_filters(&mut a, &[noise]);
-        apply_filters(&mut b, &[noise]);
+        apply_filters(&mut a, &[noise], (0, 0));
+        apply_filters(&mut b, &[noise], (0, 0));
         assert_eq!(a.data(), b.data(), "noise is deterministic");
     }
 
@@ -366,7 +367,7 @@ mod tests {
         };
         let before = opaque_fill(4, 4, 90, 160, 220);
         let mut after = opaque_fill(4, 4, 90, 160, 220);
-        apply_filters(&mut after, &[noise]);
+        apply_filters(&mut after, &[noise], (0, 0));
         assert_eq!(before.data(), after.data(), "zero-amount noise is a no-op");
     }
 
@@ -381,7 +382,7 @@ mod tests {
         };
         let before = opaque_fill(8, 8, 128, 128, 128);
         let mut after = opaque_fill(8, 8, 128, 128, 128);
-        apply_filters(&mut after, &[noise]);
+        apply_filters(&mut after, &[noise], (0, 0));
         assert_ne!(
             before.data(),
             after.data(),

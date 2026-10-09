@@ -14,6 +14,7 @@ use zenith_scene::{FitMode, ImageClip, SceneCommand};
 use super::super::commands::DrawCtx;
 use super::super::paths::build_rounded_rect_path;
 use super::super::raster::{crop_raster_image, decode_raster_image};
+use super::super::surface::{draw_pixmap, mask_fill_path};
 
 pub(in crate::tiny_skia) fn draw_image(
     target: &mut Pixmap,
@@ -40,7 +41,6 @@ pub(in crate::tiny_skia) fn draw_image(
     else {
         return;
     };
-    let (width, height) = (ctx.width, ctx.height);
     let current_ts = ctx.current_ts;
 
     // ── a. Resolve bytes; only raster images are drawn ────────
@@ -189,10 +189,17 @@ pub(in crate::tiny_skia) fn draw_image(
             let Some(path) = path else {
                 return; // degenerate path: nothing to draw
             };
-            let Some(mut m) = Mask::new(width, height) else {
+            let Some(mut m) = Mask::new(ctx.surface.w, ctx.surface.h) else {
                 return;
             };
-            m.fill_path(&path, FillRule::Winding, true, current_ts);
+            mask_fill_path(
+                &mut m,
+                ctx.surface,
+                &path,
+                FillRule::Winding,
+                true,
+                current_ts,
+            );
             Some(ctx.restrict(m))
         }
     };
@@ -218,5 +225,5 @@ pub(in crate::tiny_skia) fn draw_image(
 
     // ── g. Composite. Box-clip is enforced by the Mask;
     // deterministic same-machine (pure-software bilinear). ─────
-    target.draw_pixmap(0, 0, src.as_ref(), &paint, transform, mask);
+    draw_pixmap(target, ctx.surface, src.as_ref(), &paint, transform, mask);
 }

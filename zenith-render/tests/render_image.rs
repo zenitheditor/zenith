@@ -4,9 +4,91 @@
 use std::sync::Arc;
 
 mod common;
-use common::*;
+use common::pixel;
+#[path = "common/swatch_png.rs"]
+mod swatch_png;
+#[path = "common/swatch_provider.rs"]
+mod swatch_provider;
+use swatch_provider::swatch_provider;
+#[path = "common/three_column_rgb_png.rs"]
+mod three_column_rgb_png;
+use three_column_rgb_png::three_column_rgb_png;
+use zenith_core::{AssetKind, BytesAssetProvider, default_provider};
 use zenith_raster::{LinearRgba, blend_pixel, decode_srgb_u8, encode_linear_to_srgb_u8};
-use zenith_scene::SvgStyle;
+use zenith_render::{RasterBackend, TinySkiaBackend};
+use zenith_scene::{
+    BlendMode, Color, FitMode, ImageClip, Paint, Scene, SceneCommand, SrcRect, SvgStyle,
+};
+
+/// Build a scene that draws the swatch stretched into a box, clipped to it.
+fn swatch_scene() -> Scene {
+    let mut scene = Scene::new(40.0, 40.0);
+    scene.commands.push(SceneCommand::PushClip {
+        x: 0.0,
+        y: 0.0,
+        w: 40.0,
+        h: 40.0,
+    });
+    scene.commands.push(SceneCommand::PushClip {
+        x: 8.0,
+        y: 8.0,
+        w: 24.0,
+        h: 24.0,
+    });
+    scene.commands.push(SceneCommand::DrawImage {
+        x: 8.0,
+        y: 8.0,
+        w: 24.0,
+        h: 24.0,
+        asset_id: "asset.swatch".to_string(),
+        fit: FitMode::Stretch,
+        pos_x: 50.0,
+        pos_y: 50.0,
+        opacity: 1.0,
+        clip_shape: None,
+        src_rect: None,
+        svg_style: None,
+    });
+    scene.commands.push(SceneCommand::PopClip);
+    scene.commands.push(SceneCommand::PopClip);
+    scene
+}
+
+/// Build a scene that draws the swatch stretched to fill the whole page,
+/// clipped to the inscribed ellipse (circle, since the box is square).
+fn swatch_ellipse_scene() -> Scene {
+    let mut scene = Scene::new(40.0, 40.0);
+    scene.commands.push(SceneCommand::PushClip {
+        x: 0.0,
+        y: 0.0,
+        w: 40.0,
+        h: 40.0,
+    });
+    // Box-clip the compiler always emits before DrawImage.
+    scene.commands.push(SceneCommand::PushClip {
+        x: 0.0,
+        y: 0.0,
+        w: 40.0,
+        h: 40.0,
+    });
+    scene.commands.push(SceneCommand::DrawImage {
+        x: 0.0,
+        y: 0.0,
+        w: 40.0,
+        h: 40.0,
+        asset_id: "asset.swatch".to_string(),
+        fit: FitMode::Stretch,
+        pos_x: 50.0,
+        pos_y: 50.0,
+        opacity: 1.0,
+        clip_shape: Some(ImageClip::Ellipse),
+        src_rect: None,
+        svg_style: None,
+    });
+    scene.commands.push(SceneCommand::PopClip);
+    scene.commands.push(SceneCommand::PopClip);
+    scene
+}
 
 // ── image: stretch renders + determinism ──────────────────────────────
 

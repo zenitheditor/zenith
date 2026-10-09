@@ -5,6 +5,8 @@
 use tiny_skia::{FillRule, Mask, Path, PathBuilder, Rect, Transform};
 use zenith_scene::{FillRule as SceneFillRule, StrokeAlign, ir::PathSegment};
 
+use super::surface::{Surface, mask_fill_path, mask_intersect_path};
+
 pub(super) fn tiny_skia_fill_rule(rule: SceneFillRule) -> FillRule {
     match rule {
         SceneFillRule::NonZero => FillRule::Winding,
@@ -14,27 +16,32 @@ pub(super) fn tiny_skia_fill_rule(rule: SceneFillRule) -> FillRule {
 
 /// Build a clip `Mask` from the current effective clip rectangle.
 ///
+/// `effective_clip` is in full-page device space. The mask covers `surface`.
+///
 /// Returns:
-/// - `None` — the effective clip is empty or fully off-canvas; the caller
+/// - `None` — the effective clip is empty or misses the surface; the caller
 ///   should skip the draw entirely (`continue`).
-/// - `Some(None)` — the clip covers the whole pixmap; no masking needed,
+/// - `Some(None)` — the clip covers the whole page; no masking needed,
 ///   draw with `mask = None` (the common, no-frame case — avoids allocating
 ///   a full-size mask on every top-level draw).
 /// - `Some(Some(mask))` — a real sub-page clip; draw with `mask = Some(&mask)`.
+///
+/// The mask/no-mask choice tests the page, never the surface, so a region
+/// render takes the same blit path as the full render.
 pub(super) fn clip_mask(
     effective_clip: (f64, f64, f64, f64),
-    width: u32,
-    height: u32,
+    surface: Surface,
 ) -> Option<Option<Mask>> {
-    let pixmap_bounds = (0.0, 0.0, f64::from(width), f64::from(height));
-    let (cx, cy, cx2, cy2) = intersect_rects(effective_clip, pixmap_bounds)?; // empty → None (skip)
-    // If the clip covers the entire pixmap, no mask is needed.
-    if cx <= 0.0 && cy <= 0.0 && cx2 >= f64::from(width) && cy2 >= f64::from(height) {
+    let page_bounds = surface.page_bounds();
+    let (cx, cy, cx2, cy2) = intersect_rects(effective_clip, page_bounds)?; // empty → None (skip)
+    intersect_rects((cx, cy, cx2, cy2), surface.bounds())?;
+    // If the clip covers the entire page, no mask is needed.
+    if cx <= 0.0 && cy <= 0.0 && cx2 >= page_bounds.2 && cy2 >= page_bounds.3 {
         return Some(None);
     }
-    let mut mask = Mask::new(width, height)?;
+    let mut mask = Mask::new(surface.w, surface.h)?;
     let rect = Rect::from_xywh(cx as f32, cy as f32, (cx2 - cx) as f32, (cy2 - cy) as f32)?;
-    let clip_path = PathBuilder::from_rect(rect);
+    let clip_path = PathBuilder::from_rect(surface.local_rect(rect)?);
     // AA off: the clip is an axis-aligned rect and must be exact.
     mask.fill_path(&clip_path, FillRule::Winding, false, Transform::identity());
     Some(Some(mask))
@@ -60,8 +67,7 @@ pub(super) fn build_align_mask(
     align: StrokeAlign,
     clip_fill_rule: SceneFillRule,
     effective_clip: (f64, f64, f64, f64),
-    width: u32,
-    height: u32,
+    surface: Surface,
     device_ts: Transform,
 ) -> Option<Mask> {
     // Inside/Outside only — Center never reaches here.
@@ -77,8 +83,7 @@ pub(super) fn build_align_mask(
         invert,
         clip_fill_rule,
         effective_clip,
-        width,
-        height,
+        surface,
         device_ts,
     )
 }
@@ -88,8 +93,7 @@ pub(super) fn build_path_align_mask(
     align: StrokeAlign,
     clip_fill_rule: SceneFillRule,
     effective_clip: (f64, f64, f64, f64),
-    width: u32,
-    height: u32,
+    surface: Surface,
     device_ts: Transform,
 ) -> Option<Mask> {
     let invert = match align {
@@ -102,8 +106,7 @@ pub(super) fn build_path_align_mask(
         invert,
         clip_fill_rule,
         effective_clip,
-        width,
-        height,
+        surface,
         device_ts,
     )
 }
@@ -113,29 +116,34 @@ fn build_align_mask_for_path(
     invert: bool,
     clip_fill_rule: SceneFillRule,
     effective_clip: (f64, f64, f64, f64),
-    width: u32,
-    height: u32,
+    surface: Surface,
     device_ts: Transform,
 ) -> Option<Mask> {
-    let mut mask = Mask::new(width, height)?;
+    let mut mask = Mask::new(surface.w, surface.h)?;
     let fill_rule = tiny_skia_fill_rule(clip_fill_rule);
-    mask.fill_path(fill_path, fill_rule, true, device_ts);
+    mask_fill_path(&mut mask, surface, fill_path, fill_rule, true, device_ts);
     if invert {
         mask.invert();
     }
 
     // Intersect with the frame clip rect when it is a real sub-page clip.
-    let pixmap_bounds = (0.0, 0.0, f64::from(width), f64::from(height));
-    if let Some((cx, cy, cx2, cy2)) = intersect_rects(effective_clip, pixmap_bounds) {
-        let full_page =
-            cx <= 0.0 && cy <= 0.0 && cx2 >= f64::from(width) && cy2 >= f64::from(height);
+    let page_bounds = surface.page_bounds();
+    if let Some((cx, cy, cx2, cy2)) = intersect_rects(effective_clip, page_bounds) {
+        let full_page = cx <= 0.0 && cy <= 0.0 && cx2 >= page_bounds.2 && cy2 >= page_bounds.3;
         if !full_page
             && let Some(rect) =
                 Rect::from_xywh(cx as f32, cy as f32, (cx2 - cx) as f32, (cy2 - cy) as f32)
         {
             let clip_path = PathBuilder::from_rect(rect);
             // effective_clip is device-space → identity transform, AA off (exact rect).
-            mask.intersect_path(&clip_path, FillRule::Winding, false, Transform::identity());
+            mask_intersect_path(
+                &mut mask,
+                surface,
+                &clip_path,
+                FillRule::Winding,
+                false,
+                Transform::identity(),
+            );
         }
     }
 

@@ -13,20 +13,20 @@ use zenith_scene::{LineCap as IrLineCap, LineJoin as IrLineJoin, SceneCommand};
 
 use super::clip::{draw_clip_mask, intersect_masks};
 use super::draw;
+use super::surface::Surface;
 
 /// Read-only per-command draw context shared by every handler.
 ///
 /// `current_ts` is the active affine transform; `effective_clip` is the top of
-/// the clip stack (already intersected with all enclosing clips); `width` /
-/// `height` are the pixmap dimensions; `device_scale` is the root output
-/// scale. A `Copy` bundle so handlers take few arguments without re-deriving
+/// the clip stack (already intersected with all enclosing clips); `surface` is
+/// the device window every target pixmap covers; `device_scale` is the root
+/// output scale. Transforms and clips are in full-page device space. A `Copy` bundle so handlers take few arguments without re-deriving
 /// any of these per arm.
 #[derive(Clone, Copy)]
 pub(in crate::tiny_skia) struct DrawCtx<'a> {
     pub(in crate::tiny_skia) current_ts: Transform,
     pub(in crate::tiny_skia) effective_clip: (f64, f64, f64, f64),
-    pub(in crate::tiny_skia) width: u32,
-    pub(in crate::tiny_skia) height: u32,
+    pub(in crate::tiny_skia) surface: Surface,
     /// Root output scale of this render (`1.0` = page pixels). Handlers that
     /// rasterize an intermediate (SVG assets) size it by this factor so the
     /// intermediate stays near 1:1 with device pixels.
@@ -41,12 +41,7 @@ impl DrawCtx<'_> {
     /// rotated clip shape when one is active. `None` skips the draw;
     /// `Some(None)` draws unmasked.
     pub(in crate::tiny_skia) fn clip_mask(&self) -> Option<Option<Mask>> {
-        draw_clip_mask(
-            self.effective_clip,
-            self.width,
-            self.height,
-            self.clip_shape,
-        )
+        draw_clip_mask(self.effective_clip, self.surface, self.clip_shape)
     }
 
     /// Restrict a draw-specific `mask` to the rotated clip shape, if any.

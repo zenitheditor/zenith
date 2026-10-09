@@ -15,8 +15,9 @@
 //!   source-over in tiny-skia (highp `d * 1 + 0`, lowp `(d * 255 + 255) >> 8`).
 //!   Skipping such pixels draws the same bytes.
 
-use tiny_skia::{Pixmap, PixmapPaint, Transform};
+use tiny_skia::{BlendMode, Pixmap, PixmapPaint, Transform};
 
+use super::blend::source_over_at;
 use super::blur::blur_reach;
 
 /// Page-space pixel rectangle. `w` and `h` are at least 1.
@@ -66,10 +67,10 @@ pub(super) fn ink_bbox(pm: &Pixmap) -> Option<Region> {
     // (left, top, right, bottom), all inclusive pixel indices.
     let mut bounds: Option<(usize, usize, usize, usize)> = None;
     for (y, row) in pm.data().chunks_exact(stride).enumerate() {
-        let Some(first) = row.iter().position(|&b| b != 0) else {
+        let Some(first) = first_non_zero(row) else {
             continue;
         };
-        let last = row.iter().rposition(|&b| b != 0).unwrap_or(first);
+        let last = last_non_zero(row).unwrap_or(first);
         let (left, right) = (first / 4, last / 4);
         bounds = Some(match bounds {
             None => (left, y, right, y),
@@ -83,6 +84,48 @@ pub(super) fn ink_bbox(pm: &Pixmap) -> Option<Region> {
         w: u32::try_from(right - left + 1).ok()?,
         h: u32::try_from(bottom - top + 1).ok()?,
     })
+}
+
+/// Bytes [`first_non_zero`] and [`last_non_zero`] test per step.
+const SCAN: usize = 16;
+
+/// The index of the first non-zero byte of `bytes`.
+///
+/// Tests 16 bytes per step as one `u128`, then finds the byte inside the
+/// first non-zero block. A capture is mostly empty rows, so this is the
+/// whole cost of [`ink_bbox`] and of the blur's empty-row test.
+pub(super) fn first_non_zero(bytes: &[u8]) -> Option<usize> {
+    let (blocks, tail) = bytes.as_chunks::<SCAN>();
+    // Most rows of a capture are empty: an OR over the whole row has no
+    // branch per block, so it vectorizes, and answers them at once.
+    let any = blocks
+        .iter()
+        .fold(0u128, |acc, block| acc | u128::from_ne_bytes(*block));
+    if any == 0 && tail.iter().all(|&b| b == 0) {
+        return None;
+    }
+    for (i, block) in blocks.iter().enumerate() {
+        if u128::from_ne_bytes(*block) != 0 {
+            return block.iter().position(|&b| b != 0).map(|p| i * SCAN + p);
+        }
+    }
+    tail.iter()
+        .position(|&b| b != 0)
+        .map(|p| blocks.len() * SCAN + p)
+}
+
+/// The index of the last non-zero byte of `bytes` (see [`first_non_zero`]).
+fn last_non_zero(bytes: &[u8]) -> Option<usize> {
+    let (head, blocks) = bytes.as_rchunks::<SCAN>();
+    for (i, block) in blocks.iter().enumerate().rev() {
+        if u128::from_ne_bytes(*block) != 0 {
+            return block
+                .iter()
+                .rposition(|&b| b != 0)
+                .map(|p| head.len() + i * SCAN + p);
+        }
+    }
+    head.iter().rposition(|&b| b != 0)
 }
 
 /// Grow `bbox` by the reach of a blur with `sigma` plus one pixel.
@@ -145,7 +188,7 @@ pub(super) fn draw_at(target: &mut Pixmap, src: &Pixmap, x: i64, y: i64, paint: 
         return;
     };
     if sx0 == 0 && sy0 == 0 {
-        target.draw_pixmap(xi, yi, src.as_ref(), paint, Transform::identity(), None);
+        draw_pixmap_at(target, src, xi, yi, paint);
         return;
     }
     let visible = Region {
@@ -155,8 +198,22 @@ pub(super) fn draw_at(target: &mut Pixmap, src: &Pixmap, x: i64, y: i64, paint: 
         h: u32::try_from(sy1 - sy0).unwrap_or(0),
     };
     if let Some(part) = copy_region(src, visible) {
-        target.draw_pixmap(xi, yi, part.as_ref(), paint, Transform::identity(), None);
+        draw_pixmap_at(target, &part, xi, yi, paint);
     }
+}
+
+/// `target.draw_pixmap(x, y, src, paint)` with no transform or mask, for
+/// `x, y >= 0`. A plain source-over (opacity 1) of a source inside `target`
+/// skips tiny-skia's pipeline ([`source_over_at`], the same bytes).
+fn draw_pixmap_at(target: &mut Pixmap, src: &Pixmap, x: i32, y: i32, paint: &PixmapPaint) {
+    let plain = paint.blend_mode == BlendMode::SourceOver && paint.opacity == 1.0;
+    if plain
+        && let (Ok(ux), Ok(uy)) = (u32::try_from(x), u32::try_from(y))
+        && source_over_at(target, src, ux, uy)
+    {
+        return;
+    }
+    target.draw_pixmap(x, y, src.as_ref(), paint, Transform::identity(), None);
 }
 
 /// Draw only `region` of page-sized `src` onto page-sized `target`.
@@ -226,6 +283,29 @@ mod tests {
     fn ink_bbox_of_empty_page_is_none() {
         let pm = Pixmap::new(10, 8).expect("alloc");
         assert_eq!(ink_bbox(&pm), None);
+    }
+
+    #[test]
+    fn non_zero_scans_match_a_byte_scan() {
+        // Every length around the block size, every single set byte, and
+        // a pair of set bytes.
+        for len in 0..50usize {
+            let zeros = vec![0u8; len];
+            assert_eq!(first_non_zero(&zeros), None, "len {len}");
+            assert_eq!(last_non_zero(&zeros), None, "len {len}");
+            for at in 0..len {
+                let mut bytes = zeros.clone();
+                bytes[at] = 7;
+                assert_eq!(first_non_zero(&bytes), Some(at), "len {len} at {at}");
+                assert_eq!(last_non_zero(&bytes), Some(at), "len {len} at {at}");
+                for other in at..len {
+                    let mut pair = bytes.clone();
+                    pair[other] = 1;
+                    assert_eq!(first_non_zero(&pair), Some(at));
+                    assert_eq!(last_non_zero(&pair), Some(other));
+                }
+            }
+        }
     }
 
     #[test]

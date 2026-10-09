@@ -12,6 +12,7 @@ mod glyph_bitmap;
 mod intrinsic;
 mod pdf;
 mod raster_capture;
+mod region;
 mod render;
 mod scopes;
 mod svg;
@@ -26,6 +27,10 @@ pub use pdf::{
     PdfExportOptions, PdfOptions, PdfOutput, PdfRasterizationReason, PdfRasterizedRegion,
     render_pdf, render_pdf_multi, render_pdf_multi_report, render_pdf_multi_report_with_options,
     render_pdf_multi_with, render_pdf_report, render_pdf_report_with_options, render_pdf_with,
+};
+pub use region::{
+    DeviceRect, MAX_DEVICE_EXTENT, MAX_REGION_PIXELS, MAX_REGION_SIDE, PageRect, RegionError,
+    device_page_size, render_region_image, render_region_png, snap_view,
 };
 pub use render::{
     composite_spread, encode_png, render_image, render_image_scaled, render_png, render_png_scaled,

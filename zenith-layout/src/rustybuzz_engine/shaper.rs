@@ -114,12 +114,10 @@ impl TextLayoutEngine for CachedShaper<'_> {
                 .faces
                 .face(slot)
                 .ok_or_else(|| parse_error(&font_data))?;
-            return shape_run_with_face(FaceShapeRequest::from_shape_request(
-                req,
-                face,
-                req.text,
-                font_data.id,
-            ));
+            return shape_run_with_face(
+                FaceShapeRequest::from_shape_request(req, face, req.text, font_data.id)
+                    .with_plans(&self.faces, slot),
+            );
         }
 
         // The face is outside the store: parse it for this call only.
@@ -690,7 +688,13 @@ mod tests {
     fn store_from_other_provider_still_shapes_correctly() {
         // A store over different allocations never serves this provider.
         let provider = default_provider();
-        let other = default_provider();
+        // The same fonts in fresh allocations: `default_provider` shares one.
+        let mut other = BytesFontProvider::new();
+        for face in zenith_core::bundled_faces() {
+            if let Some(bytes) = face.bytes {
+                face.register(&mut other, std::sync::Arc::from(bytes));
+            }
+        }
         let foreign = FontFaceStore::new(&other);
         let shaper = CachedShaper::new(&foreign);
         let own = FontFaceStore::new(&provider);

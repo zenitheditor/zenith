@@ -2,7 +2,16 @@
 //! arcs stay unpainted, axis-aligned or rotated, and nested clips intersect.
 
 mod common;
-use common::*;
+use common::pixel;
+#[path = "common/no_assets.rs"]
+mod no_assets;
+use no_assets::no_assets;
+#[path = "common/red.rs"]
+mod red;
+use red::red;
+use zenith_core::default_provider;
+use zenith_render::{RasterImage, render_image, render_png};
+use zenith_scene::{Paint, Scene, SceneCommand};
 
 /// A 100×100 page: optional rotation about (50,50), a rounded clip of
 /// (20,20,60,60) with radius 20, and a red fill over the whole page.

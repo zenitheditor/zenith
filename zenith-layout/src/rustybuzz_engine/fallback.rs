@@ -145,12 +145,15 @@ pub(super) fn shape_with_fallback_in(
     // a (degenerate but valid) run with primary metrics is still returned,
     // matching `shape("")`.
     if segments.is_empty() {
-        let run = shape_run_with_face(FaceShapeRequest::from_shape_request(
-            req,
-            primary_face,
-            req.text,
-            primary_data.id.clone(),
-        ))?;
+        let run = shape_run_with_face(
+            FaceShapeRequest::from_shape_request(
+                req,
+                primary_face,
+                req.text,
+                primary_data.id.clone(),
+            )
+            .with_plans(cache, primary),
+        )?;
         return Ok(Some(FallbackResult {
             runs: vec![run],
             missing_chars: missing.into_iter().collect(),
@@ -180,12 +183,10 @@ pub(super) fn shape_with_fallback_in(
         let sub_text = req.text.get(start..end).ok_or_else(|| {
             LayoutError::new("internal: sub-run byte range out of bounds".to_owned())
         })?;
-        let mut run = shape_run_with_face(FaceShapeRequest::from_shape_request(
-            req,
-            face,
-            sub_text,
-            data.id.clone(),
-        ))?;
+        let mut run = shape_run_with_face(
+            FaceShapeRequest::from_shape_request(req, face, sub_text, data.id.clone())
+                .with_plans(cache, slot),
+        )?;
         if letter_spacing_px != 0.0 {
             run.advance_width += letter_spacing_px;
         }

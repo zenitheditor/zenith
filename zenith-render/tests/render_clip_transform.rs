@@ -2,7 +2,13 @@
 //! backend. Exercises the public `TinySkiaBackend` directly.
 
 mod common;
-use common::*;
+use common::pixel;
+#[path = "common/no_assets.rs"]
+mod no_assets;
+use no_assets::no_assets;
+use zenith_core::default_provider;
+use zenith_render::{RasterBackend, TinySkiaBackend};
+use zenith_scene::{Color, Paint, Scene, SceneCommand};
 
 // ── PushTransform: rotation moves ink outside the axis-aligned bbox ────
 

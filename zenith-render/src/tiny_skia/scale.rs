@@ -14,7 +14,7 @@ use super::pixels::f64_to_px;
 use crate::error::RenderError;
 
 /// Check that `scale` is a usable output scale: finite and `> 0`.
-pub(super) fn check_scale(scale: f64) -> Result<(), RenderError> {
+pub(crate) fn check_scale(scale: f64) -> Result<(), RenderError> {
     if scale.is_finite() && scale > 0.0 {
         return Ok(());
     }
@@ -37,6 +37,32 @@ pub(crate) fn scaled_px(value: f64, scale: f64, axis: &str) -> Result<u32, Rende
     }
     let scaled = (value * scale).round().max(1.0);
     f64_to_px(scaled, axis)
+}
+
+/// Device size in pixels of a page axis of length `value` at `scale`, with no
+/// cap on the page or the result.
+///
+/// Same rule as [`scaled_px`]: `max(1, round(value × scale))`, and `value`
+/// must round to a positive size. Region renders use it: they never allocate
+/// the whole page, so the full-page dimension cap does not apply. Returns
+/// `None` for a result that does not fit `u32`.
+pub(crate) fn page_px(value: f64, scale: f64, axis: &str) -> Result<Option<u32>, RenderError> {
+    check_scale(scale)?;
+    if !value.is_finite() || value.round() <= 0.0 {
+        return Err(RenderError::new(format!(
+            "scene {axis} {value} is not a positive finite size"
+        )));
+    }
+    let scaled = if scale == 1.0 {
+        value.round()
+    } else {
+        (value * scale).round().max(1.0)
+    };
+    if scaled <= f64::from(u32::MAX) {
+        Ok(Some(scaled as u32))
+    } else {
+        Ok(None)
+    }
 }
 
 /// Shadow layers with offset and blur multiplied by `scale`.
@@ -126,6 +152,26 @@ mod tests {
         for s in [0.0, -1.0, f64::NAN, f64::INFINITY] {
             assert!(scaled_px(100.0, s, "width").is_err(), "scale {s}");
         }
+    }
+
+    #[test]
+    fn page_px_matches_scaled_px_without_the_page_cap() {
+        for (v, s) in [
+            (1920.0, 0.5),
+            (1081.0, 0.5),
+            (100.4, 1.0),
+            (3.0, 0.01),
+            (333.3, 2.7),
+        ] {
+            assert_eq!(
+                page_px(v, s, "w").unwrap(),
+                Some(scaled_px(v, s, "w").unwrap())
+            );
+        }
+        assert_eq!(page_px(20_000.0, 8.0, "w").unwrap(), Some(160_000));
+        assert!(page_px(0.4, 2.0, "w").is_err());
+        assert!(page_px(f64::NAN, 2.0, "w").is_err());
+        assert_eq!(page_px(1e300, 1e10, "w").unwrap(), None);
     }
 
     #[test]
