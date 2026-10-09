@@ -21,6 +21,7 @@ pub mod point;
 pub mod polyline;
 pub mod transform;
 mod validation;
+pub mod winding;
 
 pub use bezier::{CubicBezier, CubicBezierProjection, project_onto_cubic_bezier};
 pub use boolean::{
@@ -81,3 +82,4 @@ pub use path_consumption::{
 pub use point::{Point2, SegmentProjection};
 pub use polyline::{PolylineProjection, project_onto_polyline, simplify_polyline};
 pub use transform::AffineTransform;
+pub use winding::{fill_contains_point, winding_number};

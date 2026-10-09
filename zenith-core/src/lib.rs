@@ -20,6 +20,7 @@ pub mod font;
 pub mod format;
 pub mod markdown;
 pub mod parse;
+pub mod patch;
 pub mod schema;
 mod suggest;
 pub mod theme;
@@ -48,7 +49,7 @@ pub use ast::{
     TokenLiteral, TokenMapDecl, TokenType, TokenValue, Unit, UnknownNode, UnknownProperty,
     UnknownStyleProp, UnknownValue, VariantDef, VariantOverride, anchor_xy, canonicalize_style_key,
     derive_anchor_origin, dim_to_px, parse_anchor, parse_anchor_edge, resolve_geometry_px,
-    style_enum_values, subtree_uses_layout, translate_node,
+    strip_node_spans, strip_spans, style_enum_values, subtree_uses_layout, translate_node,
 };
 pub use color::{
     BlendMode, Cmyk, Color, GradientPaint, GradientStop, apca_lc, best_text_color, cmyk_to_hex,
@@ -58,12 +59,14 @@ pub use data::{DataContext, DataFormat, format_data_value};
 pub use diagnostics::{Diagnostic, DiagnosticExtra, FixHint, Severity};
 pub use error::{FormatError, ParseError, ParseErrorCode};
 pub use font::{
-    BytesFontProvider, FontAlternateFeature, FontAlternateParseError, FontData, FontProvider,
-    FontSource, FontStyle, LocalFontEntry, default_provider, filter_wanted_families,
-    parse_font_alternate_spec, scan_font_dirs,
+    BundledFace, BytesFontProvider, FaceRequest, FontAlternateFeature, FontAlternateParseError,
+    FontData, FontMissLog, FontProvider, FontSource, FontStyle, LocalFontEntry,
+    bundled_face_by_file, bundled_face_for, bundled_faces, default_provider,
+    filter_wanted_families, parse_font_alternate_spec, scan_font_dirs,
 };
 pub use markdown::{ListKind, MdBlock, parse_block_markdown, parse_inline_markdown};
 pub use parse::{KdlAdapter, KdlSource, parse_brand_contract, parse_diagnostic_policy};
+pub use patch::{PatchError, PatchErrorCode, Patched, patch_source, try_patch_source};
 pub use suggest::{find_suggestion, format_candidate_list};
 pub use tokens::{
     HighlightToken, ResolvedFilter, ResolvedFilterOp, ResolvedGradient, ResolvedMask,

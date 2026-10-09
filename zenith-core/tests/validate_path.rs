@@ -1,8 +1,10 @@
 //! Integration tests for structured `path` node validation.
 
-mod common;
+#[path = "common/has_code.rs"]
+mod has_code;
 
-use common::*;
+use has_code::has_code;
+use zenith_core::{Document, KdlAdapter, KdlSource, Severity, validate};
 
 fn parse_doc(node_src: &str) -> Document {
     let src = format!(

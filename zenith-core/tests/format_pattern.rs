@@ -2,10 +2,12 @@
 //! including the single TEMPLATE `motif` child — plus the missing-motif parse
 //! error and the absent-pattern byte-identical guarantee.
 
-mod common;
+#[path = "common/token_ref.rs"]
+mod token_ref;
 
-use common::*;
+use token_ref::token_ref;
 use zenith_core::format::format_document;
+use zenith_core::{Dimension, KdlAdapter, KdlSource, Node, PropertyValue, Unit, strip_spans};
 
 /// **Pattern parse + format + round-trip (with motif)**: a `pattern` with the
 /// pattern-specific props (kind/seed/count/spacing/jitter), geometry, fill, and

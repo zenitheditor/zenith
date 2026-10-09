@@ -6,10 +6,8 @@
 //! - Unknown-prop capture (annotated) on both `recipe` and `param` nodes.
 //! - Free-form string fields containing `"`, `\`, and newlines escape correctly.
 
-mod common;
-
-use common::*;
 use zenith_core::format::format_document;
+use zenith_core::{KdlAdapter, KdlSource, strip_spans};
 
 // ── recipes: parse, serialize, and round-trip ─────────────────────────
 

@@ -5,12 +5,14 @@
 //!
 //! Moved verbatim from the former in-`src` `format/writer/tests.rs`; the body of
 //! every test is unchanged — only import paths were rewritten to the public
-//! `zenith_core` surface. Span-stripping helpers live in `common`.
+//! `zenith_core` surface. Span-stripping uses `zenith_core::strip_spans`.
 
-mod common;
+#[path = "common/px.rs"]
+mod px;
 
-use common::*;
+use px::px;
 use zenith_core::format::format_document;
+use zenith_core::{AnchorKind, KdlAdapter, KdlSource, Node, PropertyValue, strip_spans};
 
 #[path = "format_nodes/anchor.rs"]
 mod anchor;

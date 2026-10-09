@@ -48,6 +48,24 @@ impl AffineTransform {
         Self::new(cos, sin, -sin, cos, e, f)
     }
 
+    /// Scale by `sx` and `sy` about `pivot`: `pivot` stays fixed.
+    ///
+    /// A negative factor mirrors that axis. A zero factor collapses the
+    /// shape and gives [`GeometryError::SingularTransform`].
+    pub fn scale(sx: f64, sy: f64, pivot: Point2) -> Result<Self, GeometryError> {
+        if !sx.is_finite() || !sy.is_finite() {
+            return Err(GeometryError::NonFiniteParameter);
+        }
+        pivot.validate()?;
+        if sx == 0.0 || sy == 0.0 {
+            return Err(GeometryError::SingularTransform);
+        }
+        let e = pivot.x - sx * pivot.x;
+        let f = pivot.y - sy * pivot.y;
+
+        Self::new(sx, 0.0, 0.0, sy, e, f)
+    }
+
     pub fn reflection_across_line(start: Point2, end: Point2) -> Result<Self, GeometryError> {
         start.validate()?;
         end.validate()?;
@@ -286,6 +304,41 @@ mod tests {
 
         assert_eq!(mapped, point(6.0, 2.0));
         assert_eq!(inverse.apply_point(mapped), Ok(source));
+    }
+
+    #[test]
+    fn scale_keeps_pivot_fixed_and_round_trips() {
+        let transform = AffineTransform::scale(2.0, 0.5, point(10.0, 20.0)).expect("valid");
+        assert_eq!(
+            transform.apply_point(point(10.0, 20.0)),
+            Ok(point(10.0, 20.0))
+        );
+        let mapped = transform
+            .apply_point(point(14.0, 28.0))
+            .expect("valid output");
+        assert_eq!(mapped, point(18.0, 24.0));
+        let inverse = transform.inverse().expect("invertible");
+        assert_point_close(
+            inverse.apply_point(mapped).expect("valid"),
+            point(14.0, 28.0),
+        );
+    }
+
+    #[test]
+    fn scale_rejects_zero_and_non_finite_factors() {
+        let pivot = point(0.0, 0.0);
+        assert_eq!(
+            AffineTransform::scale(0.0, 1.0, pivot),
+            Err(GeometryError::SingularTransform)
+        );
+        assert_eq!(
+            AffineTransform::scale(1.0, f64::NAN, pivot),
+            Err(GeometryError::NonFiniteParameter)
+        );
+        assert_eq!(
+            AffineTransform::scale(-1.0, 1.0, pivot).and_then(|t| t.apply_point(point(3.0, 4.0))),
+            Ok(point(-3.0, 4.0))
+        );
     }
 
     #[test]

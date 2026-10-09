@@ -11,8 +11,9 @@ use super::KdlSource;
 
 /// Parses `.zen` source bytes into a `Document` AST using the KDL v2 parser.
 ///
-/// This is the only struct in zenith-core that directly touches the `kdl` crate.
-/// All other code works with the Zenith AST types.
+/// The parse layer and the source patcher (`crate::patch`) are the only
+/// zenith-core code that touches the `kdl` crate. All other code works with
+/// the Zenith AST types.
 #[derive(Debug, Clone, Default)]
 pub struct KdlAdapter;
 

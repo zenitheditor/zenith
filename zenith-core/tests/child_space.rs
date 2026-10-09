@@ -2,10 +2,17 @@
 //! read nodes in page space, through the translation of enclosing groups and
 //! frames.
 
-mod common;
+#[path = "common/codes.rs"]
+mod codes;
+#[path = "common/contrast_report.rs"]
+mod contrast_report;
+#[path = "common/has_code.rs"]
+mod has_code;
 
-use common::contrast::contrast_report;
-use common::*;
+use codes::codes;
+use contrast_report::contrast_report;
+use has_code::has_code;
+use zenith_core::{Document, KdlAdapter, KdlSource, ValidationReport, validate};
 
 fn parse_doc(body: &str) -> Document {
     let src = format!(

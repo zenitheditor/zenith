@@ -5,13 +5,10 @@
 //!
 //! Moved verbatim from the former in-`src` `format/writer/tests.rs`; the body of
 //! every test is unchanged — only import paths were rewritten to the public
-//! `zenith_core` surface. Span-stripping helpers live in `common`.
+//! `zenith_core` surface. Span-stripping uses `zenith_core::strip_spans`.
 
-mod common;
-
-use common::*;
-use zenith_core::PropertyValue;
 use zenith_core::format::format_document;
+use zenith_core::{KdlAdapter, KdlSource, Node, PropertyValue, strip_spans};
 
 /// A `.zen` document exercising the `components` block, `instance` nodes, and
 /// `override`s with span replacements plus fill/stroke styling.

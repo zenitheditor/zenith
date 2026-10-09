@@ -2,10 +2,11 @@
 //! inside a structural block is captured at parse time and reported, with a
 //! did-you-mean over the block's accepted children, from validation.
 
-mod common;
+#[path = "common/has_code.rs"]
+mod has_code;
 
-use common::*;
-use zenith_core::{KdlAdapter, KdlSource, Severity};
+use has_code::has_code;
+use zenith_core::{Document, KdlAdapter, KdlSource, Severity, validate};
 
 /// Parse a document with `top` spliced in before `document` and `page_body`
 /// inside the single page. Parsing is lenient, so malformed blocks still parse.

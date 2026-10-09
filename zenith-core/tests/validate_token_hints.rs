@@ -5,10 +5,14 @@
 //! candidates (`token.unknown_reference`, `token.raw_visual_literal`), the
 //! allowed values (`node.invalid_value`), and a source span.
 
-mod common;
+#[path = "common/codes.rs"]
+mod codes;
+#[path = "common/has_code.rs"]
+mod has_code;
 
-use common::*;
-use zenith_core::Diagnostic;
+use codes::codes;
+use has_code::has_code;
+use zenith_core::{Diagnostic, KdlAdapter, KdlSource, Severity, ValidationReport, validate};
 
 fn doc_src(tokens: &str, children: &str) -> String {
     format!(

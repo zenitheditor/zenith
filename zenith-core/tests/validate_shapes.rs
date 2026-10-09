@@ -6,9 +6,41 @@
 
 use std::collections::BTreeMap;
 
-mod common;
+#[path = "common/codes.rs"]
+mod codes;
+#[path = "common/color_token.rs"]
+mod color_token;
+#[path = "common/dim_token.rs"]
+mod dim_token;
+#[path = "common/has_code.rs"]
+mod has_code;
+#[path = "common/minimal_page.rs"]
+mod minimal_page;
+#[path = "common/minimal_rect.rs"]
+mod minimal_rect;
+#[path = "common/minimal_text.rs"]
+mod minimal_text;
+#[path = "common/px.rs"]
+mod px;
+#[path = "common/pxv_doc_with.rs"]
+mod pxv_doc_with;
+#[path = "common/token_ref.rs"]
+mod token_ref;
 
-use common::*;
+use codes::codes;
+use color_token::color_token;
+use dim_token::dim_token;
+use has_code::has_code;
+use minimal_page::minimal_page;
+use minimal_rect::minimal_rect;
+use minimal_text::minimal_text;
+use px::px;
+use pxv_doc_with::{doc_with, pxv};
+use token_ref::token_ref;
+use zenith_core::{
+    ConnectorNode, KdlAdapter, KdlSource, Node, Point, PolygonNode, PolylineNode, PropertyValue,
+    Severity, ShapeNode, TextSpan, ValidationReport, validate,
+};
 
 fn tri_points() -> Vec<Point> {
     vec![

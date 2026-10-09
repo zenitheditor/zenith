@@ -6,8 +6,7 @@
 //! - diag_catalog: `data.missing_field` and `data.no_context` are catalogued
 //!   and are governable
 
-mod common;
-use common::*;
+use zenith_core::{KdlAdapter, KdlSource, Node, PropertyValue, validate};
 
 use zenith_core::Severity;
 use zenith_core::diag_catalog::{DIAGNOSTIC_CODES, lookup};

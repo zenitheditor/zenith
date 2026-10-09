@@ -5,9 +5,14 @@
 //! a far-miss typo that produces no suggestion, and a correctly-spelled document
 //! that produces no unknown-property diagnostic at all.
 
-mod common;
+#[path = "common/codes.rs"]
+mod codes;
+#[path = "common/has_code.rs"]
+mod has_code;
 
-use common::*;
+use codes::codes;
+use has_code::has_code;
+use zenith_core::{KdlAdapter, KdlSource, Severity, validate};
 
 // ── rect: "did you mean?" triplet ────────────────────────────────────
 

@@ -6,9 +6,39 @@
 
 use std::collections::BTreeMap;
 
-mod common;
+#[path = "common/codes.rs"]
+mod codes;
+#[path = "common/color_token.rs"]
+mod color_token;
+#[path = "common/color_token_hex.rs"]
+mod color_token_hex;
+#[path = "common/has_code.rs"]
+mod has_code;
+#[path = "common/minimal_page.rs"]
+mod minimal_page;
+#[path = "common/minimal_rect.rs"]
+mod minimal_rect;
+#[path = "common/px.rs"]
+mod px;
+#[path = "common/pxv_doc_with.rs"]
+mod pxv_doc_with;
+#[path = "common/token_ref.rs"]
+mod token_ref;
 
-use common::*;
+use codes::codes;
+use color_token::color_token;
+use color_token_hex::color_token_hex;
+use has_code::has_code;
+use minimal_page::minimal_page;
+use minimal_rect::minimal_rect;
+use px::px;
+use pxv_doc_with::{doc_with, pxv};
+use token_ref::token_ref;
+use zenith_core::{
+    ActionDef, AssetBlock, BrandContract, CodeNode, Document, DocumentBody, LibraryDef, Node, Page,
+    PropertyValue, ProvenanceDef, Severity, Style, StyleBlock, Token, TokenBlock, UnknownStyleProp,
+    validate,
+};
 
 // ── Style validation tests ─────────────────────────────────────────────
 

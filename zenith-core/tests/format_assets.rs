@@ -4,10 +4,8 @@
 //! canonical property order, and AI-provenance fields — exercising both the
 //! basic `AssetDecl` fields and all nine `ai-*` provenance properties.
 
-mod common;
-
-use common::*;
 use zenith_core::format::format_document;
+use zenith_core::{KdlAdapter, KdlSource};
 
 /// A `.zen` document with an assets block containing two declarations.
 const WITH_ASSETS: &str = r##"zenith version=1 {

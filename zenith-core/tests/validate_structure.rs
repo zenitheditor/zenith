@@ -6,9 +6,25 @@
 
 use std::collections::BTreeMap;
 
-mod common;
+#[path = "common/codes.rs"]
+mod codes;
+#[path = "common/has_code.rs"]
+mod has_code;
+#[path = "common/minimal_page.rs"]
+mod minimal_page;
+#[path = "common/px.rs"]
+mod px;
+#[path = "common/pxv_doc_with.rs"]
+mod pxv_doc_with;
 
-use common::*;
+use codes::codes;
+use has_code::has_code;
+use minimal_page::minimal_page;
+use pxv_doc_with::{doc_with, pxv};
+use zenith_core::{
+    Dimension, Document, FieldNode, MasterDef, Node, Page, RectNode, SectionDef, TocNode, Token,
+    Unit, validate,
+};
 
 // ── Master-page + field validation ────────────────────────────────────────
 

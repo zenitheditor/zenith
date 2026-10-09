@@ -6,9 +6,30 @@
 
 use std::collections::BTreeMap;
 
-mod common;
+#[path = "common/bounded_page_rect_at.rs"]
+mod bounded_page_rect_at;
+#[path = "common/codes.rs"]
+mod codes;
+#[path = "common/has_code.rs"]
+mod has_code;
+#[path = "common/minimal_page.rs"]
+mod minimal_page;
+#[path = "common/px.rs"]
+mod px;
+#[path = "common/pxv_doc_with.rs"]
+mod pxv_doc_with;
 
-use common::*;
+use bounded_page_rect_at::{bounded_page, rect_at};
+use codes::codes;
+use has_code::has_code;
+use minimal_page::minimal_page;
+use px::px;
+use pxv_doc_with::{doc_with, pxv};
+use zenith_core::ast::document::Fold;
+use zenith_core::{
+    ConstructionBlock, Dimension, ImageNode, Node, Page, SafeZone, SafeZoneType, Severity, Unit,
+    ValidationReport, validate,
+};
 
 // ── Page bleed validation ─────────────────────────────────────────────
 

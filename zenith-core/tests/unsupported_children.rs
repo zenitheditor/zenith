@@ -2,10 +2,11 @@
 //! authored under a kind that does not consume them are captured at parse time
 //! and reported (with severity Error) from validation.
 
-mod common;
+#[path = "common/has_code.rs"]
+mod has_code;
 
-use common::*;
-use zenith_core::{KdlAdapter, KdlSource};
+use has_code::has_code;
+use zenith_core::{Document, KdlAdapter, KdlSource, Severity, validate};
 
 /// Parse a `.zen` document whose page body is `body_src`. Parsing is lenient, so
 /// this succeeds even for documents that will produce validation diagnostics.

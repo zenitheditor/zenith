@@ -1,10 +1,12 @@
 //! Integration tests for the `chart` node: parse, format, and round-trip —
 //! including two `series` children — plus the absent-chart byte-identical guarantee.
 
-mod common;
+#[path = "common/token_ref.rs"]
+mod token_ref;
 
-use common::*;
+use token_ref::token_ref;
 use zenith_core::format::format_document;
+use zenith_core::{Dimension, KdlAdapter, KdlSource, Node, PropertyValue, Unit, strip_spans};
 
 /// **Chart parse + format + round-trip (with two series)**: a `chart` with the
 /// chart-specific props (kind/title/caption/legend/axis-min/axis-max),

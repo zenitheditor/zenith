@@ -4,9 +4,14 @@
 //! collection on all visual props (including border/stroke-outer/blur), and
 //! every pattern-specific semantic diagnostic.
 
-mod common;
+#[path = "common/codes.rs"]
+mod codes;
+#[path = "common/has_code.rs"]
+mod has_code;
 
-use common::*;
+use codes::codes;
+use has_code::has_code;
+use zenith_core::{KdlAdapter, KdlSource, Severity, validate};
 
 /// A pattern whose id duplicates another node's id fires `id.duplicate` — this
 /// proves the pattern's own id participates in id-uniqueness.

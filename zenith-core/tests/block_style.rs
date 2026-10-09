@@ -12,8 +12,17 @@
 //! 5. Validation: a `block` decl referencing a missing token yields
 //!    `token.unknown_reference`.
 
-mod common;
-use common::*;
+#[path = "common/codes.rs"]
+mod codes;
+#[path = "common/has_code.rs"]
+mod has_code;
+#[path = "common/px.rs"]
+mod px;
+
+use codes::codes;
+use has_code::has_code;
+use px::px;
+use zenith_core::{Node, PropertyValue};
 
 use zenith_core::format::format_document;
 use zenith_core::{KdlAdapter, KdlSource, validate};

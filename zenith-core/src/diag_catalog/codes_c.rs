@@ -404,10 +404,28 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
         "A token is declared but never referenced.",
     ),
     info(
+        "tx.anchored",
+        Severity::Error,
+        "A transaction op edits an x/y that an anchor supplies, or the anchor position does not \
+         derive from authored values. Use nudge_anchor_gap, set_anchor, or detach_anchor.",
+    ),
+    info(
+        "tx.computed_size",
+        Severity::Error,
+        "A transaction op offsets a w/h that layout or content computes (hug/fill keyword or no \
+         authored size). Write the measured px size with set_geometry.",
+    ),
+    info(
         "tx.coordinate_unresolved",
         Severity::Advisory,
         "A transaction moved a node between containers, but a container origin does not resolve \
          to px, so the node's x/y stay unchanged; check its position.",
+    ),
+    info(
+        "tx.derived_geometry",
+        Severity::Error,
+        "A transaction op edits geometry that derives from other nodes (a connector's \
+         endpoints). Move the targets or change the connector's from/to attributes.",
     ),
     info(
         "tx.duplicate_id",
@@ -511,6 +529,12 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
         "A pattern-expand op could not resolve the pattern bounds node.",
     ),
     info(
+        "tx.token_bound",
+        Severity::Error,
+        "A transaction op offsets an attribute bound to a token. Change the token with \
+         update_token_value, or pass detach=true to replace the attribute with px.",
+    ),
+    info(
         "tx.unknown_master",
         Severity::Error,
         "Master referenced by a transaction op does not exist.",
@@ -549,6 +573,13 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
         "tx.unsupported_property",
         Severity::Error,
         "A transaction op targets a property that cannot be set on the node kind.",
+    ),
+    info(
+        "tx.value_unresolved",
+        Severity::Error,
+        "A transaction op offsets a value with no px conversion: a pct, deg, or unknown unit, a \
+         literal, a data ref, or an absent value with no default. Write an absolute value with \
+         set_geometry.",
     ),
     info(
         "tx.wrong_node_type",

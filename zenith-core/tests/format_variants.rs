@@ -5,10 +5,8 @@
 //! - Absent `variants` block → empty vec, no output, byte-identical to before.
 //! - Unknown-prop capture (annotated) on both `variant` and `override` nodes.
 
-mod common;
-
-use common::*;
 use zenith_core::format::format_document;
+use zenith_core::{KdlAdapter, KdlSource, strip_spans};
 
 // ── variants: parse, serialize, and round-trip ────────────────────────
 

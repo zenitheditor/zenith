@@ -14,6 +14,7 @@ pub mod policy;
 pub mod provenance;
 pub mod recipe;
 pub mod span;
+pub mod strip;
 pub mod style;
 pub mod token;
 pub mod unsupported;
@@ -51,6 +52,7 @@ pub use policy::{DiagnosticPolicy, PolicyEntry, PolicyVerb};
 pub use provenance::ProvenanceDef;
 pub use recipe::{RecipeDef, RecipeParam};
 pub use span::Span;
+pub use strip::{strip_node_spans, strip_spans};
 pub use style::{
     STYLE_ENUM_KEYS, STYLE_RECOGNIZED_KEYS, Style, StyleBlock, UnknownStyleProp,
     canonicalize_style_key, style_enum_values,

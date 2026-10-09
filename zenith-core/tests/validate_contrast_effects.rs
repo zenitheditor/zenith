@@ -5,11 +5,256 @@
 //! rects, path fills, mask/filter/blur/blend effects, boxless anchored text).
 //! Test bodies moved verbatim; only the file location changed.
 
-mod common;
+#[path = "common/codes.rs"]
+mod codes;
+#[path = "common/color_token_hex.rs"]
+mod color_token_hex;
+#[path = "common/contrast_report.rs"]
+mod contrast_report;
+#[path = "common/contrast_shared.rs"]
+mod contrast_shared;
+#[path = "common/has_code.rs"]
+mod has_code;
+#[path = "common/minimal_rect.rs"]
+mod minimal_rect;
+#[path = "common/minimal_text.rs"]
+mod minimal_text;
+#[path = "common/px.rs"]
+mod px;
+#[path = "common/pxv_doc_with.rs"]
+mod pxv_doc_with;
 
-use common::contrast::*;
-use common::*;
-use zenith_core::{Dimension, Unit};
+use codes::codes;
+use color_token_hex::color_token_hex;
+use contrast_report::contrast_report;
+use contrast_shared::{ellipse_backdrop, group_at, page_with_bg, rect_backdrop_at, text_at};
+use has_code::has_code;
+use minimal_text::minimal_text;
+use px::px;
+use pxv_doc_with::{doc_with, pxv};
+use std::collections::BTreeMap;
+use zenith_core::{
+    Dimension, Document, FrameNode, Node, PathAnchor, PathNode, PathSubpath, PropertyValue,
+    RectNode, Token, Unit,
+};
+
+// ── Local builders (used only by this binary) ──────────────────────────
+
+/// The three colour tokens used across the unmodeled-backdrop tests: a white
+/// page, a navy backdrop, and black text (black on navy is APCA-invisible).
+fn base_contrast_tokens() -> Vec<Token> {
+    vec![
+        color_token_hex("color.page", "#ffffff"),
+        color_token_hex("color.backdrop", "#003087"),
+        color_token_hex("color.text", "#000000"),
+    ]
+}
+
+/// A page (white bg) holding `backdrop` then black text at (130,130,80,30).
+fn backdrop_over_text_doc(backdrop: Node) -> Document {
+    doc_with(
+        base_contrast_tokens(),
+        vec![page_with_bg(
+            "page.one",
+            "color.page",
+            vec![
+                backdrop,
+                text_at("headline", "color.text", 130.0, 130.0, 80.0, 30.0),
+            ],
+        )],
+    )
+}
+
+/// Build a rect backdrop then mutate it (radius/rotate/mask/blur/blend/…).
+fn rect_backdrop_with(
+    id: &str,
+    fill_token: &str,
+    x: f64,
+    y: f64,
+    w: f64,
+    h: f64,
+    mutate: impl FnOnce(&mut RectNode),
+) -> Node {
+    let Node::Rect(mut rect) = rect_backdrop_at(id, fill_token, x, y, w, h) else {
+        unreachable!("rect_backdrop_at returns Node::Rect");
+    };
+    mutate(&mut rect);
+    Node::Rect(rect)
+}
+
+/// A `group` at (x,y) rotated `deg` degrees around its subtree.
+fn rotated_group(id: &str, x: f64, y: f64, deg: f64, children: Vec<Node>) -> Node {
+    let Node::Group(mut group) = group_at(id, x, y, children) else {
+        unreachable!("group_at returns Node::Group");
+    };
+    group.rotate = Some(Dimension {
+        value: deg,
+        unit: Unit::Deg,
+    });
+    Node::Group(group)
+}
+
+/// Corner-style path anchor at absolute page pixels (no Bezier handles).
+fn path_corner(px_x: f64, px_y: f64) -> PathAnchor {
+    PathAnchor {
+        x: Some(px(px_x)),
+        y: Some(px(px_y)),
+        kind: None,
+        in_x: None,
+        in_y: None,
+        out_x: None,
+        out_y: None,
+    }
+}
+
+/// Four corner anchors for an axis-aligned rectangle in page pixels.
+fn path_rect_anchors(x: f64, y: f64, w: f64, h: f64) -> Vec<PathAnchor> {
+    vec![
+        path_corner(x, y),
+        path_corner(x + w, y),
+        path_corner(x + w, y + h),
+        path_corner(x, y + h),
+    ]
+}
+
+/// A filled `path` whose anchors trace the rectangle (x,y,w,h).
+fn path_box_backdrop(id: &str, fill_token: &str, x: f64, y: f64, w: f64, h: f64) -> Node {
+    path_closed_backdrop(id, fill_token, None, path_rect_anchors(x, y, w, h))
+}
+
+/// A filled closed `path` with an explicit fill-rule and anchor list (legacy
+/// single-contour form).
+fn path_closed_backdrop(
+    id: &str,
+    fill_token: &str,
+    fill_rule: Option<&str>,
+    anchors: Vec<PathAnchor>,
+) -> Node {
+    Node::Path(PathNode {
+        id: id.to_owned(),
+        name: None,
+        role: None,
+        closed: Some(true),
+        fill: Some(PropertyValue::TokenRef(fill_token.to_owned())),
+        stroke: None,
+        stroke_width: None,
+        stroke_alignment: None,
+        stroke_linejoin: None,
+        stroke_linecap: None,
+        stroke_miter_limit: None,
+        fill_rule: fill_rule.map(|s| s.to_owned()),
+        opacity: None,
+        visible: None,
+        locked: None,
+        rotate: None,
+        style: None,
+        anchors,
+        subpaths: Vec::new(),
+        source_span: None,
+        unknown_props: BTreeMap::new(),
+    })
+}
+
+/// Evenodd compound path: outer closed contour with an inner hole contour.
+fn path_evenodd_hole_backdrop(
+    id: &str,
+    fill_token: &str,
+    outer: (f64, f64, f64, f64),
+    hole: (f64, f64, f64, f64),
+) -> Node {
+    let (ox, oy, ow, oh) = outer;
+    let (hx, hy, hw, hh) = hole;
+    Node::Path(PathNode {
+        id: id.to_owned(),
+        name: None,
+        role: None,
+        closed: None,
+        fill: Some(PropertyValue::TokenRef(fill_token.to_owned())),
+        stroke: None,
+        stroke_width: None,
+        stroke_alignment: None,
+        stroke_linejoin: None,
+        stroke_linecap: None,
+        stroke_miter_limit: None,
+        fill_rule: Some("evenodd".to_owned()),
+        opacity: None,
+        visible: None,
+        locked: None,
+        rotate: None,
+        style: None,
+        anchors: Vec::new(),
+        subpaths: vec![
+            PathSubpath {
+                closed: Some(true),
+                anchors: path_rect_anchors(ox, oy, ow, oh),
+            },
+            PathSubpath {
+                closed: Some(true),
+                anchors: path_rect_anchors(hx, hy, hw, hh),
+            },
+        ],
+        source_span: None,
+        unknown_props: BTreeMap::new(),
+    })
+}
+
+/// A frame (clip box) holding the given children.
+fn frame_clip(id: &str, x: f64, y: f64, w: f64, h: f64, children: Vec<Node>) -> Node {
+    Node::Frame(FrameNode {
+        id: id.to_owned(),
+        name: None,
+        role: None,
+        x: Some(pxv(x)),
+        y: Some(pxv(y)),
+        w: Some(pxv(w)),
+        h: Some(pxv(h)),
+        layout_item: Default::default(),
+        layout: None,
+        container: Default::default(),
+        clip: None,
+        fill: None,
+        stroke: None,
+        stroke_width: None,
+        radius: None,
+        columns: None,
+        rows: None,
+        opacity: None,
+        visible: None,
+        locked: None,
+        rotate: None,
+        blend_mode: None,
+        shadow: None,
+        filter: None,
+        mask: None,
+        blur: None,
+        style: None,
+        anchor: None,
+        anchor_zone: None,
+        anchor_sibling: None,
+        anchor_edge: None,
+        anchor_gap: None,
+        anchor_parent: None,
+        children,
+        source_span: None,
+        unknown_props: BTreeMap::new(),
+    })
+}
+
+/// Anchored text (page anchor, no w/h) with a resolvable fill, no `contrast-bg`.
+fn anchored_boxless_text(id: &str, fill_token: &str, contrast_bg: Option<&str>) -> Node {
+    let Node::Text(mut text) =
+        minimal_text(id, Some(PropertyValue::TokenRef(fill_token.to_owned())))
+    else {
+        unreachable!("minimal_text returns Node::Text");
+    };
+    text.x = None;
+    text.y = None;
+    text.w = None;
+    text.h = None;
+    text.anchor = Some("center".to_owned());
+    text.contrast_bg = contrast_bg.map(|t| PropertyValue::TokenRef(t.to_owned()));
+    Node::Text(text)
+}
 
 // ── Item 1: text sample box translated into page space ─────────────────
 

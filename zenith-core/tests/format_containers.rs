@@ -5,12 +5,10 @@
 //!
 //! Moved verbatim from the former in-`src` `format/writer/tests.rs`; the body of
 //! every test is unchanged — only import paths were rewritten to the public
-//! `zenith_core` surface. Span-stripping helpers live in `common`.
+//! `zenith_core` surface. Span-stripping uses `zenith_core::strip_spans`.
 
-mod common;
-
-use common::*;
 use zenith_core::format::format_document;
+use zenith_core::{KdlAdapter, KdlSource, Node, strip_spans};
 
 /// **table parse + format round-trip**: a table with columns/rows/cells and a
 /// colspan parses into a `Node::Table`, and a parse → format → parse cycle

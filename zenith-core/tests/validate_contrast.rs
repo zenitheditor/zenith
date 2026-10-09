@@ -8,10 +8,45 @@
 //! concern files; only import paths changed (`crate::`/`super::common` ->
 //! `zenith_core::`/`common`).
 
-mod common;
+#[path = "common/codes.rs"]
+mod codes;
+#[path = "common/color_token_hex.rs"]
+mod color_token_hex;
+#[path = "common/contrast_backdrops.rs"]
+mod contrast_backdrops;
+#[path = "common/contrast_report.rs"]
+mod contrast_report;
+#[path = "common/contrast_shared.rs"]
+mod contrast_shared;
+#[path = "common/has_code.rs"]
+mod has_code;
+#[path = "common/minimal_page.rs"]
+mod minimal_page;
+#[path = "common/minimal_rect.rs"]
+mod minimal_rect;
+#[path = "common/minimal_text.rs"]
+mod minimal_text;
+#[path = "common/px.rs"]
+mod px;
+#[path = "common/pxv_doc_with.rs"]
+mod pxv_doc_with;
 
-use common::contrast::*;
-use common::*;
+use codes::codes;
+use color_token_hex::color_token_hex;
+use contrast_backdrops::{
+    anchored_text_with_fill_and_size, dim_token_pt, doc_with_backdrop_image, fw_token,
+    image_backdrop_at, image_backdrop_at_with_opacity, linear_gradient_token, polygon_backdrop,
+    polyline_backdrop, shape_backdrop_at, table_with_cell_text, text_with_fill_and_contrast_bg,
+    text_with_fill_and_size,
+};
+use contrast_report::contrast_report;
+use contrast_shared::{
+    ellipse_backdrop, group_at, group_at_with_opacity, page_with_bg, rect_backdrop_at, text_at,
+};
+use has_code::has_code;
+use minimal_page::minimal_page;
+use pxv_doc_with::doc_with;
+use zenith_core::{Node, PropertyValue, Severity};
 
 // ══════════════════════════════════════════════════════════════════════
 // WCAG 3 (APCA) contrast advisory tests

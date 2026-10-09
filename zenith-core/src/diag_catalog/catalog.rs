@@ -255,7 +255,10 @@ mod tests {
         // validation can recognise them as known codes.
         let known_tx_codes: &[(&str, Severity)] = &[
             ("node.locked", Severity::Error),
+            ("tx.anchored", Severity::Error),
+            ("tx.computed_size", Severity::Error),
             ("tx.coordinate_unresolved", Severity::Advisory),
+            ("tx.derived_geometry", Severity::Error),
             ("tx.duplicate_id", Severity::Error),
             ("tx.flow_placed", Severity::Advisory),
             ("tx.geometry_required", Severity::Error),
@@ -274,6 +277,7 @@ mod tests {
             ("tx.page_box_changed", Severity::Warning),
             ("tx.pattern_not_expandable", Severity::Error),
             ("tx.pattern_unresolved_bounds", Severity::Error),
+            ("tx.token_bound", Severity::Error),
             ("tx.unknown_node", Severity::Error),
             ("tx.unknown_recipe", Severity::Error),
             ("tx.unknown_style", Severity::Error),
@@ -281,6 +285,7 @@ mod tests {
             ("tx.unsupported_closed_path", Severity::Error),
             ("tx.unsupported_path_handles", Severity::Error),
             ("tx.unsupported_property", Severity::Error),
+            ("tx.value_unresolved", Severity::Error),
             ("tx.wrong_node_type", Severity::Error),
         ];
         for (code, expected_severity) in known_tx_codes {

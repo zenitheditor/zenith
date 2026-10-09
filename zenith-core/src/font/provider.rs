@@ -7,6 +7,8 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
+use super::miss_log::FontMissLog;
+
 /// The style variant of a font face.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum FontStyle {
@@ -94,9 +96,15 @@ struct FaceKey {
 /// Two `BTreeMap`s are maintained:
 /// - `by_key`: `(family_lower, weight, style) -> FontData` for `resolve`.
 /// - `by_id`: `id -> FontData` for `by_id`.
+///
+/// Cloning copies the two maps and shares every face's bytes (`Arc`), so a
+/// clone is the cheap way to layer extra faces over a shared base.
+#[derive(Clone)]
 pub struct BytesFontProvider {
     by_key: BTreeMap<FaceKey, FontData>,
     by_id: BTreeMap<String, FontData>,
+    /// When set, `resolve` records every request with no exact face.
+    miss_log: Option<FontMissLog>,
 }
 
 impl std::fmt::Debug for BytesFontProvider {
@@ -115,7 +123,16 @@ impl BytesFontProvider {
         Self {
             by_key: BTreeMap::new(),
             by_id: BTreeMap::new(),
+            miss_log: None,
         }
+    }
+
+    /// This provider with `log` recording every `resolve` request that has no
+    /// exact `(family, weight, style)` face. Resolution is unchanged.
+    #[must_use]
+    pub fn with_miss_log(mut self, log: FontMissLog) -> Self {
+        self.miss_log = Some(log);
+        self
     }
 
     /// Register a font face and return its stable id.
@@ -227,6 +244,9 @@ impl FontProvider for BytesFontProvider {
                 .find(|(k, _)| k.family_lower == family_lower)
                 .map(|(_, v)| v.clone());
 
+            if let Some(log) = &self.miss_log {
+                log.record(family, weight, style, fallback.is_some());
+            }
             if fallback.is_some() {
                 return fallback;
             }
@@ -243,64 +263,10 @@ impl FontProvider for BytesFontProvider {
     }
 }
 
-/// Build a `BytesFontProvider` preloaded with the bundled default fonts.
-///
-/// Ten faces are embedded at compile time, all Apache-2.0:
-/// - Noto Sans Regular (`"Noto Sans"`, weight 400, Normal) — the proportional
-///   default for text nodes.
-/// - Noto Sans Bold (`"Noto Sans"`, weight 700, Normal) — resolved when a node
-///   requests `font-weight` 700.
-/// - Noto Sans Italic (`"Noto Sans"`, weight 400, Italic) — resolved when a
-///   span requests italic.
-/// - Noto Sans Bold Italic (`"Noto Sans"`, weight 700, Italic) — resolved for a
-///   span that is BOTH bold and italic (completes the weight×style matrix).
-/// - Noto Serif Regular (`"Noto Serif"`, weight 400, Normal) — the bundled,
-///   portable serif family.
-/// - Noto Serif Bold (`"Noto Serif"`, weight 700, Normal).
-/// - Noto Serif Italic (`"Noto Serif"`, weight 400, Italic).
-/// - Noto Serif Bold Italic (`"Noto Serif"`, weight 700, Italic) — completes the
-///   serif weight×style matrix.
-/// - Noto Sans Mono Regular (`"Noto Sans Mono"`, weight 400, Normal) — the
-///   monospace default for code nodes.
-/// - Noto Sans Mono Bold (`"Noto Sans Mono"`, weight 700, Normal) — resolved
-///   when a code node requests `font-weight` 700.
-#[must_use]
-pub fn default_provider() -> BytesFontProvider {
-    let sans: Arc<[u8]> = Arc::from(super::embedded::NOTO_SANS_REGULAR);
-    let sans_bold: Arc<[u8]> = Arc::from(super::embedded::NOTO_SANS_BOLD);
-    let sans_italic: Arc<[u8]> = Arc::from(super::embedded::NOTO_SANS_ITALIC);
-    let sans_bold_italic: Arc<[u8]> = Arc::from(super::embedded::NOTO_SANS_BOLD_ITALIC);
-    let serif: Arc<[u8]> = Arc::from(super::embedded::NOTO_SERIF_REGULAR);
-    let serif_bold: Arc<[u8]> = Arc::from(super::embedded::NOTO_SERIF_BOLD);
-    let serif_italic: Arc<[u8]> = Arc::from(super::embedded::NOTO_SERIF_ITALIC);
-    let serif_bold_italic: Arc<[u8]> = Arc::from(super::embedded::NOTO_SERIF_BOLD_ITALIC);
-    let mono: Arc<[u8]> = Arc::from(super::embedded::NOTO_SANS_MONO_REGULAR);
-    let mono_bold: Arc<[u8]> = Arc::from(super::embedded::NOTO_SANS_MONO_BOLD);
-    let mut provider = BytesFontProvider::new();
-    let b = FontSource::Bundled;
-    provider.register("Noto Sans", 400, FontStyle::Normal, sans, 0, b);
-    provider.register("Noto Sans", 700, FontStyle::Normal, sans_bold, 0, b);
-    provider.register("Noto Sans", 400, FontStyle::Italic, sans_italic, 0, b);
-    provider.register("Noto Sans", 700, FontStyle::Italic, sans_bold_italic, 0, b);
-    provider.register("Noto Serif", 400, FontStyle::Normal, serif, 0, b);
-    provider.register("Noto Serif", 700, FontStyle::Normal, serif_bold, 0, b);
-    provider.register("Noto Serif", 400, FontStyle::Italic, serif_italic, 0, b);
-    provider.register(
-        "Noto Serif",
-        700,
-        FontStyle::Italic,
-        serif_bold_italic,
-        0,
-        b,
-    );
-    provider.register("Noto Sans Mono", 400, FontStyle::Normal, mono, 0, b);
-    provider.register("Noto Sans Mono", 700, FontStyle::Normal, mono_bold, 0, b);
-    provider
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::font::default_provider;
 
     /// Helper: the four TrueType/OpenType magic bytes at offset 0.
     fn is_valid_tt_header(bytes: &[u8]) -> bool {
@@ -321,6 +287,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "bundled-fonts-extended")]
     fn default_provider_resolves_noto_serif_matrix() {
         let p = default_provider();
         for (weight, style) in [
@@ -344,6 +311,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "bundled-fonts-extended")]
     fn default_provider_resolves_noto_sans_mono() {
         let p = default_provider();
         let result = p.resolve(&["Noto Sans Mono".to_string()], 400, FontStyle::Normal);
@@ -365,6 +333,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "bundled-fonts-extended")]
     fn default_provider_distinguishes_sans_and_mono() {
         // The two bundled faces must be independently resolvable with distinct
         // bytes — a mono code node must not accidentally get the proportional face.
@@ -407,6 +376,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "bundled-fonts-extended")]
     fn bold_italic_resolves_distinct_combined_face() {
         // Weight 700 + Italic must resolve EXACTLY to the bold-italic face — not
         // fall back to bold-upright or regular-italic.
@@ -430,6 +400,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "bundled-fonts-extended")]
     fn italic_style_resolves_distinct_italic_face() {
         // The bundled italic face (Noto Sans 400 Italic) must resolve EXACTLY
         // and be a different file than the regular Normal face.
@@ -484,6 +455,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "bundled-fonts-extended")]
     fn mono_bold_weight_resolves_distinct_bold_face() {
         // The bundled Noto Sans Mono Bold face (weight 700) must resolve EXACTLY
         // and be a different file than the Mono Regular (weight 400) face.

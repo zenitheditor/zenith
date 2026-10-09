@@ -8,10 +8,15 @@
 //!   font/weight, unconstrained categories, empty contract, governable policy.
 //! - Diag-catalog: all 3 brand codes catalogued + governable.
 
-mod common;
+#[path = "common/codes.rs"]
+mod codes;
+#[path = "common/has_code.rs"]
+mod has_code;
 
-use common::*;
+use codes::codes;
+use has_code::has_code;
 use zenith_core::format::format_document;
+use zenith_core::{KdlAdapter, KdlSource, Severity, validate};
 
 // ---------------------------------------------------------------------------
 // Helper: minimal valid KDL document source with a brand block

@@ -6,9 +6,63 @@
 
 use std::collections::BTreeMap;
 
-mod common;
+#[path = "common/codes.rs"]
+mod codes;
+#[path = "common/color_token.rs"]
+mod color_token;
+#[path = "common/font_family_token.rs"]
+mod font_family_token;
+#[path = "common/has_code.rs"]
+mod has_code;
+#[path = "common/minimal_page.rs"]
+mod minimal_page;
+#[path = "common/minimal_rect.rs"]
+mod minimal_rect;
+#[path = "common/minimal_text.rs"]
+mod minimal_text;
+#[path = "common/px.rs"]
+mod px;
+#[path = "common/pxv_doc_with.rs"]
+mod pxv_doc_with;
+#[path = "common/token_ref.rs"]
+mod token_ref;
 
-use common::*;
+use codes::codes;
+use color_token::color_token;
+use font_family_token::font_family_token;
+use has_code::has_code;
+use minimal_page::minimal_page;
+use minimal_rect::minimal_rect;
+use minimal_text::minimal_text;
+use px::px;
+use pxv_doc_with::{doc_with, pxv};
+use token_ref::token_ref;
+use zenith_core::{
+    Dimension, Document, KdlAdapter, KdlSource, Node, Page, PropertyValue, RectNode, Severity,
+    TextNode, Token, TokenLiteral, TokenType, TokenValue, Unit, UnknownNode, validate,
+};
+
+/// A color token stamped with a provenance `set` id (e.g. a theme/pack id).
+fn color_token_with_set(id: &str, set_id: &str) -> Token {
+    Token {
+        id: id.to_owned(),
+        token_type: TokenType::Color,
+        value: TokenValue::Literal(TokenLiteral::String("#112233".to_owned())),
+        set: Some(set_id.to_owned()),
+        source_span: None,
+    }
+}
+
+/// Build an unknown node with the given id and children (no unknown props).
+fn unknown_node(kind: &str, id: Option<&str>, children: Vec<Node>) -> Node {
+    Node::Unknown(Box::new(UnknownNode {
+        kind: kind.to_owned(),
+        id: id.map(str::to_owned),
+        unknown_props: BTreeMap::new(),
+        children,
+        source_span: None,
+    }))
+}
 
 // ── Test 1: clean minimal doc has no errors ───────────────────────────
 
