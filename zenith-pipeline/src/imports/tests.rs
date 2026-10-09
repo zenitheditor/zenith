@@ -130,9 +130,10 @@ fn load_import_graph_reports_missing_import() {
     assert_eq!(diagnostics[0].code, "import.missing");
     assert_eq!(diagnostics[0].subject_id.as_deref(), Some("child"));
     assert!(
-        diagnostics[0]
-            .message
-            .contains("'proj/missing.zen': no such file in the in-memory file set"),
+        diagnostics[0].message.contains(&format!(
+            "'{}': no such file in the in-memory file set",
+            Path::new("proj").join("missing.zen").display()
+        )),
         "{}",
         diagnostics[0].message
     );
@@ -254,9 +255,16 @@ fn load_import_graph_reports_cycles() {
     let diagnostics = graph.into_diagnostics();
     assert_eq!(diagnostics.len(), 1);
     assert_eq!(diagnostics[0].code, "import.cycle");
+    let a = Path::new("proj").join("a.zen");
+    let b = Path::new("proj").join("b.zen");
     assert_eq!(
         diagnostics[0].message,
-        "import 'a' forms a cycle: proj/a.zen -> proj/b.zen -> proj/a.zen"
+        format!(
+            "import 'a' forms a cycle: {} -> {} -> {}",
+            a.display(),
+            b.display(),
+            a.display()
+        )
     );
 }
 

@@ -157,6 +157,10 @@ mod tests {
         let fs = MemFs::new().with("p/.zenith.kdl", b"diagnostics { deny }\n".to_vec());
         let config = FsConfig::new(&fs, None);
         let err = ConfigLayers::load(&config, Some(Path::new("p"))).expect_err("bad");
-        assert!(err.starts_with("invalid config 'p/.zenith.kdl'"), "{err}");
+        let want = format!(
+            "invalid config '{}'",
+            Path::new("p").join(".zenith.kdl").display()
+        );
+        assert!(err.starts_with(&want), "{err}");
     }
 }

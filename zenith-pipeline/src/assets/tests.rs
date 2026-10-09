@@ -81,9 +81,14 @@ fn collect_missing_import_asset_diagnostics_reports_missing_imported_asset() {
     assert_eq!(diagnostics.len(), 1);
     assert_eq!(diagnostics[0].code, "import.asset_missing");
     assert_eq!(diagnostics[0].subject_id.as_deref(), Some("logo"));
+    // Diagnostics name host paths: `\` separators on Windows.
+    let path = Path::new("p").join("brand").join("missing.png");
     assert_eq!(
         diagnostics[0].message,
-        "import 'brand' asset 'logo' file not found: 'p/brand/missing.png'"
+        format!(
+            "import 'brand' asset 'logo' file not found: '{}'",
+            path.display()
+        )
     );
 }
 
@@ -245,7 +250,10 @@ fn missing_asset_and_text_source_are_reported_through_the_fs() {
     assert_eq!(missing.len(), 1);
     assert_eq!(
         missing[0].message,
-        "asset 'logo' file not found: 'p/logo.png'"
+        format!(
+            "asset 'logo' file not found: '{}'",
+            Path::new("p").join("logo.png").display()
+        )
     );
 
     let mut diagnostics = Vec::new();
