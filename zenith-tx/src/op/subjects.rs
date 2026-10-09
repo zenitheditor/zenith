@@ -1,10 +1,11 @@
 //! [`Op::position_preserving_subjects`]: the node ids an op promises to keep
-//! at their page position.
+//! at their page position. [`Op::edited_node_ids`]: the node ids an op
+//! edits in place.
 
 use zenith_core::{Document, Node};
 
 use super::ops::Op;
-use crate::engine::find_node_any_shared;
+use crate::engine::{find_node_any_shared, op_lock_targets};
 
 impl Op {
     /// The ids whose page box this op promises to keep, read from the
@@ -13,6 +14,7 @@ impl Op {
     /// - `Reparent`: the moved node and every id in its subtree.
     /// - `Ungroup`: the group's children.
     /// - `Group`: the grouped ids.
+    /// - `DetachAnchor`: the detached node.
     /// - Every other op: `None`.
     ///
     /// A `Reparent` or `Ungroup` whose node is missing from `before` gives
@@ -38,7 +40,12 @@ impl Op {
                     .unwrap_or_default(),
             ),
             Op::Group { node_ids, .. } => Some(node_ids.clone()),
-            Op::SetTextAlign { .. }
+            Op::DetachAnchor { node } => Some(vec![node.clone()]),
+            Op::NudgeGeometry { .. }
+            | Op::SetAnchor(_)
+            | Op::NudgeAnchorGap { .. }
+            | Op::NudgeLinePoints { .. }
+            | Op::SetTextAlign { .. }
             | Op::MoveForward { .. }
             | Op::MoveBackward { .. }
             | Op::MoveToFront { .. }
@@ -47,6 +54,8 @@ impl Op {
             | Op::SetFillRule { .. }
             | Op::SetStroke { .. }
             | Op::SetStrokeWidth { .. }
+            | Op::SetNodeToken { .. }
+            | Op::SetSpanText { .. }
             | Op::SetVisible { .. }
             | Op::SetLocked { .. }
             | Op::SetGeometry { .. }
@@ -98,6 +107,15 @@ impl Op {
             | Op::SetLayout(_)
             | Op::DetachPattern { .. } => None,
         }
+    }
+}
+
+impl Op {
+    /// The ids of the existing nodes this op edits in place: the targets
+    /// the lock guard checks. Ops that only create nodes, or edit blocks
+    /// other than the node tree, give an empty list.
+    pub fn edited_node_ids(&self) -> Vec<&str> {
+        op_lock_targets(self)
     }
 }
 
@@ -215,6 +233,21 @@ mod tests {
             position: Default::default(),
         };
         assert_eq!(op.position_preserving_subjects(&doc(SRC)), Some(vec![]));
+    }
+
+    #[test]
+    fn edited_node_ids_are_the_lock_targets() {
+        let nudge = Op::NudgeGeometry {
+            node: "b".into(),
+            dx: Some(1.0),
+            dy: None,
+            dw: None,
+            dh: None,
+            detach: false,
+        };
+        assert_eq!(nudge.edited_node_ids(), vec!["b"]);
+        let add = Op::CreateMaster { id: "m".into() };
+        assert!(add.edited_node_ids().is_empty());
     }
 
     #[test]

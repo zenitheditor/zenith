@@ -5,7 +5,7 @@
 //! (both go through `zenith_core::pattern_positions`).
 
 mod common;
-use common::*;
+use common::parse;
 use zenith_core::{Node, PropertyValue};
 use zenith_tx::{Op, Permissions, Transaction, TxStatus, run_transaction};
 

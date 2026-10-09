@@ -1,6 +1,42 @@
 mod common;
-use common::*;
+use common::parse;
+#[path = "common/px_attr.rs"]
+mod px_attr;
+#[path = "common/three_rects_doc.rs"]
+mod three_rects_doc;
+use px_attr::extract_px_attr;
+use three_rects_doc::THREE_RECTS_DOC;
 use zenith_tx::{Op, Permissions, Transaction, TxStatus, run_transaction};
+
+/// Doc with two rects and one group; the group has no resolvable bbox.
+const RECTS_AND_GROUP_DOC: &str = r##"zenith version=1 {
+  project id="proj" name="Test"
+  tokens format="zenith-token-v1" { }
+  styles { }
+  document id="doc1" title="T" {
+    page id="pg1" w=(px)400 h=(px)300 {
+      rect id="r1" x=(px)20 y=(px)0 w=(px)60 h=(px)40
+      rect id="r2" x=(px)80 y=(px)0 w=(px)60 h=(px)40
+      group id="grp1" { }
+    }
+  }
+}"##;
+
+/// Three rects unevenly placed on the x axis: positions 0, 30, 100, widths 20.
+/// Span = (100+20) - 0 = 120. Σsizes = 60. gap = (120-60)/2 = 30.
+/// Distributed leading edges: 0, 0+20+30=50, 50+20+30=100.
+const DISTRIBUTE_DOC: &str = r##"zenith version=1 {
+  project id="proj" name="Test"
+  tokens format="zenith-token-v1" { }
+  styles { }
+  document id="doc1" title="T" {
+    page id="pg1" w=(px)400 h=(px)300 {
+      rect id="p1" x=(px)0 y=(px)0 w=(px)20 h=(px)20
+      rect id="p2" x=(px)30 y=(px)0 w=(px)20 h=(px)20
+      rect id="p3" x=(px)100 y=(px)0 w=(px)20 h=(px)20
+    }
+  }
+}"##;
 
 // ── AlignNodes tests ──────────────────────────────────────────────────────
 

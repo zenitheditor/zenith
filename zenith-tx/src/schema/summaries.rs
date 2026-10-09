@@ -18,13 +18,49 @@ pub fn op_summary(name: &str) -> Option<&'static str> {
         "set_stroke_width" => {
             Some("Set the stroke width of a node to a dimension token reference.")
         }
+        "set_node_token" => Some(
+            "Bind radius, font-family, font-size, or font-weight of a node to a token; null \
+             removes the attribute so the style or default applies.",
+        ),
+        "set_span_text" => Some(
+            "Replace the text of one span (0-based) of a text or shape node, keeping the span's \
+             own attributes.",
+        ),
         "set_visible" => Some("Show or hide a node by toggling its visible property."),
         "set_locked" => Some("Lock or unlock a node to prevent accidental edits."),
         "set_geometry" => Some(
             "Move and/or resize a node by setting x, y, w, h (px, or \"hug\"/\"fill\"), or rotate. \
              Omit a field to keep it; null removes the attribute. x/y values on an in-flow child of \
              a row/column/grid frame are rejected (tx.layout_managed); null x/y there is allowed. \
-             Removing x/y/w/h that a node needs outside flow is rejected (tx.geometry_required).",
+             Removing x/y/w/h that a node needs outside flow is rejected (tx.geometry_required). \
+             Writes px: it replaces a token ref, a (pt) value, or a hug/fill keyword on that axis. \
+             Use nudge_geometry to move by a delta and keep tokens and units.",
+        ),
+        "nudge_geometry" => Some(
+            "Move/resize a box node by px deltas dx, dy, dw, dh in its authored (unrotated, \
+             parent) space, keeping each attribute's unit. Rejects a token-bound axis \
+             (tx.token_bound; detach=true writes px), a hug/fill or absent size \
+             (tx.computed_size), an anchor-supplied x/y (tx.anchored), a pct/literal value \
+             (tx.value_unresolved), a negative size (tx.invalid_geometry), and dx/dy on an \
+             in-flow child (tx.layout_managed). Absent x/y on a group or instance counts as 0.",
+        ),
+        "set_anchor" => Some(
+            "Set or clear a node's anchor attributes (anchor, anchor_zone, anchor_sibling, \
+             anchor_parent, anchor_edge, anchor_gap). Omit keeps, null removes. Removing the \
+             anchor of a node without x/y is rejected (tx.geometry_required): use detach_anchor.",
+        ),
+        "nudge_anchor_gap" => Some(
+            "Move an edge-anchored node (anchor_sibling + anchor_edge) along its edge axis by \
+             changing anchor-gap in its unit. dx/dy is the drag delta. Below adds dy, above \
+             subtracts dy, after adds dx, before subtracts dx. Cross-axis movement is rejected.",
+        ),
+        "detach_anchor" => Some(
+            "Remove every anchor attribute of a node and write each anchor-supplied x/y as px \
+             at its derived position, so the node and nodes anchored to it keep their place.",
+        ),
+        "nudge_line_points" => Some(
+            "Move a line's endpoints by px deltas (dx1, dy1 start; dx2, dy2 end), keeping units. \
+             A connector is rejected (tx.derived_geometry): move its targets instead.",
         ),
         "set_points" => Some("Replace the full vertex list of a polygon or polyline node."),
         "set_path_anchors" => Some("Replace the full anchor list of a path node."),
@@ -41,9 +77,10 @@ pub fn op_summary(name: &str) -> Option<&'static str> {
         "simplify_path_anchors" => {
             Some("Simplify an open path node's anchors using a pixel tolerance.")
         }
-        "transform_path_anchors" => {
-            Some("Apply an affine transform to a path node's anchor and handle points.")
-        }
+        "transform_path_anchors" => Some(
+            "Translate, rotate, reflect, or scale a path node's anchor and handle points. \
+             Scale (sx, sy about cx, cy) resizes the path. A zero factor is rejected.",
+        ),
         "snap_path_anchors" => {
             Some("Translate a path so its nearest boundary point lands on another path.")
         }
@@ -58,7 +95,9 @@ pub fn op_summary(name: &str) -> Option<&'static str> {
         "remove_node" => Some("Remove a node and its subtree from the document."),
         "set_opacity" => Some("Set the opacity of a node (0.0 = fully transparent, 1.0 = opaque)."),
         "replace_text" => Some("Replace all text spans of a text or shape node."),
-        "duplicate_node" => Some("Clone a leaf node and insert the copy after the original."),
+        "duplicate_node" => Some(
+            "Clone a node with its whole subtree (descendants get a suffix derived from new_id) and insert the copy after the original.",
+        ),
         "duplicate_page" => Some("Deep-clone a page and insert the copy after the original."),
         "group" => Some(
             "Wrap a set of sibling nodes inside a new group node; members keep document (paint) \

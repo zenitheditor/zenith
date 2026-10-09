@@ -1,7 +1,7 @@
 //! Integration tests for the `set_default` and `remove_default` transaction ops.
 
 mod common;
-use common::*;
+use common::parse;
 use zenith_core::{DefaultsKind, Document, KdlAdapter, KdlSource};
 use zenith_tx::{Op, Permissions, Transaction, TxResult, TxStatus, run_transaction};
 

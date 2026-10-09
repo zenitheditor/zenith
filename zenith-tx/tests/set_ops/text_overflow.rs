@@ -1,5 +1,22 @@
 use super::*;
 
+/// Three sibling text/code/rect nodes for overflow + dimension-anchor tests.
+const TEXT_CODE_DOC: &str = r##"zenith version=1 {
+  project id="proj" name="Test"
+  tokens format="zenith-token-v1" { }
+  styles { }
+  document id="doc1" title="T" {
+    page id="pg1" w=(px)400 h=(px)300 {
+      text id="body" x=(px)10 y=(px)10 w=(px)200 h=(px)40 align="start" {
+        span "Hello"
+      }
+      code id="snip" x=(px)10 y=(px)60 w=(px)200 h=(px)100 {
+        content "fn main() {}"
+      }
+    }
+  }
+}"##;
+
 // ── SetTextOverflow tests ─────────────────────────────────────────────────
 
 #[test]

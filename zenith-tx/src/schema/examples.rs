@@ -17,9 +17,22 @@ pub fn op_example(name: &str) -> Option<&'static str> {
         "set_stroke_width" => {
             Some(r#"{"op":"set_stroke_width","node":"box","stroke_width":"size.stroke"}"#)
         }
+        "set_node_token" => Some(
+            r#"{"op":"set_node_token","node":"title","property":"font-size","token":"size.title"}"#,
+        ),
+        "set_span_text" => Some(r#"{"op":"set_span_text","node":"title","span":0,"text":"Hello"}"#),
         "set_visible" => Some(r#"{"op":"set_visible","node":"caption","visible":false}"#),
         "set_locked" => Some(r#"{"op":"set_locked","node":"bg","locked":true}"#),
         "set_geometry" => Some(r#"{"op":"set_geometry","node":"r","x":10,"w":200,"rotate":45}"#),
+        "nudge_geometry" => Some(r#"{"op":"nudge_geometry","node":"r","dx":12,"dy":-4,"dw":20}"#),
+        "set_anchor" => Some(
+            r#"{"op":"set_anchor","node":"card.b","anchor_sibling":"card.a","anchor_edge":"below","anchor_gap":14}"#,
+        ),
+        "nudge_anchor_gap" => Some(r#"{"op":"nudge_anchor_gap","node":"card.b","dy":6}"#),
+        "detach_anchor" => Some(r#"{"op":"detach_anchor","node":"card.b"}"#),
+        "nudge_line_points" => {
+            Some(r#"{"op":"nudge_line_points","node":"rule","dx1":10,"dy1":0,"dx2":10,"dy2":0}"#)
+        }
         "set_points" => Some(
             r#"{"op":"set_points","node":"poly","points":[{"x":0,"y":0},{"x":100,"y":0},{"x":50,"y":80}]}"#,
         ),

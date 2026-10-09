@@ -2,7 +2,7 @@
 
 use std::fmt;
 
-use zenith_core::Diagnostic;
+use zenith_core::{Diagnostic, Document};
 
 /// The outcome status of a transaction run.
 #[derive(Debug, Clone, PartialEq)]
@@ -34,6 +34,12 @@ pub struct TxResult {
     ///
     /// Equal to `source_before` when `status == Rejected`.
     pub source_after: String,
+    /// The result document. Equal to the input document when
+    /// `status == Rejected`.
+    ///
+    /// With the input document it lets a caller patch the user's own source
+    /// text (`zenith_core::patch_source`) instead of writing `source_after`.
+    pub document_after: Document,
     /// Node ids touched by successfully-applied ops, in first-seen application
     /// order, de-duplicated (no HashMap — stable insertion-order `Vec` with a
     /// linear membership check keeps the output deterministic).

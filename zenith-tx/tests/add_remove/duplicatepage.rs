@@ -1,5 +1,20 @@
 use super::*;
 
+/// Single page with two leaf nodes; used for duplicate_page tests.
+const DUP_PAGE_DOC: &str = r##"zenith version=1 {
+  project id="proj" name="Test"
+  tokens format="zenith-token-v1" {
+    token id="color.a" type="color" value="#ff0000"
+  }
+  styles { }
+  document id="doc1" title="T" {
+    page id="pg1" w=(px)400 h=(px)300 {
+      rect id="r1" x=(px)10 y=(px)20 w=(px)80 h=(px)60 fill=(token)"color.a"
+      rect id="r2" x=(px)10 y=(px)20 w=(px)80 h=(px)60 fill=(token)"color.a"
+    }
+  }
+}"##;
+
 // ── DuplicatePage tests ───────────────────────────────────────────────────
 
 /// Duplicate a 1-page doc with 2 nodes: doc now has 2 pages, the copy has the

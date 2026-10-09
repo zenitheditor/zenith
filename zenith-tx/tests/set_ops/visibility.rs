@@ -1,5 +1,19 @@
 use super::*;
 
+/// Rect inside a group.
+const NESTED_RECT_DOC: &str = r##"zenith version=1 {
+  project id="proj" name="Test"
+  tokens format="zenith-token-v1" { }
+  styles { }
+  document id="doc1" title="T" {
+    page id="pg1" w=(px)400 h=(px)300 {
+      group id="grp1" {
+        rect id="inner" x=(px)0 y=(px)0 w=(px)50 h=(px)50
+      }
+    }
+  }
+}"##;
+
 // ── SetVisible tests ──────────────────────────────────────────────────────
 
 #[test]

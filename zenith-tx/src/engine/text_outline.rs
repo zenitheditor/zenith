@@ -49,7 +49,7 @@ pub fn reject_text_outline(
     diagnostics: Vec<Diagnostic>,
 ) -> Result<TxResult, TxError> {
     let source_before = format_source(doc, "source_before")?;
-    finish_candidate(source_before, doc.clone(), diagnostics, Vec::new())
+    finish_candidate(doc, source_before, doc.clone(), diagnostics, Vec::new())
 }
 
 /// Insert precomputed outline [`PathNode`]s after the source text/code node.
@@ -76,7 +76,7 @@ pub fn apply_text_outline_paths(
 
     let Some(outline_paint) = source_outline_paint(&candidate, &request.node, &mut diagnostics)
     else {
-        return finish_candidate(source_before, candidate, diagnostics, affected);
+        return finish_candidate(doc, source_before, candidate, diagnostics, affected);
     };
 
     if paths.is_empty() {
@@ -94,7 +94,7 @@ pub fn apply_text_outline_paths(
                 Some(request.node.clone()),
             ));
         }
-        return finish_candidate(source_before, candidate, diagnostics, affected);
+        return finish_candidate(doc, source_before, candidate, diagnostics, affected);
     }
 
     let nodes: Vec<Node> = paths
@@ -119,7 +119,7 @@ pub fn apply_text_outline_paths(
         ));
     }
 
-    finish_candidate(source_before, candidate, diagnostics, affected)
+    finish_candidate(doc, source_before, candidate, diagnostics, affected)
 }
 
 #[derive(Debug, Clone, PartialEq)]

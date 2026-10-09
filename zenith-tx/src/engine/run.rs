@@ -60,7 +60,7 @@ pub fn run_transaction(doc: &Document, tx: &Transaction) -> Result<TxResult, TxE
     }
 
     // 4. Post-apply validation and result finalization.
-    finish_candidate(source_before, candidate, diagnostics, affected)
+    finish_candidate(doc, source_before, candidate, diagnostics, affected)
 }
 
 pub(super) fn format_source(doc: &Document, label: &str) -> Result<String, TxError> {
@@ -72,7 +72,10 @@ pub(super) fn format_source(doc: &Document, label: &str) -> Result<String, TxErr
     })
 }
 
+/// Validate `candidate` and build the result. `doc` is the input document,
+/// which a rejected result reports as its after document.
 pub(super) fn finish_candidate(
+    doc: &Document,
     source_before: String,
     candidate: Document,
     mut diagnostics: Vec<Diagnostic>,
@@ -84,8 +87,8 @@ pub(super) fn finish_candidate(
     let has_errors = Diagnostic::has_errors(&diagnostics);
     let has_warnings = diagnostics.iter().any(|d| d.severity == Severity::Warning);
 
-    let (status, source_after) = if has_errors {
-        (TxStatus::Rejected, source_before.clone())
+    let (status, source_after, document_after) = if has_errors {
+        (TxStatus::Rejected, source_before.clone(), doc.clone())
     } else {
         let after = format_source(&candidate, "source_after")?;
         let status = if has_warnings {
@@ -93,7 +96,7 @@ pub(super) fn finish_candidate(
         } else {
             TxStatus::Accepted
         };
-        (status, after)
+        (status, after, candidate)
     };
 
     Ok(TxResult {
@@ -101,6 +104,7 @@ pub(super) fn finish_candidate(
         diagnostics,
         source_before,
         source_after,
+        document_after,
         affected_node_ids: affected,
     })
 }

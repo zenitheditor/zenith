@@ -14,8 +14,40 @@
 //! than demanding the bare `Accepted` status.
 
 mod common;
-use common::*;
+use common::parse;
 use zenith_tx::{Op, Permissions, Transaction, TxStatus, run_transaction};
+
+/// A known `rect id="inner"` nested inside an unknown (`mystery`) node that
+/// carries its own `id`. Used to prove the tx finders descend into unknown
+/// children and that the unknown node itself is targetable by id.
+const UNKNOWN_WITH_INNER_DOC: &str = r##"zenith version=1 {
+  project id="proj" name="Test"
+  tokens format="zenith-token-v1" { }
+  styles { }
+  document id="doc1" title="T" {
+    page id="pg1" w=(px)400 h=(px)300 {
+      mystery id="lib1" {
+        rect id="inner" x=(px)0 y=(px)0 w=(px)50 h=(px)50
+      }
+    }
+  }
+}"##;
+
+/// A page whose single page-level node is an unknown (`mystery`) node, used as
+/// the would-be parent in a reparent-into-unknown rejection test.
+const UNKNOWN_PARENT_DOC: &str = r##"zenith version=1 {
+  project id="proj" name="Test"
+  tokens format="zenith-token-v1" { }
+  styles { }
+  document id="doc1" title="T" {
+    page id="pg1" w=(px)400 h=(px)300 {
+      mystery id="lib1" {
+        rect id="inner" x=(px)0 y=(px)0 w=(px)50 h=(px)50
+      }
+      rect id="outer" x=(px)0 y=(px)0 w=(px)100 h=(px)100
+    }
+  }
+}"##;
 
 /// True when the transaction was not rejected (Accepted or AcceptedWithWarnings).
 fn accepted(status: TxStatus) -> bool {

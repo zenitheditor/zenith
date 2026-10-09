@@ -15,14 +15,20 @@ use crate::op::Op;
 /// Exempt (empty): `set_locked` (must be able to *unlock* a locked node),
 /// `set_visible` (visibility is a view toggle), `add_node`, `add_path`,
 /// `duplicate_node` (the source is read-only), `group`, and `ungroup`.
-pub(super) fn op_lock_targets(op: &Op) -> Vec<&str> {
+pub(crate) fn op_lock_targets(op: &Op) -> Vec<&str> {
     match op {
         Op::SetTextAlign { node, .. }
         | Op::SetFill { node, .. }
         | Op::SetFillRule { node, .. }
         | Op::SetStroke { node, .. }
         | Op::SetStrokeWidth { node, .. }
+        | Op::SetNodeToken { node, .. }
+        | Op::SetSpanText { node, .. }
         | Op::SetGeometry { node, .. }
+        | Op::NudgeGeometry { node, .. }
+        | Op::NudgeAnchorGap { node, .. }
+        | Op::DetachAnchor { node }
+        | Op::NudgeLinePoints { node, .. }
         | Op::SetPoints { node, .. }
         | Op::SetPathAnchors { node, .. }
         | Op::SetPathAnchorKind { node, .. }
@@ -56,6 +62,7 @@ pub(super) fn op_lock_targets(op: &Op) -> Vec<&str> {
         }
         Op::SetAsset { node_id, .. } => vec![node_id.as_str()],
         Op::SetLayout(edit) => vec![edit.node.as_str()],
+        Op::SetAnchor(edit) => vec![edit.node.as_str()],
         Op::SetLocked { .. }
         | Op::SetVisible { .. }
         | Op::AddNode { .. }
@@ -100,37 +107,7 @@ pub(super) fn op_lock_targets(op: &Op) -> Vec<&str> {
 ///
 /// Missing nodes and nodes with `locked` absent/`Some(false)` return `false`;
 /// the missing-node case is left for the op's own `tx.unknown_node` path.
-/// Mirrors the variant coverage of [`node_locked_mut`] via a shared scan.
 pub(super) fn node_is_locked(doc: &Document, id: &str) -> bool {
-    fn locked_of(node: &Node) -> Option<bool> {
-        match node {
-            Node::Rect(n) => n.locked,
-            Node::Ellipse(n) => n.locked,
-            Node::Line(n) => n.locked,
-            Node::Text(n) => n.locked,
-            Node::Code(n) => n.locked,
-            Node::Frame(n) => n.locked,
-            Node::Group(n) => n.locked,
-            Node::Image(n) => n.locked,
-            Node::Polygon(n) => n.locked,
-            Node::Polyline(n) => n.locked,
-            Node::Path(n) => n.locked,
-            Node::Instance(n) => n.locked,
-            Node::Field(n) => n.locked,
-            Node::Toc(n) => n.locked,
-            Node::Table(n) => n.locked,
-            Node::Shape(n) => n.locked,
-            Node::Connector(n) => n.locked,
-            Node::Pattern(n) => n.locked,
-            Node::Chart(n) => n.locked,
-            Node::Light(n) => n.locked,
-            Node::Mesh(n) => n.locked,
-            // A footnote has no `locked` field; treat as unlocked.
-            Node::Footnote(_) => None,
-            Node::Unknown(_) => None,
-        }
-    }
-
     doc.body
         .pages
         .iter()
@@ -140,6 +117,5 @@ pub(super) fn node_is_locked(doc: &Document, id: &str) -> bool {
                 .iter()
                 .find_map(|master| find_node_shared(&master.children, id))
         })
-        .and_then(locked_of)
-        == Some(true)
+        .is_some_and(Node::is_locked)
 }

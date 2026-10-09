@@ -42,6 +42,15 @@ pub(in crate::engine) fn in_layout_flow(doc: &Document, id: &str) -> bool {
     managing_frame(doc, id).is_some()
 }
 
+/// The id and layout mode (`row` / `column` / `grid`) of the frame that
+/// places node `id` in flow, or `None` when no layout frame manages it.
+pub(in crate::engine) fn flow_frame<'d>(
+    doc: &'d Document,
+    id: &str,
+) -> Option<(&'d str, &'static str)> {
+    managing_frame(doc, id)
+}
+
 /// The id and layout mode of the frame that places node `id` in flow, or
 /// `None` when no layout frame manages the node's position.
 fn managing_frame<'d>(doc: &'d Document, id: &str) -> Option<(&'d str, &'static str)> {

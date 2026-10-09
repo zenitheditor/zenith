@@ -3,7 +3,7 @@
 //! rejected with `tx.geometry_required`.
 
 mod common;
-use common::*;
+use common::parse;
 use zenith_tx::{Op, Transaction, TxResult, TxStatus, run_transaction};
 
 /// A row frame with a stale-x/y in-flow rect, an in-flow column card that

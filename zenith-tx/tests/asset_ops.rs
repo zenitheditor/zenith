@@ -1,7 +1,10 @@
 //! Integration tests for the `add_asset` and `set_asset` transaction ops.
 
 mod common;
-use common::*;
+use common::parse;
+#[path = "common/image_doc.rs"]
+mod image_doc;
+use image_doc::IMAGE_DOC;
 use zenith_tx::{AddAssetMetadata, Op, Permissions, Transaction, TxStatus, run_transaction};
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────

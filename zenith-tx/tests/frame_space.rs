@@ -7,7 +7,10 @@
 mod common;
 use std::collections::BTreeMap;
 
-use common::*;
+use common::parse;
+#[path = "common/px_attr.rs"]
+mod px_attr;
+use px_attr::extract_px_attr;
 use zenith_core::{Document, Node, PathNode, default_provider};
 use zenith_scene::{DocumentPrep, PageCompiler};
 use zenith_tx::op::OpPathBooleanOperation;

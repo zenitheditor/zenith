@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 
 use zenith_core::{Document, FrameNode, Node, ResolvedToken, resolve_geometry_px, resolve_tokens};
 
-use super::offset::{Scope, own_offset};
+use super::offset::{Scope, own_offset, placed_anchor_origin};
 
 /// One container between a page (or master) and a child space.
 #[derive(Debug, Clone, PartialEq)]
@@ -34,7 +34,12 @@ pub(in crate::engine) fn container_chain(
     container_id: &str,
     resolved: &BTreeMap<String, ResolvedToken>,
 ) -> Option<Chain> {
-    walk_roots(doc, Query::Container(container_id), resolved)
+    walk_roots(
+        doc,
+        Query::Container(container_id),
+        resolved,
+        &mut |_, _| {},
+    )
 }
 
 /// The chain of the child space that holds the `x` / `y` of node `node_id`.
@@ -44,7 +49,23 @@ pub(in crate::engine) fn parent_chain(
     node_id: &str,
     resolved: &BTreeMap<String, ResolvedToken>,
 ) -> Option<Chain> {
-    walk_roots(doc, Query::Parent(node_id), resolved)
+    walk_roots(doc, Query::Parent(node_id), resolved, &mut |_, _| {})
+}
+
+/// The `(x, y)` the anchor of node `node_id` gives it, in the space that
+/// holds its `x` / `y`, as the scene derives it. `None` when no node has
+/// that id, a layout frame places it in flow, it has no anchor, or a box
+/// the anchor needs does not resolve from authored values.
+pub(in crate::engine) fn anchor_origin_of(
+    doc: &Document,
+    node_id: &str,
+    resolved: &BTreeMap<String, ResolvedToken>,
+) -> Option<(f64, f64)> {
+    let mut origin = None;
+    walk_roots(doc, Query::Parent(node_id), resolved, &mut |node, scope| {
+        origin = placed_anchor_origin(node, scope);
+    });
+    origin
 }
 
 /// The number of leading links every chain in `chains` shares.
@@ -158,10 +179,15 @@ enum Query<'q> {
     Parent(&'q str),
 }
 
+/// Called once with the queried node and its scope when a
+/// [`Query::Parent`] walk finds it.
+type Hit<'h> = dyn FnMut(&Node, &Scope<'_>) + 'h;
+
 fn walk_roots(
     doc: &Document,
     query: Query<'_>,
     resolved: &BTreeMap<String, ResolvedToken>,
+    hit: &mut Hit<'_>,
 ) -> Option<Chain> {
     // Master chrome projects onto pages of any size: no page for anchors.
     let roots = doc
@@ -189,7 +215,7 @@ fn walk_roots(
             acc: Some((0.0, 0.0)),
             resolved,
         };
-        if walk(&scope, &mut chain, query) {
+        if walk(&scope, &mut chain, query, hit) {
             return Some(chain);
         }
     }
@@ -198,12 +224,13 @@ fn walk_roots(
 
 /// Search the child list of `scope`, whose space `chain` describes. `true`
 /// once the query is answered: `chain` then holds the answer.
-fn walk(scope: &Scope<'_>, chain: &mut Chain, query: Query<'_>) -> bool {
+fn walk(scope: &Scope<'_>, chain: &mut Chain, query: Query<'_>, hit: &mut Hit<'_>) -> bool {
     let resolved = scope.resolved;
     for node in scope.siblings {
         if let Query::Parent(id) = query
             && node.id() == Some(id)
         {
+            hit(node, scope);
             return true;
         }
         let is_target = |cid: &str| matches!(query, Query::Container(id) if id == cid);
@@ -222,7 +249,7 @@ fn walk(scope: &Scope<'_>, chain: &mut Chain, query: Query<'_>) -> bool {
                         .then(|| px(f.w.as_ref()).zip(px(f.h.as_ref())))
                         .flatten();
                 let inner = scope.enter(&f.children, Some(f), parent_size, offset);
-                is_target(&f.id) || walk(&inner, chain, query)
+                is_target(&f.id) || walk(&inner, chain, query, hit)
             }
             Node::Group(g) => {
                 let offset = own_offset(node, scope);
@@ -233,7 +260,7 @@ fn walk(scope: &Scope<'_>, chain: &mut Chain, query: Query<'_>) -> bool {
                 let px = |v: Option<&zenith_core::PropertyValue>| resolve_geometry_px(v, resolved);
                 let parent_size = px(g.w.as_ref()).zip(px(g.h.as_ref()));
                 let inner = scope.enter(&g.children, None, parent_size, offset);
-                is_target(&g.id) || walk(&inner, chain, query)
+                is_target(&g.id) || walk(&inner, chain, query, hit)
             }
             Node::Table(t) => {
                 // The table places its cells: cell content has no authored origin.
@@ -241,17 +268,26 @@ fn walk(scope: &Scope<'_>, chain: &mut Chain, query: Query<'_>) -> bool {
                     id: t.id.clone(),
                     offset: None,
                 });
-                t.rows
-                    .iter()
-                    .flat_map(|r| r.cells.iter())
-                    .any(|c| walk(&scope.enter(&c.children, None, None, None), chain, query))
+                t.rows.iter().flat_map(|r| r.cells.iter()).any(|c| {
+                    walk(
+                        &scope.enter(&c.children, None, None, None),
+                        chain,
+                        query,
+                        hit,
+                    )
+                })
             }
             Node::Unknown(u) => {
                 chain.push(Link {
                     id: node.id_or_kind().to_owned(),
                     offset: None,
                 });
-                walk(&scope.enter(&u.children, None, None, None), chain, query)
+                walk(
+                    &scope.enter(&u.children, None, None, None),
+                    chain,
+                    query,
+                    hit,
+                )
             }
             Node::Rect(_)
             | Node::Ellipse(_)

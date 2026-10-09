@@ -16,16 +16,18 @@
 //! ```
 //!
 //! Submodules: `types` (supporting value types), `layout` (auto-layout
-//! payloads), `ops` (the [`Op`] enum itself), `subjects` (the ids an op
-//! keeps at their page position), `transaction` (the [`Transaction`]
-//! envelope).
+//! payloads), `anchor` (the anchor edit payload), `ops` (the [`Op`] enum
+//! itself), `subjects` (the ids an op keeps at their page position),
+//! `transaction` (the [`Transaction`] envelope).
 
+mod anchor;
 mod layout;
 mod ops;
 mod subjects;
 mod transaction;
 mod types;
 
+pub use anchor::AnchorEdit;
 pub use layout::{LayoutDim, LayoutEdit, SizeInput};
 pub use ops::Op;
 pub use transaction::Transaction;

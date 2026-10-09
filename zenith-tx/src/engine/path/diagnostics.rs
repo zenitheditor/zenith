@@ -68,7 +68,9 @@ pub(super) fn transform_geometry_diagnostic(node_id: &str, error: GeometryError)
         GeometryError::NonFiniteTransform => {
             "transform_path_anchors produced a non-finite transform"
         }
-        GeometryError::SingularTransform => "transform_path_anchors transform is singular",
+        GeometryError::SingularTransform => {
+            "transform_path_anchors transform is singular: a scale factor sx or sy is 0"
+        }
         GeometryError::ParameterOutOfRange
         | GeometryError::NonFiniteTolerance
         | GeometryError::NonPositiveTolerance

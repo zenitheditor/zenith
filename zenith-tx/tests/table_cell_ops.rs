@@ -3,7 +3,7 @@
 //! that already work for nodes inside a `frame` or `group`.
 
 mod common;
-use common::*;
+use common::parse;
 use zenith_tx::{Op, Permissions, Transaction, TxStatus, run_transaction};
 
 // ── Shared test document ──────────────────────────────────────────────────────

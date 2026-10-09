@@ -350,7 +350,7 @@ pub(super) fn op_fields(name: &str) -> Option<&'static [OpFieldSchema]> {
                 },
                 OpFieldSchema {
                     name: "transform",
-                    ty: r#"{mode:"translate",dx,dy} | {mode:"rotate",angle_degrees,cx,cy} | {mode:"reflect",x1,y1,x2,y2}"#,
+                    ty: r#"{mode:"translate",dx,dy} | {mode:"rotate",angle_degrees,cx,cy} | {mode:"reflect",x1,y1,x2,y2} | {mode:"scale",sx,sy,cx,cy}"#,
                     required: true,
                 },
             ];

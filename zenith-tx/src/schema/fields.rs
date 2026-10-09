@@ -2,12 +2,14 @@
 //!
 //! The [`OpFieldSchema`] type and the [`op_fields`] dispatch live here; the
 //! per-op field tables are grouped into the `group_a`/`group_b`/`group_c`
-//! submodules for file-size hygiene. Op names are unique across the groups, so the chained
+//! submodules for file-size hygiene. `group_d` holds the delta and anchor
+//! ops an editor gesture emits. Op names are unique across the groups, so the chained
 //! lookup is order-independent.
 
 mod group_a;
 mod group_b;
 mod group_c;
+mod group_d;
 
 /// One JSON field belonging to a transaction op (excluding the `"op"` tag).
 #[derive(Debug, Clone, PartialEq)]
@@ -29,4 +31,5 @@ pub fn op_fields(name: &str) -> Option<&'static [OpFieldSchema]> {
     group_a::op_fields(name)
         .or_else(|| group_b::op_fields(name))
         .or_else(|| group_c::op_fields(name))
+        .or_else(|| group_d::op_fields(name))
 }

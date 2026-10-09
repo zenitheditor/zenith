@@ -91,6 +91,48 @@ pub(super) fn reject_required_removals(
     rejected
 }
 
+/// After `op` edited node `node_id`: push one `tx.geometry_required` Error
+/// per `x` / `y` the node needs but lacks, and return `true` when any was
+/// pushed. A node in flow, an anchored node, and an unknown node pass.
+pub(in crate::engine) fn reject_unplaced(
+    doc: &Document,
+    node_id: &str,
+    op: &str,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> bool {
+    if in_layout_flow(doc, node_id) {
+        return false;
+    }
+    let Some(node) = find_node_any_shared(doc, node_id) else {
+        return false;
+    };
+    if !needs(node).position || anchored(node) {
+        return false;
+    }
+    let Some(view) = node.anchor_view() else {
+        return false;
+    };
+    let kind = node.kind_str();
+    let mut rejected = false;
+    for (field, value) in [("x", view.x), ("y", view.y)] {
+        if value.is_some() {
+            continue;
+        }
+        rejected = true;
+        diagnostics.push(Diagnostic::error(
+            "tx.geometry_required",
+            format!(
+                "{op}: {kind} {node_id:?} has no {field} and no anchor places it after this \
+                 edit. Run detach_anchor to remove the anchor and keep the position, or set \
+                 {field} with set_geometry first."
+            ),
+            None,
+            Some(node_id.to_owned()),
+        ));
+    }
+    rejected
+}
+
 /// The box attributes core validation requires of `node` outside flow.
 fn needs(node: &Node) -> Needs {
     let both = |required: bool| Needs {
@@ -133,7 +175,7 @@ fn needs(node: &Node) -> Needs {
 
 /// `true` when an anchor supplies the node's x/y: an `anchor` value, or an
 /// `anchor-sibling` with an `anchor-edge`.
-fn anchored(node: &Node) -> bool {
+pub(in crate::engine) fn anchored(node: &Node) -> bool {
     node.anchor_view().is_some_and(|v| {
         v.anchor.is_some() || (v.anchor_sibling.is_some() && v.anchor_edge.is_some())
     })

@@ -9,7 +9,7 @@
 use zenith_core::ast::document::Page;
 use zenith_core::ast::token::TokenBlock;
 
-use crate::engine::structure::{suffix_ids_in_children, suffix_zone_and_fold_ids};
+use crate::engine::structure::suffix_page_copy;
 
 /// Reconcile the candidate's token palette into `target_tokens` using an
 /// **additive upsert** strategy:
@@ -45,8 +45,9 @@ pub fn reconcile_candidate_tokens(candidate_tokens: &TokenBlock, target_tokens: 
 }
 
 /// Merge a candidate source page's content into `target` in place: deep-copy
-/// the source's children, safe-zones, and folds with every descendant id
-/// suffixed by `id_suffix`, replacing the target's content.
+/// the source's children, safe-zones, folds, and ports with every descendant id
+/// suffixed by `id_suffix`, replacing the target's content. Anchor and
+/// connector references inside the copy follow the suffix.
 ///
 /// Pure transform — no filesystem, no validation (the caller validates the
 /// resulting document).
@@ -54,13 +55,20 @@ pub fn merge_candidate_page(source: &Page, target: &mut Page, id_suffix: &str) {
     let mut children = source.children.clone();
     let mut safe_zones = source.safe_zones.clone();
     let mut folds = source.folds.clone();
+    let mut ports = source.ports.clone();
 
-    suffix_ids_in_children(&mut children, id_suffix);
-    suffix_zone_and_fold_ids(&mut safe_zones, &mut folds, id_suffix);
+    suffix_page_copy(
+        &mut children,
+        &mut safe_zones,
+        &mut folds,
+        &mut ports,
+        id_suffix,
+    );
 
     target.children = children;
     target.safe_zones = safe_zones;
     target.folds = folds;
+    target.ports = ports;
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────

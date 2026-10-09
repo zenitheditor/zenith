@@ -76,6 +76,16 @@ fn op_tag_strings_match_exhaustive_set() {
             node: String::new(),
             stroke_width: String::new(),
         },
+        Op::SetNodeToken {
+            node: String::new(),
+            property: String::new(),
+            token: None,
+        },
+        Op::SetSpanText {
+            node: String::new(),
+            span: 0,
+            text: String::new(),
+        },
         Op::SetVisible {
             node: String::new(),
             visible: true,
@@ -91,6 +101,30 @@ fn op_tag_strings_match_exhaustive_set() {
             w: None,
             h: None,
             rotate: None,
+        },
+        Op::NudgeGeometry {
+            node: String::new(),
+            dx: None,
+            dy: None,
+            dw: None,
+            dh: None,
+            detach: false,
+        },
+        Op::SetAnchor(crate::op::AnchorEdit::default()),
+        Op::NudgeAnchorGap {
+            node: String::new(),
+            dx: None,
+            dy: None,
+        },
+        Op::DetachAnchor {
+            node: String::new(),
+        },
+        Op::NudgeLinePoints {
+            node: String::new(),
+            dx1: None,
+            dy1: None,
+            dx2: None,
+            dy2: None,
         },
         Op::SetPoints {
             node: String::new(),

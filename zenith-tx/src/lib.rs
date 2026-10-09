@@ -14,14 +14,15 @@ pub mod result;
 pub mod schema;
 
 // Curated flat re-exports.
+pub use engine::query::{FlowPlacement, layout_flow, parent_space_origin};
 pub use engine::{
-    SCENE_TEXT_OUTLINE_FAILED, TextOutlineRequest, apply_text_outline_paths,
-    check_text_outline_source, reject_text_outline, run_transaction,
+    NODE_TOKEN_PROPERTIES, SCENE_TEXT_OUTLINE_FAILED, TextOutlineRequest, apply_text_outline_paths,
+    check_text_outline_source, node_token_properties, reject_text_outline, run_transaction,
 };
 pub use merge::{merge_candidate_page, reconcile_candidate_tokens};
 pub use op::{
-    AddAssetMetadata, FilterOpInput, GradientStopInput, LayoutDim, LayoutEdit, Op,
-    OpPathBooleanOperation, OpPathHandle, OpPoint, OpSpan, Permissions, Position, ShadowLayerInput,
-    SizeInput, Transaction,
+    AddAssetMetadata, AnchorEdit, FilterOpInput, GradientStopInput, LayoutDim, LayoutEdit, Op,
+    OpPathBooleanOperation, OpPathHandle, OpPathTransform, OpPoint, OpSpan, Permissions, Position,
+    ShadowLayerInput, SizeInput, Transaction,
 };
 pub use result::{TxError, TxResult, TxStatus};

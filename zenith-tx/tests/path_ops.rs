@@ -1,5 +1,8 @@
 mod common;
-use common::*;
+use common::parse;
+#[path = "common/geom_docs.rs"]
+mod geom_docs;
+use geom_docs::{PATH_DOC, RECT_GEOM_DOC};
 use zenith_tx::op::OpPathTransform;
 use zenith_tx::{Op, Permissions, Transaction, TxStatus, run_transaction};
 

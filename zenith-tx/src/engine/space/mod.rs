@@ -15,6 +15,6 @@ mod chain;
 mod offset;
 
 pub(in crate::engine) use chain::{
-    Chain, Link, chain_origin, common_prefix, container_chain, parent_chain, parent_frame,
-    resolved_tokens, shift_between,
+    Chain, Link, anchor_origin_of, chain_origin, common_prefix, container_chain, parent_chain,
+    parent_frame, resolved_tokens, shift_between,
 };

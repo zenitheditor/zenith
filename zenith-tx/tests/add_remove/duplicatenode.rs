@@ -1,5 +1,33 @@
 use super::*;
 
+/// Document with a single rect and a fill token (needed for post-validate).
+const DUP_RECT_DOC: &str = r##"zenith version=1 {
+  project id="proj" name="Test"
+  tokens format="zenith-token-v1" {
+    token id="color.a" type="color" value="#ff0000"
+  }
+  styles { }
+  document id="doc1" title="T" {
+    page id="pg1" w=(px)400 h=(px)300 {
+      rect id="orig" x=(px)10 y=(px)20 w=(px)80 h=(px)60 fill=(token)"color.a"
+    }
+  }
+}"##;
+
+/// Document with a group containing a rect (for container-rejection test).
+const DUP_GROUP_DOC: &str = r##"zenith version=1 {
+  project id="proj" name="Test"
+  tokens format="zenith-token-v1" { }
+  styles { }
+  document id="doc1" title="T" {
+    page id="pg1" w=(px)400 h=(px)300 {
+      group id="grp" {
+        rect id="inner" x=(px)0 y=(px)0 w=(px)50 h=(px)50
+      }
+    }
+  }
+}"##;
+
 // ── DuplicateNode tests ───────────────────────────────────────────────────
 
 /// Duplicate a leaf rect: parent now has 2 rects, clone right after original,
@@ -108,9 +136,9 @@ fn duplicate_node_colliding_new_id_rejected() {
     assert_eq!(result.source_after, result.source_before);
 }
 
-/// Attempting to duplicate a group → tx.unsupported_property (v0 scope).
+/// Duplicating a group copies the subtree: the descendant gets a suffixed id.
 #[test]
-fn duplicate_node_container_group_rejected() {
+fn duplicate_node_container_group_accepted() {
     let doc = parse(DUP_GROUP_DOC);
     let tx = Transaction {
         ops: vec![Op::DuplicateNode {
@@ -121,16 +149,14 @@ fn duplicate_node_container_group_rejected() {
     };
     let result = run_transaction(&doc, &tx).expect("run_transaction should not error");
 
-    assert_eq!(result.status, TxStatus::Rejected);
-    assert!(
-        result
-            .diagnostics
-            .iter()
-            .any(|d| { d.code == "tx.unsupported_property" && d.message.contains("group") }),
-        "expected tx.unsupported_property mentioning group; got: {:?}",
+    assert_eq!(
+        result.status,
+        TxStatus::Accepted,
+        "diagnostics: {:?}",
         result.diagnostics
     );
-    assert_eq!(result.source_after, result.source_before);
+    assert!(result.source_after.contains("id=\"grp-copy\""));
+    assert!(result.source_after.contains("id=\"inner-copy\""));
 }
 
 /// Attempting to duplicate an unknown node id → tx.unknown_node.

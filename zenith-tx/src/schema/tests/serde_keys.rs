@@ -63,6 +63,22 @@ fn op_fields_names_match_serde_keys() {
             },
         ),
         (
+            "set_node_token",
+            Op::SetNodeToken {
+                node: "n".into(),
+                property: "font-size".into(),
+                token: Some("size.title".into()),
+            },
+        ),
+        (
+            "set_span_text",
+            Op::SetSpanText {
+                node: "n".into(),
+                span: 1,
+                text: "Hi".into(),
+            },
+        ),
+        (
             "set_visible",
             Op::SetVisible {
                 node: "n".into(),
@@ -85,6 +101,48 @@ fn op_fields_names_match_serde_keys() {
                 w: Some(Some(100.0.into())),
                 h: Some(Some("hug".into())),
                 rotate: Some(Some(0.0)),
+            },
+        ),
+        (
+            "nudge_geometry",
+            Op::NudgeGeometry {
+                node: "n".into(),
+                dx: Some(1.0),
+                dy: Some(2.0),
+                dw: Some(3.0),
+                dh: Some(4.0),
+                detach: true,
+            },
+        ),
+        (
+            "set_anchor",
+            Op::SetAnchor(crate::op::AnchorEdit {
+                node: "n".into(),
+                anchor: Some(Some("center".into())),
+                anchor_zone: Some(None),
+                anchor_sibling: Some(Some("s".into())),
+                anchor_parent: Some(Some(false)),
+                anchor_edge: Some(Some("below".into())),
+                anchor_gap: Some(Some(8.0.into())),
+            }),
+        ),
+        (
+            "nudge_anchor_gap",
+            Op::NudgeAnchorGap {
+                node: "n".into(),
+                dx: Some(0.0),
+                dy: Some(6.0),
+            },
+        ),
+        ("detach_anchor", Op::DetachAnchor { node: "n".into() }),
+        (
+            "nudge_line_points",
+            Op::NudgeLinePoints {
+                node: "n".into(),
+                dx1: Some(1.0),
+                dy1: Some(2.0),
+                dx2: Some(3.0),
+                dy2: Some(4.0),
             },
         ),
         (
@@ -572,6 +630,27 @@ fn op_fields_names_match_serde_keys() {
         "op_fields_names_match_serde_keys is missing samples for ops: {:?}",
         missing,
     );
+}
+
+#[test]
+fn path_transform_scale_round_trips() {
+    let json = r#"{"op":"transform_path_anchors","node":"p","transform":{"mode":"scale","sx":2,"sy":0.5,"cx":10,"cy":20}}"#;
+    let op: Op = serde_json::from_str(json).expect("scale parses");
+    assert_eq!(
+        op,
+        Op::TransformPathAnchors {
+            node: "p".into(),
+            transform: OpPathTransform::Scale {
+                sx: 2.0,
+                sy: 0.5,
+                cx: 10.0,
+                cy: 20.0,
+            },
+        }
+    );
+    let back: Op =
+        serde_json::from_value(serde_json::to_value(&op).expect("serializes")).expect("re-parses");
+    assert_eq!(back, op);
 }
 
 #[test]

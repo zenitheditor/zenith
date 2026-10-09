@@ -1,5 +1,11 @@
 mod common;
-use common::*;
+use common::parse;
+#[path = "common/text_doc.rs"]
+mod text_doc;
+#[path = "common/two_rect_doc.rs"]
+mod two_rect_doc;
+use text_doc::TEXT_DOC;
+use two_rect_doc::TWO_RECT_DOC;
 use zenith_tx::{
     Op, OpPathBooleanOperation, OpPoint, OpSpan, Permissions, Position, Transaction, TxStatus,
     run_transaction,

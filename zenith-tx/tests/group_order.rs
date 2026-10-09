@@ -3,7 +3,7 @@
 //! trip over adjacent siblings gives back the original source.
 
 mod common;
-use common::*;
+use common::parse;
 use zenith_tx::{Op, Permissions, Transaction, TxResult, TxStatus, run_transaction};
 
 /// Four overlapping siblings, painted a (bottom) → d (top).

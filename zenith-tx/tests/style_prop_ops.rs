@@ -1,8 +1,30 @@
 //! Integration tests for the `set_style_property` transaction op.
 
 mod common;
-use common::*;
+use common::parse;
 use zenith_tx::{Op, Permissions, Transaction, TxStatus, run_transaction};
+
+/// Document with a `styles` block containing a named style with an existing
+/// property, plus a `fontFamily` token and a dimension token so post-validation
+/// passes when either is referenced from styles.
+const STYLE_PROP_DOC: &str = r##"zenith version=1 {
+  project id="proj" name="Test"
+  tokens format="zenith-token-v1" {
+    token id="font.body" type="fontFamily" value="Inter"
+    token id="size.md" type="dimension" value=(px)16
+    token id="color.accent" type="color" value="#3b82f6"
+  }
+  styles {
+    style id="s.heading" {
+      font-size (token)"size.md"
+    }
+  }
+  document id="doc1" title="T" {
+    page id="pg1" w=(px)400 h=(px)300 {
+      rect id="r1" x=(px)0 y=(px)0 w=(px)100 h=(px)100
+    }
+  }
+}"##;
 
 // ── 1. Accepted: set font-family on an existing style ────────────────────────
 

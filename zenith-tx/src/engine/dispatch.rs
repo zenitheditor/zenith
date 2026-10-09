@@ -2,15 +2,17 @@
 
 use zenith_core::{Diagnostic, Document};
 
+use super::anchor::{apply_detach_anchor, apply_nudge_anchor_gap, apply_set_anchor};
 use super::asset::{AddAssetSpec, apply_add_asset, apply_set_asset};
 use super::defaults::{SetDefaultScalars, apply_remove_default, apply_set_default};
 use super::fill_rule::apply_set_fill_rule;
 use super::flags::{apply_set_locked, apply_set_points, apply_set_visible};
 use super::geometry::{
-    GeometryDelta, apply_align_nodes, apply_align_to_edge, apply_distribute_nodes,
-    apply_set_geometry,
+    GeometryDelta, LineDelta, NudgeDelta, apply_align_nodes, apply_align_to_edge,
+    apply_distribute_nodes, apply_nudge_geometry, apply_nudge_line_points, apply_set_geometry,
 };
 use super::layout::apply_set_layout;
+use super::node_props::{apply_set_node_token, apply_set_span_text};
 use super::path::{
     MakePathSymmetricArgs, MovePathAnchorArgs, MovePathHandleArgs, PathBooleanArgs,
     apply_insert_path_anchor, apply_insert_path_anchor_at_point, apply_make_path_symmetric,
@@ -87,6 +89,27 @@ pub(super) fn apply_op(
         } => {
             apply_set_stroke_width(node_id, stroke_width, doc, diagnostics, affected);
         }
+        Op::SetNodeToken {
+            node: node_id,
+            property,
+            token,
+        } => {
+            apply_set_node_token(
+                node_id,
+                property,
+                token.as_deref(),
+                doc,
+                diagnostics,
+                affected,
+            );
+        }
+        Op::SetSpanText {
+            node: node_id,
+            span,
+            text,
+        } => {
+            apply_set_span_text(node_id, *span, text, doc, diagnostics, affected);
+        }
         Op::SetVisible {
             node: node_id,
             visible,
@@ -115,6 +138,61 @@ pub(super) fn apply_op(
                     w: w.as_ref().map(Option::as_ref),
                     h: h.as_ref().map(Option::as_ref),
                     rotate: *rotate,
+                },
+                doc,
+                diagnostics,
+                affected,
+            );
+        }
+        Op::NudgeGeometry {
+            node: node_id,
+            dx,
+            dy,
+            dw,
+            dh,
+            detach,
+        } => {
+            apply_nudge_geometry(
+                node_id,
+                NudgeDelta {
+                    dx: *dx,
+                    dy: *dy,
+                    dw: *dw,
+                    dh: *dh,
+                    detach: *detach,
+                },
+                doc,
+                diagnostics,
+                affected,
+            );
+        }
+        Op::SetAnchor(edit) => {
+            apply_set_anchor(edit, doc, diagnostics, affected);
+        }
+        Op::NudgeAnchorGap {
+            node: node_id,
+            dx,
+            dy,
+        } => {
+            apply_nudge_anchor_gap(node_id, (*dx, *dy), doc, diagnostics, affected);
+        }
+        Op::DetachAnchor { node: node_id } => {
+            apply_detach_anchor(node_id, doc, diagnostics, affected);
+        }
+        Op::NudgeLinePoints {
+            node: node_id,
+            dx1,
+            dy1,
+            dx2,
+            dy2,
+        } => {
+            apply_nudge_line_points(
+                node_id,
+                LineDelta {
+                    dx1: *dx1,
+                    dy1: *dy1,
+                    dx2: *dx2,
+                    dy2: *dy2,
                 },
                 doc,
                 diagnostics,

@@ -1,7 +1,7 @@
 //! Integration tests for master-page transaction ops.
 
 mod common;
-use common::*;
+use common::parse;
 use zenith_tx::{Op, Permissions, Transaction, TxStatus, run_transaction};
 
 const BASE: &str = r##"zenith version=1 {

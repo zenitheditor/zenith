@@ -140,6 +140,28 @@ fn fixed_size(f: &FrameNode, scope: &Scope<'_>) -> Option<(f64, f64)> {
         .flatten()
 }
 
+/// The anchor origin of `node`, a member of `scope`, at its authored px
+/// size, in the space of `scope`. `None` when the parent frame places it
+/// in flow, its size does not resolve to px (a layout frame needs a fixed
+/// size), or the anchor origin does not derive.
+pub(in crate::engine) fn placed_anchor_origin(
+    node: &Node,
+    scope: &Scope<'_>,
+) -> Option<(f64, f64)> {
+    if scope.parent.is_some_and(|f| places_in_flow(f, node)) {
+        return None;
+    }
+    let size = if let Node::Frame(f) = node
+        && is_layout_root(f)
+    {
+        fixed_size(f, scope)?
+    } else {
+        let view = node.anchor_view()?;
+        scope.px(view.w).zip(scope.px(view.h))?
+    };
+    anchor_origin(node, size, scope, &mut BTreeSet::new())
+}
+
 /// The anchor origin of `node` at `size` in the space of `scope`, as the
 /// scene derives it ([`derive_anchor_origin`]). `None` when it does not
 /// derive from authored data.

@@ -1,5 +1,23 @@
 use super::*;
 
+/// Polygon with exactly 3 points and a fill token (to keep post-validate happy).
+const POLY_DOC: &str = r##"zenith version=1 {
+  project id="proj" name="Test"
+  tokens format="zenith-token-v1" {
+    token id="color.fill" type="color" value="#ff0000"
+  }
+  styles { }
+  document id="doc1" title="T" {
+    page id="pg1" w=(px)400 h=(px)300 {
+      polygon id="poly" fill=(token)"color.fill" {
+        point x=(px)0 y=(px)0
+        point x=(px)100 y=(px)0
+        point x=(px)50 y=(px)80
+      }
+    }
+  }
+}"##;
+
 // ── SetPoints tests ───────────────────────────────────────────────────────
 
 #[test]

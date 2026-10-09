@@ -1,39 +1,22 @@
 //! `DuplicateNode` and `DuplicatePage` application, plus the id-cloning helpers
 //! they share (leaf id setter, any-variant id setter, subtree id-suffixing).
+//! `DuplicateNode` copies the whole subtree of a container: see
+//! [`copy_subtree`].
+
+use std::collections::BTreeMap;
 
 use zenith_core::ast::document::{Fold, SafeZone};
 use zenith_core::{Diagnostic, Document, Node};
 
 use super::super::{find_node_shared, record_affected, subtree_contains};
-
-/// Return `true` if `node` is a container variant (`Frame` or `Group`).
-///
-/// Used by [`apply_duplicate_node`] to enforce the v0 leaf-only restriction.
-/// Duplicating a container would clone all descendant ids verbatim, producing
-/// document-wide duplicate ids. Re-id'ing an entire subtree is deferred.
-fn node_is_container(node: &Node) -> bool {
-    // `Instance` is treated as container-ish here so the leaf-only duplicate
-    // guard rejects it: its expanded subtree re-ids descendants by an
-    // instance-id prefix, so duplicating it verbatim (with a single new id) is
-    // not a v0-supported operation — the same deferral as Frame/Group.
-    // `Table` is container-ish: its cells hold descendant ids, so a verbatim
-    // duplicate would clone those ids. Re-id'ing the subtree is deferred, the
-    // same deferral as Frame/Group.
-    matches!(
-        node,
-        Node::Frame(_) | Node::Group(_) | Node::Instance(_) | Node::Table(_)
-    )
-}
+use super::copy_ids::{pick_suffix, subtree_id_map};
+use super::suffix::{copy_ports, copy_subtree, suffix_page_copy};
 
 /// Set the `id` field on a leaf [`Node`] variant to `new_id`.
 ///
 /// Mirrors [`Node::id`](zenith_core::Node::id) (the shared-borrow id reader). Only leaf variants
-/// are covered; `Frame` and `Group` are deliberately excluded because
-/// [`apply_duplicate_node`] rejects containers before calling this helper.
-/// Returns `false` for containers and for an `Unknown` node (whose id lives in
-/// an `Option<String>`, set via [`node_set_id_any`], not this leaf setter). That
-/// path is unreachable from `apply_duplicate_node`, which rejects containers up
-/// front and never duplicates an unknown node verbatim.
+/// are covered. Returns `false` for containers and for an `Unknown` node (whose
+/// id lives in an `Option<String>`). Use [`node_set_id_any`] for those.
 fn node_set_id(node: &mut Node, new_id: String) -> bool {
     match node {
         Node::Rect(r) => {
@@ -108,10 +91,9 @@ fn node_set_id(node: &mut Node, new_id: String) -> bool {
             m.id = new_id;
             true
         }
-        // Containers (and the container-ish instance) are handled by the v0
-        // guard in apply_duplicate_node. An Unknown node's id lives in an
-        // `Option<String>` (not the leaf `id: String` this setter writes); its
-        // re-id path goes through `node_set_id_any`, so it returns false here.
+        // Containers and the instance are set by `node_set_id_any`. An Unknown
+        // node's id lives in an `Option<String>` (not the leaf `id: String`
+        // this setter writes), so it returns false here as well.
         Node::Frame(_) | Node::Group(_) | Node::Instance(_) | Node::Table(_) | Node::Unknown(_) => {
             false
         }
@@ -123,9 +105,14 @@ fn node_set_id(node: &mut Node, new_id: String) -> bool {
 /// Returns `true` on success, `false` if the id is not in this slice (recurse
 /// into container children to continue the search).
 ///
-/// Callers that need the source-is-container check must do so before calling
-/// this function (see [`apply_duplicate_node`]).
-fn duplicate_in_children(children: &mut Vec<Node>, id: &str, new_id: &str) -> bool {
+/// The clone is a deep copy: [`copy_subtree`] gives every descendant the id
+/// per `ids` and points references inside the copy at the copies.
+fn duplicate_in_children(
+    children: &mut Vec<Node>,
+    id: &str,
+    new_id: &str,
+    ids: &BTreeMap<String, String>,
+) -> bool {
     // Phase 1 (shared scan): find the index of the source node in this slice.
     let direct = children.iter().position(|n| n.id() == Some(id));
 
@@ -134,7 +121,7 @@ fn duplicate_in_children(children: &mut Vec<Node>, id: &str, new_id: &str) -> bo
         // Allocate the owned String only at the single insertion site.
         if let Some(src) = children.get(i) {
             let mut clone = src.clone();
-            node_set_id(&mut clone, new_id.to_owned());
+            copy_subtree(&mut clone, new_id, ids);
             children.insert(i + 1, clone);
             return true;
         }
@@ -143,7 +130,7 @@ fn duplicate_in_children(children: &mut Vec<Node>, id: &str, new_id: &str) -> bo
     // Phase 2: descend into container children. The recursive call performs its
     // own search-and-insert, so we just recurse into each container and stop at
     // the first that reports success. No String clone per iteration — new_id is
-    // a borrowed &str that is passed down without allocation.
+    // borrowed &str values that are passed down without allocation.
     for child in children.iter_mut() {
         // Each container kind contributes one or more child lists to recurse into
         // (a table contributes every cell's children). Collecting the mutable
@@ -178,7 +165,7 @@ fn duplicate_in_children(children: &mut Vec<Node>, id: &str, new_id: &str) -> bo
             | Node::Mesh(_) => Vec::new(),
         };
         for list in lists {
-            if duplicate_in_children(list, id, new_id) {
+            if duplicate_in_children(list, id, new_id, ids) {
                 return true;
             }
         }
@@ -195,7 +182,6 @@ pub(in crate::engine) fn apply_duplicate_node(
     affected: &mut Vec<String>,
 ) {
     // 1. Verify the source node exists on a page or master (shared scan).
-    //    We also need its variant to enforce the v0 leaf-only restriction.
     //    Use a two-phase approach mirroring find_node_any_mut.
     enum Host {
         Page(usize),
@@ -235,39 +221,32 @@ pub(in crate::engine) fn apply_duplicate_node(
         }
     };
 
-    // 2. Check whether the source is a container (v0 restriction).
-    //    We must obtain a shared reference to inspect the variant, then release
-    //    it before taking the mutable borrow needed for the clone-insert step.
-    {
-        let src = match host {
-            Host::Page(pi) => doc
-                .body
-                .pages
-                .get(pi)
-                .and_then(|page| find_node_shared(&page.children, node_id)),
-            Host::Master(mi) => doc
-                .masters
-                .get(mi)
-                .and_then(|master| find_node_shared(&master.children, node_id)),
-        };
-        if let Some(src) = src
-            && node_is_container(src)
-        {
-            let kind = src.kind_str();
-            diagnostics.push(Diagnostic::error(
-                "tx.unsupported_property",
-                format!(
-                    "duplicating a {} is not supported in v0; re-id'ing a subtree \
-                     is deferred — only leaf nodes may be duplicated",
-                    kind
-                ),
-                None,
-                Some(node_id.to_owned()),
-            ));
-            return;
-        }
-        // Shared borrow ends here.
-    }
+    // 2. Pick the descendant id suffix from the source subtree and the ids
+    //    already in the document (shared borrows only).
+    let src = match host {
+        Host::Page(pi) => doc
+            .body
+            .pages
+            .get(pi)
+            .and_then(|page| find_node_shared(&page.children, node_id)),
+        Host::Master(mi) => doc
+            .masters
+            .get(mi)
+            .and_then(|master| find_node_shared(&master.children, node_id)),
+    };
+    let Some(src) = src else {
+        return;
+    };
+    let Some(suffix) = pick_suffix(doc, src, node_id, new_id) else {
+        diagnostics.push(Diagnostic::error(
+            "id.duplicate",
+            format!("duplicate_node: no free id suffix for the subtree of {node_id:?}"),
+            None,
+            Some(node_id.to_owned()),
+        ));
+        return;
+    };
+    let ids = subtree_id_map(src, node_id, new_id, &suffix);
 
     // 3. Clone the source and insert it immediately after the original.
     //    `duplicate_in_children` does the clone+id-set+insert in one pass.
@@ -276,13 +255,15 @@ pub(in crate::engine) fn apply_duplicate_node(
             let Some(page) = doc.body.pages.get_mut(pi) else {
                 return;
             };
-            duplicate_in_children(&mut page.children, node_id, new_id);
+            duplicate_in_children(&mut page.children, node_id, new_id, &ids);
+            // Page ports that name nodes of the subtree get copies for the copy.
+            copy_ports(&mut page.ports, &ids);
         }
         Host::Master(mi) => {
             let Some(master) = doc.masters.get_mut(mi) else {
                 return;
             };
-            duplicate_in_children(&mut master.children, node_id, new_id);
+            duplicate_in_children(&mut master.children, node_id, new_id, &ids);
         }
     }
 
@@ -299,7 +280,7 @@ pub(in crate::engine) fn apply_duplicate_node(
 /// read/written through the shared [`Node::id`](zenith_core::Node::id) reader and the
 /// [`node_set_id_any`] setter; leaf and container nodes alike get suffixed, and
 /// containers also recurse into their own children.
-pub(crate) fn suffix_ids_in_children(children: &mut [Node], id_suffix: &str) {
+pub(super) fn suffix_ids_in_children(children: &mut [Node], id_suffix: &str) {
     for child in children.iter_mut() {
         // Suffix this node's own id (if it has one), then recurse.
         if let Some(old_id) = child.id() {
@@ -344,7 +325,7 @@ pub(crate) fn suffix_ids_in_children(children: &mut [Node], id_suffix: &str) {
 /// their source spans. Page-metadata children (safe-zones, folds) carry ids in
 /// the same namespace as nodes, so a deep page copy must suffix them too to stay
 /// collision-free. Used by `DuplicatePage` and `merge_candidate_page`.
-pub(crate) fn suffix_zone_and_fold_ids(
+pub(super) fn suffix_zone_and_fold_ids(
     safe_zones: &mut [SafeZone],
     folds: &mut [Fold],
     id_suffix: &str,
@@ -454,9 +435,15 @@ pub(in crate::engine) fn apply_duplicate_page(
     clone.id = new_id.to_owned();
     clone.source_span = None;
 
-    // 4. Suffix every descendant node id and every safe-zone id in the copy.
-    suffix_ids_in_children(&mut clone.children, id_suffix);
-    suffix_zone_and_fold_ids(&mut clone.safe_zones, &mut clone.folds, id_suffix);
+    // 4. Suffix every descendant node id and every safe-zone id in the copy,
+    //    and point the copy's internal references at the suffixed ids.
+    suffix_page_copy(
+        &mut clone.children,
+        &mut clone.safe_zones,
+        &mut clone.folds,
+        &mut clone.ports,
+        id_suffix,
+    );
 
     // 5. Insert the clone immediately after the source page.
     doc.body.pages.insert(position + 1, clone);

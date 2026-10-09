@@ -3,7 +3,7 @@
 //! guard on every hand-placement op.
 
 mod common;
-use common::*;
+use common::parse;
 use zenith_core::Severity;
 use zenith_scene::layout_boxes;
 use zenith_tx::{LayoutEdit, Op, Permissions, Transaction, TxResult, TxStatus, run_transaction};

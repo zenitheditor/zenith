@@ -1,5 +1,11 @@
 mod common;
-use common::*;
+use common::parse;
+#[path = "common/line_doc.rs"]
+mod line_doc;
+#[path = "common/px_attr.rs"]
+mod px_attr;
+use line_doc::LINE_DOC;
+use px_attr::extract_px_attr;
 use zenith_tx::{Op, Permissions, Transaction, TxStatus, run_transaction};
 
 // ── Fixture ───────────────────────────────────────────────────────────────────

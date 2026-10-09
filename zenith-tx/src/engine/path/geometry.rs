@@ -53,6 +53,10 @@ pub(super) fn path_transform(
             let end = Point2::new(*x2, *y2)?;
             AffineTransform::reflection_across_line(start, end)
         }
+        OpPathTransform::Scale { sx, sy, cx, cy } => {
+            let pivot = Point2::new(*cx, *cy)?;
+            AffineTransform::scale(*sx, *sy, pivot)
+        }
     }
 }
 

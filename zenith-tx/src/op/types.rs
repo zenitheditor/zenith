@@ -126,6 +126,7 @@ pub enum OpPathHandle {
 /// - `{"mode":"translate","dx":10,"dy":-4}`
 /// - `{"mode":"rotate","angle_degrees":90,"cx":50,"cy":50}`
 /// - `{"mode":"reflect","x1":0,"y1":0,"x2":100,"y2":0}`
+/// - `{"mode":"scale","sx":1.5,"sy":0.5,"cx":0,"cy":0}`
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq)]
 #[serde(tag = "mode", rename_all = "snake_case")]
 pub enum OpPathTransform {
@@ -139,6 +140,10 @@ pub enum OpPathTransform {
     },
     /// Reflect all anchor and complete handle points across the line from `x1`,`y1` to `x2`,`y2`.
     Reflect { x1: f64, y1: f64, x2: f64, y2: f64 },
+    /// Scale all anchor and complete handle points by `sx`,`sy` about `cx`,`cy`.
+    /// `cx`,`cy` stay fixed. A negative factor mirrors that axis. A zero
+    /// factor is rejected with `tx.invalid_geometry`.
+    Scale { sx: f64, sy: f64, cx: f64, cy: f64 },
 }
 
 /// Boolean operation to materialize between two simple closed path contours.

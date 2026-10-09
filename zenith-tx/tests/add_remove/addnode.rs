@@ -1,5 +1,20 @@
 use super::*;
 
+/// Page with one rect; an accent color token declared so added rects that
+/// reference it pass post-validation.
+const ADD_BASE_DOC: &str = r##"zenith version=1 {
+  project id="proj" name="Test"
+  tokens format="zenith-token-v1" {
+    token id="color.accent" type="color" value="#3b82f6"
+  }
+  styles { }
+  document id="doc1" title="T" {
+    page id="pg1" w=(px)320 h=(px)200 {
+      rect id="base" x=(px)0 y=(px)0 w=(px)100 h=(px)100
+    }
+  }
+}"##;
+
 // ── AddNode tests ─────────────────────────────────────────────────────────
 
 #[test]

@@ -6,12 +6,14 @@
 //! and re-exports the items the sibling engine modules dispatch to.
 
 mod add_remove;
+mod copy_ids;
 mod duplicate;
 mod finders;
 mod group;
 mod page;
 mod reorder;
 mod reparent;
+mod suffix;
 
 pub(in crate::engine) use add_remove::{
     AddPathSpec, apply_add_node, apply_add_path, apply_remove_node,
@@ -19,7 +21,6 @@ pub(in crate::engine) use add_remove::{
 pub(in crate::engine) use duplicate::{
     apply_duplicate_node, apply_duplicate_page, node_set_id_any,
 };
-pub(crate) use duplicate::{suffix_ids_in_children, suffix_zone_and_fold_ids};
 pub(in crate::engine) use group::{apply_group, apply_ungroup};
 pub(in crate::engine) use page::{
     AddPageSpec, apply_add_page, apply_create_master, apply_delete_master, apply_delete_page,
@@ -27,3 +28,4 @@ pub(in crate::engine) use page::{
 };
 pub(in crate::engine) use reorder::{ReorderKind, apply_reorder};
 pub(in crate::engine) use reparent::apply_reparent;
+pub(crate) use suffix::suffix_page_copy;

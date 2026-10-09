@@ -1,5 +1,46 @@
 use super::*;
 
+/// Rect with fill token A; token B also declared so post-validate passes.
+const FILL_DOC: &str = r##"zenith version=1 {
+  project id="proj" name="Test"
+  tokens format="zenith-token-v1" {
+    token id="color.a" type="color" value="#ff0000"
+    token id="color.b" type="color" value="#0000ff"
+  }
+  styles { }
+  document id="doc1" title="T" {
+    page id="pg1" w=(px)400 h=(px)300 {
+      rect id="r1" x=(px)0 y=(px)0 w=(px)100 h=(px)100 fill=(token)"color.a"
+    }
+  }
+}"##;
+
+/// Rect, line, polygon carrying valid color + dimension tokens.
+const STROKE_DOC: &str = r##"zenith version=1 {
+  project id="proj" name="Test"
+  tokens format="zenith-token-v1" {
+    token id="color.rule" type="color" value="#334155"
+    token id="color.on.rule" type="color" value="#ffffff"
+    token id="size.stroke" type="dimension" value=(px)2
+  }
+  styles { }
+  document id="doc1" title="T" {
+    page id="pg1" w=(px)400 h=(px)300 {
+      rect id="r1" x=(px)0 y=(px)0 w=(px)100 h=(px)100 stroke=(token)"color.rule" stroke-width=(token)"size.stroke"
+      line id="ln1" x1=(px)0 y1=(px)0 x2=(px)100 y2=(px)100 stroke=(token)"color.rule"
+      ellipse id="dot" x=(px)0 y=(px)0 w=(px)100 h=(px)100 fill=(token)"color.rule"
+      text id="lbl" x=(px)10 y=(px)10 w=(px)200 h=(px)40 fill=(token)"color.on.rule" {
+        span "Hi"
+      }
+      polygon id="poly1" stroke=(token)"color.rule" stroke-width=(token)"size.stroke" {
+        point x=(px)10 y=(px)10
+        point x=(px)90 y=(px)10
+        point x=(px)50 y=(px)90
+      }
+    }
+  }
+}"##;
+
 // ── SetFill tests ─────────────────────────────────────────────────────────
 
 #[test]

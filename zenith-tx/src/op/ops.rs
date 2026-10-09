@@ -1,5 +1,6 @@
 //! The [`Op`] enum: every mutating operation a [`super::Transaction`] can carry.
 
+use super::anchor::AnchorEdit;
 use super::layout::{LayoutEdit, SizeInput};
 use super::types::{
     AddAssetMetadata, FilterOpInput, GradientStopInput, OpPathAnchor, OpPathBooleanOperation,
@@ -67,6 +68,32 @@ pub enum Op {
         /// Dimension token id to set as the stroke width (e.g. `"size.stroke"`).
         stroke_width: String,
     },
+    /// Bind one token-valued property of a node to a token, or remove it:
+    /// `radius` (rect, frame, shape, pattern, chart), `font-family` and
+    /// `font-size` (text, code, field, footnote, toc), `font-weight` (text,
+    /// code). Another property, or a kind without it, is
+    /// `tx.unsupported_property`.
+    SetNodeToken {
+        /// The stable node `id` to target.
+        node: String,
+        /// The property in its KDL spelling (`font-size`); underscore
+        /// spellings (`font_size`) are accepted.
+        property: String,
+        /// The token id to bind. `null` or omitted removes the attribute, so
+        /// the node takes the value from its style or the defaults.
+        #[serde(default)]
+        token: Option<String>,
+    },
+    /// Replace the text of one span of a `text` or `shape` node. The span
+    /// keeps every attribute of its own (fill, weight, link, …).
+    SetSpanText {
+        /// The stable node `id` to target.
+        node: String,
+        /// The 0-based span index.
+        span: usize,
+        /// The new span text.
+        text: String,
+    },
     /// Show or hide a node by setting its `visible` property.
     SetVisible {
         /// The stable node `id` to target.
@@ -89,6 +116,11 @@ pub enum Op {
     /// `x` / `y` / `w` / `h` is rejected with `tx.geometry_required` when the
     /// node then has no placement: no row/column/grid frame places it in flow,
     /// and (for `x` / `y`) no anchor places it.
+    ///
+    /// Every written value is px. It replaces a token ref, a `(pt)` value,
+    /// or a `hug` / `fill` keyword on that axis, and an `x` / `y` overrides
+    /// an anchor on that axis. This is the explicit absolute write. Use
+    /// `nudge_geometry` to move by a delta and keep tokens and units.
     SetGeometry {
         /// The stable node `id` to target.
         node: String,
@@ -129,6 +161,97 @@ pub enum Op {
             skip_serializing_if = "Option::is_none"
         )]
         rotate: Option<Option<f64>>,
+    },
+    /// Move and/or resize a box node by px deltas, keeping each attribute's
+    /// unit.
+    ///
+    /// Deltas are in the node's authored space: the space its `x` / `y` are
+    /// written in, before its own `rotate`. A `(pt)` value stays `(pt)`. An
+    /// absent `x` / `y` on a `group` or `instance` counts as `(px)0`, as the
+    /// scene places it. An omitted delta leaves that attribute untouched.
+    ///
+    /// Rejected axes, with no change to the node:
+    /// - a token-bound axis: `tx.token_bound`, unless `detach` is `true`.
+    /// - an absent `w` / `h` or a `hug` / `fill` size: `tx.computed_size`.
+    /// - an `x` / `y` an anchor supplies: `tx.anchored`.
+    /// - a value with no px conversion (`pct`, `deg`, literal, data ref):
+    ///   `tx.value_unresolved`.
+    /// - a `w` / `h` that would become negative: `tx.invalid_geometry`.
+    /// - `dx` / `dy` on an in-flow child of a row/column/grid frame:
+    ///   `tx.layout_managed`.
+    NudgeGeometry {
+        /// The stable node `id` to target.
+        node: String,
+        /// Px delta added to `x`. Must be finite.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        dx: Option<f64>,
+        /// Px delta added to `y`. Must be finite.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        dy: Option<f64>,
+        /// Px delta added to `w`. Must be finite.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        dw: Option<f64>,
+        /// Px delta added to `h`. Must be finite.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        dh: Option<f64>,
+        /// `true` replaces a token-bound axis with a px literal: the
+        /// resolved token value plus the delta. Default `false`.
+        #[serde(default)]
+        detach: bool,
+    },
+    /// Set or clear the anchor placement attributes of a node.
+    ///
+    /// Removing the anchor from a node with no `x` / `y` is rejected with
+    /// `tx.geometry_required`: run `detach_anchor` to keep its position.
+    SetAnchor(AnchorEdit),
+    /// Move an edge-anchored node along its anchor axis by changing its
+    /// `anchor-gap`, in the gap's unit.
+    ///
+    /// The node needs `anchor-sibling` and `anchor-edge`. `dx` / `dy` are the
+    /// drag delta in the node's authored space. Only the edge axis counts:
+    /// `below` adds `dy`, `above` subtracts `dy`, `after` adds `dx`, `before`
+    /// subtracts `dx`. A non-zero delta on the other axis is rejected.
+    NudgeAnchorGap {
+        /// The stable node `id` to target.
+        node: String,
+        /// Px drag delta along x. Must be finite.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        dx: Option<f64>,
+        /// Px drag delta along y. Must be finite.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        dy: Option<f64>,
+    },
+    /// Remove every anchor attribute from a node and keep its position.
+    ///
+    /// Each `x` / `y` the anchor supplied is written as px at the
+    /// anchor-derived position. Nodes anchored to this node keep their
+    /// position. When the anchor position does not derive from authored
+    /// values, the op is rejected with `tx.anchored`.
+    DetachAnchor {
+        /// The stable node `id` to target.
+        node: String,
+    },
+    /// Move the endpoints of a `line` node by px deltas, keeping each
+    /// endpoint's unit.
+    ///
+    /// `dx1` / `dy1` move the start point, `dx2` / `dy2` the end point. Move
+    /// the whole line with all four. A connector is rejected with
+    /// `tx.derived_geometry`: its endpoints come from its targets.
+    NudgeLinePoints {
+        /// The stable node `id` to target.
+        node: String,
+        /// Px delta added to `x1`. Must be finite.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        dx1: Option<f64>,
+        /// Px delta added to `y1`. Must be finite.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        dy1: Option<f64>,
+        /// Px delta added to `x2`. Must be finite.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        dx2: Option<f64>,
+        /// Px delta added to `y2`. Must be finite.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        dy2: Option<f64>,
     },
     /// Replace the entire vertex list of a `polygon` or `polyline` node.
     SetPoints {
@@ -339,11 +462,19 @@ pub enum Op {
         /// are optional and default to `None` (inherit from node-level styles).
         spans: Vec<OpSpan>,
     },
-    /// Duplicate a leaf node, assigning it a new id, and insert the clone
+    /// Duplicate a node and its whole subtree, assigning the copy a new id, and
+    /// insert the copy directly after the original.
+    ///
+    /// Every descendant id of the copy is the original id plus a suffix: what
+    /// `new_id` adds to `node` (`box` to `box-copy` gives `-copy`), or
+    /// `.{new_id}` when `new_id` does not start with `node`. A numeric
+    /// tail (`-copy2`) is added when those ids exist already. `anchor-sibling`
+    /// and connector `from` / `to` that name a node inside the subtree follow
+    /// to the copy. References to nodes outside the subtree stay unchanged.
     DuplicateNode {
         /// The stable id of the node to duplicate.
         node: String,
-        /// The id to assign to the newly created clone.
+        /// The id to assign to the root of the copy.
         new_id: String,
     },
     /// Duplicate an entire page (and its full subtree), inserting the copy

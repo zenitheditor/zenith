@@ -1,6 +1,149 @@
 mod common;
-use common::*;
+use common::parse;
+#[path = "common/px_attr.rs"]
+mod px_attr;
+#[path = "common/two_rect_doc.rs"]
+mod two_rect_doc;
+use px_attr::extract_px_attr;
+use two_rect_doc::TWO_RECT_DOC;
 use zenith_tx::{Op, Permissions, Position, Transaction, TxStatus, run_transaction};
+
+/// Return the page ids from `source`, in document order, by scanning for
+/// `page id="…"` occurrences.
+fn page_id_order(source: &str) -> Vec<String> {
+    let mut ids = Vec::new();
+    let mut rest = source;
+    while let Some(idx) = rest.find("page id=\"") {
+        let after = &rest[idx + "page id=\"".len()..];
+        if let Some(end) = after.find('"') {
+            ids.push(after[..end].to_owned());
+            rest = &after[end..];
+        } else {
+            break;
+        }
+    }
+    ids
+}
+
+/// Group containing two rects.
+const GROUP_TWO_RECT_DOC: &str = r##"zenith version=1 {
+  project id="proj" name="Test"
+  tokens format="zenith-token-v1" { }
+  styles { }
+  document id="doc1" title="T" {
+    page id="pg1" w=(px)400 h=(px)300 {
+      group id="grp1" {
+        rect id="a" x=(px)0 y=(px)0 w=(px)100 h=(px)100
+        rect id="b" x=(px)0 y=(px)0 w=(px)100 h=(px)100
+      }
+    }
+  }
+}"##;
+
+/// Three rects a (index 0, bottom), b (index 1), c (index 2, top).
+const THREE_RECT_DOC: &str = r##"zenith version=1 {
+  project id="proj" name="Test"
+  tokens format="zenith-token-v1" { }
+  styles { }
+  document id="doc1" title="T" {
+    page id="pg1" w=(px)400 h=(px)300 {
+      rect id="a" x=(px)0 y=(px)0 w=(px)100 h=(px)100
+      rect id="b" x=(px)10 y=(px)0 w=(px)100 h=(px)100
+      rect id="c" x=(px)20 y=(px)0 w=(px)100 h=(px)100
+    }
+  }
+}"##;
+
+/// Group containing two rects: x (bottom) then y (top).
+const GROUP_TWO_RECT_BACKWARD_DOC: &str = r##"zenith version=1 {
+  project id="proj" name="Test"
+  tokens format="zenith-token-v1" { }
+  styles { }
+  document id="doc1" title="T" {
+    page id="pg1" w=(px)400 h=(px)300 {
+      group id="grp1" {
+        rect id="x" x=(px)0 y=(px)0 w=(px)100 h=(px)100
+        rect id="y" x=(px)10 y=(px)0 w=(px)100 h=(px)100
+      }
+    }
+  }
+}"##;
+
+/// A two-page document used to exercise the page-structure ops.
+const TWO_PAGE_STRUCT_DOC: &str = r##"zenith version=1 {
+  project id="proj" name="Test"
+  tokens format="zenith-token-v1" {
+    token id="color.bg" type="color" value="#ffffff"
+  }
+  styles { }
+  document id="doc1" title="T" {
+    page id="pg1" w=(px)400 h=(px)300 {
+      rect id="r1" x=(px)0 y=(px)0 w=(px)100 h=(px)100
+    }
+    page id="pg2" w=(px)400 h=(px)300 {
+      rect id="r2" x=(px)0 y=(px)0 w=(px)100 h=(px)100
+    }
+  }
+}"##;
+
+/// Two sibling rects on a page; used for group/reparent tests.
+const TWO_SIBLING_RECTS: &str = r##"zenith version=1 {
+  project id="proj" name="Test"
+  tokens format="zenith-token-v1" { }
+  styles { }
+  document id="doc1" title="T" {
+    page id="pg1" w=(px)400 h=(px)300 {
+      rect id="r1" x=(px)0 y=(px)0 w=(px)100 h=(px)100
+      rect id="r2" x=(px)0 y=(px)0 w=(px)100 h=(px)100
+    }
+  }
+}"##;
+
+/// A page with a group that already exists (for ungroup / reparent tests).
+const PAGE_WITH_GROUP: &str = r##"zenith version=1 {
+  project id="proj" name="Test"
+  tokens format="zenith-token-v1" { }
+  styles { }
+  document id="doc1" title="T" {
+    page id="pg1" w=(px)400 h=(px)300 {
+      group id="grp1" {
+        rect id="r1" x=(px)0 y=(px)0 w=(px)100 h=(px)100
+        rect id="r2" x=(px)0 y=(px)0 w=(px)100 h=(px)100
+      }
+      rect id="r3" x=(px)0 y=(px)0 w=(px)50 h=(px)50
+    }
+  }
+}"##;
+
+/// A page with a group that has a non-zero x/y offset (ungroup shift test).
+const PAGE_WITH_OFFSET_GROUP: &str = r##"zenith version=1 {
+  project id="proj" name="Test"
+  tokens format="zenith-token-v1" { }
+  styles { }
+  document id="doc1" title="T" {
+    page id="pg1" w=(px)400 h=(px)300 {
+      group id="grp1" x=(px)50 y=(px)20 {
+        rect id="r1" x=(px)0 y=(px)0 w=(px)100 h=(px)100
+      }
+    }
+  }
+}"##;
+
+/// A page with a group nested inside another group (cycle check + reparent).
+const NESTED_GROUPS: &str = r##"zenith version=1 {
+  project id="proj" name="Test"
+  tokens format="zenith-token-v1" { }
+  styles { }
+  document id="doc1" title="T" {
+    page id="pg1" w=(px)400 h=(px)300 {
+      group id="outer" {
+        group id="inner" {
+          rect id="r1" x=(px)0 y=(px)0 w=(px)50 h=(px)50
+        }
+      }
+    }
+  }
+}"##;
 
 // ── MoveForward: a moves after b ──────────────────────────────────────────
 

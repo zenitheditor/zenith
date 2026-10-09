@@ -1,5 +1,34 @@
 use super::*;
 
+const ELLIPSE_DOC: &str = r##"zenith version=1 {
+  project id="proj" name="Test"
+  tokens format="zenith-token-v1" { }
+  styles { }
+  document id="doc1" title="T" {
+    page id="pg1" w=(px)400 h=(px)300 {
+      ellipse id="dot" x=(px)0 y=(px)0 w=(px)100 h=(px)100
+      text id="lbl" x=(px)10 y=(px)10 w=(px)200 h=(px)40 {
+        span "Hi"
+      }
+    }
+  }
+}"##;
+
+const GROUP_TEXT_DOC: &str = r##"zenith version=1 {
+  project id="proj" name="Nest"
+  tokens format="zenith-token-v1" { }
+  styles { }
+  document id="doc1" title="T" {
+    page id="pg1" w=(px)400 h=(px)300 {
+      group id="grp1" {
+        text id="nested.label" x=(px)10 y=(px)10 w=(px)200 h=(px)40 align="start" {
+          span "Hello"
+        }
+      }
+    }
+  }
+}"##;
+
 // ── 1. SetTextAlign: accepted, affected ids, source diff ──────────────────
 
 #[test]
