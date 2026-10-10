@@ -3,7 +3,7 @@
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use zenith_core::{Diagnostic, Severity, line_col};
+use zenith_core::{Diagnostic, LineIndex, Severity};
 
 use crate::error::EditorError;
 use crate::session::TextDelta;
@@ -59,8 +59,13 @@ impl DiagnosticOut {
     /// document keeps no offsets, since `src` is not its text.
     #[must_use]
     pub fn from_diagnostic(d: &Diagnostic, src: &str) -> Self {
+        Self::located(d, &LineIndex::new(src))
+    }
+
+    /// [`from_diagnostic`](Self::from_diagnostic) over an indexed source.
+    fn located(d: &Diagnostic, lines: &LineIndex<'_>) -> Self {
         let span = if d.import().is_some() { None } else { d.span };
-        let located = span.and_then(|s| line_col(src, s.start));
+        let located = span.and_then(|s| lines.line_col(s.start));
         Self {
             code: d.code.clone(),
             severity: severity_name(d.severity).to_owned(),
@@ -77,7 +82,8 @@ impl DiagnosticOut {
     /// Convert every diagnostic of `list` over `src`, in order.
     #[must_use]
     pub fn all(list: &[Diagnostic], src: &str) -> Vec<Self> {
-        list.iter().map(|d| Self::from_diagnostic(d, src)).collect()
+        let lines = LineIndex::new(src);
+        list.iter().map(|d| Self::located(d, &lines)).collect()
     }
 
     /// A spanless advisory.

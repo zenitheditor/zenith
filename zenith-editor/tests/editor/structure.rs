@@ -37,7 +37,11 @@ fn remove_reports_the_comments_that_went_with_the_node() {
     let r = d.ok("node.remove", json!({ "ids": ["card"] }));
     assert_eq!(
         r["removed_comments"],
-        json!(["// card: keep in sync with the brand kit"])
+        json!([
+            "line 14: // card: keep in sync with the brand kit",
+            "line 15: // inline note (in: rect id=\"card\" x=(px)40 y=(px)40 w=(px)120 \
+             h=(px)80 fill=(token)\"color.ink\" // inline note)"
+        ])
     );
     assert_eq!(r["selection"], json!(["other"]));
     assert!(d.session.text.contains("// the backdrop"));
@@ -94,7 +98,7 @@ fn format_rewrites_canonically_and_lists_dropped_comments() {
             .as_array()
             .expect("comments")
             .iter()
-            .any(|c| c == "// the backdrop"),
+            .any(|c| c == "line 12: // the backdrop"),
         "{r}"
     );
     let again = d.ok("doc.format", json!({}));

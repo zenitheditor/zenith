@@ -7,6 +7,7 @@ use zenith_tx::Op;
 use super::boxplan::{BoxInput, BoxPlan, Motion, plan_box};
 use super::facts::{Axis, box_facts};
 use super::flags::{Flags, HandleRef};
+use super::follow::Held;
 use super::kind::Kind;
 use super::plan::current_axes;
 use super::refusal::Refusal;
@@ -19,6 +20,7 @@ use crate::doc::shape::{Shape, bounds, shape_of};
 use crate::error::EditorError;
 use crate::geom::{Drag, Pt, Rect, add, linear, resize, sub, unmap_vector};
 use crate::wire::DiagnosticOut;
+use zenith_geometry::math;
 
 /// Ops and the notes on how the mapping went.
 pub(crate) type Built = (Vec<Op>, Vec<DiagnosticOut>);
@@ -252,9 +254,9 @@ impl PageFit {
     fn own_scale(self, transform: zenith_scene::Affine2) -> Pt {
         let (sx, sy) = self.scale();
         let stretch = |v: Pt| {
-            let len = v.0.hypot(v.1);
+            let len = math::hypot(v.0, v.1);
             if len > 0.0 {
-                (v.0 * sx).hypot(v.1 * sy) / len
+                math::hypot(v.0 * sx, v.1 * sy) / len
             } else {
                 1.0
             }
@@ -274,12 +276,14 @@ impl PageFit {
 }
 
 /// Resize `t` as part of a selection resize `fit`: its centre follows the
-/// page map and its own axes stretch by the map's scale along them.
+/// page map and its own axes stretch by the map's scale along them. The
+/// `x` / `y` that `hold` leaves to an anchor do not move.
 pub(crate) fn fit(
     doc: &Document,
     t: &Target<'_>,
     fit: PageFit,
     flags: Flags,
+    hold: Held,
 ) -> Result<Built, Refusal> {
     let node = t.located.node;
     let id = t.id.as_str();
@@ -297,12 +301,8 @@ pub(crate) fn fit(
             let local = t.bx.local;
             let dw = tidy(local.w * (fw - 1.0));
             let dh = tidy(local.h * (fh - 1.0));
-            box_resize(
-                doc,
-                t,
-                [tidy(shift.0 - dw / 2.0), tidy(shift.1 - dh / 2.0), dw, dh],
-                flags,
-            )
+            let (dx, dy) = hold.mask((tidy(shift.0 - dw / 2.0), tidy(shift.1 - dh / 2.0)));
+            box_resize(doc, t, [dx, dy, dw, dh], flags)
         }
         Kind::Line => {
             let Shape::Line { start, end } = shape(t)? else {

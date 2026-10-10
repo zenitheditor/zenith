@@ -24,10 +24,13 @@ fn yes() -> bool {
 ///
 /// The request must carry the version the page's buffer started from, so
 /// a buffer made before an engine edit is rejected with
-/// `editor.stale_version` instead of overwriting it. The change becomes a
-/// typing history entry; with `coalesce` (default) it extends the last
-/// typing entry when contiguous. The text is validated: while it has
-/// errors, the session keeps the last valid text for rendering.
+/// `editor.stale_version` instead of overwriting it. With `coalesce`
+/// (default) the change is typing: it extends the last typing entry when
+/// contiguous. Without it (a reload from disk) the change is its own
+/// history entry, a boundary that no later typing extends, so one undo
+/// never reverts a reload and a keystroke together. The text is
+/// validated: while it has errors, the session keeps the last valid text
+/// for rendering.
 ///
 /// The reply has no delta: the page already holds the text.
 pub(crate) fn run(ctx: &mut Ctx<'_, '_>, raw: Value) -> Result<Value, EditorError> {

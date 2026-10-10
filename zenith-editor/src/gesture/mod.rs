@@ -4,6 +4,7 @@
 //! - `kind` — which gesture family a node kind takes.
 //! - `target` — the node, its compiled box, and its lock state.
 //! - `facts` — what a box node's attributes allow.
+//! - `follow` — members an anchor carries along with another member.
 //! - `boxplan` — box moves and resizes, axis by axis.
 //! - `shapes` — line, polygon / polyline, and path gestures.
 //! - `rotate` — rotation.
@@ -17,6 +18,7 @@
 pub(crate) mod boxplan;
 pub(crate) mod facts;
 pub(crate) mod flags;
+pub(crate) mod follow;
 pub(crate) mod kind;
 mod member;
 pub(crate) mod multi;

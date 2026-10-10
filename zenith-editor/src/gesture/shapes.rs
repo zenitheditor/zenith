@@ -10,6 +10,7 @@ use super::flags::HandleRef;
 use crate::doc::shape::{AnchorPx, Shape, bounds};
 use crate::error::EditorError;
 use crate::geom::{Drag, Grip, Pt, Rect, add, linear, linear_part, resize, sub};
+use zenith_geometry::math;
 
 /// The drag a shape gesture applies, already mapped from page px.
 #[derive(Debug, Clone, Copy)]
@@ -328,13 +329,13 @@ fn pivot_shift(before: &[Pt], after: &[Pt], spin: Affine2) -> Pt {
 /// at a multiple of 45°, keeping its length.
 fn snap_45(moving: Pt, fixed: Pt, delta: Pt) -> Pt {
     let v = sub(add(moving, delta), fixed);
-    let len = v.0.hypot(v.1);
+    let len = math::hypot(v.0, v.1);
     if len == 0.0 {
         return delta;
     }
     let step = std::f64::consts::FRAC_PI_4;
-    let angle = (v.1.atan2(v.0) / step).round() * step;
-    let target = add(fixed, (len * angle.cos(), len * angle.sin()));
+    let angle = (math::atan2(v.1, v.0) / step).round() * step;
+    let target = add(fixed, (len * math::cos(angle), len * math::sin(angle)));
     sub(target, moving)
 }
 

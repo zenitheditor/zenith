@@ -81,6 +81,28 @@ fn typing_bursts_coalesce_into_one_undo() {
 }
 
 #[test]
+fn a_disk_reload_is_a_boundary_later_typing_never_joins() {
+    let original = doc(BODY);
+    let mut d = Driver::open(&original);
+    // The file changes on disk next to where the user types next.
+    let reloaded = original.replace("// keep me", "// keep me!");
+    d.ok("buffer.set", json!({ "text": reloaded, "coalesce": false }));
+    let typed = reloaded.replace("// keep me!", "// keep me!?");
+    d.ok("buffer.set", json!({ "text": typed }));
+    assert_eq!(d.session.history.undo.len(), 2, "reload and typing apart");
+    d.ok("history.undo", json!({}));
+    assert_eq!(d.session.text, reloaded, "one undo reverts the typing only");
+    d.ok("history.undo", json!({}));
+    assert_eq!(d.session.text, original);
+    // A reload right after typing does not join that burst either.
+    let typed = original.replace("// keep me", "// keep me.");
+    d.ok("buffer.set", json!({ "text": typed }));
+    let reloaded = typed.replace("// keep me.", "// keep me..");
+    d.ok("buffer.set", json!({ "text": reloaded, "coalesce": false }));
+    assert_eq!(d.session.history.undo.len(), 2);
+}
+
+#[test]
 fn history_stays_within_its_bounds() {
     let mut d = Driver::open(&doc(BODY));
     d.session.history.limit = HistoryLimit {

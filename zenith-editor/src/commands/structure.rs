@@ -6,13 +6,14 @@ use std::collections::BTreeSet;
 use serde::Deserialize;
 use serde_json::Value;
 use zenith_core::Node;
-use zenith_tx::{Op, Permissions};
+use zenith_tx::{AnchorEdit, Op, Permissions};
 
 use super::common::{params, target, targets};
 use crate::ctx::Ctx;
-use crate::doc::tree::{all_ids, child_lists, locate, unique_id};
+use crate::doc::tree::{Located, all_ids, child_lists, locate, unique_id};
 use crate::edit::ops::{OpsEdit, apply_ops};
 use crate::error::EditorError;
+use crate::gesture::follow::{Reach, held};
 
 /// Run `ops` as an edit with `selection` after it.
 fn edit(
@@ -46,15 +47,47 @@ struct RemoveParams {
 
 /// Remove `ids` (default: the selection) with their subtrees. The comment
 /// lines directly above a removed node go with it; the reply lists them in
-/// `removed_comments`. The selection keeps the ids that remain.
+/// `removed_comments`. The selection keeps the ids that remain. A node
+/// that remains and is anchored to a removed sibling is detached from its
+/// anchor first (`detach_anchor`), so it keeps its place.
 pub(crate) fn remove(ctx: &mut Ctx<'_, '_>, raw: Value) -> Result<Value, EditorError> {
     let p: RemoveParams = params(ctx, raw.clone())?;
     let ids = targets(ctx, p.ids)?;
     let doc = ctx.editable()?;
-    let ops = ids
-        .iter()
-        .map(|id| Op::RemoveNode { node: id.clone() })
-        .collect();
+    let mut ops: Vec<Op> = Vec::new();
+    for id in &ids {
+        let Some(located) = locate(&doc, id) else {
+            continue;
+        };
+        if located
+            .ancestors
+            .iter()
+            .filter_map(|a| a.id())
+            .any(|a| ids.iter().any(|i| i == a))
+        {
+            continue;
+        }
+        // A sibling anchored to a removed node keeps its place: its anchor
+        // is detached first, while its target still exists.
+        for sibling in located.siblings {
+            let anchored_here = sibling
+                .anchor_view()
+                .and_then(|v| v.anchor_sibling)
+                .is_some_and(|target| target == id);
+            if let Some(dependent) = sibling.id()
+                && anchored_here
+                && !ids.iter().any(|i| i == dependent)
+            {
+                let op = Op::DetachAnchor {
+                    node: dependent.to_owned(),
+                };
+                if !ops.contains(&op) {
+                    ops.push(op);
+                }
+            }
+        }
+    }
+    ops.extend(ids.iter().map(|id| Op::RemoveNode { node: id.clone() }));
     let selection = ctx
         .session
         .selection
@@ -88,6 +121,9 @@ struct DuplicateParams {
 /// descendant ids take the same suffix. A node inside another duplicated
 /// node is copied with it, not again. A non-zero `dx` / `dy` (authored px)
 /// moves each box-kind copy with `nudge_geometry` in the same transaction.
+/// A copy whose node is anchored to another duplicated sibling is anchored
+/// to that sibling's copy, and gets no offset on the axes the anchor
+/// supplies (the anchor carries it).
 pub(crate) fn duplicate(ctx: &mut Ctx<'_, '_>, raw: Value) -> Result<Value, EditorError> {
     let p: DuplicateParams = params(ctx, raw.clone())?;
     let ids = match (p.id, p.ids) {
@@ -108,8 +144,7 @@ pub(crate) fn duplicate(ctx: &mut Ctx<'_, '_>, raw: Value) -> Result<Value, Edit
     }
     let doc = ctx.editable()?;
     let mut taken: BTreeSet<String> = all_ids(&doc).into_iter().map(str::to_owned).collect();
-    let mut ops: Vec<Op> = Vec::new();
-    let mut copies: Vec<String> = Vec::new();
+    let mut planned: Vec<(&String, String, Located<'_>)> = Vec::new();
     for id in &ids {
         let located = locate(&doc, id).ok_or_else(|| EditorError::unknown_node(id))?;
         let inside = located
@@ -128,11 +163,41 @@ pub(crate) fn duplicate(ctx: &mut Ctx<'_, '_>, raw: Value) -> Result<Value, Edit
             }
         };
         taken.insert(new_id.clone());
+        planned.push((id, new_id, located));
+    }
+    let copy_of = |id: &str| {
+        planned
+            .iter()
+            .find(|(source, _, _)| source.as_str() == id)
+            .map(|(_, copy, _)| copy.clone())
+    };
+    let mut ops: Vec<Op> = Vec::new();
+    let mut retarget: Vec<Op> = Vec::new();
+    let mut copies: Vec<String> = Vec::new();
+    for (id, new_id, located) in &planned {
         ops.push(Op::DuplicateNode {
-            node: id.clone(),
+            node: (*id).clone(),
             new_id: new_id.clone(),
         });
-        if p.dx != 0.0 || p.dy != 0.0 {
+        // A copy anchored to a copied sibling follows that copy: the
+        // anchor carries its offset, so it gets no offset of its own.
+        let hold = held(located, &ids, Reach::Direct);
+        let target_copy = hold
+            .target()
+            .and_then(|i| ids.get(i))
+            .and_then(|target| copy_of(target));
+        let (dx, dy) = match &target_copy {
+            Some(target_copy) => {
+                retarget.push(Op::SetAnchor(AnchorEdit {
+                    node: new_id.clone(),
+                    anchor_sibling: Some(Some(target_copy.clone())),
+                    ..AnchorEdit::default()
+                }));
+                hold.mask((p.dx, p.dy))
+            }
+            None => (p.dx, p.dy),
+        };
+        if dx != 0.0 || dy != 0.0 {
             if located.node.box_view().is_none() && !matches!(located.node, Node::Instance(_)) {
                 return Err(EditorError::new(
                     "editor.unsupported",
@@ -145,15 +210,16 @@ pub(crate) fn duplicate(ctx: &mut Ctx<'_, '_>, raw: Value) -> Result<Value, Edit
             }
             ops.push(Op::NudgeGeometry {
                 node: new_id.clone(),
-                dx: (p.dx != 0.0).then_some(p.dx),
-                dy: (p.dy != 0.0).then_some(p.dy),
+                dx: (dx != 0.0).then_some(dx),
+                dy: (dy != 0.0).then_some(dy),
                 dw: None,
                 dh: None,
                 detach: false,
             });
         }
-        copies.push(new_id);
+        copies.push(new_id.clone());
     }
+    ops.extend(retarget);
     edit(ctx, &doc, ops, copies, raw)
 }
 

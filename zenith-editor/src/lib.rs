@@ -73,8 +73,10 @@
 //! `start`/`end` are bytes, `from`/`to` UTF-16 code units (CodeMirror),
 //! both in the text before the change. `reformatted` means the patcher fell
 //! back to canonical text and comments are gone. `removed_comments` lists
-//! the `//` lines the change dropped (a removed node takes the comments
-//! directly above it).
+//! every comment the change dropped (`//`, `/* … */`, and `/-`), each as
+//! `line N: <comment>`, with `(in: <line>)` when it shares its line with
+//! other text. A removed node takes the comments directly above it and on
+//! its lines.
 //!
 //! ## Commands
 //!

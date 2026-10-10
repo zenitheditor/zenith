@@ -221,3 +221,45 @@ fn in_flow_children_offer_reorder_and_absolute() {
         "{handles}"
     );
 }
+
+#[test]
+fn a_gesture_past_the_number_range_is_rejected_not_saturated() {
+    let text = doc(
+        r#"      rect id="r" x=(px)10 y=(px)40 w=(px)50 h=(px)20 fill=(token)"color.ink"
+      rect id="s" x=(px)100 y=(px)40 w=(px)50 h=(px)20 fill=(token)"color.ink""#,
+    );
+    let mut d = Driver::open(&text);
+    for dx in [1e19, -1e19] {
+        for params in [
+            json!({ "node": "r", "dx": dx }),
+            json!({ "nodes": ["r", "s"], "dx": dx }),
+        ] {
+            let e = d.err("gesture.commit", params.clone());
+            assert!(
+                e.diagnostics
+                    .iter()
+                    .any(|g| g.code == "tx.value_out_of_range"),
+                "{params}: {e:?}"
+            );
+            assert_eq!(d.session.text, text);
+        }
+    }
+    // A resize grows the box past the range; a shrink stops at 0 wide.
+    let e = d.err(
+        "gesture.commit",
+        json!({ "node": "r", "handle": "se", "dx": 1e19 }),
+    );
+    assert!(
+        e.diagnostics
+            .iter()
+            .any(|g| g.code == "tx.value_out_of_range"),
+        "{e:?}"
+    );
+    let e = d.err("node.set", json!({ "id": "r", "x": 1e19 }));
+    assert!(
+        e.diagnostics
+            .iter()
+            .any(|g| g.code == "tx.value_out_of_range"),
+        "{e:?}"
+    );
+}

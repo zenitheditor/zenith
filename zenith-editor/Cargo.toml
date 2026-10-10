@@ -20,6 +20,7 @@ autobenches = false
 # builds for wasm32-wasip1 unchanged.
 [dependencies]
 zenith-core = { workspace = true }
+zenith-geometry = { workspace = true }
 zenith-scene = { workspace = true }
 zenith-tx = { workspace = true }
 zenith-pipeline = { workspace = true }

@@ -216,3 +216,36 @@ fn select_at_offset_keeps_the_session_while_the_text_does_not_parse() {
     assert_eq!(r["parsed"], false);
     assert_eq!(d.session, before);
 }
+
+#[test]
+fn shadowed_rotated_group_child_is_hit_on_its_drawn_box_inside_the_clip() {
+    let shadowed = doc(
+        r#"      frame id="clipper" x=(px)0 y=(px)0 w=(px)250 h=(px)300 {
+        group id="g" x=(px)100 y=(px)50 w=(px)200 h=(px)200 rotate=(deg)30 shadow=(token)"sh" {
+          rect id="r" x=(px)0 y=(px)0 w=(px)200 h=(px)20 fill=(token)"color.ink"
+        }
+      }"#,
+    )
+    .replace(
+        r#"    token id="size.w" type="dimension" value=(px)80"#,
+        r#"    token id="size.w" type="dimension" value=(px)80
+    token id="sh" type="shadow" {
+      layer dx=(px)2 dy=(px)4 blur=(px)6 color=(token)"color.ink"
+    }"#,
+    );
+    let mut d = Driver::open(&shadowed);
+    let pivot = (200.0, 150.0);
+    // On the turned child, inside the clipping frame.
+    let inside = turn(30.0, pivot, (180.0, 60.0));
+    let hit = d.ok("select.hit", json!({ "x": inside.0, "y": inside.1 }));
+    assert_eq!(ids(&hit), vec!["r", "g", "clipper"]);
+    assert_eq!(d.session.selection, vec!["r".to_owned()]);
+    // Inside the unturned box but outside the turned child.
+    let miss = d.ok("select.hit", json!({ "x": 120.0, "y": 60.0 }));
+    assert!(!ids(&miss).contains(&"r".to_owned()), "{miss}");
+    // On the turned child, but past the clipping frame's right edge.
+    let clipped = turn(30.0, pivot, (280.0, 60.0));
+    assert!(clipped.0 > 250.0);
+    let hit = d.ok("select.hit", json!({ "x": clipped.0, "y": clipped.1 }));
+    assert!(!ids(&hit).contains(&"r".to_owned()), "{hit}");
+}

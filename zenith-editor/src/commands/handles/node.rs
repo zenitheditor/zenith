@@ -18,6 +18,7 @@ use crate::gesture::flags::HandleRef;
 use crate::gesture::kind::{Kind, rotate_blocked};
 use crate::gesture::target::{hidden_by, locked_by, resolve};
 use crate::wire::to_json;
+use zenith_geometry::math;
 
 #[derive(Debug, Serialize)]
 struct Handles {
@@ -180,7 +181,7 @@ pub(super) fn run(
     }
     if node.takes_rotate() && !matches!(kind, Kind::Derived) {
         let up = linear(transform, (0.0, -1.0));
-        let len = up.0.hypot(up.1);
+        let len = math::hypot(up.0, up.1);
         let top = at((0.5, 0.0));
         let n = if len > 0.0 {
             (up.0 / len, up.1 / len)

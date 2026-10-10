@@ -16,7 +16,9 @@ use crate::wire::{DeltaOut, DiagnosticOut, to_json};
 /// How a text change enters the history.
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum Record<'l> {
-    /// A `buffer.set` typing burst; `coalesce` lets it extend the last one.
+    /// A `buffer.set` change. With `coalesce` it is typing: it can extend
+    /// the last typing entry and be extended. Without it (a reload from
+    /// disk) it is a boundary: it neither extends nor is extended.
     Typing { coalesce: bool },
     /// An engine edit, labelled with its command.
     Edit { label: &'l str },
@@ -61,7 +63,7 @@ pub(crate) fn change_text(
         });
     };
     let (label, typing, coalesce) = match record {
-        Record::Typing { coalesce } => (Some("buffer.set"), true, coalesce),
+        Record::Typing { coalesce } => (Some("buffer.set"), coalesce, coalesce),
         Record::Edit { label } => (Some(label), false, false),
         Record::Skip => (None, false, false),
     };
@@ -109,8 +111,8 @@ pub(crate) struct EditReply {
     /// `true` when the patcher fell back to canonical text: the source's
     /// comments and layout are gone.
     pub(crate) reformatted: bool,
-    /// `//` comment lines the change dropped (a removed node takes the
-    /// comments directly above it).
+    /// The comments the change dropped (`//`, `/* … */`, `/-`), each as
+    /// `line N: <comment>` (see `removed_comments`).
     pub(crate) removed_comments: Vec<String>,
     /// The ops that ran.
     pub(crate) ops: Vec<Op>,

@@ -1,5 +1,6 @@
 //! Points, vectors, and the linear part of an affine map.
 
+use zenith_geometry::math;
 use zenith_scene::Affine2;
 
 /// A point or vector in px.
@@ -32,7 +33,7 @@ pub(crate) fn det(m: Affine2) -> f64 {
 
 /// The page angle in degrees of `m`'s x axis, clockwise on screen.
 pub(crate) fn angle_deg(m: Affine2) -> f64 {
-    m.b.atan2(m.a).to_degrees()
+    math::atan2(m.b, m.a).to_degrees()
 }
 
 /// `a + b`.

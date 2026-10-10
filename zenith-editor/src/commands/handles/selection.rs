@@ -13,6 +13,7 @@ use crate::doc::shape::shape_of;
 use crate::error::EditorError;
 use crate::geom::{Grip, Pt};
 use crate::gesture::facts::box_facts;
+use crate::gesture::follow::{Held, Reach, held};
 use crate::gesture::kind::{Kind, rotate_blocked};
 use crate::gesture::multi::{rides_along, union};
 use crate::gesture::target::{Target, hidden_by, locked_by, resolve_all};
@@ -156,6 +157,18 @@ pub(super) fn run(
     to_json(&reply)
 }
 
+/// Block `b` without the position axes `hold` leaves to an anchor: the
+/// gesture gives those no delta, so they block nothing. `None` when no
+/// axis is left.
+fn unheld(mut b: Blocked, hold: Held) -> Option<Blocked> {
+    if b.action != "move" || !hold.any() || b.axes.is_empty() {
+        return Some(b);
+    }
+    b.axes
+        .retain(|a| !((*a == "x" && hold.x) || (*a == "y" && hold.y)));
+    (!b.axes.is_empty()).then_some(b)
+}
+
 /// What blocks a selection gesture on node `t` of the selection `ids`.
 fn member_blocks(doc: &zenith_core::Document, t: &Target<'_>, ids: &[String]) -> Vec<Blocked> {
     let mut out: Vec<Blocked> = Vec::new();
@@ -172,7 +185,12 @@ fn member_blocks(doc: &zenith_core::Document, t: &Target<'_>, ids: &[String]) ->
     match Kind::of(node) {
         Kind::Box => {
             if let Some(facts) = box_facts(doc, node, &t.id) {
-                out.extend(box_blocks(&facts));
+                let hold = held(&t.located, ids, Reach::Chain);
+                out.extend(
+                    box_blocks(&facts)
+                        .into_iter()
+                        .filter_map(|b| unheld(b, hold)),
+                );
             }
         }
         Kind::Line | Kind::Points | Kind::Path => match (shape_of(node), t.origin) {

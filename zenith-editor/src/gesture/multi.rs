@@ -22,10 +22,11 @@
 use serde_json::Value;
 use zenith_core::Document;
 
-use super::flags::{GestureParams, HandleRef};
+use super::flags::{Flags, GestureParams, HandleRef};
+use super::follow::{Held, Reach, held};
 use super::kind::Kind;
 use super::member::{
-    PageFit, centre, context_notes, fit, mapped, orbit, orbit_line, translate, turn,
+    Built, PageFit, centre, context_notes, fit, mapped, orbit, orbit_line, translate, turn,
 };
 use super::plan::{Plan, constrained, snap_box, snap_threshold, unsnapped};
 use super::refusal::{Refusal, refuse};
@@ -58,19 +59,23 @@ pub(crate) fn plan_multi<'d>(
         }
     }
     let handle = HandleRef::parse(p.handle.as_deref())?;
-    if !matches!(
-        handle,
-        HandleRef::Move | HandleRef::Grip(_) | HandleRef::Rotate
-    ) {
-        return Err(EditorError::new(
-            "editor.unknown_handle",
-            format!(
-                "handle '{}' belongs to one node, and {} are selected; drag the selection \
-                 body, a selection grip, or rotate, or select one node",
-                handle.id(),
-                ids.len()
-            ),
-        ));
+    match handle {
+        HandleRef::Move | HandleRef::Grip(_) | HandleRef::Rotate => {}
+        HandleRef::LineStart
+        | HandleRef::LineEnd
+        | HandleRef::Vertex(_)
+        | HandleRef::Anchor { .. }
+        | HandleRef::Control { .. } => {
+            return Err(EditorError::new(
+                "editor.unknown_handle",
+                format!(
+                    "handle '{}' belongs to one node, and {} are selected; drag the selection \
+                     body, a selection grip, or rotate, or select one node",
+                    handle.id(),
+                    ids.len()
+                ),
+            ));
+        }
     }
     if !refusals.is_empty() {
         return Err(refuse(ctx, raw, refusals));
@@ -100,7 +105,7 @@ pub(crate) fn plan_multi<'d>(
         None => p.angle,
     };
     let pivot = centre(&selection_box.corners());
-    let page_fit = match handle {
+    let motion = match handle {
         HandleRef::Grip(grip) => {
             let from = selection_box.rect();
             let to = resize(
@@ -114,15 +119,15 @@ pub(crate) fn plan_multi<'d>(
                 },
             )
             .apply(from);
-            Some(PageFit { from, to })
+            Motion::Fit(PageFit { from, to })
         }
+        HandleRef::Rotate => Motion::Turn,
         HandleRef::Move
-        | HandleRef::Rotate
         | HandleRef::LineStart
         | HandleRef::LineEnd
         | HandleRef::Vertex(_)
         | HandleRef::Anchor { .. }
-        | HandleRef::Control { .. } => None,
+        | HandleRef::Control { .. } => Motion::Move,
     };
     let flags = p.flags();
     let mut ops = Vec::new();
@@ -135,15 +140,17 @@ pub(crate) fn plan_multi<'d>(
             continue;
         }
         notes.extend(context_notes(t));
-        let built = match (handle, page_fit) {
-            (HandleRef::Grip(_), Some(f)) => fit(doc, t, f, flags),
-            (HandleRef::Rotate, _) if Kind::of(t.located.node) == Kind::Line => {
-                orbit_line(t, pivot, angle)
-            }
-            (HandleRef::Rotate, _) => turned(doc, t, pivot, angle, flags),
-            _ => mapped(t, delta)
-                .map_err(Refusal::from)
-                .and_then(|m| translate(doc, t, m, flags)),
+        let hold = held(&t.located, &ids, Reach::Chain);
+        if let Some(target) = hold.target().and_then(|i| ids.get(i))
+            && hold.any()
+        {
+            notes.push(follows_note(&t.id, target, hold));
+        }
+        let built = match motion {
+            Motion::Fit(f) => fit(doc, t, f, flags, hold),
+            Motion::Turn if Kind::of(t.located.node) == Kind::Line => orbit_line(t, pivot, angle),
+            Motion::Turn => turned(doc, t, pivot, angle, flags, hold),
+            Motion::Move => moved(doc, t, delta, flags, hold),
         };
         match built {
             Ok((more, more_notes)) => {
@@ -164,19 +171,63 @@ pub(crate) fn plan_multi<'d>(
     })
 }
 
-/// Turn `t` by `angle` and carry its centre round `pivot`.
+/// What a selection gesture does to each member.
+#[derive(Debug, Clone, Copy)]
+enum Motion {
+    /// Move by the page delta.
+    Move,
+    /// Fit the selection box onto the resized one.
+    Fit(PageFit),
+    /// Turn about the selection centre.
+    Turn,
+}
+
+/// Move `t` by the page `delta`, except on the axes `hold` leaves to an
+/// anchor.
+fn moved(
+    doc: &Document,
+    t: &Target<'_>,
+    delta: Pt,
+    flags: Flags,
+    hold: Held,
+) -> Result<Built, Refusal> {
+    let mut m = mapped(t, delta)?;
+    m.shift = hold.mask(m.shift);
+    translate(doc, t, m, flags)
+}
+
+/// Turn `t` by `angle` and carry its centre round `pivot`, except on the
+/// axes `hold` leaves to an anchor.
 fn turned(
     doc: &Document,
     t: &Target<'_>,
     pivot: Pt,
     angle: f64,
-    flags: super::flags::Flags,
-) -> Result<super::member::Built, Refusal> {
+    flags: Flags,
+    hold: Held,
+) -> Result<Built, Refusal> {
     let mut ops = turn(t, angle, None)?;
-    let m = mapped(t, orbit(t, pivot, angle))?;
+    let mut m = mapped(t, orbit(t, pivot, angle))?;
+    m.shift = hold.mask(m.shift);
     let (moved, notes) = translate(doc, t, m, flags)?;
     ops.extend(moved);
     Ok((ops, notes))
+}
+
+/// The note for a member whose anchor carries it along with `target`.
+fn follows_note(id: &str, target: &str, hold: Held) -> DiagnosticOut {
+    let axes = match (hold.x, hold.y) {
+        (true, true) => "x and y",
+        (true, false) => "x",
+        (false, true) | (false, false) => "y",
+    };
+    DiagnosticOut::advisory(
+        "editor.follows_anchor",
+        format!(
+            "'{id}' is anchored to '{target}', which this gesture moves; its {axes} follow \
+             the anchor, with no move of their own"
+        ),
+    )
 }
 
 /// `true` when an ancestor of `t` is also in the gesture: it moves with
