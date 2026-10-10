@@ -45,7 +45,7 @@ use zenith_core::Diagnostic;
 
 use crate::layout::LayoutBox;
 
-use super::geom::{area, intersect};
+use super::geom::{area, intersect, x_overlap_pairs};
 use super::ledger::{Entry, PageLedger, TextSource};
 
 /// Intersection area in px² at or below which a pair is silent.
@@ -87,12 +87,15 @@ pub(super) fn block_overlap(ledger: &PageLedger, page: Option<LayoutBox>) -> Vec
     }
     let mut out = Vec::new();
     for set in sets.values() {
-        // Entries enumerate in paint order, so `b` paints after `a`.
-        for (i, a) in set.iter().enumerate() {
-            for b in set.iter().skip(i + 1) {
-                if let Some(d) = judge(a, b) {
-                    out.push(d);
-                }
+        // Entries enumerate in paint order, so `b` paints after `a`. Only
+        // boxes whose x ranges overlap can intersect; the pairs come sorted,
+        // in the order of an all-pairs scan.
+        let rects: Vec<LayoutBox> = set.iter().map(|b| b.rect).collect();
+        for (i, j) in x_overlap_pairs(&rects) {
+            if let (Some(a), Some(b)) = (set.get(i), set.get(j))
+                && let Some(d) = judge(a, b)
+            {
+                out.push(d);
             }
         }
     }
@@ -184,26 +187,7 @@ mod tests {
     use super::*;
 
     fn entry(id: &str, kind: &'static str, in_flow: bool) -> Entry {
-        Entry {
-            id: id.to_owned(),
-            parent: None,
-            kind,
-            span: None,
-            compiled: None,
-            opacity: 1.0,
-            occluder: None,
-            visible: true,
-            in_flow,
-            exempt: false,
-            unmodeled: false,
-            effects: false,
-            hollow: false,
-            expanded: false,
-            scope: None,
-            clip: None,
-            shape: None,
-            connector: None,
-        }
+        Entry::for_test(id, kind, in_flow)
     }
 
     fn b(x: f64, y: f64, w: f64, h: f64) -> LayoutBox {

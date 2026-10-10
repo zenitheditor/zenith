@@ -20,6 +20,9 @@ use super::shape::{resolve_font_weight, run_to_scene_glyphs};
 /// left edge) and the run of leader glyphs. A deterministic, compact default.
 const TAB_LEADER_GAP_FACTOR: f64 = 1.0;
 
+/// The most leader glyphs one row emits: each is one scene command.
+const MAX_LEADERS: f64 = 65_536.0;
+
 /// A row's left/right text shaped into glyph runs, plus the summed advances.
 struct TabLeaderRow {
     /// LEFT-segment runs (placed at the box left edge), left-to-right.
@@ -324,7 +327,24 @@ pub(in crate::compile) fn compile_tab_leader(
             continue;
         }
 
-        let count = (gap / leader_advance).floor() as usize;
+        let count_f = (gap / leader_advance).floor();
+        if !(count_f.is_finite() && count_f <= MAX_LEADERS) {
+            diagnostics.push(Diagnostic::warning(
+                "text.overflow",
+                format!(
+                    "text '{}': tab-leader row {} needs {count_f} leader glyphs, more than \
+                     the {MAX_LEADERS} limit; no leader emitted. Use a narrower box or a \
+                     wider leader glyph",
+                    text.id,
+                    i + 1
+                ),
+                text.source_span,
+                Some(text.id.clone()),
+            ));
+            continue;
+        }
+        // `count_f` is finite, non-negative, and at most MAX_LEADERS.
+        let count = count_f as usize;
         if let Some(run) = leader_run.as_ref() {
             let mut x = leader_start;
             for _ in 0..count {

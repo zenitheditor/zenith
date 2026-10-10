@@ -16,6 +16,44 @@ pub(super) fn intersect(a: LayoutBox, b: LayoutBox) -> Option<LayoutBox> {
     })
 }
 
+/// Every pair `(i, j)`, `i < j`, of `rects` that [`intersect`] accepts,
+/// sorted, found by a sweep over the boxes sorted by left edge. With a
+/// non-finite x edge every pair is tested.
+pub(super) fn x_overlap_pairs(rects: &[LayoutBox]) -> Vec<(usize, usize)> {
+    if !rects.iter().all(|r| r.x.is_finite() && r.w.is_finite()) {
+        return (0..rects.len())
+            .flat_map(|i| (i + 1..rects.len()).map(move |j| (i, j)))
+            .filter(|&(i, j)| match (rects.get(i), rects.get(j)) {
+                (Some(a), Some(b)) => intersect(*a, *b).is_some(),
+                (None, _) | (_, None) => false,
+            })
+            .collect();
+    }
+    let mut order: Vec<(f64, f64, usize)> = rects
+        .iter()
+        .enumerate()
+        .map(|(i, r)| (r.x, r.x + r.w, i))
+        .collect();
+    order.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.2.cmp(&b.2)));
+    let mut pairs = Vec::new();
+    for (k, &(_, end, i)) in order.iter().enumerate() {
+        for &(start, _, j) in order.iter().skip(k + 1) {
+            // Sorted by left edge: no later box reaches back into `i`.
+            if start >= end {
+                break;
+            }
+            let (Some(a), Some(b)) = (rects.get(i), rects.get(j)) else {
+                continue;
+            };
+            if intersect(*a, *b).is_some() {
+                pairs.push((i.min(j), i.max(j)));
+            }
+        }
+    }
+    pairs.sort_unstable();
+    pairs
+}
+
 /// The smallest box holding `a` and `b`.
 pub(super) fn union(a: LayoutBox, b: LayoutBox) -> LayoutBox {
     let left = a.x.min(b.x);
@@ -135,6 +173,37 @@ mod tests {
 
     fn b(x: f64, y: f64, w: f64, h: f64) -> LayoutBox {
         LayoutBox { x, y, w, h }
+    }
+
+    #[test]
+    fn x_overlap_pairs_are_exactly_the_intersections() {
+        let mut state = 3_u64;
+        let mut next = || {
+            state = state
+                .wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1_442_695_040_888_963_407);
+            (state >> 33) as f64 / f64::from(u32::MAX >> 1)
+        };
+        for round in 0..30 {
+            let rects: Vec<LayoutBox> = (0..40)
+                .map(|_| {
+                    b(
+                        (next() * 300.0).round(),
+                        (next() * 300.0).round(),
+                        (next() * 80.0).round() - if round == 4 { 40.0 } else { 0.0 },
+                        (next() * 80.0).round(),
+                    )
+                })
+                .collect();
+            let pairs = x_overlap_pairs(&rects);
+            assert!(pairs.windows(2).all(|w| w[0] < w[1]), "sorted and unique");
+            for i in 0..rects.len() {
+                for j in i + 1..rects.len() {
+                    let hit = intersect(rects[i], rects[j]).is_some();
+                    assert_eq!(pairs.contains(&(i, j)), hit, "round {round}: ({i}, {j})");
+                }
+            }
+        }
     }
 
     #[test]

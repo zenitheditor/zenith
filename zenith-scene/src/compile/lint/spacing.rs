@@ -89,15 +89,17 @@ pub(super) fn uneven_gaps(
 
 /// The connected sets of lined-up siblings with at least 3 members.
 fn lines<'a>(set: &[Sibling<'a>], horizontal: bool) -> Vec<Vec<Sibling<'a>>> {
-    // Union-find over the lined-up pairs.
+    // Union-find over the lined-up pairs. A root is always the smallest
+    // index of its set, so the sets do not depend on the pair order.
     let mut root: Vec<usize> = (0..set.len()).collect();
-    for (i, a) in set.iter().enumerate() {
-        for (j, b) in set.iter().enumerate().skip(i + 1) {
-            if lined_up(a.rect, b.rect, horizontal) {
-                let (ri, rj) = (find(&root, i), find(&root, j));
-                if let Some(slot) = root.get_mut(ri.max(rj)) {
-                    *slot = ri.min(rj);
-                }
+    for (i, j) in candidate_pairs(set, horizontal) {
+        let (Some(a), Some(b)) = (set.get(i), set.get(j)) else {
+            continue;
+        };
+        if lined_up(a.rect, b.rect, horizontal) {
+            let (ri, rj) = (find(&root, i), find(&root, j));
+            if let Some(slot) = root.get_mut(ri.max(rj)) {
+                *slot = ri.min(rj);
             }
         }
     }
@@ -110,6 +112,44 @@ fn lines<'a>(set: &[Sibling<'a>], horizontal: bool) -> Vec<Vec<Sibling<'a>>> {
         .into_values()
         .filter(|g| g.len() >= MIN_MEMBERS)
         .collect()
+}
+
+/// Every pair `(i, j)` that can line up: those whose cross-axis intervals
+/// overlap, found by a sweep over the intervals sorted by start.
+///
+/// A lined-up pair needs a cross overlap above 60% of the smaller extent,
+/// which is positive when both extents are finite and non-negative, so the
+/// intervals intersect. With any other extent the sweep cannot rule pairs
+/// out, and every pair is a candidate.
+fn candidate_pairs(set: &[Sibling<'_>], horizontal: bool) -> Vec<(usize, usize)> {
+    let cross = |s: &Sibling<'_>| spans(s.rect, horizontal).1;
+    if !set.iter().all(|s| {
+        let (c, h) = cross(s);
+        c.is_finite() && h.is_finite() && h >= 0.0
+    }) {
+        return (0..set.len())
+            .flat_map(|i| (i + 1..set.len()).map(move |j| (i, j)))
+            .collect();
+    }
+    let mut order: Vec<(f64, f64, usize)> = set
+        .iter()
+        .enumerate()
+        .map(|(i, s)| {
+            let (c, h) = cross(s);
+            (c, c + h, i)
+        })
+        .collect();
+    order.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.2.cmp(&b.2)));
+    let mut pairs = Vec::new();
+    for (k, &(_, end, i)) in order.iter().enumerate() {
+        for &(start, _, j) in order.iter().skip(k + 1) {
+            if start >= end {
+                break;
+            }
+            pairs.push((i.min(j), i.max(j)));
+        }
+    }
+    pairs
 }
 
 /// The set root of `i`.
@@ -288,6 +328,59 @@ fn worst(gaps: &[f64], median: f64) -> Option<usize> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::compile::lint::ledger::Entry;
+
+    /// Every lined-up pair is a sweep candidate, for random boxes and for
+    /// boxes with a negative extent (where every pair is a candidate).
+    #[test]
+    fn the_sweep_keeps_every_lined_up_pair() {
+        let mut state = 9_u64;
+        let mut next = || {
+            state = state
+                .wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1_442_695_040_888_963_407);
+            (state >> 33) as f64 / f64::from(u32::MAX >> 1)
+        };
+        for round in 0..40 {
+            let n = 5 + round % 30;
+            let rects: Vec<LayoutBox> = (0..n)
+                .map(|_| LayoutBox {
+                    x: (next() * 400.0).round(),
+                    y: (next() * 6.0).round() * 30.0,
+                    w: 10.0 + (next() * 20.0).round(),
+                    h: if round == 7 {
+                        -20.0
+                    } else {
+                        18.0 + (next() * 8.0).round()
+                    },
+                })
+                .collect();
+            let entries: Vec<Entry> = (0..n)
+                .map(|i| Entry::for_test(&format!("n{i}"), "rect", false))
+                .collect();
+            let set: Vec<Sibling<'_>> = entries
+                .iter()
+                .zip(&rects)
+                .enumerate()
+                .map(|(index, (entry, rect))| Sibling {
+                    index,
+                    entry,
+                    rect: *rect,
+                    text: None,
+                })
+                .collect();
+            for horizontal in [true, false] {
+                let pairs = candidate_pairs(&set, horizontal);
+                for i in 0..n {
+                    for j in i + 1..n {
+                        if lined_up(rects[i], rects[j], horizontal) {
+                            assert!(pairs.contains(&(i, j)), "round {round}: ({i}, {j})");
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     #[test]
     fn the_last_node_is_the_sole_outlier() {

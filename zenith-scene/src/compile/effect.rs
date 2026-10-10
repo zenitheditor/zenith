@@ -3,6 +3,7 @@
 use std::collections::BTreeMap;
 
 use zenith_core::{Diagnostic, LightNode, MeshNode, ResolvedToken};
+use zenith_geometry::math;
 
 use crate::ir::{GradientPaint, GradientStop, Paint, SceneCommand};
 
@@ -240,7 +241,7 @@ fn interpolate_ray_at_y(x0: f64, y0: f64, vx: f64, vy: f64, y: f64) -> Option<f6
 fn extend_toward(x0: f64, y0: f64, vx: f64, vy: f64, extend: f64) -> (f64, f64) {
     let dx = vx - x0;
     let dy = vy - y0;
-    let len = dx.hypot(dy);
+    let len = math::hypot(dx, dy);
     if !len.is_finite() || len <= 0.000_001 {
         return (vx, vy);
     }

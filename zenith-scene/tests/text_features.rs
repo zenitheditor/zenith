@@ -212,6 +212,41 @@ fn tab_leader_row_left_right_and_leaders() {
     assert_eq!(cmds, cmds2, "tab-leader render must be deterministic");
 }
 
+/// A box so wide that a row would need more than 65536 leader glyphs emits
+/// no leaders and a `text.overflow` warning, instead of one scene command
+/// per glyph without bound.
+#[test]
+fn tab_leader_count_is_capped() {
+    let src = r##"zenith version=1 {
+  project id="proj.tl" name="TL"
+  tokens format="zenith-token-v1" {}
+  styles {}
+  document id="doc.tl" title="TL" {
+page id="page.tl" w=(px)1200 h=(px)900 {
+  text id="text.tl" x=(px)0 y=(px)100 w=(px)1e12 h=(px)400 font-size=(px)40 tab-leader="." {
+    span "Title\t12"
+  }
+}
+  }
+}
+"##;
+    let out = compile(&parse(src), &default_provider());
+    let runs = out
+        .scene
+        .commands
+        .iter()
+        .filter(|c| matches!(c, SceneCommand::DrawGlyphRun { .. }))
+        .count();
+    assert!(runs <= 2, "only the left and right runs: {runs}");
+    assert!(
+        out.diagnostics
+            .iter()
+            .any(|d| d.code == "text.overflow" && d.message.contains("limit")),
+        "{:?}",
+        out.diagnostics
+    );
+}
+
 /// A tab-leader row with NO tab renders left-aligned with NO leader dots and no
 /// right-aligned run.
 #[test]

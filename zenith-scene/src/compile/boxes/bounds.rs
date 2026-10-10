@@ -62,6 +62,7 @@ fn of_push(cmd: &SceneCommand) -> Option<Affine2> {
 }
 
 /// A transform stack driven by push / pop commands.
+#[derive(Clone, Debug)]
 pub(super) struct Stack {
     open: Vec<Affine2>,
 }

@@ -45,7 +45,7 @@ impl Affine2 {
     /// draws it. Positive degrees turn clockwise on screen (y down).
     #[must_use]
     pub fn rotate_at(deg: f64, cx: f64, cy: f64) -> Affine2 {
-        let (sin, cos) = deg.to_radians().sin_cos();
+        let (sin, cos) = zenith_geometry::math::sin_cos(deg.to_radians());
         Affine2 {
             a: cos,
             b: sin,

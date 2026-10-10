@@ -28,6 +28,8 @@
 //! identity transform, which is a true no-op: its on-page points equal its raw
 //! points and the written-back points are byte-identical to the unrotated path.
 
+use zenith_geometry::math;
+
 use crate::ir::SceneCommand;
 
 /// Bump radius / gap half-length, in pixels.
@@ -110,7 +112,7 @@ fn rotate_pt(p: (f64, f64), angle_deg: f64, pivot: (f64, f64)) -> (f64, f64) {
     let (px, py) = p;
     let (cx, cy) = pivot;
     let rad = angle_deg.to_radians();
-    let (s, c) = (rad.sin(), rad.cos());
+    let (s, c) = (math::sin(rad), math::cos(rad));
     let dx = px - cx;
     let dy = py - cy;
     (cx + dx * c - dy * s, cy + dx * s + dy * c)
@@ -151,7 +153,7 @@ fn active_transform_at(commands: &[SceneCommand], idx: usize) -> Option<Transfor
     match stack.as_slice() {
         [] => Some(Transform::Identity),
         [single @ (Transform::Rotate { .. } | Transform::Identity)] => Some(*single),
-        _ => None,
+        [Transform::Unsupported] | [_, _, ..] => None,
     }
 }
 
@@ -492,8 +494,8 @@ fn push_bump(out: &mut Vec<f64>, seg: Seg, px: f64, py: f64) {
         let frac = k as f64 / steps as f64;
         let theta = pi * (1.0 - frac); // PI → 0
         // Position along segment: cos(theta) maps PI→-1, 0→+1.
-        let along = JUMP_R * theta.cos();
-        let out_dist = JUMP_R * theta.sin();
+        let along = JUMP_R * math::cos(theta);
+        let out_dist = JUMP_R * math::sin(theta);
         let ax = px + along * ux + out_dist * nx;
         let ay = py + along * uy + out_dist * ny;
         out.push(ax);

@@ -103,6 +103,33 @@ pub(super) struct Entry {
     pub(super) connector: Option<ConnectorFacts>,
 }
 
+#[cfg(test)]
+impl Entry {
+    /// A visible, plain entry for unit tests.
+    pub(super) fn for_test(id: &str, kind: &'static str, in_flow: bool) -> Entry {
+        Entry {
+            id: id.to_owned(),
+            parent: None,
+            kind,
+            span: None,
+            compiled: None,
+            opacity: 1.0,
+            occluder: None,
+            visible: true,
+            in_flow,
+            exempt: false,
+            unmodeled: false,
+            effects: false,
+            hollow: false,
+            expanded: false,
+            scope: None,
+            clip: None,
+            shape: None,
+            connector: None,
+        }
+    }
+}
+
 /// What drew a [`TextItem`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum TextSource {

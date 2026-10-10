@@ -71,7 +71,7 @@ fn collect_runs(
                 let rotation = match stack.as_slice() {
                     [] => None,
                     [Transform::Rotate(a, cx, cy)] => Some((*a, *cx, *cy)),
-                    _ => {
+                    [Transform::Other] | [_, _, ..] => {
                         runs.unmodeled = true;
                         None
                     }

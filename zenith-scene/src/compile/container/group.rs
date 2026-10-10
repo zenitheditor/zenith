@@ -140,23 +140,14 @@ pub(in crate::compile) fn compile_group(
             child_ctx,
         );
     } else {
-        let mut draws = Vec::new();
-        let mut local_connector_strokes = Vec::new();
-        emit_live_symmetry_children(
-            group,
-            cx,
-            &mut draws,
-            diagnostics,
-            &mut local_connector_strokes,
-            child_ctx,
-        );
         emit_wrapped_container(
+            cx,
             commands,
-            draws,
-            effect,
-            mask,
             connector_strokes,
-            local_connector_strokes,
+            (effect, mask),
+            |cx, draws, strokes| {
+                emit_live_symmetry_children(group, cx, draws, diagnostics, strokes, child_ctx);
+            },
         );
     }
 

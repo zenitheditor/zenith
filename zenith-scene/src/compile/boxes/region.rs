@@ -180,7 +180,7 @@ fn point_segment(p: Pt, a: Pt, b: Pt) -> f64 {
     } else {
         0.0
     };
-    (p.0 - (a.0 + t * vx)).hypot(p.1 - (a.1 + t * vy))
+    zenith_geometry::math::hypot(p.0 - (a.0 + t * vx), p.1 - (a.1 + t * vy))
 }
 
 #[cfg(test)]

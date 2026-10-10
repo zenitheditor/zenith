@@ -3,6 +3,7 @@
 //! orientation the routed path leaves/enters through.
 
 use zenith_core::ast::{ConnectorAnchor, parse_connector_anchor};
+use zenith_geometry::math;
 use zenith_geometry::{
     GeometryError, PATH_CONSUMPTION_TOLERANCE, Point2, sample_closed_polyline_perimeter,
     sample_open_polyline_perimeter, sample_outline_perimeter,
@@ -268,32 +269,32 @@ fn divided_rounded_rect_anchor(
             1 => {
                 // TR arc center (x+w-tr, y+tr); angle runs from −π/2 (top) to 0 (right).
                 let angle = -std::f64::consts::FRAC_PI_2 + t * std::f64::consts::FRAC_PI_2;
-                let px = x + w - tr + tr * angle.cos();
-                let py = y + tr + tr * angle.sin();
+                let px = x + w - tr + tr * math::cos(angle);
+                let py = y + tr + tr * math::sin(angle);
                 ((px, py), anchor_side_from_center((px, py), (cx, cy)))
             }
             2 => ((x + w, y + tr + t * right), AnchorSide::Horizontal),
             3 => {
                 // BR: 0…π/2
                 let angle = t * std::f64::consts::FRAC_PI_2;
-                let px = x + w - br + br * angle.cos();
-                let py = y + h - br + br * angle.sin();
+                let px = x + w - br + br * math::cos(angle);
+                let py = y + h - br + br * math::sin(angle);
                 ((px, py), anchor_side_from_center((px, py), (cx, cy)))
             }
             4 => ((x + w - br - t * bottom, y + h), AnchorSide::Vertical),
             5 => {
                 // BL: π/2…π
                 let angle = std::f64::consts::FRAC_PI_2 + t * std::f64::consts::FRAC_PI_2;
-                let px = x + bl + bl * angle.cos();
-                let py = y + h - bl + bl * angle.sin();
+                let px = x + bl + bl * math::cos(angle);
+                let py = y + h - bl + bl * math::sin(angle);
                 ((px, py), anchor_side_from_center((px, py), (cx, cy)))
             }
             6 => ((x, y + h - bl - t * left), AnchorSide::Horizontal),
             7 => {
                 // TL: π…3π/2
                 let angle = std::f64::consts::PI + t * std::f64::consts::FRAC_PI_2;
-                let px = x + tl + tl * angle.cos();
-                let py = y + tl + tl * angle.sin();
+                let px = x + tl + tl * math::cos(angle);
+                let py = y + tl + tl * math::sin(angle);
                 ((px, py), anchor_side_from_center((px, py), (cx, cy)))
             }
             _ => ((x + tl + t * top_left, y), AnchorSide::Vertical),
@@ -314,8 +315,8 @@ fn divided_ellipse_anchor(
     let ry = h / 2.0;
     let angle =
         -std::f64::consts::FRAC_PI_2 + std::f64::consts::TAU * (index as f64 / count as f64);
-    let px = cx + rx * angle.cos();
-    let py = cy + ry * angle.sin();
+    let px = cx + rx * math::cos(angle);
+    let py = cy + ry * math::sin(angle);
     let side = if (px - cx).abs() >= (py - cy).abs() {
         AnchorSide::Horizontal
     } else {
@@ -411,8 +412,8 @@ fn divided_capsule_anchor(
 
     if distance <= arc_len {
         let angle = -std::f64::consts::FRAC_PI_2 + distance / radius;
-        let px = x + w - radius + radius * angle.cos();
-        let py = cy + radius * angle.sin();
+        let px = x + w - radius + radius * math::cos(angle);
+        let py = cy + radius * math::sin(angle);
         return ((px, py), anchor_side_from_center((px, py), (cx, cy)));
     }
     distance -= arc_len;
@@ -424,8 +425,8 @@ fn divided_capsule_anchor(
 
     if distance <= arc_len {
         let angle = std::f64::consts::FRAC_PI_2 + distance / radius;
-        let px = x + radius + radius * angle.cos();
-        let py = cy + radius * angle.sin();
+        let px = x + radius + radius * math::cos(angle);
+        let py = cy + radius * math::sin(angle);
         return ((px, py), anchor_side_from_center((px, py), (cx, cy)));
     }
     distance -= arc_len;

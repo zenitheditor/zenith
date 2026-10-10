@@ -5,7 +5,7 @@ use zenith_core::{Diagnostic, Node};
 use crate::ir::SceneCommand;
 
 use super::backdrop::fill_backdrop;
-use super::boxes::Compiled;
+use super::boxes::{Compiled, StreamId};
 use super::chart::compile_chart;
 use super::container::{compile_frame, compile_group, compile_instance};
 use super::ctx::NodeCtx;
@@ -50,9 +50,10 @@ pub(in crate::compile) fn compile_node(
         return 0.0;
     }
     let start = commands.len();
+    let stream = StreamId::of(commands);
     // The rank is taken before the children compile: a parent ranks below
     // them.
-    let rank = cx.boxes.map(|recorder| recorder.enter());
+    let rank = cx.boxes.map(|recorder| recorder.begin(stream, start));
     let content_h = compile_kind(node, cx, commands, diagnostics, connector_strokes, ctx);
     if let (Some(recorder), Some(rank)) = (cx.boxes, rank) {
         recorder.record(Compiled {
@@ -60,6 +61,7 @@ pub(in crate::compile) fn compile_node(
             cx,
             ctx,
             commands,
+            stream,
             start,
             content_h,
             rank,

@@ -118,7 +118,7 @@ fn report_overflow(
 
 /// The largest integer px strictly below `font_size`.
 fn below_px(font_size: f64) -> i64 {
-    font_size.ceil() as i64 - 1
+    (font_size.ceil() as i64).saturating_sub(1)
 }
 
 /// The largest integer font size in `[to_px, from_px]` at which `text` fits its
@@ -175,5 +175,6 @@ mod tests {
         assert_eq!(below_px(64.0), 63);
         assert_eq!(below_px(15.5), 15);
         assert_eq!(below_px(1.0), 0);
+        assert_eq!(below_px(f64::NEG_INFINITY), i64::MIN);
     }
 }

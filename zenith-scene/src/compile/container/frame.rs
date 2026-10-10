@@ -194,24 +194,14 @@ pub(in crate::compile) fn compile_frame(
             child_ctx,
         );
     } else {
-        let mut draws = Vec::new();
-        let mut local_connector_strokes = Vec::new();
-        compile_frame_body(
-            frame,
-            shell,
-            cx,
-            &mut draws,
-            diagnostics,
-            &mut local_connector_strokes,
-            child_ctx,
-        );
         emit_wrapped_container(
+            cx,
             commands,
-            draws,
-            effect,
-            mask,
             connector_strokes,
-            local_connector_strokes,
+            (effect, mask),
+            |cx, draws, strokes| {
+                compile_frame_body(frame, shell, cx, draws, diagnostics, strokes, child_ctx);
+            },
         );
     }
 

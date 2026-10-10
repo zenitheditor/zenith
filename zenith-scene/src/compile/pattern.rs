@@ -29,6 +29,7 @@ use crate::ir::{Paint, SceneCommand};
 use super::NodeCtx;
 use super::RenderCtx;
 use super::anchor::AnchorMap;
+use super::boxes::StreamId;
 use super::compile_node;
 use super::paint::{
     NodeEffect, apply_gradient_opacity, emit_node_with_effects, resolve_property_color,
@@ -143,7 +144,7 @@ pub(in crate::compile) fn compile_pattern(
             // Each instance records under `<pattern-id>/<index>/`, in a
             // recorder that knows the transform open where `tiles` lands.
             Some(recorder) => {
-                let nested = recorder.nested(commands, lead);
+                let nested = recorder.nested(StreamId::of(commands), commands, lead);
                 let instance_cx = NodeCtx {
                     boxes: Some(&nested),
                     ..cx

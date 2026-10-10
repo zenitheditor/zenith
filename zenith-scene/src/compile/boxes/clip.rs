@@ -83,9 +83,93 @@ impl Default for Open {
     }
 }
 
+/// The fold of a command stream that runs under a base [`Open`]: the
+/// transform stack and the clips open after the commands stepped so far.
+/// A pop with nothing opened since the base closes nothing.
+#[derive(Clone, Debug)]
+pub(super) struct Tracker {
+    stack: Stack,
+    clips: Vec<Pushed>,
+    /// The number of clips the base opened. A pop never closes them.
+    floor: usize,
+}
+
+impl Tracker {
+    /// The fold of no commands under `base`.
+    pub(super) fn new(base: &Open) -> Self {
+        Self {
+            stack: Stack::new(base.transform),
+            clips: base.clips.clone(),
+            floor: base.clips.len(),
+        }
+    }
+
+    /// Fold one more command.
+    pub(super) fn step(&mut self, cmd: &SceneCommand) {
+        let (x, y, w, h, radius) = match cmd {
+            SceneCommand::PushClip { x, y, w, h } => (*x, *y, *w, *h, 0.0),
+            SceneCommand::PushClipRoundedRect { x, y, w, h, radius } => (*x, *y, *w, *h, *radius),
+            SceneCommand::PopClip => {
+                if self.clips.len() > self.floor {
+                    self.clips.pop();
+                }
+                return;
+            }
+            SceneCommand::FillRect { .. }
+            | SceneCommand::StrokeRect { .. }
+            | SceneCommand::FillRoundedRect { .. }
+            | SceneCommand::StrokeRoundedRect { .. }
+            | SceneCommand::FillEllipse { .. }
+            | SceneCommand::StrokeEllipse { .. }
+            | SceneCommand::StrokeLine { .. }
+            | SceneCommand::FillPolygon { .. }
+            | SceneCommand::StrokePolyline { .. }
+            | SceneCommand::FillPath { .. }
+            | SceneCommand::StrokePath { .. }
+            | SceneCommand::DrawImage { .. }
+            | SceneCommand::DrawSvgAsset { .. }
+            | SceneCommand::DrawGlyphRun { .. }
+            | SceneCommand::PushLayer { .. }
+            | SceneCommand::PopLayer
+            | SceneCommand::PushTransform { .. }
+            | SceneCommand::PushScaleTranslate { .. }
+            | SceneCommand::PushTransformMatrix { .. }
+            | SceneCommand::PopTransform
+            | SceneCommand::BeginShadow { .. }
+            | SceneCommand::EndShadow
+            | SceneCommand::BeginBlur { .. }
+            | SceneCommand::EndBlur
+            | SceneCommand::BeginFilter { .. }
+            | SceneCommand::EndFilter
+            | SceneCommand::BeginMask { .. }
+            | SceneCommand::EndMask => {
+                self.stack.step(cmd, false);
+                return;
+            }
+        };
+        self.clips.push(Pushed {
+            transform: self.stack.top(),
+            rect: LayoutBox { x, y, w, h },
+            radius,
+        });
+    }
+
+    /// The transform and clips open after the commands stepped so far.
+    pub(super) fn open(&self) -> Open {
+        Open {
+            transform: self.stack.top(),
+            clips: self.clips.clone(),
+        }
+    }
+}
+
 impl Open {
     /// The state open at the end of `commands`, which run under `self`.
     /// A pop with nothing opened in `commands` closes nothing.
+    ///
+    /// The reference fold: a full walk per call. [`Tracker`] computes the
+    /// same state one command at a time, and the tests compare the two.
+    #[cfg(test)]
     pub(super) fn after(&self, commands: &[SceneCommand]) -> Open {
         let mut stack = Stack::new(self.transform);
         let mut clips = self.clips.clone();

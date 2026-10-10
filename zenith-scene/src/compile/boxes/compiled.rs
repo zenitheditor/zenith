@@ -185,7 +185,7 @@ impl CompiledBox {
 }
 
 fn distance(a: (f64, f64), b: (f64, f64)) -> f64 {
-    (a.0 - b.0).hypot(a.1 - b.1)
+    zenith_geometry::math::hypot(a.0 - b.0, a.1 - b.1)
 }
 
 /// The point of segment `a`–`b` nearest to `p`.

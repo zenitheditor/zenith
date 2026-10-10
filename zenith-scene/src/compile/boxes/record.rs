@@ -19,6 +19,7 @@ use super::bounds::{Bases, first_polyline, map_box, measure};
 use super::clip::Open;
 use super::compiled::CompiledBox;
 use super::shape::hit_shape;
+use super::track::{StreamId, Tracks};
 
 /// The lowered subtree one `instance` expanded to, as the compile drew it.
 #[derive(Debug, Clone)]
@@ -66,6 +67,8 @@ pub(in crate::compile) struct BoxRecorder {
     offset: usize,
     /// The next paint rank.
     next_rank: Cell<usize>,
+    /// The state open along each stream this recorder reads.
+    tracks: RefCell<Tracks>,
 }
 
 impl Default for BoxRecorder {
@@ -77,6 +80,7 @@ impl Default for BoxRecorder {
             base: Open::default(),
             offset: 0,
             next_rank: Cell::new(0),
+            tracks: RefCell::new(Tracks::default()),
         }
     }
 }
@@ -92,11 +96,13 @@ pub(in crate::compile) struct Compiled<'a> {
     pub(in crate::compile) ctx: RenderCtx,
     /// The whole command stream the node emitted into.
     pub(in crate::compile) commands: &'a [SceneCommand],
+    /// The identity of `commands`.
+    pub(in crate::compile) stream: StreamId,
     /// Index of the node's first command in `commands`.
     pub(in crate::compile) start: usize,
     /// The measured content height (`text` / `code`), else `0.0`.
     pub(in crate::compile) content_h: f64,
-    /// The paint rank [`BoxRecorder::enter`] gave the node.
+    /// The paint rank [`BoxRecorder::begin`] gave the node.
     pub(in crate::compile) rank: usize,
 }
 
@@ -110,6 +116,8 @@ pub(in crate::compile) struct Placed<'a> {
     pub(in crate::compile) rotate: Option<f64>,
     /// The whole command stream the node emitted into.
     pub(in crate::compile) commands: &'a [SceneCommand],
+    /// The identity of `commands`.
+    pub(in crate::compile) stream: StreamId,
     /// Index of the node's first command in `commands`.
     pub(in crate::compile) start: usize,
     /// Render position of page `(0, 0)`.
@@ -126,25 +134,47 @@ pub(in crate::compile) struct Placed<'a> {
 }
 
 impl BoxRecorder {
-    /// The paint rank of a node whose compile starts now. Call it before
-    /// the node emits its first command.
+    /// The next paint rank.
     pub(in crate::compile) fn enter(&self) -> usize {
         let rank = self.next_rank.get();
         self.next_rank.set(rank + 1);
         rank
     }
 
+    /// A node starts compiling at `start` in `stream`: its paint rank.
+    /// Call it before the node emits its first command, and pair it with
+    /// [`BoxRecorder::record`].
+    pub(in crate::compile) fn begin(&self, stream: StreamId, start: usize) -> usize {
+        self.tracks.borrow_mut().enter(stream, start);
+        self.enter()
+    }
+
+    /// The state open after `commands[..at]`, which run under this
+    /// recorder's base.
+    fn open_at(&self, stream: StreamId, commands: &[SceneCommand], at: usize) -> Open {
+        self.tracks
+            .borrow_mut()
+            .open_at(&self.base, stream, commands, at)
+    }
+
     /// A recorder for a separate command stream that is spliced into this
-    /// recorder's stream after `outer` (the commands emitted so far) and
-    /// `lead` more commands. Paint ranks continue from this recorder's.
-    pub(in crate::compile) fn nested(&self, outer: &[SceneCommand], lead: usize) -> BoxRecorder {
+    /// recorder's stream `outer` (`stream`, the commands emitted so far)
+    /// after `lead` more commands. Paint ranks continue from this
+    /// recorder's.
+    pub(in crate::compile) fn nested(
+        &self,
+        stream: StreamId,
+        outer: &[SceneCommand],
+        lead: usize,
+    ) -> BoxRecorder {
         BoxRecorder {
             boxes: RefCell::new(BTreeMap::new()),
             expansions: RefCell::new(BTreeMap::new()),
             routes: RefCell::new(BTreeMap::new()),
-            base: self.base.after(outer),
+            base: self.open_at(stream, outer, outer.len()),
             offset: self.offset + outer.len() + lead,
             next_rank: Cell::new(self.next_rank.get()),
+            tracks: RefCell::new(Tracks::default()),
         }
     }
 
@@ -160,10 +190,37 @@ impl BoxRecorder {
         }
     }
 
+    /// Move everything `child` recorded into this recorder under the same
+    /// ids: boxes, expansions, and routes. A record this recorder already
+    /// holds wins. Paint ranks continue after the child's. `child` is a
+    /// [`BoxRecorder::nested`] recorder of an effect or mask wrapper.
+    pub(in crate::compile) fn adopt(&self, child: BoxRecorder) {
+        self.next_rank
+            .set(self.next_rank.get().max(child.next_rank.get()));
+        let Recorded {
+            boxes,
+            expansions,
+            routes,
+        } = child.into_parts();
+        let mut own = self.boxes.borrow_mut();
+        for (id, b) in boxes {
+            own.entry(id).or_insert(b);
+        }
+        let mut own = self.expansions.borrow_mut();
+        for (id, e) in expansions {
+            own.entry(id).or_insert(e);
+        }
+        let mut own = self.routes.borrow_mut();
+        for (id, r) in routes {
+            own.entry(id).or_insert(r);
+        }
+    }
+
     /// Move every recorded `command_index` through `map` (old index to new
     /// index, one entry past the last old command), after a pass rewrote
     /// the command stream.
     pub(in crate::compile) fn remap_commands(&self, map: &[usize]) {
+        self.tracks.borrow_mut().rewrote();
         for b in self.boxes.borrow_mut().values_mut() {
             if let Some(&index) = map.get(b.command_index) {
                 b.command_index = index;
@@ -188,8 +245,10 @@ impl BoxRecorder {
             .or_insert(expansion);
     }
 
-    /// Record the box of one compiled node.
+    /// Record the box of one compiled node, which
+    /// [`BoxRecorder::begin`] started.
     pub(in crate::compile) fn record(&self, c: Compiled<'_>) {
+        self.tracks.borrow_mut().leave();
         let Some(id) = c.node.id() else {
             return;
         };
@@ -228,35 +287,38 @@ impl BoxRecorder {
             | Node::Mesh(_)
             | Node::Unknown(_) => None,
         };
+        let open = self.open_at(c.stream, c.commands, c.start);
         if let Node::Connector(_) = c.node {
-            self.route(id, c);
+            self.route(id, c, &open);
         }
         let source = resolved_text.as_ref().unwrap_or(c.node);
-        self.place(Placed {
-            id,
-            declared: declared_box(source, id, c),
-            rotate: node_rotate(source),
-            commands: c.commands,
-            start: c.start,
-            page_origin: c.ctx.page_origin,
-            shape: ShapeEnv {
-                engine: c.cx.engine,
-                fonts: c.cx.fonts,
+        self.place_under(
+            Placed {
+                id,
+                declared: declared_box(source, id, c),
+                rotate: node_rotate(source),
+                commands: c.commands,
+                stream: c.stream,
+                start: c.start,
+                page_origin: c.ctx.page_origin,
+                shape: ShapeEnv {
+                    engine: c.cx.engine,
+                    fonts: c.cx.fonts,
+                },
+                rank: c.rank,
+                hidden: c.node.visible() == Some(false),
+                exact: exact_kind(c.node),
             },
-            rank: c.rank,
-            hidden: c.node.visible() == Some(false),
-            exact: exact_kind(c.node),
-        });
+            &open,
+        );
     }
 
-    /// Record the route a connector drew (first record of an id wins).
-    fn route(&self, id: &str, c: Compiled<'_>) {
+    /// Record the route a connector drew under `open` (first record of an
+    /// id wins).
+    fn route(&self, id: &str, c: Compiled<'_>, open: &Open) {
         if self.routes.borrow().contains_key(id) {
             return;
         }
-        let open = self
-            .base
-            .after(c.commands.get(..c.start).unwrap_or_default());
         let own = c.commands.get(c.start..).unwrap_or_default();
         let Some(points) = first_polyline(own, open.transform) else {
             return;
@@ -271,9 +333,16 @@ impl BoxRecorder {
         if self.boxes.borrow().contains_key(p.id) {
             return;
         }
-        let open = self
-            .base
-            .after(p.commands.get(..p.start).unwrap_or_default());
+        let open = self.open_at(p.stream, p.commands, p.start);
+        self.place_under(p, &open);
+    }
+
+    /// Record one placed node under `open`, the state its stream leaves
+    /// open at its first command (first record of an id wins).
+    fn place_under(&self, p: Placed<'_>, open: &Open) {
+        if self.boxes.borrow().contains_key(p.id) {
+            return;
+        }
         let prefix = open.transform;
         let own = p.commands.get(p.start..).unwrap_or_default();
         let (ox, oy) = p.page_origin;

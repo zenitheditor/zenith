@@ -8,6 +8,7 @@ use std::collections::BTreeMap;
 use std::f64::consts::PI;
 
 use zenith_core::{ChartNode, Diagnostic, ResolvedToken};
+use zenith_geometry::math;
 
 use crate::ir::{Color, FillRule, Paint, SceneCommand};
 
@@ -97,8 +98,8 @@ pub(super) fn wedge_polygon(geom: PieGeom, a_start: f64, a_end: f64) -> Vec<f64>
         pts.push(geom.cy);
         for i in 0..=n_steps {
             let a = a_start + sweep * (i as f64 / n_steps as f64);
-            pts.push(geom.cx + geom.r_outer * a.cos());
-            pts.push(geom.cy + geom.r_outer * a.sin());
+            pts.push(geom.cx + geom.r_outer * math::cos(a));
+            pts.push(geom.cy + geom.r_outer * math::sin(a));
         }
         pts
     } else {
@@ -107,11 +108,11 @@ pub(super) fn wedge_polygon(geom: PieGeom, a_start: f64, a_end: f64) -> Vec<f64>
         let mut pts = Vec::with_capacity(arc_pts * 4);
         for i in 0..=n_steps {
             let a = a_start + sweep * (i as f64 / n_steps as f64);
-            pts.push(geom.cx + geom.r_outer * a.cos());
-            pts.push(geom.cy + geom.r_outer * a.sin());
+            pts.push(geom.cx + geom.r_outer * math::cos(a));
+            pts.push(geom.cy + geom.r_outer * math::sin(a));
             inner.push((
-                geom.cx + geom.r_inner * a.cos(),
-                geom.cy + geom.r_inner * a.sin(),
+                geom.cx + geom.r_inner * math::cos(a),
+                geom.cy + geom.r_inner * math::sin(a),
             ));
         }
         for (px, py) in inner.iter().rev() {
@@ -176,8 +177,8 @@ fn emit_slice_label(
     } else {
         geom.r_outer * 0.60
     };
-    let lx = geom.cx + label_r * label.mid_angle.cos();
-    let ly = geom.cy + label_r * label.mid_angle.sin();
+    let lx = geom.cx + label_r * math::cos(label.mid_angle);
+    let ly = geom.cy + label_r * math::sin(label.mid_angle);
     let Some(shaped) = text.shape(label.text, ChartTextRole::ValueInside, diagnostics) else {
         return;
     };

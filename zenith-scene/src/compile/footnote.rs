@@ -35,7 +35,7 @@ use crate::ir::{Color, Paint, SceneCommand};
 
 use super::RenderCtx;
 use super::anchor::AnchorMap;
-use super::boxes::{BoxRecorder, Placed};
+use super::boxes::{BoxRecorder, Placed, StreamId};
 use super::chain::ChainAssignments;
 use super::field::FieldCtx;
 use super::paint::resolve_property_color;
@@ -397,6 +397,7 @@ pub(in crate::compile) fn compile_footnote_zone(
                     h: *h,
                 }),
                 rotate: None,
+                stream: StreamId::of(commands),
                 commands,
                 start,
                 page_origin: ctx.page_origin,

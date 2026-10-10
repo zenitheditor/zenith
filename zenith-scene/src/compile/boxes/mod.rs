@@ -46,6 +46,7 @@
 //! - `region` — the boxes that meet a convex page region (area selection).
 //! - `select` — the authored node a compiled id selects.
 //! - `shape` — the painted region of a vector node, for exact hits.
+//! - `track` — the state open along each stream, kept as streams grow.
 
 mod affine;
 mod bounds;
@@ -57,6 +58,7 @@ mod record;
 mod region;
 mod select;
 mod shape;
+mod track;
 
 pub use affine::Affine2;
 pub use clip::ClipShape;
@@ -67,3 +69,4 @@ pub(in crate::compile) use record::{BoxRecorder, Compiled, Expansion, Placed, Re
 pub use region::hit_region;
 pub use select::selectable_id;
 pub use shape::HitShape;
+pub(in crate::compile) use track::StreamId;
