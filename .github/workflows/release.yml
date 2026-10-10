@@ -6,7 +6,8 @@ run-name: Release ${{ github.ref_name }}
 # synced version drives the crates.io publish and the GitHub Release binaries.
 #
 # Required configuration before the first real release:
-#   - bump `[workspace.package] version` in Cargo.toml off `0.0.0`
+#   - none for the version: the tag drives it, and the publish and build jobs
+#     stamp the tag version into Cargo.toml in the runner checkout
 #   - add a `CARGO_REGISTRY_TOKEN` secret (Environment: crates.io)
 on:
   push:

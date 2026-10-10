@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check release manifests and bundled assets without extracting archives."""
+"""Check release manifests, LICENSE copies, and bundled assets without extracting archives."""
 
 import argparse
 import json
@@ -68,6 +68,12 @@ def check_package(package: dict, packages: dict, directory: Path, tracked: list[
                     f"Manifest mismatch: {manifest_path} {field}={actual!r}, expected {expected!r}. "
                     "Correct the package manifest and run cargo package again."
                 )
+        license_file = f"{prefix}/LICENSE"
+        if archive_bytes(archive, members, license_file) != (root / "LICENSE").read_bytes():
+            raise ValueError(
+                f"License mismatch: {license_file} differs from the root LICENSE. "
+                "Copy the root LICENSE into the crate directory and run cargo package again."
+            )
         for table in dependency_tables(manifest):
             for alias, dependency in table.items():
                 dependency = {"version": dependency} if isinstance(dependency, str) else dependency
