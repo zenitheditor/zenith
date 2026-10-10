@@ -1,6 +1,7 @@
 //! sRGB transfer helpers for deterministic raster conversion.
 
 use zenith_core::Color;
+use zenith_geometry::math;
 
 use crate::surface::{LinearRgba, RasterError};
 
@@ -10,7 +11,7 @@ pub fn decode_srgb_u8(channel: u8) -> f32 {
     if srgb <= 0.04045 {
         srgb / 12.92
     } else {
-        ((srgb + 0.055) / 1.055).powf(2.4)
+        math::powf(f64::from((srgb + 0.055) / 1.055), 2.4) as f32
     }
 }
 
@@ -20,7 +21,7 @@ pub fn encode_linear_to_srgb_u8(channel: f32) -> u8 {
     let srgb = if linear <= 0.003_130_8 {
         linear * 12.92
     } else {
-        1.055 * linear.powf(1.0 / 2.4) - 0.055
+        1.055 * (math::powf(f64::from(linear), 1.0 / 2.4) as f32) - 0.055
     };
     quantize_unit_to_u8(srgb)
 }

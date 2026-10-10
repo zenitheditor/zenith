@@ -3,6 +3,7 @@ use crate::{
     path_geometry::{geometry_anchor, geometry_path},
 };
 use zenith_core::PathAnchor;
+use zenith_geometry::math;
 use zenith_geometry::{CompoundPathGeometry, ConstructionGuide, Point2, RectBounds};
 
 #[derive(Debug, Clone, Copy)]
@@ -222,7 +223,7 @@ fn key_point_scale(points: &[Point2]) -> f64 {
     }
 
     match bounds {
-        Some(bounds) => bounds.width().hypot(bounds.height()),
+        Some(bounds) => math::hypot(bounds.width(), bounds.height()),
         None => 0.0,
     }
 }

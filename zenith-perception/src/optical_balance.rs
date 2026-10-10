@@ -1,5 +1,6 @@
 use crate::{PerceptionDiagnostic, PerceptionSeverity};
 use zenith_geometry::RectBounds;
+use zenith_geometry::math;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct OpticalBalanceInput {
@@ -54,7 +55,7 @@ pub fn optical_balance(input: OpticalBalanceInput) -> OpticalBalanceReport {
     } else {
         0.0
     };
-    let offset_magnitude = normalized_dx.hypot(normalized_dy);
+    let offset_magnitude = math::hypot(f64::from(normalized_dx), f64::from(normalized_dy)) as f32;
 
     OpticalBalanceReport {
         center_dx,
