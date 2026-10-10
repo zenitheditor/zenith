@@ -20,6 +20,10 @@ zenith-core = { workspace = true }
 zenith-layout = { workspace = true }
 zenith-scene = { workspace = true }
 zenith-render = { workspace = true }
+zenith-geometry = { workspace = true }
+zenith-raster = { workspace = true }
+zenith-perception = { workspace = true }
+serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.10"
 csv = "1"

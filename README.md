@@ -320,6 +320,39 @@ Why it matters:
 
 </details>
 
+### Perception
+
+<details><summary>Deterministic signals measured from the render. Signals, not taste: no aesthetic score, no vision model.</summary>
+
+`zenith perceive page file.zen [--page N | --all-pages] [--json]` renders each page as `zenith render --png` does at scale 1. It then measures the trim box (a bleed is cut off). `zenith perceive vector` measures path geometry from the source instead.
+
+The output describes pixels and declared geometry. It is not a judgement of design quality. Read it as evidence, then decide.
+
+| Metric | What it measures |
+| --- | --- |
+| `histogram` | Ten-bin Rec.709 luminance histogram, with min, max, and mean. |
+| `value_zones` | Pixel count, mean, and spread per zone: shadow below 1/3, midtone below 2/3, highlight above. |
+| `density_map` | Luminance contrast energy in up to 4 × 4 cells, the strongest cell, and the 70/20/10 energy split. |
+| `edge_map` | Luminance steps between neighbour pixels. Hard at 0.25 and above, lost below 0.03. |
+| `optical_balance` | Offset of the ink centre from the page centre, in px and as a fraction of the page. |
+| `clearspace` | Distance from the ink to each page edge, against the smallest declared page margin. |
+| `grid_conformance` | Largest distance from a top-level node box corner (plus the union corners and centre) to the nearest construction guide. |
+
+Ink is every pixel that differs from the most common pixel of the page.
+
+How to read `--json`:
+
+- `schema` is `1`. A breaking change to the shape bumps it. The envelope has no tool version, so a release does not change its bytes.
+- `pages[].metrics.<name>.status` is `measured` or `not_applicable`. A `not_applicable` metric carries a `reason`.
+- `clearspace` needs all four margins: `margin-top`, `margin-bottom`, `margin-inner`, and `margin-outer` (page or document). `grid_conformance` needs a `construction` block with `segment` or `circle` guides. No metric invents a threshold or an input.
+- Each measured metric has a `diagnostics` array of `code`, `severity` (`info` or `warning`), and `message`.
+- Every non-integer number is rounded half away from zero to `decimals` (4) places.
+- The exit code is 0 when the pages measure. A perception diagnostic is a signal and never fails the command. Hard validation errors block it, as they block `render`.
+
+Determinism: the same document gives the same bytes on every target. `zenith-cli/tests/perceive_hashes.json` pins the output of every example on Linux x64 and arm64, macOS arm64 and x64, and Windows x64. MCP exposes the same envelope as `zenith_perceive` (`doc`, `page`, `all_pages`).
+
+</details>
+
 ## Variants
 
 <details><summary>Two ways to generate many outputs from one design: <code>zenith variant</code> (sizes) and <code>zenith merge</code> (data).</summary>
@@ -461,6 +494,7 @@ Run `zenith <command> --help` for flags (each prints a description and an exampl
 | ------------- | --------------------------------------------------------------------------------------------------------- |
 | **Author**    | `new` · `validate` · `fmt` · `tokens` · `inspect`                                                         |
 | **Render**    | `render` (`--png` · `--svg` · `--pdf` · `--scene` · `--all-pages` · `--all-pages-svg` · `--spread` · `--page`)                                    |
+| **Perceive**  | `perceive page` (measured page signals, see [Perception](#perception)) · `perceive vector` (path geometry signals) |
 | **Edit**      | `tx` (typed transactions, dry-run by default) · `fix` (machine fixes for diagnostics, dry-run by default) · `edit` (browser editor and agent HTTP API, see [Browser editor](#browser-editor)) |
 | **Variants**  | `variant` (one design → many sizes/formats) · `merge` (CSV data mail-merge)                               |
 | **Library**   | `library list` · `library search` · `library show` · `library add`                                        |
@@ -650,7 +684,7 @@ single `zenith_schema` tool (so the model never carries every node/op schema), l
 artifacts (renders, big trees, diffs) come back as **resource links** into a content-addressed
 store instead of being inlined, and documents are addressable by `doc-id` so agents stop
 juggling paths. The full author loop is exposed — `zenith_schema`, `zenith_validate`,
-`zenith_inspect`, `zenith_tokens`, `zenith_tx`, `zenith_fix`, `zenith_render`, `zenith_fmt`, `zenith_merge`,
+`zenith_inspect`, `zenith_tokens`, `zenith_tx`, `zenith_fix`, `zenith_render`, `zenith_perceive`, `zenith_fmt`, `zenith_merge`,
 `zenith_theme_new`, plus the scratch/candidate/promote/finalize workspace tools. Pointer-style editing (hit-test, drag, undo, live render) uses the `zenith_editor_*` tools described under [Browser editor](#agents-and-mcp).
 
 | MCP render parameter | Contract |

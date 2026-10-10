@@ -14,6 +14,7 @@
 //! - [`render`] — scene JSON, PNG, SVG, PDF, contact sheet, and compiled
 //!   pages with node boxes.
 //! - [`resolved_boxes`] — final node geometry per page.
+//! - [`perceive`] — deterministic page signals measured from a render.
 //!
 //! Two hosts ship: the CLI's native host (`std::fs`, a thread pool, the OS
 //! font directories) and [`MemFs`] with [`NoLocalFonts`] for the browser.
@@ -25,6 +26,7 @@ mod host;
 pub mod imports;
 pub mod io;
 pub mod path;
+pub mod perceive;
 pub mod policy;
 pub mod prepare;
 pub mod render;

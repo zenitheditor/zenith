@@ -202,6 +202,15 @@ mod tests {
     }
 
     #[test]
+    fn perceive_page_errors_are_catalogued() {
+        for code in ["perceive.raster_failed", "perceive.encode_failed"] {
+            let entry = lookup(code).unwrap_or_else(|| panic!("{code} catalog entry"));
+            assert_eq!(entry.severity, Severity::Error);
+            assert!(!entry.is_governable(), "{code} must not be governable");
+        }
+    }
+
+    #[test]
     fn render_diagnostics_are_catalogued() {
         // Codes emitted by zenith-cli at render time must be in the catalog.
         let asset_missing =

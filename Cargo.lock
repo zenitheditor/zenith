@@ -2274,11 +2274,15 @@ version = "0.0.11"
 dependencies = [
  "csv",
  "imagesize",
+ "serde",
  "serde_json",
  "sha2",
  "tempfile",
  "zenith-core",
+ "zenith-geometry",
  "zenith-layout",
+ "zenith-perception",
+ "zenith-raster",
  "zenith-render",
  "zenith-scene",
 ]

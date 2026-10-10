@@ -16,6 +16,7 @@ This skill is judgment and routing. Syntax lives in the CLI. Never invent attrib
 | Command flags | `zenith <cmd> --help` |
 | Packs, fonts | `zenith library list` · `zenith fonts` |
 | Path geometry and logo outlines | `zenith inspect path <doc> <id> --json` · `zenith outline-text --help` · `zenith perceive --help` |
+| Measured page signals (ink, balance, density, clearspace) | `zenith perceive page <doc> --json` |
 | Font features and alternates | `zenith fonts features <family> --json` · `zenith fonts alternates <family> --char A --json` |
 | Live document imports | `zenith schema node instance` · `zenith imports --help` |
 | Pointer edits with a live preview (hit-test, drag, undo) | `zenith edit <file> --no-open --json` · `zenith edit --help` |

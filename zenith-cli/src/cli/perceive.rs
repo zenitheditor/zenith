@@ -6,7 +6,7 @@ use std::path::PathBuf;
 /// Arguments for `zenith perceive`.
 #[derive(Debug, Args)]
 #[command(
-    after_help = "EXAMPLES:\n  zenith perceive vector logo.zen\n  zenith perceive vector logo.zen --json"
+    after_help = "EXAMPLES:\n  zenith perceive vector logo.zen\n  zenith perceive vector logo.zen --json\n  zenith perceive page poster.zen --json\n  zenith perceive page deck.zen --all-pages"
 )]
 pub struct PerceiveArgs {
     #[command(subcommand)]
@@ -27,5 +27,21 @@ pub enum PerceiveSub {
         /// Analyze only the named path id. Repeat to analyze a multi-path mark subset.
         #[arg(long = "node")]
         nodes: Vec<String>,
+    },
+    /// Render pages as `zenith render --png` does, then measure deterministic page signals.
+    ///
+    /// Signals: luminance histogram, value zones, density map, edge map,
+    /// optical balance, clearspace against declared margins, and grid
+    /// conformance against declared construction guides. They are signals,
+    /// not a judgement of design quality. JSON uses schema 1.
+    Page {
+        /// `.zen` document to render and measure.
+        path: PathBuf,
+        /// 1-based page to measure (default 1).
+        #[arg(long, conflicts_with = "all_pages")]
+        page: Option<usize>,
+        /// Measure every page, in page order.
+        #[arg(long)]
+        all_pages: bool,
     },
 }

@@ -795,6 +795,16 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
         "`zenith perceive` names a path node the document does not contain.",
     ),
     info(
+        "perceive.raster_failed",
+        Severity::Error,
+        "`zenith perceive page` cannot read the measured area of a page raster.",
+    ),
+    info(
+        "perceive.encode_failed",
+        Severity::Error,
+        "`zenith perceive page` cannot encode its JSON report.",
+    ),
+    info(
         "text_outline.failed",
         Severity::Error,
         "`zenith text-outline` failed.",

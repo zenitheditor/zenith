@@ -13,6 +13,18 @@ it.
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- **`zenith perceive page`** — renders pages as `zenith render --png` does, then measures deterministic signals: luminance histogram, value zones, density map, edge map, ink bounds, optical balance, clearspace, and grid conformance. These are signals, not a judgement of design quality.
+  - `--page N` or `--all-pages`. `--json` prints a schema-1 envelope with every number rounded to 4 decimal places and no tool version.
+  - `clearspace` reads the page margins and `grid_conformance` reads the construction guides. A metric reports `not_applicable` when the page declares no such input.
+  - `zenith-cli/tests/perceive_hashes.json` pins the output of every example on every CI target.
+- **`zenith_perceive` MCP tool** — the same envelope over MCP, read-only and confined to the server root.
+
+---
+
 ## [0.0.11] — 2026-10-10
 
 A plain-text design format and a deterministic engine that agents and people edit, check, and render to PNG, SVG, and PDF.

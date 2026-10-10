@@ -1,4 +1,4 @@
-//! Pure logic for `zenith perceive`.
+//! Pure logic for `zenith perceive vector`.
 
 use std::collections::BTreeSet;
 
@@ -14,19 +14,8 @@ use zenith_perception::{
 const COLLISION_TOLERANCE: f64 = 0.1;
 const REQUIRED_CLEARANCE: f64 = 2.0;
 
+use super::outcome::{PerceiveCmdErr, PerceiveOutcome};
 use crate::commands::serialize_pretty;
-
-#[derive(Debug)]
-pub struct PerceiveCmdErr {
-    pub message: String,
-    pub exit_code: u8,
-}
-
-#[derive(Debug)]
-pub struct PerceiveOutcome {
-    pub stdout: String,
-    pub exit_code: u8,
-}
 
 #[derive(Debug, Serialize)]
 struct VectorDocumentOutput {

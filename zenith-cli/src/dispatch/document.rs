@@ -9,7 +9,9 @@ use std::process::ExitCode;
 use crate::cli::{self, FmtArgs, ImportsArgs, InspectArgs, PerceiveArgs, TokensArgs, ValidateArgs};
 use crate::cli_helpers::{parse_at_spec, read_file};
 use crate::commands;
+use crate::native;
 use crate::report::CliError;
+use zenith_pipeline::render::PageSelection;
 
 use super::output::apply_edit;
 
@@ -186,6 +188,36 @@ pub(super) fn dispatch_perceive(args: PerceiveArgs) -> ExitCode {
                 Err(e) => return e.emit(args.json),
             };
             match commands::perceive::vector(&src, args.json, &nodes) {
+                Ok(outcome) => {
+                    println!("{}", outcome.stdout);
+                    ExitCode::from(outcome.exit_code)
+                }
+                Err(err) => {
+                    CliError::new("perceive.failed", err.message, err.exit_code).emit(args.json)
+                }
+            }
+        }
+        cli::PerceiveSub::Page {
+            path,
+            page,
+            all_pages,
+        } => {
+            let src = match read_file(&path) {
+                Ok(s) => s,
+                Err(e) => return e.emit(args.json),
+            };
+            let selection = if all_pages {
+                PageSelection::All
+            } else {
+                PageSelection::One(page.unwrap_or(1))
+            };
+            match commands::perceive::page(
+                native::host(),
+                &src,
+                path.parent(),
+                selection,
+                args.json,
+            ) {
                 Ok(outcome) => {
                     println!("{}", outcome.stdout);
                     ExitCode::from(outcome.exit_code)

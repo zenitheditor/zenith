@@ -76,6 +76,7 @@ Prefer the CLI when it can run. Use `zenith mcp` for remote, CI, sandboxed, or h
 | `validate` | `zenith_validate` |
 | `fix` | `zenith_fix` (`apply`) |
 | `render` | `zenith_render` (`format`, `page`, `raster_scale`, `out`, `diagnostics`, PNG `scale`/`contact_sheet`) |
+| `perceive page` | `zenith_perceive` (`page`, `all_pages`) |
 | `inspect` / `tokens` / `fmt` / `fonts` | `zenith_inspect` / `zenith_tokens` / `zenith_fmt` / `zenith_fonts` |
 | `workspace scratch` / `candidate` / `promote` | `zenith_workspace_scratch` / `zenith_workspace_candidate` / `zenith_workspace_promote` |
 | `workspace finalize` / `bundle` / `unbundle` | `zenith_workspace_finalize` |

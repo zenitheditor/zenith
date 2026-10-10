@@ -1,4 +1,4 @@
-//! The MCP tool catalog: 20 tools with token-lean JSON-Schema inputs.
+//! The MCP tool catalog: 22 tools with token-lean JSON-Schema inputs.
 //!
 //! The surface is deliberately small and stable (clients cache `tools/list`
 //! once). All node/op/surface schema detail lives behind the single
@@ -164,6 +164,24 @@ SVG exports page 1 by default, outlines text, embeds images, and reports raster 
                     "contact_sheet": { "type": "boolean", "description": "png only: tile every page (or `page`) into one labelled PNG, ceil(sqrt(n)) columns. Without scale, fits 2048 px wide." }
                 },
                 "required": ["doc", "format"]
+            }),
+        },
+        Tool {
+            name: "zenith_perceive",
+            description: "Measure deterministic page signals from the render (read-only): luminance \
+histogram, value zones, density map, edge map, ink bounds, optical balance, clearspace against \
+declared margins, and grid conformance against declared construction guides. Returns the schema-1 \
+envelope. A metric whose input the page does not declare reports not_applicable. These are signals, \
+not a judgement of design quality. Blocked by hard diagnostics — validate first. Large results are \
+returned as a resource link.",
+            schema: json!({
+                "type": "object",
+                "properties": {
+                    "doc": doc_arg(),
+                    "page": { "type": "integer", "minimum": 1, "description": "1-based page (default 1)." },
+                    "all_pages": { "type": "boolean", "description": "Measure every page, in page order. Overrides page." }
+                },
+                "required": ["doc"]
             }),
         },
         Tool {

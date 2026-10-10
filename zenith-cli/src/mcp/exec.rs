@@ -20,6 +20,7 @@ use super::serialize::{compact, maybe_offload, store_link};
 use crate::cli::ScratchNewArgs;
 use crate::commands::{self, theme};
 use crate::edit_io::apply_edit;
+use zenith_pipeline::render::PageSelection;
 
 /// Dispatch a tool call, returning a structured result. Unknown names and
 /// execution failures become `is_error` results (never JSON-RPC errors).
@@ -34,6 +35,7 @@ pub fn call(name: &str, args: &Value) -> ToolResult {
         "zenith_tx" => run_tx(args),
         "zenith_fix" => run_fix(args),
         "zenith_render" => run_render(args),
+        "zenith_perceive" => run_perceive(args),
         "zenith_merge" => return merge::call(args),
         "zenith_theme_new" => run_theme_new(args),
         "zenith_workspace_scratch" => run_workspace_scratch(args),
@@ -165,6 +167,35 @@ fn run_tokens(args: &Value) -> Result<Value, String> {
         insert(&mut out, "diagnostics", Value::Array(diags));
     }
     Ok(out)
+}
+
+fn run_perceive(args: &Value) -> Result<Value, String> {
+    let loc = doc_ref::locate(req_str(args, "doc")?)?;
+    let src = read(&loc.path)?;
+    let selection = if flag(args, "all_pages") {
+        PageSelection::All
+    } else {
+        let page = match args.get("page") {
+            None => 1,
+            Some(v) => v
+                .as_u64()
+                .and_then(|n| usize::try_from(n).ok())
+                .filter(|n| *n >= 1)
+                .ok_or_else(|| format!("'page' must be an integer >= 1, got {v}"))?,
+        };
+        PageSelection::One(page)
+    };
+    let artifact =
+        commands::perceive::page_report(crate::native::host(), &src, loc.path.parent(), selection)
+            .map_err(|e| e.message)?;
+    let value = serde_json::to_value(&artifact.report)
+        .map_err(|e| format!("internal: cannot encode the perceive report: {e}"))?;
+    Ok(maybe_offload(
+        loc.doc_id.as_deref(),
+        value,
+        "json",
+        "perceive",
+    ))
 }
 
 // ── Edit tools ────────────────────────────────────────────────────────────────

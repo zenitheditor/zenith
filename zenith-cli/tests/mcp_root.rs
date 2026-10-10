@@ -74,6 +74,7 @@ fn a_documents_own_reads_are_confined_to_the_mcp_root() {
                     json!({ "doc": doc, "severity": "advisory" }),
                 ),
                 req(2, "zenith_render", json!({ "doc": doc, "format": "png" })),
+                req(3, "zenith_perceive", json!({ "doc": doc })),
             ] {
                 writeln!(stdin, "{r}").expect("write request");
             }
@@ -88,7 +89,7 @@ fn a_documents_own_reads_are_confined_to_the_mcp_root() {
     };
     let root_arg = root.path().to_string_lossy().into_owned();
     let confined = run(&["--root", &root_arg]);
-    assert_eq!(confined.len(), 2, "{confined:?}");
+    assert_eq!(confined.len(), 3, "{confined:?}");
     for reply in &confined {
         let text = reply.to_string();
         assert!(
