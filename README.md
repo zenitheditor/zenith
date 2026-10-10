@@ -71,7 +71,7 @@ cargo install zenith-tool    # from crates.io (installs the `zenith` binary)
 cargo install --git https://github.com/zenitheditor/zenith zenith-tool   # from source
 ```
 
-The library crates (`zenith-core`, `zenith-layout`, `zenith-scene`, `zenith-render`, `zenith-tx`, `zenith-session`) are published under their own names for Rust projects that want to build on the engine directly.
+Thirteen library crates are published under their own names for Rust projects that build on the engine directly: `zenith-geometry`, `zenith-session`, `zenith-core`, `zenith-layout`, `zenith-raster`, `zenith-scene`, `zenith-perception`, `zenith-zpx`, `zenith-render`, `zenith-tx`, `zenith-producers`, `zenith-pipeline`, and `zenith-editor`. `zenith-editor-wasm` and `zenith-editor-bench` are not published.
 
 ### With npm
 
@@ -489,20 +489,23 @@ The command serves one document on a local port, prints the URL with a per-run t
 | --- | --- |
 | `--port <N>` | Port. Default: a free port. |
 | `--host <ADDR>` | Bind address: an IP address or `localhost`. Default `127.0.0.1`. |
-| `--allow-remote` | Allow a non-loopback `--host`. Anyone who reaches the port can try the token. |
+| `--allow-remote` | Allow a non-loopback `--host`. The traffic is plain HTTP, so the token crosses the network in clear. Prefer an SSH tunnel (`ssh -L PORT:127.0.0.1:PORT host`) or a TLS reverse proxy. |
 | `--root <DIR>` | Directory the editor may read project files from. Default: the document's directory. |
 | `--no-open` | Do not open the browser. |
 | `--json` | Print the start line as JSON: `{schema, url, host, port, token, path}`. |
 
 Security model:
 
-- **Bind.** Loopback by default. A non-loopback `--host` needs `--allow-remote` and prints a warning.
-- **Token.** 64 hex characters from the OS RNG, new on every run. Every route needs it, static files included. Agents send `Authorization: Bearer <token>`. The page loads `/?token=<token>`, receives an `HttpOnly`, `SameSite=Strict` cookie, and removes the token from the address bar.
+- **Bind.** Loopback by default. A non-loopback `--host` needs `--allow-remote` and prints a warning: the traffic is plain HTTP.
+- **Token.** 64 hex characters from the OS RNG, new on every run. Every `/api` route needs `Authorization: Bearer <token>`. The server accepts the token nowhere else. A cookie would reach every service on `127.0.0.1`, since cookies ignore the port.
+- **Page URL.** `http://127.0.0.1:PORT/#token=<token>`. Browsers never send a fragment to a server or in a `Referer`. The page reads the token, removes it from the address bar and history, and keeps it in memory and in this tab's `sessionStorage` (so a reload works). The page files themselves are public and need no token.
+- **Browser launch.** The token never goes on the opener command line, which other local users can read. The server writes a `0600` redirect file with a random name to `$XDG_RUNTIME_DIR` (or the temporary directory), opens that file, and removes it after the first authenticated request. If a sandboxed browser cannot read the file, open the printed URL.
 - **Host and Origin.** `Host` must be `localhost`, an IP address, or the `--host` name, with the bound port. Otherwise the server answers 403 `edit.bad_host`. A DNS-rebinding page fails here. When a request has an `Origin`, it must be `http://<Host>`. A cross-site fetch gets 403 `edit.bad_origin`. The server sends no CORS headers. POST bodies must be `application/json`.
-- **Files.** The server serves only the embedded page files. The engine reads the document, imports, assets, and fonts only under the document's directory (or `--root`). `..` and symlinks that leave it are errors.
-- **Writes.** A save keeps comments, records history, stamps the `doc-id` as `tx --apply` does, and replaces the file atomically.
+- **Limits.** The head and the token are checked before the body is read. A head must arrive within 5 s. One thread serves each connection, at most 64 at once (16 from one remote peer). Idle clients cannot stall a real request.
+- **Files.** The server serves only the embedded page files. The engine reads the document, imports, assets, data, and text sources only under the document's directory (or `--root`). `..` and symlinks that leave it are errors. Two reads are not confined. Config files (the nearest `.zenith.kdl` and `$HOME/.config/zenith/config.kdl`) and system fonts are read as every other CLI command reads them.
+- **Writes.** A save keeps comments, records history, stamps the `doc-id` as `tx --apply` does, syncs the bytes to disk, and replaces the file atomically. A read-only document opens with a warning. The page turns Save off and says how to make the file writable.
 
-The server runs until Ctrl-C or `POST /api/shutdown`. Shutdown returns 409 while unsaved edits remain, unless `{"force": true}`.
+The server runs until Ctrl-C or `POST /api/shutdown`. Shutdown returns 409 while unsaved edits remain, unless `{"force": true}`. Ctrl-C, `SIGTERM`, and `SIGHUP` stop a clean session at once with exit code 0. With unsaved edits, the first signal stops nothing: the terminal names the file, and the page shows a banner with Save. A second signal discards the edits and exits with code 130.
 
 ### Using the editor
 
@@ -511,7 +514,7 @@ The server runs until Ctrl-C or `POST /api/shutdown`. Shutdown returns 409 while
 - **Selection.** Click a node to select it. Shift-click adds to the selection. Drag on empty canvas to select with a band (Alt: only nodes wholly inside, Shift: add). Layers, the source cursor, and the canvas share one selection.
 - **Move, resize, rotate.** Drag the node or its handles. Shift keeps one axis, keeps the aspect ratio, or rotates in 15 degree steps. Ctrl or Cmd resizes about the centre and skips snapping while moving. Alt detaches a token-bound value or an anchor. The edit lands on release. A ghost outline and a live preview follow the pointer.
 - **Snapping.** The magnet button toggles snapping to other nodes and the page.
-- **Keyboard on a selection.** Arrows move by 1 px (Shift: 10 px). Ctrl or Cmd with arrows resizes. `[` and `]` rotate by 15 degrees. Delete removes. Escape cancels a drag or clears the selection. Without a selection, arrows pan.
+- **Keyboard on a selection.** These keys work while the canvas has focus: click the canvas first. Arrows move by 1 px (Shift: 10 px). Ctrl or Cmd with arrows resizes. `[` and `]` rotate by 15 degrees. Delete or Backspace removes. Escape cancels a drag or clears the selection. Without a selection, arrows pan.
 - **Inspector.** Shows the selected node and edits its fields, including fill and stroke from the color tokens.
 - **Shortcuts.** Ctrl or Cmd with: `S` save, `Z` undo, `Shift+Z` or `Y` redo, `D` duplicate the selection, `O` open a file (static site). Undo and redo cover typing and canvas edits in one history.
 - **Diagnostics.** The bottom panel lists errors, warnings, and advisories. A row with a position jumps to it in the source.
@@ -552,12 +555,12 @@ How it behaves:
 - Open a `.zen` file or a project folder with the toolbar buttons. A folder gives the document its imports and assets. Chromium writes saves back to the file. Other browsers read through `<input type=file>` and save by download.
 - Bundled fonts beyond Noto Sans Regular and Bold load on demand from `fonts/`.
 - `?doc=samples/<name>.zen` opens a sample. The default is `samples/stack.zen`.
-- Each engine call sends the session and the project files to the module. A 1 MiB project adds about 1.4 ms per call. Keep large images out of a project folder.
+- Each engine call sends the session and the project files to the module. Keep large images out of a project folder.
 - A save on the static site does not stamp a `doc-id` into the file.
 
 ### Agents and MCP
 
-Agents drive the same session the page shows. Over HTTP, `POST /api/cmd` runs an editor command (`{"command":"commands.list"}` lists them). Edits from an agent appear live in the page. Over MCP, five tools expose the engine:
+Agents drive the same session the page shows. Over HTTP, `POST /api/cmd` runs an editor command (`{"command":"commands.list"}` lists them). Edits from an agent appear live in the page. Over MCP, six tools expose the engine. They open and save only `.zen` files. The read root is the document's directory (or `root`). `/` is refused as a read root unless the server runs with `zenith mcp --root /`. A server holds at most 16 sessions: a new one evicts the least recently used session without unsaved edits.
 
 | Tool | Purpose |
 | --- | --- |
@@ -565,6 +568,7 @@ Agents drive the same session the page shows. Over HTTP, `POST /api/cmd` runs an
 | `zenith_editor_command` | Run one editor command on a session (`select.hit`, `gesture.commit`, `tx.apply`, `history.undo`, `file.save`, and more). Text edits need the session `version`. |
 | `zenith_editor_render` | Render a session page to PNG. Renders the last valid text while the text has errors (`stale: true`). |
 | `zenith_editor_sessions` | List the sessions: id, kind (local or attached), path, version, dirty, valid, conflict. |
+| `zenith_editor_close` | Close a session. Unsaved edits need `discard=true`. Closing an attached session only forgets it. |
 | `zenith_editor_attach` | Attach to a running `zenith edit` on this machine, so the person watching the page sees the agent's edits. Pass the URL it printed. |
 
 </details>
@@ -669,17 +673,26 @@ Point any MCP-aware client at it:
 …or, for Claude Code: `claude mcp add zenith -- zenith mcp`.
 
 **Remote / hosted serving.** Build with the optional `http` feature and serve native
-Streamable-HTTP at a single `/mcp` endpoint (kept behind an opt-in feature so the default build
-stays dependency-light and C-free):
+Streamable-HTTP at a single `/mcp` endpoint. The transport runs on the same bounded `std::net`
+HTTP layer as `zenith edit` and adds no dependency:
 
 ```bash
 cargo install --path zenith-cli --features http --locked
-zenith mcp --http 127.0.0.1:8080
+zenith mcp --http 127.0.0.1:8080     # prints the token to stderr
 # test it:
 curl -s -XPOST http://127.0.0.1:8080/mcp \
+  -H "Authorization: Bearer $TOKEN" \
   -H 'Content-Type: application/json' \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
 ```
+
+The tools read and write files, so the HTTP transport checks every request before it reads the body:
+
+- **Bind.** Loopback only. `--allow-remote` allows another address. The traffic is plain HTTP: put a TLS reverse proxy in front.
+- **Token.** `Authorization: Bearer <token>`. The token is `ZENITH_MCP_TOKEN` (at least 32 characters), else a random one printed to stderr at start.
+- **Host and Origin.** `Host` must be `localhost`, an IP address, the `--http` host, or an `--allow-host` name. A browser `Origin` must name the same host.
+- **Body.** `Content-Type: application/json`, at most 8 MiB.
+- **Root.** Every tool path (documents, outputs, data, bundles) must lie under `--root`, by default the working directory. Over stdio, `--root` is optional. Under a root, every file a document reads (imports, assets, data, the local `.zenith.kdl`) is confined to the root. The user-level global config (`$HOME/.config/zenith/config.kdl`) and system fonts are not confined.
 
 The workspace store (scratch candidates, version history, rendered resource artifacts) lives
 under `$XDG_DATA_HOME/zenith` (`~/.local/share/zenith` by default); set `ZENITH_DATA_DIR` to
