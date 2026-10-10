@@ -1,3 +1,4 @@
+use crate::math;
 use crate::{CubicBezier, GeometryError, Point2};
 
 const MAX_RADIAL_SYMMETRY_COUNT: usize = 72;
@@ -40,8 +41,7 @@ impl AffineTransform {
         pivot.validate()?;
 
         let angle = angle_degrees.to_radians();
-        let sin = angle.sin();
-        let cos = angle.cos();
+        let (sin, cos) = math::sin_cos(angle);
         let e = pivot.x - cos.mul_add(pivot.x, -sin * pivot.y);
         let f = pivot.y - sin.mul_add(pivot.x, cos * pivot.y);
 
@@ -75,7 +75,7 @@ impl AffineTransform {
         if !dx.is_finite() || !dy.is_finite() {
             return Err(GeometryError::NonFiniteTransform);
         }
-        let length = dx.hypot(dy);
+        let length = math::hypot(dx, dy);
         if !length.is_finite() {
             return Err(GeometryError::NonFiniteTransform);
         }
@@ -219,7 +219,8 @@ impl AffineTransform {
         center.validate()?;
 
         let axis_radians = axis_angle_degrees.to_radians();
-        let axis_end = Point2::new(center.x + axis_radians.cos(), center.y + axis_radians.sin())?;
+        let (sin, cos) = math::sin_cos(axis_radians);
+        let axis_end = Point2::new(center.x + cos, center.y + sin)?;
         let reflection = Self::reflection_across_line(center, axis_end)?;
 
         let step_degrees = 360.0 / count as f64;

@@ -1,3 +1,4 @@
+use crate::math;
 use crate::{GeometryError, Point2, RectBounds};
 
 const MAX_CONSTRUCTION_GUIDES: usize = 4096;
@@ -119,8 +120,8 @@ pub fn polar_guides(
     for spoke in 0..spokes {
         let angle = (start_angle_degrees + step_degrees * spoke as f64).to_radians();
         let end = Point2::new(
-            center.x + radius * angle.cos(),
-            center.y + radius * angle.sin(),
+            center.x + radius * math::cos(angle),
+            center.y + radius * math::sin(angle),
         )?;
         guides.push(ConstructionGuide::segment(center, end)?);
     }

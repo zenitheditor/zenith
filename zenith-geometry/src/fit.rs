@@ -1,3 +1,4 @@
+use crate::math;
 use crate::{CubicBezier, GeometryError, PathAnchor, Point2, validation::validate_tolerance};
 
 const MIN_HANDLE_SCALE: f64 = 1.0e-6;
@@ -338,7 +339,7 @@ fn unit_direction(start: Point2, end: Point2) -> Result<Option<Point2>, Geometry
         return Err(GeometryError::CountOutOfRange);
     }
 
-    let length = dx.hypot(dy);
+    let length = math::hypot(dx, dy);
     if !length.is_finite() {
         return Err(GeometryError::CountOutOfRange);
     }
@@ -356,7 +357,7 @@ fn segment_length(start: Point2, end: Point2) -> Result<f64, GeometryError> {
         return Err(GeometryError::CountOutOfRange);
     }
 
-    let length = dx.hypot(dy);
+    let length = math::hypot(dx, dy);
     if length.is_finite() {
         Ok(length)
     } else {

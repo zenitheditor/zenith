@@ -1,3 +1,4 @@
+use crate::math;
 use crate::{GeometryError, LineIntersection, Point2, intersect_lines};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -38,7 +39,7 @@ pub fn offset_segment(
         return Err(GeometryError::CountOutOfRange);
     }
 
-    let length = dx.hypot(dy);
+    let length = math::hypot(dx, dy);
     if !length.is_finite() {
         return Err(GeometryError::CountOutOfRange);
     }

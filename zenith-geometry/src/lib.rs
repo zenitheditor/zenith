@@ -13,6 +13,7 @@ pub mod fill_topology;
 pub mod fit;
 pub mod guide;
 pub mod intersection;
+pub mod math;
 pub mod offset;
 pub mod outline;
 pub mod path;

@@ -1,3 +1,4 @@
+use crate::math;
 use crate::{
     ClosedPolyline, CompoundFillRule, CompoundPathGeometry, FilledContourBoundaryRole,
     GeometryError, Point2, PointLocation, PolylineProjection, RectBounds,
@@ -441,7 +442,7 @@ fn point_at_distance_open(points: &[Point2], mut distance: f64) -> Result<Point2
 fn segment_length(start: Point2, end: Point2) -> f64 {
     let dx = end.x - start.x;
     let dy = end.y - start.y;
-    dx.hypot(dy)
+    math::hypot(dx, dy)
 }
 
 fn validate_polyline_points(points: &[Point2]) -> Result<(), GeometryError> {

@@ -1,3 +1,4 @@
+use crate::math;
 use crate::{
     AffineTransform, CubicBezier, GeometryError, Point2, RectBounds, project_onto_cubic_bezier,
     validation::{validate_parameter, validate_tolerance},
@@ -267,8 +268,8 @@ impl PathAnchor {
             return None;
         }
 
-        let in_length = in_vector.x.hypot(in_vector.y);
-        let out_length = out_vector.x.hypot(out_vector.y);
+        let in_length = math::hypot(in_vector.x, in_vector.y);
+        let out_length = math::hypot(out_vector.x, out_vector.y);
         if !in_length.is_finite() || !out_length.is_finite() {
             return None;
         }

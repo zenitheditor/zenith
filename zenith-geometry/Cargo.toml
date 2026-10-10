@@ -13,6 +13,7 @@ readme.workspace = true
 description = "Zenith deterministic vector geometry math."
 
 [dependencies]
+libm = "0.2.16"
 
 [lints]
 workspace = true
