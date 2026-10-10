@@ -47,6 +47,8 @@ cargo fmt --all                                        # canonical formatting ap
 
 `zenith-cli/tests/render_hashes.json` pins the SHA-256 of every example's PNG, SVG, and PDF. After an intended output change, regenerate it with `ZENITH_UPDATE_HASHES=1 cargo test -p zenith-tool --test render_hashes` and commit it.
 
+`zenith-cli/tests/perceive_hashes.json` pins the SHA-256 of `zenith perceive page --all-pages --json` for every example. After an intended change to the render or the perceive envelope, regenerate it with `ZENITH_UPDATE_HASHES=1 cargo test -p zenith-tool --test perceive_hashes` and commit it.
+
 If you change the browser editor UI, look at it. Build the release binary, then run:
 
 ```bash

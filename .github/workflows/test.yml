@@ -8,6 +8,11 @@
 # runs it on macOS x64. The `editor-wasm` job checks the wasm page-1 PNG
 # against the same pins. One drifted byte on any of these targets fails CI.
 # Outputs outside the examples and their default render options are not pinned.
+#
+# `zenith-cli/tests/perceive_hashes.rs` pins the SHA-256 of
+# `zenith perceive page --all-pages --json` for every example in
+# `zenith-cli/tests/perceive_hashes.json`. It runs on the same targets as the
+# render hashes, except wasm.
 
 name: Test
 
@@ -76,7 +81,7 @@ jobs:
 
   render-hashes-macos-x64:
     name: Render hashes (macos-15-intel)
-    # The only x86_64 macOS target. It runs the pinned-hash test alone, not
+    # The only x86_64 macOS target. It runs the pinned-hash tests alone, not
     # the whole suite, to keep the slow Intel runner short.
     runs-on: macos-15-intel
     steps:
@@ -86,8 +91,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           prefix-key: render-hashes
-      - name: Pinned render hashes
-        run: cargo test -p zenith-tool --test render_hashes --locked
+      - name: Pinned render and perceive hashes
+        run: cargo test -p zenith-tool --test render_hashes --test perceive_hashes --locked
 
   editor-wasm:
     name: Editor on wasm (native-vs-wasm byte equality)

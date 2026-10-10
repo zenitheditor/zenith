@@ -3,7 +3,9 @@
 # change both, so these files always check out with LF.
 zenith-cli/assets/editor/** text eol=lf
 zenith-cli/tests/editor_e2e/** text eol=lf
-# The pinned render hashes are checked in canonical LF form. The example
-# sources are the input of those hashes, so every target reads the same bytes.
+# The pinned render and perceive hashes are checked in canonical LF form. The
+# example sources are the input of those hashes, so every target reads the
+# same bytes.
 zenith-cli/tests/render_hashes.json text eol=lf
+zenith-cli/tests/perceive_hashes.json text eol=lf
 examples/** text=auto eol=lf
