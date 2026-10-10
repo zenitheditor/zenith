@@ -139,7 +139,14 @@ export class Page {
     this.browser = browser;
     this.sessionId = sessionId;
     this.errors = [];
+    /** Entries matching one of these never count as page errors: a step that stops the server sets one. */
+    this.expected = [];
     this.dialogs = [];
+  }
+
+  /** Record a page error unless a step declared it expected (the CDP event can arrive after the step ends). */
+  record(message) {
+    if (!this.expected.some((re) => re.test(message ?? ""))) this.errors.push(message);
   }
 
   send(method, params) {
@@ -148,16 +155,16 @@ export class Page {
 
   async init() {
     this.browser.on(this.sessionId, "Runtime.exceptionThrown", (p) => {
-      this.errors.push(p.exceptionDetails?.exception?.description ?? p.exceptionDetails?.text);
+      this.record(p.exceptionDetails?.exception?.description ?? p.exceptionDetails?.text);
     });
     this.browser.on(this.sessionId, "Runtime.consoleAPICalled", (p) => {
       if (p.type === "error") {
-        this.errors.push(p.args.map((a) => a.value ?? a.description).join(" "));
+        this.record(p.args.map((a) => a.value ?? a.description).join(" "));
       }
     });
     this.browser.on(this.sessionId, "Log.entryAdded", (p) => {
       if (p.entry.level === "error" && !/favicon/.test(p.entry.url ?? "")) {
-        this.errors.push(`${p.entry.source}: ${p.entry.text} ${p.entry.url ?? ""}`);
+        this.record(`${p.entry.source}: ${p.entry.text} ${p.entry.url ?? ""}`);
       }
     });
     this.browser.on(this.sessionId, "Page.javascriptDialogOpening", (p) => {

@@ -684,8 +684,10 @@ export const steps = [
       const r = await page.eval(`fetch('/api/shutdown', { method: 'POST', headers: { 'Content-Type': 'application/json', ...${A}.host.authHeaders() }, body: '{"force":true}' }).then((x) => x.json())`);
       check(r.ok, `shutdown: ${JSON.stringify(r)}`);
       await page.waitFor("!!document.querySelector('[data-key=shutdown]')", "stopped notice");
-      // Requests in flight when the server stopped log refused connections:
-      // wait until none is left, then drop those errors.
+      // The server is gone for good, so a refused connection is expected from
+      // here on. A request in flight can log it after this step ends, because
+      // the browser reports it asynchronously: declare it before anything else.
+      page.expected.push(/^network: .*ERR_CONNECTION_REFUSED/);
       await page.waitFor(`${A}.events.calls === 0 && ${A}.renderer.idle() && !${A}.refreshLater.pending()`, "the requests in flight to end");
       const unexpected = page.errors.filter((e) => !/^network: .*ERR_CONNECTION_REFUSED/.test(e));
       page.errors.length = 0;
