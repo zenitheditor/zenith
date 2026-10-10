@@ -16,6 +16,7 @@ mod node_props;
 mod path;
 mod pattern;
 pub mod query;
+pub(crate) mod range;
 mod recipe;
 mod run;
 mod space;

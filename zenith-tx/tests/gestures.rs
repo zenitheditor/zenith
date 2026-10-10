@@ -17,6 +17,8 @@ mod line;
 mod nudge_geometry;
 #[path = "gestures/path_scale.rs"]
 mod path_scale;
+#[path = "gestures/range.rs"]
+mod range;
 
 /// A one-page document around `body`, with a color and two dimension
 /// tokens.

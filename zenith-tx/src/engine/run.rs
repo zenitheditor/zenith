@@ -7,7 +7,8 @@ use zenith_core::{Diagnostic, Document, KdlAdapter, KdlSource, Severity, validat
 
 use super::dispatch::apply_op;
 use super::lock::{node_is_locked, op_lock_targets};
-use crate::op::Transaction;
+use super::range;
+use crate::op::{Op, Transaction};
 use crate::result::{TxError, TxResult, TxStatus};
 
 /// Apply `tx` to `doc` and return a structured [`TxResult`].
@@ -56,11 +57,29 @@ pub fn run_transaction(doc: &Document, tx: &Transaction) -> Result<TxResult, TxE
             }
         }
 
+        // Every geometry value the op writes must stay finite and exact.
+        let targets: Vec<String> = op_lock_targets(op).into_iter().map(str::to_owned).collect();
+        let mut before = range::snapshot(&candidate, &targets);
+        let known = affected.len();
         apply_op(op, &mut candidate, &mut diagnostics, &mut affected);
+        for id in affected.iter().skip(known) {
+            if !before.iter().any(|(t, _)| t == id) {
+                before.push((id.clone(), Vec::new()));
+            }
+        }
+        range::check_nodes(&candidate, &|| op_name(op), &before, &mut diagnostics);
     }
 
     // 4. Post-apply validation and result finalization.
     finish_candidate(doc, source_before, candidate, diagnostics, affected)
+}
+
+/// The wire name of `op` (`nudge_geometry`, …).
+fn op_name(op: &Op) -> String {
+    serde_json::to_value(op)
+        .ok()
+        .and_then(|v| v.get("op").and_then(|n| n.as_str()).map(str::to_owned))
+        .unwrap_or_else(|| "op".to_owned())
 }
 
 pub(super) fn format_source(doc: &Document, label: &str) -> Result<String, TxError> {

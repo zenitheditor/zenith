@@ -3,6 +3,7 @@
 use zenith_core::{
     AnchorKind, Diagnostic, Dimension, Document, Node, PathAnchor as CorePathAnchor,
 };
+use zenith_geometry::math;
 use zenith_geometry::{GeometryError, Point2};
 
 use crate::op::OpPathHandle;
@@ -174,7 +175,7 @@ fn moved_handle_replacements(
         (Some(AnchorKind::Smooth), Some(opposite)) => {
             let vx = moved_selected.x - anchor_point.x;
             let vy = moved_selected.y - anchor_point.y;
-            let moved_distance = vx.hypot(vy);
+            let moved_distance = math::hypot(vx, vy);
             if !moved_distance.is_finite() || moved_distance == 0.0 {
                 return Err(Diagnostic::error(
                     "tx.invalid_geometry",
@@ -185,7 +186,7 @@ fn moved_handle_replacements(
             }
             let old_ox = opposite.x - anchor_point.x;
             let old_oy = opposite.y - anchor_point.y;
-            let old_distance = old_ox.hypot(old_oy);
+            let old_distance = math::hypot(old_ox, old_oy);
             Point2::new(
                 anchor_point.x - (vx / moved_distance) * old_distance,
                 anchor_point.y - (vy / moved_distance) * old_distance,
