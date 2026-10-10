@@ -3,13 +3,16 @@
 // the same scripted commands on every `examples/*.zen`. Their `doc.render`
 // PNG SHA-256, their gesture results (one node, and a selection: marquee
 // hits, the selection box, a snapped preview, and selection gestures), and
-// the text after each edit must be equal.
+// the text after each edit must be equal. With `--hashes`, the wasm page-1
+// PNG at scale 1 must also equal the pinned `<stem>/page-1.png` SHA-256 of
+// that manifest (`zenith-cli/tests/render_hashes.json`).
 //
 // Run: node cross_target.js --zenith <bin> --wasm <file.wasm> --chromium <bin>
-//        --examples <dir> [--gesture-sample <n>] [--out <dir>]
+//        --examples <dir> [--hashes <manifest.json>] [--gesture-sample <n>]
+//        [--out <dir>]
 // Prints one JSON line per example and a summary. Exit 0 when all are equal.
 
-import { mkdtempSync, readdirSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { Browser } from "./cdp.js";
@@ -158,6 +161,8 @@ async function main() {
   const browser = await Browser.launch(a.chromium);
   const names = readdirSync(a.examples).filter((n) => n.endsWith(".zen")).sort();
   const every = Number(a["gesture-sample"] ?? 1);
+  const pinned = a.hashes ? JSON.parse(readFileSync(a.hashes, "utf8")) : null;
+  let pinnedEqual = 0;
   let equal = 0;
   let gestured = 0;
   let commits = 0;
@@ -177,7 +182,11 @@ async function main() {
       const blob = was.__blob;
       delete was.__blob;
       delete was.__metrics;
-      const same = JSON.stringify(nat) === JSON.stringify(was) && blob === "equal";
+      // The wasm page-1 PNG against the manifest pin. A missing entry fails.
+      const pin = pinned ? (pinned[`${name.replace(/\.zen$/, "")}/page-1.png`] ?? "no manifest entry") : null;
+      const pinOk = pin === null || was.page?.sha === pin;
+      if (pinned && pinOk) pinnedEqual++;
+      const same = JSON.stringify(nat) === JSON.stringify(was) && blob === "equal" && pinOk;
       if (same) equal++;
       else bad.push(name);
       if (gestures && nat.steps) {
@@ -190,7 +199,7 @@ async function main() {
         selectionsOk += nat.multi.filter((c) => c.ok).length;
       }
       const diffKeys = Object.keys(nat).filter((k) => JSON.stringify(nat[k]) !== JSON.stringify(was[k]));
-      console.log(JSON.stringify({ example: name, equal: same, sha: nat.page?.sha?.slice(0, 12), blob, gestures: !!nat.steps, differ: diffKeys }));
+      console.log(JSON.stringify({ example: name, equal: same, sha: nat.page?.sha?.slice(0, 12), blob, pinned: pin === null ? null : pinOk ? "equal" : `expected ${pin}, wasm ${was.page?.sha}`, gestures: !!nat.steps, differ: diffKeys }));
       if (!same) console.log(JSON.stringify({ native: nat, wasm: was }).slice(0, 1500));
     }
   } finally {
@@ -198,7 +207,7 @@ async function main() {
     await host.close();
     rmSync(work, { recursive: true, force: true });
   }
-  console.log(JSON.stringify({ suite: "cross-target", examples: names.length, equal, gestureScripts: gestured, commits, commitsOk: committed, selectionCommits: selections, selectionCommitsOk: selectionsOk, differ: bad }));
+  console.log(JSON.stringify({ suite: "cross-target", examples: names.length, equal, pinnedEqual: pinned ? pinnedEqual : null, gestureScripts: gestured, commits, commitsOk: committed, selectionCommits: selections, selectionCommitsOk: selectionsOk, differ: bad }));
   process.exit(bad.length ? 1 : 0);
 }
 

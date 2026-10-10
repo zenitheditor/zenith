@@ -329,7 +329,8 @@ fn wasm_engine_passes_node_tests() {
 /// Native `zenith edit` and the wasm engine in Chromium give equal results
 /// on every example: the `doc.render` PNG SHA-256 (and the PNG blob the page
 /// builds), diagnostics, a viewport render, and a script of gestures with the
-/// text after each edit.
+/// text after each edit. The wasm page-1 PNG also equals its pin in
+/// `tests/render_hashes.json`.
 #[test]
 fn wasm_matches_native_on_every_example() {
     let (Some(node), Some(chromium)) = (node(), chromium()) else {
@@ -343,6 +344,7 @@ fn wasm_matches_native_on_every_example() {
     let script = crate_dir().join("tests/editor_e2e/cross_target.js");
     let zenith = PathBuf::from(env!("CARGO_BIN_EXE_zenith"));
     let examples = crate_dir().join("../examples");
+    let hashes = crate_dir().join("tests/render_hashes.json");
     run_node(
         &node,
         &script,
@@ -355,6 +357,8 @@ fn wasm_matches_native_on_every_example() {
             chromium.as_os_str(),
             "--examples".as_ref(),
             examples.as_os_str(),
+            "--hashes".as_ref(),
+            hashes.as_os_str(),
         ],
     );
 }

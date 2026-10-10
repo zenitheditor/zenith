@@ -45,6 +45,8 @@ cargo clippy --workspace --all-targets -- -D warnings  # no lints (warnings are 
 cargo fmt --all                                        # canonical formatting applied
 ```
 
+`zenith-cli/tests/render_hashes.json` pins the SHA-256 of every example's PNG, SVG, and PDF. After an intended output change, regenerate it with `ZENITH_UPDATE_HASHES=1 cargo test -p zenith-tool --test render_hashes` and commit it.
+
 If you change the browser editor UI, look at it. Build the release binary, then run:
 
 ```bash

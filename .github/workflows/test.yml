@@ -1,8 +1,13 @@
 # Reusable test suite. Called by ci.yml (PR gate) and release.yml (pre-publish
 # gate) so both run the exact same checks.
 #
-# The OS matrix is load-bearing: Zenith's hard rule is byte-identical output on
-# any machine, so the render/test suite must pass on Linux, macOS, and Windows.
+# Byte identity: `zenith-cli/tests/render_hashes.rs` pins one SHA-256 per
+# PNG, SVG, and PDF of every `examples/*.zen` page in
+# `zenith-cli/tests/render_hashes.json`. The `test` job runs it on Linux x64,
+# Linux arm64, macOS arm64, and Windows x64. The `render-hashes-macos-x64` job
+# runs it on macOS x64. The `editor-wasm` job checks the wasm page-1 PNG
+# against the same pins. One drifted byte on any of these targets fails CI.
+# Outputs outside the examples and their default render options are not pinned.
 
 name: Test
 
@@ -48,7 +53,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        # macos-latest is arm64. ubuntu-24.04-arm is free for public repos.
+        os: [ubuntu-latest, ubuntu-24.04-arm, macos-latest, windows-latest]
     steps:
       - uses: actions/checkout@v6
       - name: Install Rust
@@ -67,6 +73,21 @@ jobs:
       # required.
       - name: Run tests
         run: cargo test --workspace --all-features --locked
+
+  render-hashes-macos-x64:
+    name: Render hashes (macos-15-intel)
+    # The only x86_64 macOS target. It runs the pinned-hash test alone, not
+    # the whole suite, to keep the slow Intel runner short.
+    runs-on: macos-15-intel
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: render-hashes
+      - name: Pinned render hashes
+        run: cargo test -p zenith-tool --test render_hashes --locked
 
   editor-wasm:
     name: Editor on wasm (native-vs-wasm byte equality)
@@ -98,7 +119,8 @@ jobs:
           echo "ZENITH_E2E_WASM=$GITHUB_WORKSPACE/target/wasm32-wasip1/release-wasm/zenith-editor-wasm.wasm" >> "$GITHUB_ENV"
       - name: Page, static-host and native-vs-wasm tests
         # Runs the hash sweep over examples/*.zen: native `zenith edit` vs the
-        # wasm engine in Chromium. Any byte difference fails the test.
+        # wasm engine in Chromium, and the wasm page-1 PNG against
+        # zenith-cli/tests/render_hashes.json. Any byte difference fails it.
         run: cargo test -p zenith-tool --test editor_page --locked -- --nocapture
 
   msrv:
