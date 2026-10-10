@@ -33,21 +33,25 @@ export class SelectionController {
     }
   }
 
+  /**
+   * A click on the canvas at page point `x`, `y`: an intent (see
+   * `App.intents`), so a Shift+click right after a click extends the
+   * selection that click made, and a key after both acts on it.
+   */
   async canvasClick(x, y, event) {
     const app = this.app;
     const tolerance = CLICK_SLOP_PX / app.view.zoom;
-    const env = await app.engine.run("select.hit", {
-      x,
-      y,
-      tolerance,
-      extend: event.shiftKey,
+    const extend = event.shiftKey;
+    const changed = await app.intents.run(async () => {
+      const env = await app.engine.run("select.hit", { x, y, tolerance, extend });
+      if (!env.ok) {
+        app.notices.error("select.hit", env, { runOffer: (o) => app.runOffer(o) });
+        return false;
+      }
+      app.selectionIds = env.result.selection;
+      return true;
     });
-    if (!env.ok) {
-      app.notices.error("select.hit", env, { runOffer: (o) => app.runOffer(o) });
-      return;
-    }
-    app.selectionIds = env.result.selection;
-    await this.refresh("canvas");
+    if (changed) await this.refresh("canvas");
   }
 
   hover(x, y) {
@@ -123,24 +127,28 @@ export class SelectionController {
     this.cursorLater();
   }
 
+  /** Select the node at the code cursor (an intent, see `App.intents`). */
   async cursorNow() {
     const app = this.app;
-    if (!app.sync.synced()) {
-      // Byte offsets name the engine text: wait until the pane text is there.
-      this.cursorWaiting = true;
-      return;
-    }
-    const head = app.code.head();
-    // The keystroke batch already asked for this cursor in this text.
-    const f = this.frameCursor;
-    if (f && f.head === head && f.version === app.sync.version) return;
-    const offset = app.offsets().toByte(head);
-    const env = await app.engine.run("select.at_offset", { offset });
-    if (!env.ok) {
-      app.notices.error("select.at_offset", env);
-      return;
-    }
-    if (this.applyCursor(env.result)) await this.refresh("code");
+    const changed = await app.intents.run(async () => {
+      if (!app.sync.synced()) {
+        // Byte offsets name the engine text: wait until the pane text is there.
+        this.cursorWaiting = true;
+        return false;
+      }
+      const head = app.code.head();
+      // The keystroke batch already asked for this cursor in this text.
+      const f = this.frameCursor;
+      if (f && f.head === head && f.version === app.sync.version) return false;
+      const offset = app.offsets().toByte(head);
+      const env = await app.engine.run("select.at_offset", { offset });
+      if (!env.ok) {
+        app.notices.error("select.at_offset", env);
+        return false;
+      }
+      return this.applyCursor(env.result);
+    });
+    if (changed) await this.refresh("code");
   }
 
   /**
@@ -178,18 +186,31 @@ export class SelectionController {
     await this.refresh("document", { inspect });
   }
 
-  /** Select `ids` (layers panel). Switches to the page that holds them. */
+  /**
+   * Select `ids` (layers panel, Escape) as an intent (see `App.intents`).
+   * Switches to the page that holds them.
+   */
   async selectIds(ids, source) {
+    const app = this.app;
+    if (!(await app.intents.run(() => this.setNow(ids)))) return;
+    const page = this.pageOf(ids[0]);
+    if (page && page !== app.page) await this.goToPage(page, { refresh: false });
+    await this.refresh(source);
+  }
+
+  /**
+   * Inside an intent: `select.set` of `ids`, and take the reply's
+   * selection. `false` (and a notice) when the engine refused.
+   */
+  async setNow(ids) {
     const app = this.app;
     const env = await app.engine.run("select.set", { ids });
     if (!env.ok) {
       app.notices.error("select.set", env);
-      return;
+      return false;
     }
     app.selectionIds = env.result.selection;
-    const page = this.pageOf(ids[0]);
-    if (page && page !== app.page) await this.goToPage(page, { refresh: false });
-    await this.refresh(source);
+    return true;
   }
 
   /** The 1-based page whose layers hold `id`, if the outline has it. */

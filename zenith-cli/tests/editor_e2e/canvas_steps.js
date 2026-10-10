@@ -5,12 +5,56 @@
 // edited nodes' lines (and the tokens an edit creates), and the canvas
 // shows, pixel for pixel, the engine's render of the new source.
 
-import { A, STATE, check, focusOn, landed, pressLands, state, ready, settle, viewSized, viewportIs, bodyBackground, DARK_BG } from "./helpers.js";
+import { A, check, engineState, focusOn, keyOn, landed, pressLands, state, ready, settle, viewSized, viewportIs, bodyBackground, DARK_BG } from "./helpers.js";
 import {
-  ALT, CTRL, SHIFT, lineOf, onlyNodes, onlyNodesAndTokens, onlyBlock, centerOf, handleOf, drag,
-  dismissNotices, select, selectMany, selectedAs, groupHandle, previewShown,
+  ALT, CTRL, SHIFT, INTENTS_IDLE, lineOf, lineHas, sameText, textReport, onlyNodes, onlyNodesAndTokens, onlyBlock, centerOf, clickPage,
+  handleOf, drag, dismissNotices, select, selectMany, selectedAs, groupHandle, previewShown,
   canvasMatchesEngine, cornersOf, cornersMapped, setSnap,
 } from "./canvas_helpers.js";
+
+/**
+ * Hold the reply of the next canvas click's `select.hit` (a hover's
+ * `select.hit` asks with `select: false` and goes through) until
+ * `releaseClick`. The engine runs the click at once; only the page sees
+ * the reply late, as on a slow link.
+ */
+async function holdClick(page) {
+  await page.eval(`(() => {
+    const host = ${A}.host;
+    if (!window.__clickHold) {
+      const run = host.run;
+      host.run = async function (cmd, params, ...rest) {
+        const hold = window.__clickHold;
+        if (cmd !== 'select.hit' || params?.select === false || !hold?.armed) return run.call(this, cmd, params, ...rest);
+        hold.armed = false;
+        const env = await run.call(this, cmd, params, ...rest);
+        hold.arrived = true;
+        await hold.gate;
+        return env;
+      };
+    }
+    const hold = { armed: true, arrived: false };
+    hold.gate = new Promise((r) => (hold.open = r));
+    window.__clickHold = hold;
+    return true;
+  })()`);
+}
+
+/** Wait until the held click reached the engine and got its reply. */
+function clickArrived(page) {
+  return page.waitFor("window.__clickHold.arrived", "the held click reply");
+}
+
+/** Settle, focus the canvas, press `key` with `modifiers`, and wait until the edit landed (see `pressLands`). */
+async function pressOnViewport(page, key, modifiers, what) {
+  await focusOn(page, "#viewport");
+  return pressLands(page, key, modifiers, what);
+}
+
+/** Let the held click reply through. */
+function releaseClick(page) {
+  return page.eval("(() => { window.__clickHold.open(); return true; })()");
+}
 
 /** Drag a marquee band from page point `a` to `b`; `mid` runs before release. */
 async function band(page, a, b, { modifiers = 0, mid = null } = {}) {
@@ -48,7 +92,11 @@ async function toggle(page, field) {
   await page.eval(`(() => { document.querySelector('#inspector input[data-field="${field}"]').click(); return true; })()`);
 }
 
-/** Run inspector edit `edit` on `id`; check the diff names only `id` (and `tokens`). */
+/**
+ * Run inspector edit `edit` on `id`; check the diff names only `id` (and
+ * `tokens`). The result's `has(want)` checks that `id`'s new line holds
+ * `want` (see `lineHas`).
+ */
 async function inspectorEdit(page, id, edit, tokens = []) {
   await select(page, id);
   const before = await state(page);
@@ -56,7 +104,7 @@ async function inspectorEdit(page, id, edit, tokens = []) {
   await landed(page, before.version);
   const after = await state(page);
   onlyNodesAndTokens(before.text, after.text, [id], tokens);
-  return { before, after, line: lineOf(after.text, id) };
+  return { before, after, has: (want) => lineHas(after.text, id, want, before.text) };
 }
 
 export const steps = [
@@ -123,25 +171,24 @@ export const steps = [
           await previewShown(page);
           const ghosts = await page.eval("document.querySelectorAll('#overlay .ghost.member').length");
           check(ghosts === 2, `member ghosts ${ghosts}`);
-          check((await state(page)).text === before.text, "the text changed during the drag");
+          sameText((await state(page)).text, before.text, "the text changed during the drag");
           await shot("canvas-multi-drag");
         },
       });
       await landed(page, before.version);
       const after = await state(page);
       onlyNodes(before.text, after.text, ["a", "b"]);
-      check(lineOf(after.text, "a").includes("x=(px)70 y=(px)60"), lineOf(after.text, "a"));
-      check(lineOf(after.text, "b").includes("x=(px)210 y=(px)80"), lineOf(after.text, "b"));
+      lineHas(after.text, "a", "x=(px)70 y=(px)60", before.text);
+      lineHas(after.text, "b", "x=(px)210 y=(px)80", before.text);
       check(after.version === before.version + 1, "one edit, one version");
       cornersMapped(ca, await cornersOf(page, "a"), ([x, y]) => [x + 30, y + 20], "a");
       cornersMapped(cb, await cornersOf(page, "b"), ([x, y]) => [x + 30, y + 20], "b");
       const compared = await canvasMatchesEngine(page);
       await selectedAs(page, ["a", "b"]);
-      await focusOn(page, "#viewport");
-      const undone = await pressLands(page, "z", CTRL, "one undo of the move");
-      check(undone.text === before.text, "one undo did not restore the text before the move");
-      const redone = await pressLands(page, "Z", CTRL | SHIFT, "redo of the move");
-      check(redone.text === after.text, "redo did not restore the moved text");
+      const undone = await pressOnViewport(page, "z", CTRL, "one undo of the move");
+      sameText(undone.text, before.text, "one undo did not restore the text before the move");
+      const redone = await pressOnViewport(page, "Z", CTRL | SHIFT, "redo of the move");
+      sameText(redone.text, after.text, "redo did not restore the moved text");
       return { compared };
     },
   ],
@@ -185,69 +232,94 @@ export const steps = [
       await landed(page, before.version);
       const after = await state(page);
       onlyNodes(before.text, after.text, ["a", "b"]);
-      for (const id of ["a", "b"]) check(lineOf(after.text, id).includes("rotate=(deg)90"), lineOf(after.text, id));
+      for (const id of ["a", "b"]) lineHas(after.text, id, "rotate=(deg)90", before.text);
       const compared = await canvasMatchesEngine(page);
-      await focusOn(page, "#viewport");
-      const undone = await pressLands(page, "z", CTRL, "undo of the turn");
-      check(undone.text === before.text, "undo did not restore the text before the turn");
+      const undone = await pressOnViewport(page, "z", CTRL, "undo of the turn");
+      sameText(undone.text, before.text, "undo did not restore the text before the turn");
       return { compared };
+    },
+  ],
+  [
+    "a click or key while a click's reply is on the wire waits for it",
+    async ({ page }) => {
+      // A plain click on a (held), then ArrowRight at once: the nudge
+      // moves a only, the selection that click made.
+      await selectMany(page, ["a", "b"]);
+      const start = await state(page);
+      await holdClick(page);
+      await clickPage(page, await centerOf(page, "a"));
+      await clickArrived(page);
+      await keyOn(page, "#viewport", "ArrowRight");
+      check(JSON.stringify(await page.eval(`${A}.selectionIds`)) === '["a","b"]', "the held click changed the selection");
+      await releaseClick(page);
+      const moved = await landed(page, start.version, "the nudge after the click");
+      check(moved.version === start.version + 1, `version ${moved.version}, want ${start.version + 1}`);
+      onlyNodes(start.text, moved.text, ["a"]);
+      check(JSON.stringify(moved.sel) === '["a"]', `selection ${moved.sel}`);
+      // A plain click on b (held), then Shift+click on a: the Shift+click
+      // extends the selection the first click made, in the page and in
+      // the engine session.
+      await holdClick(page);
+      await clickPage(page, await centerOf(page, "b"));
+      await clickArrived(page);
+      await clickPage(page, await centerOf(page, "a"), SHIFT);
+      await releaseClick(page);
+      await page.waitFor(`${INTENTS_IDLE} && ${A}.events.calls === 0`, "both clicks to land");
+      await selectedAs(page, ["b", "a"]);
+      const session = await engineState(page);
+      check(JSON.stringify(session.selection) === '["b","a"]', `engine selection ${JSON.stringify(session.selection)}`);
+      await focusOn(page, "#viewport");
+      const undone = await pressLands(page, "z", CTRL, "undo of the nudge");
+      sameText(undone.text, start.text, "undo did not restore the text before the nudge");
+      return {};
     },
   ],
   [
     "keys act on the whole selection: arrows, Ctrl+arrows, brackets, Ctrl+D, Delete",
     async ({ page }) => {
+      // Back-to-back keys: the page runs them one by one, each on the
+      // selection and the text the last one left.
       await selectMany(page, ["a", "b"]);
       const start = await state(page);
-      await focusOn(page, "#viewport");
-      await page.key("ArrowRight");
-      await page.key("ArrowRight", SHIFT);
-      await page.waitFor(`(${STATE}).version === ${start.version + 2}`, "two nudges");
-      await settle(page);
-      let now = await state(page);
+      await keyOn(page, "#viewport", "ArrowRight");
+      await keyOn(page, "#viewport", "ArrowRight", SHIFT);
+      let now = await landed(page, start.version, "two nudges");
+      check(now.version === start.version + 2, `version ${now.version}, want ${start.version + 2}`);
       onlyNodes(start.text, now.text, ["a", "b"]);
-      const xa = (t) => Number(/rect id="a" x=\(px\)([0-9.]+)/.exec(t)[1]);
-      check(xa(now.text) === xa(start.text) + 11, `a moved ${xa(now.text) - xa(start.text)}`);
+      const xOf = (t, id) => Number(new RegExp(`rect id="${id}" x=\\(px\\)([0-9.]+)`).exec(t)[1]);
+      for (const id of ["a", "b"]) {
+        check(xOf(now.text, id) === xOf(start.text, id) + 11, `${id} moved ${xOf(now.text, id) - xOf(start.text, id)}, want 11`);
+      }
+      check(JSON.stringify(now.sel) === '["a","b"]', `selection after the nudges ${now.sel}`);
       const sized = now;
-      await page.key("ArrowDown", CTRL);
-      await page.waitFor(`(${STATE}).version === ${sized.version + 1}`, "a selection resize");
-      await settle(page);
-      now = await state(page);
+      now = await pressOnViewport(page, "ArrowDown", CTRL, "a selection resize");
+      check(now.version === sized.version + 1, `version ${now.version}, want ${sized.version + 1}`);
       onlyNodes(sized.text, now.text, ["a", "b"]);
       const turned = now;
-      await page.key("]");
-      await page.waitFor(`(${STATE}).version === ${turned.version + 1}`, "a selection turn");
-      await settle(page);
-      now = await state(page);
+      now = await pressOnViewport(page, "]", 0, "a selection turn");
+      check(now.version === turned.version + 1, `version ${now.version}, want ${turned.version + 1}`);
       onlyNodes(turned.text, now.text, ["a", "b"]);
-      for (const id of ["a", "b"]) check(lineOf(now.text, id).includes("rotate=(deg)15"), lineOf(now.text, id));
+      for (const id of ["a", "b"]) lineHas(now.text, id, "rotate=(deg)15", turned.text);
       await canvasMatchesEngine(page);
       // Ctrl+D copies both; undo removes the copies.
       await selectMany(page, ["a", "b"]);
       const dup = await state(page);
-      await focusOn(page, "#viewport");
-      await page.key("d", CTRL);
-      await landed(page, dup.version);
-      const copied = await state(page);
+      const copied = await pressOnViewport(page, "d", CTRL, "the duplicate");
       const change = onlyNodes(dup.text, copied.text, ["a-copy", "b-copy"]);
       check(change.removed.length === 0 && change.added.length === 2, `duplicate changed ${JSON.stringify(change)}`);
       check(JSON.stringify(copied.sel) === '["a-copy","b-copy"]', `selection ${copied.sel}`);
       await canvasMatchesEngine(page);
-      await focusOn(page, "#viewport");
-      const undup = await pressLands(page, "z", CTRL, "undo of the duplicate");
-      check(undup.text === dup.text, "undo did not remove the copies");
+      const undup = await pressOnViewport(page, "z", CTRL, "undo of the duplicate");
+      sameText(undup.text, dup.text, "undo did not remove the copies");
       // Delete removes both (and the comment line above a); undo restores.
       await selectMany(page, ["a", "b"]);
       const del = await state(page);
-      await focusOn(page, "#viewport");
-      await page.key("Delete");
-      await landed(page, del.version);
-      const gone = await state(page);
+      const gone = await pressOnViewport(page, "Delete", 0, "the delete");
       const removed = onlyNodes(del.text, gone.text, ["a", "b"], { comments: true });
       check(removed.added.length === 0, `delete added ${removed.added}`);
       await canvasMatchesEngine(page);
-      await focusOn(page, "#viewport");
-      const undel = await pressLands(page, "z", CTRL, "undo of the delete");
-      check(undel.text === del.text, "undo did not restore the deleted nodes");
+      const undel = await pressOnViewport(page, "z", CTRL, "undo of the delete");
+      sameText(undel.text, del.text, "undo did not restore the deleted nodes");
       return {};
     },
   ],
@@ -288,12 +360,12 @@ export const steps = [
       await page.waitFor("!!document.querySelector('[data-key=\"error:gesture.commit\"]')", "the rejection notice");
       const notice = await page.eval("document.querySelector('[data-key=\"error:gesture.commit\"]').textContent");
       check(notice.includes("tx.token_bound"), `notice: ${notice}`);
-      check((await state(page)).text === before.text, "a refused gesture changed the text");
+      sameText((await state(page)).text, before.text, "a refused gesture changed the text");
       await page.eval("[...document.querySelectorAll('[data-key=\"error:gesture.commit\"] button')].find((b) => b.textContent === 'Detach from token').click()");
       await landed(page, before.version);
       const after = await state(page);
       onlyNodes(before.text, after.text, ["b", "tok"]);
-      check(lineOf(after.text, "tok").includes("x=(px)60"), lineOf(after.text, "tok"));
+      lineHas(after.text, "tok", "x=(px)60", before.text);
       const compared = await canvasMatchesEngine(page);
       return { compared };
     },
@@ -317,12 +389,11 @@ export const steps = [
       await landed(page, before.version);
       let after = await state(page);
       onlyNodes(before.text, after.text, ["dock"]);
-      check(lineOf(after.text, "dock").includes("x=(px)500"), lineOf(after.text, "dock"));
+      lineHas(after.text, "dock", "x=(px)500", before.text);
       check(!(await page.eval("!!document.querySelector('#overlay .guide')")), "a guide stayed after release");
       const compared = await canvasMatchesEngine(page);
-      await focusOn(page, "#viewport");
-      const unsnap = await pressLands(page, "z", CTRL, "undo of the snapped move");
-      check(unsnap.text === before.text, "undo did not restore the text before the snapped move");
+      const unsnap = await pressOnViewport(page, "z", CTRL, "undo of the snapped move");
+      sameText(unsnap.text, before.text, "undo did not restore the text before the snapped move");
       // Ctrl held during a move: no snap. The undo moved the version, so
       // each drag waits for a version past the one it started at.
       await select(page, "dock");
@@ -330,10 +401,9 @@ export const steps = [
       await drag(page, from, { x: from.x + 37, y: from.y }, { modifiers: CTRL });
       await landed(page, unsnapped);
       after = await state(page);
-      check(lineOf(after.text, "dock").includes("x=(px)497"), lineOf(after.text, "dock"));
-      await focusOn(page, "#viewport");
-      const unctrl = await pressLands(page, "z", CTRL, "undo of the Ctrl move");
-      check(unctrl.text === before.text, "undo did not restore the text before the Ctrl move");
+      lineHas(after.text, "dock", "x=(px)497", before.text);
+      const unctrl = await pressOnViewport(page, "z", CTRL, "undo of the Ctrl move");
+      sameText(unctrl.text, before.text, "undo did not restore the text before the Ctrl move");
       // Snapping off: no snap.
       await setSnap(page, false);
       await select(page, "dock");
@@ -341,7 +411,7 @@ export const steps = [
       await drag(page, from, { x: from.x + 37, y: from.y });
       await landed(page, snapOff);
       after = await state(page);
-      check(lineOf(after.text, "dock").includes("x=(px)497"), lineOf(after.text, "dock"));
+      lineHas(after.text, "dock", "x=(px)497", before.text);
       await canvasMatchesEngine(page);
       return { compared };
     },
@@ -379,16 +449,20 @@ export const steps = [
     "inspector: raw colors with alpha, tokens, stroke width, and radius",
     async ({ page, shot }) => {
       const fill = await inspectorEdit(page, "a", () => typeInto(page, "fill-value", "#ff000080"), ["color.custom.ff000080"]);
-      check(fill.line.includes('fill=(token)"color.custom.ff000080"'), fill.line);
-      check(fill.after.text.includes('token id="color.custom.ff000080" type="color" value="#ff000080"'), "no new color token");
+      fill.has('fill=(token)"color.custom.ff000080"');
+      check(
+        fill.after.text.includes('token id="color.custom.ff000080" type="color" value="#ff000080"'),
+        textReport("no new color token", fill.before.text, fill.after.text),
+      );
       const mint = await inspectorEdit(page, "a", () => pick(page, "fill", "color.mint"));
-      check(mint.line.includes('fill=(token)"color.mint"'), mint.line);
+      mint.has('fill=(token)"color.mint"');
+      // An equal token is reused.
       const stroke = await inspectorEdit(page, "a", () => typeInto(page, "stroke-value", "#1e293b"));
-      check(stroke.line.includes('stroke=(token)"color.ink"'), `an equal token is reused: ${stroke.line}`);
+      stroke.has('stroke=(token)"color.ink"');
       const width = await inspectorEdit(page, "a", () => typeInto(page, "stroke_width-value", "3"), ["size.stroke-width.3"]);
-      check(width.line.includes('stroke-width=(token)"size.stroke-width.3"'), width.line);
+      width.has('stroke-width=(token)"size.stroke-width.3"');
       const radius = await inspectorEdit(page, "a", () => typeInto(page, "radius-value", "8"), ["size.radius.8"]);
-      check(radius.line.includes('radius=(token)"size.radius.8"'), radius.line);
+      radius.has('radius=(token)"size.radius.8"');
       const compared = await canvasMatchesEngine(page);
       await select(page, "a");
       await shot("canvas-inspector-style");
@@ -399,13 +473,14 @@ export const steps = [
     "inspector: font family, size, weight, alignment, span text",
     async ({ page }) => {
       const family = await inspectorEdit(page, "title", () => pick(page, "font_family", "font.serif"));
-      check(family.line.includes('font-family=(token)"font.serif"'), family.line);
+      family.has('font-family=(token)"font.serif"');
       const size = await inspectorEdit(page, "title", () => typeInto(page, "font_size-value", "22"), ["size.font-size.22"]);
-      check(size.line.includes('font-size=(token)"size.font-size.22"'), size.line);
+      size.has('font-size=(token)"size.font-size.22"');
+      // An equal token is reused.
       const weight = await inspectorEdit(page, "title", () => typeInto(page, "font_weight-value", "700"));
-      check(weight.line.includes('font-weight=(token)"weight.bold"'), `an equal token is reused: ${weight.line}`);
+      weight.has('font-weight=(token)"weight.bold"');
       const align = await inspectorEdit(page, "title", () => pick(page, "align", "center"));
-      check(align.line.includes('align="center"'), align.line);
+      align.has('align="center"');
       await canvasMatchesEngine(page);
       // Span text of a multi-span text keeps the span's own weight.
       await select(page, "rich");
@@ -417,7 +492,7 @@ export const steps = [
       const change = onlyBlock(before.text, after.text, "rich");
       check(
         change.added.length === 1 && change.added[0].trim() === 'span "strong" font-weight=(token)"weight.bold"',
-        JSON.stringify(change),
+        textReport("the span edit", before.text, after.text),
       );
       const compared = await canvasMatchesEngine(page);
       return { compared };
@@ -427,7 +502,7 @@ export const steps = [
     "inspector: visibility and lock",
     async ({ page }) => {
       const hide = await inspectorEdit(page, "b", () => toggle(page, "visible"));
-      check(hide.line.includes("visible=#false"), hide.line);
+      hide.has("visible=#false");
       await canvasMatchesEngine(page);
       // A hidden node draws no box: select it from the layers or the code.
       await page.eval(`${A}.selection.selectIds(['b'], 'test').then(() => true)`);
@@ -437,9 +512,9 @@ export const steps = [
       await landed(page, shownBefore.version);
       const shown = await state(page);
       onlyNodes(shownBefore.text, shown.text, ["b"]);
-      check(lineOf(shown.text, "b").includes("visible=#true"), lineOf(shown.text, "b"));
+      lineHas(shown.text, "b", "visible=#true", shownBefore.text);
       const lock = await inspectorEdit(page, "b", () => toggle(page, "locked"));
-      check(lock.line.includes("locked=#true"), lock.line);
+      lock.has("locked=#true");
       // A locked node still unlocks from the inspector.
       await page.eval(`${A}.selection.selectIds(['b'], 'test').then(() => true)`);
       await page.waitFor("!!document.querySelector('#inspector input[data-field=\"locked\"]')", "the locked box");
@@ -448,7 +523,7 @@ export const steps = [
       await landed(page, lockedBefore.version);
       const unlocked = await state(page);
       onlyNodes(lockedBefore.text, unlocked.text, ["b"]);
-      check(lineOf(unlocked.text, "b").includes("locked=#false"), lineOf(unlocked.text, "b"));
+      lineHas(unlocked.text, "b", "locked=#false", lockedBefore.text);
       const compared = await canvasMatchesEngine(page);
       return { compared };
     },

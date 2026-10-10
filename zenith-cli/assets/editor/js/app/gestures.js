@@ -125,27 +125,34 @@ export class GestureController {
    * node is under the point (or, with several selected, the point is in the
    * selection box), else the topmost node there (which becomes the
    * selection). `null` (a marquee) when nothing, or only a locked node, is
-   * there.
+   * there. An intent (see `App.intents`): it reads the selection the
+   * clicks before it made, and the outlines of that selection (the
+   * overlay can still show the one before).
    */
   async target(p) {
     const app = this.app;
-    const env = await app.engine.run("select.hit", { x: p.x, y: p.y, tolerance: HIT_PX / app.view.zoom, select: false });
-    if (!env.ok) return null;
-    const hits = env.result.hits;
-    const sel = app.selectionIds;
-    const overlay = app.overlay;
-    if (sel.length > 1 && overlay.group && (hits.some((h) => sel.includes(h.id)) || inside(overlay.group.corners, p))) {
-      return { nodes: [...sel], item: overlay.group };
-    }
-    if (sel.length === 1 && hits.some((h) => h.id === sel[0])) {
-      const item = overlay.single();
-      return { node: sel[0], item: item?.id === sel[0] ? item : null };
-    }
-    const top = hits[0];
-    if (!top || top.locked) return null;
-    await app.selection.selectIds([top.id], "canvas");
-    const item = overlay.single();
-    return { node: top.id, item: item?.id === top.id ? item : null };
+    const found = await app.intents.run(async () => {
+      const env = await app.engine.run("select.hit", { x: p.x, y: p.y, tolerance: HIT_PX / app.view.zoom, select: false });
+      if (!env.ok) return null;
+      const hits = env.result.hits;
+      const sel = [...app.selectionIds];
+      if (sel.length > 1) {
+        const group = await app.selection.groupOutline(sel);
+        if (group?.corners && (hits.some((h) => sel.includes(h.id)) || inside(group.corners, p))) {
+          return { nodes: sel, item: group };
+        }
+      }
+      if (sel.length === 1 && hits.some((h) => h.id === sel[0])) {
+        return { node: sel[0], item: await app.selection.outline(sel[0]) };
+      }
+      const top = hits[0];
+      if (!top || top.locked) return null;
+      await app.selection.setNow([top.id]);
+      return { node: top.id, item: await app.selection.outline(top.id), picked: true };
+    });
+    if (!found?.picked) return found;
+    await app.selection.refresh("canvas");
+    return { node: found.node, item: found.item };
   }
 
   /** The marquee band moved: draw it and say what release does. */
@@ -228,21 +235,41 @@ export class GestureController {
     this.previewed = JSON.stringify(params);
   }
 
-  /** The drag ended (`commit`) or was cancelled. */
+  /**
+   * The drag ended (`commit`) or was cancelled. From the release on it is
+   * an intent (see `App.intents`): a key pressed after the release acts
+   * after the commit, or on the selection the band made.
+   */
   async finish(drag, commit) {
     const app = this.app;
     this.want = null;
     this.hint(null);
+    const band = await app.intents.run(() => this.release(drag, commit));
+    if (!band) return;
+    if (!band.ok) {
+      app.notices.error("select.marquee", band);
+      return;
+    }
+    await app.selection.refresh("canvas");
+    const n = band.result.selection.length;
+    app.announce(n ? `${n} node${n === 1 ? "" : "s"} selected.` : "Nothing selected.");
+  }
+
+  /**
+   * Inside an intent: commit or drop `drag`. Resolves the `select.marquee`
+   * envelope of a released band, else `null`.
+   */
+  async release(drag, commit) {
+    const app = this.app;
     if (drag.resolving) await drag.resolving;
     if (drag.marquee) {
       app.overlay.setMarquee(null);
       if (drag === this.drag) this.drag = null;
-      if (commit) await this.select(drag);
-      return;
+      return commit ? this.selectNow(drag) : null;
     }
     if (!commit || drag.blocked || drag.inert || !drag.bound || drag.still()) {
       this.clear(drag);
-      return;
+      return null;
     }
     const params = drag.params();
     // A preview reply that lands while the commit runs must not show.
@@ -263,7 +290,7 @@ export class GestureController {
       if (!env.result.changed) app.overlay.setGhost(null);
       const what = params.nodes ? `${params.nodes.length} nodes` : params.node;
       app.announce(`${verb(drag.action)} ${what}.`);
-      return;
+      return null;
     }
     app.renderer.clearPreview();
     app.overlay.setGhost(null);
@@ -274,17 +301,22 @@ export class GestureController {
         title: "Gesture dropped.",
         message: "The text changed while you dragged, so nothing was applied. Drag again.",
       });
-      return;
+      return null;
     }
     app.notices.error("gesture.commit", env, { runOffer: (o) => app.runOffer(o) });
+    return null;
   }
 
-  /** Release of a marquee band: select what it touches (or holds). */
-  async select(drag) {
+  /**
+   * Inside an intent: `select.marquee` of a released band, and take the
+   * reply's selection. Resolves the envelope, or `null` for a band too
+   * small to select.
+   */
+  async selectNow(drag) {
     const app = this.app;
     const b = drag.band();
     const zoom = app.view.zoom || 1;
-    if (Math.abs(b.x1 - b.x0) * zoom < BAND_MIN_PX && Math.abs(b.y1 - b.y0) * zoom < BAND_MIN_PX) return;
+    if (Math.abs(b.x1 - b.x0) * zoom < BAND_MIN_PX && Math.abs(b.y1 - b.y0) * zoom < BAND_MIN_PX) return null;
     const env = await app.engine.run("select.marquee", {
       x: b.x0,
       y: b.y0,
@@ -293,14 +325,8 @@ export class GestureController {
       contain: drag.mods.alt,
       extend: drag.mods.shift,
     });
-    if (!env.ok) {
-      app.notices.error("select.marquee", env);
-      return;
-    }
-    app.selectionIds = env.result.selection;
-    await app.selection.refresh("canvas");
-    const n = env.result.selection.length;
-    app.announce(n ? `${n} node${n === 1 ? "" : "s"} selected.` : "Nothing selected.");
+    if (env.ok) app.selectionIds = env.result.selection;
+    return env;
   }
 
   clear(drag) {

@@ -114,6 +114,8 @@ async function main() {
         const page_ = await within(page.eval(DIAGNOSIS), DIAGNOSIS_GUARD_MS, "the diagnosis").catch((e) => `no diagnosis: ${e.message}`);
         await within(ctx.shot(`failed-${name.replace(/\W+/g, "-")}`), DIAGNOSIS_GUARD_MS, "the screenshot").catch(() => {});
         results.push({ step: name, ok: false, ms, error: err.message, page: page_, pageErrors: page.errors.slice() });
+        // A check message can hold whole sources: print it unescaped too.
+        if (err.message.includes("\n")) console.error(`--- step "${name}" failed ---\n${err.message}\n--- end of step "${name}" ---`);
         page.errors.length = 0;
         if (err instanceof Hung) {
           console.log(JSON.stringify(results.at(-1)));

@@ -4,11 +4,17 @@
 // edited node's lines (before/after text compare), and the canvas shows,
 // pixel for pixel, the engine's render of the new source.
 
-import { A, STATE, check, focusOn, landed, pressLands, state, settle, ready, clientOf, agentCommand, viewSized, nextFrame, bodyBackground, DARK_BG } from "./helpers.js";
+import { A, check, focusOn, keyOn, landed, pressLands, state, settle, ready, clientOf, agentCommand, viewSized, nextFrame, bodyBackground, DARK_BG } from "./helpers.js";
 import {
-  ALT, CTRL, SHIFT, lineChange, onlyNodes, lineOf, inspect, centerOf, handleOf, drag, clickPage,
+  ALT, CTRL, SHIFT, INTENTS_IDLE, lineChange, onlyNodes, lineOf, lineHas, sameText, textReport, inspect, centerOf, handleOf, drag, clickPage,
   dismissNotices, select, previewShown, canvasMatchesEngine, setSnap,
 } from "./canvas_helpers.js";
+
+/** Focus the canvas, press `key` with `modifiers`, and wait until the edit landed (see `pressLands`). */
+async function pressOnViewport(page, key, modifiers, what) {
+  await focusOn(page, "#viewport");
+  return pressLands(page, key, modifiers, what);
+}
 
 export const steps = [
   [
@@ -60,20 +66,19 @@ export const steps = [
               return !h.hidden && h.textContent.startsWith('Δx 30  Δy 20') && !g.want && !g.flight; })()`,
             "the drag hint at the release point",
           );
-          check((await state(page)).text === before.text, "the text changed during the drag");
+          sameText((await state(page)).text, before.text, "the text changed during the drag");
           await shot("gesture-mid-drag");
         },
       });
       await landed(page, before.version);
       const after = await state(page);
       onlyNodes(before.text, after.text, ["box"]);
-      check(lineOf(after.text, "box").includes("x=(px)70 y=(px)60"), lineOf(after.text, "box"));
+      lineHas(after.text, "box", "x=(px)70 y=(px)60", before.text);
       const compared = await canvasMatchesEngine(page);
-      await focusOn(page, "#viewport");
-      const undone = await pressLands(page, "z", CTRL, "undo of the move");
-      check(undone.text === before.text, "undo did not restore the text before the move");
-      const redone = await pressLands(page, "Z", CTRL | SHIFT, "redo of the move");
-      check(redone.text === after.text, "redo did not restore the moved text");
+      const undone = await pressOnViewport(page, "z", CTRL, "undo of the move");
+      sameText(undone.text, before.text, "undo did not restore the text before the move");
+      const redone = await pressOnViewport(page, "Z", CTRL | SHIFT, "redo of the move");
+      sameText(redone.text, after.text, "redo did not restore the moved text");
       return { compared };
     },
   ],
@@ -127,7 +132,7 @@ export const steps = [
       await landed(page, before.version);
       const after = await state(page);
       onlyNodes(before.text, after.text, ["spin"]);
-      check(lineOf(after.text, "spin").includes("rotate=(deg)90"), lineOf(after.text, "spin"));
+      lineHas(after.text, "spin", "rotate=(deg)90", before.text);
       const compared = await canvasMatchesEngine(page);
       await shot("gesture-rotated");
       return { line: lineOf(after.text, "spin"), compared };
@@ -137,14 +142,16 @@ export const steps = [
     "arrow keys nudge 1 px, Shift 10 px",
     async ({ page }) => {
       await select(page, "box");
-      const before = await state(page);
-      await focusOn(page, "#viewport");
-      for (let i = 0; i < 3; i++) await page.key("ArrowRight");
-      await page.key("ArrowDown", SHIFT);
-      await page.waitFor(`(${STATE}).text.includes('rect id="box" x=(px)73 y=(px)70')`, "the nudges to land");
       await settle(page);
-      const after = await state(page);
+      const before = await state(page);
+      // Back-to-back keys: the page runs them one by one, each on the text
+      // the last one left.
+      for (let i = 0; i < 3; i++) await keyOn(page, "#viewport", "ArrowRight");
+      await keyOn(page, "#viewport", "ArrowDown", SHIFT);
+      // Each key queued its intent before `keyOn` returned: settled means all four ran.
+      const after = await landed(page, before.version, "the four nudges");
       onlyNodes(before.text, after.text, ["box"]);
+      lineHas(after.text, "box", 'rect id="box" x=(px)73 y=(px)70', before.text);
       check(after.version === before.version + 4, `version ${after.version}, want ${before.version + 4}`);
       const compared = await canvasMatchesEngine(page);
       return { line: lineOf(after.text, "box"), compared };
@@ -165,7 +172,8 @@ export const steps = [
       // No commit may follow the cancel: wait until no call is left.
       await settle(page);
       const after = await state(page);
-      check(after.text === before.text && after.version === before.version, "a cancelled drag changed the text");
+      sameText(after.text, before.text, "a cancelled drag changed the text");
+      check(after.version === before.version, `a cancelled drag moved the version to ${after.version} from ${before.version}`);
       return {};
     },
   ],
@@ -192,14 +200,14 @@ export const steps = [
       const buttons = await page.eval("[...document.querySelectorAll('[data-key=\"error:gesture.commit\"] button')].map((b) => b.textContent)");
       check(buttons.includes("Detach from token"), `offer buttons: ${buttons}`);
       await shot("gesture-rejection");
-      check((await state(page)).text === before.text, "a refused gesture changed the text");
+      sameText((await state(page)).text, before.text, "a refused gesture changed the text");
       await page.eval("[...document.querySelectorAll('[data-key=\"error:gesture.commit\"] button')].find((b) => b.textContent === 'Detach from token').click()");
       await landed(page, before.version);
       const offered = await state(page);
       onlyNodes(before.text, offered.text, ["bound"]);
-      check(lineOf(offered.text, "bound").includes("x=(px)320"), lineOf(offered.text, "bound"));
-      const undetached = await pressLands(page, "z", CTRL, "undo of the detach");
-      check(undetached.text === before.text, "undo did not restore the text before the detach");
+      lineHas(offered.text, "bound", "x=(px)320", before.text);
+      const undetached = await pressOnViewport(page, "z", CTRL, "undo of the detach");
+      sameText(undetached.text, before.text, "undo did not restore the text before the detach");
       // Alt detaches during the drag itself.
       await select(page, "bound");
       const undone = await state(page);
@@ -207,7 +215,7 @@ export const steps = [
       await landed(page, undone.version);
       const alt = await state(page);
       onlyNodes(before.text, alt.text, ["bound"]);
-      check(lineOf(alt.text, "bound").includes("x=(px)320"), lineOf(alt.text, "bound"));
+      lineHas(alt.text, "bound", "x=(px)320", before.text);
       check(!(await page.eval("!!document.querySelector('[data-key=\"error:gesture.commit\"]')")), "the rejection notice stayed");
       const compared = await canvasMatchesEngine(page);
       return { compared };
@@ -222,7 +230,7 @@ export const steps = [
       await landed(page, before.version);
       const after = await state(page);
       onlyNodes(before.text, after.text, ["follow"]);
-      check(lineOf(after.text, "follow").includes("anchor-gap=(px)35"), lineOf(after.text, "follow"));
+      lineHas(after.text, "follow", "anchor-gap=(px)35", before.text);
       check(JSON.stringify(after.sel) === '["follow"]', `selection ${after.sel}`);
       const note = await page.eval("document.querySelector('[data-key=notes]')?.textContent ?? ''");
       check(note.includes("x shift dropped"), `notes notice: ${note}`);
@@ -239,7 +247,7 @@ export const steps = [
       await page.waitFor("!!document.querySelector('[data-key=\"error:gesture.commit\"]')", "the layout notice");
       const buttons = await page.eval("[...document.querySelectorAll('[data-key=\"error:gesture.commit\"] button')].map((b) => b.textContent)");
       check(buttons.includes("Reorder in layout") && buttons.includes("Take out of layout"), `offer buttons: ${buttons}`);
-      check((await state(page)).text === before.text, "a refused gesture changed the text");
+      sameText((await state(page)).text, before.text, "a refused gesture changed the text");
       await page.eval("[...document.querySelectorAll('[data-key=\"error:gesture.commit\"] button')].find((b) => b.textContent === 'Reorder in layout').click()");
       await landed(page, before.version);
       const after = await state(page);
@@ -262,12 +270,12 @@ export const steps = [
       await page.waitFor("!!document.querySelector('[data-key=\"error:gesture.commit\"]')", "the computed size notice");
       const buttons = await page.eval("[...document.querySelectorAll('[data-key=\"error:gesture.commit\"] button')].map((b) => b.textContent)");
       check(buttons.includes("Set a fixed size"), `offer buttons: ${buttons}`);
-      check((await state(page)).text === before.text, "a refused resize changed the text");
+      sameText((await state(page)).text, before.text, "a refused resize changed the text");
       await page.eval("[...document.querySelectorAll('[data-key=\"error:gesture.commit\"] button')].find((b) => b.textContent === 'Set a fixed size').click()");
       await landed(page, before.version);
       const after = await state(page);
       onlyNodes(before.text, after.text, ["grow"]);
-      check(lineOf(after.text, "grow").includes("w=(px)120"), lineOf(after.text, "grow"));
+      lineHas(after.text, "grow", "w=(px)120", before.text);
       const compared = await canvasMatchesEngine(page);
       return { compared };
     },
@@ -277,24 +285,21 @@ export const steps = [
     async ({ page }) => {
       // 3 px below a 2 px rule: inside the 4 px slop.
       await dismissNotices(page);
+      await page.waitFor(INTENTS_IDLE, "the intents before the click");
       await clickPage(page, { x: 490, y: 333 });
-      await page.waitFor(`JSON.stringify(${A}.selectionIds) === '["rule"]'`, "rule selected near its stroke");
+      await page.waitFor(`${INTENTS_IDLE} && JSON.stringify(${A}.selectionIds) === '["rule"]'`, "rule selected near its stroke");
       await page.waitFor("document.querySelectorAll('#overlay .handle.endpoint').length === 2", "two endpoint handles");
       const before = await state(page);
-      await focusOn(page, "#viewport");
-      await page.key("Delete");
-      await landed(page, before.version);
-      const after = await state(page);
+      const after = await pressOnViewport(page, "Delete", 0, "the delete");
       const change = onlyNodes(before.text, after.text, ["rule"], { comments: true });
-      check(change.added.length === 0 && change.removed.length === 2, `delete changed ${JSON.stringify(change)}`);
+      check(change.added.length === 0 && change.removed.length === 2, textReport("the delete", before.text, after.text));
       check(after.sel.length === 0, `selection after delete: ${after.sel}`);
       await page.waitFor("!!document.querySelector('[data-key=comments]')", "the removed comments notice");
       const removed = await page.eval("document.querySelector('[data-key=comments] .notice-detail').textContent");
       check(removed === "line 27: // A thin rule.", `removed comments: ${JSON.stringify(removed)}`);
       const compared = await canvasMatchesEngine(page);
-      await focusOn(page, "#viewport");
-      const undone = await pressLands(page, "z", CTRL, "undo of the delete");
-      check(undone.text === before.text, "undo did not restore the deleted node");
+      const undone = await pressOnViewport(page, "z", CTRL, "undo of the delete");
+      sameText(undone.text, before.text, "undo did not restore the deleted node");
       return { compared };
     },
   ],
@@ -302,16 +307,16 @@ export const steps = [
     "a line endpoint drag moves that end only",
     async ({ page }) => {
       await dismissNotices(page);
+      await page.waitFor(INTENTS_IDLE, "the intents before the click");
       await clickPage(page, { x: 490, y: 330 });
-      await page.waitFor(`JSON.stringify(${A}.selectionIds) === '["rule"]'`, "rule selected");
+      await page.waitFor(`${INTENTS_IDLE} && JSON.stringify(${A}.selectionIds) === '["rule"]'`, "rule selected");
       const before = await state(page);
       const end = await handleOf(page, "rule", "end");
       await drag(page, end, { x: end.x, y: end.y - 20 });
       await landed(page, before.version);
       const after = await state(page);
       onlyNodes(before.text, after.text, ["rule"]);
-      check(lineOf(after.text, "rule").includes("x2=(px)560 y2=(px)310"), lineOf(after.text, "rule"));
-      check(lineOf(after.text, "rule").includes("x1=(px)420 y1=(px)330"), lineOf(after.text, "rule"));
+      lineHas(after.text, "rule", ["x2=(px)560 y2=(px)310", "x1=(px)420 y1=(px)330"], before.text);
       const compared = await canvasMatchesEngine(page);
       return { compared };
     },
@@ -330,7 +335,7 @@ export const steps = [
       const change = lineChange(before.text, after.text);
       check(
         JSON.stringify(change) === JSON.stringify({ removed: ["        point x=(px)440 y=(px)250"], added: ["        point x=(px)440 y=(px)240"] }),
-        `vertex drag changed ${JSON.stringify(change)}`,
+        textReport("the vertex drag", before.text, after.text),
       );
       const compared = await canvasMatchesEngine(page);
       return { compared };
@@ -341,16 +346,13 @@ export const steps = [
     async ({ page }) => {
       await select(page, "box");
       const before = await state(page);
-      await focusOn(page, "#viewport");
-      await page.key("d", CTRL);
-      await landed(page, before.version);
-      const after = await state(page);
+      const after = await pressOnViewport(page, "d", CTRL, "the duplicate");
       const change = onlyNodes(before.text, after.text, ["box-copy"]);
-      check(change.removed.length === 0 && change.added.length === 1, `duplicate changed ${JSON.stringify(change)}`);
+      check(change.removed.length === 0 && change.added.length === 1, textReport("the duplicate", before.text, after.text));
       check(JSON.stringify(after.sel) === '["box-copy"]', `selection ${after.sel}`);
       const compared = await canvasMatchesEngine(page);
-      const undone = await pressLands(page, "z", CTRL, "undo of the duplicate");
-      check(undone.text === before.text, "undo did not remove the copy");
+      const undone = await pressOnViewport(page, "z", CTRL, "undo of the duplicate");
+      sameText(undone.text, before.text, "undo did not remove the copy");
       return { compared };
     },
   ],
@@ -375,7 +377,7 @@ export const steps = [
       await settle(page);
       const after = await state(page);
       onlyNodes(before.text, after.text, ["caption"]);
-      check(lineOf(after.text, "box") === lineOf(before.text, "box"), "the stale gesture moved box");
+      check(lineOf(after.text, "box") === lineOf(before.text, "box"), textReport("the stale gesture moved box", before.text, after.text));
       check(after.version === agent.version, `version ${after.version}, want ${agent.version}`);
       const compared = await canvasMatchesEngine(page);
       await page.eval("document.querySelector('[data-key=gesture-stale] button[title=Dismiss]').click()");
@@ -395,13 +397,13 @@ export const steps = [
       await landed(page, before.version);
       const mid = await state(page);
       onlyNodes(before.text, mid.text, ["box"]);
-      check(lineOf(mid.text, "box").includes("w=(px)150"), lineOf(mid.text, "box"));
+      lineHas(mid.text, "box", "w=(px)150", before.text);
       await page.waitFor("document.querySelector('#inspector select[data-field=fill]').value === 'color.accent'", "the fill picker");
       await page.eval("(() => { const s = document.querySelector('#inspector select[data-field=fill]'); s.value = 'color.warm'; s.dispatchEvent(new Event('change')); return true; })()");
       await landed(page, mid.version);
       const after = await state(page);
       onlyNodes(mid.text, after.text, ["box"]);
-      check(lineOf(after.text, "box").includes('fill=(token)"color.warm"'), lineOf(after.text, "box"));
+      lineHas(after.text, "box", 'fill=(token)"color.warm"', mid.text);
       const compared = await canvasMatchesEngine(page);
       await shot("gesture-inspector");
       return { compared };
@@ -425,7 +427,7 @@ export const steps = [
       await page.send("Emulation.setTouchEmulationEnabled", { enabled: false });
       const after = await state(page);
       onlyNodes(before.text, after.text, ["spin"]);
-      check(lineOf(after.text, "spin").includes("y=(px)70"), lineOf(after.text, "spin"));
+      lineHas(after.text, "spin", "y=(px)70", before.text);
       const compared = await canvasMatchesEngine(page);
       return { compared };
     },

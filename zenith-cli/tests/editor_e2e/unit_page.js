@@ -1,7 +1,8 @@
 // Async unit tests of page modules, run by `unit.js`: the buffer sync over a
 // fake engine (CRLF text, UTF-16 offsets, typing while an engine edit is on
 // the wire, resync), the engine Worker client over a fake Worker (restart,
-// reply timeout, project replay), file writes, and swatch colors.
+// reply timeout, project replay), file writes, swatch colors, and the
+// intent queue (clicks and keys run in input order over a slow engine).
 //
 // Exports `tests`: `[[name, async fn], …]`. Zero dependencies.
 
@@ -17,6 +18,9 @@ const { WorkerClient } = await import(path.join(assets, "js", "engine", "wasm", 
 const { writeHandle, isReadOnlyError } = await import(path.join(assets, "js", "engine", "wasm", "files.js"));
 const { readEvents } = await import(path.join(assets, "js", "engine", "http.js"));
 const { cssColor } = await import(path.join(assets, "js", "util", "color.js"));
+const { Serial } = await import(path.join(assets, "js", "util", "serial.js"));
+const { SelectionController } = await import(path.join(assets, "js", "app", "selection.js"));
+const { NodeActions } = await import(path.join(assets, "js", "app", "actions.js"));
 const { applyDelta } = await import("./delta.js");
 
 /** A promise and its `resolve`. */
@@ -130,6 +134,77 @@ function agree({ engine, pane, sync }, what) {
 }
 
 const CRLF = 'zenith version=1 {\r\n  rect id="a" fill="#fff"\r\n}\r\n';
+
+/**
+ * A page with the selection controller and the key actions over a fake
+ * `zenith edit` engine. The engine runs each call when it arrives, as the
+ * server does. `holdNext()` keeps the reply of the next call until the
+ * returned function runs, as on a slow link. `select.hit` takes the node
+ * id as `x`; `extend` toggles it in the selection, as the engine does.
+ */
+function intentPage() {
+  const engine = {
+    selection: ["a", "b"],
+    sent: [],
+    held: null,
+    holdNext() {
+      const g = gate();
+      this.held = g;
+      return g.open;
+    },
+    async run(command, params) {
+      this.sent.push({ command, params });
+      let result = {};
+      if (command === "select.hit") {
+        const id = params.x;
+        if (!params.extend) this.selection = [id];
+        else if (this.selection.includes(id)) this.selection = this.selection.filter((s) => s !== id);
+        else this.selection = [...this.selection, id];
+        result = { selection: [...this.selection] };
+      }
+      const held = this.held;
+      this.held = null;
+      if (held) await held.promise;
+      return { ok: true, command, result };
+    },
+  };
+  const app = {
+    engine,
+    view: { zoom: 1 },
+    valid: true,
+    stale: false,
+    selectionIds: ["a", "b"],
+    intents: new Serial(),
+    layout: { full: "none" },
+    gestures: { cancel: () => false },
+    notices: {
+      error: (command, env) => {
+        throw new Error(`${command}: ${JSON.stringify(env)}`);
+      },
+      toast() {},
+      hide() {},
+    },
+    announce() {},
+    sync: { edit: (run) => run(1) },
+  };
+  app.selection = new SelectionController(app);
+  // The overlay, inspector, and code pane are not here.
+  app.selection.refresh = async () => {};
+  app.actions = new NodeActions(app);
+  return { app, engine };
+}
+
+/** A keydown event of `key` with no modifiers. */
+const keyEvent = (key) => ({ key, shiftKey: false, ctrlKey: false, metaKey: false, altKey: false });
+
+/** Wait until every intent of `app` ran. */
+async function intentsDone(app) {
+  while (!app.intents.idle()) await tick();
+}
+
+/** The `gesture.commit` targets `engine` got, in order. */
+const commits = (engine) =>
+  engine.sent.filter((s) => s.command === "gesture.commit").map((s) => s.params.nodes ?? s.params.node);
 
 export const tests = [
   [
@@ -413,6 +488,92 @@ export const tests = [
       ]) {
         assert.equal(cssColor(bad), null, JSON.stringify(bad));
       }
+    },
+  ],
+  [
+    "Serial: tasks run one at a time in call order; a rejected task does not stop the next",
+    async () => {
+      const serial = new Serial();
+      const log = [];
+      const first = gate();
+      const a = serial.run(async () => {
+        log.push("a start");
+        await first.promise;
+        log.push("a end");
+        throw new Error("a failed");
+      });
+      const b = serial.run(async () => {
+        log.push("b");
+        return 2;
+      });
+      await tick();
+      assert.deepEqual(log, ["a start"]);
+      assert.ok(!serial.idle());
+      first.open();
+      await assert.rejects(a, /a failed/);
+      assert.equal(await b, 2);
+      assert.deepEqual(log, ["a start", "a end", "b"]);
+      await tick();
+      assert.ok(serial.idle());
+    },
+  ],
+  [
+    "intents: a key pressed while a click's reply is on the wire acts on the selection the click made",
+    async () => {
+      const { app, engine } = intentPage();
+      const release = engine.holdNext();
+      const click = app.selection.canvasClick("a", 0, { shiftKey: false });
+      await tick();
+      // Two nudges at once, before the click reply: both wait for it.
+      assert.ok(app.actions.key(keyEvent("ArrowRight")));
+      assert.ok(app.actions.key(keyEvent("ArrowRight")));
+      await tick();
+      assert.deepEqual(commits(engine), [], "a nudge went out before the click reply");
+      assert.deepEqual(app.selectionIds, ["a", "b"]);
+      release();
+      await click;
+      await intentsDone(app);
+      assert.deepEqual(app.selectionIds, ["a"]);
+      assert.deepEqual(commits(engine), ["a", "a"], "the nudges did not act on the clicked selection");
+    },
+  ],
+  [
+    "intents: a Shift+click waits for the click before it, so the engine and the page agree",
+    async () => {
+      const { app, engine } = intentPage();
+      const release = engine.holdNext();
+      const first = app.selection.canvasClick("b", 0, { shiftKey: false });
+      const second = app.selection.canvasClick("a", 0, { shiftKey: true });
+      await tick();
+      // Sent at once, the Shift+click could reach the server first and
+      // toggle a out of the old selection [a, b].
+      assert.equal(engine.sent.filter((s) => s.command === "select.hit").length, 1, "the Shift+click went out before the click reply");
+      release();
+      await Promise.all([first, second]);
+      assert.deepEqual(engine.sent.map((s) => [s.params.x, !!s.params.extend]), [["b", false], ["a", true]]);
+      assert.deepEqual(engine.selection, ["b", "a"]);
+      assert.deepEqual(app.selectionIds, ["b", "a"]);
+      // A key now acts on both.
+      app.actions.key(keyEvent("ArrowLeft"));
+      await intentsDone(app);
+      assert.deepEqual(commits(engine), [["b", "a"]]);
+    },
+  ],
+  [
+    "intents: with nothing selected and no intent waiting, keys are not actions",
+    async () => {
+      const { app, engine } = intentPage();
+      app.selectionIds = [];
+      assert.equal(app.actions.key(keyEvent("ArrowRight")), false);
+      // A click on the wire can still select: the key waits for it.
+      const release = engine.holdNext();
+      const click = app.selection.canvasClick("b", 0, { shiftKey: false });
+      assert.ok(app.actions.key(keyEvent("Delete")));
+      release();
+      await click;
+      await intentsDone(app);
+      const removed = engine.sent.filter((s) => s.command === "node.remove").map((s) => s.params.ids);
+      assert.deepEqual(removed, [["b"]]);
     },
   ],
 ];

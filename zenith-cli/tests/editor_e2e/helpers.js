@@ -41,11 +41,11 @@ export const state = (page) => page.eval(STATE);
 
 /**
  * `true` in the page when nothing is left to run: the pane text reached
- * the engine, no render, refresh, or cursor lookup waits, and no engine
- * call is on the wire.
+ * the engine, no render, refresh, or cursor lookup waits, no intent (click,
+ * key, undo, save) waits or runs, and no engine call is on the wire.
  */
 export const SETTLED = `(() => { const a = ${A}; return a.sync.synced() && !a.sync.pending() && a.renderer.idle()
-  && !a.refreshLater.pending() && !a.selection.cursorLater.pending() && a.events.calls === 0; })()`;
+  && !a.refreshLater.pending() && !a.selection.cursorLater.pending() && a.intents.idle() && a.events.calls === 0; })()`;
 
 /**
  * A snapshot of the page for a failed step: focus, the code cursor, the
@@ -70,6 +70,7 @@ export const DIAGNOSIS = `(() => {
     baseEqualsPane: s.base === text };
   out.render = { idle: a.renderer.idle(), gen: a.renderer.gen, shownGen: a.renderer.shown ? a.renderer.shown.gen : null, renders: a.renderer.renders };
   out.calls = a.events.calls;
+  out.intents = a.intents.count;
   out.later = { refresh: a.refreshLater.pending(), cursor: a.selection.cursorLater.pending(), cursorWaiting: a.selection.cursorWaiting };
   out.dirty = a.dirty();
   out.selection = a.selectionIds;
@@ -174,6 +175,12 @@ export async function focusOn(page, selector) {
   await page.waitFor(`document.hasFocus() && document.activeElement === ${el}`, `the focus on ${selector}`);
 }
 
+/** Focus `selector`, wait until it holds the focus, then press `key` with `modifiers` (see `Page.key`). */
+export async function keyOn(page, selector, key, modifiers = 0) {
+  await focusOn(page, selector);
+  await page.key(key, modifiers);
+}
+
 /** The engine text version the pane last saw. Pass it to `landed` after an action. */
 export const versionOf = (page) => page.eval(`${A}.sync.version`);
 
@@ -189,9 +196,12 @@ export async function landed(page, version, what = "the edit to land") {
 
 /**
  * Press `key` with `modifiers` (see `Page.key`) for an action that moves
- * the text (undo, redo, a nudge), then `landed`. Resolves the page state.
+ * the text (undo, redo, a nudge), then `landed`. Settles first, so no
+ * earlier edit can move the version between the read and the key.
+ * Resolves the page state.
  */
 export async function pressLands(page, key, modifiers, what) {
+  await settle(page);
   const version = await versionOf(page);
   await page.key(key, modifiers);
   return landed(page, version, what);

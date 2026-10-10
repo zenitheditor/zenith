@@ -15,6 +15,7 @@ import { Layout } from "../ui/layout.js";
 import { Notices } from "../ui/notify.js";
 import { byId } from "../util/dom.js";
 import { OffsetIndex } from "../util/text.js";
+import { Serial } from "../util/serial.js";
 import { debounce } from "../util/timing.js";
 import { NodeActions } from "./actions.js";
 import { EventRouter } from "./events.js";
@@ -47,6 +48,16 @@ export class App {
     this.layout = new Layout();
     this.events = new EventRouter(this);
     this.engine = this.events.track(engine);
+    /**
+     * User intents run here one at a time, in input order: selection
+     * requests (click, Shift+click, marquee, layers, code cursor), key and
+     * inspector edits, undo, redo, and save. Each starts after the one
+     * before it got its reply. So replies apply in input order, and a key
+     * acts on the selection the clicks before it made. The `zenith edit`
+     * host sends each call on its own HTTP request, so two calls in flight
+     * at once can reach the server, or come back, in either order.
+     */
+    this.intents = new Serial();
     this.status = new Status(this);
     this.code = new CodeEditor(byId("code-host"), summary.text, {
       localChange: (changes) => this.sync.localChange(changes),
@@ -345,22 +356,24 @@ export class App {
     this.notices.error("doc.render", env, { retry: () => this.renderer.request() });
   }
 
-  /** Undo or redo through the engine history. */
-  async history(command) {
-    const env = await this.sync.edit((version) => this.engine.run(command, {}, { version }), "history");
-    if (env.ok) return;
-    const code = env.error?.code;
-    if (code === "editor.nothing_to_undo" || code === "editor.nothing_to_redo") {
-      this.notices.toast(code === "editor.nothing_to_undo" ? "Nothing to undo." : "Nothing to redo.", "info");
-      return;
-    }
-    this.notices.error(command, env, { runOffer: (o) => this.runOffer(o) });
+  /** Undo or redo through the engine history (an intent, see `intents`). */
+  history(command) {
+    return this.intents.run(async () => {
+      const env = await this.sync.edit((version) => this.engine.run(command, {}, { version }), "history");
+      if (env.ok) return;
+      const code = env.error?.code;
+      if (code === "editor.nothing_to_undo" || code === "editor.nothing_to_redo") {
+        this.notices.toast(code === "editor.nothing_to_undo" ? "Nothing to undo." : "Nothing to redo.", "info");
+        return;
+      }
+      this.notices.error(command, env, { runOffer: (o) => this.runOffer(o) });
+    });
   }
 
-  /** Save to disk. A conflict shows the conflict notice. */
+  /** Save to disk (an intent, see `intents`). A conflict shows the conflict notice. */
   async save({ overwrite = false } = {}) {
     if (this.saving) return this.saving;
-    this.saving = (async () => {
+    this.saving = this.intents.run(async () => {
       this.status.saving(true);
       try {
         const env = await this.sync.edit(
@@ -398,7 +411,7 @@ export class App {
         this.status.update();
         this.saving = null;
       }
-    })();
+    });
     return this.saving;
   }
 

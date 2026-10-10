@@ -9,6 +9,9 @@ export const ALT = 1;
 export const CTRL = 2;
 export const SHIFT = 8;
 
+/** `true` in the page when no intent (click, key, undo, save) waits or runs. */
+export const INTENTS_IDLE = `${A}.intents.idle()`;
+
 /** The lines removed from `before` and added in `after` (a line diff). */
 export function lineChange(before, after) {
   const a = before.split("\n");
@@ -47,17 +50,27 @@ export function lineChange(before, after) {
   return { removed, added };
 }
 
+/** `text` as the tail of a check message, under a `label` header. */
+function source(label, text) {
+  return `\n--- ${label} source ---\n${text}`;
+}
+
+/** A check message: `what`, the line change from `before` to `after`, and both full sources. */
+export function textReport(what, before, after) {
+  return `${what}\nchange: ${JSON.stringify(lineChange(before, after))}${source("before", before)}${source("after", after)}`;
+}
+
 /**
  * Throw unless the change from `before` to `after` touches only lines that
  * name one of `ids` (and, with `comments`, `//` lines). Returns the change.
  */
 export function onlyNodes(before, after, ids, { comments = false } = {}) {
   const change = lineChange(before, after);
-  check(change.removed.length + change.added.length > 0, "the source did not change");
+  check(change.removed.length + change.added.length > 0, textReport(`the edit of ${ids.join(", ")} did not change the source`, before, after));
   for (const line of [...change.removed, ...change.added]) {
     const named = ids.some((id) => line.includes(`id="${id}"`));
     const comment = comments && line.trim().startsWith("//");
-    check(named || comment, `the edit of ${ids.join(", ")} touched another line: ${JSON.stringify(line)}`);
+    check(named || comment, textReport(`the edit of ${ids.join(", ")} touched another line: ${JSON.stringify(line)}`, before, after));
   }
   return change;
 }
@@ -65,6 +78,23 @@ export function onlyNodes(before, after, ids, { comments = false } = {}) {
 /** The line of node `id` in `text`. */
 export function lineOf(text, id) {
   return text.split("\n").find((l) => l.includes(`id="${id}"`)) ?? null;
+}
+
+/**
+ * Throw unless the line of node `id` in `text` holds every string in
+ * `wants` (one string or a list). The message names the line, what it
+ * lacks, the change from `before`, and both full sources. Returns the line.
+ */
+export function lineHas(text, id, wants, before) {
+  const line = lineOf(text, id);
+  const missing = [wants].flat().filter((w) => !line?.includes(w));
+  check(missing.length === 0, textReport(`${id}: want ${JSON.stringify(missing)} in ${JSON.stringify(line)}`, before, text));
+  return line;
+}
+
+/** Throw unless `actual` is `expected`. The message has the line change and both full sources. */
+export function sameText(actual, expected, what) {
+  check(actual === expected, textReport(what, expected, actual));
 }
 
 /** `node.inspect` of `id`. */
@@ -136,11 +166,13 @@ export async function dismissNotices(page) {
  */
 export async function select(page, id) {
   await dismissNotices(page);
+  // A click, key, or undo still on its way can change the selection.
+  await page.waitFor(INTENTS_IDLE, "the intents before the selection");
   // Already the one selected node: a click could only race the check below
   // (and miss a stroke-only shape whose centre is off its stroke).
   const already = await page.eval(`JSON.stringify(${A}.selectionIds) === ${JSON.stringify(JSON.stringify([id]))}`);
   if (!already) await clickPage(page, await centerOf(page, id));
-  await page.waitFor(`JSON.stringify(${A}.selectionIds) === ${JSON.stringify(JSON.stringify([id]))}`, `${id} selected`);
+  await page.waitFor(`${INTENTS_IDLE} && JSON.stringify(${A}.selectionIds) === ${JSON.stringify(JSON.stringify([id]))}`, `${id} selected`);
   await page.waitFor(`(() => { const s = ${A}.overlay.single(); return !!s && s.id === ${JSON.stringify(id)}; })()`, `${id} outlined`);
   await page.waitFor(`${A}.inspector.shownId === ${JSON.stringify(id)}`, `${id} in the inspector`);
 }
@@ -179,12 +211,20 @@ export async function selectedAs(page, ids) {
   if (ids.length === 1) await page.waitFor(`${A}.inspector.shownId === ${JSON.stringify(ids[0])}`, `${ids[0]} in the inspector`);
 }
 
-/** Select `ids`: a click on the first node's centre, Shift+clicks on the rest. */
+/**
+ * Select `ids`: a click on the first node's centre, Shift+clicks on the
+ * rest. After each click it waits for that click's own reply: the
+ * selection the clicks so far make, with no intent left. The selection
+ * before the clicks can already hold every id (the last step's
+ * selection), so a check that only asks for an id passes on stale state.
+ */
 export async function selectMany(page, ids) {
   await dismissNotices(page);
+  await page.waitFor(INTENTS_IDLE, "the intents before the selection");
   for (const [i, id] of ids.entries()) {
     await clickPage(page, await centerOf(page, id), i === 0 ? 0 : SHIFT);
-    await page.waitFor(`${A}.selectionIds.includes(${JSON.stringify(id)})`, `${id} in the selection`);
+    const want = JSON.stringify(ids.slice(0, i + 1));
+    await page.waitFor(`${INTENTS_IDLE} && JSON.stringify(${A}.selectionIds) === ${JSON.stringify(want)}`, `selection ${want}`);
   }
   await selectedAs(page, ids);
 }
@@ -203,11 +243,11 @@ export async function groupHandle(page, handle) {
  */
 export function onlyNodesAndTokens(before, after, ids, tokens) {
   const change = lineChange(before, after);
-  check(change.removed.length + change.added.length > 0, "the source did not change");
+  check(change.removed.length + change.added.length > 0, textReport(`the edit of ${ids.join(", ")} did not change the source`, before, after));
   for (const line of [...change.removed, ...change.added]) {
     const named = ids.some((id) => line.includes(`id="${id}"`));
     const token = tokens.some((t) => line.trim().startsWith(`token id="${t}"`));
-    check(named || token, `the edit of ${ids.join(", ")} touched another line: ${JSON.stringify(line)}`);
+    check(named || token, textReport(`the edit of ${ids.join(", ")} touched another line: ${JSON.stringify(line)}`, before, after));
   }
   return change;
 }
@@ -231,9 +271,9 @@ export function onlyBlock(before, after, id) {
   };
   const a = block(before);
   const b = block(after);
-  check(a.head === b.head && a.tail === b.tail, `the edit of ${id} touched lines outside its block`);
+  check(a.head === b.head && a.tail === b.tail, textReport(`the edit of ${id} touched lines outside its block`, before, after));
   const change = lineChange(a.body.join("\n"), b.body.join("\n"));
-  check(change.removed.length + change.added.length > 0, "the source did not change");
+  check(change.removed.length + change.added.length > 0, textReport(`the edit of ${id} did not change the source`, before, after));
   return change;
 }
 
