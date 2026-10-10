@@ -285,6 +285,7 @@ mod tests {
             ("tx.unsupported_closed_path", Severity::Error),
             ("tx.unsupported_path_handles", Severity::Error),
             ("tx.unsupported_property", Severity::Error),
+            ("tx.value_out_of_range", Severity::Error),
             ("tx.value_unresolved", Severity::Error),
             ("tx.wrong_node_type", Severity::Error),
         ];

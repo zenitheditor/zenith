@@ -18,9 +18,73 @@ pub fn line_col(text: &str, offset: usize) -> Option<(usize, usize)> {
     Some((line, col))
 }
 
+/// The line starts of one text, for many [`line_col`] lookups: each lookup
+/// costs a binary search plus its own line, not a scan from the start.
+#[derive(Debug, Clone)]
+pub struct LineIndex<'t> {
+    text: &'t str,
+    /// Byte offset of each line start, ascending; the first is 0.
+    starts: Vec<usize>,
+}
+
+impl<'t> LineIndex<'t> {
+    /// Index the lines of `text`.
+    #[must_use]
+    pub fn new(text: &'t str) -> Self {
+        let starts = std::iter::once(0)
+            .chain(
+                text.bytes()
+                    .enumerate()
+                    .filter(|&(_, b)| b == b'\n')
+                    .map(|(i, _)| i + 1),
+            )
+            .collect();
+        Self { text, starts }
+    }
+
+    /// [`line_col`] of `offset` in the indexed text.
+    #[must_use]
+    pub fn line_col(&self, offset: usize) -> Option<(usize, usize)> {
+        let before = self.text.as_bytes().get(..offset)?;
+        // Lines that start at or before `offset`.
+        let line = self.starts.partition_point(|&s| s <= offset);
+        let line_start = line
+            .checked_sub(1)
+            .and_then(|i| self.starts.get(i))
+            .copied()
+            .unwrap_or(0);
+        let col = before.get(line_start..).map_or(0, |tail| {
+            tail.iter().filter(|&&b| (b & 0xC0) != 0x80).count()
+        }) + 1;
+        Some((line.max(1), col))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_index_agrees_with_line_col_at_every_offset() {
+        for src in [
+            "",
+            "ab",
+            "foo\nbar",
+            "ab\ncdé\nxy",
+            "\n\n",
+            "é日x!\n",
+            "a\r\nb\n",
+        ] {
+            let index = LineIndex::new(src);
+            for offset in 0..src.len() + 3 {
+                assert_eq!(
+                    index.line_col(offset),
+                    line_col(src, offset),
+                    "{src:?} {offset}"
+                );
+            }
+        }
+    }
 
     #[test]
     fn first_byte_is_line_one_col_one() {

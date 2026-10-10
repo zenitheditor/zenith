@@ -8,6 +8,8 @@
 
 use std::collections::BTreeMap;
 
+use zenith_geometry::math;
+
 use crate::ast::node::{FrameNode, LayoutKind, Node};
 use crate::diagnostics::Diagnostic;
 use crate::tokens::ResolvedToken;
@@ -117,8 +119,8 @@ pub(super) fn check_placement(node: &Node, ctx: PlacementCtx, diagnostics: &mut 
 /// The AABB of `b` rotated by `deg` about its center.
 fn rotated_aabb((nx, ny, nw, nh): PxBox, deg: f64) -> PxBox {
     let rad = deg.to_radians();
-    let cos = rad.cos();
-    let sin = rad.sin();
+    let cos = math::cos(rad);
+    let sin = math::sin(rad);
     let cx = nx + nw / 2.0;
     let cy = ny + nh / 2.0;
     let hw = nw / 2.0;

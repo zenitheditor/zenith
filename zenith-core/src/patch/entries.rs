@@ -6,7 +6,7 @@
 
 use std::collections::BTreeMap;
 
-use kdl::{KdlEntry, KdlNode};
+use kdl::{KdlEntry, KdlIdentifier, KdlNode};
 
 use super::diff::{Differ, entry_range, name_end};
 use super::error::{PatchError, PatchErrorCode};
@@ -65,11 +65,12 @@ impl Differ<'_> {
             ));
         }
         for (i, at) in a_texts.iter().enumerate() {
-            if let (Some(ue), Some(bt)) = (ua.get(i), b_texts.get(i))
+            if let (Some(ue), Some(bt), Some(ae)) = (ua.get(i), b_texts.get(i), aa.get(i))
                 && bt != at
             {
                 let (s, e) = entry_range(ue);
-                self.edits.push(Edit::replace(s, e, *at));
+                let text = self.keep_inner_comments(ue, ae, at);
+                self.edits.push(Edit::replace(s, e, text));
             }
         }
         if let Some(extra) = a_texts.get(ua.len()..)
@@ -115,12 +116,13 @@ impl Differ<'_> {
         idx: usize,
         text: &str,
     ) -> Result<(), PatchError> {
-        let Some((name, _)) = ap.get(idx) else {
+        let Some((name, ae)) = ap.get(idx) else {
             return Ok(());
         };
         match unique_prop(u, up, name)? {
             Some(ue) => {
                 let (s, e) = entry_range(ue);
+                let text = self.keep_inner_comments(ue, ae, text);
                 self.edits.push(Edit::replace(s, e, text));
             }
             None => {
@@ -143,6 +145,78 @@ impl Differ<'_> {
         Ok(())
     }
 
+    /// The replacement text for source entry `ue`: `at`, the canonical
+    /// text of after entry `ae`, with the comments written inside `ue`
+    /// kept in place.
+    ///
+    /// A comment inside an entry sits after the key, after `=`, inside the
+    /// type parentheses, or after the type. Each keeps its slot, with the
+    /// source's spacing. When the new value has no type, the comments of
+    /// the type slots go before the value. With no comment inside `ue`,
+    /// the result is `at` itself.
+    fn keep_inner_comments(&self, ue: &KdlEntry, ae: &KdlEntry, at: &str) -> String {
+        let Some(uf) = ue.format() else {
+            return at.to_owned();
+        };
+        let type_slots = [&uf.before_ty_name, &uf.after_ty_name, &uf.after_ty];
+        if ![&uf.after_key, &uf.after_eq]
+            .into_iter()
+            .chain(type_slots)
+            .any(|slot| has_comment(slot))
+        {
+            return at.to_owned();
+        }
+        let Some(af) = ae.format() else {
+            return at.to_owned();
+        };
+        let text = |id: &KdlIdentifier| {
+            let span = id.span();
+            self.after_text((span.offset(), span.offset() + span.len()))
+        };
+        let Some(value) = at.get(at.len().saturating_sub(af.value_repr.len())..) else {
+            return at.to_owned();
+        };
+        if value != af.value_repr {
+            return at.to_owned();
+        }
+        let mut out = String::with_capacity(at.len() + 16);
+        if let Some(name) = ae.name() {
+            let (Ok(key), Some(_)) = (text(name), ue.name()) else {
+                return at.to_owned();
+            };
+            out.push_str(key);
+            out.push_str(&uf.after_key);
+            out.push('=');
+            out.push_str(&uf.after_eq);
+        }
+        match ae.ty() {
+            Some(ty) => {
+                let Ok(ty) = text(ty) else {
+                    return at.to_owned();
+                };
+                let typed = ue.ty().is_some();
+                let slot = |s: &str| if typed { s.to_owned() } else { String::new() };
+                out.push('(');
+                out.push_str(&slot(&uf.before_ty_name));
+                out.push_str(ty);
+                out.push_str(&slot(&uf.after_ty_name));
+                out.push(')');
+                out.push_str(&slot(&uf.after_ty));
+            }
+            None => {
+                for slot in type_slots {
+                    let trimmed = slot.trim();
+                    if has_comment(trimmed) {
+                        out.push_str(trimmed);
+                        out.push(' ');
+                    }
+                }
+            }
+        }
+        out.push_str(value);
+        out
+    }
+
     /// Remove an entry with the spaces before it.
     fn remove_entry(&mut self, entry: &KdlEntry) {
         let (s, e) = entry_range(entry);
@@ -150,6 +224,12 @@ impl Differ<'_> {
         let ws = head.len() - head.trim_end_matches([' ', '\t']).len();
         self.edits.push(Edit::replace(s - ws, e, ""));
     }
+}
+
+/// `true` when the whitespace-and-comment text `slot` of an entry holds a
+/// comment.
+fn has_comment(slot: &str) -> bool {
+    slot.contains("/*") || slot.contains("//") || slot.contains("/-")
 }
 
 /// The single source entry for property `name`, `None` when absent. A

@@ -131,3 +131,45 @@ fn bad_token_value_has_span() {
         err.message
     );
 }
+
+/// A KDL syntax error points at the line that holds the error, not at the
+/// start of the document, for several malformed inputs.
+#[test]
+fn kdl_syntax_errors_point_at_the_offending_line() {
+    let cases: [(&str, usize, &str); 4] = [
+        (
+            "zenith version=1 {\n  document id=\"d\" {\n    page id=\"p\" w=(px)10 h=(px)10 {\n      rect id=\"r\" x=(px)0 y=(px)\n    }\n  }\n}\n",
+            4,
+            "rect id=\"r\" x=(px)0 y=(px)",
+        ),
+        (
+            "zenith version=1 {\n  document id=\"d\" {\n    page id=\"p\" w=\n  }\n}\n",
+            3,
+            "page id=\"p\" w=",
+        ),
+        (
+            "zenith version=1 {\n  document id=\"d\" {\n    text id=\"t\" {\n      span \"open\n    }\n  }\n}\n",
+            4,
+            "\"o",
+        ),
+        ("zenith version=1 {\n  project id=\n", 2, "project id="),
+    ];
+    for (src, line, starts) in cases {
+        let err = parse_err(src);
+        let span = err
+            .span
+            .unwrap_or_else(|| panic!("no span: {}", err.message));
+        let at = src[..span.start].matches('\n').count() + 1;
+        assert_eq!(at, line, "{src:?}: {err:?}");
+        assert!(
+            src[span.start..].starts_with(starts),
+            "{src:?}: span text {:?}",
+            &src[span.start..span.end]
+        );
+        assert!(
+            err.message.contains(&format!("line {line},")),
+            "{}",
+            err.message
+        );
+    }
+}

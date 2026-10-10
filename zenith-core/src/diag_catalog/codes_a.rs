@@ -99,7 +99,8 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
     info(
         "asset.read_failed",
         Severity::Error,
-        "Locked render cannot read a declared asset file.",
+        "A declared asset file cannot be read: a locked render cannot read it, or the host \
+         refuses the path (a file outside the `zenith mcp --root` or `zenith edit` root).",
     ),
     info(
         "asset.sha256_missing",

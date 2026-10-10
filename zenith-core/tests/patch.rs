@@ -11,6 +11,9 @@
 #[path = "patch/structure.rs"]
 mod structure;
 
+#[path = "patch/inner_comments.rs"]
+mod inner_comments;
+
 use zenith_core::{
     Dimension, Document, KdlAdapter, KdlSource, Node, PatchErrorCode, PropertyValue, Unit,
     patch_source, strip_spans, try_patch_source,

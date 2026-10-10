@@ -314,7 +314,7 @@ fn resolve_markers(tokens: &mut [Token]) {
                 can_close,
                 ..
             }) => (*delim, *can_open, *can_close),
-            _ => continue,
+            Some(Token::Text(_) | Token::Code(_) | Token::Link(_)) | None => continue,
         };
 
         // Try to CLOSE against the nearest matching open on the stack (LIFO).

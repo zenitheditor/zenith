@@ -10,5 +10,5 @@ mod line_col;
 pub mod pattern;
 
 pub use hash::hash_unit;
-pub use line_col::line_col;
+pub use line_col::{LineIndex, line_col};
 pub use pattern::{PatternLayout, pattern_positions};

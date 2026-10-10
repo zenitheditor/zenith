@@ -48,8 +48,9 @@ pub use ast::{
     TableCell, TableColumn, TableNode, TableRow, TextNode, TextSpan, TocNode, Token, TokenBlock,
     TokenLiteral, TokenMapDecl, TokenType, TokenValue, Unit, UnknownNode, UnknownProperty,
     UnknownStyleProp, UnknownValue, VariantDef, VariantOverride, anchor_xy, canonicalize_style_key,
-    derive_anchor_origin, dim_to_px, parse_anchor, parse_anchor_edge, resolve_geometry_px,
-    strip_node_spans, strip_spans, style_enum_values, subtree_uses_layout, translate_node,
+    derive_anchor_origin, dim_to_px, format_number, parse_anchor, parse_anchor_edge,
+    resolve_geometry_px, strip_node_spans, strip_spans, style_enum_values, subtree_uses_layout,
+    translate_node,
 };
 pub use color::{
     BlendMode, Cmyk, Color, GradientPaint, GradientStop, apca_lc, best_text_color, cmyk_to_hex,
@@ -74,7 +75,7 @@ pub use tokens::{
     TokenResolution, builtin_color, is_supported, resolve_tokens, scan, token_id_for_kind,
 };
 pub use util::pattern::{PatternLayout, pattern_positions};
-pub use util::{hash_unit, line_col};
+pub use util::{LineIndex, hash_unit, line_col};
 pub use validate::{
     ChartTextInk, ContentScope, ContentScopes, ContrastInks, GlyphInk, InkLine, LabelInk, ScopeFit,
     ScopeTokens, ValidationReport, apply_policy, layout_geometry_checks, page_contrast_checks,

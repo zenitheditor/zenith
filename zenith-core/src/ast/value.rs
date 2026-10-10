@@ -56,13 +56,34 @@ impl Dimension {
     /// the single source of the dimension string used by the formatter and by
     /// the CLI's transaction/inspect output, so all three agree byte-for-byte.
     pub fn to_kdl_string(&self) -> String {
-        let value = if self.value.fract() == 0.0 && self.value.is_finite() {
-            format!("{}", self.value as i64)
-        } else {
-            format!("{}", self.value)
-        };
-        format!("({}){value}", self.unit.as_annotation())
+        format!(
+            "({}){}",
+            self.unit.as_annotation(),
+            format_number(self.value)
+        )
     }
+}
+
+/// Format `v` as a KDL number, exactly.
+///
+/// An integral value has no fractional part (`640`, `-0` as `0`), at any
+/// magnitude: `1e19` writes all 20 digits, never a saturated `i64`. A
+/// fraction takes the shortest text that reads back as `v`. A non-finite
+/// value takes its KDL keyword: `#nan`, `#inf`, `#-inf`.
+pub fn format_number(v: f64) -> String {
+    /// 2^63: every integral `f64` in `[-2^63, 2^63)` is an exact `i64`.
+    const I64_END: f64 = 9_223_372_036_854_775_808.0;
+    if v.is_nan() {
+        return "#nan".to_owned();
+    }
+    if v.is_infinite() {
+        return if v > 0.0 { "#inf" } else { "#-inf" }.to_owned();
+    }
+    if v.fract() == 0.0 && (-I64_END..I64_END).contains(&v) {
+        // In range, the cast is exact; it also writes -0 as 0.
+        return format!("{}", v as i64);
+    }
+    format!("{v}")
 }
 
 /// Convert a dimension value + unit to pixels.
@@ -92,4 +113,32 @@ pub enum PropertyValue {
     Dimension(Dimension),
     /// A typed reference to a runtime data field, e.g. `(data)"revenue.total"`.
     DataRef(String),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn numbers_format_exactly_at_any_magnitude() {
+        for (v, text) in [
+            (640.0, "640"),
+            (10.5, "10.5"),
+            (-0.0, "0"),
+            (-3.0, "-3"),
+            (1e19, "10000000000000000000"),
+            (-1e19, "-10000000000000000000"),
+            (9_007_199_254_740_992.0, "9007199254740992"),
+            (f64::NAN, "#nan"),
+            (f64::INFINITY, "#inf"),
+            (f64::NEG_INFINITY, "#-inf"),
+        ] {
+            assert_eq!(format_number(v), text, "{v}");
+        }
+        let d = Dimension {
+            value: 1e19,
+            unit: Unit::Px,
+        };
+        assert_eq!(d.to_kdl_string(), "(px)10000000000000000000");
+    }
 }

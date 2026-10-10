@@ -575,6 +575,13 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
         "A transaction op targets a property that cannot be set on the node kind.",
     ),
     info(
+        "tx.value_out_of_range",
+        Severity::Error,
+        "A transaction op writes a geometry value that is not finite or exceeds 2^53 px in \
+         magnitude, for example a nudge by 1e19. The transaction does not apply. Use a smaller \
+         value or delta.",
+    ),
+    info(
         "tx.value_unresolved",
         Severity::Error,
         "A transaction op offsets a value with no px conversion: a pct, deg, or unknown unit, a \

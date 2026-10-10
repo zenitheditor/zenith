@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 
+use zenith_geometry::math;
 use zenith_geometry::{
     CompoundFillRule, CompoundPathGeometry, PATH_CONSUMPTION_TOLERANCE,
     PathAnchor as GeomPathAnchor, PathGeometry, Point2, PointLocation, compound_path_fill_bounds,
@@ -131,7 +132,7 @@ pub(super) struct Rotation {
 impl Rotation {
     /// Inverse-rotate a sample point back into the candidate's unrotated frame.
     pub(super) fn inverse_map(self, x: f64, y: f64) -> (f64, f64) {
-        let (sin, cos) = (-self.angle_deg).to_radians().sin_cos();
+        let (sin, cos) = math::sin_cos((-self.angle_deg).to_radians());
         let dx = x - self.cx;
         let dy = y - self.cy;
         (self.cx + dx * cos - dy * sin, self.cy + dx * sin + dy * cos)

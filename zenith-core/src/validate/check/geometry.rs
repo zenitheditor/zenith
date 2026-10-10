@@ -40,7 +40,15 @@ pub(super) fn page_background_rgb(
     };
     match &resolved.get(id.as_str())?.value {
         ResolvedValue::Color(hex) => parse_rgb(hex),
-        _ => None,
+        ResolvedValue::CmykColor { .. }
+        | ResolvedValue::Dimension(_)
+        | ResolvedValue::Number(_)
+        | ResolvedValue::FontFamily(_)
+        | ResolvedValue::FontWeight(_)
+        | ResolvedValue::Gradient(_)
+        | ResolvedValue::Shadow(_)
+        | ResolvedValue::Filter(_)
+        | ResolvedValue::Mask(_) => None,
     }
 }
 

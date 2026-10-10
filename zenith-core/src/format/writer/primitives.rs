@@ -66,11 +66,7 @@ pub(in crate::format::writer) fn indent(out: &mut String, depth: usize) {
 
 /// Format a `f64` canonically: no trailing `.0` for integral values.
 pub(in crate::format::writer) fn fmt_f64(v: f64) -> String {
-    if v.fract() == 0.0 && v.is_finite() {
-        format!("{}", v as i64)
-    } else {
-        format!("{v}")
-    }
+    crate::ast::value::format_number(v)
 }
 
 /// Format a dimension annotation + value, e.g. `(px)640` or `(pt)10.5`.

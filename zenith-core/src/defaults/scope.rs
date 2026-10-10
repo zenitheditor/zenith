@@ -196,7 +196,10 @@ impl Synth {
         let layer_id = |l: Option<Layer<'_>>| l.map_or("-", |l| l.id).to_owned();
         let fill_id = match paired_fill {
             Some(PropertyValue::TokenRef(id)) => id.clone(),
-            Some(_) | None => "-".to_owned(),
+            Some(
+                PropertyValue::Literal(_) | PropertyValue::Dimension(_) | PropertyValue::DataRef(_),
+            )
+            | None => "-".to_owned(),
         };
         let id = format!(
             "defaults:{role}:{}:{}:{}:{fill_id}:{}",

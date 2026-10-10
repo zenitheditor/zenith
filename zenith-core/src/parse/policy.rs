@@ -34,14 +34,11 @@ use crate::parse::transform::{
 };
 
 /// Map a KDL syntax error to a [`ParseError`], keeping the first diagnostic span.
-fn config_kdl_error(e: kdl::KdlError) -> ParseError {
+fn config_kdl_error(text: &str, e: kdl::KdlError) -> ParseError {
     let message = format!("config KDL parse error: {e}");
     let span = e.diagnostics.first().map(|d| {
-        let start = d.span.offset();
-        crate::ast::Span {
-            start,
-            end: start + d.span.len(),
-        }
+        let (start, end) = super::kdl_adapter::focus(text, d.span.offset(), d.span.len());
+        crate::ast::Span { start, end }
     });
     ParseError::at(span, ParseErrorCode::InvalidKdl, message)
 }
@@ -69,7 +66,7 @@ pub fn parse_diagnostic_policy(source: &[u8]) -> Result<DiagnosticPolicy, ParseE
     })?;
 
     // Step 2: parse KDL.
-    let kdl_doc: kdl::KdlDocument = text.parse().map_err(config_kdl_error)?;
+    let kdl_doc: kdl::KdlDocument = text.parse().map_err(|e| config_kdl_error(text, e))?;
 
     // Step 3: reject unknown config content, then locate the first top-level
     // `diagnostics` node and transform it. Absent → empty policy (identity pass).
@@ -108,7 +105,7 @@ pub fn parse_brand_contract(source: &[u8]) -> Result<BrandContract, ParseError> 
     })?;
 
     // Step 2: parse KDL.
-    let kdl_doc: kdl::KdlDocument = text.parse().map_err(config_kdl_error)?;
+    let kdl_doc: kdl::KdlDocument = text.parse().map_err(|e| config_kdl_error(text, e))?;
 
     // Step 3: reject unknown config content, then locate the first top-level
     // `brand` node and transform it. Absent → empty contract (identity pass).

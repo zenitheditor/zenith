@@ -5,6 +5,7 @@
 //! (WCAG 2.2 §1.4.3 measures opaque foreground on opaque background).
 
 use serde::Serialize;
+use zenith_geometry::math;
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
@@ -294,7 +295,7 @@ pub fn relative_luminance(rgb: (u8, u8, u8)) -> f64 {
         if c <= 0.03928 {
             c / 12.92
         } else {
-            ((c + 0.055) / 1.055).powf(2.4)
+            math::powf((c + 0.055) / 1.055, 2.4)
         }
     };
     let r = linearize(rgb.0);
@@ -345,10 +346,10 @@ pub fn apca_lc(text: (u8, u8, u8), bg: (u8, u8, u8)) -> f64 {
     const LO_OFFSET: f64 = 0.027;
 
     let screen_y = |rgb: (u8, u8, u8)| -> f64 {
-        let ch = |c: u8| (c as f64 / 255.0).powf(TRC);
+        let ch = |c: u8| math::powf(c as f64 / 255.0, TRC);
         let mut y = RCO * ch(rgb.0) + GCO * ch(rgb.1) + BCO * ch(rgb.2);
         if y < BLK_THRS {
-            y += (BLK_THRS - y).powf(BLK_CLMP);
+            y += math::powf(BLK_THRS - y, BLK_CLMP);
         }
         y
     };
@@ -359,14 +360,14 @@ pub fn apca_lc(text: (u8, u8, u8), bg: (u8, u8, u8)) -> f64 {
         return 0.0;
     }
     let output = if ybg > ytxt {
-        let sapc = (ybg.powf(NORM_BG) - ytxt.powf(NORM_TXT)) * SCALE;
+        let sapc = (math::powf(ybg, NORM_BG) - math::powf(ytxt, NORM_TXT)) * SCALE;
         if sapc < LO_CLIP {
             0.0
         } else {
             sapc - LO_OFFSET
         }
     } else {
-        let sapc = (ybg.powf(REV_BG) - ytxt.powf(REV_TXT)) * SCALE;
+        let sapc = (math::powf(ybg, REV_BG) - math::powf(ytxt, REV_TXT)) * SCALE;
         if sapc > -LO_CLIP {
             0.0
         } else {

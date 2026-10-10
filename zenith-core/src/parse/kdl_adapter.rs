@@ -32,7 +32,7 @@ impl KdlSource for KdlAdapter {
             // Extract the first diagnostic span and rich message if available.
             match e.diagnostics.first() {
                 Some(d) => {
-                    let offset = d.span.offset();
+                    let (offset, end) = focus(text, d.span.offset(), d.span.len());
                     // An offset past the end clamps to the end of the source.
                     let (line, col) = line_col(text, offset.min(text.len())).unwrap_or((1, 1));
                     let mut msg = format!("KDL parse error at line {line}, column {col}");
@@ -96,10 +96,7 @@ impl KdlSource for KdlAdapter {
                             );
                         }
                     }
-                    let span = crate::ast::Span {
-                        start: offset,
-                        end: offset + d.span.len(),
-                    };
+                    let span = crate::ast::Span { start: offset, end };
                     ParseError::with_span(ParseErrorCode::InvalidKdl, span, msg)
                 }
                 None => ParseError::spanless(
@@ -118,10 +115,56 @@ impl KdlSource for KdlAdapter {
     }
 }
 
+/// The span `(start, end)` to report for a kdl diagnostic at `offset` with
+/// length `len` in `text`.
+///
+/// The kdl parser can report a span from the start of the enclosing node
+/// (often the start of the document) to the point where it gave up, for
+/// example a property with no value at the end of line 5. The error lies
+/// at the end of that span, so the reported span starts on the line of its
+/// last byte, at that line's first non-blank character (never before
+/// `offset`). A span within one line is kept as is. Both ends are clamped
+/// to `text`.
+pub(crate) fn focus(text: &str, offset: usize, len: usize) -> (usize, usize) {
+    let start = offset.min(text.len());
+    let end = offset.saturating_add(len).min(text.len()).max(start);
+    let Some(last) = end.checked_sub(1).filter(|&l| l >= start) else {
+        return (start, end);
+    };
+    let line_start = text
+        .get(..last)
+        .and_then(|head| head.rfind('\n'))
+        .map_or(0, |i| i + 1)
+        .max(start);
+    let blank = text
+        .get(line_start..end)
+        .map_or(0, |line| line.len() - line.trim_start().len());
+    let focused = line_start + blank;
+    if focused < end && text.is_char_boundary(focused) {
+        (focused, end)
+    } else {
+        (line_start, end)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::ast::{Node, PropertyValue, TokenLiteral, TokenType, TokenValue, Unit};
+
+    #[test]
+    fn focus_moves_a_multi_line_span_to_its_last_line() {
+        let text = "a {\n  b\n  c y=\n}\n";
+        let end = text.find("y=").expect("y") + 2;
+        let (s, e) = focus(text, 0, end);
+        assert_eq!(&text[s..e], "c y=");
+        // A one-line span stays.
+        assert_eq!(focus(text, 2, 1), (2, 3));
+        // Past the end clamps.
+        assert_eq!(focus("ab", 5, 3), (2, 2));
+        // An empty span stays empty.
+        assert_eq!(focus("ab\ncd", 3, 0), (3, 3));
+    }
 
     /// Read the magnitude of a geometry `PropertyValue` that is a raw dimension
     /// literal (the geometry axes accept either a `(px)N` literal or a token ref).
