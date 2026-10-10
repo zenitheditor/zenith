@@ -71,6 +71,7 @@ auditable, and dependency-light.
 - **Integration tests** live in each crate's `tests/` directory, compiled as separate crates, and exercise only the public API. Name files after the feature (e.g. `tests/recipe.rs`). Group with subdirectories that contain a `mod.rs`; shared helpers go in `tests/common/mod.rs`.
 - Add coverage for every new node kind, diagnostic, transaction op, and serialization path.
 - Render proof of conformance scenarios into `conformance/<area>/` (not `/tmp`); it is regenerable and not committed.
+- **Verify editor UI changes visually.** Run `node zenith-cli/tests/editor_e2e/shot.mjs <doc.zen> <out_dir>` and read the PNGs. Never commit screenshots of personal content. README screenshots live in `assets/editor/` and are regenerated with this tool (recipe in the header of `shot.mjs`).
 
 ## Commit & Pull Request Guidelines
 
@@ -79,4 +80,5 @@ auditable, and dependency-light.
 - Do **not** add co-author trailers or tool-attribution lines.
 - PRs should describe the change, the commands run to verify it (build/test/clippy/fmt), and any rendered output or diagnostic changes. Link related issues.
 - Never stage `conformance/`, `resource/`, `zenith-showcase/`, or any local-scratch directory.
+- Every release adds a non-empty `## [X.Y.Z]` section to `CHANGELOG.md` before the tag. The tag workflow fails without it.
   </content>

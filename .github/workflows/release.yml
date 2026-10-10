@@ -9,6 +9,10 @@ run-name: Release ${{ github.ref_name }}
 #   - none for the version: the tag drives it, and the publish and build jobs
 #     stamp the tag version into Cargo.toml in the runner checkout
 #   - add a `CARGO_REGISTRY_TOKEN` secret (Environment: crates.io)
+#
+# Every release needs a non-empty `## [X.Y.Z]` section in CHANGELOG.md before
+# the tag. `validate-version` fails without it, and that section becomes the
+# GitHub Release body.
 on:
   push:
     tags:
@@ -31,6 +35,7 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version }}
       is_prerelease: ${{ steps.version.outputs.is_prerelease }}
+      base_version: ${{ steps.version.outputs.base_version }}
     steps:
       - uses: actions/checkout@v6
       - name: Install Rust
@@ -63,6 +68,14 @@ jobs:
             echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
           fi
           echo "version=$TAG_VERSION" >> "$GITHUB_OUTPUT"
+          echo "base_version=$TAG_BASE" >> "$GITHUB_OUTPUT"
+
+      # A prerelease is checked against its base version: `v0.0.12-beta.1`
+      # needs the `## [0.0.12]` section it is a candidate for, so the notes are
+      # written once and rehearsed by every beta. This gate runs before any
+      # publish or build job.
+      - name: Require a changelog section
+        run: bash scripts/ci/changelog_section.sh "${{ steps.version.outputs.base_version }}"
 
   ci:
     name: CI gate
@@ -239,18 +252,48 @@ jobs:
     permissions:
       contents: write
     steps:
+      # Full history and tags: the notes step reads CHANGELOG.md and finds the
+      # previous tag for the compare link.
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
       - name: Download binary artifacts
         uses: actions/download-artifact@v8
         with:
           path: ./artifacts
           pattern: binaries-*
           merge-multiple: true
+      # The release body is the CHANGELOG.md section, not generated commit
+      # subjects: commits describe what was done to the code, and the changelog
+      # describes what changed for the person upgrading. `validate-version`
+      # has already proved this section exists and is non-empty.
+      - name: Build release notes from the changelog
+        env:
+          TAG: ${{ github.ref_name }}
+          BASE: ${{ needs.validate-version.outputs.base_version }}
+        run: |
+          set -euo pipefail
+          # -l is required: without it git reads 'v*' as a tag to CREATE and
+          # errors, which `|| true` then swallows into an empty PREVIOUS_TAG.
+          PREVIOUS_TAG=$(git tag -l 'v*' --sort=-v:refname | grep -v "^${TAG}$" | head -n 1 || true)
+
+          bash scripts/ci/changelog_section.sh "$BASE" /tmp/changelog-section.md
+
+          {
+            cat /tmp/changelog-section.md
+            echo
+            if [[ -n "$PREVIOUS_TAG" ]]; then
+              echo "**Full diff:** https://github.com/zenitheditor/zenith/compare/${PREVIOUS_TAG}...${TAG}"
+            else
+              echo "**Tree:** https://github.com/zenitheditor/zenith/tree/${TAG}"
+            fi
+          } > /tmp/release-notes.md
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
           name: Zenith ${{ needs.validate-version.outputs.version }}
-          generate_release_notes: true
+          body_path: /tmp/release-notes.md
           draft: false
           prerelease: ${{ needs.validate-version.outputs.is_prerelease == 'true' }}
           files: artifacts/*

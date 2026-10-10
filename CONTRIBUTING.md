@@ -45,6 +45,14 @@ cargo clippy --workspace --all-targets -- -D warnings  # no lints (warnings are 
 cargo fmt --all                                        # canonical formatting applied
 ```
 
+If you change the browser editor UI, look at it. Build the release binary, then run:
+
+```bash
+node zenith-cli/tests/editor_e2e/shot.mjs <doc.zen> <out_dir>   # writes editor-split.png; read it
+```
+
+Add `--view all --break` for the canvas and diagnostics views. `--select <node-id>` selects a node. Never commit screenshots of personal content. The README images in `assets/editor/` come from this tool. The recipe is in the header of `shot.mjs`.
+
 Land work in small, focused, bisect-safe commits — one coherent unit each, each one green on its own. Fix problems at the source as you find them rather than deferring them.
 
 ## Where Things Go
@@ -130,6 +138,7 @@ carry a license that permits redistribution (see `zenith-core/assets/fonts/LICEN
 - No co-author trailers or tool-attribution lines.
 - A PR should describe the change, list the verification commands you ran (build / test / clippy /fmt), and link any related issue. Include rendered output or diagnostic changes when relevant.
 - Never stage `conformance/`, `resource/`, `zenith-showcase/`, or local-scratch directories.
+- Every release adds a non-empty `## [X.Y.Z]` section to [CHANGELOG.md](CHANGELOG.md) before the tag. The tag workflow fails without it.
 
 ## License
 
