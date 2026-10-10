@@ -45,6 +45,7 @@ pub fn call(name: &str, args: &Value) -> ToolResult {
         "zenith_editor_render" => return super::editor::render(args),
         "zenith_editor_sessions" => return super::editor::sessions(args),
         "zenith_editor_attach" => return super::editor::attach(args),
+        "zenith_editor_close" => return super::editor::close(args),
         other => Err(format!("unknown tool '{other}'")),
     };
     match result {
@@ -264,6 +265,7 @@ fn run_render(args: &Value) -> Result<Value, String> {
     let request = render_request::RenderRequest::parse(args)?;
     let reference = request.doc;
     if let Some(out) = request.out {
+        super::policy::confine(Path::new(out))?;
         let location = doc_ref::locate(reference)?;
         let mut guard = crate::output_file::OutputGuard::new(&[location.path.as_path()])
             .map_err(|error| format!("error writing '{out}': {error}"))?;
@@ -450,7 +452,9 @@ fn run_theme_new(args: &Value) -> Result<Value, String> {
     let source = theme::new(&input).map_err(|e| e.message)?;
     match opt_str(args, "out") {
         Some(out) => {
-            std::fs::write(out, &source).map_err(|e| format!("error writing '{out}': {e}"))?;
+            super::policy::confine(Path::new(out))?;
+            crate::output_file::write_bytes(Path::new(out), source.as_bytes())
+                .map_err(|e| crate::output_file::write_failure(Path::new(out), &e))?;
             Ok(json!({ "written": out }))
         }
         None => Ok(json!({ "source": source })),
@@ -532,11 +536,13 @@ fn run_workspace_finalize(args: &Value) -> Result<Value, String> {
         "bundle" => {
             let loc = doc_ref::locate(req_str(args, "doc")?)?;
             let bundle = req_str(args, "bundle")?;
+            super::policy::confine(Path::new(bundle))?;
             commands::workspace::bundle_doc(&loc.path, Path::new(bundle))?;
             Ok(json!({ "bundled": true, "path": bundle }))
         }
         "unbundle" => {
             let bundle = req_str(args, "bundle")?;
+            super::policy::confine(Path::new(bundle))?;
             let doc_id = commands::workspace::unbundle_doc(Path::new(bundle))?;
             Ok(json!({ "doc_id": doc_id }))
         }

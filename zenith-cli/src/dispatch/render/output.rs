@@ -124,10 +124,7 @@ fn write_stop(path: &Path, e: &std::io::Error) -> Stop {
     Stop {
         diagnostics: vec![Diagnostic::error(
             "io.write_failed",
-            format!(
-                "cannot write '{}': {e}; check the directory exists and is writable",
-                path.display()
-            ),
+            crate::output_file::write_failure(path, e),
             None,
             None,
         )],

@@ -1,5 +1,6 @@
-//! Request checks: the per-run token, the `Host` header (DNS rebinding),
-//! and the `Origin` header (cross-site requests).
+//! Request checks: the per-run token (`Authorization: Bearer` only), the
+//! `Host` header (DNS rebinding), and the `Origin` header (cross-site
+//! requests).
 
 use std::net::IpAddr;
 
@@ -30,6 +31,12 @@ impl Token {
         Ok(Self(bytes.iter().map(|b| format!("{b:02x}")).collect()))
     }
 
+    /// A token with a configured `secret`.
+    #[cfg(feature = "http")]
+    pub(crate) fn from_secret(secret: String) -> Self {
+        Self(secret)
+    }
+
     /// The token text.
     pub(crate) fn as_str(&self) -> &str {
         &self.0
@@ -44,17 +51,6 @@ impl Token {
         }
         a.iter().zip(b).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
     }
-}
-
-/// How a request proved it holds the token.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Auth {
-    /// `Authorization: Bearer <token>`.
-    Bearer,
-    /// The page cookie.
-    Cookie,
-    /// `?token=` on `GET /`. The response sets the cookie.
-    Query,
 }
 
 /// The checks every request passes before any route runs.
@@ -82,21 +78,6 @@ impl Guard {
     /// The token.
     pub(crate) fn token(&self) -> &Token {
         &self.token
-    }
-
-    /// The name of the page cookie. It carries the port: cookies are not
-    /// isolated by port, so two editors on one host keep separate cookies.
-    pub(crate) fn cookie_name(&self) -> String {
-        format!("zenith_edit_{}", self.port)
-    }
-
-    /// The `Set-Cookie` value that stores the token for the page.
-    pub(crate) fn set_cookie(&self) -> String {
-        format!(
-            "{}={}; HttpOnly; SameSite=Strict; Path=/",
-            self.cookie_name(),
-            self.token.as_str()
-        )
     }
 
     /// Check `Host`, `Origin`, and `Sec-Fetch-Site`. Returns the `Host`
@@ -136,46 +117,24 @@ impl Guard {
         Ok(host)
     }
 
-    /// Check the token. `allow_query` accepts `?token=` (page load only).
+    /// Check `Authorization: Bearer <token>`. The header is the only
+    /// place the token is accepted: no cookie (cookies ignore the port, so
+    /// every local service would receive it) and no query (it would land in
+    /// logs and history).
     ///
     /// # Errors
     ///
     /// 401 `edit.unauthorized` when no valid token is present.
-    pub(crate) fn check_token(
-        &self,
-        req: &HttpRequest,
-        allow_query: bool,
-    ) -> Result<Auth, HttpError> {
-        if let Some(value) = req.header("authorization")? {
-            let given = value
-                .strip_prefix("Bearer ")
-                .or_else(|| value.strip_prefix("bearer "))
-                .unwrap_or("");
-            return if self.token.matches(given.trim()) {
-                Ok(Auth::Bearer)
-            } else {
-                Err(unauthorized())
-            };
-        }
-        if allow_query && let Some(given) = req.query_param("token") {
-            return if self.token.matches(given) {
-                Ok(Auth::Query)
-            } else {
-                Err(unauthorized())
-            };
-        }
-        let name = self.cookie_name();
-        let cookie = req
-            .headers
-            .iter()
-            .filter(|(n, _)| n == "cookie")
-            .flat_map(|(_, v)| v.split(';'))
-            .filter_map(|pair| pair.trim().split_once('='))
-            .find(|(n, _)| *n == name)
-            .map(|(_, v)| v);
-        match cookie {
-            Some(given) if self.token.matches(given) => Ok(Auth::Cookie),
-            Some(_) | None => Err(unauthorized()),
+    pub(crate) fn check_token(&self, req: &HttpRequest) -> Result<(), HttpError> {
+        let value = req.header("authorization")?.ok_or_else(unauthorized)?;
+        let given = match value.split_once(' ') {
+            Some((scheme, rest)) if scheme.eq_ignore_ascii_case("bearer") => rest.trim(),
+            Some(_) | None => return Err(unauthorized()),
+        };
+        if self.token.matches(given) {
+            Ok(())
+        } else {
+            Err(unauthorized())
         }
     }
 
@@ -195,7 +154,7 @@ impl Guard {
 
 /// Split `host[:port]` (with `[v6]` brackets). A port that does not parse
 /// reads as `Some(0)`, which matches no server.
-fn split_host(host: &str) -> (&str, Option<u16>) {
+pub(crate) fn split_host(host: &str) -> (&str, Option<u16>) {
     let (name, port) = if host.starts_with('[') {
         match host.rfind("]:") {
             Some(i) => (host.get(..=i).unwrap_or(host), host.get(i + 2..)),
@@ -241,6 +200,7 @@ mod tests {
                 .iter()
                 .map(|(n, v)| ((*n).to_owned(), (*v).to_owned()))
                 .collect(),
+            length: 0,
             body: Vec::new(),
         }
     }
@@ -316,32 +276,27 @@ mod tests {
     }
 
     #[test]
-    fn token_comes_from_bearer_cookie_or_page_query() {
+    fn token_comes_only_from_the_bearer_header() {
         let g = guard();
         let t = "ab".repeat(32);
-        let bearer = format!("Bearer {t}");
-        assert_eq!(
-            g.check_token(&req(Method::Post, &[("authorization", &bearer)], ""), false),
-            Ok(Auth::Bearer)
-        );
-        let cookie = format!("a=b; zenith_edit_4242={t}");
-        assert_eq!(
-            g.check_token(&req(Method::Get, &[("cookie", &cookie)], ""), false),
-            Ok(Auth::Cookie)
-        );
+        for scheme in ["Bearer", "bearer", "BEARER"] {
+            let value = format!("{scheme} {t}");
+            assert_eq!(
+                g.check_token(&req(Method::Post, &[("authorization", &value)], "")),
+                Ok(()),
+                "{scheme}"
+            );
+        }
+        let cookie = format!("zenith_edit_4242={t}");
+        let err = g
+            .check_token(&req(Method::Get, &[("cookie", &cookie)], ""))
+            .expect_err("cookie");
+        assert_eq!(err.status, 401);
         let q = format!("token={t}");
-        assert_eq!(
-            g.check_token(&req(Method::Get, &[], &q), true),
-            Ok(Auth::Query)
-        );
-        assert!(g.check_token(&req(Method::Get, &[], &q), false).is_err());
-        let wrong = req(Method::Post, &[("authorization", "Bearer nope")], "");
-        assert_eq!(g.check_token(&wrong, false).expect_err("wrong").status, 401);
-        let other_port = format!("zenith_edit_1={t}");
-        assert!(
-            g.check_token(&req(Method::Get, &[("cookie", &other_port)], ""), false)
-                .is_err()
-        );
-        assert!(g.set_cookie().contains("HttpOnly; SameSite=Strict"));
+        assert!(g.check_token(&req(Method::Get, &[], &q)).is_err(), "query");
+        for wrong in ["Bearer nope", "Basic abc", &t, ""] {
+            let r = req(Method::Post, &[("authorization", wrong)], "");
+            assert_eq!(g.check_token(&r).expect_err(wrong).status, 401, "{wrong}");
+        }
     }
 }

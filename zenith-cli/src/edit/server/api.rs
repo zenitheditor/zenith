@@ -179,6 +179,7 @@ fn run(shared: &Shared, request: &Request, client: Option<&str>, diff: bool) -> 
         events,
         change,
     } = ran;
+    shared.note_clean(doc.dirty());
     shared.hub.send(events);
     let mut out = json!({
         "ok": result.is_ok(),

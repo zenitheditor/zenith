@@ -122,6 +122,15 @@ pub fn command_dir(agent: Agent, scope: Scope, project_root: &Path) -> Option<Pa
             Scope::Project => project_root.join(".opencode").join("command"),
             Scope::User => home_dir()?.join(".config").join("opencode").join("command"),
         }),
-        _ => None,
+        Agent::Codex
+        | Agent::Cursor
+        | Agent::Windsurf
+        | Agent::Aider
+        | Agent::Zed
+        | Agent::Gemini
+        | Agent::Copilot
+        | Agent::Continue
+        | Agent::Kiro
+        | Agent::Antigravity => None,
     }
 }

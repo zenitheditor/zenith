@@ -34,6 +34,7 @@ export class Status {
           ? "Unsaved, syncing"
           : "Unsaved changes"
         : "Saved";
+    byId("save").disabled = this.isSaving || app.readonly === true;
     byId("status-version").textContent = `v${app.sync.version}`;
     byId("status-conn").textContent = this.conn;
     this.cursor();
@@ -41,7 +42,6 @@ export class Status {
 
   saving(on) {
     this.isSaving = on;
-    byId("save").disabled = on;
     this.update();
   }
 

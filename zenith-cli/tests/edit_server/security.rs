@@ -1,5 +1,9 @@
 //! Every defense of the editor server, proven over real sockets.
 
+use std::io::{Read, Write};
+use std::net::TcpStream;
+use std::time::{Duration, Instant};
+
 use serde_json::json;
 
 use crate::support::{raw, start, status_only};
@@ -31,41 +35,45 @@ fn wrong_or_missing_token_is_unauthorized() {
         .as_bytes(),
     );
     assert_eq!(r.status, 401);
-    // Static files need the token too.
+    // The page files are public: they need no token, only a good Host.
     let r = raw(
         server.port,
         format!("GET / HTTP/1.1\r\nHost: {host}\r\n\r\n").as_bytes(),
     );
-    assert_eq!(r.status, 401);
+    assert_eq!(r.status, 200);
 }
 
 #[test]
-fn page_load_token_sets_a_strict_http_only_cookie() {
+fn the_token_is_accepted_only_as_a_bearer_header() {
     let server = start();
     let host = server.host();
-    let r = raw(
+    // Cookies ignore the port, so every local service would see one: no
+    // cookie is set and none is accepted.
+    let page = raw(
         server.port,
-        format!(
-            "GET /?token={} HTTP/1.1\r\nHost: {host}\r\n\r\n",
-            server.token
-        )
-        .as_bytes(),
+        format!("GET / HTTP/1.1\r\nHost: {host}\r\n\r\n").as_bytes(),
     );
-    assert_eq!(r.status, 200);
-    let cookie = r.header("Set-Cookie").expect("cookie");
-    assert!(cookie.contains("HttpOnly"), "{cookie}");
-    assert!(cookie.contains("SameSite=Strict"), "{cookie}");
+    assert_eq!(page.status, 200);
+    assert!(page.header("Set-Cookie").is_none(), "{}", page.head);
+    assert_eq!(page.header("Cache-Control").as_deref(), Some("no-store"));
+    let csp = page.header("Content-Security-Policy").expect("csp");
+    assert!(csp.contains("frame-ancestors 'none'"), "{csp}");
     assert!(
-        r.header("Content-Security-Policy")
-            .is_some_and(|c| c.contains("frame-ancestors 'none'"))
+        !csp.contains("worker-src"),
+        "the page starts no worker: {csp}"
     );
-    let pair = cookie.split(';').next().expect("pair");
-    let r = raw(
-        server.port,
-        format!("GET /api/state HTTP/1.1\r\nHost: {host}\r\nCookie: {pair}\r\n\r\n").as_bytes(),
-    );
-    assert_eq!(r.status, 200);
-    // The query token works only for the page, never for the API.
+    let cookie = format!("zenith_edit_{}={}", server.port, server.token);
+    for extra in [
+        format!("Cookie: {cookie}\r\n"),
+        format!("Authorization: {}\r\n", server.token),
+        format!("Authorization: Basic {}\r\n", server.token),
+    ] {
+        let r = raw(
+            server.port,
+            format!("GET /api/state HTTP/1.1\r\nHost: {host}\r\n{extra}\r\n").as_bytes(),
+        );
+        assert_eq!(r.status, 401, "{extra:?}");
+    }
     let r = raw(
         server.port,
         format!(
@@ -74,7 +82,101 @@ fn page_load_token_sets_a_strict_http_only_cookie() {
         )
         .as_bytes(),
     );
+    assert_eq!(r.status, 401, "a query token is refused");
+    let r = raw(
+        server.port,
+        format!(
+            "GET /api/state HTTP/1.1\r\nHost: {host}\r\nAuthorization: bearer {}\r\n\r\n",
+            server.token
+        )
+        .as_bytes(),
+    );
+    assert_eq!(r.status, 200, "the scheme is case-insensitive");
+}
+
+#[test]
+fn head_answers_page_routes_without_a_body() {
+    let server = start();
+    let get = server.request("GET", "/", &[], None);
+    let head = server.request("HEAD", "/", &[], None);
+    assert_eq!(head.status, 200);
+    assert!(head.body.is_empty(), "HEAD has no body");
+    assert_eq!(
+        head.header("Content-Length"),
+        Some(get.body.len().to_string()),
+        "HEAD names the GET length"
+    );
+    assert_eq!(head.header("Cache-Control").as_deref(), Some("no-store"));
+    let module = server.request("HEAD", "/js/main.js", &[], None);
+    assert_eq!(module.status, 200);
+    assert!(module.body.is_empty());
+    let api = server.request("HEAD", "/api/state", &[], None);
+    assert_eq!(api.status, 405);
+    assert_eq!(api.header("Allow").as_deref(), Some("GET, HEAD, POST"));
+}
+
+#[test]
+fn bodies_of_unauthenticated_requests_are_never_read() {
+    let server = start();
+    // A promised 1 MB body that never comes: without the token the reply is
+    // at once, not after a body deadline.
+    let started = Instant::now();
+    let r = raw(
+        server.port,
+        format!(
+            "POST /api/cmd HTTP/1.1\r\nHost: {}\r\nContent-Type: application/json\r\n\
+             Content-Length: 1000000\r\n\r\n",
+            server.host()
+        )
+        .as_bytes(),
+    );
     assert_eq!(r.status, 401);
+    assert!(
+        started.elapsed() < Duration::from_secs(3),
+        "{:?}",
+        started.elapsed()
+    );
+}
+
+#[test]
+fn idle_connections_never_stall_a_real_request() {
+    let server = start();
+    // Slowloris: many sockets that send a partial head, then nothing.
+    let idle: Vec<TcpStream> = (0..24)
+        .map(|_| {
+            let mut s = TcpStream::connect(("127.0.0.1", server.port)).expect("connect");
+            s.write_all(b"GET /api/state HTTP/1.1\r\nHost: ")
+                .expect("write");
+            s
+        })
+        .collect();
+    std::thread::sleep(Duration::from_millis(200));
+    let started = Instant::now();
+    assert_eq!(server.state()["ok"], true);
+    assert!(
+        started.elapsed() < Duration::from_secs(2),
+        "a real request waited {:?} behind idle sockets",
+        started.elapsed()
+    );
+    drop(idle);
+}
+
+#[test]
+fn idle_connections_are_dropped_after_the_head_deadline() {
+    let server = start();
+    let mut s = TcpStream::connect(("127.0.0.1", server.port)).expect("connect");
+    s.set_read_timeout(Some(Duration::from_secs(20)))
+        .expect("timeout");
+    let started = Instant::now();
+    let mut out = Vec::new();
+    let _ = s.read_to_end(&mut out);
+    let text = String::from_utf8_lossy(&out);
+    assert!(text.starts_with("HTTP/1.1 408"), "{text}");
+    assert!(
+        started.elapsed() < Duration::from_secs(10),
+        "{:?}",
+        started.elapsed()
+    );
 }
 
 #[test]

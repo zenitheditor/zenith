@@ -23,6 +23,7 @@ mod editor;
 mod exec;
 #[cfg(feature = "http")]
 mod http;
+mod policy;
 mod protocol;
 mod resources;
 mod serialize;
@@ -135,16 +136,32 @@ fn tools_call(id: Value, params: &Value) -> Value {
     success(id, exec::call(name, &args).into_payload())
 }
 
-/// Serve the MCP protocol over native Streamable-HTTP at `addr`. Requires the
-/// `http` Cargo feature; both transports drive [`handle_message`].
 #[cfg(feature = "http")]
-pub fn run_http(addr: &str) -> u8 {
-    http::serve(addr)
+pub use http::HttpOptions;
+pub use policy::set_root;
+
+/// Serve the MCP protocol over native Streamable-HTTP. Requires the `http`
+/// Cargo feature; both transports drive [`handle_message`].
+#[cfg(feature = "http")]
+pub fn run_http(options: &HttpOptions) -> u8 {
+    http::serve(options)
+}
+
+/// How to serve MCP over HTTP (the build has no `http` feature).
+#[cfg(not(feature = "http"))]
+#[derive(Debug, Clone, Default)]
+pub struct HttpOptions {
+    /// `host:port` to bind.
+    pub addr: String,
+    /// Allow a non-loopback bind address.
+    pub allow_remote: bool,
+    /// Extra names accepted in `Host` (for a reverse proxy).
+    pub allow_hosts: Vec<String>,
 }
 
 /// Fallback when the binary was built without the `http` feature: report and fail.
 #[cfg(not(feature = "http"))]
-pub fn run_http(_addr: &str) -> u8 {
+pub fn run_http(_options: &HttpOptions) -> u8 {
     eprintln!(
         "zenith mcp: this binary was built without the `http` feature; rebuild with \
          `--features http` to use --http, or use the default stdio transport."

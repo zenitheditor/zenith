@@ -218,7 +218,7 @@ fn editor_arguments_are_checked_before_side_effects() {
         ("zenith_editor_open", json!({})),
         (
             "zenith_editor_attach",
-            json!({ "url": "http://10.0.0.1:80/?token=x" }),
+            json!({ "url": "http://10.0.0.1:80/#token=x" }),
         ),
     ] {
         let r = mcp.call(tool, args.clone());
@@ -236,6 +236,60 @@ fn editor_arguments_are_checked_before_side_effects() {
         text.contains("edit.missing_file") && text.contains("nope.zen"),
         "{text}"
     );
+}
+
+#[test]
+fn editor_tools_open_only_zen_files_and_close_sessions() {
+    let dir = tempfile::tempdir().expect("dir");
+    let data = tempfile::tempdir().expect("data");
+    let doc = dir.path().join("d.zen");
+    std::fs::write(&doc, DOC).expect("write");
+    let rc = dir.path().join(".bashrc");
+    std::fs::write(&rc, "echo hi\n").expect("write");
+    let mut mcp = Mcp::start(data.path());
+    for (tool, args) in [
+        ("zenith_editor_open", json!({ "path": rc })),
+        (
+            "zenith_editor_command",
+            json!({ "path": rc, "command": "doc.open", "params": { "text": "pwned" } }),
+        ),
+    ] {
+        let r = mcp.call(tool, args);
+        assert_eq!(r["isError"], true, "{r}");
+        let text = r["content"][0]["text"].as_str().expect("text");
+        assert!(text.contains("not a .zen document"), "{text}");
+    }
+    assert_eq!(std::fs::read_to_string(&rc).expect("read"), "echo hi\n");
+    #[cfg(unix)]
+    {
+        let r = mcp.call("zenith_editor_open", json!({ "path": doc, "root": "/" }));
+        assert_eq!(r["isError"], true, "{r}");
+        let text = r["content"][0]["text"].as_str().expect("text");
+        assert!(text.contains("whole filesystem"), "{text}");
+    }
+    let opened = mcp.ok("zenith_editor_open", json!({ "path": doc }));
+    let session = opened["session"].as_str().expect("session").to_owned();
+    let v = opened["version"].as_u64().expect("version");
+    mcp.ok(
+        "zenith_editor_command",
+        json!({
+            "session": session, "command": "gesture.commit",
+            "params": { "node": "box", "dx": 1, "dy": 0 }, "version": v,
+        }),
+    );
+    let refused = mcp.call("zenith_editor_close", json!({ "session": session }));
+    assert_eq!(refused["isError"], true, "unsaved edits need discard");
+    let closed = mcp.ok(
+        "zenith_editor_close",
+        json!({ "session": session, "discard": true }),
+    );
+    assert_eq!(closed["closed"], session.as_str());
+    assert_eq!(closed["kind"], "local");
+    let listed = mcp.ok("zenith_editor_sessions", json!({}));
+    assert_eq!(listed["sessions"], json!([]));
+    let again = mcp.call("zenith_editor_close", json!({ "session": session }));
+    assert_eq!(again["isError"], true, "a closed session is gone");
+    assert_eq!(std::fs::read_to_string(&doc).expect("read"), DOC);
 }
 
 #[test]

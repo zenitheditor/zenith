@@ -2,7 +2,7 @@
 // geometry from the engine, pointer drags in page px, selection, and the
 // screen-versus-engine check after an edit.
 
-import { A, sleep, check, state, settle, clientOf, sharpness, checkSharp, engineState } from "./helpers.js";
+import { A, check, state, settle, clientOf, sharpness, checkSharp, engineState, nextFrame, viewSized } from "./helpers.js";
 
 /** CDP modifier bits. */
 export const ALT = 1;
@@ -106,7 +106,8 @@ export async function drag(page, from, to, { steps = 8, modifiers = 0, mid = nul
       const x = a.x + ((b.x - a.x) * i) / steps;
       const y = a.y + ((b.y - a.y) * i) / steps;
       await page.mouse("mouseMoved", x, y, { buttons: 1, modifiers });
-      await sleep(16);
+      // One move per frame, as a real pointer delivers them.
+      await nextFrame(page);
     }
     if (mid) await mid();
   } finally {
@@ -123,7 +124,8 @@ export async function clickPage(page, p, modifiers = 0) {
 /** Dismiss every notice, so the canvas keeps its size and place. */
 export async function dismissNotices(page) {
   await page.eval("(() => { for (const b of document.querySelectorAll('#banners [title=Dismiss]')) b.click(); return true; })()");
-  await sleep(100);
+  await page.waitFor("!document.querySelector('#banners [title=Dismiss]')", "the notices to go");
+  await viewSized(page);
 }
 
 /**

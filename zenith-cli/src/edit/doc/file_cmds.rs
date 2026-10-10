@@ -47,7 +47,15 @@ impl DocState {
         self.check_version(request, false)?;
         let p: SaveParams = params(request)?;
         if !p.overwrite {
-            if let DiskRead::Text(text, stamp) = disk::read(&self.target.path)
+            let on_disk = disk::read(&self.target.path);
+            if let DiskRead::Text(text, stamp) = &on_disk
+                && *text == self.saved_text
+            {
+                // The disk went back to the saved text (`git checkout`):
+                // no conflict is left.
+                ran.events.extend(self.back_to_saved(*stamp));
+            }
+            if let DiskRead::Text(text, stamp) = on_disk
                 && text != self.saved_text
                 && self.conflict.as_ref().is_none_or(|c| c.text != text)
             {
@@ -70,8 +78,15 @@ impl DocState {
         }
         let path = self.target.path.clone();
         let written =
-            crate::edit_io::write_document(&path, self.session.text.as_bytes(), SAVE_LABEL)
-                .map_err(|e| EditorError::new("edit.write_failed", e.human))?;
+            crate::edit_io::write_document_io(&path, self.session.text.as_bytes(), SAVE_LABEL)
+                .map_err(|e| {
+                    let code = if disk::readonly(&path) == Some(true) {
+                        "edit.readonly"
+                    } else {
+                        "edit.write_failed"
+                    };
+                    EditorError::new(code, crate::output_file::write_failure(&path, &e))
+                })?;
         let written_text = String::from_utf8(written.bytes).map_err(|_| {
             EditorError::new(
                 "edit.write_failed",
@@ -320,7 +335,11 @@ mod tests {
     #[test]
     fn conflict_blocks_a_plain_save_and_offers_both_ways() {
         let (_dir, mut state) = open();
-        force_conflict(&mut state, "other");
+        // A real conflict: the disk holds other text (a disk back at the
+        // saved text ends a conflict).
+        let other = DOC.replace("// The page.", "// Theirs.");
+        std::fs::write(state.path(), &other).expect("write");
+        force_conflict(&mut state, &other);
         let ran = state.execute(&Request::new("file.save", json!({})), None);
         let err = ran.result.expect_err("conflict");
         assert_eq!(err.code, "edit.conflict");

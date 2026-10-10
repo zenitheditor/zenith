@@ -72,6 +72,12 @@ impl SourceFs for ConfinedFs<'_> {
     fn is_file(&self, path: &Path) -> bool {
         self.check(path).is_ok_and(|p| p.is_file())
     }
+
+    fn refusal(&self, path: &Path) -> Option<FsError> {
+        self.check(path)
+            .err()
+            .filter(|e| e.kind != zenith_pipeline::FsErrorKind::NotFound)
+    }
 }
 
 #[cfg(test)]
@@ -116,5 +122,11 @@ mod tests {
         let err = fs.read(&root.join("link.txt")).expect_err("escape");
         assert!(err.message.contains("outside the editor root"), "{err}");
         assert!(!fs.is_file(&root.join("link.txt")));
+        let refused = fs.refusal(&root.join("link.txt")).expect("refused");
+        assert!(
+            refused.message.contains("outside the editor root"),
+            "{refused}"
+        );
+        assert!(fs.refusal(&root.join("missing.txt")).is_none());
     }
 }

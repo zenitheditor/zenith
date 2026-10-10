@@ -1,6 +1,7 @@
 // The inspector panel: `node.inspect` for the one selected node, with an
 // edit form for the `node.set` fields the engine lists (see editform.js).
 
+import { cssColor } from "../util/color.js";
 import { clear, h, num, plural } from "../util/dom.js";
 import { icon, kindIcon } from "../ui/icons.js";
 import { editForm } from "./editform.js";
@@ -174,16 +175,16 @@ function tokenChip(id, resolved, type) {
   );
   if (resolved === undefined || resolved === null) return chip;
   const shown = format(resolved);
-  const color = /^#[0-9a-fA-F]{3,8}$/.test(shown) || /^(rgb|hsl)a?\(/.test(shown);
-  return [
-    chip,
-    h(
-      "span",
-      { class: "resolved" },
-      color ? h("span", { class: "swatch", style: `background:${shown}` }) : null,
-      h("span", { text: shown }),
-    ),
-  ];
+  return [chip, h("span", { class: "resolved" }, swatch(shown), h("span", { text: shown }))];
+}
+
+/** A color swatch of `value`, or `null` when `value` is not a CSS color. */
+export function swatch(value) {
+  const color = cssColor(value);
+  if (color === null) return null;
+  const el = h("span", { class: "swatch" });
+  el.style.setProperty("background-color", color);
+  return el;
 }
 
 function format(v) {

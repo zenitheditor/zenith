@@ -37,6 +37,8 @@ export class App {
     this.valid = summary.valid;
     this.stale = summary.stale;
     this.serverDirty = summary.dirty;
+    /** The file is read-only: Save is off (see `EventRouter.readonly`). */
+    this.readonly = false;
     this.needsVersion = new Map();
     this.diagnosticList = [];
     this.index = null;
@@ -194,7 +196,7 @@ export class App {
       this.notices.show("comments", {
         level: "warning",
         title: "Comments removed.",
-        message: `The edit removed ${reply.removed_comments.length} comment line(s).`,
+        message: `The edit removed ${reply.removed_comments.length} comment(s).`,
         detail: reply.removed_comments.join("\n"),
       });
     }
@@ -400,6 +402,27 @@ export class App {
     return this.saving;
   }
 
+  /** Static host: write the text to a new file the user picks (`file.save_as`). */
+  async saveAs() {
+    const env = await this.sync.edit((version) => this.engine.run("file.save_as", {}, { version }), "save");
+    if (env.ok) {
+      this.serverDirty = env.dirty;
+      if (!env.result.saved) return;
+      this.events.cleared();
+      this.notices.hide("error:file.save");
+      if (env.result.path && env.result.path !== this.path) {
+        this.path = env.result.path;
+        this.name = this.path.split(/[\\/]/).pop() || this.name;
+        byId("doc-name").textContent = this.name;
+        byId("doc-name").title = this.path;
+      }
+      this.notices.toast(env.result.warning ?? `Saved ${this.name}.`);
+      this.status.update();
+    } else {
+      this.notices.error("file.save_as", env, { retry: () => this.saveAs() });
+    }
+  }
+
   /**
    * The static host opened another document (`opened` event): show its
    * text and start from page 1 with nothing selected.
@@ -428,6 +451,10 @@ export class App {
   /** Resend an engine offer as it came, at the current version. */
   async runOffer(offer) {
     this.notices.hide(`error:${offer.command}`);
+    if (offer.command === "file.save_as") {
+      this.notices.hide("error:file.save");
+      return this.saveAs();
+    }
     const params = offer.params ?? {};
     const env = this.needsVersion.get(offer.command) !== false || offer.command.startsWith("file.")
       ? await this.sync.edit((version) => this.engine.run(offer.command, params, { version }), "offer")

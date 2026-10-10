@@ -5,7 +5,7 @@
 // edited nodes' lines (and the tokens an edit creates), and the canvas
 // shows, pixel for pixel, the engine's render of the new source.
 
-import { A, STATE, sleep, check, state, ready, settle } from "./helpers.js";
+import { A, STATE, check, state, ready, settle, viewSized, viewportIs, bodyBackground, DARK_BG } from "./helpers.js";
 import {
   ALT, CTRL, SHIFT, lineOf, onlyNodes, onlyNodesAndTokens, onlyBlock, centerOf, handleOf, drag,
   dismissNotices, select, selectMany, selectedAs, groupHandle, previewShown, landed,
@@ -15,7 +15,6 @@ import {
 /** Drag a marquee band from page point `a` to `b`; `mid` runs before release. */
 async function band(page, a, b, { modifiers = 0, mid = null } = {}) {
   await drag(page, a, b, { modifiers, mid });
-  await sleep(150);
   await settle(page);
 }
 
@@ -68,7 +67,7 @@ export const steps = [
       await page.goto(url);
       await ready(page);
       await page.eval(`(() => { const l = ${A}.layout; if (l.state.left) l.toggle('left'); l.setSplit(0.3); return true; })()`);
-      await sleep(200);
+      await viewSized(page);
       await page.eval(`(() => { ${A}.view.actualSize(); return true; })()`);
       await settle(page);
       check((await state(page)).zoom === 1, "zoom is not 100%");
@@ -328,10 +327,12 @@ export const steps = [
       await page.key("z", CTRL);
       await page.waitFor(`(${STATE}).text === ${JSON.stringify(before.text)}`, "undo of the snapped move");
       await settle(page);
-      // Ctrl held during a move: no snap.
+      // Ctrl held during a move: no snap. The undo moved the version, so
+      // each drag waits for a version past the one it started at.
       await select(page, "dock");
+      const unsnapped = (await state(page)).version;
       await drag(page, from, { x: from.x + 37, y: from.y }, { modifiers: CTRL });
-      await landed(page, before.version);
+      await landed(page, unsnapped);
       after = await state(page);
       check(lineOf(after.text, "dock").includes("x=(px)497"), lineOf(after.text, "dock"));
       await page.eval("document.getElementById('viewport').focus()");
@@ -341,8 +342,9 @@ export const steps = [
       // Snapping off: no snap.
       await setSnap(page, false);
       await select(page, "dock");
+      const snapOff = (await state(page)).version;
       await drag(page, from, { x: from.x + 37, y: from.y });
-      await landed(page, before.version);
+      await landed(page, snapOff);
       after = await state(page);
       check(lineOf(after.text, "dock").includes("x=(px)497"), lineOf(after.text, "dock"));
       await canvasMatchesEngine(page);
@@ -461,7 +463,8 @@ export const steps = [
     async ({ page, shot }) => {
       await page.media("dark");
       await selectMany(page, ["a", "b"]);
-      await sleep(200);
+      await bodyBackground(page, DARK_BG);
+      await settle(page);
       await shot("canvas-multi-selection-dark");
       await dismissNotices(page);
       await drag(page, { x: 20, y: 205 }, { x: 330, y: 300 }, {
@@ -486,12 +489,12 @@ export const steps = [
       await canvasMatchesEngine(page);
       await page.media("light");
       await page.viewport(390, 844);
-      await sleep(400);
+      await viewportIs(page, 390);
       await page.eval(`(() => { ${A}.view.fit(); return true; })()`);
       await settle(page);
       await page.eval(`${A}.selection.selectIds(['title', 'rich'], 'test').then(() => true)`);
       await selectedAs(page, ["title", "rich"]);
-      await sleep(300);
+      await settle(page);
       await page.waitFor(`!${A}.renderer.preview && ${A}.renderer.idle()`, "the phone render");
       await shot("canvas-phone");
       const overflow = await page.eval("document.documentElement.scrollWidth > window.innerWidth");

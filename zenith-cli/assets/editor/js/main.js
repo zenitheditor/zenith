@@ -4,7 +4,15 @@
 //   wasm    a static site: the engine is the wasm module in a Worker.
 //
 // `<meta name="zenith-host" content="http|wasm|auto">` pins the host. The
-// default `auto` asks `/api/state` once.
+// default `auto` takes `http` when the URL carries a `zenith edit` token,
+// else asks `/api/state` once.
+//
+// The token: `zenith edit` opens `/#token=<t>`. A fragment never reaches a
+// server and is never in a `Referer`. The page reads it, drops it from the
+// address bar and history, and keeps it in memory. A copy in
+// `sessionStorage` (this tab and this origin only) lets a reload of the tab
+// work. The token dies with the server run, so a stored copy grants nothing
+// once `zenith edit` stops.
 
 import { App } from "./app/app.js";
 import { loadSample } from "./app/samples.js";
@@ -13,10 +21,33 @@ import { hydrateIcons } from "./ui/icons.js";
 import { byId } from "./util/dom.js";
 import { sleep } from "./util/timing.js";
 
+const TOKEN_KEY = "zenith-edit-token";
+
+/** The token from the fragment (then removed from the URL), else from this tab's storage. */
+function takeToken() {
+  const fragment = new URLSearchParams(location.hash.slice(1));
+  const fromUrl = fragment.get("token");
+  if (fromUrl) {
+    history.replaceState(null, "", `${location.pathname}${location.search}`);
+    try {
+      sessionStorage.setItem(TOKEN_KEY, fromUrl);
+    } catch {
+      // Storage off: the token lives in memory only, and a reload needs the URL again.
+    }
+    return fromUrl;
+  }
+  try {
+    return sessionStorage.getItem(TOKEN_KEY);
+  } catch {
+    return null;
+  }
+}
+
 async function main() {
   hydrateIcons(document);
-  const host = await chooseHost();
-  const { engine, summary } = host === "wasm" ? await startWasm() : await startServer();
+  const token = takeToken();
+  const host = await chooseHost(token);
+  const { engine, summary } = host === "wasm" ? await startWasm() : await startServer(token);
   byId("banners").replaceChildren();
   const app = new App(engine, summary);
   window.zenithEditor = app;
@@ -26,11 +57,12 @@ async function main() {
 }
 
 /** `"http"` when `zenith edit` serves this page, else `"wasm"`. */
-async function chooseHost() {
+async function chooseHost(token) {
   const pinned = document.querySelector('meta[name="zenith-host"]')?.content;
   if (pinned === "http" || pinned === "wasm") return pinned;
+  if (token) return "http";
   try {
-    const res = await fetch("/api/state", { credentials: "same-origin" });
+    const res = await fetch("/api/state", { credentials: "omit" });
     const json = await res.json().catch(() => null);
     const server = json && (json.ok === true || String(json.error?.code ?? "").startsWith("edit."));
     return server ? "http" : "wasm";
@@ -40,18 +72,30 @@ async function chooseHost() {
   }
 }
 
-async function startServer() {
-  // The token authenticated this load and set the cookie. Drop it from the
-  // address bar and history.
-  if (new URLSearchParams(location.search).has("token")) history.replaceState(null, "", "/");
-  const engine = new HttpEngine();
+async function startServer(token) {
+  if (!token) {
+    banner("error", "edit.unauthorized: this page has no token. Open the URL zenith edit printed in its terminal (it ends in #token=...).");
+    await new Promise(() => {});
+  }
+  const engine = new HttpEngine(token);
+  // The server answers once its first validation is done; a large
+  // document takes a while.
+  banner("info", "Loading the document.");
   let summary = null;
   for (let attempt = 0; summary === null; attempt++) {
     try {
       summary = await engine.state({ text: true });
     } catch (err) {
       fatal(err, attempt);
-      if (err.code === "edit.unauthorized") await new Promise(() => {});
+      if (err.code === "edit.unauthorized") {
+        // A token from an earlier run: forget it.
+        try {
+          sessionStorage.removeItem(TOKEN_KEY);
+        } catch {
+          // Nothing stored.
+        }
+        await new Promise(() => {});
+      }
       await sleep(Math.min(8000, 500 * 2 ** attempt));
     }
   }

@@ -1,6 +1,7 @@
 //! The `zenith edit` HTTP server. Wiring only.
 //!
-//! - `run` — [`EditServer`] and [`EditOptions`]: bind, threads, shutdown.
+//! - `run` — [`EditServer`], [`EditOptions`], [`StopHandle`]: bind,
+//!   threads, shutdown, stop signals.
 //! - `routes` — one connection: checks, routing.
 //! - `api` — the `/api/*` handlers.
 //! - `guard` — token, `Host`, and `Origin` checks.
@@ -8,6 +9,7 @@
 //! - `images` — recent renders by SHA-256.
 //! - `assets` — the embedded editor page.
 //! - `shared` — the state every thread reaches.
+//! - `slots` — the cap on open connections.
 
 mod api;
 mod assets;
@@ -17,5 +19,8 @@ mod images;
 mod routes;
 mod run;
 mod shared;
+mod slots;
 
-pub use run::{EditOptions, EditServer};
+#[cfg(feature = "http")]
+pub(crate) use guard::{Token, split_host};
+pub use run::{EditOptions, EditServer, Interrupt, StopHandle};

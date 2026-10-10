@@ -315,7 +315,18 @@ fn opt_pv_to_f64(pv: Option<&PropertyValue>, resolved: &Resolved) -> Option<f64>
         PropertyValue::Dimension(d) => Some(dim_to_f64(d)),
         PropertyValue::TokenRef(id) => match resolved.get(id).map(|t| &t.value) {
             Some(ResolvedValue::Dimension(d)) => Some(dim_to_f64(d)),
-            _ => None,
+            Some(
+                ResolvedValue::Color(_)
+                | ResolvedValue::CmykColor { .. }
+                | ResolvedValue::Number(_)
+                | ResolvedValue::FontFamily(_)
+                | ResolvedValue::FontWeight(_)
+                | ResolvedValue::Gradient(_)
+                | ResolvedValue::Shadow(_)
+                | ResolvedValue::Filter(_)
+                | ResolvedValue::Mask(_),
+            )
+            | None => None,
         },
         PropertyValue::Literal(_) | PropertyValue::DataRef(_) => None,
     }

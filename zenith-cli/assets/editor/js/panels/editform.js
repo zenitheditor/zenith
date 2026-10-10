@@ -8,6 +8,7 @@
 // name, weight). The engine binds a raw value through the token that holds
 // it, or a new one.
 
+import { cssColor } from "../util/color.js";
 import { h, num } from "../util/dom.js";
 import { icon } from "../ui/icons.js";
 
@@ -213,8 +214,8 @@ function boundField(spec, bound, tokens, set) {
     : null;
   const paint = (hex) => {
     if (!swatch) return;
-    const color = /^#[0-9a-fA-F]{3,8}$/.test(hex ?? "");
-    swatch.style.background = color ? hex : "";
+    const color = cssColor(hex) !== null && hex.startsWith("#");
+    swatch.style.setProperty("background-color", color ? hex : "");
     swatch.classList.toggle("none", !color);
     if (picker && /^#[0-9a-fA-F]{6}/.test(hex ?? "")) picker.value = hex.slice(0, 7).toLowerCase();
   };

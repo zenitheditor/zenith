@@ -1,6 +1,6 @@
 // Live events and the connection: `state`, `session`, `external_change`,
-// `saved`, `shutdown`; the offline notice; the disk conflict and deleted
-// notices.
+// `saved`, `stopping`, `shutdown`; the offline notice; the disk conflict,
+// deleted, read-only, and stopping notices.
 
 import { EngineUnavailable } from "../engine/index.js";
 import { lineDiff } from "../util/diff.js";
@@ -8,6 +8,8 @@ import { sleep } from "../util/timing.js";
 
 const DISK = "disk";
 const OFFLINE = "offline";
+const STOPPING = "stopping";
+const READONLY = "readonly";
 const PROBE_MIN_MS = 1000;
 const PROBE_MAX_MS = 8000;
 
@@ -19,6 +21,8 @@ export class EventRouter {
     this.connected = false;
     this.everConnected = false;
     this.stopped = false;
+    /** Engine calls on the wire now (tracked calls only). */
+    this.calls = 0;
   }
 
   /**
@@ -31,6 +35,7 @@ export class EventRouter {
     const wrap =
       (fn) =>
       async (...args) => {
+        router.calls++;
         try {
           const out = await fn(...args);
           router.reachable();
@@ -38,6 +43,8 @@ export class EventRouter {
         } catch (err) {
           if (err instanceof EngineUnavailable) router.offline(err);
           throw err;
+        } finally {
+          router.calls--;
         }
       };
     // A command that cannot reach the server resolves with an envelope
@@ -188,18 +195,60 @@ export class EventRouter {
         this.cleared();
         app.status.update();
         break;
+      case "stopping":
+        this.stopping();
+        break;
       case "shutdown":
         this.stop();
         break;
       default:
         break;
     }
+    // A save (here or elsewhere) took the edits the stop warning was about.
+    if (name !== "stopping" && !app.serverDirty) app.notices.hide(STOPPING);
+  }
+
+  /** The server got a stop signal (Ctrl-C) while the session has unsaved edits. */
+  stopping() {
+    const app = this.app;
+    app.notices.show(STOPPING, {
+      level: "warning",
+      code: "edit.stopping",
+      title: "zenith edit is stopping.",
+      message: `Its terminal got Ctrl-C while ${app.name} has unsaved edits. Save now to keep them. Another Ctrl-C there discards them.`,
+      dismiss: false,
+      actions: [{ label: "Save", kind: "primary", run: () => app.save() }],
+    });
+  }
+
+  /** Show or clear the read-only notice. Save is off while the file is read-only. */
+  readonly(on) {
+    const app = this.app;
+    if (app.readonly === on) return;
+    app.readonly = on;
+    app.status.update();
+    if (!on) {
+      app.notices.hide(READONLY);
+      return;
+    }
+    const wasm = this.raw?.kind === "wasm";
+    app.notices.show(READONLY, {
+      level: "warning",
+      code: "edit.readonly",
+      title: `${app.name} is read-only.`,
+      message: wasm
+        ? "The browser cannot write it. Save As writes the text to a new file."
+        : "Save is off until the file is writable (for example chmod u+w). The editor keeps your edits.",
+      dismiss: false,
+      actions: wasm ? [{ label: "Save As", kind: "primary", run: () => app.saveAs() }] : [],
+    });
   }
 
   /** Flags from a state summary: dirty, conflict, missing. */
   summary(s) {
     const app = this.app;
     app.serverDirty = s.dirty;
+    this.readonly(s.readonly === true);
     if (s.conflict && typeof s.disk_text === "string") this.conflict(s.disk_text);
     else if (s.missing) this.deleted();
     else if (!s.conflict) app.notices.hide(DISK);

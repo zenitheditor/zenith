@@ -28,23 +28,25 @@ export async function startServer(zenith, doc, data) {
 }
 
 /**
- * A client of a started server: opens the page URL once for the cookie,
- * then runs commands. `run(command, params, version)` resolves the envelope.
+ * A client of a started server: takes the token from the URL fragment and
+ * sends it as a bearer header. `run(command, params, version)` resolves the
+ * envelope.
  */
 export async function connect(server) {
-  const first = await fetch(server.url, { redirect: "manual" });
-  const cookie = (first.headers.getSetCookie?.() ?? []).map((c) => c.split(";")[0]).join("; ");
-  const base = new URL(server.url).origin;
+  const url = new URL(server.url);
+  const token = new URLSearchParams(url.hash.slice(1)).get("token");
+  const auth = { Authorization: `Bearer ${token}` };
+  const base = url.origin;
   const call = async (path, body) => {
     const res = await fetch(`${base}${path}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", "X-Zenith-Client": "node-e2e", Cookie: cookie },
+      headers: { "Content-Type": "application/json", "X-Zenith-Client": "node-e2e", ...auth },
       body: JSON.stringify(body),
     });
     return res.json();
   };
   return {
     run: (command, params = {}, version) => call("/api/cmd", { command, params, ...(version === undefined ? {} : { version }) }),
-    state: async () => (await fetch(`${base}/api/state?text=1`, { headers: { Cookie: cookie } })).json(),
+    state: async () => (await fetch(`${base}/api/state?text=1`, { headers: auth })).json(),
   };
 }

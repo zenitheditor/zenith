@@ -15,8 +15,13 @@ pub(crate) struct Limits {
     pub(crate) headers: usize,
     /// Body bytes.
     pub(crate) body: usize,
-    /// Time to receive the whole request.
-    pub(crate) deadline: Duration,
+    /// Time to receive the request line and the headers.
+    pub(crate) head_deadline: Duration,
+    /// Time to receive the body, counted from the end of the head.
+    pub(crate) body_deadline: Duration,
+    /// Longest wait for the next bytes. A client that sends nothing for
+    /// this long is dropped.
+    pub(crate) idle: Duration,
 }
 
 impl Default for Limits {
@@ -25,7 +30,9 @@ impl Default for Limits {
             head: 16 * 1024,
             headers: 64,
             body: 16 * 1024 * 1024,
-            deadline: Duration::from_secs(15),
+            head_deadline: Duration::from_secs(5),
+            body_deadline: Duration::from_secs(60),
+            idle: Duration::from_secs(5),
         }
     }
 }
@@ -37,6 +44,8 @@ pub(crate) enum Method {
     Get,
     /// `POST`.
     Post,
+    /// `HEAD`: a `GET` without the body. Static routes answer it.
+    Head,
     /// Any other method. Every route answers it with 405.
     Other(String),
 }
@@ -51,8 +60,15 @@ pub(crate) struct HttpRequest {
     pub(crate) query: String,
     /// Header names in lowercase, with their trimmed values, in order.
     pub(crate) headers: Vec<(String, String)>,
+    /// The `Content-Length` value. `0` without the header.
+    pub(crate) length: usize,
+    /// The body. Empty until [`read_body`] ran.
     pub(crate) body: Vec<u8>,
 }
+
+/// Body bytes that arrived with the head, kept for [`read_body`].
+#[derive(Debug, Default)]
+pub(crate) struct Leftover(Vec<u8>);
 
 impl HttpRequest {
     /// The value of the single header `name` (lowercase). `None` when it is
@@ -88,17 +104,18 @@ impl HttpRequest {
     }
 }
 
-/// Read one request from `stream`.
+/// Read the request line and the headers from `stream`. The body stays on
+/// the socket until [`read_body`], so a caller can check the request first.
 ///
 /// # Errors
 ///
-/// 408 past the deadline, 431 for an oversize head, 413 for an oversize
-/// body, 501 for `Transfer-Encoding`, 505 for a non-1.x version, and 400
-/// for anything malformed.
-pub(crate) fn read_request(
+/// 408 past the head deadline or the idle wait, 431 for an oversize head,
+/// 501 for `Transfer-Encoding`, 505 for a non-1.x version, and 400 for
+/// anything malformed.
+pub(crate) fn read_head(
     stream: &mut TcpStream,
     limits: Limits,
-) -> Result<HttpRequest, HttpError> {
+) -> Result<(HttpRequest, Leftover), HttpError> {
     let start = Instant::now();
     let mut buf: Vec<u8> = Vec::with_capacity(2048);
     let head_end = loop {
@@ -108,7 +125,7 @@ pub(crate) fn read_request(
         if buf.len() > limits.head {
             return Err(head_too_large(limits));
         }
-        read_some(stream, &mut buf, start, limits.deadline)?;
+        read_some(stream, &mut buf, start, limits.head_deadline, limits.idle)?;
     };
     if head_end > limits.head {
         return Err(head_too_large(limits));
@@ -124,6 +141,7 @@ pub(crate) fn read_request(
         path,
         query,
         headers,
+        length: 0,
         body: Vec::new(),
     };
     if request.header("transfer-encoding")?.is_some() {
@@ -133,7 +151,7 @@ pub(crate) fn read_request(
             "chunked bodies are not supported; send the body with Content-Length",
         ));
     }
-    let length = match request.header("content-length")? {
+    request.length = match request.header("content-length")? {
         None => 0,
         Some(v) => v.parse::<usize>().map_err(|_| {
             bad(
@@ -142,6 +160,27 @@ pub(crate) fn read_request(
             )
         })?,
     };
+    let rest = buf
+        .get(head_end + 4..)
+        .map(<[u8]>::to_vec)
+        .unwrap_or_default();
+    Ok((request, Leftover(rest)))
+}
+
+/// Read the body of `request` (its `Content-Length` bytes) into
+/// `request.body`.
+///
+/// # Errors
+///
+/// 413 for an oversize body, 408 past the body deadline or the idle wait,
+/// 400 when the client closes early.
+pub(crate) fn read_body(
+    stream: &mut TcpStream,
+    request: &mut HttpRequest,
+    leftover: Leftover,
+    limits: Limits,
+) -> Result<(), HttpError> {
+    let length = request.length;
     if length > limits.body {
         return Err(HttpError::new(
             413,
@@ -152,16 +191,14 @@ pub(crate) fn read_request(
             ),
         ));
     }
-    let mut body = buf
-        .get(head_end + 4..)
-        .map(<[u8]>::to_vec)
-        .unwrap_or_default();
+    let start = Instant::now();
+    let mut body = leftover.0;
     while body.len() < length {
-        read_some(stream, &mut body, start, limits.deadline)?;
+        read_some(stream, &mut body, start, limits.body_deadline, limits.idle)?;
     }
     body.truncate(length);
     request.body = body;
-    Ok(request)
+    Ok(())
 }
 
 /// Read more bytes into `buf` before the deadline.
@@ -170,13 +207,14 @@ fn read_some(
     buf: &mut Vec<u8>,
     start: Instant,
     deadline: Duration,
+    idle: Duration,
 ) -> Result<(), HttpError> {
     let remaining = deadline
         .checked_sub(start.elapsed())
         .filter(|d| !d.is_zero())
         .ok_or_else(timeout)?;
     stream
-        .set_read_timeout(Some(remaining))
+        .set_read_timeout(Some(remaining.min(idle).max(Duration::from_millis(1))))
         .map_err(|e| bad("http.socket", e.to_string()))?;
     let mut chunk = [0u8; 8192];
     match stream.read(&mut chunk) {
@@ -224,6 +262,7 @@ fn request_line(line: &str) -> Result<(Method, String, String), HttpError> {
     let method = match method {
         "GET" => Method::Get,
         "POST" => Method::Post,
+        "HEAD" => Method::Head,
         other => Method::Other(other.to_owned()),
     };
     let (path, query) = target.split_once('?').unwrap_or((target, ""));
@@ -297,16 +336,24 @@ mod tests {
     use std::net::TcpListener;
 
     fn parse(raw: &[u8], limits: Limits) -> Result<HttpRequest, HttpError> {
+        parse_with(raw, limits, Duration::from_millis(200))
+    }
+
+    /// Parse `raw`, keeping the client socket open for `hold`.
+    fn parse_with(raw: &[u8], limits: Limits, hold: Duration) -> Result<HttpRequest, HttpError> {
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
         let addr = listener.local_addr().expect("addr");
         let raw = raw.to_vec();
         let writer = std::thread::spawn(move || {
             let mut c = TcpStream::connect(addr).expect("connect");
             let _ = c.write_all(&raw);
-            std::thread::sleep(Duration::from_millis(200));
+            std::thread::sleep(hold);
         });
         let (mut s, _) = listener.accept().expect("accept");
-        let out = read_request(&mut s, limits);
+        let out = read_head(&mut s, limits).and_then(|(mut req, rest)| {
+            read_body(&mut s, &mut req, rest, limits)?;
+            Ok(req)
+        });
         writer.join().expect("join");
         out
     }
@@ -367,7 +414,7 @@ mod tests {
             505
         );
         let quick = Limits {
-            deadline: Duration::from_millis(50),
+            head_deadline: Duration::from_millis(50),
             ..Limits::default()
         };
         assert_eq!(
@@ -376,5 +423,46 @@ mod tests {
                 .status,
             408
         );
+    }
+
+    #[test]
+    fn idle_clients_time_out_before_the_deadline() {
+        let idle = Limits {
+            head_deadline: Duration::from_secs(30),
+            body_deadline: Duration::from_secs(30),
+            idle: Duration::from_millis(100),
+            ..Limits::default()
+        };
+        // The client stays silent for 2 s, then closes. Without the idle
+        // wait the read would end with the close (400), not with 408.
+        let err =
+            parse_with(b"GET / HTTP/1.1\r\n", idle, Duration::from_secs(2)).expect_err("idle head");
+        assert_eq!(err.status, 408);
+        let err = parse_with(
+            b"POST / HTTP/1.1\r\nContent-Length: 9\r\n\r\nabc",
+            idle,
+            Duration::from_secs(2),
+        )
+        .expect_err("idle body");
+        assert_eq!(err.status, 408);
+    }
+
+    #[test]
+    fn the_body_waits_for_read_body() {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+        let addr = listener.local_addr().expect("addr");
+        let writer = std::thread::spawn(move || {
+            let mut c = TcpStream::connect(addr).expect("connect");
+            let _ = c.write_all(b"POST / HTTP/1.1\r\nContent-Length: 20000000\r\n\r\n");
+            std::thread::sleep(Duration::from_millis(200));
+        });
+        let (mut s, _) = listener.accept().expect("accept");
+        let (req, rest) = read_head(&mut s, Limits::default()).expect("head");
+        assert_eq!(req.length, 20_000_000, "the head alone is read");
+        assert!(req.body.is_empty());
+        let mut req = req;
+        let err = read_body(&mut s, &mut req, rest, Limits::default()).expect_err("too large");
+        assert_eq!(err.status, 413);
+        writer.join().expect("join");
     }
 }

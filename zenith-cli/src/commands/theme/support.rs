@@ -5,9 +5,5 @@
 /// Shared by `new::px` (dimension shape values) and `apply::encode_literal`
 /// (plain `number` token values).
 pub(super) fn format_scalar(v: f64) -> String {
-    if v.fract() == 0.0 && v.is_finite() {
-        format!("{}", v as i64)
-    } else {
-        format!("{v}")
-    }
+    zenith_core::format_number(v)
 }

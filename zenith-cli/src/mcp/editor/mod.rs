@@ -6,4 +6,4 @@
 mod registry;
 mod run;
 
-pub(crate) use run::{attach, command, open, render, sessions};
+pub(crate) use run::{attach, close, command, open, render, sessions};

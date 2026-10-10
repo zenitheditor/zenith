@@ -11,22 +11,44 @@
 //! - HTTP/1.1 over `std::net`, one request per connection
 //!   (`Connection: close`). Bodies use `Content-Length`. Chunked bodies get
 //!   501.
-//! - Limits: head 16 KiB, 64 headers, body 16 MiB, whole request in 15 s.
-//!   Past a limit the reply is 431, 413, or 408. Malformed input gets 400.
-//! - 4 worker threads, a queue of 64 connections (503 `edit.busy` past
-//!   it), and one event thread for all event streams.
+//! - Limits: head 16 KiB and 64 headers, read within 5 s. Body 16 MiB,
+//!   read within 60 s. A client that sends nothing for 5 s is dropped. Past
+//!   a limit the reply is 431, 413, or 408. Malformed input gets 400.
+//! - The head is read and checked (`Host`, `Origin`, token) before the
+//!   body. A request without the token never makes the server read or hold
+//!   a body.
+//! - One thread per connection, at most 64 open connections and 16 from
+//!   one non-loopback peer. Past a cap the accept loop answers 503
+//!   `edit.busy` with one non-blocking write, so idle or slow clients never
+//!   stall it. One event thread serves every event stream.
 //!
 //! # Security
 //!
 //! - **Bind.** Loopback by default. A non-loopback `--host` needs
-//!   `--allow-remote` and prints a warning.
+//!   `--allow-remote` and prints a warning: the traffic is plain HTTP, so
+//!   the token crosses the network in clear. Use a TLS reverse proxy or an
+//!   SSH tunnel instead.
 //! - **Token.** 32 bytes from the OS RNG, 64 hex characters, new per run,
-//!   compared in constant time. Agents send `Authorization: Bearer
-//!   <token>`. The page loads `/?token=<token>`. That response sets the
-//!   cookie `zenith_edit_<port>=<token>; HttpOnly; SameSite=Strict;
-//!   Path=/`, and the page then calls `history.replaceState` to drop the
-//!   token from the address bar. `EventSource` and `fetch` send the cookie.
-//!   Every route needs the token, static files included.
+//!   compared in constant time. Every `/api/*` request sends
+//!   `Authorization: Bearer <token>`. The server accepts the token nowhere
+//!   else: no cookie (cookies ignore the port, so every service on
+//!   127.0.0.1 would receive it) and no query (it would land in logs and
+//!   history).
+//! - **Page bootstrap.** The page URL is `http://127.0.0.1:<port>/#token=<t>`.
+//!   A fragment is never sent to a server and never in a `Referer`. The page
+//!   reads it, drops it from the address bar and history
+//!   (`history.replaceState`), keeps it in memory, and copies it to this
+//!   tab's `sessionStorage` so a reload works. It sends it as the bearer
+//!   header on every `fetch`, and reads `/api/events` with `fetch` (an
+//!   `EventSource` cannot send a header). The page files (`/`, `/js/…`) are
+//!   the public editor bundle and need no token.
+//! - **Browser launch.** The opener command line (`xdg-open`, `open`,
+//!   `rundll32`) is readable by other local users, so it never holds
+//!   the URL. The server writes a redirect page, mode `0600` with a random
+//!   name, into `$XDG_RUNTIME_DIR` (else the temporary directory) and opens
+//!   that file. The server removes it after the first authenticated request,
+//!   or at exit. A sandboxed browser that cannot read the file shows an
+//!   error: open the printed URL instead.
 //! - **Host.** Must be `localhost`, an IP literal, or the `--host` name,
 //!   with the bound port. A DNS-rebinding page carries its own name and
 //!   gets 403 `edit.bad_host`.
@@ -43,18 +65,29 @@
 //!   fonts are read as every other CLI command reads them.
 //! - **Writes.** Saves go through the CLI write path: history and
 //!   `doc-id` stamping as `tx --apply`, then an atomic sibling-file
-//!   rename. A symlinked document keeps its link.
+//!   rename after the bytes are synced to disk. A symlinked document keeps
+//!   its link. A read-only document opens with a warning, reports
+//!   `readonly: true`, and a save fails with `edit.readonly`.
 //! - Every page response carries a strict Content-Security-Policy,
-//!   `X-Frame-Options: DENY`, and `nosniff`.
+//!   `X-Frame-Options: DENY`, and `nosniff`. The page itself is
+//!   `Cache-Control: no-store`.
+//!
+//! # Stop signals
+//!
+//! Ctrl-C, `SIGTERM`, and `SIGHUP` stop a clean session at once (exit 0).
+//! With unsaved edits the first signal stops nothing: the terminal names
+//! the file and every page gets a `stopping` event and a banner with Save.
+//! A second signal drops the edits and exits with 130. A save (any return
+//! to a clean session) clears the warning.
 //!
 //! # Routes
 //!
 //! | Method | Path | Body | Reply |
 //! |---|---|---|---|
-//! | GET | `/`, `/<asset>` | — | embedded page file. `/?token=` sets the cookie |
+//! | GET, HEAD | `/`, `/<asset>` | — | embedded page file (no token needed) |
 //! | POST | `/api/cmd` | `{command, params?, version?, diff?}` | envelope |
 //! | POST | `/api/save` | `{version?, overwrite?, diff?}` or empty | envelope of `file.save` |
-//! | GET | `/api/state[?text=1]` | — | `{ok, path, root, version, dirty, valid, stale, conflict, missing, page, selection, mtime_ms, saved_sha256, text?, disk_text?}` |
+//! | GET | `/api/state[?text=1]` | — | `{ok, path, root, version, dirty, valid, stale, conflict, missing, readonly, page, selection, mtime_ms, saved_sha256, text?, disk_text?}` |
 //! | GET | `/api/events` | — | `text/event-stream` |
 //! | GET | `/api/image/<sha256>.png` | — | PNG, `Cache-Control: immutable` |
 //! | POST | `/api/shutdown` | `{force?}` or empty | `{ok, stopping, dirty}`. 409 `edit.unsaved` while dirty without `force` |
@@ -112,14 +145,17 @@
 //!
 //! | event | data |
 //! |---|---|
-//! | `state` | the summary, first record on every stream |
+//! | `state` | the summary, first record on every stream, and again when `readonly` changes |
 //! | `session` | `{client, command, base_version, version, delta?, selection, page, valid, stale, dirty, conflict}` |
 //! | `external_change` | `{path, deleted, mtime_ms, text, conflict, reloaded, base_version, version, delta?, valid, stale, dirty}` |
 //! | `saved` | `{client, path, version, sha256, mtime_ms, stamped}` |
+//! | `stopping` | `{reason: "signal", path, version, dirty: true}`: a stop signal met unsaved edits |
 //! | `shutdown` | `{}`, then the stream closes |
 //!
 //! A removed file sends `external_change` with `deleted: true` and no
-//! text. A later save writes it again.
+//! text. A later save writes it again. A file that holds the saved text
+//! again (restored, or `git checkout` during a conflict) sends
+//! `external_change` with `conflict: false` and `deleted: false`.
 //!
 //! **Applying a delta.** `delta` is `{start, end, from, to, insert}`
 //! (`from`/`to` in UTF-16 units) against the text at `base_version`.
@@ -140,6 +176,8 @@
 //!   `file.save` fails with `edit.conflict`, offering `file.reload` (take
 //!   the disk text) and `file.save {overwrite: true}` (replace it).
 //! - A save that finds an unseen disk change applies the same rule first.
+//! - Disk back at the saved text: the conflict ends. The session keeps
+//!   its edits and saves again.
 //!
 //! Neither side is ever dropped silently. Stale-version rules of the
 //! engine stay in force for every text-changing command.
@@ -150,5 +188,8 @@ pub(crate) mod doc;
 mod http;
 mod server;
 
-pub(crate) use browser::open as open_browser;
-pub use server::{EditOptions, EditServer};
+#[cfg(feature = "http")]
+pub(crate) use http::{HttpError, HttpRequest, Limits, Method, Response, read_body, read_head};
+pub use server::{EditOptions, EditServer, Interrupt, StopHandle};
+#[cfg(feature = "http")]
+pub(crate) use server::{Token, split_host};

@@ -28,8 +28,9 @@
 //
 //   engine.state({ text }) -> Promise<Summary>
 //       Summary = { ok, path, root, version, dirty, valid, stale, conflict,
-//                   missing, page, selection, mtime_ms, saved_sha256,
-//                   text?, disk_text? }   (text with `text: true`)
+//                   missing, readonly, page, selection, mtime_ms,
+//                   saved_sha256, text?, disk_text? }   (text with `text: true`)
+//       `readonly`: the file cannot be written, so Save fails.
 //       Rejects with `EngineUnavailable`.
 //
 //   engine.image(image) -> Promise<Blob>
@@ -41,6 +42,7 @@
 //       Live events. `open()` runs on every (re)connect: the page reads the
 //       state with text after it, since events do not resume. `event(name,
 //       data)` runs for `state`, `session`, `external_change`, `saved`,
+//       `stopping` (the server got a stop signal with unsaved edits),
 //       `shutdown`. `lost(retryMs)` runs when the stream drops and names the
 //       wait before the next attempt. `stopped()` runs after `shutdown`.
 //       Returns the function that ends the subscription.

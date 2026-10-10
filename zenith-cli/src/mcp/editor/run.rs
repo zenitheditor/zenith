@@ -1,11 +1,10 @@
 //! The `zenith_editor_*` MCP tools: open a document in an editor session,
-//! run editor commands on it, render it, list sessions, and attach to a
-//! running `zenith edit`.
+//! run editor commands on it, render it, list and close sessions, and
+//! attach to a running `zenith edit`.
 //!
 //! Every argument is decoded and checked before any file is read or any
-//! request is sent.
-
-use std::path::PathBuf;
+//! request is sent. Documents pass the file policy of `mcp::policy`: `.zen`
+//! only, under the server root, never the whole filesystem as read root.
 
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -14,7 +13,8 @@ use zenith_editor::Request;
 
 use super::registry::{Entry, registry};
 use crate::edit::client::Remote;
-use crate::edit::doc::{DocState, Ran, Target, image_meta};
+use crate::edit::doc::{DocState, Ran, image_meta};
+use crate::mcp::policy;
 use crate::mcp::protocol::ToolResult;
 use crate::mcp::serialize::compact;
 
@@ -65,6 +65,14 @@ struct AttachArgs {
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
+struct CloseArgs {
+    session: String,
+    #[serde(default)]
+    discard: bool,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct NoArgs {}
 
 /// `zenith_editor_open {path, root?, discard?}`.
@@ -73,17 +81,14 @@ pub(crate) fn open(args: &Value) -> ToolResult {
         Ok(a) => a,
         Err(r) => return r,
     };
-    let target = match Target::resolve(
-        &PathBuf::from(&a.path),
-        a.root.as_deref().map(PathBuf::from).as_deref(),
-    ) {
+    let target = match policy::editor_target(&a.path, a.root.as_deref()) {
         Ok(t) => t,
-        Err(e) => return ToolResult::err(format!("{}: {}", e.code, e.message)),
+        Err(e) => return ToolResult::err(e),
     };
     let mut reg = registry();
     let existing = reg.local_id(&target.path);
     if let Some(id) = &existing
-        && let Some(Entry::Local(doc)) = reg.sessions.get(id)
+        && let Some(Entry::Local(doc)) = reg.get(id)
         && doc.dirty()
         && !a.discard
     {
@@ -98,7 +103,7 @@ pub(crate) fn open(args: &Value) -> ToolResult {
         Err(e) => return ToolResult::err(format!("{}: {}", e.code, e.message)),
     };
     let id = existing.unwrap_or_else(|| reg.next_id('e'));
-    let out = json!({
+    let mut out = json!({
         "session": id,
         "path": doc.path(),
         "version": doc.session().version,
@@ -108,7 +113,15 @@ pub(crate) fn open(args: &Value) -> ToolResult {
         "diagnostics": reply.get("diagnostics").cloned().unwrap_or(json!([])),
         "commands": "send command commands.list for every command and its params",
     });
-    reg.sessions.insert(id, Entry::Local(Box::new(doc)));
+    match reg.insert(id, Entry::Local(Box::new(doc))) {
+        Ok(Some(evicted)) => {
+            if let Some(obj) = out.as_object_mut() {
+                obj.insert("evicted".into(), Value::String(evicted));
+            }
+        }
+        Ok(None) => {}
+        Err(e) => return ToolResult::err(e),
+    }
     let text = compact(&out);
     ToolResult::ok(out, text)
 }
@@ -176,7 +189,6 @@ pub(crate) fn sessions(args: &Value) -> ToolResult {
         return r;
     }
     let listed: Vec<Listed> = registry()
-        .sessions
         .iter()
         .map(|(id, entry)| match entry {
             Entry::Local(doc) => Listed::Local(json!({
@@ -245,14 +257,17 @@ pub(crate) fn attach(args: &Value) -> ToolResult {
     let path = state["path"].as_str().unwrap_or_default().to_owned();
     let mut reg = registry();
     let id = reg.remote_id(&remote).unwrap_or_else(|| reg.next_id('r'));
-    reg.sessions.insert(
+    let evicted = match reg.insert(
         id.clone(),
         Entry::Remote {
             remote: remote.clone(),
             path: path.clone(),
         },
-    );
-    let out = json!({
+    ) {
+        Ok(evicted) => evicted,
+        Err(e) => return ToolResult::err(e),
+    };
+    let mut out = json!({
         "session": id,
         "server": remote.addr().to_string(),
         "path": path,
@@ -261,6 +276,41 @@ pub(crate) fn attach(args: &Value) -> ToolResult {
         "valid": state["valid"],
         "conflict": state["conflict"],
     });
+    if let (Some(evicted), Some(obj)) = (evicted, out.as_object_mut()) {
+        obj.insert("evicted".into(), Value::String(evicted));
+    }
+    let text = compact(&out);
+    ToolResult::ok(out, text)
+}
+
+/// `zenith_editor_close {session, discard?}`: drop a session. A local
+/// session with unsaved edits needs `discard: true`. Closing an attached
+/// session only forgets it: the `zenith edit` server keeps running.
+pub(crate) fn close(args: &Value) -> ToolResult {
+    let a: CloseArgs = match decode(args, "zenith_editor_close") {
+        Ok(a) => a,
+        Err(r) => return r,
+    };
+    let mut reg = registry();
+    let Some(entry) = reg.get(&a.session) else {
+        return ToolResult::err(format!(
+            "no editor session '{}'; zenith_editor_sessions lists them",
+            a.session
+        ));
+    };
+    if entry.holds_unsaved() && !a.discard {
+        return ToolResult::err(format!(
+            "session {} has unsaved edits; save them with zenith_editor_command file.save, or \
+             pass discard=true to drop them",
+            a.session
+        ));
+    }
+    let kind = match reg.remove(&a.session) {
+        Some(Entry::Local(_)) => "local",
+        Some(Entry::Remote { .. }) => "attached",
+        None => return ToolResult::err(format!("no editor session '{}'", a.session)),
+    };
+    let out = json!({ "closed": a.session, "kind": kind });
     let text = compact(&out);
     ToolResult::ok(out, text)
 }
@@ -273,15 +323,15 @@ fn run(session: Option<&str>, path: Option<&str>, request: &Request) -> ToolResu
             return ToolResult::err("pass exactly one of 'session' and 'path'".to_owned());
         }
         (Some(_), None) => None,
-        (None, Some(p)) => match Target::resolve(&PathBuf::from(p), None) {
+        (None, Some(p)) => match policy::editor_target(p, None) {
             Ok(t) => Some(t),
-            Err(e) => return ToolResult::err(format!("{}: {}", e.code, e.message)),
+            Err(e) => return ToolResult::err(e),
         },
     };
     let mut reg = registry();
     let id = match (session, target) {
         (Some(id), _) => {
-            if !reg.sessions.contains_key(id) {
+            if !reg.contains(id) {
                 return ToolResult::err(format!(
                     "no editor session '{id}'; zenith_editor_sessions lists them, \
                      zenith_editor_open starts one"
@@ -294,7 +344,9 @@ fn run(session: Option<&str>, path: Option<&str>, request: &Request) -> ToolResu
             None => match DocState::open(target) {
                 Ok((doc, _)) => {
                     let id = reg.next_id('e');
-                    reg.sessions.insert(id.clone(), Entry::Local(Box::new(doc)));
+                    if let Err(e) = reg.insert(id.clone(), Entry::Local(Box::new(doc))) {
+                        return ToolResult::err(e);
+                    }
                     id
                 }
                 Err(e) => return ToolResult::err(format!("{}: {}", e.code, e.message)),
@@ -302,7 +354,7 @@ fn run(session: Option<&str>, path: Option<&str>, request: &Request) -> ToolResu
         },
         (None, None) => return ToolResult::err("pass 'session' or 'path'".to_owned()),
     };
-    match reg.sessions.get_mut(&id) {
+    match reg.get_mut(&id) {
         Some(Entry::Local(doc)) => run_local(&id, doc, request),
         Some(Entry::Remote { remote, .. }) => {
             let remote = remote.clone();

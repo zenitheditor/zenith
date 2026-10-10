@@ -52,6 +52,14 @@ pub(crate) fn stamp(path: &Path) -> Option<Stamp> {
     })
 }
 
+/// `Some(true)` when `path` is read-only (no write permission bit on Unix,
+/// the read-only attribute on Windows). `None` when it has no metadata.
+pub(crate) fn readonly(path: &Path) -> Option<bool> {
+    std::fs::metadata(path)
+        .ok()
+        .map(|m| m.permissions().readonly())
+}
+
 /// Read `path` as text, with its stamp.
 pub(crate) fn read(path: &Path) -> DiskRead {
     let before = stamp(path);
@@ -103,5 +111,20 @@ mod tests {
         }
         std::fs::write(&path, [0xff, 0xfe]).expect("write");
         assert!(matches!(read(&path), DiskRead::Unreadable(_)));
+    }
+
+    #[test]
+    fn readonly_follows_the_permissions() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("a.zen");
+        assert_eq!(readonly(&path), None);
+        std::fs::write(&path, "abc").expect("write");
+        assert_eq!(readonly(&path), Some(false));
+        let original = std::fs::metadata(&path).expect("meta").permissions();
+        let mut perms = original.clone();
+        perms.set_readonly(true);
+        std::fs::set_permissions(&path, perms).expect("chmod");
+        assert_eq!(readonly(&path), Some(true));
+        std::fs::set_permissions(&path, original).expect("chmod");
     }
 }

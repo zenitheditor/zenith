@@ -50,16 +50,18 @@ tempfile = "3"
 # Parallel page compile and raster for multi-page renders. Pure Rust and
 # already in the lock via `jpeg-decoder`, so the C-free invariant holds.
 rayon = "1.12"
-# Optional native Streamable-HTTP transport for `zenith mcp --http`. `tiny_http`
-# is pure-Rust and synchronous (default features only — the `ssl-*` features
-# pull C; they stay off), so the C-free, dependency-light invariant holds and
-# the default build is unaffected.
-tiny_http = { version = "0.12", optional = true }
+# Ctrl-C and SIGTERM for `zenith edit`. Pure-Rust bindings: `nix` (over `libc`)
+# on Unix, `windows-sys` on Windows, `dispatch2` on Apple. No C is compiled,
+# and the `unsafe` stays inside the crate, so the C-free invariant and
+# `unsafe_code = "forbid"` hold. `termination` adds SIGTERM and SIGHUP.
+ctrlc = { version = "3.5", features = ["termination"] }
 
 [features]
 default = []
-# Enable the in-binary HTTP transport (otherwise `--http` reports it was built out).
-http = ["dep:tiny_http"]
+# Enable the in-binary HTTP transport for `zenith mcp --http` (otherwise `--http`
+# reports it was built out). It runs on the bounded `std::net` HTTP layer of
+# `zenith edit`, so it adds no dependency.
+http = []
 
 [dev-dependencies]
 tiny-skia = "0.11"

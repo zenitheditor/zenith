@@ -4,7 +4,6 @@
 import {
   A,
   STATE,
-  sleep,
   check,
   state,
   settle,
@@ -19,7 +18,12 @@ import {
   changedLines,
   engineState,
   agentCommand,
+  viewportIs,
+  bodyBackground,
+  DARK_BG,
+  LIGHT_BG,
 } from "./helpers.js";
+import { crlfEdits, editWhileTyping, paneIsEngine, reconnectWhileSending } from "./sync_checks.js";
 
 export const steps = [
   [
@@ -319,8 +323,8 @@ export const steps = [
       const renders = await page.eval(`${A}.renderer.renders`);
       const vw = await page.eval(`${A}.view.vw`);
       // Inside the margin: no render.
+      // `panBy` decides at once whether the view needs a render.
       await page.eval(`(() => { ${A}.view.panBy(-${Math.round(vw * 0.2)}, 0); return true; })()`);
-      await sleep(150);
       check(await page.eval(`${A}.renderer.idle()`), "a pan inside the margin started a render");
       check((await page.eval(`${A}.renderer.renders`)) === renders, "a pan inside the margin rendered");
       // Past it: a new window.
@@ -450,6 +454,40 @@ export const steps = [
     },
   ],
   [
+    "engine edits while typing: duplicate and undo rebase the keystrokes, save writes the engine text",
+    async ({ page, mode, readDoc }) => {
+      await page.eval(`${A}.selection.selectIds(['card.b'], 'layers')`);
+      await editWhileTyping(page, {
+        command: "node.duplicate",
+        trigger: `${A}.actions.duplicate()`,
+        anchor: "// Relative",
+        typed: " typed",
+      });
+      const text = await editWhileTyping(page, {
+        command: "history.undo",
+        trigger: `${A}.history('history.undo')`,
+        anchor: "// and moving",
+        typed: " more",
+      });
+      // The static host saves through a file handle: static_steps.js checks it.
+      if (mode === "server") {
+        await page.eval(`${A}.save()`);
+        await page.waitFor(`!${A}.dirty()`, "save to finish");
+        const saved = await paneIsEngine(page, "after save");
+        check(readDoc() === saved, "disk text differs from the engine text after save");
+      }
+      return { bytes: text.length };
+    },
+  ],
+  [
+    "a reconnect while a keystroke is on the wire resyncs and refreshes",
+    async ({ page }) => {
+      const text = await reconnectWhileSending(page, { anchor: "// Relative", typed: " again" });
+      check(text.includes("// Relative again"), "the keystroke is not in the text after the reconnect");
+      return {};
+    },
+  ],
+  [
     "conflict banner: Reload takes the disk text",
     async ({ page, readDoc, writeDoc, shot }) => {
       const s = await state(page);
@@ -496,25 +534,106 @@ export const steps = [
     { host: "server" },
   ],
   [
+    "a conflict clears when the disk returns to the saved text; save then works",
+    async ({ page, readDoc, writeDoc }) => {
+      await settle(page);
+      const saved = readDoc();
+      const s = await state(page);
+      check(s.text.includes("// mine Disk C"), "the text lacks the line of the Overwrite step");
+      await cursorAt(page, s.text.indexOf("// mine Disk C") + 2);
+      await page.type(" ours");
+      await settle(page);
+      writeDoc(saved.replace("// mine Disk C", "// Rival C"));
+      await page.waitFor("!!document.querySelector('[data-key=disk].error')", "conflict banner");
+      // `git checkout`: the file holds the saved text again.
+      writeDoc(saved);
+      await page.waitFor("!document.querySelector('[data-key=disk]')", "the conflict banner to clear");
+      check((await engineState(page)).conflict === false, "the server still reports a conflict");
+      await page.key("s", 2);
+      await page.waitFor(`!${A}.dirty()`, "save to finish");
+      await settle(page);
+      check(readDoc() === (await state(page)).text, "disk text is not the editor text after the save");
+      return {};
+    },
+    { host: "server" },
+  ],
+  [
+    "a read-only file shows a notice and turns Save off until it is writable",
+    async ({ page, doc, setReadonly }) => {
+      if (!setReadonly) return { skipped: "no chmod on this platform" };
+      setReadonly(doc, true);
+      try {
+        await page.waitFor("!!document.querySelector('[data-key=readonly]')", "the read-only notice", 10000);
+        check(await page.eval("document.getElementById('save').disabled"), "Save is still on");
+        check((await engineState(page)).readonly === true, "the summary is not read-only");
+      } finally {
+        setReadonly(doc, false);
+      }
+      await page.waitFor("!document.querySelector('[data-key=readonly]') && !document.getElementById('save').disabled", "the notice to clear", 10000);
+      return {};
+    },
+    { host: "server" },
+  ],
+  [
+    "a stop signal with unsaved edits warns the page; Save keeps the edits and clears it",
+    async ({ page, signal, readDoc, shot }) => {
+      if (!signal) return { skipped: "no signals on this platform" };
+      await settle(page);
+      const s = await state(page);
+      await cursorAt(page, s.text.indexOf("// ours mine Disk C") + 2);
+      await page.type(" unsaved");
+      await settle(page);
+      check(await page.eval(`${A}.dirty()`), "typing did not make the buffer dirty");
+      signal("SIGINT");
+      await page.waitFor("!!document.querySelector('[data-key=stopping]')", "the stopping notice");
+      await shot("stopping");
+      await page.eval("[...document.querySelectorAll('[data-key=stopping] button')].find((b) => b.textContent === 'Save').click()");
+      await page.waitFor(`!${A}.dirty() && !document.querySelector('[data-key=stopping]')`, "the save to clear the notice");
+      check(readDoc().includes("// unsaved ours mine Disk C"), "the edit is not on disk");
+      check(!(await page.eval("document.querySelector('[data-key=shutdown]') !== null")), "the server stopped");
+      return {};
+    },
+    { host: "server" },
+  ],
+  [
+    "CRLF document: reload, duplicate, undo, redo, typing, and save keep every \\r",
+    async ({ page, readDoc, writeDoc }) => {
+      await settle(page);
+      check(!(await state(page)).dirty, "dirty before the CRLF step");
+      const crlf = readDoc().replace(/\r?\n/g, "\r\n");
+      writeDoc(crlf);
+      await page.waitFor(`${A}.code.text() === ${JSON.stringify(crlf)}`, "the CRLF text from disk in the pane");
+      await crlfEdits(page, "card.b");
+      await page.eval(`${A}.selection.selectIds(['card.c'], 'layers')`);
+      await editWhileTyping(page, { command: "node.duplicate", trigger: `${A}.actions.duplicate()`, anchor: "// crlf", typed: " x" });
+      await page.eval(`${A}.save()`);
+      await page.waitFor(`!${A}.dirty()`, "save to finish");
+      const text = await paneIsEngine(page, "after save");
+      const disk = readDoc();
+      check(disk === text, "disk bytes differ from the engine text");
+      const cr = (disk.match(/\r/g) ?? []).length;
+      check(cr >= crlf.split("\r\n").length - 1, `the file has ${cr} \\r, the CRLF text had ${crlf.split("\r\n").length - 1}`);
+      return { cr };
+    },
+    { host: "server" },
+  ],
+  [
     "dark theme renders",
     async ({ page, shot }) => {
       await page.media("dark");
-      await sleep(200);
-      const bg = await page.eval("getComputedStyle(document.body).backgroundColor");
-      check(bg === "rgb(20, 23, 28)", `dark background is ${bg}`);
+      await bodyBackground(page, DARK_BG);
       await shot("dark");
       await page.media("light");
-      await sleep(100);
-      const light = await page.eval("getComputedStyle(document.body).backgroundColor");
-      check(light === "rgb(244, 245, 247)", `light background is ${light}`);
-      return { dark: bg, light };
+      await bodyBackground(page, LIGHT_BG);
+      return { dark: DARK_BG, light: LIGHT_BG };
     },
   ],
   [
     "phone width stacks with no horizontal scroll",
     async ({ page, shot }) => {
       await page.viewport(390, 844, true);
-      await sleep(400);
+      await viewportIs(page, 390);
+      await page.waitFor("document.getElementById('divider').getAttribute('aria-orientation') === 'horizontal'", "the stacked layout");
       const m = await page.eval(`(() => ({
         doc: document.documentElement.scrollWidth, body: document.body.scrollWidth,
         ws: document.getElementById('workspace').scrollWidth, inner: innerWidth,
@@ -525,7 +644,8 @@ export const steps = [
       await settle(page);
       await shot("phone");
       await page.viewport(1440, 900);
-      await sleep(300);
+      await viewportIs(page, 1440);
+      await page.waitFor("document.getElementById('divider').getAttribute('aria-orientation') === 'vertical'", "the side-by-side layout");
       return m;
     },
   ],
@@ -563,11 +683,12 @@ export const steps = [
     "server shutdown shows the stopped notice",
     async ({ page, shot }) => {
       await settle(page);
-      const r = await page.eval(`fetch('/api/shutdown', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"force":true}' }).then((x) => x.json())`);
+      const r = await page.eval(`fetch('/api/shutdown', { method: 'POST', headers: { 'Content-Type': 'application/json', ...${A}.host.authHeaders() }, body: '{"force":true}' }).then((x) => x.json())`);
       check(r.ok, `shutdown: ${JSON.stringify(r)}`);
       await page.waitFor("!!document.querySelector('[data-key=shutdown]')", "stopped notice");
-      // Requests in flight when the server stopped log refused connections.
-      await sleep(500);
+      // Requests in flight when the server stopped log refused connections:
+      // wait until none is left, then drop those errors.
+      await page.waitFor(`${A}.events.calls === 0 && ${A}.renderer.idle() && !${A}.refreshLater.pending()`, "the requests in flight to end");
       const unexpected = page.errors.filter((e) => !/^network: .*ERR_CONNECTION_REFUSED/.test(e));
       page.errors.length = 0;
       page.errors.push(...unexpected);

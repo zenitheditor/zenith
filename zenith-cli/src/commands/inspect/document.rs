@@ -487,11 +487,7 @@ fn render_flags(node: &NodeEntry) -> String {
 
 /// Format an `f64` without a trailing `.0` when the value is whole.
 fn fmt_f64(v: f64) -> String {
-    if v.fract() == 0.0 {
-        (v as i64).to_string()
-    } else {
-        v.to_string()
-    }
+    zenith_core::format_number(v)
 }
 
 /// An `inspect.node_not_found` error for `id` (exit code 2).

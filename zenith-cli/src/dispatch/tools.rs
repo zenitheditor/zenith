@@ -75,8 +75,34 @@ pub(super) fn dispatch_plugin(args: PluginArgs) -> ExitCode {
 }
 
 pub(super) fn dispatch_mcp(args: McpArgs) -> ExitCode {
-    match &args.http {
-        Some(addr) => ExitCode::from(mcp::run_http(addr)),
+    // Over HTTP, tool paths stay under the working directory unless a root
+    // is given: a leaked token then cannot reach the rest of the disk.
+    let root = match (&args.root, &args.http) {
+        (Some(root), _) => Some(root.clone()),
+        (None, Some(_)) => match std::env::current_dir() {
+            Ok(dir) => Some(dir),
+            Err(e) => {
+                eprintln!("zenith mcp: cannot read the working directory ({e}); pass --root <DIR>");
+                return ExitCode::from(2);
+            }
+        },
+        (None, None) => None,
+    };
+    if let Some(root) = root {
+        match mcp::set_root(&root) {
+            Ok(root) => eprintln!("zenith mcp: tool paths stay under '{}'", root.display()),
+            Err(e) => {
+                eprintln!("zenith mcp: {e}");
+                return ExitCode::from(2);
+            }
+        }
+    }
+    match args.http {
+        Some(addr) => ExitCode::from(mcp::run_http(&mcp::HttpOptions {
+            addr,
+            allow_remote: args.allow_remote,
+            allow_hosts: args.allow_host,
+        })),
         None => ExitCode::from(mcp::run()),
     }
 }

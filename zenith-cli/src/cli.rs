@@ -322,9 +322,28 @@ zenith fonts features ./MyFont.ttf")]
 )]
 pub struct McpArgs {
     /// Serve over native Streamable-HTTP at this address (e.g. 127.0.0.1:8080)
-    /// instead of stdio. Requires a build with the `http` feature.
+    /// instead of stdio. Requires a build with the `http` feature. Every
+    /// request needs `Authorization: Bearer <token>`: the token is printed to
+    /// stderr at start, or read from `ZENITH_MCP_TOKEN`.
     #[arg(long, value_name = "ADDR")]
     pub http: Option<String>,
+
+    /// Directory every tool path must stay under (documents, outputs, data,
+    /// bundles). Default: none over stdio, the working directory over
+    /// `--http`. `/` (or a drive root) also allows the editor tools to read
+    /// the whole filesystem.
+    #[arg(long, value_name = "DIR")]
+    pub root: Option<PathBuf>,
+
+    /// Allow a non-loopback `--http` address. The traffic is plain HTTP: put
+    /// a TLS reverse proxy in front.
+    #[arg(long, requires = "http")]
+    pub allow_remote: bool,
+
+    /// Accept this name in the `Host` header of `--http` requests (for a
+    /// reverse proxy). Repeat for several names.
+    #[arg(long, value_name = "NAME", requires = "http")]
+    pub allow_host: Vec<String>,
 }
 
 /// Arguments for `zenith update`.

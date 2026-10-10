@@ -7,9 +7,11 @@ use serde_json::{Value, json};
 use super::HttpError;
 
 /// The Content-Security-Policy of HTML pages: same-origin scripts, styles,
-/// workers, and requests. Images may also be `blob:` and `data:` URLs.
+/// and requests. Images may also be `blob:` and `data:` URLs. The page
+/// served by `zenith edit` starts no worker, so workers fall under
+/// `default-src 'self'`.
 pub(crate) const PAGE_CSP: &str = "default-src 'self'; img-src 'self' blob: data:; \
-style-src 'self' 'unsafe-inline'; worker-src 'self' blob:; connect-src 'self'; \
+style-src 'self' 'unsafe-inline'; connect-src 'self'; \
 object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'";
 
 /// One response: status, extra headers, body.
@@ -18,6 +20,8 @@ pub(crate) struct Response {
     pub(crate) status: u16,
     pub(crate) headers: Vec<(&'static str, String)>,
     pub(crate) body: Vec<u8>,
+    /// Answer a `HEAD`: the headers of the full response, no body.
+    pub(crate) head_only: bool,
 }
 
 impl Response {
@@ -30,7 +34,14 @@ impl Response {
                 ("Cache-Control", "no-store".to_owned()),
             ],
             body,
+            head_only: false,
         }
+    }
+
+    /// This response as the answer to a `HEAD`: same headers, no body.
+    pub(crate) fn for_head(mut self) -> Self {
+        self.head_only = true;
+        self
     }
 
     /// A JSON response.
@@ -53,7 +64,7 @@ impl Response {
             }),
         );
         if error.status == 405 {
-            r.headers.push(("Allow", "GET, POST".to_owned()));
+            r.headers.push(("Allow", "GET, HEAD, POST".to_owned()));
         }
         r
     }
@@ -89,7 +100,9 @@ impl Response {
         }
         head.push_str("\r\n");
         out.write_all(head.as_bytes())?;
-        out.write_all(&self.body)?;
+        if !self.head_only {
+            out.write_all(&self.body)?;
+        }
         out.flush()
     }
 }
@@ -124,5 +137,28 @@ pub(crate) fn reason(status: u16) -> &'static str {
         503 => "Service Unavailable",
         505 => "HTTP Version Not Supported",
         _ => "Status",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn head_responses_keep_the_length_and_drop_the_body() {
+        let mut out = Vec::new();
+        Response::new(200, "text/html", b"hello".to_vec())
+            .for_head()
+            .write_to(&mut out)
+            .expect("write");
+        let text = String::from_utf8(out).expect("utf8");
+        assert!(text.contains("Content-Length: 5\r\n"), "{text}");
+        assert!(text.ends_with("\r\n\r\n"), "no body: {text}");
+    }
+
+    #[test]
+    fn the_page_policy_allows_no_blob_workers() {
+        assert!(!PAGE_CSP.contains("worker-src"));
+        assert!(PAGE_CSP.contains("default-src 'self'"));
     }
 }

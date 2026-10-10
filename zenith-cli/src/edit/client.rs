@@ -30,7 +30,7 @@ impl std::fmt::Debug for Remote {
 
 impl Remote {
     /// The server at `url` (`http://127.0.0.1:<port>/…`). `token` defaults
-    /// to the `token=` query of `url`.
+    /// to the `#token=` fragment of `url`.
     ///
     /// # Errors
     ///
@@ -40,7 +40,8 @@ impl Remote {
         let rest = url.strip_prefix("http://").ok_or_else(|| {
             format!("url '{url}' must start with http:// (the URL `zenith edit` printed)")
         })?;
-        let (authority, tail) = rest.split_once('/').unwrap_or((rest, ""));
+        let split = rest.find(['/', '#', '?']).unwrap_or(rest.len());
+        let (authority, tail) = rest.split_at(split);
         let (host, port) = authority.rsplit_once(':').ok_or_else(|| {
             format!("url '{url}' has no port; pass the URL `zenith edit` printed")
         })?;
@@ -60,15 +61,21 @@ impl Remote {
                  on this machine"
             ));
         }
-        let query_token = tail
-            .split_once('?')
-            .map_or("", |(_, q)| q)
+        let fragment_token = tail
+            .split_once('#')
+            .map_or("", |(_, f)| f)
             .split('&')
             .find_map(|pair| pair.strip_prefix("token="));
-        let token = token
-            .or(query_token)
-            .filter(|t| !t.is_empty())
-            .ok_or("no token: pass `token`, or the URL with ?token=")?;
+        let token = token.or(fragment_token).filter(|t| !t.is_empty()).ok_or(
+            "no token: pass `token`, or the URL `zenith edit` printed (it ends in #token=...)",
+        )?;
+        if !header_safe(token) {
+            return Err(
+                "the token holds a space, a control character, or a non-ASCII character; \
+                 pass the token `zenith edit` printed"
+                    .to_owned(),
+            );
+        }
         Ok(Remote {
             addr: SocketAddr::new(ip, port),
             token: token.to_owned(),
@@ -112,6 +119,13 @@ impl Remote {
     }
 
     fn exchange(&self, method: &str, path: &str, body: Option<&[u8]>) -> Result<Vec<u8>, String> {
+        if !path.starts_with('/') || !header_safe(path) {
+            return Err(format!(
+                "request path {path:?} for zenith edit at {} must start with '/' and hold only \
+                 visible ASCII; the server sent a bad image URL",
+                self.addr
+            ));
+        }
         let fail = |e: std::io::Error| format!("zenith edit at {} did not answer: {e}", self.addr);
         let mut stream = TcpStream::connect_timeout(&self.addr, CONNECT).map_err(fail)?;
         stream.set_read_timeout(Some(EXCHANGE)).map_err(fail)?;
@@ -167,6 +181,13 @@ impl Remote {
     }
 }
 
+/// `true` when `s` is not empty and holds only visible ASCII (`!` to `~`).
+/// A request line or header built from it cannot gain a line break, a
+/// space-separated field, or a header of its own.
+fn header_safe(s: &str) -> bool {
+    !s.is_empty() && s.bytes().all(|b| b.is_ascii_graphic())
+}
+
 fn parse_json(body: &[u8]) -> Result<Value, String> {
     serde_json::from_slice(body).map_err(|e| format!("zenith edit sent bad JSON: {e}"))
 }
@@ -177,7 +198,7 @@ mod tests {
 
     #[test]
     fn only_loopback_urls_with_a_token_parse() {
-        let r = Remote::parse("http://127.0.0.1:4000/?token=abc", None).expect("parse");
+        let r = Remote::parse("http://127.0.0.1:4000/#token=abc", None).expect("parse");
         assert_eq!(r.addr(), "127.0.0.1:4000".parse().expect("addr"));
         assert_eq!(r.token, "abc");
         let r = Remote::parse("http://localhost:4000", Some("t")).expect("parse");
@@ -192,5 +213,46 @@ mod tests {
             assert!(Remote::parse(bad, Some("t")).is_err(), "{bad}");
         }
         assert!(Remote::parse("http://127.0.0.1:4000/", None).is_err());
+        assert!(
+            Remote::parse("http://127.0.0.1:4000/?token=abc", None).is_err(),
+            "the token rides in the fragment only"
+        );
+        let r = Remote::parse("http://127.0.0.1:4000#token=xyz", None).expect("no slash");
+        assert_eq!(r.token, "xyz");
+    }
+
+    #[test]
+    fn tokens_with_control_or_space_characters_are_rejected() {
+        for bad in [
+            "abc\r\nX-Injected: 1",
+            "abc\n",
+            "a b",
+            "a\tb",
+            "a\u{7f}",
+            "tök",
+        ] {
+            let err = Remote::parse("http://127.0.0.1:4000", Some(bad)).expect_err(bad);
+            assert!(err.contains("token"), "{bad:?}: {err}");
+        }
+        let err = Remote::parse("http://127.0.0.1:4000/#token=a%0d%0a\r\nHost:x", None)
+            .expect_err("fragment token with CRLF");
+        assert!(err.contains("token"), "{err}");
+        assert!(Remote::parse("http://127.0.0.1:4000/#token=Ab-9_x.~", None).is_ok());
+    }
+
+    #[test]
+    fn paths_with_control_characters_never_reach_the_socket() {
+        // Port 9 on loopback: a path check that passed would try to connect.
+        let r = Remote::parse("http://127.0.0.1:9", Some("t")).expect("parse");
+        for bad in [
+            "/api/image/x\r\nX-Injected: 1",
+            "/a b",
+            "relative",
+            "",
+            "/\u{0}",
+        ] {
+            let err = r.get_bytes(bad).expect_err(bad);
+            assert!(err.contains("request path"), "{bad:?}: {err}");
+        }
     }
 }

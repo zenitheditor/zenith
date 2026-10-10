@@ -15,7 +15,7 @@
 // line per step and a summary. Exit code 0 when all pass. Screenshots go to
 // --out.
 
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -76,6 +76,9 @@ async function main() {
       readDoc: () => readFileSync(doc, "utf8"),
       writeDoc: (text) => writeFileSync(doc, text),
       shot: (name) => page.screenshot(path.join(a.out, `${name}.png`)),
+      // Server only, and only where signals and modes exist.
+      signal: mode === "server" && process.platform !== "win32" ? (sig) => server.child.kill(sig) : null,
+      setReadonly: process.platform !== "win32" ? (file, on) => chmodSync(file, on ? 0o444 : 0o644) : null,
     };
     for (const [name, fn] of steps) {
       const t0 = Date.now();

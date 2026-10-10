@@ -1,5 +1,7 @@
-//! Complete sibling writes replace outputs only after writing and flushing.
-//! Directory creation remains caller-owned. Replacement provides no crash durability guarantee.
+//! Complete sibling writes replace outputs only after writing, flushing, and
+//! syncing the new bytes to disk. After the rename, the directory is synced
+//! too (Unix), so a crash leaves either the old file or the whole new one.
+//! Directory creation remains caller-owned.
 
 use std::{
     fs::{self, File},
@@ -11,9 +13,22 @@ pub(crate) fn write_bytes(path: &Path, bytes: &[u8]) -> io::Result<()> {
     write_with(path, |file| file.write_all(bytes))
 }
 
-fn write_with(path: &Path, write: impl FnOnce(&mut File) -> io::Result<()>) -> io::Result<()> {
+/// Check that [`write_bytes`] may replace `path`: it is a regular file that
+/// is not read-only, or it does not exist yet. A caller runs this before
+/// work that must not happen for a write that cannot land (history).
+///
+/// # Errors
+///
+/// `InvalidInput` for a non-file, `PermissionDenied` for a read-only file,
+/// or the metadata error.
+pub(crate) fn check_replaceable(path: &Path) -> io::Result<()> {
     let destination = super::identity::replacement_destination(path)?;
-    let permissions = match fs::metadata(&destination) {
+    existing_permissions(path, &destination).map(|_| ())
+}
+
+/// The permissions of an existing `destination`, `None` when it is missing.
+fn existing_permissions(path: &Path, destination: &Path) -> io::Result<Option<fs::Permissions>> {
+    match fs::metadata(destination) {
         Ok(metadata) => {
             if !metadata.is_file() {
                 return Err(io::Error::new(
@@ -28,11 +43,16 @@ fn write_with(path: &Path, write: impl FnOnce(&mut File) -> io::Result<()>) -> i
                     format!("output '{}' is read-only", path.display()),
                 ));
             }
-            Some(permissions)
+            Ok(Some(permissions))
         }
-        Err(error) if error.kind() == io::ErrorKind::NotFound => None,
-        Err(error) => return Err(error),
-    };
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(error),
+    }
+}
+
+fn write_with(path: &Path, write: impl FnOnce(&mut File) -> io::Result<()>) -> io::Result<()> {
+    let destination = super::identity::replacement_destination(path)?;
+    let permissions = existing_permissions(path, &destination)?;
     let parent = destination.parent().ok_or_else(|| {
         io::Error::new(
             io::ErrorKind::InvalidInput,
@@ -58,13 +78,30 @@ fn write_with(path: &Path, write: impl FnOnce(&mut File) -> io::Result<()>) -> i
     if let Some(permissions) = permissions {
         temporary.as_file().set_permissions(permissions)?;
     }
-    temporary.persist(destination).map_err(|error| {
+    // The bytes reach the disk before the rename can expose them.
+    temporary.as_file().sync_all()?;
+    temporary.persist(&destination).map_err(|error| {
         let tempfile::PersistError { error, file } = error;
         drop(file);
         error
     })?;
+    sync_directory(parent);
     Ok(())
 }
+
+/// Make the rename in `dir` durable. Best effort: some filesystems refuse
+/// to sync a directory, and the new bytes are already on disk.
+#[cfg(unix)]
+fn sync_directory(dir: &Path) {
+    if let Ok(handle) = File::open(dir) {
+        let _ = handle.sync_all();
+    }
+}
+
+/// Windows cannot open a directory as a file; the rename is journaled by
+/// NTFS.
+#[cfg(not(unix))]
+fn sync_directory(_dir: &Path) {}
 
 #[cfg(test)]
 mod tests {
@@ -213,6 +250,26 @@ mod tests {
         assert_eq!(fs::read_link(&first).unwrap(), Path::new("second.svg"));
         assert_eq!(fs::read_link(&second).unwrap(), Path::new("./first.svg"));
         assert_eq!(entries(directory.path()), vec![first, second]);
+    }
+
+    #[test]
+    fn check_replaceable_matches_what_a_write_accepts() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("output.svg");
+        check_replaceable(&path).unwrap();
+        fs::write(&path, b"previous").unwrap();
+        check_replaceable(&path).unwrap();
+        let original = fs::metadata(&path).unwrap().permissions();
+        let mut permissions = original.clone();
+        permissions.set_readonly(true);
+        fs::set_permissions(&path, permissions).unwrap();
+        let result = check_replaceable(&path);
+        fs::set_permissions(&path, original).unwrap();
+        assert_eq!(result.unwrap_err().kind(), io::ErrorKind::PermissionDenied);
+        assert_eq!(
+            check_replaceable(directory.path()).unwrap_err().kind(),
+            io::ErrorKind::InvalidInput
+        );
     }
 
     #[test]

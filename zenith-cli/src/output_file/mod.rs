@@ -2,10 +2,12 @@
 
 mod collision;
 mod identity;
+mod message;
 mod replacement;
 
 pub(crate) use collision::{OutputGuard, check_distinct};
-pub(crate) use replacement::write_bytes;
+pub(crate) use message::write_failure;
+pub(crate) use replacement::{check_replaceable, write_bytes};
 
 #[cfg(test)]
 mod tests;

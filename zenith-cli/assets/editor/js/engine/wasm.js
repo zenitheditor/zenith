@@ -13,7 +13,9 @@
 // document lock.
 //
 // Extra methods for the static page: `openDocument`, `pickDocument`,
-// `pickProject`, `metrics`, `close`.
+// `pickProject`, `metrics`, `close`. One extra host command:
+// `file.save_as` writes the text to a new file the user picks (the offer of
+// a save that met a read-only file).
 
 import { diffRange } from "../util/text.js";
 import { lineDiff } from "../util/diff.js";
@@ -68,6 +70,14 @@ const FILE_COMMANDS = [
     needs_version: true,
   },
   {
+    id: "file.save_as",
+    label: "Save to a new file",
+    params: "{}",
+    result: "{saved, path, version, bytes, sha256, mtime_ms, stamped, dirty}",
+    mutates: true,
+    needs_version: false,
+  },
+  {
     id: "file.state",
     label: "File state",
     params: "{}",
@@ -105,6 +115,8 @@ export class WasmEngine {
     this.savedText = "";
     this.mtimeMs = null;
     this.conflict = null;
+    /** The last write met a read-only file. */
+    this.readonly = false;
     this.images = new Map();
     this.imageCount = 0;
     this.listeners = new Set();
@@ -233,6 +245,7 @@ export class WasmEngine {
       this.savedText = text;
       this.mtimeMs = this.handle ? (mtimeMs ?? (await browser.readHandle(this.handle)).mtimeMs) : null;
       this.conflict = null;
+      this.readonly = false;
       this.emit("opened", {
         name: this.name,
         path: this.path,
@@ -254,6 +267,7 @@ export class WasmEngine {
 
   async runNow(command, params, version, wantDiff, client) {
     if (command === "file.save") return this.fileSave(params, version, client);
+    if (command === "file.save_as") return this.fileSaveAs(version, client);
     if (command === "file.reload") return this.fileReload(version, client);
     if (command === "file.state") return this.envelope(command, { ok: true, result: this.summary(false) });
     const request = { command, params };
@@ -410,6 +424,7 @@ export class WasmEngine {
       stale: s ? !s.valid : false,
       conflict: this.conflict !== null,
       missing: false,
+      readonly: this.readonly,
       page: s?.page ?? 1,
       selection: s?.selection ?? [],
       mtime_ms: this.mtimeMs,
@@ -477,10 +492,56 @@ export class WasmEngine {
         warning = `This browser cannot write files back. Downloaded a copy of ${this.name} instead.`;
       }
     } catch (err) {
+      if (browser.isReadOnlyError(err)) return this.readOnlyFailure("file.save");
       return this.failure("file.save", "edit.write_failed", `cannot write ${this.name}: ${err.message}`);
     }
+    return this.saved(text, warning, client, "file.save");
+  }
+
+  /** The failure of a write that met a read-only file. Flags the file and tells the page. */
+  readOnlyFailure(command) {
+    if (!this.readonly) {
+      this.readonly = true;
+      this.emit("state", this.summary(false));
+    }
+    return this.failure(command, "edit.readonly", `${this.name} is read-only, so the browser cannot write it; save a copy with Save As, or make the file writable and save again`, {
+      offers: [{ id: "save_as", label: "Save As", command: "file.save_as", params: {} }],
+    });
+  }
+
+  /** `file.save_as`: ask for a new file and write the text there. Resolves `saved: false` when the user cancels. */
+  async fileSaveAs(version, client) {
+    const bad = this.versionError("file.save_as", version, false);
+    if (bad) return bad;
+    const text = this.session.text;
+    let handle;
+    try {
+      handle = await browser.saveAs(this.name, text);
+    } catch (err) {
+      return this.failure("file.save_as", "edit.write_failed", `cannot write a copy of ${this.name}: ${err.message}`);
+    }
+    if (!handle) {
+      if (typeof window.showSaveFilePicker === "function") {
+        return this.envelope("file.save_as", { ok: true, result: { saved: false, path: this.path, version: this.session.version, dirty: this.dirty() } });
+      }
+      browser.download(this.name, text);
+      return this.saved(text, `This browser cannot write files. Downloaded a copy of ${this.name} instead.`, client, "file.save_as");
+    }
+    this.handle = handle;
+    this.name = handle.name;
+    this.path = handle.name;
+    this.mtimeMs = (await browser.readHandle(handle)).mtimeMs;
+    return this.saved(text, null, client, "file.save_as");
+  }
+
+  /** Record a write of `text` that landed: clear the conflict and read-only flags, send `saved`. */
+  async saved(text, warning, client, command) {
     this.savedText = text;
     this.conflict = null;
+    if (this.readonly) {
+      this.readonly = false;
+      this.emit("state", this.summary(false));
+    }
     const sha = await sha256Hex(text);
     const result = {
       saved: true,
@@ -502,7 +563,7 @@ export class WasmEngine {
       mtime_ms: this.mtimeMs,
       stamped: false,
     });
-    return this.envelope("file.save", { ok: true, result });
+    return this.envelope(command, { ok: true, result });
   }
 
   /** Pick where an unsaved document goes, when the browser can. */
@@ -571,6 +632,27 @@ export class WasmEngine {
       disk = { text: await file.text(), mtimeMs: file.lastModified };
     } catch {
       return "none";
+    }
+    if (disk.text === this.savedText && this.conflict) {
+      // The file went back to the saved text (`git checkout`): no conflict is left.
+      this.mtimeMs = disk.mtimeMs;
+      this.conflict = null;
+      const s = this.session;
+      this.emit("external_change", {
+        path: this.path,
+        deleted: false,
+        mtime_ms: disk.mtimeMs,
+        text: disk.text,
+        base_version: s.version,
+        version: s.version,
+        valid: s.valid,
+        stale: !s.valid,
+        conflict: false,
+        reloaded: false,
+        delta: null,
+        dirty: this.dirty(),
+      });
+      return "synced";
     }
     if (disk.text === this.savedText || this.conflict?.text === disk.text) {
       this.mtimeMs = disk.mtimeMs;

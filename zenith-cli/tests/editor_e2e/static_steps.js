@@ -8,12 +8,13 @@
 import { writeFileSync } from "node:fs";
 import path from "node:path";
 import { tmpdir } from "node:os";
-import { A, STATE, check, cursorAt, engineState, ready, settle, sleep, state } from "./helpers.js";
+import { A, STATE, check, cursorAt, engineState, ready, settle, state } from "./helpers.js";
+import { crlfEdits, editWhileTyping, paneIsEngine } from "./sync_checks.js";
 
 /** Install a fake `FileSystemFileHandle` store and pickers in the page. */
 const MOCKS = `(() => {
   if (window.__mock) return window.__mock;
-  const mock = { files: new Map(), picks: [], writes: [], clock: 1000 };
+  const mock = { files: new Map(), picks: [], writes: [], clock: 1000, readonly: new Set(), saveAsName: null };
   const handle = (name) => ({
     kind: 'file', name,
     async getFile() {
@@ -21,6 +22,7 @@ const MOCKS = `(() => {
       return { name, size: f.text.length, lastModified: f.mtime, async text() { return f.text; }, async arrayBuffer() { return new TextEncoder().encode(f.text).buffer; } };
     },
     async createWritable() {
+      if (mock.readonly.has(name)) throw new DOMException(name + ' is read-only', 'NoModificationAllowedError');
       let buf = '';
       return { async write(t) { buf += t; }, async close() { mock.files.set(name, { text: buf, mtime: ++mock.clock }); mock.writes.push({ name, text: buf }); } };
     },
@@ -28,7 +30,7 @@ const MOCKS = `(() => {
   mock.handle = handle;
   mock.put = (name, text) => { mock.files.set(name, { text, mtime: ++mock.clock }); };
   window.showOpenFilePicker = async () => { const n = mock.next; mock.picks.push(n); return [handle(n)]; };
-  window.showSaveFilePicker = async ({ suggestedName }) => { mock.saveAs = suggestedName; mock.files.set(suggestedName, { text: '', mtime: ++mock.clock }); return handle(suggestedName); };
+  window.showSaveFilePicker = async ({ suggestedName }) => { const n = mock.saveAsName ?? suggestedName; mock.saveAs = n; mock.files.set(n, { text: '', mtime: ++mock.clock }); return handle(n); };
   window.__mock = mock;
   return mock;
 })()`;
@@ -203,7 +205,8 @@ export const steps = [
       await page.clickSelector("#open-file");
       await page.waitFor("!!document.querySelector('[data-key=open-confirm]')", "the discard confirmation");
       await page.eval("[...document.querySelectorAll('[data-key=open-confirm] button')].find((b) => b.textContent === 'Cancel').click()");
-      await sleep(200);
+      await page.waitFor("!document.querySelector('[data-key=open-confirm]')", "the confirmation to close");
+      await settle(page);
       const kept = await state(page);
       check(kept.text.includes("// unsaved") && (await page.eval(`${A}.name`)) === "stack.zen", "Cancel did not keep the document");
       await page.clickSelector("#open-file");
@@ -314,6 +317,96 @@ export const steps = [
       const s = await state(page);
       check(r.as === "first.zen" && r.text === s.text, `Save As ${JSON.stringify({ as: r.as })}`);
       return {};
+    },
+  ],
+  [
+    "a conflict clears when the file returns to the saved text; save then works",
+    async ({ page }) => {
+      await settle(page);
+      const saved = await page.eval("window.__mock.files.get('first.zen').text");
+      await cursorAt(page, 0);
+      await page.type("// mine again\n");
+      await settle(page);
+      const theirs = saved.replace("// as new", "// theirs again");
+      check(theirs !== saved, "the disk edit changed nothing");
+      await page.eval(`(() => { window.__mock.put('first.zen', ${JSON.stringify(theirs)}); window.dispatchEvent(new Event('focus')); return true; })()`);
+      await page.waitFor("!!document.querySelector('[data-key=disk]')", "the conflict banner");
+      // `git checkout`: the file holds the saved text again.
+      await page.eval(`(() => { window.__mock.put('first.zen', ${JSON.stringify(saved)}); window.dispatchEvent(new Event('focus')); return true; })()`);
+      await page.waitFor("!document.querySelector('[data-key=disk]')", "the conflict banner to clear");
+      check((await engineState(page)).conflict === false, "the engine still reports a conflict");
+      await page.key("s", 2);
+      await page.waitFor(`!${A}.dirty()`, "save to finish");
+      const text = await page.eval("window.__mock.files.get('first.zen').text");
+      check(text === (await state(page)).text, "the file is not the editor text after the save");
+      return {};
+    },
+  ],
+  [
+    "a read-only file: save fails with edit.readonly, Save is off, Save As writes a copy",
+    async ({ page }) => {
+      await page.eval("(() => { window.__mock.readonly.add('first.zen'); window.__mock.saveAsName = 'copy.zen'; return true; })()");
+      await cursorAt(page, 0);
+      await page.type("// read-only edit\n");
+      await settle(page);
+      await page.key("s", 2);
+      await page.waitFor("!!document.querySelector('[data-key=readonly]')", "the read-only notice");
+      check(await page.eval("document.getElementById('save').disabled"), "Save is still on");
+      check((await engineState(page)).readonly === true, "the summary is not read-only");
+      check(await page.eval(`${A}.dirty()`), "the failed save cleared the dirty mark");
+      await page.eval("[...document.querySelectorAll('[data-key=readonly] button')].find((b) => b.textContent === 'Save As').click()");
+      await page.waitFor(`!${A}.dirty() && !document.querySelector('[data-key=readonly]')`, "Save As to finish");
+      const r = await page.eval("({ copy: window.__mock.files.get('copy.zen').text, name: window.zenithEditor.name })");
+      check(r.copy === (await state(page)).text, "the copy is not the editor text");
+      check(r.name === "copy.zen", `the page names ${r.name}`);
+      check(!(await page.eval("document.getElementById('save').disabled")), "Save is still off");
+      await page.eval("(() => { window.__mock.readonly.clear(); window.__mock.saveAsName = null; return true; })()");
+      return {};
+    },
+  ],
+  [
+    "CRLF document: open, duplicate, undo, redo, typing, an edit while typing, and save keep every \\r",
+    async ({ page }) => {
+      const crlf = DOC("CRLF", "// note").replace(/\n/g, "\r\n");
+      await openMocked(page, "crlf.zen", crlf);
+      check((await state(page)).text === crlf, "the pane text is not the CRLF file");
+      await crlfEdits(page, "r");
+      await page.eval(`${A}.selection.selectIds(['r'], 'layers')`);
+      await editWhileTyping(page, { command: "node.duplicate", trigger: `${A}.actions.duplicate()`, anchor: "// crlf", typed: " y" });
+      await page.key("s", 2);
+      await page.waitFor(`!${A}.dirty()`, "save to finish");
+      const text = await paneIsEngine(page, "after save");
+      const file = await page.eval("window.__mock.files.get('crlf.zen').text");
+      check(file === text, "the saved file differs from the engine text");
+      check(file.startsWith('zenith version=1 {\r\n'), "the saved file lost its CRLF");
+      return { bytes: file.length };
+    },
+  ],
+  [
+    "a second Open while the discard question shows ends the first; Cancel keeps the document",
+    async ({ page }) => {
+      await settle(page);
+      const before = await state(page);
+      const at = before.text.indexOf("// ") + 3;
+      await cursorAt(page, at);
+      await page.type("keep ");
+      await page.waitFor(`${A}.dirty()`, "dirty");
+      await page.eval(`(() => { const m = ${MOCKS}; m.put('other.zen', ${JSON.stringify(DOC("Other"))}); m.next = 'other.zen';
+        window.__opens = [];
+        for (const n of [1, 2]) ${A}.files.openFile().then(() => window.__opens.push(n), (e) => window.__opens.push('error ' + e.message));
+        return true; })()`);
+      await page.waitFor("window.__opens.includes(1) && !!document.querySelector('[data-key=open-confirm]')", "the first open to end when the second asks");
+      await page.eval("[...document.querySelectorAll('[data-key=open-confirm] button')].find((b) => b.textContent === 'Cancel').click()");
+      await page.waitFor("window.__opens.length === 2 && !document.querySelector('[data-key=open-confirm]')", "the second open to end on Cancel");
+      const opens = await page.eval("window.__opens");
+      check(JSON.stringify(opens) === "[1,2]", `opens ended as ${JSON.stringify(opens)}`);
+      await settle(page);
+      const s = await state(page);
+      check(s.text === before.text.slice(0, at) + "keep " + before.text.slice(at), "Cancel did not keep the document");
+      check((await page.eval(`${A}.name`)) === "crlf.zen", "another document opened");
+      await page.key("s", 2);
+      await page.waitFor(`!${A}.dirty()`, "save to finish");
+      return { opens };
     },
   ],
   [

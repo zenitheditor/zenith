@@ -3,7 +3,7 @@
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpStream;
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Stdio};
+use std::process::{Child, Command, ExitStatus, Stdio};
 use std::time::{Duration, Instant};
 
 use serde_json::{Value, json};
@@ -251,6 +251,49 @@ impl Server {
         let (name, _) = events.next(Duration::from_secs(10)).expect("state");
         assert_eq!(name, "state");
         events
+    }
+
+    /// Send `signal` (`INT`, `TERM`, or `KILL`) to the server process.
+    pub fn signal(&self, signal: &str) {
+        let pid = self.child.id().to_string();
+        let status = Command::new("kill")
+            .args(["-s", signal, &pid])
+            .status()
+            .expect("run kill");
+        assert!(status.success(), "kill -s {signal} {pid}: {status}");
+    }
+
+    /// `true` while the server process runs.
+    #[cfg(unix)]
+    pub fn alive(&mut self) -> bool {
+        self.child.try_wait().expect("try_wait").is_none()
+    }
+
+    /// Send `signal` (`KILL` kills on every platform), wait for the exit,
+    /// and return the exit status and everything the server wrote to
+    /// stderr.
+    pub fn stop_with_signal_and_collect(&mut self, signal: &str) -> (ExitStatus, String) {
+        if signal == "KILL" {
+            self.child.kill().expect("kill");
+        } else {
+            self.signal(signal);
+        }
+        let deadline = Instant::now() + Duration::from_secs(15);
+        let status = loop {
+            if let Some(status) = self.child.try_wait().expect("try_wait") {
+                break status;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "server did not exit after {signal}"
+            );
+            std::thread::sleep(Duration::from_millis(20));
+        };
+        let mut stderr = String::new();
+        if let Some(mut s) = self.child.stderr.take() {
+            let _ = s.read_to_string(&mut stderr);
+        }
+        (status, stderr)
     }
 
     /// Stop the server through the API and wait for exit 0.

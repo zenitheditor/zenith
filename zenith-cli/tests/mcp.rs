@@ -135,7 +135,7 @@ fn ping_returns_empty_result() {
 fn tools_list_is_the_small_stable_surface() {
     let resp = call(json!({ "jsonrpc": "2.0", "id": 3, "method": "tools/list" }));
     let tools = resp["result"]["tools"].as_array().expect("tools array");
-    assert_eq!(tools.len(), 20, "expected 20 top-level tools");
+    assert_eq!(tools.len(), 21, "expected 21 top-level tools");
     let names: Vec<&str> = tools.iter().filter_map(|t| t["name"].as_str()).collect();
     for expected in [
         "zenith_schema",
@@ -151,6 +151,7 @@ fn tools_list_is_the_small_stable_surface() {
         "zenith_editor_command",
         "zenith_editor_render",
         "zenith_editor_sessions",
+        "zenith_editor_close",
         "zenith_editor_attach",
     ] {
         assert!(names.contains(&expected), "missing {expected}");
@@ -734,76 +735,243 @@ fn mcp_tx_diff_returns_written_bytes() {
 
 // ── HTTP transport (only with `--features http`) ───────────────────────────
 
-/// POST one JSON-RPC message to the HTTP transport and return the parsed reply.
+/// A running `zenith mcp --http` and its token.
 #[cfg(feature = "http")]
-fn http_post(addr: &str, message: &Value) -> Value {
-    use std::io::{Read, Write};
-    use std::net::TcpStream;
-
-    let body = message.to_string();
-    let mut stream = TcpStream::connect(addr).expect("connect");
-    let request = format!(
-        "POST /mcp HTTP/1.1\r\nHost: {addr}\r\nContent-Type: application/json\r\n\
-         Content-Length: {}\r\nConnection: close\r\n\r\n{body}",
-        body.len()
-    );
-    stream.write_all(request.as_bytes()).expect("write request");
-    let mut response = String::new();
-    stream.read_to_string(&mut response).expect("read response");
-    let payload = response
-        .split_once("\r\n\r\n")
-        .map(|(_, b)| b)
-        .unwrap_or("");
-    serde_json::from_str(payload).expect("parse http body")
+struct HttpServer {
+    child: std::process::Child,
+    addr: String,
+    token: String,
+    /// Kept open: a closed pipe would fail the server's later log lines.
+    _stderr: std::io::BufReader<std::process::ChildStderr>,
 }
 
 #[cfg(feature = "http")]
-#[test]
-fn http_transport_matches_stdio() {
+impl Drop for HttpServer {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+    }
+}
+
+/// Start `zenith mcp --http` in `cwd` and read its token from stderr.
+#[cfg(feature = "http")]
+fn http_server(cwd: &std::path::Path, data: &std::path::Path) -> HttpServer {
+    use std::io::{BufRead, BufReader};
     use std::net::TcpListener;
 
-    // Reserve a free port, then hand it to the server.
     let port = TcpListener::bind("127.0.0.1:0")
         .expect("probe")
         .local_addr()
         .expect("addr")
         .port();
     let addr = format!("127.0.0.1:{port}");
-
     let mut child = Command::new(env!("CARGO_BIN_EXE_zenith"))
         .args(["mcp", "--http", &addr])
+        .current_dir(cwd)
+        .env("ZENITH_DATA_DIR", data)
+        .env_remove("ZENITH_MCP_TOKEN")
         .stdout(Stdio::null())
-        .stderr(Stdio::null())
+        .stderr(Stdio::piped())
         .spawn()
         .expect("spawn http server");
-
-    // Poll until the listener is accepting connections.
-    let mut connected = false;
-    for _ in 0..50 {
-        if std::net::TcpStream::connect(&addr).is_ok() {
-            connected = true;
-            break;
-        }
-        std::thread::sleep(std::time::Duration::from_millis(20));
+    let mut stderr = BufReader::new(child.stderr.take().expect("stderr"));
+    let mut token = None;
+    let mut line = String::new();
+    while token.is_none() {
+        line.clear();
+        assert_ne!(
+            stderr.read_line(&mut line).expect("stderr"),
+            0,
+            "no token line"
+        );
+        token = line
+            .strip_prefix("zenith mcp: token ")
+            .map(|t| t.trim().to_owned());
     }
-    assert!(connected, "http server never came up");
+    HttpServer {
+        child,
+        addr,
+        token: token.expect("the server printed no token"),
+        _stderr: stderr,
+    }
+}
 
+/// Send one raw request and return `(status, body)`.
+#[cfg(feature = "http")]
+fn http_raw(addr: &str, request: &str) -> (u16, String) {
+    use std::io::{Read, Write};
+    use std::net::TcpStream;
+
+    let mut stream = TcpStream::connect(addr).expect("connect");
+    stream
+        .set_read_timeout(Some(std::time::Duration::from_secs(30)))
+        .expect("timeout");
+    stream.write_all(request.as_bytes()).expect("write request");
+    let mut response = String::new();
+    stream.read_to_string(&mut response).expect("read response");
+    let (head, body) = response.split_once("\r\n\r\n").unwrap_or((&response, ""));
+    let status = head
+        .split(' ')
+        .nth(1)
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0);
+    (status, body.to_owned())
+}
+
+/// POST one JSON-RPC message with the token and `extra` header lines.
+#[cfg(feature = "http")]
+fn http_post_with(server: &HttpServer, message: &Value, extra: &str) -> (u16, String) {
+    let body = message.to_string();
+    http_raw(
+        &server.addr,
+        &format!(
+            "POST /mcp HTTP/1.1\r\nHost: {}\r\nAuthorization: Bearer {}\r\n{extra}\
+             Content-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            server.addr,
+            server.token,
+            body.len()
+        ),
+    )
+}
+
+#[cfg(feature = "http")]
+fn http_post(server: &HttpServer, message: &Value) -> Value {
+    let (status, body) = http_post_with(server, message, "");
+    assert_eq!(status, 200, "{body}");
+    serde_json::from_str(&body).expect("parse http body")
+}
+
+#[cfg(feature = "http")]
+#[test]
+fn http_transport_matches_stdio() {
+    let cwd = tempfile::tempdir().expect("cwd");
+    let data = tempfile::tempdir().expect("data");
+    let server = http_server(cwd.path(), data.path());
     let init = http_post(
-        &addr,
+        &server,
         &json!({ "jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {} }),
     );
     assert_eq!(init["result"]["serverInfo"]["name"], "zenith");
-
     let list = http_post(
-        &addr,
+        &server,
         &json!({ "jsonrpc": "2.0", "id": 2, "method": "tools/list" }),
     );
     assert_eq!(
         list["result"]["tools"].as_array().map(|a| a.len()),
-        Some(20),
+        Some(21),
         "http tools/list must match stdio"
     );
+}
 
-    let _ = child.kill();
-    let _ = child.wait();
+#[cfg(feature = "http")]
+#[test]
+fn http_transport_refuses_requests_without_every_proof() {
+    let cwd = tempfile::tempdir().expect("cwd");
+    let data = tempfile::tempdir().expect("data");
+    let server = http_server(cwd.path(), data.path());
+    let body = json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/list" }).to_string();
+    let len = body.len();
+    let addr = &server.addr;
+    let token = &server.token;
+    for (request, status, code) in [
+        (
+            format!(
+                "POST /mcp HTTP/1.1\r\nHost: {addr}\r\nContent-Type: application/json\r\n\
+                 Content-Length: {len}\r\n\r\n{body}"
+            ),
+            401,
+            "mcp.unauthorized",
+        ),
+        (
+            format!(
+                "POST /mcp HTTP/1.1\r\nHost: rebind.example:{}\r\nAuthorization: Bearer \
+                 {token}\r\nContent-Type: application/json\r\nContent-Length: {len}\r\n\r\n{body}",
+                addr.rsplit_once(':').map_or("", |(_, p)| p)
+            ),
+            403,
+            "mcp.bad_host",
+        ),
+        (
+            format!(
+                "POST /mcp HTTP/1.1\r\nHost: {addr}\r\nOrigin: http://evil.example\r\n\
+                 Authorization: Bearer {token}\r\nContent-Type: application/json\r\n\
+                 Content-Length: {len}\r\n\r\n{body}"
+            ),
+            403,
+            "mcp.bad_origin",
+        ),
+        (
+            format!(
+                "POST /mcp HTTP/1.1\r\nHost: {addr}\r\nAuthorization: Bearer {token}\r\n\
+                 Content-Type: text/plain\r\nContent-Length: {len}\r\n\r\n{body}"
+            ),
+            415,
+            "mcp.bad_content_type",
+        ),
+        (
+            format!(
+                "POST /mcp HTTP/1.1\r\nHost: {addr}\r\nAuthorization: Bearer {token}\r\n\
+                 Content-Type: application/json\r\nContent-Length: 999999999\r\n\r\n"
+            ),
+            413,
+            "http.body_too_large",
+        ),
+        // A huge promised body without the token is refused before any read.
+        (
+            format!(
+                "POST /mcp HTTP/1.1\r\nHost: {addr}\r\nContent-Type: application/json\r\n\
+                 Content-Length: 18446744073709551615\r\n\r\n"
+            ),
+            401,
+            "mcp.unauthorized",
+        ),
+    ] {
+        let (got, reply) = http_raw(addr, &request);
+        assert_eq!(got, status, "{reply}");
+        assert!(reply.contains(code), "{reply}");
+    }
+}
+
+/// The audit's attack: write `~/.bashrc` (here: a file outside the working
+/// directory) through the editor tools. Refused twice over: not `.zen`,
+/// and outside the root.
+#[cfg(feature = "http")]
+#[test]
+fn http_transport_confines_files_to_the_working_directory() {
+    let cwd = tempfile::tempdir().expect("cwd");
+    let data = tempfile::tempdir().expect("data");
+    let outside = tempfile::tempdir().expect("outside");
+    let rc = outside.path().join(".bashrc");
+    std::fs::write(&rc, "echo hi\n").expect("write");
+    let zen = outside.path().join("d.zen");
+    std::fs::write(&zen, "zenith version=1 {\n}\n").expect("write");
+    let inside = cwd.path().join("d.zen");
+    std::fs::write(&inside, "zenith version=1 {\n}\n").expect("write");
+    let server = http_server(cwd.path(), data.path());
+    let call = |id: u64, name: &str, args: Value| {
+        http_post(
+            &server,
+            &json!({ "jsonrpc": "2.0", "id": id, "method": "tools/call",
+                     "params": { "name": name, "arguments": args } }),
+        )
+    };
+    let r = call(
+        1,
+        "zenith_editor_command",
+        json!({ "path": rc, "command": "doc.open", "params": { "text": "pwned" } }),
+    );
+    assert_eq!(r["result"]["isError"], true, "{r}");
+    let r = call(2, "zenith_editor_open", json!({ "path": zen }));
+    assert_eq!(r["result"]["isError"], true, "{r}");
+    assert!(r.to_string().contains("outside the MCP root"), "{r}");
+    let r = call(
+        3,
+        "zenith_render",
+        json!({ "doc": inside, "format": "png", "out": outside.path().join("x.png") }),
+    );
+    assert_eq!(r["result"]["isError"], true, "{r}");
+    assert!(!outside.path().join("x.png").exists());
+    let r = call(4, "zenith_editor_open", json!({ "path": inside }));
+    assert_eq!(r["result"]["isError"], false, "{r}");
+    assert_eq!(std::fs::read_to_string(&rc).expect("read"), "echo hi\n");
 }

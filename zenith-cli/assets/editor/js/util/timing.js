@@ -34,7 +34,8 @@ export function debounce(fn, ms) {
 
 /**
  * `fn` at most once per `ms`. The last call in a window runs at its end,
- * so the final position is never lost.
+ * so the final position is never lost. The result has `cancel()` and
+ * `pending()` (a call waits to run).
  */
 export function throttle(fn, ms) {
   let last = 0;
@@ -58,6 +59,7 @@ export function throttle(fn, ms) {
     timer = null;
     args = null;
   };
+  wrapped.pending = () => timer !== null;
   return wrapped;
 }
 

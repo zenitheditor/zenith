@@ -11,6 +11,8 @@ export class FileTools {
   constructor(app, host) {
     this.app = app;
     this.host = host;
+    /** The `finish(answer)` of the discard question on screen, or `null`. */
+    this.confirming = null;
     byId("file-tools").hidden = false;
     byId("open-file").addEventListener("click", () => this.openFile());
     byId("open-folder").addEventListener("click", () => this.openFolder());
@@ -107,13 +109,20 @@ export class FileTools {
     }
   }
 
-  /** Ask before unsaved edits go. Resolves `true` to go on. */
+  /**
+   * Ask before unsaved edits go. Resolves `true` to go on. A second ask
+   * replaces the first, which resolves `false`, so no caller waits forever.
+   */
   confirmDiscard(next) {
+    this.confirming?.(false);
     return new Promise((resolve) => {
       const finish = (answer) => {
+        if (this.confirming !== finish) return;
+        this.confirming = null;
         this.app.notices.hide(CONFIRM);
         resolve(answer);
       };
+      this.confirming = finish;
       this.app.notices.show(CONFIRM, {
         level: "warning",
         title: `${this.app.name} has unsaved edits.`,

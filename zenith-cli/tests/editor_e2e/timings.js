@@ -14,7 +14,7 @@ import { copyFileSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync,
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { Browser } from "./cdp.js";
-import { A, cursorAt, ready, settle, sleep } from "./helpers.js";
+import { A, cursorAt, ready, settle } from "./helpers.js";
 import { buildSite, serve } from "./static_site.js";
 
 function args() {
@@ -151,7 +151,8 @@ async function main() {
     const bursts = 12;
     for (let i = 0; i < bursts; i++) {
       await page.type("x");
-      await sleep(260);
+      // One burst per keystroke: wait until its debounced send went out.
+      await page.waitFor(`!${A}.sync.schedule.pending()`, "the keystroke send");
       await settle(page);
     }
     const calls = await page.eval(`${A}.host.metrics({ clear: true }).map((e) => e.command)`);

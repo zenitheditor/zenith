@@ -9,6 +9,7 @@ use std::path::PathBuf;
 
 use zenith_session::DocMeta;
 
+use super::policy::confine;
 use super::resources::open_store;
 use crate::history::{ensure_doc_id_in, read_doc_id};
 
@@ -25,15 +26,20 @@ pub struct Located {
 /// - A ULID is looked up in the store's `meta.json` to recover its path.
 /// - Anything else is treated as a path; its `doc-id` is read from the file when
 ///   present (a brand-new file simply yields `doc_id: None`).
+///
+/// The path must lie under the server root (see `super::policy`).
 pub fn locate(reference: &str) -> Result<Located, String> {
     if is_ulid(reference) {
         let meta = read_meta(reference)?;
+        let path = PathBuf::from(meta.path);
+        confine(&path)?;
         Ok(Located {
-            path: PathBuf::from(meta.path),
+            path,
             doc_id: Some(meta.doc_id),
         })
     } else {
         let path = PathBuf::from(reference);
+        confine(&path)?;
         let doc_id = read_doc_id(&path).ok();
         Ok(Located { path, doc_id })
     }
@@ -45,9 +51,12 @@ pub fn locate(reference: &str) -> Result<Located, String> {
 pub fn ensure(reference: &str) -> Result<(PathBuf, String), String> {
     if is_ulid(reference) {
         let meta = read_meta(reference)?;
-        return Ok((PathBuf::from(meta.path), meta.doc_id));
+        let path = PathBuf::from(meta.path);
+        confine(&path)?;
+        return Ok((path, meta.doc_id));
     }
     let path = PathBuf::from(reference);
+    confine(&path)?;
     let paths = open_store()?;
     let ensured = ensure_doc_id_in(&paths, &path)?;
     Ok((path, ensured.doc_id))

@@ -27,6 +27,12 @@ fn run(args: &Value) -> Result<(Value, bool), String> {
     let out_dir = Path::new(req_str(args, "out_dir")?);
     let name_by = opt_str(args, "name_by");
     let manifest_path = opt_str(args, "manifest").map(Path::new);
+    for path in [Some(Path::new(data)), Some(out_dir), manifest_path]
+        .into_iter()
+        .flatten()
+    {
+        crate::mcp::policy::confine(path)?;
+    }
     let location = doc_ref::locate(doc)?;
     let source = read(&location.path)?;
     let csv = read(Path::new(data))?;
@@ -70,9 +76,13 @@ fn run(args: &Value) -> Result<(Value, bool), String> {
                 .map(|name| out_dir.join(name)),
         );
         if let Err(error) = write_manifest(path, &manifest, &protected) {
-            diagnostics.push(DiagnosticJson::error("io.write_failed", format!(
-                "cannot write manifest '{}': {error}. Check the directory exists and is writable", path.display()
-            )));
+            diagnostics.push(DiagnosticJson::error(
+                "io.write_failed",
+                format!(
+                    "manifest: {}",
+                    crate::output_file::write_failure(path, &error)
+                ),
+            ));
         }
     }
     let is_error = output.failed != 0 || !diagnostics.is_empty();

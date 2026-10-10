@@ -5,9 +5,11 @@
 //! [`host`] to `zenith-pipeline`. The browser editor passes an in-memory
 //! host instead, so both report the same diagnostics and bytes.
 
+use std::borrow::Cow;
 use std::collections::BTreeSet;
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 
 use rayon::prelude::*;
 use zenith_core::LocalFontEntry;
@@ -31,18 +33,38 @@ pub fn host() -> Host<'static> {
         .with_warnings(&StderrWarnings)
 }
 
+/// The directory every [`NativeFs`] read of this process is confined to,
+/// when one is set (`zenith mcp --root`).
+static READ_ROOT: OnceLock<PathBuf> = OnceLock::new();
+
+/// Confine every [`NativeFs`] read of this process (documents, imports,
+/// assets, data, config) to `root`, a canonical directory. Call once,
+/// before serving.
+///
+/// # Errors
+///
+/// A message when a root was set before.
+pub(crate) fn confine_reads(root: PathBuf) -> Result<(), String> {
+    READ_ROOT
+        .set(root)
+        .map_err(|_| "the read root is already set".to_owned())
+}
+
 /// Project files on the local disk through `std::fs`. Error messages are the
-/// OS error text.
+/// OS error text. Under a read root (`zenith mcp --root`) a read of a path
+/// outside it is an error that names the path, the root, and the next
+/// action. `exists` and `is_file` still report the file, and `refusal`
+/// gives that error, so callers report a refused file, not a missing one.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct NativeFs;
 
 impl SourceFs for NativeFs {
     fn read(&self, path: &Path) -> Result<Vec<u8>, FsError> {
-        std::fs::read(path).map_err(fs_error)
+        std::fs::read(allowed(path)?).map_err(fs_error)
     }
 
     fn read_to_string(&self, path: &Path) -> Result<String, FsError> {
-        std::fs::read_to_string(path).map_err(fs_error)
+        std::fs::read_to_string(allowed(path)?).map_err(fs_error)
     }
 
     fn exists(&self, path: &Path) -> bool {
@@ -51,6 +73,60 @@ impl SourceFs for NativeFs {
 
     fn is_file(&self, path: &Path) -> bool {
         path.is_file()
+    }
+
+    fn refusal(&self, path: &Path) -> Option<FsError> {
+        allowed(path)
+            .err()
+            .filter(|e| e.kind != zenith_pipeline::FsErrorKind::NotFound)
+    }
+}
+
+/// The user's own files on the local disk, never confined: the global
+/// config at a fixed path under `$HOME`, which no document names.
+struct UserFs;
+
+impl SourceFs for UserFs {
+    fn read(&self, path: &Path) -> Result<Vec<u8>, FsError> {
+        std::fs::read(path).map_err(fs_error)
+    }
+
+    fn exists(&self, path: &Path) -> bool {
+        path.exists()
+    }
+
+    fn is_file(&self, path: &Path) -> bool {
+        path.is_file()
+    }
+}
+
+/// `path` when this process may read it: always without a read root, and
+/// with one, its canonical form when that lies under the root (checked
+/// lexically and after links resolve, so a link out of the tree does not
+/// escape).
+fn allowed(path: &Path) -> Result<Cow<'_, Path>, FsError> {
+    let Some(root) = READ_ROOT.get() else {
+        return Ok(Cow::Borrowed(path));
+    };
+    let absolute = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        std::env::current_dir()
+            .map_err(|e| FsError::other(e.to_string()))?
+            .join(path)
+    };
+    let lexical = zenith_pipeline::path::normalize_lexically(&absolute);
+    let canonical = crate::edit::doc::canonicalize(&lexical).map_err(fs_error)?;
+    if lexical.starts_with(root) && canonical.starts_with(root) {
+        Ok(Cow::Owned(canonical))
+    } else {
+        Err(FsError::other(format!(
+            "'{}' is outside the MCP root '{}': the MCP server reads only files under it; move \
+             the file under the root, or start `zenith mcp --root <DIR>` with a root that \
+             holds it",
+            path.display(),
+            root.display()
+        )))
     }
 }
 
@@ -79,7 +155,7 @@ pub struct NativeConfig;
 
 impl ConfigSource for NativeConfig {
     fn global(&self) -> Result<Option<ConfigFile>, String> {
-        FsConfig::new(&NativeFs, global_config_path()).global()
+        FsConfig::new(&UserFs, global_config_path()).global()
     }
 
     fn local(&self, start_dir: &Path) -> Result<Option<ConfigFile>, String> {

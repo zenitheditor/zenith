@@ -1,6 +1,8 @@
 // Unit tests for the page modules that run without a browser: the KDL
 // stream grammar, the UTF-16 / byte offset conversion, and the canvas render
-// window and placement math, and the keystroke batch split.
+// window and placement math, and the keystroke batch split. The async tests
+// of `unit_page.js` (buffer sync, the engine Worker client, file writes,
+// swatch colors) run after these.
 //
 // Run: node zenith-cli/tests/editor_e2e/unit.js
 // Exit code 0 when every check passes. Zero dependencies.
@@ -348,6 +350,23 @@ test("batch split: one envelope per step, the image on the step that rendered", 
   const off = splitBatch({ ok: false, offline: true, error: { code: "edit.offline", message: "down" } }, steps);
   assert.deepEqual(off.map((e) => [e.ok, e.offline, e.error.code]), [[false, true, "edit.offline"], [false, true, "edit.offline"], [false, true, "edit.offline"]]);
 });
+
+const { tests: pageTests } = await import("./unit_page.js");
+const TEST_TIMEOUT_MS = 10000;
+for (const [name, fn] of pageTests) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`did not finish within ${TEST_TIMEOUT_MS} ms`)), TEST_TIMEOUT_MS);
+  });
+  try {
+    await Promise.race([fn(), timeout]);
+    passed++;
+  } catch (err) {
+    failures.push(`${name}: ${err.stack ?? err.message}`);
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 for (const f of failures) console.error(`FAIL ${f}`);
 console.log(JSON.stringify({ suite: "editor-unit", passed, failed: failures.length }));

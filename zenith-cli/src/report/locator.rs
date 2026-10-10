@@ -5,7 +5,7 @@
 
 use std::collections::BTreeMap;
 
-use zenith_core::{Diagnostic, ParseError, line_col};
+use zenith_core::{Diagnostic, LineIndex, ParseError, line_col};
 
 use zenith_pipeline::imports::ImportFiles;
 
@@ -35,7 +35,8 @@ impl Location {
 /// Import file text is read once per import id.
 #[derive(Debug)]
 pub(crate) struct Locator<'a> {
-    src: &'a str,
+    /// The host source, indexed: many diagnostics locate in one pass.
+    lines: LineIndex<'a>,
     files: Option<&'a ImportFiles>,
     texts: BTreeMap<String, Option<String>>,
 }
@@ -44,7 +45,7 @@ impl<'a> Locator<'a> {
     /// A locator over the host `src` with no import files.
     pub(crate) fn new(src: &'a str) -> Self {
         Self {
-            src,
+            lines: LineIndex::new(src),
             files: None,
             texts: BTreeMap::new(),
         }
@@ -53,7 +54,7 @@ impl<'a> Locator<'a> {
     /// A locator over the host `src` and the import `files`.
     pub(crate) fn with_files(src: &'a str, files: &'a ImportFiles) -> Self {
         Self {
-            src,
+            lines: LineIndex::new(src),
             files: Some(files),
             texts: BTreeMap::new(),
         }
@@ -72,7 +73,7 @@ impl<'a> Locator<'a> {
         let Some(import) = d.import() else {
             return Location {
                 file: None,
-                line_col: line_col(self.src, span.start),
+                line_col: self.lines.line_col(span.start),
             };
         };
         let Some(path) = self.files.and_then(|f| f.path(import)) else {

@@ -28,12 +28,10 @@ export function agentCommand(page, command, params) {
       return host.run(${JSON.stringify(command)}, ${JSON.stringify(params)}, { version: st.version, client: 'agent-e2e' });
     }
     const res = await fetch('/api/cmd', { method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Zenith-Client': 'agent-e2e' },
+      headers: { 'Content-Type': 'application/json', 'X-Zenith-Client': 'agent-e2e', ...host.authHeaders() },
       body: JSON.stringify({ command: ${JSON.stringify(command)}, params: ${JSON.stringify(params)}, version: st.version }) });
     return res.json(); })()`);
 }
-
-export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 export function check(cond, message) {
   if (!cond) throw new Error(message);
@@ -41,14 +39,46 @@ export function check(cond, message) {
 
 export const state = (page) => page.eval(STATE);
 
+/**
+ * `true` in the page when nothing is left to run: the pane text reached
+ * the engine, no render, refresh, or cursor lookup waits, and no engine
+ * call is on the wire.
+ */
+export const SETTLED = `(() => { const a = ${A}; return a.sync.synced() && !a.sync.pending() && a.renderer.idle()
+  && !a.refreshLater.pending() && !a.selection.cursorLater.pending() && a.events.calls === 0; })()`;
+
 /** Wait until the pane text reached the engine and the last render landed. */
 export async function settle(page) {
-  await page.waitFor(
-    `(() => { const a = ${A}; return a.sync.synced() && a.renderer.idle() && !a.refreshLater.pending(); })()`,
-    "sync and render to settle",
-  );
-  await sleep(250);
+  await page.waitFor(SETTLED, "sync, render, and engine calls to settle");
 }
+
+/** Wait until the canvas view took the size of its viewport (after a layout change). */
+export async function viewSized(page) {
+  await page.waitFor(
+    `(() => { const a = ${A}; const r = a.view.viewport.getBoundingClientRect();
+      return Math.abs(a.view.vw - r.width) < 1 && Math.abs(a.view.vh - r.height) < 1; })()`,
+    "the canvas view to take its new size",
+  );
+}
+
+/** Wait until `innerWidth` is `width` and the canvas view took its size. */
+export async function viewportIs(page, width) {
+  await page.waitFor(`innerWidth === ${width}`, `a ${width} px wide window`);
+  await viewSized(page);
+}
+
+/** Wait for the page to draw the next frame. */
+export function nextFrame(page) {
+  return page.eval("new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r(true))))");
+}
+
+/** Wait until `<body>` has background `color` (a theme switch applied). */
+export function bodyBackground(page, color) {
+  return page.waitFor(`getComputedStyle(document.body).backgroundColor === ${JSON.stringify(color)}`, `the ${color} background`);
+}
+
+export const DARK_BG = "rgb(20, 23, 28)";
+export const LIGHT_BG = "rgb(244, 245, 247)";
 
 export async function ready(page) {
   await page.waitFor(
@@ -109,7 +139,11 @@ export async function zoomTo(page, z) {
 export async function sharpness(page) {
   await page.eval(`(() => { const a = ${A}; a.overlay.setSelection([]); a.overlay.setHover(null); return true; })()`);
   await page.mouse("mouseMoved", 1, 1);
-  await sleep(150);
+  await page.waitFor(
+    `!${A}.selection.hoverLater.pending() && ${A}.events.calls === 0 && !${A}.overlay.hover && !document.querySelector('#overlay .hover')`,
+    "the hover outline to clear",
+  );
+  await nextFrame(page);
   const { data } = await page.send("Page.captureScreenshot", { format: "png" });
   return page.eval(`(async () => {
     const a = ${A}; const s = a.renderer.shown; const p = a.paint.last;

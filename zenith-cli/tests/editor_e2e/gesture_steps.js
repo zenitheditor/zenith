@@ -4,7 +4,7 @@
 // edited node's lines (before/after text compare), and the canvas shows,
 // pixel for pixel, the engine's render of the new source.
 
-import { A, STATE, sleep, check, state, settle, ready, clientOf, agentCommand } from "./helpers.js";
+import { A, STATE, check, state, settle, ready, clientOf, agentCommand, viewSized, nextFrame, bodyBackground, DARK_BG } from "./helpers.js";
 import {
   ALT, CTRL, SHIFT, lineChange, onlyNodes, lineOf, inspect, centerOf, handleOf, drag, clickPage,
   dismissNotices, select, previewShown, landed, canvasMatchesEngine, setSnap,
@@ -20,7 +20,7 @@ export const steps = [
       await ready(page);
       // Room for the whole 600 px page at 100%: no layers panel, a narrow source pane.
       await page.eval(`(() => { const l = ${A}.layout; if (l.state.left) l.toggle('left'); l.setSplit(0.3); return true; })()`);
-      await sleep(200);
+      await viewSized(page);
       await page.eval(`(() => { ${A}.view.actualSize(); return true; })()`);
       await settle(page);
       check((await state(page)).zoom === 1, "zoom is not 100%");
@@ -163,7 +163,8 @@ export const steps = [
           await page.waitFor(`!${A}.renderer.preview && !document.querySelector('#overlay .ghost')`, "the preview to clear");
         },
       });
-      await sleep(300);
+      // No commit may follow the cancel: wait until no call is left.
+      await settle(page);
       const after = await state(page);
       check(after.text === before.text && after.version === before.version, "a cancelled drag changed the text");
       return {};
@@ -291,7 +292,7 @@ export const steps = [
       check(after.sel.length === 0, `selection after delete: ${after.sel}`);
       await page.waitFor("!!document.querySelector('[data-key=comments]')", "the removed comments notice");
       const removed = await page.eval("document.querySelector('[data-key=comments] .notice-detail').textContent");
-      check(removed === "// A thin rule.", `removed comments: ${JSON.stringify(removed)}`);
+      check(removed === "line 27: // A thin rule.", `removed comments: ${JSON.stringify(removed)}`);
       const compared = await canvasMatchesEngine(page);
       await page.eval("document.getElementById('viewport').focus()");
       await page.key("z", CTRL);
@@ -420,7 +421,7 @@ export const steps = [
       await page.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x: a.x, y: a.y }] });
       for (let i = 1; i <= 6; i++) {
         await page.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ x: a.x, y: a.y + i * 5 }] });
-        await sleep(16);
+        await nextFrame(page);
       }
       await page.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
       await landed(page, before.version);
@@ -437,7 +438,8 @@ export const steps = [
     async ({ page, shot }) => {
       await page.media("dark");
       await select(page, "spin");
-      await sleep(200);
+      await bodyBackground(page, DARK_BG);
+      await settle(page);
       await shot("gesture-selection-dark");
       await select(page, "bound");
       await shot("gesture-lock-dark");

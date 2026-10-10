@@ -156,14 +156,26 @@ export async function readHandle(handle) {
   return { text: await file.text(), mtimeMs: file.lastModified };
 }
 
-/** Write `text` to `handle`. Resolves the new modification time. */
+/**
+ * Write `text` to `handle`. Resolves the new modification time. A failed
+ * write aborts the stream, so the file keeps its old bytes, and rejects
+ * with the write error (an error of the abort never hides it).
+ */
 export async function writeHandle(handle, text) {
   const writable = await handle.createWritable();
   try {
     await writable.write(text);
-  } finally {
-    await writable.close();
+  } catch (err) {
+    if (typeof writable.abort === "function") {
+      try {
+        await writable.abort(err);
+      } catch {
+        // The write error is the one to report.
+      }
+    }
+    throw err;
   }
+  await writable.close();
   return (await handle.getFile()).lastModified;
 }
 
@@ -184,6 +196,15 @@ export async function saveAs(name, text) {
     if (isAbort(err)) return null;
     throw err;
   }
+}
+
+/**
+ * `true` when `err` says the file cannot be written: a read-only file
+ * (`NoModificationAllowedError`) or a write permission the user or the
+ * system refused (`NotAllowedError`).
+ */
+export function isReadOnlyError(err) {
+  return err?.name === "NoModificationAllowedError" || err?.name === "NotAllowedError";
 }
 
 /** Offer `text` as a download named `name`. */

@@ -271,12 +271,14 @@ op=unbundle restores one from a bundle path. Read any preview resources BEFORE f
             name: "zenith_editor_open",
             description: "Open a .zen file in an editor session (selection, gestures, undo, live \
 render). Returns the session id. Reopening a clean session rereads the file; a dirty one needs \
-discard=true. Commands: send command commands.list via zenith_editor_command.",
+discard=true. Only .zen files open, under the server --root when one is set. At most 16 \
+sessions: a new one evicts the least recently used clean session (reported as evicted). \
+Commands: send command commands.list via zenith_editor_command.",
             schema: json!({
                 "type": "object",
                 "properties": {
                     "path": { "type": "string", "description": "Document path." },
-                    "root": { "type": "string", "description": "Directory project reads stay under (default: the document's directory)." },
+                    "root": { "type": "string", "description": "Directory project reads stay under (default: the document's directory). Not the filesystem root." },
                     "discard": { "type": "boolean", "description": "Reopen even with unsaved edits, dropping them." }
                 },
                 "required": ["path"]
@@ -321,6 +323,19 @@ path, version, dirty, valid, conflict.",
             schema: json!({ "type": "object", "properties": {} }),
         },
         Tool {
+            name: "zenith_editor_close",
+            description: "Close an editor session. A local session with unsaved edits needs \
+discard=true. Closing an attached session only forgets it; the zenith edit server keeps running.",
+            schema: json!({
+                "type": "object",
+                "properties": {
+                    "session": { "type": "string", "description": "Session id." },
+                    "discard": { "type": "boolean", "description": "Close even with unsaved edits, dropping them." }
+                },
+                "required": ["session"]
+            }),
+        },
+        Tool {
             name: "zenith_editor_attach",
             description: "Attach to a running `zenith edit` on this machine, so a human watching \
 the page sees your edits live. Pass the URL it printed (and the token when the URL lacks it). \
@@ -328,7 +343,7 @@ Then use the returned session id with zenith_editor_command and zenith_editor_re
             schema: json!({
                 "type": "object",
                 "properties": {
-                    "url": { "type": "string", "description": "The http://127.0.0.1:<port>/?token=... URL `zenith edit` printed." },
+                    "url": { "type": "string", "description": "The http://127.0.0.1:<port>/#token=... URL `zenith edit` printed." },
                     "token": { "type": "string", "description": "The token, when the URL has none." }
                 },
                 "required": ["url"]

@@ -112,6 +112,8 @@ pub(crate) struct DocState {
     pub(super) saved_text: String,
     pub(super) disk: Disk,
     pub(super) conflict: Option<Conflict>,
+    /// The file is read-only: saves fail until it is writable again.
+    pub(super) readonly: bool,
 }
 
 impl DocState {
@@ -123,7 +125,22 @@ impl DocState {
     /// `edit.missing_file` or `edit.read_failed` when the file cannot be
     /// read as UTF-8 text, or the `doc.open` error.
     pub(crate) fn open(target: Target) -> Result<(Self, Value), EditorError> {
-        let (text, stamp) = match disk::read(&target.path) {
+        let mut state = Self::read(target)?;
+        let reply = state.load()?;
+        Ok((state, reply))
+    }
+
+    /// Read the document from disk without opening it in the engine: the
+    /// session holds the text, not yet validated. [`DocState::load`] opens
+    /// it. A server reads first, so it can print its URL before a large
+    /// document's first validation.
+    ///
+    /// # Errors
+    ///
+    /// As [`DocState::open`], except engine errors.
+    pub(crate) fn read(target: Target) -> Result<Self, EditorError> {
+        let path = target.path.clone();
+        let (text, stamp) = match disk::read(&path) {
             DiskRead::Text(text, stamp) => (text, stamp),
             DiskRead::Missing => {
                 return Err(EditorError::new(
@@ -138,17 +155,28 @@ impl DocState {
                 return Err(EditorError::new("edit.read_failed", message));
             }
         };
-        let mut state = DocState {
+        Ok(DocState {
             target,
-            session: Session::new(""),
-            saved_text: text.clone(),
+            session: Session::new(text.clone()),
+            saved_text: text,
             disk: Disk::synced(Some(stamp)),
             conflict: None,
-        };
-        let outcome = state.engine_call(Request::new("doc.open", json!({ "text": text })));
+            readonly: disk::readonly(&path).unwrap_or(false),
+        })
+    }
+
+    /// Open the text [`DocState::read`] read in the engine (`doc.open`:
+    /// parse, validate, render state) and return the engine's reply.
+    ///
+    /// # Errors
+    ///
+    /// The engine error of `doc.open`.
+    pub(crate) fn load(&mut self) -> Result<Value, EditorError> {
+        let text = self.saved_text.clone();
+        let outcome = self.engine_call(Request::new("doc.open", json!({ "text": text })));
         let reply = outcome.result?;
-        state.session = outcome.session;
-        Ok((state, reply))
+        self.session = outcome.session;
+        Ok(reply)
     }
 
     /// The canonical document path.
@@ -165,6 +193,11 @@ impl DocState {
     /// overwriting `file.save`.
     pub(crate) fn conflict(&self) -> bool {
         self.conflict.is_some()
+    }
+
+    /// `true` while the file is read-only, so a save would fail.
+    pub(crate) fn readonly(&self) -> bool {
+        self.readonly
     }
 
     /// The session.
@@ -198,6 +231,7 @@ impl DocState {
             "stale": self.session.stale(),
             "conflict": self.conflict.is_some(),
             "missing": self.disk.missing,
+            "readonly": self.readonly,
             "page": self.session.page,
             "selection": self.session.selection,
             "mtime_ms": self.disk.stamp.map(|s| s.mtime_ms),
@@ -316,6 +350,18 @@ impl DocState {
     /// poller settles. A caller that checks only before each command (the
     /// MCP tools) does not.
     pub(crate) fn poll_disk(&mut self, settle: bool) -> Vec<Event> {
+        let mut events = self.poll_text(settle);
+        if let Some(readonly) = disk::readonly(&self.target.path)
+            && readonly != self.readonly
+        {
+            self.readonly = readonly;
+            events.push(Event::new("state", self.summary(false)));
+        }
+        events
+    }
+
+    /// The text part of [`DocState::poll_disk`].
+    fn poll_text(&mut self, settle: bool) -> Vec<Event> {
         let Some(stamp) = disk::stamp(&self.target.path) else {
             if self.disk.missing {
                 return Vec::new();
@@ -352,7 +398,10 @@ impl DocState {
             self.disk.pending = Pending::Changed(read_stamp);
             return Vec::new();
         }
-        if text == self.saved_text || self.conflict.as_ref().is_some_and(|c| c.text == text) {
+        if text == self.saved_text {
+            return self.back_to_saved(stamp).into_iter().collect();
+        }
+        if self.conflict.as_ref().is_some_and(|c| c.text == text) {
             self.disk = Disk::synced(Some(stamp));
             return Vec::new();
         }
@@ -362,6 +411,16 @@ impl DocState {
         }
         self.disk = Disk::synced(Some(stamp));
         self.take_disk_change(text, stamp.mtime_ms)
+    }
+
+    /// The disk holds the saved text again. A conflict or the removed
+    /// state ends: the event tells the clients. `None` when there was
+    /// neither.
+    pub(super) fn back_to_saved(&mut self, stamp: Stamp) -> Option<Event> {
+        let was = self.conflict.is_some() || self.disk.missing;
+        self.disk = Disk::synced(Some(stamp));
+        self.conflict = None;
+        was.then(|| self.external_event(None, None, stamp.mtime_ms))
     }
 
     /// Apply a disk text that differs from the saved text.
@@ -455,6 +514,21 @@ mod tests {
     }
 
     #[test]
+    fn read_defers_validation_to_load() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("d.zen");
+        std::fs::write(&path, DOC).expect("write");
+        let target = Target::resolve(&path, None).expect("target");
+        let mut doc = DocState::read(target).expect("read");
+        assert_eq!(doc.session().text, DOC);
+        assert!(!doc.session().valid, "not validated yet");
+        assert!(!doc.dirty());
+        doc.load().expect("load");
+        assert!(doc.session().valid);
+        assert!(!doc.dirty());
+    }
+
+    #[test]
     fn settled_poll_waits_for_a_second_look() {
         let (_dir, mut doc) = open();
         let changed = DOC.replace("w=(px)20", "w=(px)25");
@@ -498,6 +572,87 @@ mod tests {
             doc.poll_disk(false).is_empty(),
             "the same conflict is not sent twice"
         );
+    }
+
+    #[test]
+    fn conflict_ends_when_the_disk_returns_to_the_saved_text() {
+        let (_dir, mut doc) = open();
+        let v = doc.session().version;
+        let request =
+            Request::new("gesture.commit", json!({ "node": "r", "dx": 5, "dy": 0 })).at(v);
+        assert!(doc.execute(&request, None).result.is_ok());
+        std::fs::write(doc.path(), DOC.replace("h=(px)20", "h=(px)22")).expect("write");
+        assert_eq!(doc.poll_disk(false)[0].data["conflict"], true);
+        // `git checkout`: the disk holds the saved text again.
+        std::fs::write(doc.path(), DOC).expect("write");
+        let events = doc.poll_disk(false);
+        assert_eq!(events.len(), 1, "{events:?}");
+        assert_eq!(events[0].name, "external_change");
+        assert_eq!(events[0].data["conflict"], false);
+        assert_eq!(events[0].data["reloaded"], false);
+        assert!(!doc.conflict());
+        assert!(doc.dirty(), "the session keeps its edits");
+        let save = doc.execute(&Request::new("file.save", json!({})), None);
+        assert!(save.result.is_ok(), "{:?}", save.result);
+        assert!(!doc.dirty());
+    }
+
+    #[test]
+    fn save_ends_a_conflict_the_disk_already_resolved() {
+        let (_dir, mut doc) = open();
+        let v = doc.session().version;
+        let request =
+            Request::new("gesture.commit", json!({ "node": "r", "dx": 5, "dy": 0 })).at(v);
+        assert!(doc.execute(&request, None).result.is_ok());
+        std::fs::write(doc.path(), DOC.replace("h=(px)20", "h=(px)22")).expect("write");
+        assert!(!doc.poll_disk(false).is_empty());
+        std::fs::write(doc.path(), DOC).expect("write");
+        // No poll in between: the save itself sees the saved text.
+        let save = doc.execute(&Request::new("file.save", json!({})), None);
+        assert!(save.result.is_ok(), "{:?}", save.result);
+        assert!(
+            save.events
+                .iter()
+                .any(|e| e.name == "external_change" && e.data["conflict"] == false),
+            "{:?}",
+            save.events
+        );
+    }
+
+    #[test]
+    fn restored_file_ends_the_removed_state() {
+        let (_dir, mut doc) = open();
+        std::fs::remove_file(doc.path()).expect("remove");
+        assert_eq!(doc.poll_disk(false)[0].data["deleted"], true);
+        std::fs::write(doc.path(), DOC).expect("write");
+        let events = doc.poll_disk(false);
+        assert_eq!(events[0].data["deleted"], false, "{events:?}");
+        assert_eq!(doc.summary(false)["missing"], false);
+    }
+
+    #[test]
+    fn read_only_files_are_flagged_and_changes_send_state() {
+        let (_dir, mut doc) = open();
+        assert_eq!(doc.summary(false)["readonly"], false);
+        let original = std::fs::metadata(doc.path()).expect("meta").permissions();
+        let mut perms = original.clone();
+        perms.set_readonly(true);
+        std::fs::set_permissions(doc.path(), perms).expect("chmod");
+        let events = doc.poll_disk(true);
+        assert!(
+            events
+                .iter()
+                .any(|e| e.name == "state" && e.data["readonly"] == true),
+            "{events:?}"
+        );
+        assert!(doc.readonly());
+        assert!(
+            doc.poll_disk(true).iter().all(|e| e.name != "state"),
+            "once"
+        );
+        std::fs::set_permissions(doc.path(), original).expect("chmod");
+        assert!(doc.poll_disk(true).iter().any(|e| e.name == "state"));
+        assert!(!doc.readonly());
     }
 
     #[test]

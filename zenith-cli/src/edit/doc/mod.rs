@@ -19,6 +19,7 @@ mod image;
 mod state;
 mod target;
 
+pub(crate) use canonical::canonicalize;
 pub(crate) use event::Event;
 pub(crate) use image::image_meta;
 pub(crate) use state::{DocState, Ran, TextChange};

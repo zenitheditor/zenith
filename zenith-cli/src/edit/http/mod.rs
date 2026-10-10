@@ -1,5 +1,7 @@
 //! A minimal HTTP/1.1 layer over `std::net`: one request per connection,
-//! `Content-Length` bodies only, hard size and time limits. Wiring and the
+//! `Content-Length` bodies only, hard size and time limits. The head and
+//! the body are read in two steps, so a request is checked before its body
+//! is read. Wiring and the
 //! shared error type.
 //!
 //! - `request` — read and parse one request.
@@ -8,7 +10,7 @@
 mod request;
 mod response;
 
-pub(crate) use request::{HttpRequest, Limits, Method, read_request};
+pub(crate) use request::{HttpRequest, Limits, Method, read_body, read_head};
 pub(crate) use response::{PAGE_CSP, Response, reason};
 
 /// An HTTP-level error: status, stable code, and a message naming the next

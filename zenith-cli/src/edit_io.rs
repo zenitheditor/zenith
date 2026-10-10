@@ -27,8 +27,20 @@ pub(crate) struct Written {
 /// A history error never blocks the write. It comes back as
 /// [`Written::warning`].
 pub(crate) fn write_document(path: &Path, bytes: &[u8], label: &str) -> Result<Written, CliError> {
+    write_document_io(path, bytes, label).map_err(|e| write_error(path, &e))
+}
+
+/// [`write_document`] with the I/O error. A file that cannot be replaced
+/// (read-only, not a regular file) fails before history records anything,
+/// so history never holds a version that did not reach the disk.
+pub(crate) fn write_document_io(
+    path: &Path,
+    bytes: &[u8],
+    label: &str,
+) -> std::io::Result<Written> {
+    output_file::check_replaceable(path)?;
     let recorded = history::record_edit(bytes, path, label);
-    output_file::write_bytes(path, &recorded.bytes).map_err(|e| write_error(path, &e))?;
+    output_file::write_bytes(path, &recorded.bytes)?;
     Ok(Written {
         bytes: recorded.bytes,
         warning: recorded.warning,
@@ -51,8 +63,8 @@ pub(crate) fn write_error(path: &Path, e: &std::io::Error) -> CliError {
     CliError::new(
         "io.write_failed",
         format!(
-            "error[io.write_failed]: cannot write '{}': {e}; check the directory exists and is writable",
-            path.display()
+            "error[io.write_failed]: {}",
+            output_file::write_failure(path, e)
         ),
         2,
     )
