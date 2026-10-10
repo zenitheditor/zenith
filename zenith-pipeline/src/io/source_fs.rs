@@ -86,4 +86,11 @@ pub trait SourceFs {
 
     /// `true` when a regular file exists at `path`.
     fn is_file(&self, path: &Path) -> bool;
+
+    /// Why this source refuses to read `path`, when it does: a confined
+    /// source refuses a path outside its root, even when the file exists.
+    /// The default refuses nothing.
+    fn refusal(&self, _path: &Path) -> Option<FsError> {
+        None
+    }
 }

@@ -196,3 +196,131 @@ fn region_renders_are_deterministic_across_hosts() {
     assert_eq!(memory, gradient_region(&examples()));
     assert_eq!(memory, gradient_region(&DiskFs));
 }
+
+/// A page as wide as the surface cap with a blur that reaches far past a
+/// wide window: the pad is clamped to the page before the caps apply, so
+/// the region still equals the full render (an earlier pad limit of
+/// `(8191 - window) / 2` per side lost ink near the window edge).
+#[test]
+fn a_wide_window_on_a_cap_wide_page_keeps_the_full_blur_reach() {
+    let src = r##"zenith version=1 {
+  project id="proj.w" name="W"
+  tokens format="zenith-token-v1" {
+    token id="c.ink" type="color" value="#204080"
+  }
+  styles {}
+  document id="doc.w" title="W" {
+    page id="p" w=(px)8191 h=(px)2048 {
+      rect id="left" x=(px)0 y=(px)400 w=(px)400 h=(px)1200 fill=(token)"c.ink" blur=(px)600
+      rect id="right" x=(px)7800 y=(px)400 w=(px)391 h=(px)1200 fill=(token)"c.ink" blur=(px)600
+    }
+  }
+}
+"##;
+    let fs = MemFs::new();
+    let config = FsConfig::new(&fs, None);
+    let host = Host::new(&fs, &config);
+    let flags = PolicyFlags::default();
+    let opts = RenderOptions::new(&flags);
+    let compiled =
+        compile_pages(host, src, None, PageSelection::All, opts, false).expect("compile");
+    let page = &compiled.pages[0];
+    let full = render_image_scaled(&page.scene, 1.0, &compiled.fonts, &compiled.assets)
+        .expect("full render");
+    assert!(feasible(&full));
+    for rect in [
+        DeviceRect {
+            x: 1000,
+            y: 0,
+            width: 7000,
+            height: 2048,
+        },
+        DeviceRect {
+            x: 191,
+            y: 100,
+            width: 7000,
+            height: 1800,
+        },
+    ] {
+        let part = render_region_image(&page.scene, 1.0, rect, &compiled.fonts, &compiled.assets)
+            .expect("region");
+        let want = cut(&full, rect);
+        let differ = part
+            .rgba
+            .chunks(4)
+            .zip(want.chunks(4))
+            .filter(|(a, b)| a != b)
+            .count();
+        assert_eq!(differ, 0, "{rect:?}: {differ} px differ");
+    }
+}
+
+/// A 4096 px page of gradient ellipses: each crosses the window edge, so
+/// each draw runs on a scratch buffer that starts at the page origin. The
+/// windows equal the full render.
+#[test]
+fn gradient_draws_across_window_edges_equal_the_full_render() {
+    let mut body = String::new();
+    for i in 0..24u32 {
+        let x = 300 + (i % 6) * 600;
+        let y = 300 + (i / 6) * 900;
+        body.push_str(&format!(
+            "      ellipse id=\"e{i}\" x=(px){x} y=(px){y} w=(px)520 h=(px)700 fill=(token)\"g\" \
+             rotate=(deg){}\n",
+            i * 7
+        ));
+    }
+    let src = format!(
+        r##"zenith version=1 {{
+  project id="proj.g" name="G"
+  tokens format="zenith-token-v1" {{
+    token id="c.a" type="color" value="#1e3a8a"
+    token id="c.b" type="color" value="#f97316"
+    token id="g" type="gradient" angle=(deg)33 {{
+      stop offset=0.0 color=(token)"c.a"
+      stop offset=1.0 color=(token)"c.b"
+    }}
+  }}
+  styles {{}}
+  document id="doc.g" title="G" {{
+    page id="p" w=(px)4096 h=(px)4096 {{
+{body}    }}
+  }}
+}}
+"##
+    );
+    let fs = MemFs::new();
+    let config = FsConfig::new(&fs, None);
+    let host = Host::new(&fs, &config);
+    let flags = PolicyFlags::default();
+    let opts = RenderOptions::new(&flags);
+    let compiled =
+        compile_pages(host, &src, None, PageSelection::All, opts, false).expect("compile");
+    let page = &compiled.pages[0];
+    let full = render_image_scaled(&page.scene, 1.0, &compiled.fonts, &compiled.assets)
+        .expect("full render");
+    for rect in [
+        DeviceRect {
+            x: 3300,
+            y: 3200,
+            width: 700,
+            height: 800,
+        },
+        DeviceRect {
+            x: 1111,
+            y: 2222,
+            width: 999,
+            height: 777,
+        },
+        DeviceRect {
+            x: 0,
+            y: 0,
+            width: 640,
+            height: 480,
+        },
+    ] {
+        let part = render_region_image(&page.scene, 1.0, rect, &compiled.fonts, &compiled.assets)
+            .expect("region");
+        assert!(part.rgba == cut(&full, rect), "{rect:?} differs");
+    }
+}

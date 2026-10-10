@@ -29,6 +29,13 @@ pub fn collect_missing_asset_diagnostics(
                 decl.source_span,
                 Some(decl.id.clone()),
             ));
+        } else if let Some(e) = fs.refusal(&path) {
+            diagnostics.push(Diagnostic::error(
+                "asset.read_failed",
+                format!("asset '{}' cannot be read: {e}", decl.id),
+                decl.source_span,
+                Some(decl.id.clone()),
+            ));
         }
     }
     diagnostics
@@ -58,6 +65,19 @@ pub fn collect_missing_import_asset_diagnostics(
                             import_id,
                             decl.id,
                             path.display()
+                        ),
+                        decl.source_span,
+                        Some(decl.id.clone()),
+                    )
+                    .with_import(import_id),
+                );
+            } else if let Some(e) = fs.refusal(&path) {
+                diagnostics.push(
+                    Diagnostic::error(
+                        "asset.read_failed",
+                        format!(
+                            "import '{import_id}' asset '{}' cannot be read: {e}",
+                            decl.id
                         ),
                         decl.source_span,
                         Some(decl.id.clone()),
@@ -192,11 +212,21 @@ fn check_image(
     // skipped to avoid false positives (this layer has no token table).
     let w_dim = match img.w.as_ref() {
         Some(zenith_core::PropertyValue::Dimension(d)) => d,
-        _ => return,
+        Some(
+            zenith_core::PropertyValue::TokenRef(_)
+            | zenith_core::PropertyValue::Literal(_)
+            | zenith_core::PropertyValue::DataRef(_),
+        )
+        | None => return,
     };
     let h_dim = match img.h.as_ref() {
         Some(zenith_core::PropertyValue::Dimension(d)) => d,
-        _ => return,
+        Some(
+            zenith_core::PropertyValue::TokenRef(_)
+            | zenith_core::PropertyValue::Literal(_)
+            | zenith_core::PropertyValue::DataRef(_),
+        )
+        | None => return,
     };
     let w = match dim_to_px(w_dim.value, &w_dim.unit) {
         Some(px) => px,

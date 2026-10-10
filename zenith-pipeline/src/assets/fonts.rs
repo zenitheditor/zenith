@@ -203,7 +203,15 @@ fn register_local_fonts(host: Host<'_>, provider: &mut BytesFontProvider, doc: &
         .filter(|t| t.token_type == TokenType::FontFamily)
         .filter_map(|t| match &t.value {
             TokenValue::Literal(TokenLiteral::String(s)) => Some(s.clone()),
-            _ => None,
+            TokenValue::Literal(
+                TokenLiteral::Dimension(_)
+                | TokenLiteral::Number(_)
+                | TokenLiteral::Gradient(_)
+                | TokenLiteral::Shadow(_)
+                | TokenLiteral::Filter(_)
+                | TokenLiteral::Mask(_),
+            )
+            | TokenValue::Reference { .. } => None,
         })
         .collect();
     let needs_scan = wanted.iter().any(|fam| {
