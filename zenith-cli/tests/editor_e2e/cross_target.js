@@ -102,7 +102,7 @@ async function native(zenith, file, gestures) {
     const rec = await scenario(client.run, client.state, gestures);
     return rec;
   } finally {
-    server.child.kill();
+    await server.stop();
     rmSync(data, { recursive: true, force: true });
   }
 }

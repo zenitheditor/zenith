@@ -8,6 +8,15 @@ import path from "node:path";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+/** Browser processes this process launched that have not exited yet. */
+const running = new Set();
+
+// A run that ends without `close` (an uncaught error, `process.exit`) must
+// not leave a browser behind.
+process.on("exit", () => {
+  for (const child of running) child.kill("SIGKILL");
+});
+
 export class Browser {
   /**
    * Launch `chromium` headless and connect to it. `ZENITH_E2E_NO_SANDBOX=1`
@@ -35,6 +44,8 @@ export class Browser {
       ],
       { stdio: ["ignore", "ignore", "pipe"] },
     );
+    running.add(child);
+    child.once("exit", () => running.delete(child));
     const url = await new Promise((resolve, reject) => {
       let err = "";
       const timer = setTimeout(() => reject(new Error(`chromium did not start: ${err}`)), 30000);
@@ -107,14 +118,18 @@ export class Browser {
     return page;
   }
 
+  /** Close the browser and wait until its process exited. */
   async close() {
-    try {
-      await this.send("Browser.close");
-    } catch {
-      // The socket closes as the browser exits.
-    }
-    this.child.kill();
-    await sleep(200);
+    const exited =
+      this.child.exitCode !== null || this.child.signalCode !== null
+        ? Promise.resolve()
+        : new Promise((resolve) => this.child.once("exit", resolve));
+    // `Browser.close` answers only when the socket outlives the browser.
+    this.send("Browser.close").catch(() => {});
+    const timer = setTimeout(() => this.child.kill("SIGKILL"), 5000);
+    await exited;
+    clearTimeout(timer);
+    this.ws.close();
     rmSync(this.profile, { recursive: true, force: true });
   }
 }
@@ -202,8 +217,11 @@ export class Page {
     return r.result.value;
   }
 
-  /** Wait until `expr` is truthy; returns its value. */
-  async waitFor(expr, what = expr, timeout = 15000) {
+  /**
+   * Wait until `expr` is truthy; returns its value. Steps wait on page
+   * state, never on time, so `timeout` only guards against a hang.
+   */
+  async waitFor(expr, what = expr, timeout = 60000) {
     const end = Date.now() + timeout;
     let last;
     while (Date.now() < end) {

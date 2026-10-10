@@ -5,10 +5,10 @@
 // edited nodes' lines (and the tokens an edit creates), and the canvas
 // shows, pixel for pixel, the engine's render of the new source.
 
-import { A, STATE, check, state, ready, settle, viewSized, viewportIs, bodyBackground, DARK_BG } from "./helpers.js";
+import { A, STATE, check, focusOn, landed, pressLands, state, ready, settle, viewSized, viewportIs, bodyBackground, DARK_BG } from "./helpers.js";
 import {
   ALT, CTRL, SHIFT, lineOf, onlyNodes, onlyNodesAndTokens, onlyBlock, centerOf, handleOf, drag,
-  dismissNotices, select, selectMany, selectedAs, groupHandle, previewShown, landed,
+  dismissNotices, select, selectMany, selectedAs, groupHandle, previewShown,
   canvasMatchesEngine, cornersOf, cornersMapped, setSnap,
 } from "./canvas_helpers.js";
 
@@ -30,7 +30,8 @@ async function boundsOf(page, ids) {
 /** Type `text` into the inspector input `field` and press Enter. */
 async function typeInto(page, field, text) {
   await page.waitFor(`!!document.querySelector('#inspector [data-field="${field}"]')`, `the ${field} field`);
-  await page.eval(`(() => { const i = document.querySelector('#inspector [data-field="${field}"]'); i.focus(); i.select?.(); return true; })()`);
+  await focusOn(page, `#inspector [data-field="${field}"]`);
+  await page.eval("(() => { document.activeElement.select?.(); return true; })()");
   await page.type(text);
   await page.key("Enter");
 }
@@ -136,12 +137,11 @@ export const steps = [
       cornersMapped(cb, await cornersOf(page, "b"), ([x, y]) => [x + 30, y + 20], "b");
       const compared = await canvasMatchesEngine(page);
       await selectedAs(page, ["a", "b"]);
-      await page.eval("document.getElementById('viewport').focus()");
-      await page.key("z", CTRL);
-      await page.waitFor(`(${STATE}).text === ${JSON.stringify(before.text)}`, "one undo of the move");
-      await page.key("Z", CTRL | SHIFT);
-      await page.waitFor(`(${STATE}).text === ${JSON.stringify(after.text)}`, "redo of the move");
-      await settle(page);
+      await focusOn(page, "#viewport");
+      const undone = await pressLands(page, "z", CTRL, "one undo of the move");
+      check(undone.text === before.text, "one undo did not restore the text before the move");
+      const redone = await pressLands(page, "Z", CTRL | SHIFT, "redo of the move");
+      check(redone.text === after.text, "redo did not restore the moved text");
       return { compared };
     },
   ],
@@ -187,10 +187,9 @@ export const steps = [
       onlyNodes(before.text, after.text, ["a", "b"]);
       for (const id of ["a", "b"]) check(lineOf(after.text, id).includes("rotate=(deg)90"), lineOf(after.text, id));
       const compared = await canvasMatchesEngine(page);
-      await page.eval("document.getElementById('viewport').focus()");
-      await page.key("z", CTRL);
-      await page.waitFor(`(${STATE}).text === ${JSON.stringify(before.text)}`, "undo of the turn");
-      await settle(page);
+      await focusOn(page, "#viewport");
+      const undone = await pressLands(page, "z", CTRL, "undo of the turn");
+      check(undone.text === before.text, "undo did not restore the text before the turn");
       return { compared };
     },
   ],
@@ -199,7 +198,7 @@ export const steps = [
     async ({ page }) => {
       await selectMany(page, ["a", "b"]);
       const start = await state(page);
-      await page.eval("document.getElementById('viewport').focus()");
+      await focusOn(page, "#viewport");
       await page.key("ArrowRight");
       await page.key("ArrowRight", SHIFT);
       await page.waitFor(`(${STATE}).version === ${start.version + 2}`, "two nudges");
@@ -225,7 +224,7 @@ export const steps = [
       // Ctrl+D copies both; undo removes the copies.
       await selectMany(page, ["a", "b"]);
       const dup = await state(page);
-      await page.eval("document.getElementById('viewport').focus()");
+      await focusOn(page, "#viewport");
       await page.key("d", CTRL);
       await landed(page, dup.version);
       const copied = await state(page);
@@ -233,24 +232,22 @@ export const steps = [
       check(change.removed.length === 0 && change.added.length === 2, `duplicate changed ${JSON.stringify(change)}`);
       check(JSON.stringify(copied.sel) === '["a-copy","b-copy"]', `selection ${copied.sel}`);
       await canvasMatchesEngine(page);
-      await page.eval("document.getElementById('viewport').focus()");
-      await page.key("z", CTRL);
-      await page.waitFor(`(${STATE}).text === ${JSON.stringify(dup.text)}`, "undo of the duplicate");
-      await settle(page);
+      await focusOn(page, "#viewport");
+      const undup = await pressLands(page, "z", CTRL, "undo of the duplicate");
+      check(undup.text === dup.text, "undo did not remove the copies");
       // Delete removes both (and the comment line above a); undo restores.
       await selectMany(page, ["a", "b"]);
       const del = await state(page);
-      await page.eval("document.getElementById('viewport').focus()");
+      await focusOn(page, "#viewport");
       await page.key("Delete");
       await landed(page, del.version);
       const gone = await state(page);
       const removed = onlyNodes(del.text, gone.text, ["a", "b"], { comments: true });
       check(removed.added.length === 0, `delete added ${removed.added}`);
       await canvasMatchesEngine(page);
-      await page.eval("document.getElementById('viewport').focus()");
-      await page.key("z", CTRL);
-      await page.waitFor(`(${STATE}).text === ${JSON.stringify(del.text)}`, "undo of the delete");
-      await settle(page);
+      await focusOn(page, "#viewport");
+      const undel = await pressLands(page, "z", CTRL, "undo of the delete");
+      check(undel.text === del.text, "undo did not restore the deleted nodes");
       return {};
     },
   ],
@@ -323,10 +320,9 @@ export const steps = [
       check(lineOf(after.text, "dock").includes("x=(px)500"), lineOf(after.text, "dock"));
       check(!(await page.eval("!!document.querySelector('#overlay .guide')")), "a guide stayed after release");
       const compared = await canvasMatchesEngine(page);
-      await page.eval("document.getElementById('viewport').focus()");
-      await page.key("z", CTRL);
-      await page.waitFor(`(${STATE}).text === ${JSON.stringify(before.text)}`, "undo of the snapped move");
-      await settle(page);
+      await focusOn(page, "#viewport");
+      const unsnap = await pressLands(page, "z", CTRL, "undo of the snapped move");
+      check(unsnap.text === before.text, "undo did not restore the text before the snapped move");
       // Ctrl held during a move: no snap. The undo moved the version, so
       // each drag waits for a version past the one it started at.
       await select(page, "dock");
@@ -335,10 +331,9 @@ export const steps = [
       await landed(page, unsnapped);
       after = await state(page);
       check(lineOf(after.text, "dock").includes("x=(px)497"), lineOf(after.text, "dock"));
-      await page.eval("document.getElementById('viewport').focus()");
-      await page.key("z", CTRL);
-      await page.waitFor(`(${STATE}).text === ${JSON.stringify(before.text)}`, "undo of the Ctrl move");
-      await settle(page);
+      await focusOn(page, "#viewport");
+      const unctrl = await pressLands(page, "z", CTRL, "undo of the Ctrl move");
+      check(unctrl.text === before.text, "undo did not restore the text before the Ctrl move");
       // Snapping off: no snap.
       await setSnap(page, false);
       await select(page, "dock");

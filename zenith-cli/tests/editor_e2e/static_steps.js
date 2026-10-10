@@ -8,7 +8,7 @@
 import { writeFileSync } from "node:fs";
 import path from "node:path";
 import { tmpdir } from "node:os";
-import { A, STATE, check, cursorAt, engineState, ready, settle, state } from "./helpers.js";
+import { A, check, cursorAt, engineState, landed, ready, settle, state } from "./helpers.js";
 import { crlfEdits, editWhileTyping, paneIsEngine } from "./sync_checks.js";
 
 /** Install a fake `FileSystemFileHandle` store and pickers in the page. */
@@ -127,8 +127,9 @@ export const steps = [
       await page.eval(`${A}.host.metrics({ clear: true }); true`);
       const renders = await page.eval(`${A}.renderer.renders`);
       await page.type("q");
-      await page.waitFor(`${A}.renderer.renders > ${renders}`, "the render of the keystroke");
-      await settle(page);
+      await landed(page, before.version, "the keystroke to reach the engine");
+      const rendered = await page.eval(`${A}.renderer.renders`);
+      check(rendered > renders, "the keystroke rendered nothing");
       const calls = await page.eval(`${A}.host.metrics({ clear: true }).map((e) => e.command)`);
       check(JSON.stringify(calls) === '["commands.batch"]', `engine calls for one keystroke: ${JSON.stringify(calls)}`);
       const after = await state(page);
@@ -137,8 +138,8 @@ export const steps = [
       const shown = await page.eval(`${A}.renderer.shown.gen === ${A}.renderer.gen`);
       check(shown, "the shown image is not of the new text");
       await page.key("Backspace");
-      await page.waitFor(`(${STATE}).text === ${JSON.stringify(before.text)}`, "the text back");
-      await settle(page);
+      const back = await landed(page, after.version, "the Backspace to reach the engine");
+      check(back.text === before.text, "Backspace did not remove the typed character");
       return { calls };
     },
   ],
@@ -255,9 +256,7 @@ export const steps = [
       const before = await state(page);
       const next = before.text.replace("// saved note", "// changed on disk");
       await page.eval(`(() => { window.__mock.put('first.zen', ${JSON.stringify(next)}); window.dispatchEvent(new Event('focus')); return true; })()`);
-      await page.waitFor(`(${STATE}).text.includes('changed on disk')`, "the external change to reach the pane");
-      await settle(page);
-      const s = await state(page);
+      const s = await landed(page, before.version, "the external change to reach the pane");
       check(s.text === next && !s.dirty, "reload left the pane differing or dirty");
       check(s.version > before.version, "version did not move");
       return { version: s.version };
@@ -269,7 +268,8 @@ export const steps = [
       const s0 = await state(page);
       await cursorAt(page, 0);
       await page.type("// local edit\n");
-      await settle(page);
+      const typed = await landed(page, s0.version, "the local edit to reach the engine");
+      check(typed.text === "// local edit\n" + s0.text, "the local edit did not land at the start");
       const disk = s0.text.replace("// changed on disk", "// theirs");
       await page.eval(`(() => { window.__mock.put('first.zen', ${JSON.stringify(disk)}); window.dispatchEvent(new Event('focus')); return true; })()`);
       await page.waitFor("!!document.querySelector('[data-key=disk]')", "the conflict banner");
@@ -277,14 +277,13 @@ export const steps = [
       check(banner.includes("edit.conflict"), `banner: ${banner}`);
       await shot("static-conflict");
       await page.eval("[...document.querySelectorAll('[data-key=disk] button')].find((b) => b.textContent === 'Reload').click()");
-      await page.waitFor(`(${STATE}).text === ${JSON.stringify(disk)}`, "the disk text in the pane");
-      await settle(page);
-      const s = await state(page);
+      const s = await landed(page, typed.version, "the disk text to reach the pane");
+      check(s.text === disk, "Reload did not put the disk text in the pane");
       check(!s.dirty, "dirty after Reload");
       check(!(await page.eval("!!document.querySelector('[data-key=disk]')")), "banner still shown");
       await page.key("z", 2);
-      await page.waitFor(`(${STATE}).text.includes('// local edit')`, "undo to bring the local edit back");
-      await settle(page);
+      const undone = await landed(page, s.version, "undo after Reload");
+      check(undone.text.includes("// local edit"), "undo did not bring the local edit back");
       return {};
     },
   ],

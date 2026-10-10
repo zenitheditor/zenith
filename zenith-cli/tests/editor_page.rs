@@ -19,7 +19,7 @@
 //! `conformance/editor/` (static host: `conformance/editor/static/`).
 
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Output};
 
 use sha2::{Digest, Sha256};
 
@@ -62,13 +62,38 @@ fn chromium() -> Option<PathBuf> {
     ])
 }
 
+/// Run `cmd` (a Node script) to its end and return its output. On Unix the
+/// script runs in a process group of its own, and every process left in
+/// that group when it exits (a `zenith edit` server, a Chromium) is killed:
+/// a script killed before its own cleanup ran leaks nothing.
+fn output_reaped(cmd: &mut Command) -> Output {
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        cmd.process_group(0);
+    }
+    let child = cmd
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .expect("spawn node");
+    #[cfg(unix)]
+    let group = child.id();
+    let out = child.wait_with_output().expect("wait for node");
+    #[cfg(unix)]
+    {
+        // Exit status 1: no process left in the group, the usual case.
+        let _ = Command::new("kill")
+            .args(["-KILL", "--", &format!("-{group}")])
+            .stderr(std::process::Stdio::null())
+            .status();
+    }
+    out
+}
+
 /// Run `node <script> <args>` and require exit code 0; print its output.
 fn run_node(node: &Path, script: &Path, args: &[&std::ffi::OsStr]) {
-    let out = Command::new(node)
-        .arg(script)
-        .args(args)
-        .output()
-        .expect("spawn node");
+    let out = output_reaped(Command::new(node).arg(script).args(args));
     let stdout = String::from_utf8_lossy(&out.stdout);
     let stderr = String::from_utf8_lossy(&out.stderr);
     println!("{stdout}");
@@ -286,11 +311,11 @@ fn wasm_engine_passes_node_tests() {
         return;
     };
     let script = crate_dir().join("tests/editor_e2e/unit_wasm.js");
-    let out = Command::new(&node)
-        .arg(&script)
-        .env("ZENITH_EDITOR_WASM", &wasm)
-        .output()
-        .expect("spawn node");
+    let out = output_reaped(
+        Command::new(&node)
+            .arg(&script)
+            .env("ZENITH_EDITOR_WASM", &wasm),
+    );
     let stdout = String::from_utf8_lossy(&out.stdout);
     let stderr = String::from_utf8_lossy(&out.stderr);
     println!("{stdout}");

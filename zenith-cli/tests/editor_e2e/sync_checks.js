@@ -3,7 +3,7 @@
 // and edits of a CRLF document. Each check compares the pane text with the
 // engine text after every edit.
 
-import { A, check, cursorAt, engineState, settle, state } from "./helpers.js";
+import { A, check, cursorAt, engineState, landed, settle, state, versionOf } from "./helpers.js";
 
 /**
  * Hold the reply of the next page call of `command` until
@@ -149,8 +149,10 @@ export async function crlfEdits(page, id) {
   const at = redone.indexOf("// ") + 3;
   check(at > 3, "no comment to type in");
   await cursorAt(page, at);
+  const v1 = await versionOf(page);
   await page.type("crlf ");
-  await page.waitFor(`${A}.sync.synced() && ${A}.code.text().includes('// crlf ')`, "the typing to land");
+  const landedText = (await landed(page, v1, "the typing to land")).text;
+  check(landedText === redone.slice(0, at) + "crlf " + redone.slice(at), "the typing did not land at the cursor");
   const typed = await paneIsEngine(page, "typing");
   check(typed.split("\r").length === redone.split("\r").length, "typing changed the \\r count");
   return typed;

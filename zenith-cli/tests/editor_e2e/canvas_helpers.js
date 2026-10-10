@@ -150,12 +150,6 @@ export async function previewShown(page) {
   await page.waitFor(`!!${A}.renderer.preview && !!document.querySelector('#overlay .ghost')`, "a live preview and ghost");
 }
 
-/** Wait for an edit after version `v` to land and the canvas to settle. */
-export async function landed(page, v) {
-  await page.waitFor(`${A}.sync.version !== ${v}`, "the edit to land");
-  await settle(page);
-}
-
 /**
  * The canvas shows the engine render of the current source: no preview
  * left, the image is of the latest text, the session text is the pane

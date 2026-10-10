@@ -47,6 +47,36 @@ export const state = (page) => page.eval(STATE);
 export const SETTLED = `(() => { const a = ${A}; return a.sync.synced() && !a.sync.pending() && a.renderer.idle()
   && !a.refreshLater.pending() && !a.selection.cursorLater.pending() && a.events.calls === 0; })()`;
 
+/**
+ * A snapshot of the page for a failed step: focus, the code cursor, the
+ * buffer sync queue, the renderer, the engine calls on the wire, and the
+ * last engine calls. Every field reads `null` when the page has no editor.
+ */
+export const DIAGNOSIS = `(() => {
+  const a = window.zenithEditor;
+  const el = document.activeElement;
+  const out = {
+    focus: { page: document.hasFocus(), active: el ? el.tagName.toLowerCase() + (el.id ? '#' + el.id : '') + (el.className && typeof el.className === 'string' ? '.' + el.className.split(/\\s+/).join('.') : '') : null },
+  };
+  if (!a) return out;
+  const s = a.sync;
+  const sel = a.code.view.state.selection;
+  const text = a.code.text();
+  const head = sel.main.head;
+  out.code = { focused: a.code.view.hasFocus, head, ranges: sel.ranges.map((r) => [r.anchor, r.head]), length: text.length,
+    around: text.slice(Math.max(0, head - 24), head) + '|' + text.slice(head, head + 24) };
+  out.sync = { version: s.version, synced: s.synced(), pending: s.pending(), inflight: !!s.inflight, unsent: !s.unsent.empty,
+    queued: s.queued.length, waiting: s.waiting, stale: s.stale, running: s.running, held: s.held, typingTimer: s.schedule.pending(),
+    baseEqualsPane: s.base === text };
+  out.render = { idle: a.renderer.idle(), gen: a.renderer.gen, shownGen: a.renderer.shown ? a.renderer.shown.gen : null, renders: a.renderer.renders };
+  out.calls = a.events.calls;
+  out.later = { refresh: a.refreshLater.pending(), cursor: a.selection.cursorLater.pending(), cursorWaiting: a.selection.cursorWaiting };
+  out.dirty = a.dirty();
+  out.selection = a.selectionIds;
+  if (typeof a.host.metrics === 'function') out.lastCalls = a.host.metrics().slice(-6);
+  return out;
+})()`;
+
 /** Wait until the pane text reached the engine and the last render landed. */
 export async function settle(page) {
   await page.waitFor(SETTLED, "sync, render, and engine calls to settle");
@@ -84,7 +114,6 @@ export async function ready(page) {
   await page.waitFor(
     `document.documentElement.dataset.ready === 'true' && !!${A}.renderer.shown`,
     "the page to load and render",
-    30000,
   );
   await settle(page);
 }
@@ -102,9 +131,70 @@ export async function boxOf(page, id) {
   return env.result.box;
 }
 
-/** Put the code cursor at UTF-16 offset `pos` and focus the pane. */
+/**
+ * `true` in the page when the code pane has focus, its selection is
+ * `anchor`..`head`, the DOM selection maps to the same head, and the head is
+ * inside the visible part of the pane.
+ */
+const SELECTED = (anchor, head) => `(() => { const v = ${A}.code.view; const m = v.state.selection.main;
+  if (!v.hasFocus || m.anchor !== ${anchor} || m.head !== ${head}) return false;
+  const g = getSelection();
+  if (!g.focusNode || !v.contentDOM.contains(g.focusNode) || v.posAtDOM(g.focusNode, g.focusOffset) !== ${head}) return false;
+  const c = v.coordsAtPos(${head}); const r = v.scrollDOM.getBoundingClientRect();
+  return !!c && c.top >= r.top && c.bottom <= r.bottom; })()`;
+
+/**
+ * Select `anchor`..`head` (UTF-16 offsets) in the code pane, focus it, and
+ * wait until the selection holds on screen and no scroll is due.
+ *
+ * Typing at a head outside the visible part of the pane makes the browser
+ * scroll it into view. That scroll event can run before the mutation
+ * observer of the inserted text. CodeMirror then reads the change from its
+ * scroll handler with its old DOM selection, and puts the cursor back in
+ * front of the typed text. So the head scrolls into view first, and the
+ * typing starts one frame after the scroll ended.
+ */
+export async function selectRange(page, anchor, head) {
+  await page.eval(`(() => { const v = ${A}.code.view; v.focus();
+    v.dispatch({ selection: { anchor: ${anchor}, head: ${head} }, scrollIntoView: true }); return true; })()`);
+  await page.waitFor(SELECTED(anchor, head), `the code selection ${anchor}..${head} with focus, on screen`);
+  await nextFrame(page);
+  await page.waitFor(SELECTED(anchor, head), `the code selection ${anchor}..${head} to hold after a frame`);
+}
+
+/** Put the code cursor at UTF-16 offset `pos` and focus the pane (see `selectRange`). */
 export async function cursorAt(page, pos) {
-  await page.eval(`(() => { const v = ${A}.code.view; v.dispatch({ selection: { anchor: ${pos} } }); v.focus(); return true; })()`);
+  await selectRange(page, pos, pos);
+}
+
+/** Focus the element `selector` matches and wait until it holds the focus. */
+export async function focusOn(page, selector) {
+  const el = `document.querySelector(${JSON.stringify(selector)})`;
+  await page.eval(`(() => { ${el}.focus(); return true; })()`);
+  await page.waitFor(`document.hasFocus() && document.activeElement === ${el}`, `the focus on ${selector}`);
+}
+
+/** The engine text version the pane last saw. Pass it to `landed` after an action. */
+export const versionOf = (page) => page.eval(`${A}.sync.version`);
+
+/**
+ * Wait until the text moved past `version` (a keystroke, undo, redo, an
+ * engine edit, a reload) and the page settled. Resolves the page state, for
+ * the step to check the text.
+ */
+export async function landed(page, version, what = "the edit to land") {
+  await page.waitFor(`${A}.sync.version !== ${version} && ${SETTLED}`, what);
+  return state(page);
+}
+
+/**
+ * Press `key` with `modifiers` (see `Page.key`) for an action that moves
+ * the text (undo, redo, a nudge), then `landed`. Resolves the page state.
+ */
+export async function pressLands(page, key, modifiers, what) {
+  const version = await versionOf(page);
+  await page.key(key, modifiers);
+  return landed(page, version, what);
 }
 
 /**

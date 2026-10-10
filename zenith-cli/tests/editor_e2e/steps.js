@@ -3,7 +3,6 @@
 
 import {
   A,
-  STATE,
   check,
   state,
   settle,
@@ -11,6 +10,10 @@ import {
   clientOf,
   boxOf,
   cursorAt,
+  focusOn,
+  landed,
+  selectRange,
+  versionOf,
   zoomTo,
   setDpr,
   sharpness,
@@ -53,10 +56,11 @@ export const steps = [
       const at = anchor + 'rect id="accent"'.length;
       const line = before.text.slice(0, at).split("\n").length;
       await cursorAt(page, at);
+      const v0 = await versionOf(page);
       await page.type(' w=(px)"');
-      await page.waitFor(`(${STATE}).errors > 0`, "an error diagnostic");
-      await settle(page);
-      const bad = await state(page);
+      const bad = await landed(page, v0, "the broken text to reach the engine");
+      check(bad.text === before.text.slice(0, at) + ' w=(px)"' + before.text.slice(at), "the typing did not land at the cursor");
+      check(bad.errors > 0, "no error diagnostic for the broken text");
       check(bad.stale, "stale badge hidden while the text has errors");
       const err = bad.diags.find((d) => d.severity === "error");
       check(err && err.line === line, `error at line ${err && err.line}, want ${line}: ${JSON.stringify(err)}`);
@@ -66,20 +70,20 @@ export const steps = [
       check(marks > 0, "no error underline in the source");
       check(bad.sha === before.sha, "preview changed while the text has errors");
       await shot("error-stale");
+      const v1 = await versionOf(page);
       for (let i = 0; i < ' w=(px)"'.length; i++) await page.key("Backspace");
-      await page.waitFor(`(${STATE}).errors === 0`, "errors to clear");
-      await settle(page);
-      const fixed = await state(page);
+      const fixed = await landed(page, v1, "the fix to reach the engine");
+      check(fixed.errors === 0, `errors after the fix: ${JSON.stringify(fixed.diags)}`);
       check(!fixed.stale, "stale badge still shown after the fix");
       check(fixed.text === before.text, "text differs after the fix");
       // A visible edit renders a new preview.
       const title = fixed.text.indexOf("Featured Projects") + "Featured ".length;
-      await page.eval(`(() => { const v = ${A}.code.view; v.dispatch({ selection: { anchor: ${title}, head: ${title + "Projects".length} } }); v.focus(); return true; })()`);
+      await selectRange(page, title, title + "Projects".length);
+      const v2 = await versionOf(page);
       await page.type("Work");
-      await page.waitFor(`(${STATE}).sha !== ${JSON.stringify(fixed.sha)}`, "a new preview");
-      await settle(page);
-      const edited = await state(page);
+      const edited = await landed(page, v2, "the visible edit to reach the engine");
       check(edited.text.includes("Featured Work"), "edit did not land");
+      check(edited.sha !== fixed.sha, "the visible edit did not change the preview");
       return { errorLine: err.line, errorCol: err.col, code: err.code };
     },
   ],
@@ -88,14 +92,10 @@ export const steps = [
     async ({ page }) => {
       const before = await state(page);
       await page.key("z", 2);
-      await page.waitFor(`(${STATE}).version !== ${before.version}`, "undo");
-      await settle(page);
-      const undone = await state(page);
+      const undone = await landed(page, before.version, "undo");
       check(undone.text !== before.text, "undo changed nothing");
       await page.key("Z", 2 | 8);
-      await page.waitFor(`(${STATE}).text.includes('Featured Work')`, "redo");
-      await settle(page);
-      const redone = await state(page);
+      const redone = await landed(page, undone.version, "redo");
       check(redone.text === before.text, "redo did not restore the text");
       return { undoVersion: undone.version, redoVersion: redone.version };
     },
@@ -279,7 +279,7 @@ export const steps = [
       await page.drag({ x: v.x, y: v.y }, { x: v.x + 50, y: v.y + 40 }, 6, { button: "middle" });
       const p2 = await state(page);
       check(Math.abs(p2.panX - p1.panX - 50) < 1 && Math.abs(p2.panY - p1.panY - 40) < 1, "middle drag did not pan");
-      await page.eval("document.getElementById('viewport').focus()");
+      await focusOn(page, "#viewport");
       await page.key("0", 0, "Digit0");
       const actual = await state(page);
       check(actual.zoom === 1, `0 key zoom ${actual.zoom}`);
@@ -425,9 +425,7 @@ export const steps = [
       const next = readDoc().replace("// Card B — below card A.", "// Card B sits below card A.");
       check(next !== readDoc(), "fixture comment not found");
       writeDoc(next);
-      await page.waitFor(`(${STATE}).text.includes('Card B sits below')`, "external change to reach the pane");
-      await settle(page);
-      const s = await state(page);
+      const s = await landed(page, before.version, "the external change to reach the pane");
       check(s.text === next, "pane text differs from the disk text");
       check(s.version > before.version, "version did not move");
       check(!s.dirty, "reload left the buffer dirty");
@@ -448,8 +446,8 @@ export const steps = [
       check(s.text === server.text, "pane text differs from the session text");
       check(s.text !== before.text, "the agent edit changed nothing");
       await page.key("z", 2);
-      await page.waitFor(`(${STATE}).text === ${JSON.stringify(before.text)}`, "undo of the agent edit");
-      await settle(page);
+      const undone = await landed(page, env.version, "undo of the agent edit");
+      check(undone.text === before.text, "undo did not restore the text before the agent edit");
       return { version: env.version };
     },
   ],
@@ -563,13 +561,13 @@ export const steps = [
       if (!setReadonly) return { skipped: "no chmod on this platform" };
       setReadonly(doc, true);
       try {
-        await page.waitFor("!!document.querySelector('[data-key=readonly]')", "the read-only notice", 10000);
+        await page.waitFor("!!document.querySelector('[data-key=readonly]')", "the read-only notice");
         check(await page.eval("document.getElementById('save').disabled"), "Save is still on");
         check((await engineState(page)).readonly === true, "the summary is not read-only");
       } finally {
         setReadonly(doc, false);
       }
-      await page.waitFor("!document.querySelector('[data-key=readonly]') && !document.getElementById('save').disabled", "the notice to clear", 10000);
+      await page.waitFor("!document.querySelector('[data-key=readonly]') && !document.getElementById('save').disabled", "the notice to clear");
       return {};
     },
     { host: "server" },
@@ -670,11 +668,11 @@ export const steps = [
         downloadThroughput: -1,
         uploadThroughput: -1,
       });
-      await page.waitFor("!document.querySelector('[data-key=offline]')", "the offline notice to clear", 20000);
+      await page.waitFor("!document.querySelector('[data-key=offline]')", "the offline notice to clear");
       // The failed requests logged network errors on purpose.
       page.errors.length = 0;
       await page.eval("[...document.querySelectorAll('[data-key=\"error:file.save\"] button')].find((b) => b.textContent === 'Retry').click()");
-      await page.waitFor(`!document.querySelector('[data-key=offline]') && !${A}.dirty()`, "save after recovery", 20000);
+      await page.waitFor(`!document.querySelector('[data-key=offline]') && !${A}.dirty()`, "save after recovery");
       return {};
     },
     { host: "server" },

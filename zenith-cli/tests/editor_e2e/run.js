@@ -20,8 +20,28 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Browser } from "./cdp.js";
+import { DIAGNOSIS } from "./helpers.js";
 import { startServer } from "./native_host.js";
 import { buildSite, serve } from "./static_site.js";
+
+/**
+ * A step waits on page state with a 60 s guard per wait (`Page.waitFor`).
+ * This guard catches a step stuck elsewhere (an evaluation that never
+ * resolves). A hung step ends the run: it may still drive the page.
+ */
+const STEP_GUARD_MS = 300000;
+const DIAGNOSIS_GUARD_MS = 10000;
+
+class Hung extends Error {}
+
+/** `promise`, or a `Hung` error after `ms` ms. */
+function within(promise, ms, what) {
+  let timer;
+  const guard = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Hung(`${what} did not finish in ${ms / 1000} s`)), ms);
+  });
+  return Promise.race([promise, guard]).finally(() => clearTimeout(timer));
+}
 
 function args() {
   const out = {};
@@ -43,7 +63,7 @@ async function startStatic(wasm, example, work) {
   copyFileSync(example, path.join(site, "samples", name));
   // A subdirectory path proves every URL the page builds is relative.
   const host = await serve(site, { prefix: "/sub/dir/" });
-  return { child: { kill: () => host.close() }, url: `${host.url}?doc=samples/${encodeURIComponent(name)}`, site, stderr: () => "" };
+  return { child: null, url: `${host.url}?doc=samples/${encodeURIComponent(name)}`, site, stderr: () => "", stop: () => host.close() };
 }
 
 async function main() {
@@ -60,11 +80,13 @@ async function main() {
   const data = mkdtempSync(path.join(tmpdir(), "zenith-e2e-data-"));
   const doc = path.join(dir, path.basename(a.example));
   copyFileSync(a.example, doc);
-  const server = mode === "static" ? await startStatic(a.wasm, a.example, dir) : await startServer(a.zenith, doc, data);
-  const browser = await Browser.launch(a.chromium);
   const results = [];
   let failed = 0;
+  let server = null;
+  let browser = null;
   try {
+    server = mode === "static" ? await startStatic(a.wasm, a.example, dir) : await startServer(a.zenith, doc, data);
+    browser = await Browser.launch(a.chromium);
     const page = await browser.newPage();
     const ctx = {
       page,
@@ -83,20 +105,27 @@ async function main() {
     for (const [name, fn] of steps) {
       const t0 = Date.now();
       try {
-        const detail = await fn(ctx);
+        const detail = await within(fn(ctx), STEP_GUARD_MS, `step "${name}"`);
         if (page.errors.length) throw new Error(`page errors: ${page.errors.join(" | ")}`);
         results.push({ step: name, ok: true, ms: Date.now() - t0, detail });
       } catch (err) {
         failed++;
-        await ctx.shot(`failed-${name.replace(/\W+/g, "-")}`).catch(() => {});
-        results.push({ step: name, ok: false, ms: Date.now() - t0, error: err.message });
+        const ms = Date.now() - t0;
+        const page_ = await within(page.eval(DIAGNOSIS), DIAGNOSIS_GUARD_MS, "the diagnosis").catch((e) => `no diagnosis: ${e.message}`);
+        await within(ctx.shot(`failed-${name.replace(/\W+/g, "-")}`), DIAGNOSIS_GUARD_MS, "the screenshot").catch(() => {});
+        results.push({ step: name, ok: false, ms, error: err.message, page: page_, pageErrors: page.errors.slice() });
         page.errors.length = 0;
+        if (err instanceof Hung) {
+          console.log(JSON.stringify(results.at(-1)));
+          break;
+        }
       }
       console.log(JSON.stringify(results.at(-1)));
     }
   } finally {
-    await browser.close();
-    server.child.kill();
+    // Every step result is out; a cleanup error must not leave the server.
+    await browser?.close().catch((err) => console.error(`closing chromium: ${err.message}`));
+    await server?.stop();
     rmSync(dir, { recursive: true, force: true });
     rmSync(data, { recursive: true, force: true });
   }
