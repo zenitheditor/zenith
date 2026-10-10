@@ -477,6 +477,16 @@ Run `zenith <command> --help` for flags (each prints a description and an exampl
 
 The source pane is the source of truth. The canvas shows the engine render of that text. Canvas edits (move, resize, rotate, inspector fields) become transactions that modify the text.
 
+<p align="center">
+  <img src="assets/editor/editor-split.png" alt="The Zenith browser editor: source pane, canvas with a selected text node, layers, inspector, and diagnostics panel" width="900">
+</p>
+<p align="center">
+  <img src="assets/editor/editor-canvas.png" alt="The Zenith browser editor with the canvas in fullscreen and a text node selected with its resize and rotate handles" width="900">
+</p>
+<p align="center">
+  <img src="assets/editor/editor-diagnostics.png" alt="The Zenith browser editor listing an unknown token reference as an error in the diagnostics panel, with the source line underlined" width="900">
+</p>
+
 ### `zenith edit`
 
 ```bash
@@ -775,7 +785,7 @@ Zenith is in its first public release series. The author → validate → edit �
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for how to work on the engine, and [AGENTS.md](AGENTS.md) for the binding repository conventions (the source of truth for both human and agent contributors).
+See [CONTRIBUTING.md](CONTRIBUTING.md) for how to work on the engine, and [AGENTS.md](AGENTS.md) for the binding repository conventions (the source of truth for both human and agent contributors). [CHANGELOG.md](CHANGELOG.md) lists the changes in each release.
 
 ## License
 
