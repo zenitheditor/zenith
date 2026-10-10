@@ -2,6 +2,7 @@
 
 use pdf_writer::Content;
 use zenith_core::{AssetProvider, FontProvider};
+use zenith_geometry::math;
 use zenith_scene::{
     FillRule, Scene, SceneCommand, StrokeAlign,
     ir::{path_segments_bbox, path_segments_finite},
@@ -630,7 +631,7 @@ pub(in crate::pdf) fn emit_command(
         SceneCommand::PushTransform { angle_deg, cx, cy } => {
             content.save_state();
             let theta = (*angle_deg).to_radians();
-            let (s, c) = (theta.sin() as f32, theta.cos() as f32);
+            let (s, c) = (math::sin(theta) as f32, math::cos(theta) as f32);
             let (cx, cy) = (*cx as f32, *cy as f32);
             // Translate(cx,cy) · Rotate(θ) · Translate(-cx,-cy), as one matrix.
             content.transform([c, s, -s, c, cx - c * cx + s * cy, cy - s * cx - c * cy]);

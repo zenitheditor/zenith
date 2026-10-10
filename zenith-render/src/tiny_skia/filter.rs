@@ -16,6 +16,7 @@
 
 use tiny_skia::Pixmap;
 use zenith_core::hash_unit;
+use zenith_geometry::math;
 use zenith_scene::FilterSpec;
 
 use super::pixels::premultiplied_to_straight;
@@ -149,8 +150,8 @@ fn apply_one(spec: &FilterSpec, r: f64, g: f64, b: f64, x: i64, y: i64) -> (f64,
         FilterSpec::HueRotate(amount) => {
             // SVG feColorMatrix hueRotate matrix; amount is in DEGREES.
             let rad = amount.to_radians();
-            let cos = rad.cos();
-            let sin = rad.sin();
+            let cos = math::cos(rad);
+            let sin = math::sin(rad);
             let m00 = 0.213 + cos * 0.787 - sin * 0.213;
             let m01 = 0.715 - cos * 0.715 - sin * 0.715;
             let m02 = 0.072 - cos * 0.072 + sin * 0.928;

@@ -125,6 +125,10 @@ pub fn render_spread_png_scaled(
     backend.encode_png(&spread)
 }
 
+/// The widest spread gutter [`composite_spread`] takes, in px: the page
+/// pixmap dimension limit, so a gutter never allocates more than a page.
+pub const MAX_SPREAD_GUTTER: u32 = 16_384;
+
 /// Composite two rasterized pages SIDE BY SIDE into one image with an optional
 /// transparent gutter between them.
 ///
@@ -141,12 +145,19 @@ pub fn render_spread_png_scaled(
 ///
 /// # Errors
 ///
-/// Returns [`RenderError`] if the combined width overflows `u32`.
+/// Returns [`RenderError`] if the combined width overflows `u32`, or if
+/// `gutter_px` exceeds [`MAX_SPREAD_GUTTER`].
 pub fn composite_spread(
     left: &RasterImage,
     right: &RasterImage,
     gutter_px: u32,
 ) -> Result<RasterImage, RenderError> {
+    if gutter_px > MAX_SPREAD_GUTTER {
+        return Err(RenderError::new(format!(
+            "spread gutter {gutter_px} px exceeds the {MAX_SPREAD_GUTTER} px limit; set a \
+             smaller spread-gutter"
+        )));
+    }
     let width = left
         .width
         .checked_add(gutter_px)
@@ -264,6 +275,18 @@ mod tests {
         assert_eq!(out.width, 70, "spread width must be wA + wB");
         assert_eq!(out.height, 20, "spread height must be max(hA, hB)");
         assert_eq!(out.rgba.len(), (70 * 20 * 4) as usize);
+    }
+
+    #[test]
+    fn a_gutter_past_the_limit_is_an_error_not_an_allocation() {
+        let page = solid(2, 2, [1, 2, 3, 255]);
+        assert!(composite_spread(&page, &page, MAX_SPREAD_GUTTER).is_ok());
+        for gutter in [MAX_SPREAD_GUTTER + 1, u32::MAX] {
+            let Err(e) = composite_spread(&page, &page, gutter) else {
+                panic!("gutter {gutter} accepted");
+            };
+            assert!(e.to_string().contains("spread-gutter"), "{e}");
+        }
     }
 
     #[test]

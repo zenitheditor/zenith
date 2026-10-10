@@ -3,6 +3,7 @@
 use super::values::Check;
 use crate::RenderError;
 use tiny_skia::{Point, Transform};
+use zenith_geometry::math;
 
 pub(super) struct TransformStack {
     current: Transform,
@@ -50,7 +51,7 @@ impl TransformStack {
         }
         let theta = angle.to_radians();
         check.finite("angle_radians", theta)?;
-        let (s, c) = (theta.sin() as f32, theta.cos() as f32);
+        let (s, c) = (math::sin(theta) as f32, math::cos(theta) as f32);
         let (cx, cy) = (cx as f32, cy as f32);
         self.push(
             check,
@@ -69,9 +70,9 @@ impl TransformStack {
         check.coordinate(&format!("{field}.transformed.y"), f64::from(point.y))
     }
     pub fn stroke(&self, check: Check, width: f64) -> Result<(), RenderError> {
-        let scale = f64::from(self.current.sx)
-            .hypot(f64::from(self.current.ky))
-            .max(f64::from(self.current.kx).hypot(f64::from(self.current.sy)));
+        let scale = math::hypot(f64::from(self.current.sx), f64::from(self.current.ky)).max(
+            math::hypot(f64::from(self.current.kx), f64::from(self.current.sy)),
+        );
         check.coordinate("transformed_stroke_width", width * scale)
     }
 }

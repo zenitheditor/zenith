@@ -52,7 +52,7 @@ fn run_placed(
     let Some(placement) = surface.place(device.bounds(), margin, samples_pixels(paint)) else {
         return;
     };
-    if let Placement::Scratch(area) = placement
+    if let Placement::Scratch { area, ink } = placement
         && let Some(mut scratch) = pixmap_from(target, surface, area)
     {
         let scratch_mask = match mask {
@@ -73,7 +73,7 @@ fn run_placed(
             scratch_mask.as_ref(),
             draw,
         );
-        pixmap_back(target, surface, &scratch, area);
+        pixmap_back(target, surface, scratch, area, ink);
         return;
     }
     // Direct, or a scratch that could not be allocated.

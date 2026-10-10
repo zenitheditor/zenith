@@ -83,7 +83,11 @@ fn boxes_for_gauss(sigma: f64) -> [u32; 3] {
     if sigma <= 0.0 {
         return [1, 1, 1];
     }
-    let w_ideal = ((12.0 * sigma * sigma / N) + 1.0).sqrt();
+    // Capped so the box widths stay within u32 and the i64 math below
+    // cannot overflow; a blur this wide covers any raster anyway.
+    let w_ideal = ((12.0 * sigma * sigma / N) + 1.0)
+        .sqrt()
+        .min(f64::from(u32::MAX - 2));
     let mut wl = w_ideal.floor() as i64;
     if wl % 2 == 0 {
         wl -= 1;
@@ -579,6 +583,17 @@ fn box_blur_v<Q: Quotient>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_huge_sigma_gives_bounded_boxes_without_overflow() {
+        for sigma in [1e9, 1e19, 1e300, f64::MAX] {
+            let boxes = boxes_for_gauss(sigma);
+            assert!(
+                boxes.iter().all(|b| *b >= 1 && b % 2 == 1),
+                "{sigma}: {boxes:?}"
+            );
+        }
+    }
 
     /// The previous `gaussian_blur_premul`, kept verbatim as the byte reference.
     fn reference_gaussian_blur_premul(pm: &mut Pixmap, sigma: f64) {

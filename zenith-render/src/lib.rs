@@ -33,8 +33,8 @@ pub use region::{
     device_page_size, render_region_image, render_region_png, snap_view,
 };
 pub use render::{
-    composite_spread, encode_png, render_image, render_image_scaled, render_png, render_png_scaled,
-    render_spread_png, render_spread_png_scaled, scaled_size,
+    MAX_SPREAD_GUTTER, composite_spread, encode_png, render_image, render_image_scaled, render_png,
+    render_png_scaled, render_spread_png, render_spread_png_scaled, scaled_size,
 };
 pub use svg::{
     SvgOptions, SvgOutput, SvgRasterizationReason, SvgRasterizedRegion, render_svg,

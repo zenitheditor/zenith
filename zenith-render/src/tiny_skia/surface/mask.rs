@@ -31,7 +31,7 @@ pub(in crate::tiny_skia) fn mask_fill_path(
     let Some(placement) = surface.place(device.bounds(), FILL_MARGIN, false) else {
         return;
     };
-    if let Placement::Scratch(area) = placement
+    if let Placement::Scratch { area, .. } = placement
         && let Some(mut scratch) = Mask::new(area.w(), area.h())
         && let Some(local) = device.clone().transform(area.shift())
     {

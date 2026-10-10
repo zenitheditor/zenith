@@ -1,5 +1,6 @@
 //! Native axial and radial gradient geometry and RGB stops.
 
+use zenith_geometry::math;
 use zenith_scene::GradientPaint;
 
 /// A gradient resolved to native PDF shading geometry plus ordered RGB stops.
@@ -89,11 +90,11 @@ pub(super) fn geometry_coordinates(
     if gradient.radial {
         let cx = (x + w * gradient.center_x.unwrap_or(0.5)) as f32;
         let cy = (y + h * gradient.center_y.unwrap_or(0.5)) as f32;
-        let radius = (gradient.radius_frac.unwrap_or(1.0) * (w / 2.0).hypot(h / 2.0)) as f32;
+        let radius = (gradient.radius_frac.unwrap_or(1.0) * math::hypot(w / 2.0, h / 2.0)) as f32;
         GradientGeometry::Radial([cx, cy, 0.0, cx, cy, radius])
     } else {
         let theta = gradient.angle_deg.to_radians();
-        let (dir_x, dir_y) = (theta.cos(), theta.sin());
+        let (dir_x, dir_y) = (math::cos(theta), math::sin(theta));
         let (cx, cy) = (x + w / 2.0, y + h / 2.0);
         let line_len = (w * dir_x).abs() + (h * dir_y).abs();
         let half = line_len / 2.0;

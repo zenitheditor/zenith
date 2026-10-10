@@ -1,11 +1,13 @@
 //! Region render: rasterize one device-pixel window of a page.
 //!
 //! The window grows by the scene's effect pad (see `reach`) into a surface,
-//! the surface renders, and the window is cut out. When the whole page fits
-//! the region caps, the surface runs in exact mode (see `surface`). The surface is capped at
-//! [`MAX_SURFACE_SIDE`] per axis and [`MAX_SURFACE_PIXELS`] in total. A pad
-//! that does not fit is shortened, and effect pixels within the missing reach
-//! of the window edge can then differ from the full render.
+//! the surface renders, and the window is cut out. The pad is clamped to the
+//! page before the surface caps ([`MAX_SURFACE_SIDE`] per axis,
+//! [`MAX_SURFACE_PIXELS`] in total) apply. When the whole page fits the
+//! region caps, the clamped surface always fits, and the surface runs in
+//! exact mode (see `surface`). Only on a larger page can a pad that does not
+//! fit be shortened; effect pixels within the missing reach of the window
+//! edge can then differ from the full render.
 
 use tiny_skia::Pixmap;
 use zenith_core::{AssetProvider, FontProvider};
@@ -82,6 +84,16 @@ pub(crate) fn rasterize_window_png(
 /// `window` grown by `pad` on every side, clamped to the page and the
 /// surface caps.
 fn padded_surface(window: Window, pad: u32) -> Surface {
+    // The full pad, clamped to the page first: a page that fits the region
+    // caps always fits here, so its region render stays exact.
+    let full = grow(window, pad, pad);
+    if full.w <= MAX_SURFACE_SIDE
+        && full.h <= MAX_SURFACE_SIDE
+        && u64::from(full.w) * u64::from(full.h) <= MAX_SURFACE_PIXELS
+    {
+        return full;
+    }
+    // Only a page past the caps (no exact mode) gets here: shorten the pad.
     let fit_side = |side: u32| (MAX_SURFACE_SIDE.saturating_sub(side)) / 2;
     let mut pad_x = pad.min(fit_side(window.w));
     let mut pad_y = pad.min(fit_side(window.h));

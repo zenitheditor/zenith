@@ -9,6 +9,7 @@ use tiny_skia::{
     Color as TsColor, GradientStop as TsGradientStop, LinearGradient, Point, RadialGradient,
     Shader, SpreadMode, Transform,
 };
+use zenith_geometry::math;
 use zenith_scene::GradientPaint;
 
 /// Build a tiny-skia gradient [`Shader`] for a fill box.
@@ -44,7 +45,7 @@ pub(super) fn gradient_shader(
     if gradient.radial {
         let cx = x + w * gradient.center_x.unwrap_or(0.5);
         let cy = y + h * gradient.center_y.unwrap_or(0.5);
-        let default_radius = (w / 2.0).hypot(h / 2.0);
+        let default_radius = math::hypot(w / 2.0, h / 2.0);
         let radius = (gradient.radius_frac.unwrap_or(1.0) * default_radius) as f32;
         let center = Point::from_xy(cx as f32, cy as f32);
         RadialGradient::new(
@@ -57,7 +58,7 @@ pub(super) fn gradient_shader(
         )
     } else {
         let theta = gradient.angle_deg.to_radians();
-        let (dir_x, dir_y) = (theta.cos(), theta.sin());
+        let (dir_x, dir_y) = (math::cos(theta), math::sin(theta));
         let center = (x + w / 2.0, y + h / 2.0);
         // CSS gradient-line length, then half-extent on each side of center.
         let line_len = (w * dir_x).abs() + (h * dir_y).abs();

@@ -21,4 +21,5 @@ mod window;
 
 pub(in crate::tiny_skia) use draw::{draw_pixmap, fill_device_rect, fill_path, stroke_path};
 pub(in crate::tiny_skia) use mask::{mask_fill_path, mask_intersect_path};
+pub(in crate::tiny_skia) use scratch::ScratchScope;
 pub(in crate::tiny_skia) use window::Surface;

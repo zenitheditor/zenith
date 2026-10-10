@@ -28,7 +28,7 @@ use super::pixels::premultiplied_to_straight;
 use super::pool::{CapturePool, Dirty};
 use super::scale::{scale_filters, scale_mask, scale_shadows, scaled_px};
 use super::shadow::{composite_blur, composite_shadows};
-use super::surface::Surface;
+use super::surface::{ScratchScope, Surface};
 use crate::backend::{RasterBackend, RasterImage};
 use crate::error::RenderError;
 
@@ -298,6 +298,8 @@ pub(super) fn rasterize_surface(
     assets: &dyn AssetProvider,
 ) -> Result<Pixmap, RenderError> {
     let (width, height) = (surface.w, surface.h);
+    // Scratch buffers live for this render only.
+    let _scratch = ScratchScope::enter();
     let mut pixmap = Pixmap::new(width, height)
         .ok_or_else(|| RenderError::new(format!("failed to allocate pixmap ({width}×{height})")))?;
     // Background starts fully transparent (0,0,0,0) — the deterministic default.

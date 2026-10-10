@@ -5,7 +5,7 @@ use crate::error::RenderError;
 /// Maximum allowed dimension in either axis (width or height).
 ///
 /// Prevents gigantic allocations from malformed or adversarial scenes.
-const MAX_DIMENSION: u32 = 16_384;
+pub(crate) const MAX_DIMENSION: u32 = 16_384;
 
 /// Convert scene `f64` dimensions to `u32` pixels, enforcing sanity rules.
 ///

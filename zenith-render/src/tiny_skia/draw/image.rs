@@ -13,6 +13,7 @@ use zenith_scene::{FitMode, ImageClip, SceneCommand};
 
 use super::super::commands::DrawCtx;
 use super::super::paths::build_rounded_rect_path;
+use super::super::pixels::MAX_DIMENSION;
 use super::super::raster::{crop_raster_image, decode_raster_image};
 use super::super::surface::{draw_pixmap, mask_fill_path};
 
@@ -93,7 +94,7 @@ pub(in crate::tiny_skia) fn draw_image(
             // preserving the SVG's own aspect ratio.
             // A scaled render multiplies by the root output scale so the
             // intermediate matches device pixels (exact at scale 1).
-            let raster_scale = ((*w / svw).max(*h / svh) * ctx.device_scale).clamp(0.01, 16.0);
+            let raster_scale = svg_raster_scale((*w, *h), (svw, svh), ctx.device_scale);
             let pw = ((svw * raster_scale).ceil() as u32).max(1);
             let ph = ((svh * raster_scale).ceil() as u32).max(1);
             let Some(mut pm) = Pixmap::new(pw, ph) else {
@@ -226,4 +227,29 @@ pub(in crate::tiny_skia) fn draw_image(
     // ── g. Composite. Box-clip is enforced by the Mask;
     // deterministic same-machine (pure-software bilinear). ─────
     draw_pixmap(target, ctx.surface, src.as_ref(), &paint, transform, mask);
+}
+
+/// The scale an SVG of intrinsic size `(svw, svh)` rasterizes at for a
+/// destination box `(w, h)` at `device_scale`: near 1:1 with the device,
+/// within 0.01..16, and never past the pixmap dimension limit (a larger
+/// SVG rasterizes smaller and scales up downstream).
+fn svg_raster_scale((w, h): (f64, f64), (svw, svh): (f64, f64), device_scale: f64) -> f64 {
+    ((w / svw).max(h / svh) * device_scale)
+        .clamp(0.01, 16.0)
+        .min(f64::from(MAX_DIMENSION) / svw)
+        .min(f64::from(MAX_DIMENSION) / svh)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_huge_svg_rasterizes_within_the_pixmap_limit() {
+        let limit = f64::from(MAX_DIMENSION);
+        let s = svg_raster_scale((100.0, 100.0), (1e7, 1e7), 1.0);
+        assert!((1e7 * s).ceil() <= limit + 1.0, "{s}");
+        // An ordinary SVG keeps the 1:1 device scale.
+        assert_eq!(svg_raster_scale((200.0, 100.0), (100.0, 50.0), 1.0), 2.0);
+    }
 }

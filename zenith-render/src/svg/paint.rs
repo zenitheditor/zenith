@@ -1,6 +1,7 @@
 use super::geometry::{BoxRect, finite};
 use super::writer::Writer;
 use crate::RenderError;
+use zenith_geometry::math;
 use zenith_scene::{Color, LineCap, LineJoin, Paint};
 
 pub(super) fn color(color: Color, attribute: &str) -> String {
@@ -27,7 +28,8 @@ impl Writer {
                 let (element, attrs) = if gradient.radial {
                     let cx = x + w * gradient.center_x.unwrap_or(0.5);
                     let cy = y + h * gradient.center_y.unwrap_or(0.5);
-                    let radius = gradient.radius_frac.unwrap_or(1.0) * (w / 2.0).hypot(h / 2.0);
+                    let radius =
+                        gradient.radius_frac.unwrap_or(1.0) * math::hypot(w / 2.0, h / 2.0);
                     finite(&[cx, cy, radius])?;
                     if radius <= 0.0 {
                         return Err(RenderError::new(
@@ -40,7 +42,7 @@ impl Writer {
                     )
                 } else {
                     let theta = gradient.angle_deg.to_radians();
-                    let (dx, dy) = (theta.cos(), theta.sin());
+                    let (dx, dy) = (math::cos(theta), math::sin(theta));
                     let half = ((w * dx).abs() + (h * dy).abs()) / 2.0;
                     let (cx, cy) = (x + w / 2.0, y + h / 2.0);
                     (

@@ -82,8 +82,9 @@ impl DeviceBox {
 pub(in crate::tiny_skia) enum Placement {
     /// On the surface itself, shifted by its origin.
     Direct,
-    /// On a scratch buffer covering this device box.
-    Scratch(DeviceBox),
+    /// On a scratch buffer covering `area`. The draw's ink stays inside
+    /// `ink`, a part of `area`.
+    Scratch { area: DeviceBox, ink: DeviceBox },
 }
 
 impl Surface {
@@ -205,7 +206,10 @@ impl Surface {
         if self.device_box().contains(needed) {
             Some(Placement::Direct)
         } else {
-            Some(Placement::Scratch(needed))
+            Some(Placement::Scratch {
+                area: needed,
+                ink: near,
+            })
         }
     }
 }
@@ -226,6 +230,20 @@ mod tests {
         }
     }
 
+    const CROSSING: DeviceBox = DeviceBox {
+        x0: 9,
+        y0: 29,
+        x1: 52,
+        y1: 41,
+    };
+
+    const WIDE: DeviceBox = DeviceBox {
+        x0: 0,
+        y0: 29,
+        x1: 100,
+        y1: 41,
+    };
+
     fn rect(l: f32, t: f32, r: f32, b: f32) -> Rect {
         Rect::from_ltrb(l, t, r, b).expect("rect")
     }
@@ -239,12 +257,10 @@ mod tests {
         );
         assert_eq!(
             s.place(rect(10.5, 30.0, 50.2, 40.0), 1.0, false),
-            Some(Placement::Scratch(DeviceBox {
-                x0: 9,
-                y0: 29,
-                x1: 52,
-                y1: 41
-            }))
+            Some(Placement::Scratch {
+                area: CROSSING,
+                ink: CROSSING
+            })
         );
     }
 
@@ -253,21 +269,27 @@ mod tests {
         let s = window(20, 20, 40, 40);
         assert_eq!(
             s.place(rect(-30.0, 30.0, 150.0, 40.0), 1.0, false),
-            Some(Placement::Scratch(DeviceBox {
-                x0: 0,
-                y0: 29,
-                x1: 100,
-                y1: 41
-            }))
+            Some(Placement::Scratch {
+                area: WIDE,
+                ink: WIDE
+            })
         );
         assert_eq!(
             s.place(rect(25.0, 30.0, 50.0, 40.0), 1.0, true),
-            Some(Placement::Scratch(DeviceBox {
-                x0: 0,
-                y0: 0,
-                x1: 51,
-                y1: 41
-            }))
+            Some(Placement::Scratch {
+                area: DeviceBox {
+                    x0: 0,
+                    y0: 0,
+                    x1: 51,
+                    y1: 41
+                },
+                ink: DeviceBox {
+                    x0: 24,
+                    y0: 29,
+                    x1: 51,
+                    y1: 41
+                }
+            })
         );
         assert_eq!(s.place(rect(120.0, 0.0, 150.0, 10.0), 1.0, false), None);
         assert_eq!(s.place(rect(1.0, 1.0, 5.0, 5.0), 1.0, false), None);
