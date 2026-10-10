@@ -42,6 +42,8 @@ pub fn density_map(surface: &Surface) -> DensityReport {
     let rows = height.min(4);
     let mean = mean_luminance(surface);
     let mut cells = build_cells(width, height, columns, rows);
+    // Sum in f64: an f32 running sum drifts over millions of pixels.
+    let mut energies = vec![0.0_f64; cells.len()];
 
     for y in 0..height {
         for x in 0..width {
@@ -53,14 +55,18 @@ pub fn density_map(surface: &Surface) -> DensityReport {
             let energy = pixel.a() * (luminance(pixel) - mean).abs();
             if let Some(index) = cell_index(row, column, columns)
                 && let Some(cell) = cells.get_mut(index)
+                && let Some(total) = energies.get_mut(index)
             {
-                cell.energy += energy;
+                *total += f64::from(energy);
                 cell.pixel_count += 1;
             }
         }
     }
 
-    let total_energy = cells.iter().map(|cell| cell.energy).sum::<f32>();
+    for (cell, total) in cells.iter_mut().zip(&energies) {
+        cell.energy = *total as f32;
+    }
+    let total_energy = energies.iter().sum::<f64>() as f32;
     let strongest_cell = strongest_cell(&cells);
     let (focal_x, focal_y) = focal_location(&strongest_cell);
     let diagnostics = density_diagnostics(total_energy, &strongest_cell, columns, rows);

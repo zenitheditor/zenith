@@ -32,7 +32,7 @@ struct ZoneAccumulator {
     count: u64,
     min: f32,
     max: f32,
-    total: f32,
+    total: f64,
 }
 
 impl ZoneAccumulator {
@@ -50,7 +50,7 @@ impl ZoneAccumulator {
         self.count += 1;
         self.min = self.min.min(value);
         self.max = self.max.max(value);
-        self.total += value;
+        self.total += f64::from(value);
     }
 
     fn metrics(self) -> ZoneMetrics {
@@ -70,7 +70,7 @@ impl ZoneAccumulator {
             count: self.count,
             min: self.min,
             max: self.max,
-            mean: self.total / self.count as f32,
+            mean: (self.total / self.count as f64) as f32,
             spread: self.max - self.min,
         }
     }

@@ -18,7 +18,7 @@ pub struct EdgeReport {
 
 pub fn edge_map(surface: &Surface) -> EdgeReport {
     let mut count = 0_u64;
-    let mut total = 0.0_f32;
+    let mut total = 0.0_f64;
     let mut max = 0.0_f32;
     let mut hard_count = 0_u64;
     let mut lost_count = 0_u64;
@@ -69,7 +69,7 @@ pub fn edge_map(surface: &Surface) -> EdgeReport {
         mean: if count == 0 {
             0.0
         } else {
-            total / count as f32
+            (total / count as f64) as f32
         },
         hard_count,
         lost_count,
@@ -80,13 +80,13 @@ pub fn edge_map(surface: &Surface) -> EdgeReport {
 fn collect_edge(
     delta: f32,
     count: &mut u64,
-    total: &mut f32,
+    total: &mut f64,
     max: &mut f32,
     hard_count: &mut u64,
     lost_count: &mut u64,
 ) {
     *count += 1;
-    *total += delta;
+    *total += f64::from(delta);
     *max = max.max(delta);
     if delta >= HARD_EDGE_THRESHOLD {
         *hard_count += 1;

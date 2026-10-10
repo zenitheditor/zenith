@@ -18,13 +18,13 @@ pub fn histogram(surface: &Surface) -> Histogram {
     let mut bins = [0_u64; HISTOGRAM_BINS];
     let mut min = 1.0_f32;
     let mut max = 0.0_f32;
-    let mut total = 0.0_f32;
+    let mut total = 0.0_f64;
 
     for pixel in surface.pixels() {
         let value = luminance(*pixel);
         min = min.min(value);
         max = max.max(value);
-        total += value;
+        total += f64::from(value);
         if let Some(bin) = bins.get_mut(histogram_bin(value)) {
             *bin += 1;
         }
@@ -36,7 +36,7 @@ pub fn histogram(surface: &Surface) -> Histogram {
         total_pixels,
         min,
         max,
-        mean: total / total_pixels as f32,
+        mean: (total / total_pixels as f64) as f32,
     }
 }
 
@@ -77,6 +77,14 @@ mod tests {
 
         assert_eq!(report.bins, [1, 0, 0, 0, 0, 0, 0, 0, 0, 1]);
         assert_eq!(report.min, 0.0);
+    }
+
+    #[test]
+    fn mean_of_a_large_flat_surface_has_no_running_sum_drift() {
+        let surface = Surface::filled(1000, 1000, gray(0.9)).unwrap();
+        let report = histogram(&surface);
+        assert_eq!(report.mean, report.min);
+        assert_eq!(report.mean, report.max);
     }
 
     fn gray(value: f32) -> LinearRgba {

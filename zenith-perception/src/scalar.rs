@@ -17,12 +17,13 @@ pub fn pixel_count(surface: &Surface) -> u64 {
 }
 
 pub fn mean_luminance(surface: &Surface) -> f32 {
+    // Sum in f64: an f32 running sum drifts over millions of pixels.
     let total = surface
         .pixels()
         .iter()
-        .map(|pixel| luminance(*pixel))
-        .sum::<f32>();
-    total / pixel_count(surface) as f32
+        .map(|pixel| f64::from(luminance(*pixel)))
+        .sum::<f64>();
+    (total / pixel_count(surface) as f64) as f32
 }
 
 fn clamp_unit(value: f32) -> f32 {
