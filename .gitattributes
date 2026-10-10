@@ -1,0 +1,5 @@
+# The editor page is embedded into the binary and the vendored bundle is
+# checked against a byte size and sha256. A CRLF checkout on Windows would
+# change both, so these files always check out with LF.
+zenith-cli/assets/editor/** text eol=lf
+zenith-cli/tests/editor_e2e/** text eol=lf
