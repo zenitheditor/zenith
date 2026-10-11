@@ -33,12 +33,12 @@ fn node_fill_mut(node: &mut Node) -> Option<&mut Option<PropertyValue>> {
         Node::Shape(n) => Some(&mut n.fill),
         Node::Pattern(n) => Some(&mut n.fill),
         Node::Chart(n) => Some(&mut n.fill),
+        Node::Frame(n) => Some(&mut n.fill),
         Node::Light(_) => None,
         Node::Mesh(_) => None,
         // A connector is stroke-only (like `line`): it has no `fill` field, so
         // set_fill honestly surfaces tx.unsupported_property.
         Node::Line(_)
-        | Node::Frame(_)
         | Node::Group(_)
         | Node::Image(_)
         | Node::Instance(_)
@@ -49,7 +49,7 @@ fn node_fill_mut(node: &mut Node) -> Option<&mut Option<PropertyValue>> {
 
 /// Return a mutable reference to the `stroke` field of a node, or `None` for
 /// variants that do not have a `stroke` property
-/// (`Text`, `Code`, `Frame`, `Group`, `Image`, `Unknown`).
+/// (`Text`, `Code`, `Group`, `Image`, `Unknown`).
 fn node_stroke_mut(node: &mut Node) -> Option<&mut Option<PropertyValue>> {
     match node {
         Node::Rect(n) => Some(&mut n.stroke),
@@ -62,11 +62,11 @@ fn node_stroke_mut(node: &mut Node) -> Option<&mut Option<PropertyValue>> {
         Node::Connector(n) => Some(&mut n.stroke),
         Node::Pattern(n) => Some(&mut n.stroke),
         Node::Chart(n) => Some(&mut n.stroke),
+        Node::Frame(n) => Some(&mut n.stroke),
         Node::Light(_) => None,
         Node::Mesh(n) => Some(&mut n.stroke),
         Node::Text(_)
         | Node::Code(_)
-        | Node::Frame(_)
         | Node::Group(_)
         | Node::Image(_)
         | Node::Instance(_)
@@ -80,7 +80,7 @@ fn node_stroke_mut(node: &mut Node) -> Option<&mut Option<PropertyValue>> {
 
 /// Return a mutable reference to the `stroke_width` field of a node, or `None`
 /// for variants that do not have a `stroke_width` property
-/// (`Text`, `Code`, `Frame`, `Group`, `Image`, `Unknown`).
+/// (`Text`, `Code`, `Group`, `Image`, `Unknown`).
 fn node_stroke_width_mut(node: &mut Node) -> Option<&mut Option<PropertyValue>> {
     match node {
         Node::Rect(n) => Some(&mut n.stroke_width),
@@ -93,11 +93,11 @@ fn node_stroke_width_mut(node: &mut Node) -> Option<&mut Option<PropertyValue>> 
         Node::Connector(n) => Some(&mut n.stroke_width),
         Node::Pattern(n) => Some(&mut n.stroke_width),
         Node::Chart(n) => Some(&mut n.stroke_width),
+        Node::Frame(n) => Some(&mut n.stroke_width),
         Node::Light(_) => None,
         Node::Mesh(n) => Some(&mut n.stroke_width),
         Node::Text(_)
         | Node::Code(_)
-        | Node::Frame(_)
         | Node::Group(_)
         | Node::Image(_)
         | Node::Instance(_)
