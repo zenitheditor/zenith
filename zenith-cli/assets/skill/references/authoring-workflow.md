@@ -8,7 +8,8 @@ This skill is judgment and routing. Syntax lives in the CLI. Never invent attrib
 
 | Need | Run |
 | --- | --- |
-| Node attributes | `zenith schema nodes` · `zenith schema node <kind>` |
+| Write a document: example, layout rules, common attributes | `zenith schema write` |
+| Node attributes beyond those | `zenith schema nodes` · `zenith schema node <kind>` |
 | Transaction ops | `zenith schema ops` · `zenith schema op <name>` |
 | Token types, document tokens | `zenith schema token <type>` · `zenith tokens <file>` |
 | Styles, defaults | `zenith schema style` · `zenith schema defaults` |
@@ -25,9 +26,8 @@ If `zenith --version` fails, give the installer from https://github.com/zenithed
 
 ## Core loop
 
-1. **Scaffold.** `zenith new <path> --theme <name>` plus canvas flags. If `.zenith/brand.md` exists in or above the directory, use its tokens (`references/brand.md`). Invent a palette only when the brand and every theme fail the brief.
+1. **Scaffold.** For a flyer, letterhead, handout, deck, poster, menu, card, or report, run `zenith new <path> --starter <kind>`. It scaffolds a finished layout, prints its text slots, and takes `--theme` and the canvas flags. Adapt it instead of building from a blank page. Otherwise run `zenith new <path> --theme <name>` plus canvas flags, and read `zenith schema write` before writing nodes. If `.zenith/brand.md` exists in or above the directory, use its tokens (`references/brand.md`). Invent a palette only when the brand and every theme fail the brief.
    - A print `--format` (A4, Letter, A5, …) scales the theme type to a 16 px body on A4. Use the scaled `size.*` tokens. Do not add smaller ones.
-   - For a flyer, letterhead, handout, deck, poster, menu, card, or report, `zenith new <path> --starter <kind>` scaffolds a finished layout. Read it and adapt it instead of building from a blank page. It takes `--theme` and the canvas flags.
 2. **Author with layout and defaults.**
    - Stacks, rows, cards, chips, and lists go in `frame layout="row|column|grid"`. Do not compute child x/y by hand.
    - A themed document styles bare `text`, `shape`, and `connector` through its `defaults` block. Omit font, fill, and radius attributes.
