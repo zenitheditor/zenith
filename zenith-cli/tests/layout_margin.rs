@@ -109,12 +109,13 @@ fn nudging_an_in_flow_child_points_to_margin() {
 #[test]
 fn schema_lists_margin_attributes_and_fields() {
     let env = Env::with_doc(FORM);
-    let node = stdout(&env.zenith(&["schema", "node", "rect"]));
+    let brief = stdout(&env.zenith(&["schema", "node", "rect"]));
     for name in ["margin", "margin-x", "margin-top", "margin-left"] {
-        assert!(node.contains(name), "rect lists {name}:\n{node}");
+        assert!(brief.contains(name), "rect brief names {name}:\n{brief}");
     }
+    let node = stdout(&env.zenith(&["schema", "node", "rect", "--notes"]));
     assert!(node.contains("(default: margin-y)"), "{node}");
-    let frame = stdout(&env.zenith(&["schema", "node", "frame"]));
+    let frame = stdout(&env.zenith(&["schema", "node", "frame", "--notes"]));
     assert!(frame.contains("margin-top moves one child"), "{frame}");
     let op = stdout(&env.zenith(&["schema", "op", "set_layout"]));
     for name in [

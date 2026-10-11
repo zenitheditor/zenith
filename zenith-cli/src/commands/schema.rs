@@ -9,6 +9,7 @@
 //! - `surfaces`: the page/asset/document, variant, and diagnostics surfaces.
 //! - `brand`: the brand-kit, markdown-block, and style surfaces.
 //! - `defaults`: the per-kind default-style block surface.
+//! - `write`: the one-read guide to writing a document.
 //! - `common`: the shared attribute-table formatter.
 
 mod brand;
@@ -16,11 +17,15 @@ mod common;
 mod defaults;
 mod listings;
 mod surfaces;
+mod write;
 
 #[cfg(test)]
 mod tests;
 
 pub use brand::{block, brand, style};
 pub use defaults::defaults;
-pub use listings::{node_detail, nodes, op_detail, ops, overview, token_detail, tokens};
+pub use listings::{
+    node_detail, node_detail_with, nodes, op_detail, ops, overview, token_detail, tokens,
+};
 pub use surfaces::{asset, diagnostics, document, page, ports, variant};
+pub use write::write;

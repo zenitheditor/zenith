@@ -15,7 +15,7 @@ mod tree;
 
 pub use boxes::{BoxInfo, NodeBox, resolved_boxes};
 pub use document::{
-    InspectCmdErr, InspectNodeOutput, InspectOutput, NodeEntry, NodeGeometry, PageEntry, run,
-    summary,
+    InspectCmdErr, InspectNodeOutput, InspectOutput, NodeEntry, NodeGeometry, PageEntry, clip_text,
+    run, summary,
 };
 pub use tree::{build_doc_tree, find_node_tree};

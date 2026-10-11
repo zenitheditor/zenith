@@ -1,0 +1,61 @@
+zenith version=1 {
+  project id="proj.deck" name="Fernhill Museum Website Proposal"
+  tokens format="zenith-token-v1" {
+    token id="space.margin" type="dimension" value=(px)48
+    token id="layout.width" type="dimension" value=(px)1184
+    token id="layout.height" type="dimension" value=(px)624
+    token id="layout.aside" type="dimension" value=(px)400
+    token id="layout.title" type="dimension" value=(px)960
+    token id="layout.bar" type="dimension" value=(px)64
+    token id="layout.footer.y" type="dimension" value=(px)640
+    token id="layout.footer.h" type="dimension" value=(px)32
+    token id="space.xs" type="dimension" value=(px)4
+    token id="space.md" type="dimension" value=(px)16
+    token id="space.lg" type="dimension" value=(px)24
+    token id="space.xxl" type="dimension" value=(px)48
+    token id="space.xxxl" type="dimension" value=(px)64
+  }
+  styles {
+  }
+  masters {
+    master id="master.slide" {
+      rect id="chrome.bar" x=(token)"space.margin" y=(token)"space.margin" w=(token)"layout.bar" h=(token)"space.xs" fill=(token)"color.primary"
+      frame id="chrome.footer" x=(token)"space.margin" y=(token)"layout.footer.y" w=(token)"layout.width" h=(token)"layout.footer.h" layout="row" justify="space-between" align="center" {
+        text id="chrome.studio" w="hug" style="ui.caption" { span "Northlight Studio · Fernhill Museum" }
+        field id="chrome.folio" type="page-number" w="hug" fill=(token)"color.base.content" font-family=(token)"font.body" font-size=(token)"size.caption"
+      }
+    }
+  }
+  document id="doc.deck" title="Fernhill Museum Website Proposal" {
+    page id="page.1" w=(px)1280 h=(px)720 master="master.slide" background=(token)"color.base.100" {
+      frame id="title" x=(token)"space.margin" y=(token)"space.margin" w=(token)"layout.width" h=(token)"layout.height" padding-y=(token)"space.xxl" layout="column" justify="center" gap=(token)"space.lg" {
+        text id="title.kicker" style="ui.caption" font-weight=(token)"font.weight.heading" { span "WEBSITE PROPOSAL" }
+        text id="title.heading" max-w=(token)"layout.title" style="ui.display" { span "A calmer website for Fernhill Museum" }
+        text id="title.subtitle" style="ui.h2" { span "Discovery findings and the direction we recommend" }
+      }
+    }
+    page id="page.2" w=(px)1280 h=(px)720 master="master.slide" background=(token)"color.base.100" {
+      frame id="findings" x=(token)"space.margin" y=(token)"space.margin" w=(token)"layout.width" h=(token)"layout.height" padding-y=(token)"space.xxl" layout="row" align="center" gap=(token)"space.xxxl" {
+        frame id="findings.intro" w=(token)"layout.aside" layout="column" gap=(token)"space.md" {
+          text id="findings.kicker" style="ui.caption" font-weight=(token)"font.weight.heading" { span "WHAT WE HEARD" }
+          text id="findings.heading" style="ui.h1" { span "Visitors plan before they arrive" }
+          text id="findings.lead" { span "Forty interviews and a month of site data point the same way." }
+        }
+        frame id="findings.points" w="fill" layout="column" gap=(token)"space.lg" {
+          text id="findings.point.1" style="ui.h2" bullet="•" { span "Opening hours and tickets are the first thing people look for." }
+          rect id="findings.rule.1" h=(token)"border.width" fill=(token)"color.base.300"
+          text id="findings.point.2" style="ui.h2" bullet="•" { span "Most visits start on a phone, often on the walk over." }
+          rect id="findings.rule.2" h=(token)"border.width" fill=(token)"color.base.300"
+          text id="findings.point.3" style="ui.h2" bullet="•" { span "Families want to know what will hold a child's attention." }
+        }
+      }
+    }
+    page id="page.3" w=(px)1280 h=(px)720 master="master.slide" background=(token)"color.base.100" {
+      frame id="closing" x=(token)"space.margin" y=(token)"space.margin" w=(token)"layout.width" h=(token)"layout.height" padding-y=(token)"space.xxl" layout="column" justify="center" gap=(token)"space.lg" {
+        text id="closing.kicker" style="ui.caption" font-weight=(token)"font.weight.heading" { span "NEXT STEP" }
+        text id="closing.heading" max-w=(token)"layout.title" style="ui.display" { span "Let's sketch the new homepage together" }
+        text id="closing.contact" style="ui.h2" { span "studio@northlight.example · Ask for Ren Halvorsen" }
+      }
+    }
+  }
+}

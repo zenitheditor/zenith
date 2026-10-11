@@ -33,13 +33,14 @@ pub fn catalog() -> Vec<Tool> {
             description: "Look up the document schema ON DEMAND: node kinds, a node's attributes, \
 tx ops, or one op's fields + a ready-to-edit JSON example. Use surface=variant to discover the \
 variants block and override entry structure (override/variant are NOT node kinds). \
+Use surface=write for a working document, the layout rules, and the common attributes in one read. \
 Call this before building a zenith_tx instead of guessing.",
             schema: json!({
                 "type": "object",
                 "properties": {
                     "surface": {
                         "type": "string",
-                        "enum": ["overview", "nodes", "node", "ops", "op", "tokens", "token", "page", "asset", "document", "variant", "diagnostics"],
+                        "enum": ["overview", "write", "nodes", "node", "ops", "op", "tokens", "token", "page", "asset", "document", "ports", "variant", "diagnostics", "brand", "block", "style", "defaults"],
                         "description": "Which schema surface to fetch."
                     },
                     "name": { "type": "string", "description": "Node kind (surface=node), op name (surface=op), or token type e.g. \"gradient\" (surface=token)." }

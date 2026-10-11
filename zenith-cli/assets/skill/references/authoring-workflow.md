@@ -27,6 +27,7 @@ If `zenith --version` fails, give the installer from https://github.com/zenithed
 
 1. **Scaffold.** `zenith new <path> --theme <name>` plus canvas flags. If `.zenith/brand.md` exists in or above the directory, use its tokens (`references/brand.md`). Invent a palette only when the brand and every theme fail the brief.
    - A print `--format` (A4, Letter, A5, …) scales the theme type to a 16 px body on A4. Use the scaled `size.*` tokens. Do not add smaller ones.
+   - For a flyer, letterhead, handout, deck, poster, menu, card, or report, `zenith new <path> --starter <kind>` scaffolds a finished layout. Read it and adapt it instead of building from a blank page. It takes `--theme` and the canvas flags.
 2. **Author with layout and defaults.**
    - Stacks, rows, cards, chips, and lists go in `frame layout="row|column|grid"`. Do not compute child x/y by hand.
    - A themed document styles bare `text`, `shape`, and `connector` through its `defaults` block. Omit font, fill, and radius attributes.
@@ -34,8 +35,9 @@ If `zenith --version` fails, give the installer from https://github.com/zenithed
 3. **Validate.** `zenith validate <file> --json`. With no Errors it also compiles every page and reports overflow, contrast, and lint.
 4. **Fix.** `zenith fix <file>` previews the diff. `zenith fix <file> --apply` writes it. Fix what remains by hand.
 5. **Preview.** `zenith render <file> --contact-sheet <png> --scale 0.5 --json`. Open the PNG. `status: blocked` means Errors remain.
-6. **Iterate** with `zenith tx <file> <tx.json>` (dry-run, then `--apply`). `zenith inspect <file> --json` gives each node's final `box`.
+6. **Iterate** with `zenith tx <file> <tx.json>` (dry-run, then `--apply`). `zenith inspect <file>` prints the layout outline: one line per node with its id, final box, layout mode, and text. Use it instead of reading the file. `--json` adds authored geometry and ink bounds.
    - The dry-run prints the source diff and every moved or resized box. Check them before `--apply`.
+   - The result also lists the Error and Warning diagnostics the edit introduces, such as `text.overflow`. An edit that breaks the render, such as `text.fit_failed`, is rejected and not written. A separate `validate` after each edit adds nothing. Run it once before delivery.
    - `tx --apply` patches the file in place and keeps comments, node add, remove, move, group, and reparent included. A removed node takes the comment lines directly above it. A few layouts rewrite the file in canonical form: a new child inside an inline `{ … }` block, or a node sharing its line with another node. The file changes on every apply. Re-read it before text edits.
    - `set_geometry` writes absolute px. To move or resize by a delta and keep tokens and units, use `nudge_geometry`. Anchored nodes take `nudge_anchor_gap`, `set_anchor`, or `detach_anchor`. `zenith schema op <name>` gives the fields.
 7. **Finish.** Render full scale with `--png <out.png>`, `--all-pages <DIR>`, `--svg <out.svg>`, or `--pdf <out.pdf>`. Report the changed ids, the validate result, and the output path.

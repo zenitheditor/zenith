@@ -399,7 +399,7 @@ pub struct SchemaNodeEntry {
 }
 
 /// A single attribute entry in the `schema node <kind>` and `schema page/asset/document` JSON output.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct SchemaAttr {
     pub name: String,
     pub ty: String,
@@ -530,6 +530,23 @@ pub struct SchemaSurfaceOutput {
     pub surface: &'static str,
     pub summary: String,
     pub attributes: Vec<SchemaAttr>,
+}
+
+/// One kind and its common attributes in the `schema write` JSON.
+#[derive(Debug, Serialize)]
+pub struct SchemaWriteKind {
+    pub kind: String,
+    pub attributes: Vec<SchemaAttr>,
+}
+
+/// Top-level JSON envelope for `schema write`.
+#[derive(Debug, Serialize)]
+pub struct SchemaWriteOutput {
+    pub schema: &'static str,
+    /// A complete document that validates clean.
+    pub example: String,
+    pub rules: String,
+    pub kinds: Vec<SchemaWriteKind>,
 }
 
 /// A single governable diagnostic-code entry in the `schema diagnostics` JSON.

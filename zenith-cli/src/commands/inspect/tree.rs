@@ -93,7 +93,40 @@ fn build_node_entry(node: &Node, resolved: &Resolved) -> NodeEntry {
         resolved: None,
         visible: node.visible(),
         locked: node_locked(node),
+        text: text_of(node),
+        spans: span_count(node),
+        layout: layout_of(node),
         children,
+    }
+}
+
+/// A `text` node's spans joined in order.
+fn text_of(node: &Node) -> Option<String> {
+    if let Node::Text(t) = node {
+        Some(t.spans.iter().map(|s| s.text.as_str()).collect())
+    } else {
+        None
+    }
+}
+
+/// The span count of a `text` node with more than one span.
+fn span_count(node: &Node) -> Option<usize> {
+    if let Node::Text(t) = node {
+        Some(t.spans.len()).filter(|n| *n > 1)
+    } else {
+        None
+    }
+}
+
+/// The auto-layout mode of a stacking or grid `frame`.
+fn layout_of(node: &Node) -> Option<String> {
+    if let Node::Frame(f) = node {
+        f.layout
+            .as_ref()
+            .filter(|l| l.positions_children())
+            .map(|l| l.as_str().to_owned())
+    } else {
+        None
     }
 }
 

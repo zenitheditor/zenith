@@ -9,6 +9,10 @@
 # against the same pins. One drifted byte on any of these targets fails CI.
 # Outputs outside the examples and their default render options are not pinned.
 #
+# `zenith-cli/tests/starter_hashes.rs` pins the same PNG, SVG, and PDF hashes
+# for every `zenith new --starter` layout in
+# `zenith-cli/tests/starter_hashes.json`, on the same native targets.
+#
 # `zenith-cli/tests/perceive_hashes.rs` pins the SHA-256 of
 # `zenith perceive page --all-pages --json` for every example in
 # `zenith-cli/tests/perceive_hashes.json`. It runs on the same targets as the
@@ -92,7 +96,7 @@ jobs:
         with:
           prefix-key: render-hashes
       - name: Pinned render and perceive hashes
-        run: cargo test -p zenith-tool --test render_hashes --test perceive_hashes --locked
+        run: cargo test -p zenith-tool --test render_hashes --test starter_hashes --test perceive_hashes --locked
 
   editor-wasm:
     name: Editor on wasm (native-vs-wasm byte equality)

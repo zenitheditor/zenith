@@ -1,0 +1,53 @@
+zenith version=1 {
+  project id="proj.poster" name="Paper Moons Film Night"
+  tokens format="zenith-token-v1" {
+    token id="space.margin" type="dimension" value=(px)56
+    token id="layout.width" type="dimension" value=(px)608
+    token id="layout.height" type="dimension" value=(px)848
+    token id="layout.label" type="dimension" value=(px)120
+    token id="layout.moon" type="dimension" value=(px)200
+    token id="space.xs" type="dimension" value=(px)4
+    token id="space.lg" type="dimension" value=(px)24
+    token id="space.xl" type="dimension" value=(px)32
+  }
+  styles {
+  }
+  document id="doc.poster" title="Paper Moons Film Night" {
+    page id="page.1" w=(px)720 h=(px)960 background=(token)"color.base.100" {
+      frame id="poster" x=(token)"space.margin" y=(token)"space.margin" w=(token)"layout.width" h=(token)"layout.height" layout="column" justify="space-between" gap=(token)"space.xl" {
+        frame id="poster.top" layout="row" justify="space-between" align="start" gap=(token)"space.lg" {
+          text id="poster.kicker" w="fill" style="ui.caption" font-weight=(token)"font.weight.heading" { span "THE LANTERN FILM SOCIETY PRESENTS" }
+          ellipse id="poster.moon" w=(token)"layout.moon" h=(token)"layout.moon" fill=(token)"color.primary" role="decoration"
+        }
+        frame id="poster.headline" layout="column" gap=(token)"space.lg" {
+          text id="poster.title" style="ui.display" { span "Paper Moons" }
+          text id="poster.subtitle" { span "A restored 1962 classic, shown on 35 mm film with a live piano score." }
+        }
+        frame id="poster.details" layout="column" gap=(token)"space.lg" {
+          rect id="poster.rule" h=(token)"space.xs" fill=(token)"color.primary"
+          frame id="poster.when" layout="row" gap=(token)"space.lg" {
+            text id="poster.when.label" w=(token)"layout.label" style="ui.caption" font-weight=(token)"font.weight.heading" { span "WHEN" }
+            frame id="poster.when.text" w="fill" layout="column" gap=(token)"space.xs" {
+              text id="poster.when.value" style="ui.h2" { span "Friday 19 September" }
+              text id="poster.when.note" { span "Doors 19:30 · Film 20:00" }
+            }
+          }
+          frame id="poster.where" layout="row" gap=(token)"space.lg" {
+            text id="poster.where.label" w=(token)"layout.label" style="ui.caption" font-weight=(token)"font.weight.heading" { span "WHERE" }
+            frame id="poster.where.text" w="fill" layout="column" gap=(token)"space.xs" {
+              text id="poster.where.value" style="ui.h2" { span "Old Mill Hall" }
+              text id="poster.where.note" { span "3 Weaver Lane, by the river footbridge" }
+            }
+          }
+          frame id="poster.tickets" layout="row" gap=(token)"space.lg" {
+            text id="poster.tickets.label" w=(token)"layout.label" style="ui.caption" font-weight=(token)"font.weight.heading" { span "TICKETS" }
+            frame id="poster.tickets.text" w="fill" layout="column" gap=(token)"space.xs" {
+              text id="poster.tickets.value" style="ui.h2" { span "£6 at the door" }
+              text id="poster.tickets.note" { span "Members free · lanternfilms.example" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,96 @@
+zenith version=1 {
+  project id="proj.handout" name="Sorting Your Recycling"
+  tokens format="zenith-token-v1" {
+    token id="space.margin" type="dimension" value=(px)56
+    token id="layout.width" type="dimension" value=(px)682
+    token id="layout.height" type="dimension" value=(px)1011
+    token id="layout.aside" type="dimension" value=(px)230
+    token id="space.xs" type="dimension" value=(px)4
+    token id="space.sm" type="dimension" value=(px)8
+    token id="space.md" type="dimension" value=(px)16
+    token id="space.lg" type="dimension" value=(px)24
+  }
+  styles {
+  }
+  document id="doc.handout" title="Sorting Your Recycling" {
+    page id="page.1" w=(px)794 h=(px)1123 background=(token)"color.base.100" {
+      frame id="handout" x=(token)"space.margin" y=(token)"space.margin" w=(token)"layout.width" h=(token)"layout.height" layout="column" gap=(token)"space.lg" {
+        frame id="intro" layout="column" gap=(token)"space.sm" {
+          text id="intro.kicker" style="ui.caption" font-weight=(token)"font.weight.heading" { span "WILLOWBROOK COUNCIL · HOUSEHOLD GUIDE" }
+          text id="intro.title" style="ui.h1" { span "Sorting Your Recycling" }
+          text id="intro.lead" { span "Clean, dry and loose is the rule. Follow the three steps below and your bins will be collected without a hitch." }
+        }
+        rect id="intro.rule" h=(token)"space.xs" fill=(token)"color.primary"
+        frame id="sections" layout="column" {
+          frame id="paper" layout="row" gap=(token)"space.lg" padding-y=(token)"space.md" {
+            frame id="paper.head" w=(token)"layout.aside" layout="column" gap=(token)"space.xs" {
+              text id="paper.heading" style="ui.h2" { span "1. Paper and card" }
+              text id="paper.note" { span "Blue-lid bin" }
+            }
+            frame id="paper.items" w="fill" layout="column" gap=(token)"space.sm" {
+              text id="paper.item.1" bullet="•" { span "Flatten boxes before they go in" }
+              text id="paper.item.2" bullet="•" { span "Newspapers, post, magazines and envelopes" }
+              text id="paper.item.3" bullet="•" { span "No greasy pizza boxes, tissues or wallpaper" }
+            }
+          }
+          rect id="paper.rule" h=(token)"border.width" fill=(token)"color.base.300"
+          frame id="plastic" layout="row" gap=(token)"space.lg" padding-y=(token)"space.md" {
+            frame id="plastic.head" w=(token)"layout.aside" layout="column" gap=(token)"space.xs" {
+              text id="plastic.heading" style="ui.h2" { span "2. Plastics and cans" }
+              text id="plastic.note" { span "Yellow-lid bin" }
+            }
+            frame id="plastic.items" w="fill" layout="column" gap=(token)"space.sm" {
+              text id="plastic.item.1" bullet="•" { span "Rinse bottles, tubs and food trays" }
+              text id="plastic.item.2" bullet="•" { span "Squash cans and drinks cartons to save space" }
+              text id="plastic.item.3" bullet="•" { span "Keep lids on bottles; leave film and bags out" }
+            }
+          }
+          rect id="plastic.rule" h=(token)"border.width" fill=(token)"color.base.300"
+          frame id="glass" layout="row" gap=(token)"space.lg" padding-y=(token)"space.md" {
+            frame id="glass.head" w=(token)"layout.aside" layout="column" gap=(token)"space.xs" {
+              text id="glass.heading" style="ui.h2" { span "3. Glass" }
+              text id="glass.note" { span "Grey-lid bin" }
+            }
+            frame id="glass.items" w="fill" layout="column" gap=(token)"space.sm" {
+              text id="glass.item.1" bullet="•" { span "Jars and bottles of any colour" }
+              text id="glass.item.2" bullet="•" { span "Remove corks and metal caps first" }
+              text id="glass.item.3" bullet="•" { span "No window glass, mirrors or drinking glasses" }
+            }
+          }
+        }
+        frame id="schedule" layout="column" gap=(token)"space.sm" {
+          text id="schedule.heading" style="ui.h2" { span "Collection schedule" }
+          table id="schedule.table" w="fill" h="hug" border=(token)"color.base.300" border-width=(token)"border.width" header-rows=1 header-fill=(token)"color.base.200" cell-padding=(token)"space.sm" {
+            column
+            column
+            column
+            row {
+              cell { text id="schedule.h.bin" font-weight=(token)"font.weight.heading" { span "Bin" } }
+              cell { text id="schedule.h.lid" font-weight=(token)"font.weight.heading" { span "Lid colour" } }
+              cell { text id="schedule.h.day" font-weight=(token)"font.weight.heading" { span "Collected" } }
+            }
+            row {
+              cell { text id="schedule.r1.bin" { span "Paper and card" } }
+              cell { text id="schedule.r1.lid" { span "Blue" } }
+              cell { text id="schedule.r1.day" { span "Every Tuesday" } }
+            }
+            row {
+              cell { text id="schedule.r2.bin" { span "Plastics and cans" } }
+              cell { text id="schedule.r2.lid" { span "Yellow" } }
+              cell { text id="schedule.r2.day" { span "Every Tuesday" } }
+            }
+            row {
+              cell { text id="schedule.r3.bin" { span "Glass" } }
+              cell { text id="schedule.r3.lid" { span "Grey" } }
+              cell { text id="schedule.r3.day" { span "Alternate Fridays" } }
+            }
+          }
+        }
+        frame id="note" layout="column" gap=(token)"space.xs" padding=(token)"space.md" fill=(token)"color.base.200" radius=(token)"radius.box" {
+          text id="note.heading" font-weight=(token)"font.weight.heading" { span "Not sure where something goes?" }
+          text id="note.body" { span "Search the item at willowbrook.example/recycle or put it in general waste. One wrong item can spoil a whole lorry load." }
+        }
+      }
+    }
+  }
+}

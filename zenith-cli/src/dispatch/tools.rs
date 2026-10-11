@@ -4,13 +4,31 @@
 use std::process::ExitCode;
 
 use crate::cli::{self, FontsArgs, McpArgs, NewArgs, PluginArgs, SchemaArgs, UpdateArgs};
-use crate::cli_helpers::{scope_from_arg, targets_from_flags};
+use crate::cli_helpers::{scope_from_arg, shell_word, targets_from_flags};
 use crate::report::CliError;
 use crate::{commands, mcp, selfupdate};
 
 use super::output::warn;
 
 pub(super) fn dispatch_new(args: NewArgs) -> ExitCode {
+    if let Some(starter) = args.starter {
+        let size = commands::new::StarterSize {
+            format: args.format,
+            width: args.width,
+            height: args.height,
+            landscape: args.landscape,
+        };
+        return report_new(
+            commands::new::run_starter(
+                &args.path,
+                args.name.as_deref(),
+                starter,
+                args.theme.as_deref(),
+                size,
+            ),
+            NewTip::Starter,
+        );
+    }
     let page = match commands::new::resolve_page(
         args.format,
         args.width,
@@ -21,12 +39,68 @@ pub(super) fn dispatch_new(args: NewArgs) -> ExitCode {
         Ok(p) => p,
         Err(msg) => return CliError::usage(msg).emit(false),
     };
-    match commands::new::run(
+    let result = commands::new::run(
         &args.path,
         args.name.as_deref(),
         page,
         args.theme.as_deref(),
-    ) {
+    );
+    let tip = if args.theme.is_none() {
+        NewTip::Blank
+    } else {
+        NewTip::None
+    };
+    report_new(result, tip)
+}
+
+/// The hint `zenith new` prints after it created a file.
+#[derive(Clone, Copy)]
+enum NewTip {
+    /// A blank page with no theme: point at starters and themes.
+    Blank,
+    /// A starter was written: say how to adapt it.
+    Starter,
+    /// A blank page on a theme: no hint.
+    None,
+}
+
+/// After a starter: the text slots and how to fill them in one transaction.
+fn print_starter_tip(path: &std::path::Path) {
+    let shown = shell_word(&path.display().to_string());
+    let slots = std::fs::read(path).ok().and_then(|bytes| {
+        use zenith_core::KdlSource as _;
+        let doc = zenith_core::KdlAdapter.parse(&bytes).ok()?;
+        let resolved = zenith_core::resolve_tokens(&doc.tokens).resolved;
+        Some(commands::new::text_slots(
+            &commands::inspect::build_doc_tree(&doc.body.pages, &resolved),
+        ))
+    });
+    match slots {
+        Some(slots) if !slots.is_empty() => {
+            println!("{}", commands::new::slot_listing(&slots, &shown, 40));
+        }
+        _ => println!("note: could not list the text slots; run `zenith inspect {shown}`."),
+    }
+    println!(
+        "This is a finished layout: replace the text above, restyle with `zenith tokens {shown}` and {{\"op\":\"update_token_value\",\"id\":\"color.primary\",\"value\":\"#rrggbb\"}}, and add or remove nodes (`duplicate_node` repeats a row). `zenith inspect {shown}` prints its layout outline (id, box, layout, text per node). To write nodes by hand, `zenith schema write` has the syntax and common attributes. Run `zenith validate {shown}` after."
+    );
+}
+
+/// The starter names, `|`-separated.
+fn starter_names() -> String {
+    <commands::new::Starter as clap::ValueEnum>::value_variants()
+        .iter()
+        .filter_map(|s| clap::ValueEnum::to_possible_value(s).map(|v| v.get_name().to_owned()))
+        .collect::<Vec<_>>()
+        .join("|")
+}
+
+/// Print the outcome of `zenith new` and the hint `tip` selects.
+fn report_new(
+    result: Result<commands::new::NewResult, commands::new::NewErr>,
+    tip: NewTip,
+) -> ExitCode {
+    match result {
         Ok(result) => {
             if let Some(w) = &result.warning {
                 warn(w);
@@ -36,10 +110,13 @@ pub(super) fn dispatch_new(args: NewArgs) -> ExitCode {
                 result.path.display(),
                 result.doc_id
             );
-            if args.theme.is_none() {
-                println!(
-                    "tip: start on a theme with --theme <name> (run `zenith library list` to see themes)"
-                );
+            match tip {
+                NewTip::Blank => println!(
+                    "tip: a finished layout is faster than a blank page: --starter {} (add --theme <name> and a size flag to restyle and resize it)",
+                    starter_names()
+                ),
+                NewTip::Starter => print_starter_tip(&result.path),
+                NewTip::None => {}
             }
             ExitCode::SUCCESS
         }
@@ -145,8 +222,11 @@ pub(super) fn dispatch_schema(args: SchemaArgs) -> ExitCode {
     let json = args.json;
     let (output, code) = match args.command {
         None => commands::schema::overview(json),
+        Some(cli::SchemaSub::Write) => commands::schema::write(json),
         Some(cli::SchemaSub::Nodes) => commands::schema::nodes(json),
-        Some(cli::SchemaSub::Node { kind }) => commands::schema::node_detail(&kind, json),
+        Some(cli::SchemaSub::Node { kind, notes }) => {
+            commands::schema::node_detail_with(&kind, json, notes)
+        }
         Some(cli::SchemaSub::Ops) => commands::schema::ops(json),
         Some(cli::SchemaSub::Op { name }) => commands::schema::op_detail(&name, json),
         Some(cli::SchemaSub::Tokens) => commands::schema::tokens(json),

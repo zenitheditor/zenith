@@ -3,12 +3,14 @@
 //! - `run`      — entry points, error and outcome types, the shared tail.
 //! - `boxes`    — compiled page boxes, the box delta, `tx.page_box_changed`.
 //! - `collapse` — fold rigid subtrees of the box delta into one entry.
+//! - `introduced` — the validate diagnostics an edit adds.
 //! - `tree`     — the id tree: parent, siblings, descendants, ancestors.
 //! - `render`   — human and JSON output.
 //! - `written`  — the patched source an `--apply` writes.
 
 mod boxes;
 mod collapse;
+mod introduced;
 mod render;
 mod run;
 mod tree;

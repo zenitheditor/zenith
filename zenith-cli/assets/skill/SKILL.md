@@ -14,7 +14,7 @@ allowed-tools:
 
 Zenith agents author editable `.zen` documents and render deterministic outputs through the CLI.
 
-Read `references/authoring-workflow.md` before authoring. Discover syntax through CLI schemas and command help. Never invent attributes or transaction fields. Check diagnostics and inspect a PNG preview before delivery. Export the requested format alongside the `.zen` source.
+Read `references/authoring-workflow.md` before authoring a new document, or start from a finished layout with `zenith new <path> --starter <kind>`. To revise an existing document, start with `zenith tx --help`, which lists the common edits as runnable ops. Read a reference only when an edit is rejected or the edit is not listed. Discover syntax through CLI schemas and command help. Never invent attributes or transaction fields. Check diagnostics and inspect a PNG preview before delivery. Export the requested format alongside the `.zen` source.
 
 If the CLI is unavailable, use the installer at https://github.com/zenitheditor/zenith#install. Never fabricate execution results.
 

@@ -1,0 +1,53 @@
+zenith version=1 {
+  project id="proj.flyer" name="Fix-It Sunday Flyer"
+  tokens format="zenith-token-v1" {
+    token id="space.margin" type="dimension" value=(px)32
+    token id="layout.width" type="dimension" value=(px)495
+    token id="layout.height" type="dimension" value=(px)730
+    token id="layout.label" type="dimension" value=(px)88
+    token id="space.xs" type="dimension" value=(px)4
+    token id="space.sm" type="dimension" value=(px)8
+    token id="space.md" type="dimension" value=(px)16
+    token id="space.lg" type="dimension" value=(px)24
+    token id="space.xl" type="dimension" value=(px)32
+  }
+  styles {
+  }
+  document id="doc.flyer" title="Fix-It Sunday Flyer" {
+    page id="page.1" w=(px)559 h=(px)794 background=(token)"color.base.100" {
+      frame id="flyer" x=(token)"space.margin" y=(token)"space.margin" w=(token)"layout.width" h=(token)"layout.height" layout="column" gap=(token)"space.lg" {
+        frame id="hero" h="fill" layout="column" justify="end" gap=(token)"space.md" padding=(token)"space.xl" fill=(token)"color.primary" radius=(token)"radius.box" {
+          text id="hero.kicker" style="ui.caption" font-weight=(token)"font.weight.heading" { span "COMMUNITY BIKE WORKSHOP" }
+          text id="hero.title" style="ui.display" { span "Fix-It Sunday" }
+          text id="hero.subtitle" { span "Bring your bike. Leave knowing how to keep it rolling." }
+        }
+        frame id="details" layout="column" {
+          frame id="details.when" layout="row" align="center" gap=(token)"space.md" padding-y=(token)"space.sm" {
+            text id="details.when.label" w=(token)"layout.label" style="ui.caption" font-weight=(token)"font.weight.heading" { span "WHEN" }
+            text id="details.when.value" w="fill" font-weight=(token)"font.weight.heading" { span "Sunday, June 7 · 10:00 – 16:00" }
+          }
+          rect id="details.rule.1" h=(token)"border.width" fill=(token)"color.base.300"
+          frame id="details.where" layout="row" align="center" gap=(token)"space.md" padding-y=(token)"space.sm" {
+            text id="details.where.label" w=(token)"layout.label" style="ui.caption" font-weight=(token)"font.weight.heading" { span "WHERE" }
+            text id="details.where.value" w="fill" font-weight=(token)"font.weight.heading" { span "Spoke & Chain, 18 Canal Row" }
+          }
+          rect id="details.rule.2" h=(token)"border.width" fill=(token)"color.base.300"
+          frame id="details.cost" layout="row" align="center" gap=(token)"space.md" padding-y=(token)"space.sm" {
+            text id="details.cost.label" w=(token)"layout.label" style="ui.caption" font-weight=(token)"font.weight.heading" { span "COST" }
+            text id="details.cost.value" w="fill" font-weight=(token)"font.weight.heading" { span "Free. Stands and tools provided." }
+          }
+        }
+        frame id="topics" layout="column" gap=(token)"space.xs" {
+          text id="topics.title" style="ui.caption" font-weight=(token)"font.weight.heading" { span "WHAT WE COVER" }
+          text id="topics.1" bullet="•" { span "Flat tyres, tubes and patches" }
+          text id="topics.2" bullet="•" { span "Brake and gear adjustment" }
+          text id="topics.3" bullet="•" { span "Chain cleaning and everyday care" }
+        }
+        frame id="cta" layout="row" justify="space-between" align="center" gap=(token)"space.md" padding-x=(token)"space.lg" padding-y=(token)"space.md" fill=(token)"color.neutral" radius=(token)"radius.field" {
+          text id="cta.label" w="hug" font-weight=(token)"font.weight.heading" { span "Book a stand" }
+          text id="cta.url" w="hug" { span "spokeandchain.example" }
+        }
+      }
+    }
+  }
+}

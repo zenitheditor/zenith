@@ -34,6 +34,13 @@ pub struct SchemaArgs {
 /// Subcommands of `zenith schema`.
 #[derive(Debug, Subcommand)]
 pub enum SchemaSub {
+    /// Everything needed to write a document, in one read.
+    ///
+    /// A complete working document, the layout rules, and the common attributes of
+    /// page, frame, text, rect, ellipse, line, and image. Read this before writing
+    /// or changing a file by hand.
+    Write,
+
     /// List all authorable node kinds with their one-line summaries.
     Nodes,
 
@@ -41,6 +48,10 @@ pub enum SchemaSub {
     Node {
         /// The node kind to look up (e.g. `rect`, `text`, `pattern`).
         kind: String,
+
+        /// Print the full prose and every attribute row. By default long prose is cut at a sentence and attribute families such as `padding-x` fold into their base row.
+        #[arg(long)]
+        notes: bool,
     },
 
     /// List all transaction ops with their one-line summaries.

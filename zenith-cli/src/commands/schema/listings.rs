@@ -11,7 +11,7 @@ use crate::json_types::{
     SchemaTokensOutput,
 };
 
-use super::common::format_attr_table;
+use super::common::{brief, fold_families, format_attr_table};
 
 /// Bare `zenith schema`: short overview with counts and drill-in hints.
 ///
@@ -35,7 +35,9 @@ pub fn overview(json: bool) -> (String, u8) {
             "Zenith schema — {node_count} node kinds, {op_count} tx ops, \
              {token_type_count} token types, 10 non-node surfaces, \
              {diag_count} diagnostic codes\n\n\
+             To write a document, read `zenith schema write` first: a working example, the layout rules, and the common attributes in one page.\n\n\
              Drill in:\n  \
+             zenith schema write              # example + rules + common attributes\n  \
              zenith schema nodes              # list all node kinds\n  \
              zenith schema node <kind>        # attributes for one kind\n  \
              zenith schema ops                # list all tx ops\n  \
@@ -52,6 +54,8 @@ pub fn overview(json: bool) -> (String, u8) {
              zenith schema block              # block role declaration: vocab, props, scopes\n  \
              zenith schema style              # styles block: recognized keys + tx ops\n  \
              zenith schema defaults           # per-kind default styles (document / page)\n\n\
+             Start from a finished layout instead of a blank page: \
+             `zenith new <path> --starter <kind>` (see `zenith new --help` for the kinds).\n\n\
              Attribute types, required-ness, and valid values are enforced by \
              `zenith validate`."
         );
@@ -95,6 +99,16 @@ pub fn nodes(json: bool) -> (String, u8) {
 /// contains the error message (suitable for printing via the normal `println!`
 /// path so the caller need not special-case stderr).
 pub fn node_detail(kind: &str, json: bool) -> (String, u8) {
+    node_detail_with(kind, json, true)
+}
+
+/// Characters of summary and content prose a node prints before `--notes`.
+const BRIEF_PROSE: usize = 600;
+
+/// [`node_detail`] with control over the prose. Human output without `notes`
+/// folds attribute families and cuts long prose at a sentence, with a line
+/// naming `--notes`. JSON is always whole.
+pub fn node_detail_with(kind: &str, json: bool, notes: bool) -> (String, u8) {
     let summary = match core_schema::node_summary(kind) {
         Some(s) => s,
         None => {
@@ -141,16 +155,28 @@ pub fn node_detail(kind: &str, json: bool) -> (String, u8) {
         };
         (serialize_pretty(&out), 0)
     } else {
-        let mut text = format!("{kind}: {summary}\n");
+        let shorten = |prose: &str| {
+            if notes {
+                (prose.to_owned(), false)
+            } else {
+                brief(prose, BRIEF_PROSE)
+            }
+        };
+        let (summary_text, summary_cut) = shorten(summary);
+        let mut text = format!("{kind}: {summary_text}\n");
+        let attrs = if notes { attrs } else { fold_families(attrs) };
         if attrs.is_empty() {
             text.push_str("  (no fixed attribute list)\n");
         } else {
             text.push_str("Attributes:\n");
             text.push_str(&format_attr_table(&attrs));
         }
+        let mut content_cut = false;
         if let Some(d) = content_desc {
+            let (prose, cut) = shorten(d.description);
+            content_cut = cut;
             text.push_str("\nContent:\n");
-            text.push_str(&format!("  {}\n", d.description));
+            text.push_str(&format!("  {prose}\n"));
             text.push_str("  Example:\n");
             for line in d.example.lines() {
                 text.push_str(&format!("    {line}\n"));
@@ -161,6 +187,11 @@ pub fn node_detail(kind: &str, json: bool) -> (String, u8) {
             for line in ex.lines() {
                 text.push_str(&format!("  {line}\n"));
             }
+        }
+        if summary_cut || content_cut {
+            text.push_str(&format!(
+                "\nShortened: `zenith schema node {kind} --notes` prints the full text and every attribute row.\n"
+            ));
         }
         text.push_str(
             "\nNote: required-ness and full valid values are enforced by\n\

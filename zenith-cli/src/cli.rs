@@ -57,11 +57,16 @@ use std::path::PathBuf;
     long_about = "Zenith turns a design into plain-text .zen source (KDL) you can read, diff, \
 validate, edit with typed transactions, and render deterministically to pixel-exact PNG, self-contained SVG, or \
 print-ready PDF — the opposite of a flat AI image.\n\n\
+Start from a finished layout, not a blank page: `zenith new out.zen --starter \
+flyer|letterhead|handout|deck|poster|menu|card|report` (add `--format`, `--theme`), then replace its \
+text with one `tx --ops` call. To write by hand, `zenith schema write` has a working \
+example and the common attributes in one read.\n\n\
 The core loop: author/edit source → `validate` → `render` to inspect → iterate. Edits to \
 existing documents should go through `tx` (typed, dry-run by default). Every command accepts \
 `--json` for machine-readable output; run `zenith <command> --help` for exact flags.",
     after_help = "QUICK START:\n  \
-zenith new poster.zen --name \"My Poster\"  # 1. create a new document\n  \
+zenith new flyer.zen --starter flyer      # 1. start from a finished layout\n  \
+zenith new poster.zen --name \"My Poster\"  #    or from a blank page\n  \
 zenith render poster.zen --png out.png     # 2. render it to a PNG to inspect\n  \
 zenith validate poster.zen --json          # check for problems (they block render)\n  \
 zenith plugin install --claude             # teach your AI agent to use zenith\n\n\
@@ -149,11 +154,12 @@ pub enum Command {
     /// `path` siblings after the target text/code node. Dry-run by default; write with `--apply`.
     OutlineText(OutlineTextArgs),
 
-    /// Print the node tree of a `.zen` document (read-only).
+    /// Print the layout outline of a `.zen` document (read-only).
     ///
-    /// Print the structure of a .zen document (read-only): the node tree plus
-    /// document-level blocks such as the `recipes` provenance block. Use it to discover node ids before
-    /// writing a `tx` edit, to see which recipes a document declares, or to confirm what it contains.
+    /// One line per node, indented by depth: kind, id, final page box, `layout=` for a row, column or
+    /// grid frame, and the text of a text node. Read it instead of the file to find node ids before a
+    /// `tx` edit, to see how a layout is built, or to see which recipes a document declares. `--json`
+    /// adds authored geometry and ink bounds.
     Inspect(InspectArgs),
 
     /// Inspect composition import edges for a `.zen` document (read-only).
@@ -538,9 +544,12 @@ pub struct VariantArgs {
     zenith new flyer.zen --format a4\n  \
     zenith new deck.zen --format letter --landscape --pages 12\n  \
     zenith new banner.zen --width 1600 --height 400\n  \
-    zenith new poster.zen --theme sunset\n\n\
+    zenith new poster.zen --theme sunset\n  \
+    zenith new flyer.zen --starter flyer\n  \
+    zenith new flyer.zen --starter flyer --theme cobalt --format a4\n\n\
 PRINT SCALE: a print --format (not square) with --theme scales size.* to a 16 px body on A4 \
-(text.too_small floor, steps kept distinct) and radius.* by short side / 1080.")]
+(text.too_small floor, steps kept distinct) and radius.* by short side / 1080. A --starter \
+scales its type, spacing, and margins to the page instead.")]
 pub struct NewArgs {
     /// Path to create the new document at (must not already exist). A `.zen`
     /// extension is appended if absent, and missing parent directories are created.
@@ -565,7 +574,7 @@ pub struct NewArgs {
     #[arg(long, value_name = "PX", value_parser = clap::value_parser!(u32).range(1..))]
     pub height: Option<u32>,
 
-    /// Use landscape orientation (swap the width and height of `--format`).
+    /// Use landscape orientation: the wider side is the width. A starter that is already wide stays wide.
     #[arg(long)]
     pub landscape: bool,
 
@@ -581,6 +590,12 @@ pub struct NewArgs {
     /// instead of the default `color.bg`.
     #[arg(long, value_name = "NAME")]
     pub theme: Option<String>,
+
+    /// Write a finished layout to read and adapt. It sets the page count. It
+    /// takes `--theme` and the size flags: without a size flag it uses its
+    /// own size, with one the layout fits the new page.
+    #[arg(long, value_enum, value_name = "KIND", conflicts_with = "pages")]
+    pub starter: Option<crate::commands::new::Starter>,
 }
 
 /// Arguments for `zenith validate`.

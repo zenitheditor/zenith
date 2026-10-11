@@ -106,8 +106,10 @@ fn non_structural_op_does_not_warn() {
     );
     assert_eq!(out.status.code(), Some(0));
     let v = json(&out);
-    assert_eq!(v["status"], "accepted", "{v:#}");
     assert!(diags_with(&v, "tx.page_box_changed").is_empty(), "{v:#}");
+    // The new x overlaps `free`: the edit introduces that validate warning.
+    assert_eq!(v["status"], "accepted_with_warnings", "{v:#}");
+    assert!(!diags_with(&v, "layout.block_overlap").is_empty(), "{v:#}");
 }
 
 #[test]

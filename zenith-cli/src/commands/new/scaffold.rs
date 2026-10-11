@@ -60,16 +60,17 @@ pub fn run(
     page: PageSpec,
     theme: Option<&str>,
 ) -> Result<NewResult, NewErr> {
-    let paths = match zenith_session::resolve_data_dir() {
-        Ok(data_dir) => StorePaths::new(data_dir),
-        Err(e) => {
-            return Err(NewErr {
-                message: format!("cannot resolve data directory: {}", e.message),
-                exit_code: 2,
-            });
-        }
-    };
-    run_in(&paths, path, name, page, theme)
+    run_in(&resolve_store()?, path, name, page, theme)
+}
+
+/// The history store under the real data directory.
+pub(super) fn resolve_store() -> Result<StorePaths, NewErr> {
+    zenith_session::resolve_data_dir()
+        .map(StorePaths::new)
+        .map_err(|e| NewErr {
+            message: format!("cannot resolve data directory: {}", e.message),
+            exit_code: 2,
+        })
 }
 
 /// Same as [`run`] but with an explicit store root (used by tests).
@@ -90,25 +91,7 @@ pub fn run_in(
     page: PageSpec,
     theme: Option<&str>,
 ) -> Result<NewResult, NewErr> {
-    // A directory can't be a document target.
-    if path.is_dir() {
-        return Err(NewErr {
-            message: format!("'{}' is a directory; provide a file path", path.display()),
-            exit_code: 2,
-        });
-    }
-
-    // Default the `.zen` extension when the path has none (`poster` → `poster.zen`);
-    // an explicit extension is respected as given.
-    let target = target_path(path);
-
-    // Bright-line safety: never overwrite an existing file.
-    if target.exists() {
-        return Err(NewErr {
-            message: format!("refusing to overwrite existing file '{}'", target.display()),
-            exit_code: 2,
-        });
-    }
+    let target = prepare_target(path)?;
 
     let display_name = name.unwrap_or("Untitled");
     let slug = slug_for(name, &target);
@@ -167,9 +150,47 @@ pub fn run_in(
         None => canonical.formatted,
     };
 
+    write_new(paths, &target, &canonical_bytes)
+}
+
+// ── Shared steps (also used by the starter path) ────────────────────────────────
+
+/// Resolve the on-disk target for `path` and refuse a directory or an existing
+/// file. Appends `.zen` when `path` has no extension.
+pub(super) fn prepare_target(path: &Path) -> Result<PathBuf, NewErr> {
+    // A directory can't be a document target.
+    if path.is_dir() {
+        return Err(NewErr {
+            message: format!("'{}' is a directory; provide a file path", path.display()),
+            exit_code: 2,
+        });
+    }
+
+    // Default the `.zen` extension when the path has none (`poster` → `poster.zen`);
+    // an explicit extension is respected as given.
+    let target = target_path(path);
+
+    // Bright-line safety: never overwrite an existing file.
+    if target.exists() {
+        return Err(NewErr {
+            message: format!("refusing to overwrite existing file '{}'", target.display()),
+            exit_code: 2,
+        });
+    }
+    Ok(target)
+}
+
+/// Stamp a doc-id into `canonical_bytes`, record the first history version
+/// into `paths`, and write the result to `target` (creating parent
+/// directories).
+pub(super) fn write_new(
+    paths: &StorePaths,
+    target: &Path,
+    canonical_bytes: &[u8],
+) -> Result<NewResult, NewErr> {
     // Mint + stamp the doc-id and record the initial version through the shared
     // history pipeline. The returned bytes carry the stamped identity.
-    let recorded = record_edit_in(paths, &canonical_bytes, &target, "document.new");
+    let recorded = record_edit_in(paths, canonical_bytes, target, "document.new");
 
     // History recording is best-effort and must never block creating the file.
     // In the normal path `record_edit_in` mints, stamps, and records a doc-id.
@@ -179,7 +200,7 @@ pub fn run_in(
     // a valid, identity-carrying `.zen`, surfacing the recording failure as a
     // (non-fatal) warning rather than aborting.
     let (bytes, doc_id, warning) = if recorded.doc_id.is_empty() {
-        let (stamped, minted) = mint_and_stamp(&canonical_bytes)?;
+        let (stamped, minted) = mint_and_stamp(canonical_bytes)?;
         let warning = Some(match recorded.warning {
             Some(w) => format!("history unavailable, doc-id minted locally: {w}"),
             None => "history unavailable; doc-id minted locally".to_string(),
@@ -200,13 +221,13 @@ pub fn run_in(
         })?;
     }
 
-    std::fs::write(&target, &bytes).map_err(|e| NewErr {
+    std::fs::write(target, &bytes).map_err(|e| NewErr {
         message: format!("error writing '{}': {}", target.display(), e),
         exit_code: 2,
     })?;
 
     Ok(NewResult {
-        path: target,
+        path: target.to_path_buf(),
         doc_id,
         warning,
     })
@@ -256,7 +277,7 @@ fn target_path(path: &Path) -> PathBuf {
 
 /// Derive an id slug from the explicit `name` if present, else from `path`'s
 /// file stem, falling back to `"untitled"` when neither yields usable text.
-fn slug_for(name: Option<&str>, path: &Path) -> String {
+pub(super) fn slug_for(name: Option<&str>, path: &Path) -> String {
     if let Some(n) = name {
         let s = slugify(n);
         if !s.is_empty() {

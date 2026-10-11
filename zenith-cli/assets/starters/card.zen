@@ -1,0 +1,40 @@
+zenith version=1 {
+  project id="proj.card" name="Ines Varga Business Card"
+  tokens format="zenith-token-v1" {
+    token id="space.margin" type="dimension" value=(px)40
+    token id="layout.width" type="dimension" value=(px)592
+    token id="layout.height" type="dimension" value=(px)304
+    token id="layout.mark" type="dimension" value=(px)64
+    token id="space.xs" type="dimension" value=(px)4
+    token id="space.md" type="dimension" value=(px)16
+    token id="space.lg" type="dimension" value=(px)24
+  }
+  styles {
+  }
+  document id="doc.card" title="Ines Varga Business Card" {
+    page id="page.1" w=(px)672 h=(px)384 background=(token)"color.base.100" {
+      frame id="card" x=(token)"space.margin" y=(token)"space.margin" w=(token)"layout.width" h=(token)"layout.height" layout="column" justify="space-between" gap=(token)"space.lg" {
+        frame id="card.head" layout="row" justify="space-between" align="start" gap=(token)"space.lg" {
+          frame id="card.identity" w="fill" layout="column" gap=(token)"space.xs" {
+            text id="card.name" style="ui.h1" { span "Ines Varga" }
+            text id="card.title" { span "Portrait & Event Photographer" }
+          }
+          frame id="card.mark" w=(token)"layout.mark" h=(token)"layout.mark" layout="row" justify="center" align="center" fill=(token)"color.primary" radius=(token)"radius.selector" {
+            text id="card.mark.label" w="hug" style="ui.h2" { span "IV" }
+          }
+        }
+        frame id="card.foot" layout="column" gap=(token)"space.md" {
+          rect id="card.rule" h=(token)"border.width" fill=(token)"color.base.300"
+          frame id="card.contact" layout="row" justify="space-between" align="end" gap=(token)"space.lg" {
+            frame id="card.contact.lines" w="hug" layout="column" {
+              text id="card.phone" w="hug" { span "+44 20 7946 0321" }
+              text id="card.email" w="hug" { span "ines@vargastudio.example" }
+              text id="card.web" w="hug" { span "vargastudio.example" }
+            }
+            text id="card.city" w="hug" { span "Lisbon · Available to travel" }
+          }
+        }
+      }
+    }
+  }
+}

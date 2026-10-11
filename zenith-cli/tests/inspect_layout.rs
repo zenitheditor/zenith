@@ -115,7 +115,7 @@ fn node_subtree_carries_boxes() {
 }
 
 #[test]
-fn human_output_shows_boxes_that_differ_from_authored_geometry() {
+fn human_output_shows_the_final_box_of_every_compiled_node() {
     let out = run(DOC, None, false, None).expect("inspect succeeds");
     let line = |id: &str| {
         out.lines()
@@ -129,7 +129,7 @@ fn human_output_shows_boxes_that_differ_from_authored_geometry() {
         "{}",
         line("inner")
     );
-    assert!(!line("free").contains("box="), "{}", line("free"));
+    assert!(line("free").contains("box="), "{}", line("free"));
 }
 
 #[test]
@@ -363,4 +363,79 @@ fn pattern_instances_are_listed_under_expanded_ids() {
     let expanded = &root["pages"][0]["expanded"];
     assert_eq!(bx(&expanded["pat/0/dot"]), (100.0, 500.0, 10.0, 10.0));
     assert_eq!(bx(&expanded["pat/3/dot"]), (150.0, 550.0, 10.0, 10.0));
+}
+
+const OUTLINE_DOC: &str = r##"zenith version=1 {
+  project id="proj.ol" name="OL"
+  tokens format="zenith-token-v1" {
+    token id="color.k" type="color" value="#000000"
+  }
+  styles {}
+  document id="doc.ol" title="OL" {
+    page id="p" w=(px)400 h=(px)300 {
+      frame id="stack" x=(px)10 y=(px)10 w=(px)200 layout="column" gap=(px)6 {
+        text id="head" w="fill" h="hug" fill=(token)"color.k" { span "Hello world" }
+        text id="mixed" w="fill" h="hug" fill=(token)"color.k" {
+          span "One "
+          span "two"
+        }
+      }
+      frame id="loose" x=(px)220 y=(px)10 w=(px)100 h=(px)100 {
+        rect id="r" x=(px)0 y=(px)0 w=(px)10 h=(px)10 fill=(token)"color.k"
+      }
+    }
+  }
+}
+"##;
+
+#[test]
+fn outline_lists_box_layout_and_text_per_node() {
+    let out = run(OUTLINE_DOC, None, false, None).expect("inspect succeeds");
+    let line = |id: &str| {
+        out.lines()
+            .find(|l| l.split_whitespace().nth(1) == Some(id))
+            .unwrap_or_else(|| panic!("no line for {id} in\n{out}"))
+            .to_owned()
+    };
+    assert!(line("stack").contains("layout=column"), "{}", line("stack"));
+    assert!(!line("loose").contains("layout="), "{}", line("loose"));
+    assert!(
+        line("head").ends_with("\"Hello world\""),
+        "{}",
+        line("head")
+    );
+    assert!(
+        line("mixed").contains("\"One two\" [2 spans]"),
+        "{}",
+        line("mixed")
+    );
+    // Depth shows as indentation, one line per node.
+    assert!(
+        line("head").starts_with("    text head"),
+        "{}",
+        line("head")
+    );
+    assert!(
+        !out.contains("bounds="),
+        "text ink bounds stay in --json:\n{out}"
+    );
+}
+
+#[test]
+fn json_and_mcp_carry_text_and_layout() {
+    let out = run(OUTLINE_DOC, None, true, None).expect("inspect succeeds");
+    let root: Value = serde_json::from_str(&out).expect("json");
+    let head = node(&root, "head");
+    assert_eq!(head["text"], "Hello world");
+    assert!(head.get("spans").is_none(), "{head}");
+    assert_eq!(node(&root, "mixed")["spans"], 2);
+    assert_eq!(node(&root, "stack")["layout"], "column");
+    assert!(node(&root, "loose").get("layout").is_none());
+    let shallow = zenith_cli::commands::inspect::summary(OUTLINE_DOC, None, 4, false, None)
+        .expect("summary succeeds");
+    let text = shallow.to_string();
+    assert!(
+        text.contains("\"text\":\"Hello world\"") && text.contains("\"layout\":\"column\""),
+        "{text}"
+    );
 }

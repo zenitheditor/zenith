@@ -1,6 +1,16 @@
 use crate::report::CliError;
 use crate::{cli, commands};
 
+/// `word` as one shell word: unchanged when it holds only safe characters,
+/// else in single quotes. Printed commands use it for paths.
+pub(crate) fn shell_word(word: &str) -> String {
+    let safe = |c: char| c.is_ascii_alphanumeric() || "_./:@%+=,-".contains(c);
+    if !word.is_empty() && word.chars().all(safe) {
+        return word.to_owned();
+    }
+    format!("'{}'", word.replace('\'', "'\\''"))
+}
+
 /// Map the CLI scope flag to the plugin module's [`Scope`](commands::plugin::Scope).
 pub(crate) fn scope_from_arg(scope: cli::ScopeArg) -> commands::plugin::Scope {
     match scope {
@@ -158,4 +168,17 @@ pub(crate) fn read_file(path: &std::path::Path) -> Result<String, CliError> {
             2,
         )
     })
+}
+
+#[cfg(test)]
+mod shell_word_tests {
+    use super::shell_word;
+
+    #[test]
+    fn safe_words_stay_bare_and_others_are_quoted() {
+        assert_eq!(shell_word("out/flyer.zen"), "out/flyer.zen");
+        assert_eq!(shell_word("my flyer.zen"), "'my flyer.zen'");
+        assert_eq!(shell_word("it's.zen"), "'it'\\''s.zen'");
+        assert_eq!(shell_word(""), "''");
+    }
 }

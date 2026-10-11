@@ -66,9 +66,27 @@ enum Group {
 /// Rescale the dimension tokens of `tokens` for `page`. Does nothing unless
 /// `page.format` is a print format.
 pub(super) fn apply(tokens: &mut TokenBlock, page: PageSpec) {
-    let Some(factors) = factors_for(tokens, page) else {
-        return;
+    if let Some(factors) = factors_for(tokens, page) {
+        apply_factors(tokens, factors);
+    }
+}
+
+/// Rescale `size.*` so `size.body` becomes `body_px`, and `radius.*` by the
+/// short side of a `width`×`height` page. The same floor, rounding, and
+/// distinct-step rules as [`apply`] hold. `zenith new --starter` uses it to
+/// fit the theme type to the starter's own body size on any page.
+pub(super) fn apply_body(tokens: &mut TokenBlock, body_px: f64, width: u32, height: u32) {
+    let k_type = body_token_px(tokens).map(|body| body_px / body);
+    let factors = Factors {
+        k_type,
+        type_floor: text_size_floor_px(f64::from(width), f64::from(height)),
+        k_page: f64::from(width.min(height)) / f64::from(TUNED_SHORT_SIDE_PX),
     };
+    apply_factors(tokens, factors);
+}
+
+/// Apply `factors` to every literal `size.*` and `radius.*` token.
+fn apply_factors(tokens: &mut TokenBlock, factors: Factors) {
     if let Some(k_type) = factors.k_type {
         scale_type(tokens, k_type, factors.type_floor);
     }
@@ -140,18 +158,22 @@ fn factors_for(tokens: &TokenBlock, page: PageSpec) -> Option<Factors> {
         return None;
     }
     let short = f64::from(page.width.min(page.height));
-    let k_type = tokens
-        .tokens
-        .iter()
-        .find(|t| t.id == BODY_TOKEN_ID)
-        .and_then(literal_px)
-        .filter(|body| *body > 0.0)
-        .map(|body| type_factor(body, short));
+    let k_type = body_token_px(tokens).map(|body| type_factor(body, short));
     Some(Factors {
         k_type,
         type_floor: text_size_floor_px(f64::from(page.width), f64::from(page.height)),
         k_page: short / f64::from(TUNED_SHORT_SIDE_PX),
     })
+}
+
+/// The positive literal px value of `size.body`, if any.
+fn body_token_px(tokens: &TokenBlock) -> Option<f64> {
+    tokens
+        .tokens
+        .iter()
+        .find(|t| t.id == BODY_TOKEN_ID)
+        .and_then(literal_px)
+        .filter(|body| *body > 0.0)
 }
 
 /// `k_type = (16 / body) × (short / 794)`.

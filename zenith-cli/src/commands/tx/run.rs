@@ -4,6 +4,7 @@
 //! filesystem I/O and decides whether to persist `written` (the
 //! `--apply` flag lives in the dispatcher, not here).
 
+use std::collections::BTreeSet;
 use std::path::Path;
 
 use zenith_core::fix::unified_diff;
@@ -15,6 +16,7 @@ use zenith_tx::{
 };
 
 use super::boxes::{BoxSides, box_deltas, page_box_warnings, page_boxes};
+use super::introduced::introduced;
 use super::render::{TxView, render_human, render_json};
 use super::tree::Tree;
 use super::written::written_source;
@@ -196,7 +198,26 @@ fn finish(
                 view.boxes = Some(box_deltas(&before_boxes, &after_boxes, &after_tree));
             }
         }
-        if result.status == TxStatus::Accepted
+        // The engine already reported the core diagnostics of the result.
+        let reported: BTreeSet<_> = result
+            .diagnostics
+            .iter()
+            .map(|d| (d.code.clone(), d.subject_id.clone(), d.message.clone()))
+            .collect();
+        let new: Vec<_> = introduced(doc_src, &written.text, ctx.project_dir)
+            .into_iter()
+            .filter(|d| {
+                !reported.contains(&(d.code.clone(), d.subject_id.clone(), d.message.clone()))
+            })
+            .collect();
+        let breaks_render = new.iter().any(|d| d.severity == Severity::Error);
+        result.diagnostics.extend(new);
+        if breaks_render {
+            // An edit that breaks the render is rejected, as the engine
+            // rejects one that breaks validation: nothing is written.
+            result.status = TxStatus::Rejected;
+            result.source_after = result.source_before.clone();
+        } else if result.status == TxStatus::Accepted
             && result
                 .diagnostics
                 .iter()

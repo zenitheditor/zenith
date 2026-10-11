@@ -97,6 +97,17 @@ pub struct NodeEntry {
     pub resolved: Option<BoxInfo>,
     pub visible: Option<bool>,
     pub locked: Option<bool>,
+    /// A `text` node's content: its spans joined in order.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub text: Option<String>,
+    /// How many spans a `text` node has, when more than one. A multi-span
+    /// node is edited with `replace_text`, not `set_span_text`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub spans: Option<usize>,
+    /// A `frame`'s auto-layout mode (`row`, `column`, or `grid`). Absent for
+    /// an absolute frame and for every other kind.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub layout: Option<String>,
     pub children: Vec<NodeEntry>,
 }
 
@@ -304,6 +315,12 @@ fn trim_node(n: &NodeEntry, depth: usize, detail: bool) -> serde_json::Value {
     let mut obj = serde_json::Map::new();
     obj.insert("id".into(), n.id.clone().into());
     obj.insert("kind".into(), n.kind.clone().into());
+    if let Some(layout) = &n.layout {
+        obj.insert("layout".into(), layout.clone().into());
+    }
+    if let Some(text) = &n.text {
+        obj.insert("text".into(), text.clone().into());
+    }
     if detail {
         if let Some(role) = &n.role {
             obj.insert("role".into(), role.clone().into());
@@ -376,104 +393,102 @@ fn render_pages_human(pages: &[PageEntry]) -> String {
     out.trim_end().to_owned()
 }
 
-/// Render a single node (and its subtree) at the given indent depth.
+/// Characters of a text node's content shown in the outline.
+const OUTLINE_TEXT: usize = 48;
+
+/// `text` on one line, cut at 48 characters with `...`. The
+/// outline and `zenith new --starter` show a node's text this way.
+pub fn clip_text(text: &str) -> String {
+    let flat: String = text
+        .chars()
+        .map(|c| if c == '\n' { ' ' } else { c })
+        .collect();
+    let shown: String = flat.chars().take(OUTLINE_TEXT).collect();
+    if flat.chars().count() > OUTLINE_TEXT {
+        format!("{shown}...")
+    } else {
+        shown
+    }
+}
+
+/// Render a single node (and its subtree) as outline lines at `depth`.
 /// Called by both the whole-document path and the `--node` subtree path.
+///
+/// One line per node: `kind id  box=x,y WxH layout=… [flags] "text"`. The box
+/// is the final page box (layout and anchors resolved), rounded to 0.1 px,
+/// or the authored box when the compile skipped the node. Authored geometry
+/// and ink bounds are in `--json`.
 fn render_node_human(node: &NodeEntry, depth: usize) -> String {
     let indent = "  ".repeat(depth);
-    let geom = render_geom_summary(node);
-    let resolved = render_box_summary(node);
+    let mut parts = Vec::new();
+    if let Some(b) = outline_box(node) {
+        parts.push(format!("box={b}"));
+    }
+    // What a rotated or stroked leaf paints. The ink bounds of text and the
+    // painted extent of a container are noise here; both stay in `--json`.
+    if let Some(info) = &node.resolved {
+        if let Some(deg) = info.rotate {
+            parts.push(format!("rot={}", fmt_f64(deg)));
+        }
+        if let (Some(b), true) = (info.bounds, node.kind != "text" && node.children.is_empty()) {
+            parts.push(format!("bounds={}", box_text(b)));
+        }
+    }
+    if let Some(layout) = &node.layout {
+        parts.push(format!("layout={layout}"));
+    }
     let flags = render_flags(node);
-    let suffix = [geom, resolved, flags]
-        .into_iter()
-        .filter(|s| !s.is_empty())
-        .collect::<Vec<_>>()
-        .join(" ");
-    let suffix_part = if suffix.is_empty() {
+    if !flags.is_empty() {
+        parts.push(flags);
+    }
+    if let Some(text) = &node.text {
+        parts.push(outline_text(text, node.spans));
+    }
+    let suffix = if parts.is_empty() {
         String::new()
     } else {
-        format!("  {}", suffix)
+        format!("  {}", parts.join(" "))
     };
-
-    let mut out = format!("{}{} {}{}\n", indent, node.kind, node.id, suffix_part);
+    let mut out = format!("{}{} {}{}\n", indent, node.kind, node.id, suffix);
     for child in &node.children {
         out.push_str(&render_node_human(child, depth + 1));
     }
     out
 }
 
-fn render_geom_summary(node: &NodeEntry) -> String {
-    let Some(ref g) = node.geometry else {
-        return String::new();
-    };
-
-    // bbox summary: x,y WxH
-    if g.x.is_some() || g.y.is_some() || g.w.is_some() || g.h.is_some() {
-        let x = g.x.unwrap_or(0.0);
-        let y = g.y.unwrap_or(0.0);
-        let w = g.w.unwrap_or(0.0);
-        let h = g.h.unwrap_or(0.0);
-        return format!(
-            "{},{} {}x{}",
-            fmt_f64(x),
-            fmt_f64(y),
-            fmt_f64(w),
-            fmt_f64(h)
-        );
-    }
-
-    // line endpoint summary
-    if g.x1.is_some() || g.y1.is_some() || g.x2.is_some() || g.y2.is_some() {
-        let x1 = g.x1.unwrap_or(0.0);
-        let y1 = g.y1.unwrap_or(0.0);
-        let x2 = g.x2.unwrap_or(0.0);
-        let y2 = g.y2.unwrap_or(0.0);
-        return format!(
-            "({},{})→({},{})",
-            fmt_f64(x1),
-            fmt_f64(y1),
-            fmt_f64(x2),
-            fmt_f64(y2)
-        );
-    }
-
-    // poly point count
-    if let Some(count) = g.point_count {
-        return format!("{} pts", count);
-    }
-
-    String::new()
+/// `x,y WxH` rounded to 0.1 px.
+fn box_text(b: NodeBox) -> String {
+    rect_text(b.x, b.y, b.w, b.h)
 }
 
-/// `box=x,y WxH` when the resolved box differs from the authored x/y/w/h
-/// (a laid-out or group-translated node); empty otherwise.
-fn render_box_summary(node: &NodeEntry) -> String {
-    let Some(info) = node.resolved else {
-        return String::new();
-    };
-    // Hundredths of a px: ink bounds carry float noise that costs tokens and hides the value.
-    let hundredth = |v: f64| fmt_f64((v * 100.0).round() / 100.0 + 0.0);
-    let rect = |label: &str, b: NodeBox| {
-        format!(
-            "{label}={},{} {}x{}",
-            hundredth(b.x),
-            hundredth(b.y),
-            hundredth(b.w),
-            hundredth(b.h)
-        )
-    };
-    let b = info.rect;
-    let authored = node.geometry.as_ref().map(|g| (g.x, g.y, g.w, g.h));
-    let mut parts: Vec<String> = Vec::new();
-    if authored != Some((Some(b.x), Some(b.y), Some(b.w), Some(b.h))) {
-        parts.push(rect("box", b));
+/// `x,y WxH`, each rounded to 0.1 px.
+fn rect_text(x: f64, y: f64, w: f64, h: f64) -> String {
+    let tenth = |v: f64| fmt_f64((v * 10.0).round() / 10.0 + 0.0);
+    format!("{},{} {}x{}", tenth(x), tenth(y), tenth(w), tenth(h))
+}
+
+/// `x,y WxH` of the final box, else of the authored box, rounded to 0.1 px.
+fn outline_box(node: &NodeEntry) -> Option<String> {
+    if let Some(info) = &node.resolved {
+        return Some(box_text(info.rect));
     }
-    if let Some(deg) = info.rotate {
-        parts.push(format!("rot={}", fmt_f64(deg)));
+    let g = node.geometry.as_ref()?;
+    if g.x.is_none() && g.y.is_none() && g.w.is_none() && g.h.is_none() {
+        return None;
     }
-    if let Some(v) = info.bounds {
-        parts.push(rect("bounds", v));
-    }
-    parts.join(" ")
+    Some(rect_text(
+        g.x.unwrap_or(0.0),
+        g.y.unwrap_or(0.0),
+        g.w.unwrap_or(0.0),
+        g.h.unwrap_or(0.0),
+    ))
+}
+
+/// `"text"`, cut at [`OUTLINE_TEXT`] characters, with a span count when the
+/// node has several spans.
+fn outline_text(text: &str, spans: Option<usize>) -> String {
+    let spans = spans.map(|n| format!(" [{n} spans]")).unwrap_or_default();
+    format!("\"{}\"{spans}", clip_text(text))
 }
 
 fn render_flags(node: &NodeEntry) -> String {

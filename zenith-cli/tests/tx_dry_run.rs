@@ -257,3 +257,89 @@ fn op_is_an_alias_of_ops() {
     ]);
     assert_eq!(out.status.code(), Some(0));
 }
+
+#[test]
+fn tx_reports_a_warning_the_edit_introduces() {
+    let env = Env::with_doc(CARDS);
+    let v = json(&env.tx(
+        r#"{"ops":[{"op":"set_geometry","node":"card.3","x":10}]}"#,
+        &["--json"],
+    ));
+    let codes: Vec<&str> = v["diagnostics"]
+        .as_array()
+        .expect("diagnostics")
+        .iter()
+        .filter_map(|d| d["code"].as_str())
+        .collect();
+    assert!(codes.contains(&"layout.block_overlap"), "{codes:?}");
+    // A warning the input already had is not repeated by an unrelated edit.
+    let again = json(&env.tx(
+        r#"{"ops":[{"op":"set_fill","node":"card.3","fill":"color.w"}]}"#,
+        &["--json"],
+    ));
+    let again_codes: Vec<&str> = again["diagnostics"]
+        .as_array()
+        .expect("diagnostics")
+        .iter()
+        .filter_map(|d| d["code"].as_str())
+        .collect();
+    assert!(
+        !again_codes.contains(&"layout.block_overlap"),
+        "{again_codes:?}"
+    );
+}
+
+/// A text node that must fit a 100x24 box and has room only for a short line.
+const FIT_DOC: &str = r##"zenith version=1 {
+  project id="p" name="P"
+  tokens format="zenith-token-v1" {
+    token id="color.k" type="color" value="#000000"
+    token id="font.body" type="fontFamily" value="Noto Sans"
+    token id="size.big" type="dimension" value=(px)20
+  }
+  styles {}
+  document id="d" title="T" {
+    page id="pg" w=(px)400 h=(px)200 {
+      text id="t" x=(px)10 y=(px)10 w=(px)100 h=(px)24 overflow="fit" fill=(token)"color.k" font-family=(token)"font.body" font-size=(token)"size.big" { span "Hi" }
+    }
+  }
+}
+"##;
+
+#[test]
+fn an_edit_that_breaks_the_render_is_rejected_and_not_written() {
+    let env = Env::with_doc(FIT_DOC);
+    let before = env.read();
+    let ops = r#"{"ops":[{"op":"set_span_text","node":"t","span":0,"text":"A much longer headline that cannot fit in one small box at all"}]}"#;
+    let out = env.tx(ops, &["--apply", "--json"]);
+    assert_eq!(out.status.code(), Some(1), "{}", stdout(&out));
+    let v = json(&out);
+    assert_eq!(v["status"], "rejected");
+    assert_eq!(v["applied"], false);
+    let codes: Vec<&str> = v["diagnostics"]
+        .as_array()
+        .expect("diagnostics")
+        .iter()
+        .filter_map(|d| d["code"].as_str())
+        .collect();
+    assert!(codes.contains(&"text.fit_failed"), "{codes:?}");
+    assert_eq!(env.read(), before, "a rejected edit writes nothing");
+}
+
+#[test]
+fn tx_diagnostics_are_not_repeated() {
+    let env = Env::with_doc(common::CARDS);
+    let v = json(&env.tx(
+        r#"{"ops":[{"op":"set_geometry","node":"card.3","x":10}]}"#,
+        &["--json"],
+    ));
+    let mut seen = std::collections::BTreeSet::new();
+    for d in v["diagnostics"].as_array().expect("diagnostics") {
+        let key = (
+            d["code"].as_str().unwrap_or_default().to_owned(),
+            d["subject_id"].as_str().unwrap_or_default().to_owned(),
+            d["message"].as_str().unwrap_or_default().to_owned(),
+        );
+        assert!(seen.insert(key.clone()), "repeated diagnostic {key:?}");
+    }
+}
