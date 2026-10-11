@@ -15,6 +15,10 @@ it.
 
 ## [Unreleased]
 
+---
+
+## [0.0.12] — 2026-10-12
+
 ### Added
 
 - **KDL parse errors name the faulty line.** An unclosed block used to point at its opening `{`, often far above the mistake. The error now adds the line before which a `}` is likely missing, or the first line that does not parse on its own (a stray `)` or `"`).
