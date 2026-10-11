@@ -18,10 +18,25 @@ it.
 ### Added
 
 - **`zenith perceive page`** — renders pages as `zenith render --png` does, then measures deterministic signals: luminance histogram, value zones, density map, edge map, ink bounds, optical balance, clearspace, and grid conformance. These are signals, not a judgement of design quality.
-  - `--page N` or `--all-pages`. `--json` prints a schema-1 envelope with every number rounded to 4 decimal places and no tool version.
+  - `--page N` or `--all-pages`. `--json` prints a `zenith-perceive-page-v1` envelope with every number rounded to 4 decimal places and no tool version.
   - `clearspace` reads the page margins and `grid_conformance` reads the construction guides. A metric reports `not_applicable` when the page declares no such input.
   - `zenith-cli/tests/perceive_hashes.json` pins the output of every example on every CI target.
 - **`zenith_perceive` MCP tool** — the same envelope over MCP, read-only and confined to the server root.
+- **Per-child `margin` in auto layout** — `margin`, `margin-x`, `margin-y`, `margin-top`, `margin-right`, `margin-bottom`, and `margin-left` on a child of a `row` or `column` frame. Margins add outer space around that child and never collapse, so one child moves without changing the frame's `gap`.
+  - Precedence is side, then axis, then `margin`. A negative value is `node.invalid_value`.
+  - Cross axis: `align` start, center, and end place the margin box. `align=stretch` shrinks the stretched size by the cross margins. A hugging frame includes its children's margins.
+  - Margin on a grid child, an absolute child, or a child of an absolute frame has no effect and reports `layout.inert_attribute`.
+  - `tx` `set_layout` takes the seven fields, and `null` clears one. The `tx.layout_managed` rejection names `margin_top` as the way to offset a child in the flow.
+  - A document without margins renders byte-identically.
+- **`zenith tx --ops`** — takes the transaction inline, as a `{"ops":[...]}` object or a bare array, so an edit needs no separate file. A file path or `--ops` is required, and not both.
+- **`zenith schema op <unknown>` suggests ops.** It lists up to 12 ops whose names or summaries share a word with the name you typed, in place of the list of all 69. It prints the full list only when nothing matches.
+
+### Changed
+
+- **`set_fill`, `set_stroke`, and `set_stroke_width` accept a `frame`.** They rejected it with `tx.unsupported_property` although a frame paints a fill and stroke, so a button built as a frame could not be recolored by `tx`.
+- **`zenith tx --help` lists common edits.** Eight runnable one-line ops cover text, fill, token, geometry, margin, add, remove, and visibility. A test checks that every op in the list exists. `--op` works as an alias of `--ops`.
+- **`zenith tx` says whether it wrote the file.** The output gains `applied`. A dry run prints `applied: false (dry run, nothing written; add --apply to write the file)`, and `--json` carries `"applied": false`. Before, a dry run printed `changed: true` and a diff, which agents read as done. The MCP `zenith_tx` result carries `applied` too.
+- **`zenith inspect` rounds boxes to 0.01 px.** The `box=` and `bounds=` values no longer print float noise such as `52.829999923706055`.
 
 ---
 
