@@ -3,7 +3,7 @@
 
 mod common;
 
-use common::{CARDS, Env, INTO_ROW, json, stdout};
+use common::{CARDS, DOC, Env, INTO_ROW, json, stdout};
 
 #[test]
 fn dry_run_shows_diff_and_moved_line() {
@@ -69,6 +69,87 @@ fn apply_with_diff_shows_them() {
 }
 
 #[test]
+fn dry_run_says_nothing_was_written() {
+    let env = Env::with_doc(CARDS);
+    let text = stdout(&env.tx(INTO_ROW, &[]));
+    assert!(
+        text.contains("applied: false (dry run, nothing written; add --apply to write the file)"),
+        "{text}"
+    );
+    let v = json(&env.tx(INTO_ROW, &["--json"]));
+    assert_eq!(v["applied"], false, "{v:#}");
+    assert_eq!(v["changed"], true, "{v:#}");
+}
+
+#[test]
+fn apply_says_it_wrote() {
+    let env = Env::with_doc(CARDS);
+    let text = stdout(&env.tx(INTO_ROW, &["--apply"]));
+    assert!(text.contains("applied: true\n"), "{text}");
+    let env = Env::with_doc(CARDS);
+    let v = json(&env.tx(INTO_ROW, &["--apply", "--json"]));
+    assert_eq!(v["applied"], true, "{v:#}");
+}
+
+#[test]
+fn rejected_and_unchanged_are_not_applied() {
+    let env = Env::with_doc(CARDS);
+    let v = json(&env.tx(
+        r#"{"ops":[{"op":"set_fill","node":"nope","fill":"color.w"}]}"#,
+        &["--apply", "--json"],
+    ));
+    assert_eq!(v["applied"], false, "{v:#}");
+    let text = stdout(&env.tx(
+        r#"{"ops":[{"op":"set_fill","node":"card.3","fill":"color.k"}]}"#,
+        &["--apply"],
+    ));
+    assert!(
+        text.contains("applied: false\n"),
+        "unchanged has no dry-run hint: {text}"
+    );
+}
+
+#[test]
+fn inline_ops_match_the_file_form() {
+    let env = Env::with_doc(CARDS);
+    let body = r#"{"op":"set_fill","node":"card.3","fill":"color.w"}"#;
+    let wrapped = env.zenith(&[
+        "tx",
+        DOC,
+        "--ops",
+        &format!(r#"{{"ops":[{body}]}}"#),
+        "--json",
+    ]);
+    let bare = env.zenith(&["tx", DOC, "--ops", &format!("[{body}]"), "--json"]);
+    assert_eq!(wrapped.status.code(), Some(0));
+    assert_eq!(json(&wrapped), json(&bare));
+    assert_eq!(json(&bare)["changed"], true);
+}
+
+#[test]
+fn inline_ops_apply_writes_the_file() {
+    let env = Env::with_doc(CARDS);
+    let before = env.read();
+    let out = env.zenith(&[
+        "tx",
+        "t.zen",
+        "--apply",
+        "--ops",
+        r#"[{"op":"set_fill","node":"card.3","fill":"color.w"}]"#,
+    ]);
+    assert_eq!(out.status.code(), Some(0));
+    assert_ne!(env.read(), before);
+}
+
+#[test]
+fn tx_needs_a_file_or_inline_ops_and_not_both() {
+    let env = Env::with_doc(CARDS);
+    assert_eq!(env.zenith(&["tx", DOC]).status.code(), Some(2));
+    let both = env.zenith(&["tx", DOC, "ops.json", "--ops", "[]"]);
+    assert_eq!(both.status.code(), Some(2));
+}
+
+#[test]
 fn no_geometry_op_has_empty_boxes() {
     let env = Env::with_doc(CARDS);
     let out = env.tx(
@@ -128,4 +209,51 @@ fn help_names_the_real_review() {
         "{text}"
     );
     assert!(text.contains("--diff"), "{text}");
+}
+
+// `zenith tx --help` lists common edits as runnable JSON. Each op in that list
+// must exist.
+
+fn common_edits(help: &str) -> Vec<String> {
+    help.lines()
+        .skip_while(|l| !l.starts_with("COMMON EDITS"))
+        .skip(1)
+        .take_while(|l| !l.trim().is_empty())
+        .filter_map(|l| {
+            let start = l.find('{')?;
+            let end = l.rfind('}')?;
+            Some(l[start..=end].to_owned())
+        })
+        .collect()
+}
+
+#[test]
+fn every_common_edit_names_a_real_op() {
+    let env = Env::with_doc(CARDS);
+    let help = stdout(&env.zenith(&["tx", "--help"]));
+    let edits = common_edits(&help);
+    assert!(
+        edits.len() >= 8,
+        "common edits missing from tx --help:\n{help}"
+    );
+    for edit in edits {
+        let v: serde_json::Value = serde_json::from_str(&edit)
+            .unwrap_or_else(|e| panic!("example is not JSON ({e}): {edit}"));
+        let op = v["op"].as_str().expect("op name");
+        let out = env.zenith(&["schema", "op", op]);
+        assert_eq!(out.status.code(), Some(0), "unknown op {op} in: {edit}");
+    }
+}
+
+#[test]
+fn op_is_an_alias_of_ops() {
+    let env = Env::with_doc(CARDS);
+    let out = env.zenith(&[
+        "tx",
+        "t.zen",
+        "--op",
+        r#"[{"op":"set_fill","node":"card.3","fill":"color.w"}]"#,
+        "--json",
+    ]);
+    assert_eq!(out.status.code(), Some(0));
 }

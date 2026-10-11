@@ -232,6 +232,10 @@ pub struct TxOutputJson {
     pub affected: Vec<String>,
     pub diagnostics: Vec<DiagnosticJson>,
     pub changed: bool,
+    /// Whether the edit was written to disk. False on a dry run: `changed`
+    /// then reports only that the edit would change the source.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub applied: Option<bool>,
     /// Unified diff of the canonical source before and after. Present on a
     /// dry-run, or with `--apply --diff`, when the source changed.
     #[serde(skip_serializing_if = "Option::is_none")]

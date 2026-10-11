@@ -12,21 +12,36 @@ use crate::report::CliError;
 
 use super::output::{apply_edit, print_outcome, write_error};
 
+/// Inline ops are either the `{"ops":[...]}` object or a bare array of ops.
+fn inline_tx(text: &str) -> String {
+    if text.trim_start().starts_with('[') {
+        format!("{{\"ops\":{text}}}")
+    } else {
+        text.to_owned()
+    }
+}
+
 pub(super) fn dispatch_tx(args: TxArgs) -> ExitCode {
     let json = args.json;
     let doc_src = match read_file(&args.path) {
         Ok(s) => s,
         Err(e) => return e.emit(json),
     };
-    let tx_json = match read_file(&args.tx_file) {
-        Ok(s) => s,
-        Err(e) => return e.emit(json),
+    let tx_json = match (&args.ops, &args.tx_file) {
+        (Some(inline), _) => inline_tx(inline),
+        (None, Some(file)) => match read_file(file) {
+            Ok(s) => s,
+            Err(e) => return e.emit(json),
+        },
+        // clap requires one of the two.
+        (None, None) => String::new(),
     };
     let label = args.path.display().to_string();
     let ctx = commands::tx::TxCtx {
         project_dir: args.path.parent(),
         label: &label,
         show_diff: !args.apply || args.diff,
+        apply: args.apply,
     };
     let outcome = match commands::tx::run_with(&doc_src, &tx_json, &ctx) {
         Ok(o) => o,
@@ -53,6 +68,7 @@ pub(super) fn dispatch_outline_text(args: OutlineTextArgs) -> ExitCode {
         project_dir: args.path.parent(),
         label: &label,
         show_diff: !args.apply || args.diff,
+        apply: args.apply,
     };
     let outcome = match commands::tx::run_outline_text(
         &doc_src,

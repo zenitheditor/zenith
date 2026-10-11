@@ -15,6 +15,9 @@ pub struct TxView {
     pub source_diff: Option<String>,
     /// Nodes whose compiled page box changed, sorted by id.
     pub boxes: Option<Vec<BoxDelta>>,
+    /// Whether the edit was written to disk. `None` when the caller does not
+    /// say (an AST-only run).
+    pub applied: Option<bool>,
 }
 
 /// The status as shown in human output.
@@ -42,6 +45,15 @@ pub fn render_human(result: &TxResult, view: &TxView) -> String {
     let mut out = String::new();
     out.push_str(&format!("status: {}\n", status_label(&result.status)));
     out.push_str(&format!("changed: {}\n", changed));
+    if let Some(applied) = view.applied {
+        let pending = !applied && changed && result.status != TxStatus::Rejected;
+        let hint = if pending {
+            " (dry run, nothing written; add --apply to write the file)"
+        } else {
+            ""
+        };
+        out.push_str(&format!("applied: {applied}{hint}\n"));
+    }
 
     if result.affected_node_ids.is_empty() {
         out.push_str("affected: (none)\n");
@@ -126,6 +138,7 @@ pub(super) fn render_json(result: &TxResult, view: TxView) -> String {
             .map(DiagnosticJson::from)
             .collect(),
         changed,
+        applied: view.applied,
         source_diff: view.source_diff,
         boxes: view.boxes,
     };

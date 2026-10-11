@@ -221,6 +221,7 @@ fn run_tx(args: &Value) -> Result<Value, String> {
         project_dir: loc.path.parent(),
         label: &label,
         show_diff: !flag(args, "apply") || flag(args, "diff"),
+        apply: flag(args, "apply"),
     };
     let outcome = commands::tx::run_with(&src, &tx_json, &ctx).map_err(|e| e.message)?;
 
@@ -240,6 +241,7 @@ fn run_tx(args: &Value) -> Result<Value, String> {
     let mut out = json!({
         "status": parsed.get("status").cloned().unwrap_or(Value::Null),
         "changed": parsed.get("changed").and_then(Value::as_bool).unwrap_or(false),
+        "applied": parsed.get("applied").and_then(Value::as_bool).unwrap_or(false),
         "affected": parsed.get("affected").cloned().unwrap_or(json!([])),
         "error_count": count_severity(&diags, "error"),
         "warning_count": count_severity(&diags, "warning"),

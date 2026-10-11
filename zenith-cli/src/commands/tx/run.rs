@@ -62,6 +62,8 @@ pub struct TxCtx<'a> {
     /// Print the source diff and the box delta. A dry-run sets it always;
     /// `--apply` sets it only with `--diff`.
     pub show_diff: bool,
+    /// `--apply` is set: the edit is written to disk. Unset is a dry run.
+    pub apply: bool,
 }
 
 // ── Public entry points ───────────────────────────────────────────────────────
@@ -204,6 +206,7 @@ fn finish(
         }
     }
 
+    view.applied = ctx.map(|c| c.apply && result.status != TxStatus::Rejected && changed);
     let exit_code = status_exit_code(&result.status);
     let human = render_human(&result, &view);
     let json_str = render_json(&result, view);
@@ -253,6 +256,7 @@ mod tests {
         project_dir: None,
         label: "doc.zen",
         show_diff: true,
+        apply: false,
     };
 
     // ── 1. Valid set_text_align → Accepted, changed, exit 0 ──────────────────
