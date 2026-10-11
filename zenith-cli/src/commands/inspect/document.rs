@@ -450,13 +450,15 @@ fn render_box_summary(node: &NodeEntry) -> String {
     let Some(info) = node.resolved else {
         return String::new();
     };
+    // Hundredths of a px: ink bounds carry float noise that costs tokens and hides the value.
+    let hundredth = |v: f64| fmt_f64((v * 100.0).round() / 100.0 + 0.0);
     let rect = |label: &str, b: NodeBox| {
         format!(
             "{label}={},{} {}x{}",
-            fmt_f64(b.x),
-            fmt_f64(b.y),
-            fmt_f64(b.w),
-            fmt_f64(b.h)
+            hundredth(b.x),
+            hundredth(b.y),
+            hundredth(b.w),
+            hundredth(b.h)
         )
     };
     let b = info.rect;
