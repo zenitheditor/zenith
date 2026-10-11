@@ -39,7 +39,7 @@ pub use plugin::{
 };
 pub use render::RenderArgs;
 pub use schema::{SchemaArgs, SchemaSub};
-pub use tx::{OutlineTextArgs, TxArgs};
+pub use tx::{COMMON_EDITS, OutlineTextArgs, TxArgs};
 pub use workspace::{
     CandidateArgs, PromoteArgs, ScratchArgs, ScratchListArgs, ScratchNewArgs, ScratchShowArgs,
     ScratchSub, WorkspaceArgs, WorkspaceSub,

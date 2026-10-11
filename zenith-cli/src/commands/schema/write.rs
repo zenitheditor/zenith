@@ -162,6 +162,7 @@ pub fn write(json: bool) -> (String, u8) {
             schema: "zenith-schema-v1",
             example: EXAMPLE.to_owned(),
             rules: RULES.to_owned(),
+            edits: crate::cli::COMMON_EDITS.to_owned(),
             kinds,
         };
         return (serialize_pretty(&out), 0);
@@ -177,8 +178,10 @@ pub fn write(json: bool) -> (String, u8) {
         text.push_str(&format!("\n{}:\n", kind.kind));
         text.push_str(&format_attr_table(&kind.attributes));
     }
+    text.push_str("\nEdit a file with `zenith tx <file> --apply --ops '[...]'`. Common ops, one per line (`zenith schema op <name>` has the fields of any other):\n");
+    text.push_str(crate::cli::COMMON_EDITS);
     text.push_str(
-        "\nOther kinds: `zenith schema nodes`. Tokens: `zenith tokens <file>` lists a file's tokens. Edit a file with `zenith tx <file> --apply --ops '[...]'` (`zenith schema ops`).",
+        "\n\nOther kinds: `zenith schema nodes`. Tokens: `zenith tokens <file>` lists a file's tokens.",
     );
     (text, 0)
 }

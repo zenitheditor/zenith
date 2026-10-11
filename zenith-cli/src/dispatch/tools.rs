@@ -82,6 +82,10 @@ fn print_starter_tip(path: &std::path::Path) {
         _ => println!("note: could not list the text slots; run `zenith inspect {shown}`."),
     }
     println!(
+        "other edits, each an op for --ops (`zenith schema op <name>` has the fields of any other):\n{}\n",
+        crate::cli::COMMON_EDITS
+    );
+    println!(
         "This is a finished layout: replace the text above, restyle with `zenith tokens {shown}` and {{\"op\":\"update_token_value\",\"id\":\"color.primary\",\"value\":\"#rrggbb\"}}, and add or remove nodes (`duplicate_node` repeats a row). `zenith inspect {shown}` prints its layout outline (id, box, layout, text per node). To write nodes by hand, `zenith schema write` has the syntax and common attributes. Run `zenith validate {shown}` after."
     );
 }

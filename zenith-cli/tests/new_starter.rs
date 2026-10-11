@@ -378,6 +378,7 @@ fn starter_output_lists_the_text_slots_and_the_batched_edit() {
         );
         assert!(text.contains("\"op\":\"set_span_text\""), "{kind}: {text}");
         assert!(text.contains("<new text>"), "{kind}: {text}");
+        assert!(text.contains("\"op\":\"set_fill\""), "{kind}: {text}");
         let slot_lines = text
             .lines()
             .filter(|l| l.starts_with("  ") && l.contains(": \""))

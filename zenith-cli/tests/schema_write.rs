@@ -56,6 +56,23 @@ fn the_guide_names_the_common_kinds_and_json_matches() {
 }
 
 #[test]
+fn the_guide_carries_the_same_common_edits_as_tx_help() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let (_, guide) = zenith(&["schema", "write"], dir.path());
+    let (_, help) = zenith(&["tx", "--help"], dir.path());
+    let edits: Vec<&str> = help
+        .lines()
+        .skip_while(|l| !l.starts_with("COMMON EDITS"))
+        .skip(1)
+        .take_while(|l| !l.is_empty())
+        .collect();
+    assert!(edits.len() >= 6, "{help}");
+    for line in edits {
+        assert!(guide.contains(line), "guide lacks `{line}`");
+    }
+}
+
+#[test]
 fn the_first_places_an_agent_reads_point_at_the_guide() {
     let dir = tempfile::tempdir().expect("tempdir");
     for args in [&["--help"][..], &["schema"][..]] {

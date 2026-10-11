@@ -546,6 +546,8 @@ pub struct SchemaWriteOutput {
     /// A complete document that validates clean.
     pub example: String,
     pub rules: String,
+    /// The common `tx` ops, one runnable op per line.
+    pub edits: String,
     pub kinds: Vec<SchemaWriteKind>,
 }
 
