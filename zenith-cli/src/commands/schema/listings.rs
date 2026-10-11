@@ -199,17 +199,58 @@ pub fn ops(json: bool) -> (String, u8) {
     }
 }
 
+/// The error for an unknown op name: the closest ops by shared words in their
+/// names (weight 3) and summaries (weight 1), or every op when none match.
+fn unknown_op_message(name: &str) -> String {
+    let words = |s: &str| -> Vec<String> {
+        s.split(|c: char| !c.is_ascii_alphanumeric())
+            .map(str::to_ascii_lowercase)
+            .filter(|w| w.len() > 2 && w != "tx" && w != "op")
+            .collect()
+    };
+    let query = words(name);
+    let mut scored: Vec<(usize, &str)> = tx_schema::op_names()
+        .iter()
+        .map(|&op| {
+            let in_name = words(op);
+            let in_summary = words(tx_schema::op_summary(op).unwrap_or(""));
+            let score: usize = query
+                .iter()
+                .map(|q| {
+                    3 * in_name.iter().filter(|w| w.starts_with(q.as_str())).count()
+                        + in_summary
+                            .iter()
+                            .filter(|w| w.starts_with(q.as_str()))
+                            .count()
+                })
+                .sum();
+            (score, op)
+        })
+        .filter(|(score, _)| *score > 0)
+        .collect();
+    // Highest score first; equal scores keep the catalog order.
+    scored.sort_by_key(|a| std::cmp::Reverse(a.0));
+    if scored.is_empty() {
+        let valid = tx_schema::op_names().join(", ");
+        return format!("error: unknown op '{name}'\nvalid ops: {valid}");
+    }
+    let mut msg = format!("error: unknown op '{name}'\nclosest ops:\n");
+    for (_, op) in scored.iter().take(12) {
+        let full = tx_schema::op_summary(op).unwrap_or("");
+        let summary = full.split(". ").next().unwrap_or(full);
+        msg.push_str(&format!("  {op:<24}  {summary}\n"));
+    }
+    msg.push_str("run `zenith schema ops` for every op");
+    msg
+}
+
 /// `zenith schema op <name>`: full detail for one tx op (summary + fields + example).
 ///
 /// Returns `(stdout, exit_code)`. On unknown name, exit_code is 1.
 pub fn op_detail(name: &str, json: bool) -> (String, u8) {
     let summary = match tx_schema::op_summary(name) {
         Some(s) => s,
-        None => {
-            let valid = tx_schema::op_names().join(", ");
-            let msg = format!("error: unknown op '{name}'\nvalid ops: {valid}");
-            return (msg, 1);
-        }
+        None => return (unknown_op_message(name), 1),
     };
 
     // op_fields and op_example are always Some when op_summary is Some

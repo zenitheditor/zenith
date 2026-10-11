@@ -210,10 +210,21 @@ fn op_detail_set_fill_json_has_node_and_fill_fields() {
 
 #[test]
 fn op_detail_unknown_op_returns_error() {
-    let (text, code) = op_detail("not_an_op", false);
+    let (text, code) = op_detail("zzz_qqq", false);
     assert_eq!(code, 1);
     assert!(text.contains("unknown op"), "must report unknown op");
     assert!(text.contains("valid ops"), "must list valid ops");
+}
+
+#[test]
+fn op_detail_unknown_op_suggests_the_closest_ops() {
+    let (text, code) = op_detail("tx.move", false);
+    assert_eq!(code, 1);
+    assert!(text.contains("closest ops:"), "{text}");
+    assert!(text.contains("nudge_geometry"), "{text}");
+    assert!(!text.contains("valid ops:"), "{text}");
+    let listed = text.lines().filter(|l| l.starts_with("  ")).count();
+    assert!(listed <= 12, "at most twelve suggestions: {text}");
 }
 
 #[test]
