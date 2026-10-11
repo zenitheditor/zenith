@@ -3,6 +3,12 @@
 //!
 //! Widths resolve before heights, because a text height depends on its width.
 //! A row resolves its main axis first; a column resolves its cross axis first.
+//!
+//! A child's margin is outer space: line breaks, `justify`, `align`, and the
+//! used (hug) extents work on margin boxes, so margins add to `gap` and
+//! never collapse. `fill` shares free space after every margin, and a
+//! stretched cross size is the line less the child's cross margins. Slots,
+//! and the `min-*` / `max-*` clamps, stay border boxes.
 
 use zenith_core::Span;
 
@@ -13,7 +19,7 @@ use super::flex::{
     OVERFLOW_EPSILON, align_offset, break_lines, distribute_fill, justify_positions, span,
 };
 use super::measure::Engine;
-use super::model::{Align, Avail, Axis, AxisSpec, FrameSpec, Justify, Sizing};
+use super::model::{Align, Avail, Axis, AxisSpec, FrameSpec, Justify, Sizing, plus};
 use super::solve::{Item, Slot};
 
 /// The frame-level inputs of a stack or grid solve.
@@ -116,6 +122,16 @@ impl Sized {
     }
 }
 
+/// The margin-box sizes of `items` along `axis`: each border-box size plus
+/// the item's margins on that axis.
+fn outer_sizes(items: &[Item<'_>], sizes: &[f64], axis: Axis) -> Vec<f64> {
+    items
+        .iter()
+        .zip(sizes)
+        .map(|(it, s)| plus(*s, it.margin.sum(axis)))
+        .collect()
+}
+
 /// A hug size clamped into `spec`, and whether the clamp left it unchanged.
 fn clamp_hug(spec: AxisSpec, raw: f64) -> (f64, bool) {
     let v = spec.clamp(raw);
@@ -171,6 +187,7 @@ fn grow_lines(
         return;
     };
     let gap = cx.spec.gap;
+    let axis = if row { Axis::X } else { Axis::Y };
     for &(start, end) in lines {
         let main = if row { &mut sized.w } else { &mut sized.h };
         let (Some(line), Some(grow), Some(line_items)) = (
@@ -187,6 +204,11 @@ fn grow_lines(
             .map(|(s, _)| *s)
             .sum();
         let gaps = gap * (line.len().saturating_sub(1)) as f64;
+        // Every item's main-axis margins, growing or not, come off the free
+        // space before it is shared.
+        let margins = line_items
+            .iter()
+            .fold(0.0, |acc, it| plus(acc, it.margin.sum(axis)));
         let fills: Vec<(f64, f64)> = line_items
             .iter()
             .zip(grow)
@@ -196,7 +218,7 @@ fn grow_lines(
                 (spec.min, spec.max)
             })
             .collect();
-        let mut shares = distribute_fill(limit - fixed - gaps, &fills).into_iter();
+        let mut shares = distribute_fill(limit - fixed - gaps - margins, &fills).into_iter();
         for (size, g) in line.iter_mut().zip(grow) {
             if *g && let Some(share) = shares.next() {
                 *size = share;
@@ -232,6 +254,14 @@ fn place(
     } else {
         (&sized.h, &sized.w)
     };
+    let (main_axis, cross_axis) = if row {
+        (Axis::X, Axis::Y)
+    } else {
+        (Axis::Y, Axis::X)
+    };
+    // Justify, align, and the used extents work on margin boxes.
+    let outer_main = outer_sizes(items, main_sizes, main_axis);
+    let outer_cross = outer_sizes(items, cross_sizes, cross_axis);
     let mut slots = Vec::with_capacity(items.len());
     let mut used_main: f64 = 0.0;
     let mut used_cross = 0.0;
@@ -239,33 +269,38 @@ fn place(
     let mut cross_cursor = cross_start;
     let last = lines.len().saturating_sub(1);
     for (li, (&(start, end), &line)) in lines.iter().zip(line_cross).enumerate() {
-        let (Some(mains), Some(crosses), Some(line_items)) = (
+        let (Some(mains), Some(crosses), Some(outer_mains), Some(outer_crosses), Some(line_items)) = (
             main_sizes.get(start..end),
             cross_sizes.get(start..end),
+            outer_main.get(start..end),
+            outer_cross.get(start..end),
             items.get(start..end),
         ) else {
             continue;
         };
-        used_main = used_main.max(span(mains, spec.gap));
-        let positions = justify_positions(main_start, mains, spec.gap, main_def, spec.justify);
+        used_main = used_main.max(span(outer_mains, spec.gap));
+        let positions =
+            justify_positions(main_start, outer_mains, spec.gap, main_def, spec.justify);
         let mut line_need = line;
-        for (k, ((pos, (m, c)), it)) in positions
+        for (k, ((pos, ((m, c), oc)), it)) in positions
             .iter()
-            .zip(mains.iter().zip(crosses))
+            .zip(mains.iter().zip(crosses).zip(outer_crosses))
             .zip(line_items)
             .enumerate()
         {
-            line_need = line_need.max(*c);
-            let offset = align_offset(*c, line, spec.align);
+            line_need = line_need.max(*oc);
+            let offset = align_offset(*oc, line, spec.align);
             let cross_pos = if offset == 0.0 {
                 cross_cursor
             } else {
                 cross_cursor + offset
             };
+            let cross_pos = plus(cross_pos, it.margin.along(cross_axis).0);
+            let pos = plus(*pos, it.margin.along(main_axis).0);
             let (x, y, w, h) = if row {
-                (*pos, cross_pos, *m, *c)
+                (pos, cross_pos, *m, *c)
             } else {
-                (cross_pos, *pos, *c, *m)
+                (cross_pos, pos, *c, *m)
             };
             slots.push(Slot {
                 index: it.index,
@@ -286,11 +321,6 @@ fn place(
             cross_cursor += spec.wrap_gap;
         }
     }
-    let (main_axis, cross_axis) = if row {
-        (Axis::X, Axis::Y)
-    } else {
-        (Axis::Y, Axis::X)
-    };
     cx.check_overflow(main_axis, used_main, main_def, sink);
     cx.check_overflow(cross_axis, need_cross, cross_def, sink);
     if row {
@@ -334,7 +364,7 @@ pub(super) fn row(
         sized.hug_w.push(hugs);
     }
     let wraps = cx.inner_w.definite().filter(|_| cx.spec.wrap);
-    let lines = lines_of(&sized.w, wraps, cx.spec.gap);
+    let lines = lines_of(&outer_sizes(items, &sized.w, Axis::X), wraps, cx.spec.gap);
     grow_lines(&lines, items, &mut sized, true, cx);
 
     // Heights: fixed and hug first; a `fill` height stretches to its line.
@@ -343,7 +373,7 @@ pub(super) fn row(
     let xs = (lines.len() == 1 && top_aligned).then(|| {
         justify_positions(
             cx.content.0,
-            &sized.w,
+            &outer_sizes(items, &sized.w, Axis::X),
             cx.spec.gap,
             cx.inner_w.definite(),
             cx.spec.justify,
@@ -353,7 +383,7 @@ pub(super) fn row(
         let at = xs
             .as_ref()
             .and_then(|xs| xs.get(k))
-            .map(|x| (*x, cx.content.1));
+            .map(|x| (plus(*x, it.margin.left), plus(cx.content.1, it.margin.top)));
         let (h, hugs) = match it.h.sizing {
             Sizing::Fixed(v) => (it.h.clamp(v), false),
             Sizing::Hug => clamp_hug(it.h, cx.hug_h(it, *w, at, sink)),
@@ -367,9 +397,10 @@ pub(super) fn row(
     }
     let single = lines.len() == 1;
     let mut line_cross = Vec::with_capacity(lines.len());
+    let outer_h = outer_sizes(items, &sized.h, Axis::Y);
     for &(start, end) in &lines {
         let size = line_cross_size(
-            sized.h.get(start..end).unwrap_or(&[]),
+            outer_h.get(start..end).unwrap_or(&[]),
             single,
             cx.inner_h.definite(),
         );
@@ -381,7 +412,8 @@ pub(super) fn row(
             .zip(sized.h.get_mut(start..end).unwrap_or(&mut []))
         {
             if it.h.sizing == Sizing::Fill {
-                *h = it.h.clamp(size);
+                // Stretch to the line, less the item's own cross margins.
+                *h = it.h.clamp(size - it.margin.sum(Axis::Y));
             }
         }
     }
@@ -415,48 +447,52 @@ pub(super) fn column(
     // Without wrapping there is one line: `fill` widths stretch to it now.
     let mut line_cross: Vec<f64> = Vec::new();
     if wraps.is_none() && !items.is_empty() {
-        let size = line_cross_size(&sized.w, true, cross_def);
+        let size = line_cross_size(&outer_sizes(items, &sized.w, Axis::X), true, cross_def);
         line_cross.push(size);
         for (it, w) in items.iter().zip(sized.w.iter_mut()) {
             if it.w.sizing == Sizing::Fill {
-                *w = it.w.clamp(size);
+                // Stretch to the line, less the item's own cross margins.
+                *w = it.w.clamp(size - it.margin.sum(Axis::X));
             }
         }
     }
 
     // Heights in order. On one line packed from the top, each item's
-    // position follows from the heights before it (as `place` computes it),
-    // until a growing item, whose height is not known yet.
+    // position follows from the margin boxes before it (as `place` computes
+    // it), until a growing item, whose height is not known yet.
     let packed =
         wraps.is_none() && (cx.spec.justify == Justify::Start || cx.inner_h.definite().is_none());
     let mut cursor = packed.then_some(cx.content.1);
     for (it, w) in items.iter().zip(&sized.w) {
         let at = cursor.zip(line_cross.first()).map(|(y, line)| {
-            let offset = align_offset(*w, *line, cx.spec.align);
+            let offset = align_offset(plus(*w, it.margin.sum(Axis::X)), *line, cx.spec.align);
             let x = if offset == 0.0 {
                 cx.content.0
             } else {
                 cx.content.0 + offset
             };
-            (x, y)
+            (plus(x, it.margin.left), plus(y, it.margin.top))
         });
         let (h, grow, hugs) = main_base(cx, it, it.h, Axis::Y, |s| cx.hug_h(it, *w, at, s), sink);
         cursor = match cursor {
-            Some(y) if !grow => Some(y + h + cx.spec.gap),
+            Some(y) if !grow => {
+                Some(plus(plus(y, it.margin.top) + h, it.margin.bottom) + cx.spec.gap)
+            }
             Some(_) | None => None,
         };
         sized.h.push(h);
         sized.grow.push(grow);
         sized.hug_h.push(hugs);
     }
-    let lines = lines_of(&sized.h, wraps, cx.spec.gap);
+    let lines = lines_of(&outer_sizes(items, &sized.h, Axis::Y), wraps, cx.spec.gap);
 
-    // Wrapped columns: each line is as wide as its widest item; `fill` widths
-    // stretch to it and hugging heights re-measure at the new width.
+    // Wrapped columns: each line is as wide as its widest margin box; `fill`
+    // widths stretch to it and hugging heights re-measure at the new width.
     if wraps.is_some() {
         let single = lines.len() == 1;
+        let outer_w = outer_sizes(items, &sized.w, Axis::X);
         for &(start, end) in &lines {
-            let size = line_cross_size(sized.w.get(start..end).unwrap_or(&[]), single, cross_def);
+            let size = line_cross_size(outer_w.get(start..end).unwrap_or(&[]), single, cross_def);
             line_cross.push(size);
             for (((it, w), h), hugs) in items
                 .get(start..end)
@@ -469,7 +505,7 @@ pub(super) fn column(
                 if it.w.sizing != Sizing::Fill {
                     continue;
                 }
-                *w = it.w.clamp(size);
+                *w = it.w.clamp(size - it.margin.sum(Axis::X));
                 if it.h.sizing == Sizing::Hug {
                     (*h, *hugs) = clamp_hug(it.h, cx.engine.hug_h(it.node, *w).unwrap_or(0.0));
                 }

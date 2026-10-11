@@ -1,5 +1,6 @@
 //! Auto-layout attribute transforms shared by every box-node kind: keyword
-//! `w`/`h` sizes, the item attributes (`min-*`, `max-*`, `position`), and the
+//! `w`/`h` sizes, the item attributes (`min-*`, `max-*`, `position`,
+//! `margin*`), and the
 //! `frame` container attributes.
 
 use kdl::{KdlNode, KdlValue};
@@ -45,6 +46,13 @@ pub(super) fn transform_layout_item(node: &KdlNode) -> LayoutItem {
         min_h: optional_property_value(node, "min-h"),
         max_h: optional_property_value(node, "max-h"),
         position: optional_string_prop(node, "position").map(LayoutPosition::from_attr),
+        margin: optional_property_value(node, "margin"),
+        margin_x: optional_property_value(node, "margin-x"),
+        margin_y: optional_property_value(node, "margin-y"),
+        margin_top: optional_property_value(node, "margin-top"),
+        margin_right: optional_property_value(node, "margin-right"),
+        margin_bottom: optional_property_value(node, "margin-bottom"),
+        margin_left: optional_property_value(node, "margin-left"),
     }
 }
 

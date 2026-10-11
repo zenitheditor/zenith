@@ -370,7 +370,7 @@ fn op_tag_strings_match_exhaustive_set() {
         Op::DetachPattern {
             node: String::new(),
         },
-        Op::SetLayout(crate::op::LayoutEdit::default()),
+        Op::SetLayout(Box::default()),
     ];
 
     for op in samples {

@@ -54,7 +54,10 @@ pub fn node_summary(kind: &str) -> Option<&'static str> {
             "Container box. Child x/y count from its top-left. \
              layout=\"row\"|\"column\"|\"grid\" places and sizes its children \
              (gap, padding, justify, align, wrap); children size with w/h=\"hug\"|\"fill\", \
-             min/max-w/h, and leave the flow with position=\"absolute\".",
+             min/max-w/h, and leave the flow with position=\"absolute\". \
+             In a row/column, a child's margin/margin-x/-y/-top/-right/-bottom/-left \
+             adds outer space around that child only, so margin-top moves one child \
+             and the siblings after it without changing gap.",
         ),
         "group" => Some("Transparent grouping container for related nodes."),
         "image" => Some("Raster or SVG image positioned within a bounding box."),

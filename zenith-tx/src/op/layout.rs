@@ -70,7 +70,8 @@ where
 /// Every attribute field is tri-state: omit it to leave the attribute
 /// unchanged, pass `null` to clear it, pass a value to set it. Container
 /// fields (`layout` … `clip`) apply to `frame` nodes only. Item fields
-/// (`position`, `min_w` … `max_h`) apply to every box node and `instance`.
+/// (`position`, `min_w` … `max_h`, `margin` … `margin_left`) apply to every
+/// box node and `instance`.
 ///
 /// JSON shape: `{"op":"set_layout","node":"card","layout":"column","gap":16,"padding":"space.md"}`.
 #[derive(serde::Serialize, serde::Deserialize, Debug, Clone, PartialEq, Default)]
@@ -210,6 +211,55 @@ pub struct LayoutEdit {
         skip_serializing_if = "Option::is_none"
     )]
     pub max_h: Option<Option<LayoutDim>>,
+    /// Item outer space on all four sides (row/column children).
+    #[serde(
+        default,
+        deserialize_with = "nullable",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub margin: Option<Option<LayoutDim>>,
+    /// Item left + right outer space.
+    #[serde(
+        default,
+        deserialize_with = "nullable",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub margin_x: Option<Option<LayoutDim>>,
+    /// Item top + bottom outer space.
+    #[serde(
+        default,
+        deserialize_with = "nullable",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub margin_y: Option<Option<LayoutDim>>,
+    /// Item top outer space.
+    #[serde(
+        default,
+        deserialize_with = "nullable",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub margin_top: Option<Option<LayoutDim>>,
+    /// Item right outer space.
+    #[serde(
+        default,
+        deserialize_with = "nullable",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub margin_right: Option<Option<LayoutDim>>,
+    /// Item bottom outer space.
+    #[serde(
+        default,
+        deserialize_with = "nullable",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub margin_bottom: Option<Option<LayoutDim>>,
+    /// Item left outer space.
+    #[serde(
+        default,
+        deserialize_with = "nullable",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub margin_left: Option<Option<LayoutDim>>,
 }
 
 #[cfg(test)]

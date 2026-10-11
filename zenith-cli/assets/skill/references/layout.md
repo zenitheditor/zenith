@@ -23,6 +23,7 @@ Never compute sibling coordinates by hand where a layout frame fits. Hand math d
 - **Grid child** — always fills its cell. `w`/`h` `fill` or `hug` on a grid child has no effect.
 - **Frame size** — a layout frame without `w`/`h` hugs its children. Give the outer frame a `w` so text wraps.
 - **Text** — omit `h` on text inside a layout frame. The compile measures it.
+- **Child margin** — `margin*` on a row/column child adds outer space around that child only. It adds to `gap`, a hugging frame includes it, and `fill` shares space after it. Grid and absolute children ignore it.
 - **Out of flow** — `position="absolute"` places a child by `x`/`y` from the frame's top-left.
 - **Clipping** — row and column frames clip only with `clip=#true`. `layout="absolute"` (default) clips.
 - **Anchored layout frame** — measures first, then anchors at its measured size.
@@ -33,7 +34,8 @@ Editing:
 
 - `set_layout` sets or clears container and child fields (`zenith schema op set_layout`).
 - `tx` rejects `x`/`y` on an in-flow child with `tx.layout_managed`.
-- To move an in-flow child, reorder it. Or set `position="absolute"` plus `x`/`y` in one tx.
+- To offset one in-flow child, run `set_layout` with `margin_top` (or another `margin_*` field). Siblings after it shift with it, and `gap` stays.
+- To move an in-flow child elsewhere, reorder it. Or set `position="absolute"` plus `x`/`y` in one tx.
 - `zenith inspect <file> --json` reports each node's final `box` after layout and anchors.
 - `inspect` adds `rotate` and the painted `bounds` when they differ from `box`.
 

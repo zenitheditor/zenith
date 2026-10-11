@@ -1,8 +1,10 @@
 //! Auto-layout checks: per-child item attributes (any box node) and `frame`
 //! container attributes.
 //!
-//! Structural rules only: enum values, `min-*` / `max-*` / `gap` / `padding*`
-//! dimensions, inert attributes, ignored or missing placement, and statically
+//! Structural rules only: enum values, `min-*` / `max-*` / `margin*` / `gap` /
+//! `padding*` dimensions, negative margins, inert attributes (a margin only
+//! acts on an in-flow child of a `row` / `column` frame; grid children treat
+//! it like `min-*`, as inert), ignored or missing placement, and statically
 //! contradictory sizes. Rules that need measured sizes (`layout.unsized_child`,
 //! `layout.child_overflow`, `layout.fill_in_hug_parent`) run in the scene
 //! layout engine. An `instance` carries the item attributes like a box node.
@@ -15,6 +17,7 @@ use crate::ast::node::{
 use crate::ast::value::{PropertyValue, Unit, dim_to_px};
 use crate::diagnostics::{Diagnostic, FixHint};
 use crate::schema::enums::{LAYOUT_ALIGNS, LAYOUT_JUSTIFIES, LAYOUT_KINDS, LAYOUT_POSITIONS};
+use crate::tokens::ResolvedValue;
 
 use super::shared::{TokenEnv, check_optional_dim};
 use super::suggest::push_invalid_value;
@@ -210,6 +213,7 @@ pub(in crate::validate::check) fn check_layout_item(
     ] {
         check_optional_dim(id, prop, value, false, span, tokens, diagnostics);
     }
+    check_margins(subject, id, item, span, tokens, diagnostics);
     if let Some(LayoutPosition::Unknown(v)) = &item.position {
         push_invalid_value(
             &format!("{subject} '{id}'"),
@@ -295,6 +299,7 @@ pub(in crate::validate::check) fn check_layout_item(
                 inert.push(Removable::fixable(name));
             }
         }
+        inert.extend(set_margins(item));
         push_inert(
             subject,
             id,
@@ -308,6 +313,14 @@ pub(in crate::validate::check) fn check_layout_item(
 
     let absolute = matches!(item.position, Some(LayoutPosition::Absolute));
     if absolute {
+        push_inert(
+            subject,
+            id,
+            &set_margins(item),
+            "on a position=\"absolute\" child",
+            span,
+            diagnostics,
+        );
         if !(view.anchored || (view.x && view.y)) {
             diagnostics.push(Diagnostic::error(
                 "layout.absolute_unplaced",
@@ -361,6 +374,49 @@ pub(in crate::validate::check) fn check_layout_item(
                 span,
                 diagnostics,
             );
+        }
+    }
+}
+
+/// The margin attributes `item` sets, each removable.
+fn set_margins(item: &LayoutItem) -> Vec<Removable> {
+    item.margins()
+        .into_iter()
+        .filter(|(_, v)| v.is_some())
+        .map(|(name, _)| Removable::fixable(name))
+        .collect()
+}
+
+/// Validate the margin attributes: dimension form (like `padding*`), then
+/// `node.invalid_value` for a negative literal or a negative dimension token.
+fn check_margins(
+    subject: &str,
+    id: &str,
+    item: &LayoutItem,
+    span: Option<Span>,
+    tokens: &mut TokenEnv<'_>,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    for (prop, value) in item.margins() {
+        check_optional_dim(id, prop, value, false, span, tokens, diagnostics);
+        let negative = match value {
+            Some(PropertyValue::Dimension(d)) => d.value < 0.0,
+            Some(PropertyValue::TokenRef(t)) => tokens
+                .resolved
+                .get(t)
+                .is_some_and(|r| matches!(&r.value, ResolvedValue::Dimension(d) if d.value < 0.0)),
+            Some(PropertyValue::Literal(_) | PropertyValue::DataRef(_)) | None => false,
+        };
+        if negative {
+            diagnostics.push(Diagnostic::error(
+                "node.invalid_value",
+                format!(
+                    "{subject} '{id}': {prop} is negative; margins must be >= 0, \
+                     set (px)0 or more"
+                ),
+                span,
+                Some(id.to_owned()),
+            ));
         }
     }
 }

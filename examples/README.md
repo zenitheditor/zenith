@@ -58,6 +58,7 @@ zenith validate examples/<name>.zen --json
 | Frame (clipping)                  | [`frame.zen`](frame.zen)         | ![frame](frame.png)         |
 | Anchors (9-point grid)            | [`anchors.zen`](anchors.zen)     | ![anchors](anchors.png)     |
 | Relative stacking (`anchor-edge`) | [`stack.zen`](stack.zen)         | ![stack](stack.png)         |
+| Per-child margin (row, column)    | [`margin.zen`](margin.zen)       | ![margin](margin.png)       |
 | Shared styles                     | [`styled.zen`](styled.zen)       | ![styled](styled.png)       |
 | Image asset                       | [`image.zen`](image.zen)         | ![image](image.png)         |
 | Multipage (page 1 shown)          | [`multipage.zen`](multipage.zen) | ![multipage](multipage.png) |

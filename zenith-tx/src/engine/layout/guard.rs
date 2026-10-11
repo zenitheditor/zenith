@@ -20,13 +20,22 @@ pub(in crate::engine) fn reject_layout_managed<'a>(
     for id in ids {
         if let Some((frame, mode)) = managing_frame(doc, id) {
             rejected = true;
+            // Margins act in row/column frames only; a grid child has none.
+            let margin_route = match mode {
+                "row" | "column" => {
+                    "; to offset it in the flow, run set_layout with margin_top (or \
+                     margin_left, margin_right, margin_bottom), which adds space around \
+                     this child only and keeps the frame's gap"
+                }
+                _ => "",
+            };
             diagnostics.push(Diagnostic::error(
                 "tx.layout_managed",
                 format!(
                     "{op}: node {id:?} is in the flow of {mode} frame {frame:?}, which computes \
-                     its x/y; to place it by hand, run set_layout with position=\"absolute\" \
-                     (and x/y in the same transaction), or change its order with reparent, \
-                     move_forward, or move_backward"
+                     its x/y{margin_route}; to place it by hand, run set_layout with \
+                     position=\"absolute\" (and x/y in the same transaction), or change its \
+                     order with reparent, move_forward, or move_backward"
                 ),
                 None,
                 Some(id.to_owned()),

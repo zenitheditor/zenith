@@ -6,8 +6,8 @@ use zenith_core::{FrameNode, Node, PropertyValue};
 use super::diag::{Sink, conflicting_min_max};
 use super::measure::Engine;
 use super::model::{
-    Align, Avail, Axis, AxisSpec, ChildRole, FrameSpec, ItemView, Mode, Sizing, axis_sizing,
-    child_role, px_of,
+    Align, Avail, Axis, AxisSpec, ChildRole, FrameSpec, Insets, ItemView, Mode, Sizing,
+    axis_sizing, child_role, item_margins, px_of,
 };
 use super::stack::{StackCx, column, row};
 
@@ -42,6 +42,9 @@ pub(super) struct Item<'n> {
     pub(super) node: &'n Node,
     pub(super) w: AxisSpec,
     pub(super) h: AxisSpec,
+    /// Outer space around the child in a `row` / `column` frame. Always
+    /// zero in a grid, where margins are inert like `min-*` / `max-*`.
+    pub(super) margin: Insets,
 }
 
 /// Where a frame is solved: its top-left, and the render translation of its
@@ -138,7 +141,17 @@ fn flow_items<'n>(
         };
         let w = with_clamp(engine, node, w, Axis::X, (&li.min_w, &li.max_w), sink);
         let h = with_clamp(engine, node, h, Axis::Y, (&li.min_h, &li.max_h), sink);
-        items.push(Item { index, node, w, h });
+        let margin = match spec.mode {
+            Mode::Row | Mode::Column => item_margins(li, engine.resolved()),
+            Mode::Grid => Insets::ZERO,
+        };
+        items.push(Item {
+            index,
+            node,
+            w,
+            h,
+            margin,
+        });
     }
     items
 }

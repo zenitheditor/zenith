@@ -193,11 +193,11 @@ pub(crate) fn plan_box(input: &BoxInput<'_>) -> BoxPlan {
         });
     }
     if to_absolute {
-        ops.push(Op::SetLayout(LayoutEdit {
+        ops.push(Op::SetLayout(Box::new(LayoutEdit {
             node: input.id.to_owned(),
             position: Some(Some("absolute".to_owned())),
             ..LayoutEdit::default()
-        }));
+        })));
     }
     let mut absolute = [None, None, None, None];
     let mut missing: Vec<&'static str> = Vec::new();

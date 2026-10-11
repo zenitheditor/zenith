@@ -23,6 +23,10 @@ pub fn attribute_default(kind: &str, name: &str) -> Option<&'static str> {
         ("frame", "wrap") => Some("#false"),
         ("frame", "clip") => Some("#true; #false when layout is row or column"),
         (k, "position") if BOX_KINDS.contains(&k) => Some("auto"),
+        (k, "margin") if BOX_KINDS.contains(&k) => Some("(px)0"),
+        (k, "margin-x" | "margin-y") if BOX_KINDS.contains(&k) => Some("margin"),
+        (k, "margin-top" | "margin-bottom") if BOX_KINDS.contains(&k) => Some("margin-y"),
+        (k, "margin-left" | "margin-right") if BOX_KINDS.contains(&k) => Some("margin-x"),
         ("text" | "code", "overflow") => Some("clip"),
         ("chart", "fill") => Some(
             "text colour: style `fill`, else the ambient `.content` pair, else the best-contrast `.content` token, else black or white",
@@ -78,12 +82,30 @@ mod tests {
     fn every_box_kind_lists_item_attrs_with_position_default() {
         for kind in BOX_KINDS {
             let attrs = node_attributes(kind);
-            for name in ["min-w", "max-w", "min-h", "max-h", "position"] {
+            for name in [
+                "min-w",
+                "max-w",
+                "min-h",
+                "max-h",
+                "position",
+                "margin",
+                "margin-x",
+                "margin-y",
+                "margin-top",
+                "margin-right",
+                "margin-bottom",
+                "margin-left",
+            ] {
                 assert!(attrs.contains(&name), "{kind} lists {name}");
             }
             assert_eq!(attribute_default(kind, "position"), Some("auto"));
+            assert_eq!(attribute_default(kind, "margin"), Some("(px)0"));
+            assert_eq!(attribute_default(kind, "margin-top"), Some("margin-y"));
+            assert_eq!(attribute_default(kind, "margin-left"), Some("margin-x"));
+            assert_eq!(attribute_default(kind, "margin-y"), Some("margin"));
         }
         assert_eq!(attribute_default("line", "position"), None);
+        assert_eq!(attribute_default("line", "margin"), None);
         assert_eq!(attribute_default("rect", "fill"), None);
         assert_eq!(attribute_default("text", "overflow"), Some("clip"));
         assert_eq!(attribute_default("code", "overflow"), Some("clip"));

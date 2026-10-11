@@ -43,7 +43,9 @@ fn write_keyword(out: &mut String, key: &str, k: SizeKeyword) {
 }
 
 /// Emit the item attributes in canonical order: `min-w`, `max-w`, `min-h`,
-/// `max-h`, `position`. Emits nothing for an empty [`LayoutItem`].
+/// `max-h`, `position`, `margin`, `margin-x`, `margin-y`, `margin-top`,
+/// `margin-right`, `margin-bottom`, `margin-left`. Emits nothing for an empty
+/// [`LayoutItem`].
 pub(super) fn write_layout_item(out: &mut String, item: &LayoutItem) {
     write_opt_property_value(out, "min-w", &item.min_w);
     write_opt_property_value(out, "max-w", &item.max_w);
@@ -51,6 +53,13 @@ pub(super) fn write_layout_item(out: &mut String, item: &LayoutItem) {
     write_opt_property_value(out, "max-h", &item.max_h);
     let position = item.position.as_ref().map(|p| p.as_str().to_owned());
     write_opt_str_escaped(out, "position", &position);
+    write_opt_property_value(out, "margin", &item.margin);
+    write_opt_property_value(out, "margin-x", &item.margin_x);
+    write_opt_property_value(out, "margin-y", &item.margin_y);
+    write_opt_property_value(out, "margin-top", &item.margin_top);
+    write_opt_property_value(out, "margin-right", &item.margin_right);
+    write_opt_property_value(out, "margin-bottom", &item.margin_bottom);
+    write_opt_property_value(out, "margin-left", &item.margin_left);
 }
 
 /// Emit the frame container attributes in canonical order: `gap`, `wrap-gap`,

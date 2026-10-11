@@ -567,7 +567,7 @@ fn op_fields_names_match_serde_keys() {
         ),
         (
             "set_layout",
-            Op::SetLayout(crate::op::LayoutEdit {
+            Op::SetLayout(Box::new(crate::op::LayoutEdit {
                 node: "n".into(),
                 layout: Some(Some("row".into())),
                 gap: Some(Some(8.0.into())),
@@ -588,7 +588,14 @@ fn op_fields_names_match_serde_keys() {
                 max_w: Some(None),
                 min_h: Some(None),
                 max_h: Some(None),
-            }),
+                margin: Some(Some(4.0.into())),
+                margin_x: Some(None),
+                margin_y: Some(None),
+                margin_top: Some(Some("space.md".into())),
+                margin_right: Some(None),
+                margin_bottom: Some(None),
+                margin_left: Some(None),
+            })),
         ),
     ];
 

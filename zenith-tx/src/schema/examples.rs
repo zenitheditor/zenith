@@ -133,7 +133,7 @@ pub fn op_example(name: &str) -> Option<&'static str> {
             Some(r#"{"op":"find_replace_text","find":"Draft","replace":"Final"}"#)
         }
         "set_layout" => Some(
-            r#"{"op":"set_layout","node":"chips","layout":"row","gap":8,"padding":"space.md","align":"center","wrap":true}"#,
+            r#"{"op":"set_layout","node":"chips","layout":"row","gap":8,"padding":"space.md","align":"center","wrap":true,"margin_top":40}"#,
         ),
         "set_page_size" => {
             Some(r#"{"op":"set_page_size","page":"page.main","w":"(px)794","h":"(px)1123"}"#)

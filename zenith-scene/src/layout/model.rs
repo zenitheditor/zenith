@@ -142,13 +142,73 @@ impl Mode {
     }
 }
 
-/// Resolved padding of a frame, in px.
+/// Resolved padding of a frame, or margin of a flow child, in px.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(super) struct Insets {
     pub(super) top: f64,
     pub(super) right: f64,
     pub(super) bottom: f64,
     pub(super) left: f64,
+}
+
+impl Insets {
+    /// No inset on any side.
+    pub(super) const ZERO: Self = Self {
+        top: 0.0,
+        right: 0.0,
+        bottom: 0.0,
+        left: 0.0,
+    };
+
+    /// The `(before, after)` insets along `axis`: left/right on x, top/bottom
+    /// on y.
+    pub(super) fn along(self, axis: Axis) -> (f64, f64) {
+        match axis {
+            Axis::X => (self.left, self.right),
+            Axis::Y => (self.top, self.bottom),
+        }
+    }
+
+    /// The summed insets along `axis`.
+    pub(super) fn sum(self, axis: Axis) -> f64 {
+        let (before, after) = self.along(axis);
+        plus(before, after)
+    }
+}
+
+/// `a + b`, returning `a` unchanged when `b` is zero.
+///
+/// Margin arithmetic goes through this so a layout without margins keeps the
+/// exact f64 values (and zero signs) it had before margins existed.
+pub(super) fn plus(a: f64, b: f64) -> f64 {
+    if b == 0.0 { a } else { a + b }
+}
+
+/// Resolve the margin of a flow child's item attributes, in px.
+///
+/// Per side: `margin-<side>` > `margin-x`/`margin-y` > `margin` > 0. A
+/// negative or unresolvable value counts as 0 (validation reports a negative
+/// one as `node.invalid_value`).
+pub(super) fn item_margins(li: &LayoutItem, resolved: &BTreeMap<String, ResolvedToken>) -> Insets {
+    if !li.has_margin() {
+        return Insets::ZERO;
+    }
+    let attr_or = |pv: &Option<PropertyValue>, fallback: f64| -> f64 {
+        match pv {
+            Some(p) => resolve_property_dimension_px(Some(p), resolved, fallback),
+            None => fallback,
+        }
+    };
+    let side = |v: f64| if v > 0.0 { v } else { 0.0 };
+    let m = attr_or(&li.margin, 0.0);
+    let mx = attr_or(&li.margin_x, m);
+    let my = attr_or(&li.margin_y, m);
+    Insets {
+        top: side(attr_or(&li.margin_top, my)),
+        right: side(attr_or(&li.margin_right, mx)),
+        bottom: side(attr_or(&li.margin_bottom, my)),
+        left: side(attr_or(&li.margin_left, mx)),
+    }
 }
 
 /// The resolved container settings of a layout frame.
@@ -333,5 +393,65 @@ pub(super) fn axis_sizing(
         (None, None) if is_main => Sizing::Hug,
         (None, None) if stretch => Sizing::Fill,
         (None, None) => Sizing::Hug,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use zenith_core::Unit;
+
+    fn px(v: f64) -> Option<PropertyValue> {
+        Some(PropertyValue::Dimension(Dimension {
+            value: v,
+            unit: Unit::Px,
+        }))
+    }
+
+    #[test]
+    fn no_margin_is_zero() {
+        let none = BTreeMap::new();
+        assert_eq!(item_margins(&LayoutItem::default(), &none), Insets::ZERO);
+    }
+
+    #[test]
+    fn margin_side_beats_axis_beats_all() {
+        let none = BTreeMap::new();
+        let li = LayoutItem {
+            margin: px(4.0),
+            margin_x: px(8.0),
+            margin_top: px(40.0),
+            ..LayoutItem::default()
+        };
+        let m = item_margins(&li, &none);
+        assert_eq!(
+            m,
+            Insets {
+                top: 40.0,
+                right: 8.0,
+                bottom: 4.0,
+                left: 8.0,
+            }
+        );
+        assert_eq!(m.along(Axis::Y), (40.0, 4.0));
+        assert_eq!(m.sum(Axis::X), 16.0);
+    }
+
+    #[test]
+    fn negative_margin_counts_as_zero() {
+        let none = BTreeMap::new();
+        let li = LayoutItem {
+            margin_y: px(-10.0),
+            margin_left: px(6.0),
+            ..LayoutItem::default()
+        };
+        let m = item_margins(&li, &none);
+        assert_eq!((m.top, m.bottom, m.left, m.right), (0.0, 0.0, 6.0, 0.0));
+    }
+
+    #[test]
+    fn plus_keeps_the_value_for_zero() {
+        assert_eq!(plus(-0.0, 0.0).to_bits(), (-0.0_f64).to_bits());
+        assert_eq!(plus(1.5, 2.0), 3.5);
     }
 }

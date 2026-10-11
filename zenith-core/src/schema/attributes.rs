@@ -228,6 +228,14 @@ fn attribute_type_for_kind_inner(kind: &str, name: &str, fallback: &'static str)
         ("frame", "justify") => "enum: start|center|end|space-between",
         ("frame", "align") => "enum: start|center|end|stretch",
         ("frame", "padding-left") => "px literal or token ref: dimension",
+        // Item margins on box kinds. The page `margin-top` / `margin-bottom`
+        // (surface, kind "") stay px literals via the generic arm.
+        (
+            "rect" | "ellipse" | "text" | "code" | "frame" | "group" | "image" | "field" | "toc"
+            | "table" | "shape" | "pattern" | "chart" | "mesh" | "instance",
+            "margin" | "margin-x" | "margin-y" | "margin-top" | "margin-right" | "margin-bottom"
+            | "margin-left",
+        ) => "px literal or token ref: dimension (>= 0)",
         // w/h on box kinds: a dimension, or a size keyword for auto-layout items.
         (
             "rect" | "ellipse" | "text" | "code" | "frame" | "group" | "image" | "field" | "toc"
@@ -845,6 +853,28 @@ mod tests {
     ///
     /// Documented in ast/node/container.rs:34-39; grid semantics validated
     /// at validate/check/nodes/node/container.rs:122.
+    #[test]
+    fn margin_type_hint_is_item_specific() {
+        for name in [
+            "margin",
+            "margin-x",
+            "margin-y",
+            "margin-top",
+            "margin-right",
+            "margin-bottom",
+            "margin-left",
+        ] {
+            assert_eq!(
+                attribute_type_for_kind("rect", name),
+                "px literal or token ref: dimension (>= 0)",
+                "rect.{name}",
+            );
+            assert!(node_attributes("instance").contains(&name), "{name}");
+        }
+        assert_eq!(attribute_type("margin-top"), "px literal");
+        assert!(!node_attributes("line").contains(&"margin"));
+    }
+
     #[test]
     fn layout_type_hint_is_frame_specific() {
         assert_eq!(

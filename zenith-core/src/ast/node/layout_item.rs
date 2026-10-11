@@ -209,12 +209,44 @@ pub struct LayoutItem {
     pub max_h: Option<PropertyValue>,
     /// `position="auto"|"absolute"`.
     pub position: Option<LayoutPosition>,
+    /// Uniform outer space on all four sides of an in-flow stack child.
+    pub margin: Option<PropertyValue>,
+    /// Left + right outer space; overrides `margin`.
+    pub margin_x: Option<PropertyValue>,
+    /// Top + bottom outer space; overrides `margin`.
+    pub margin_y: Option<PropertyValue>,
+    /// Top outer space; overrides `margin-y` and `margin`.
+    pub margin_top: Option<PropertyValue>,
+    /// Right outer space; overrides `margin-x` and `margin`.
+    pub margin_right: Option<PropertyValue>,
+    /// Bottom outer space; overrides `margin-y` and `margin`.
+    pub margin_bottom: Option<PropertyValue>,
+    /// Left outer space; overrides `margin-x` and `margin`.
+    pub margin_left: Option<PropertyValue>,
 }
 
 impl LayoutItem {
     /// `true` when no item attribute is set.
     pub fn is_empty(&self) -> bool {
         self == &Self::default()
+    }
+
+    /// The margin attributes in canonical order, with their KDL names.
+    pub fn margins(&self) -> [(&'static str, Option<&PropertyValue>); 7] {
+        [
+            ("margin", self.margin.as_ref()),
+            ("margin-x", self.margin_x.as_ref()),
+            ("margin-y", self.margin_y.as_ref()),
+            ("margin-top", self.margin_top.as_ref()),
+            ("margin-right", self.margin_right.as_ref()),
+            ("margin-bottom", self.margin_bottom.as_ref()),
+            ("margin-left", self.margin_left.as_ref()),
+        ]
+    }
+
+    /// `true` when any margin attribute is set.
+    pub fn has_margin(&self) -> bool {
+        self.margins().iter().any(|(_, v)| v.is_some())
     }
 }
 
@@ -304,5 +336,25 @@ mod tests {
             ..LayoutContainer::default()
         };
         assert!(!c.is_empty());
+        assert!(!LayoutItem::default().has_margin());
+        let item = LayoutItem {
+            margin_top: Some(PropertyValue::Literal("x".to_owned())),
+            ..LayoutItem::default()
+        };
+        assert!(item.has_margin());
+        assert!(!item.is_empty());
+        let names: Vec<&str> = item.margins().iter().map(|(n, _)| *n).collect();
+        assert_eq!(
+            names,
+            [
+                "margin",
+                "margin-x",
+                "margin-y",
+                "margin-top",
+                "margin-right",
+                "margin-bottom",
+                "margin-left"
+            ]
+        );
     }
 }

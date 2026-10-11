@@ -639,6 +639,7 @@ fn rich_fixture_ops() {
         exact(r#"{"op":"distribute_nodes","node_ids":["d1","d2","d3"],"axis":"horizontal"}"#),
         exact(r#"{"op":"align_to_edge","node":"d3","edge":"right","margin":24}"#),
         exact(r#"{"op":"set_layout","node":"chips","layout":"row","gap":8}"#),
+        exact(r#"{"op":"set_layout","node":"chip.a","margin_top":40}"#),
         exact(r#"{"op":"set_geometry","node":"bar","h":6}"#),
         exact_on(
             r#"{"op":"set_style_property","style_id":"box","property":"fill","value":"c.b"}"#,

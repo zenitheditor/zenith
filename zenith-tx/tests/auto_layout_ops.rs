@@ -87,11 +87,16 @@ fn edit(node: &str) -> LayoutEdit {
     }
 }
 
+/// The `set_layout` op of `e`.
+fn set_layout(e: LayoutEdit) -> Op {
+    Op::SetLayout(Box::new(e))
+}
+
 // ── set_layout: set ──────────────────────────────────────────────────────────
 
 #[test]
 fn set_layout_sets_container_fields_and_shows_the_diff() {
-    let r = run(vec![Op::SetLayout(LayoutEdit {
+    let r = run(vec![set_layout(LayoutEdit {
         layout: Some(Some("column".into())),
         gap: Some(Some(12.0.into())),
         padding: Some(Some("space.md".into())),
@@ -131,7 +136,7 @@ fn set_layout_sets_container_fields_and_shows_the_diff() {
 
 #[test]
 fn set_layout_result_lays_out_as_a_column() {
-    let r = run(vec![Op::SetLayout(LayoutEdit {
+    let r = run(vec![set_layout(LayoutEdit {
         layout: Some(Some("column".into())),
         align: Some(Some("start".into())),
         ..edit("chips")
@@ -146,7 +151,7 @@ fn set_layout_result_lays_out_as_a_column() {
 
 #[test]
 fn set_layout_sets_item_fields_on_a_box_node() {
-    let r = run(vec![Op::SetLayout(LayoutEdit {
+    let r = run(vec![set_layout(LayoutEdit {
         min_w: Some(Some(30.0.into())),
         max_w: Some(Some("(px)90".into())),
         min_h: Some(Some("(token)space.md".into())),
@@ -201,7 +206,7 @@ fn set_layout_absent_fields_stay_unchanged() {
 
 #[test]
 fn set_layout_without_fields_is_a_noop() {
-    let r = run(vec![Op::SetLayout(edit("chips"))]);
+    let r = run(vec![set_layout(edit("chips"))]);
     assert_eq!(r.source_after, r.source_before);
     assert!(
         r.diagnostics
@@ -216,7 +221,7 @@ fn set_layout_without_fields_is_a_noop() {
 
 #[test]
 fn set_layout_container_field_on_a_rect_is_wrong_node_type() {
-    let r = run(vec![Op::SetLayout(LayoutEdit {
+    let r = run(vec![set_layout(LayoutEdit {
         gap: Some(Some(8.0.into())),
         justify: Some(Some("center".into())),
         ..edit("free")
@@ -229,7 +234,7 @@ fn set_layout_container_field_on_a_rect_is_wrong_node_type() {
 
 #[test]
 fn set_layout_item_field_on_a_line_is_unsupported() {
-    let r = run(vec![Op::SetLayout(LayoutEdit {
+    let r = run(vec![set_layout(LayoutEdit {
         position: Some(Some("absolute".into())),
         ..edit("rule")
     })]);
@@ -240,7 +245,7 @@ fn set_layout_item_field_on_a_line_is_unsupported() {
 
 #[test]
 fn set_layout_unknown_node_is_rejected() {
-    let r = run(vec![Op::SetLayout(LayoutEdit {
+    let r = run(vec![set_layout(LayoutEdit {
         gap: Some(Some(8.0.into())),
         ..edit("ghost")
     })]);
@@ -279,7 +284,7 @@ fn set_layout_rejects_bad_dimensions() {
 
 #[test]
 fn set_layout_unknown_token_is_rejected_by_validation() {
-    let r = run(vec![Op::SetLayout(LayoutEdit {
+    let r = run(vec![set_layout(LayoutEdit {
         gap: Some(Some("space.missing".into())),
         ..edit("chips")
     })]);
@@ -467,7 +472,7 @@ fn guard_allows_an_absolute_child() {
 #[test]
 fn guard_allows_a_child_made_absolute_in_the_same_transaction() {
     let r = run(vec![
-        Op::SetLayout(LayoutEdit {
+        set_layout(LayoutEdit {
             position: Some(Some("absolute".into())),
             ..edit("a")
         }),

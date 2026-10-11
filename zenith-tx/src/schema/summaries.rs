@@ -150,7 +150,8 @@ pub fn op_summary(name: &str) -> Option<&'static str> {
         "find_replace_text" => Some("Literal find-and-replace across text and shape label spans."),
         "set_layout" => Some(
             "Set or clear auto-layout attributes: frame container fields (layout, gap, padding*, \
-             justify, align, wrap, clip) and box-node item fields (position, min/max w/h); null clears.",
+             justify, align, wrap, clip) and box-node item fields (position, min/max w/h, \
+             margin*); null clears. margin_top offsets one row/column child without changing gap.",
         ),
         "set_page_size" => Some("Resize a page by setting new width and height dimensions."),
         "align_to_edge" => {

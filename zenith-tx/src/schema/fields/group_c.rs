@@ -108,6 +108,41 @@ pub(super) fn op_fields(name: &str) -> Option<&'static [OpFieldSchema]> {
                     ty: "px | \"(px)N\" | dimension token id | null (box node)",
                     required: false,
                 },
+                OpFieldSchema {
+                    name: "margin",
+                    ty: "px >= 0 | \"(px)N\" | dimension token id | null (box node in row/column)",
+                    required: false,
+                },
+                OpFieldSchema {
+                    name: "margin_x",
+                    ty: "px >= 0 | \"(px)N\" | dimension token id | null (box node in row/column)",
+                    required: false,
+                },
+                OpFieldSchema {
+                    name: "margin_y",
+                    ty: "px >= 0 | \"(px)N\" | dimension token id | null (box node in row/column)",
+                    required: false,
+                },
+                OpFieldSchema {
+                    name: "margin_top",
+                    ty: "px >= 0 | \"(px)N\" | dimension token id | null (box node in row/column)",
+                    required: false,
+                },
+                OpFieldSchema {
+                    name: "margin_right",
+                    ty: "px >= 0 | \"(px)N\" | dimension token id | null (box node in row/column)",
+                    required: false,
+                },
+                OpFieldSchema {
+                    name: "margin_bottom",
+                    ty: "px >= 0 | \"(px)N\" | dimension token id | null (box node in row/column)",
+                    required: false,
+                },
+                OpFieldSchema {
+                    name: "margin_left",
+                    ty: "px >= 0 | \"(px)N\" | dimension token id | null (box node in row/column)",
+                    required: false,
+                },
             ];
             Some(F)
         }

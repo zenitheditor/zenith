@@ -840,8 +840,11 @@ pub enum Op {
     },
     /// Set or clear auto-layout attributes: frame container fields (`layout`,
     /// `gap`, `padding*`, `justify`, `align`, `wrap`, `clip`) and item fields
-    /// (`position`, `min_w`, `max_w`, `min_h`, `max_h`). `null` clears a field.
-    SetLayout(LayoutEdit),
+    /// (`position`, `min_w`, `max_w`, `min_h`, `max_h`, `margin`, `margin_x`,
+    /// `margin_y`, `margin_top`, `margin_right`, `margin_bottom`,
+    /// `margin_left`). `null` clears a field. Boxed: the edit is the largest
+    /// op body by far.
+    SetLayout(Box<LayoutEdit>),
     /// Materialize a `pattern` node into an editable `group` of native shapes —
     DetachPattern {
         /// The stable id of the pattern node to detach into a native group.

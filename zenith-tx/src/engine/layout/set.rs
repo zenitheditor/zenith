@@ -39,6 +39,13 @@ struct Checked {
     max_w: Change<PropertyValue>,
     min_h: Change<PropertyValue>,
     max_h: Change<PropertyValue>,
+    margin: Change<PropertyValue>,
+    margin_x: Change<PropertyValue>,
+    margin_y: Change<PropertyValue>,
+    margin_top: Change<PropertyValue>,
+    margin_right: Change<PropertyValue>,
+    margin_bottom: Change<PropertyValue>,
+    margin_left: Change<PropertyValue>,
 }
 
 /// Collects `tx.invalid_value` errors while the fields are checked.
@@ -110,6 +117,25 @@ impl Check<'_> {
             }
         }
     }
+
+    /// Check a margin field: a [`Check::dim`] value that is not a negative
+    /// px or pt literal.
+    fn margin(&mut self, field: &str, value: &Option<Option<LayoutDim>>) -> Change<PropertyValue> {
+        let change = self.dim(field, value);
+        if let Some(Some(PropertyValue::Dimension(d))) = &change
+            && d.value < 0.0
+        {
+            self.invalid(
+                field,
+                format!(
+                    "is {}; a margin must be 0 or more, or null to clear",
+                    d.to_kdl_string()
+                ),
+            );
+            return None;
+        }
+        change
+    }
 }
 
 /// The stored value of a layout dimension input, or `None` when it is not a
@@ -180,6 +206,13 @@ fn check(edit: &LayoutEdit, diagnostics: &mut Vec<Diagnostic>) -> Option<Checked
         max_w: c.dim("max_w", &edit.max_w),
         min_h: c.dim("min_h", &edit.min_h),
         max_h: c.dim("max_h", &edit.max_h),
+        margin: c.margin("margin", &edit.margin),
+        margin_x: c.margin("margin_x", &edit.margin_x),
+        margin_y: c.margin("margin_y", &edit.margin_y),
+        margin_top: c.margin("margin_top", &edit.margin_top),
+        margin_right: c.margin("margin_right", &edit.margin_right),
+        margin_bottom: c.margin("margin_bottom", &edit.margin_bottom),
+        margin_left: c.margin("margin_left", &edit.margin_left),
     };
     (!c.failed).then_some(checked)
 }
@@ -215,6 +248,13 @@ fn item_fields(edit: &LayoutEdit) -> Vec<&'static str> {
         ("max_w", edit.max_w.is_some()),
         ("min_h", edit.min_h.is_some()),
         ("max_h", edit.max_h.is_some()),
+        ("margin", edit.margin.is_some()),
+        ("margin_x", edit.margin_x.is_some()),
+        ("margin_y", edit.margin_y.is_some()),
+        ("margin_top", edit.margin_top.is_some()),
+        ("margin_right", edit.margin_right.is_some()),
+        ("margin_bottom", edit.margin_bottom.is_some()),
+        ("margin_left", edit.margin_left.is_some()),
     ]
     .into_iter()
     .filter_map(|(name, set)| set.then_some(name))
@@ -313,6 +353,13 @@ pub(in crate::engine) fn apply_set_layout(
         put(&mut li.max_w, c.max_w);
         put(&mut li.min_h, c.min_h);
         put(&mut li.max_h, c.max_h);
+        put(&mut li.margin, c.margin);
+        put(&mut li.margin_x, c.margin_x);
+        put(&mut li.margin_y, c.margin_y);
+        put(&mut li.margin_top, c.margin_top);
+        put(&mut li.margin_right, c.margin_right);
+        put(&mut li.margin_bottom, c.margin_bottom);
+        put(&mut li.margin_left, c.margin_left);
     }
     record_affected(node_id, affected);
 }
