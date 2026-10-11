@@ -77,6 +77,12 @@ impl KdlSource for KdlAdapter {
                              split a node's attributes across lines, end each line with `\\` to \
                              continue it — otherwise a `{` is genuinely unclosed.",
                         );
+                        if let Some(found) = super::unclosed::missing_close_hint(text)
+                            .or_else(|| super::unclosed::bad_line_hint(text))
+                        {
+                            msg.push_str("\n  ");
+                            msg.push_str(&found);
+                        }
                     }
                     // KDL v2 booleans require a leading `#` (`#true` / `#false`).
                     // A bare `true` or `false` is rejected as "Expected identifier

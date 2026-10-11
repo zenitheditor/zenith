@@ -3,6 +3,7 @@
 pub mod kdl_adapter;
 pub mod policy;
 pub mod transform;
+mod unclosed;
 
 pub use kdl_adapter::KdlAdapter;
 pub use policy::{parse_brand_contract, parse_diagnostic_policy};
