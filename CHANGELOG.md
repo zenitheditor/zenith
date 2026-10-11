@@ -15,6 +15,10 @@ it.
 
 ## [Unreleased]
 
+---
+
+## [0.0.13] — 2026-10-12
+
 ### Added
 
 - **`zenith schema write` and the `zenith new --starter` output list the common `tx` ops.** The ops are runnable JSON, from the same text as `zenith tx --help`, and a test keeps them identical. In a 4-brief build run with the skill on, `schema op` calls fell from 30 to 10 and the cost per run from $0.078 to $0.044.
