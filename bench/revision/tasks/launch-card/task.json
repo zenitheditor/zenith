@@ -1,0 +1,56 @@
+{
+  "id": "launch-card",
+  "canvas": { "w": 800, "h": 500 },
+  "background": [15, 23, 42],
+  "steps": [
+    {
+      "instruction": "Change the button color to #e11d48.",
+      "frozen": [
+        { "name": "stat-card", "x": 480, "y": 48, "w": 272, "h": 404 },
+        { "name": "headline", "x": 48, "y": 88, "w": 392, "h": 110 }
+      ],
+      "checks": [{ "kind": "pixel", "x": 60, "y": 360, "rgb": [225, 29, 72], "tol": 2 }]
+    },
+    {
+      "instruction": "Change the headline to \"Ship faster, break nothing\".",
+      "frozen": [
+        { "name": "stat-card", "x": 480, "y": 48, "w": 272, "h": 404 },
+        { "name": "body", "x": 48, "y": 218, "w": 392, "h": 96 },
+        { "name": "button", "x": 48, "y": 334, "w": 180, "h": 52 }
+      ],
+      "checks": [
+        { "kind": "source-contains", "text": "Ship faster, break nothing" },
+        { "kind": "source-absent", "text": "Ship faster with Zenith" }
+      ]
+    },
+    {
+      "instruction": "Make the background of the right-hand card #134e4a.",
+      "frozen": [{ "name": "left-column", "x": 48, "y": 48, "w": 392, "h": 404 }],
+      "checks": [{ "kind": "pixel", "x": 520, "y": 70, "rgb": [19, 78, 74], "tol": 2 }]
+    },
+    {
+      "instruction": "Move the button 40px lower. Keep it the same size and color.",
+      "frozen": [
+        { "name": "stat-card", "x": 480, "y": 48, "w": 272, "h": 404 },
+        { "name": "headline", "x": 48, "y": 88, "w": 392, "h": 110 },
+        { "name": "body", "x": 48, "y": 218, "w": 392, "h": 96 }
+      ],
+      "checks": [
+        { "kind": "pixel", "x": 60, "y": 350, "rgb": [15, 23, 42], "tol": 2 },
+        { "kind": "pixel", "x": 60, "y": 410, "rgb": [225, 29, 72], "tol": 2 }
+      ]
+    },
+    {
+      "instruction": "Add the text \"zenith.dev\" in small gray type at the bottom-left of the page.",
+      "frozen": [
+        { "name": "stat-card", "x": 480, "y": 48, "w": 272, "h": 404 },
+        { "name": "headline", "x": 48, "y": 88, "w": 392, "h": 110 },
+        { "name": "button", "x": 48, "y": 374, "w": 180, "h": 52 }
+      ],
+      "checks": [
+        { "kind": "source-contains", "text": "zenith.dev" },
+        { "kind": "ink", "x": 48, "y": 432, "w": 200, "h": 40, "min": 40 }
+      ]
+    }
+  ]
+}

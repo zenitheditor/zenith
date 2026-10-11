@@ -1,0 +1,5 @@
+{
+  "glm-5.3-flash": { "in": 0.15, "cached": 0.03, "out": 0.5 },
+  "deepseek-v4.1-flash": { "in": 0.3, "cached": 0.006, "out": 1.2 },
+  "noop": { "in": 0, "cached": 0, "out": 0 }
+}

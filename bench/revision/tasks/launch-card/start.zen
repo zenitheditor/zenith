@@ -1,0 +1,37 @@
+zenith version=1 {
+  project id="proj.launch" name="Launch Card"
+  tokens format="zenith-token-v1" {
+    token id="color.bg" type="color" value="#0f172a"
+    token id="color.card" type="color" value="#1e293b"
+    token id="color.accent" type="color" value="#7dd3fc"
+    token id="color.button" type="color" value="#2563eb"
+    token id="color.white" type="color" value="#ffffff"
+    token id="color.muted" type="color" value="#cbd5e1"
+    token id="font.body" type="fontFamily" value="Noto Sans"
+    token id="weight.bold" type="fontWeight" value=700
+    token id="size.label" type="dimension" value=(px)14
+    token id="size.headline" type="dimension" value=(px)44
+    token id="size.body" type="dimension" value=(px)18
+    token id="size.stat" type="dimension" value=(px)64
+    token id="radius.button" type="dimension" value=(px)10
+    token id="radius.card" type="dimension" value=(px)24
+    token id="space.tracking" type="dimension" value=(px)2
+  }
+  styles {}
+  document id="doc.launch" title="Launch Card" {
+    page id="page.launch" w=(px)800 h=(px)500 background=(token)"color.bg" {
+      frame id="col.left" x=(px)48 y=(px)48 w=(px)392 h=(px)404 layout="column" gap=(px)20 {
+        text id="text.label" w=(px)392 h=(px)20 fill=(token)"color.accent" font-family=(token)"font.body" font-size=(token)"size.label" font-weight=(token)"weight.bold" letter-spacing=(token)"space.tracking" { span "NEW RELEASE" }
+        text id="text.headline" w=(px)392 h=(px)110 fill=(token)"color.white" font-family=(token)"font.body" font-size=(token)"size.headline" font-weight=(token)"weight.bold" { span "Ship faster with Zenith" }
+        text id="text.body" w=(px)392 h=(px)96 fill=(token)"color.muted" font-family=(token)"font.body" font-size=(token)"size.body" { span "Design documents your agents can read, edit and render the same way every time." }
+        frame id="button" w=(px)180 h=(px)52 fill=(token)"color.button" radius=(token)"radius.button" layout="row" justify="center" align="center" {
+          text id="text.button" w="hug" h="hug" fill=(token)"color.white" font-family=(token)"font.body" font-size=(token)"size.body" font-weight=(token)"weight.bold" { span "Get started" }
+        }
+      }
+      frame id="card.stat" x=(px)480 y=(px)48 w=(px)272 h=(px)404 fill=(token)"color.card" radius=(token)"radius.card" layout="column" justify="center" align="center" gap=(px)12 {
+        text id="text.stat" w="hug" h="hug" fill=(token)"color.white" font-family=(token)"font.body" font-size=(token)"size.stat" font-weight=(token)"weight.bold" { span "99.9%" }
+        text id="text.caption" w="hug" h="hug" fill=(token)"color.muted" font-family=(token)"font.body" font-size=(token)"size.body" { span "uptime across 3 regions" }
+      }
+    }
+  }
+}
