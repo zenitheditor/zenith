@@ -8,7 +8,8 @@ import { zenithBin } from "./render.mjs";
 
 const run = promisify(execFile);
 const LIMIT = 8000;
-const ZENITH_COMMANDS = new Set(["schema", "validate", "render", "tx", "inspect", "fmt", "fix", "tokens", "perceive", "new", "help", "--help", "-h"]);
+// Everything except the commands that start a server, change the install, or run an MCP server.
+const ZENITH_BLOCKED = new Set(["edit", "update", "plugin", "mcp"]);
 
 const fn = (name, description, properties, required) => ({
   type: "function",
@@ -19,7 +20,7 @@ const FILE_TOOLS = [
   fn("read_file", "Read a text file in the working directory.", { path: { type: "string" } }, ["path"]),
   fn("write_file", "Write a text file in the working directory, replacing it.", { path: { type: "string" }, content: { type: "string" } }, ["path", "content"]),
   fn("edit_file", "Replace one exact occurrence of a string in a text file. Fails if the string is missing or appears more than once.", { path: { type: "string" }, old: { type: "string" }, new: { type: "string" } }, ["path", "old", "new"]),
-  fn("view", "Render the current design and show it as an image.", {}, []),
+  fn("view", "Render the current design and show it as an image. Pass `page` (1-based) to see another page.", { page: { type: "integer" } }, []),
 ];
 
 const ZENITH_TOOL = fn(
@@ -41,7 +42,7 @@ function safe(ws, rel) {
   return path.join(ws, rel);
 }
 
-export function makeArm(kind, ws, canvas, skill) {
+export function makeArm(kind, ws, canvas, skill, build) {
   const file = kind === "zenith" ? "design.zen" : "design.html";
   const extra =
     kind === "zenith"
@@ -53,7 +54,7 @@ export function makeArm(kind, ws, canvas, skill) {
   return {
     kind,
     file,
-    system: COMMON(file, canvas) + extra + skillText,
+    system: (build ? buildPrompt(kind, file, canvas, build) : COMMON(file, canvas) + extra) + (build ? "" : "") + skillText,
     tools: kind === "zenith" ? [...FILE_TOOLS, ZENITH_TOOL] : FILE_TOOLS,
     /** Returns { text, image? } where image is PNG bytes. */
     async exec(name, args, render) {
@@ -74,13 +75,13 @@ export function makeArm(kind, ws, canvas, skill) {
             return { text: `edited ${args.path}` };
           }
           case "view": {
-            const r = await render();
+            const r = await render(Number.isInteger(args.page) ? args.page : 1);
             return r.png ? { text: "rendered; the image follows", image: r.png } : { text: `render failed:\n${clip(r.error)}` };
           }
           case "zenith": {
             if (kind !== "zenith") return { text: `unknown tool ${name}` };
             const list = Array.isArray(args.args) ? args.args.map(String) : [];
-            if (!list.length || !ZENITH_COMMANDS.has(list[0])) return { text: `command not available: ${list[0] ?? ""}` };
+            if (!list.length || ZENITH_BLOCKED.has(list[0])) return { text: `command not available: ${list[0] ?? ""}` };
             if (list.some((a) => path.isAbsolute(a) || a.split(/[\\/]/).includes(".."))) return { text: "paths must stay inside the working directory" };
             try {
               const { stdout, stderr } = await run(zenithBin(), list, { cwd: ws, timeout: 60000, maxBuffer: 4 << 20 });
@@ -97,4 +98,14 @@ export function makeArm(kind, ws, canvas, skill) {
       }
     },
   };
+}
+
+/** System prompt for authoring a design from a brief: the file contract differs per arm. */
+function buildPrompt(kind, file, canvas, build) {
+  const pages = build.pages === 1 ? "one page" : `${build.pages} pages`;
+  const contract =
+    kind === "zenith"
+      ? "Author a Zenith document (KDL text) in design.zen with the `zenith` tool (start with `zenith --help`). Every page is exactly the canvas size."
+      : 'Author one HTML file with inline CSS in design.html. Wrap every page in `<section class="page">` that is exactly the canvas size in px, with body margin 0, the sections stacked top to bottom with no gap.';
+  return `You design a ${build.kind} from a brief, starting from an empty working directory. The design has ${pages}, each ${canvas.w}x${canvas.h} px. ${contract} Use only the fonts Noto Sans and Noto Sans Mono. Use no images: build the design from text and shapes. Include every text item the user lists, exactly as written. Do not invent other text. Use \`view\` to check each page before you finish. When it is done, reply with one short sentence and no tool call.`;
 }

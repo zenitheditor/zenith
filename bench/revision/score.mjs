@@ -41,7 +41,19 @@ export function runCheck(check, { png, source, background }) {
           if (p.some((c, i) => Math.abs(c - background[i]) > 12)) n++;
         }
       }
-      return { ok: n >= check.min, detail: `${n} ink pixels, want >= ${check.min}` };
+      const ok = (check.min === undefined || n >= check.min) && (check.max === undefined || n <= check.max);
+      return { ok, detail: `${n} ink pixels, want ${check.min !== undefined ? `>= ${check.min}` : ""}${check.max !== undefined ? `<= ${check.max}` : ""}` };
+    }
+    case "colorcount": {
+      if (!img) return { ok: false, detail: "no render" };
+      let n = 0;
+      for (let y = check.y; y < check.y + check.h; y++) {
+        for (let x = check.x; x < check.x + check.w; x++) {
+          const p = px(img, x, y);
+          if (p.every((c, i) => Math.abs(c - check.rgb[i]) <= check.tol)) n++;
+        }
+      }
+      return { ok: n >= check.min, detail: `${n} pixels near ${check.rgb.join(",")} at (${check.x},${check.y}), want >= ${check.min}` };
     }
     case "source-contains":
       return { ok: source.includes(check.text), detail: `contains "${check.text}"` };

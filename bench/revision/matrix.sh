@@ -6,7 +6,7 @@ for seed in $2; do
   for model in $3; do
     for arm in ${ARMS:-html zenith}; do
       for skill in no yes; do
-        node bench/revision/run.mjs --task "$1" --arm $arm --model $model --skill $skill --seed $seed 2>&1 | grep -E "^launch|^[a-z-]+\.[a-z+]+\." | tail -1
+        node bench/revision/run.mjs --task "$1" --arm $arm --model $model --skill $skill --seed $seed 2>&1 | grep -E "^[a-z-]+\.[a-z+]+\." | tail -1
       done
     done
   done

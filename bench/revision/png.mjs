@@ -90,3 +90,12 @@ export function decode(buf) {
   }
   return { width, height, data: out };
 }
+
+/** Crop an RGBA image `{width,height,data}` to the given rectangle. */
+export function crop(img, x, y, w, h) {
+  const data = Buffer.alloc(w * h * 4);
+  for (let row = 0; row < h; row++) {
+    img.data.copy(data, row * w * 4, ((y + row) * img.width + x) * 4, ((y + row) * img.width + x + w) * 4);
+  }
+  return { width: w, height: h, data };
+}

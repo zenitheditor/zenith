@@ -20,7 +20,7 @@ function readKey() {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // Returns { message, usage, finish }. Retries 429 and 5xx with backoff.
-export async function chat({ model, messages, tools, maxTokens = 8192, temperature = 0.6, seed }) {
+export async function chat({ model, messages, tools, maxTokens = 16384, temperature = 0.6, seed }) {
   const key = readKey();
   const body = { model, messages, max_tokens: maxTokens, temperature };
   if (seed !== undefined) body.seed = seed;

@@ -80,3 +80,4 @@ bench-results/
 *.tmp
 
 bench/revision/runs/
+!bench/revision/build/

@@ -1,0 +1,289 @@
+{
+ "id": "dashboard",
+ "canvas": {
+  "w": 960,
+  "h": 700
+ },
+ "background": [
+  15,
+  23,
+  42
+ ],
+ "steps": [
+  {
+   "instruction": "Change the green used for the percentage changes on the cards to #f59e0b.",
+   "frozen": [
+    {
+     "name": "header",
+     "x": 40,
+     "y": 32,
+     "w": 600,
+     "h": 76
+    },
+    {
+     "name": "row1-text",
+     "x": 40,
+     "y": 120,
+     "w": 880,
+     "h": 100
+    },
+    {
+     "name": "row2-text",
+     "x": 40,
+     "y": 300,
+     "w": 880,
+     "h": 100
+    }
+   ],
+   "checks": [
+    {
+     "kind": "colorcount",
+     "x": 60,
+     "y": 220,
+     "w": 140,
+     "h": 50,
+     "rgb": [
+      245,
+      158,
+      11
+     ],
+     "tol": 40,
+     "min": 25
+    },
+    {
+     "kind": "colorcount",
+     "x": 360,
+     "y": 220,
+     "w": 140,
+     "h": 50,
+     "rgb": [
+      245,
+      158,
+      11
+     ],
+     "tol": 40,
+     "min": 25
+    },
+    {
+     "kind": "colorcount",
+     "x": 660,
+     "y": 220,
+     "w": 140,
+     "h": 50,
+     "rgb": [
+      245,
+      158,
+      11
+     ],
+     "tol": 40,
+     "min": 25
+    },
+    {
+     "kind": "colorcount",
+     "x": 60,
+     "y": 400,
+     "w": 140,
+     "h": 50,
+     "rgb": [
+      245,
+      158,
+      11
+     ],
+     "tol": 40,
+     "min": 25
+    },
+    {
+     "kind": "colorcount",
+     "x": 360,
+     "y": 400,
+     "w": 140,
+     "h": 50,
+     "rgb": [
+      245,
+      158,
+      11
+     ],
+     "tol": 40,
+     "min": 25
+    },
+    {
+     "kind": "colorcount",
+     "x": 660,
+     "y": 400,
+     "w": 140,
+     "h": 50,
+     "rgb": [
+      245,
+      158,
+      11
+     ],
+     "tol": 40,
+     "min": 25
+    }
+   ]
+  },
+  {
+   "instruction": "Rename the \"Revenue\" card label to \"Net revenue\".",
+   "frozen": [
+    {
+     "name": "header",
+     "x": 40,
+     "y": 32,
+     "w": 600,
+     "h": 76
+    },
+    {
+     "name": "card-1",
+     "x": 40,
+     "y": 120,
+     "w": 280,
+     "h": 160
+    },
+    {
+     "name": "card-3",
+     "x": 640,
+     "y": 120,
+     "w": 280,
+     "h": 160
+    },
+    {
+     "name": "row-2",
+     "x": 40,
+     "y": 300,
+     "w": 880,
+     "h": 160
+    }
+   ],
+   "checks": [
+    {
+     "kind": "source-contains",
+     "text": "Net revenue"
+    }
+   ]
+  },
+  {
+   "instruction": "Add one more card at the end of the grid: label \"Churn\", value \"1.2%\", change \"-0.3%\". It must look like the other cards.",
+   "frozen": [
+    {
+     "name": "header",
+     "x": 40,
+     "y": 32,
+     "w": 600,
+     "h": 76
+    },
+    {
+     "name": "rows-1-2",
+     "x": 40,
+     "y": 120,
+     "w": 880,
+     "h": 340
+    }
+   ],
+   "checks": [
+    {
+     "kind": "ink",
+     "x": 40,
+     "y": 480,
+     "w": 280,
+     "h": 160,
+     "min": 8000
+    },
+    {
+     "kind": "source-contains",
+     "text": "Churn"
+    }
+   ]
+  },
+  {
+   "instruction": "Remove the \"Visitors\" card. The other cards close up.",
+   "frozen": [
+    {
+     "name": "header",
+     "x": 40,
+     "y": 32,
+     "w": 600,
+     "h": 76
+    }
+   ],
+   "checks": [
+    {
+     "kind": "source-absent",
+     "text": "Visitors"
+    },
+    {
+     "kind": "ink",
+     "x": 40,
+     "y": 480,
+     "w": 880,
+     "h": 160,
+     "max": 200
+    }
+   ]
+  },
+  {
+   "instruction": "Make every card 20px taller. Keep the width, colors and text.",
+   "frozen": [
+    {
+     "name": "header",
+     "x": 40,
+     "y": 32,
+     "w": 600,
+     "h": 76
+    }
+   ],
+   "checks": [
+    {
+     "kind": "pixel",
+     "x": 60,
+     "y": 290,
+     "rgb": [
+      30,
+      41,
+      59
+     ],
+     "tol": 2
+    },
+    {
+     "kind": "pixel",
+     "x": 60,
+     "y": 310,
+     "rgb": [
+      15,
+      23,
+      42
+     ],
+     "tol": 2
+    },
+    {
+     "kind": "pixel",
+     "x": 60,
+     "y": 330,
+     "rgb": [
+      30,
+      41,
+      59
+     ],
+     "tol": 2
+    }
+   ]
+  },
+  {
+   "instruction": "Change the page title to \"Q3 Metrics\".",
+   "frozen": [
+    {
+     "name": "cards",
+     "x": 40,
+     "y": 120,
+     "w": 880,
+     "h": 380
+    }
+   ],
+   "checks": [
+    {
+     "kind": "source-contains",
+     "text": "Q3 Metrics"
+    }
+   ]
+  }
+ ]
+}

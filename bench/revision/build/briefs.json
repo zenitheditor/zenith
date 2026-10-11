@@ -1,0 +1,399 @@
+[
+ {
+  "id": "flyer",
+  "kind": "flyer",
+  "canvas": {
+   "w": 559,
+   "h": 794
+  },
+  "pages": 1,
+  "margin": 16,
+  "brief": "Design a one-page flyer for a neighborhood volunteer event. Make it eye-catching and easy to read from a distance. Put the event name first, the date and time next, and the place after that.",
+  "required": [
+   "Neighborhood Cleanup Day",
+   "Saturday, March 14",
+   "9:00 AM - 12:00 PM",
+   "Riverside Park, Main Street entrance",
+   "Bring gloves. We supply bags and water.",
+   "Free pizza for all volunteers",
+   "riversidecleanup.org"
+  ]
+ },
+ {
+  "id": "letterhead",
+  "kind": "letterhead",
+  "canvas": {
+   "w": 794,
+   "h": 1123
+  },
+  "pages": 1,
+  "margin": 36,
+  "brief": "Design an A4 business letterhead with a sample letter already set on it. The header carries the company name and contact details. The footer carries the licence line. Leave the letter body comfortably readable.",
+  "required": [
+   "Harbor & Pine Architects",
+   "214 Dock Street, Portland, OR 97209",
+   "(503) 555-0142",
+   "hello@harborpine.com",
+   "harborpine.com",
+   "March 3, 2026",
+   "Dear Ms. Alvarez,",
+   "Thank you for meeting with us last week. We have attached the revised floor plans and a schedule for the permit review.",
+   "Please call me if you would like to walk through the changes together.",
+   "Sincerely,",
+   "Daniel Pine",
+   "Licensed in Oregon and Washington"
+  ]
+ },
+ {
+  "id": "handout",
+  "kind": "handout",
+  "canvas": {
+   "w": 794,
+   "h": 1123
+  },
+  "pages": 1,
+  "margin": 36,
+  "brief": "Design a one-page A4 handout for a community garden class. Use clear headings, short bullet lists, and a small planting-dates table. It will be printed and read at arm's length.",
+  "required": [
+   "Spring Garden Checklist",
+   "Prepare the beds",
+   "Loosen the soil to 12 inches",
+   "Mix in two inches of compost",
+   "Plant by date",
+   "Water and mulch",
+   "Water deeply twice a week",
+   "Spread three inches of mulch",
+   "Crop",
+   "Sow indoors",
+   "Transplant",
+   "Tomatoes",
+   "March 1",
+   "May 10",
+   "Lettuce",
+   "April 5",
+   "Peas",
+   "March 15"
+  ]
+ },
+ {
+  "id": "deck",
+  "kind": "deck",
+  "canvas": {
+   "w": 1280,
+   "h": 720
+  },
+  "pages": 3,
+  "margin": 32,
+  "brief": "Design a three-slide presentation deck. Slide 1 is a title slide. Slide 2 lists highlights. Slide 3 lists next steps and ends with a thank-you line. Keep a consistent look across the slides.",
+  "required": [
+   "Q3 Product Review",
+   "Growth, retention, and what ships next",
+   "Highlights",
+   "Active users grew 18% to 240,000",
+   "Churn fell from 4.1% to 3.2%",
+   "Median load time dropped to 1.4 seconds",
+   "Next quarter",
+   "Launch the team workspace in October",
+   "Open the public API in November",
+   "Cut onboarding to three steps",
+   "Thank you"
+  ]
+ },
+ {
+  "id": "menu",
+  "kind": "menu",
+  "canvas": {
+   "w": 794,
+   "h": 1123
+  },
+  "pages": 1,
+  "margin": 36,
+  "brief": "Design a one-page A4 cafe menu with two sections. Each item has a name, a short description, and a price aligned consistently. It should feel warm and uncluttered.",
+  "required": [
+   "Corner Table Cafe",
+   "Breakfast",
+   "Lemon Ricotta Pancakes",
+   "Fluffy stack with berry compote",
+   "$11",
+   "Veggie Scramble",
+   "Peppers, spinach, and feta with toast",
+   "$10",
+   "Avocado Toast",
+   "Sourdough, chili flakes, and a soft egg",
+   "$12",
+   "Granola Bowl",
+   "Yogurt, honey, and seasonal fruit",
+   "$9",
+   "Lunch",
+   "Tomato Soup",
+   "Roasted tomatoes and basil with a grilled cheese point",
+   "$8",
+   "Falafel Wrap",
+   "Hummus, pickles, and shredded cabbage",
+   "$13",
+   "Harvest Salad",
+   "Kale, roasted squash, and toasted pepitas",
+   "$12",
+   "Turkey Club",
+   "Smoked turkey, bacon, and herb mayo",
+   "$14"
+  ]
+ },
+ {
+  "id": "poster",
+  "kind": "poster",
+  "canvas": {
+   "w": 720,
+   "h": 960
+  },
+  "pages": 1,
+  "margin": 16,
+  "brief": "Design a portrait event poster for a weekly music night. The event name must dominate. The time and place must be readable from across a room.",
+  "required": [
+   "Open Mic Night",
+   "Every Thursday, 8 PM",
+   "The Blue Door, 41 Elm Street",
+   "Sign up at 7:30",
+   "No cover. All ages."
+  ]
+ },
+ {
+  "id": "card",
+  "kind": "business card",
+  "canvas": {
+   "w": 672,
+   "h": 384
+  },
+  "pages": 1,
+  "margin": 16,
+  "brief": "Design the front of a business card for a landscape designer. The name leads, the title follows, and the contact lines sit together.",
+  "required": [
+   "Mara Okafor",
+   "Landscape Designer",
+   "(206) 555-0178",
+   "mara@okaforlandscapes.com",
+   "okaforlandscapes.com"
+  ]
+ },
+ {
+  "id": "report",
+  "kind": "one-page report",
+  "canvas": {
+   "w": 794,
+   "h": 1123
+  },
+  "pages": 1,
+  "margin": 36,
+  "brief": "Design a one-page A4 impact summary for a food bank. Show three large headline figures, a short paragraph, and a simple bar chart of meals served per quarter.",
+  "required": [
+   "2025 Impact Summary",
+   "12,400",
+   "meals served",
+   "310",
+   "volunteers",
+   "$48k",
+   "raised",
+   "Every dollar we raise becomes four meals for neighbors in need.",
+   "Meals served per quarter",
+   "Q1",
+   "2,600",
+   "Q2",
+   "3,100",
+   "Q3",
+   "3,300",
+   "Q4",
+   "3,400"
+  ]
+ },
+ {
+  "id": "aurora",
+  "kind": "poster",
+  "canvas": {
+   "w": 600,
+   "h": 800
+  },
+  "pages": 1,
+  "margin": 24,
+  "brief": "Design a festival poster. The background is a smooth diagonal gradient between two colors, and a large soft glowing circle sits behind the title. Make the title huge and the details small but readable.",
+  "required": [
+   "AURORA",
+   "Night Sky Festival",
+   "October 24 - 26",
+   "Harbor Lights Park"
+  ]
+ },
+ {
+  "id": "raised-cards",
+  "kind": "feature page",
+  "canvas": {
+   "w": 1200,
+   "h": 800
+  },
+  "pages": 1,
+  "margin": 32,
+  "brief": "Design a features page on a light gray background with three equal cards that look raised off the page with soft drop shadows. Each card has a heading and a one-line description.",
+  "required": [
+   "Why teams choose Lumen",
+   "Fast",
+   "Sets up in two minutes.",
+   "Private",
+   "Your data never leaves your device.",
+   "Simple",
+   "One price, no surprises."
+  ]
+ },
+ {
+  "id": "dot-card",
+  "kind": "thank-you card",
+  "canvas": {
+   "w": 600,
+   "h": 600
+  },
+  "pages": 1,
+  "margin": 24,
+  "brief": "Design a thank-you card. The background is a repeating pattern of dots or stripes drawn with shapes. The message sits on a solid panel so it stays readable.",
+  "required": [
+   "Thank you",
+   "for a wonderful year",
+   "The Marlow Team"
+  ]
+ },
+ {
+  "id": "bar-chart",
+  "kind": "chart slide",
+  "canvas": {
+   "w": 1000,
+   "h": 700
+  },
+  "pages": 1,
+  "margin": 32,
+  "brief": "Design a bar chart slide of quarterly revenue in thousands of dollars: Q1 is 120, Q2 is 180, Q3 is 150, Q4 is 240. Draw the bars with shapes and make each bar height proportional to its value. Add a baseline, a label under each bar, and the value above each bar.",
+  "required": [
+   "Quarterly Revenue ($k)",
+   "Q1",
+   "Q2",
+   "Q3",
+   "Q4",
+   "120",
+   "180",
+   "150",
+   "240"
+  ]
+ },
+ {
+  "id": "invoice",
+  "kind": "invoice",
+  "canvas": {
+   "w": 794,
+   "h": 1123
+  },
+  "pages": 1,
+  "margin": 48,
+  "brief": "Design an invoice with a table of line items, a subtotal, 8% tax, and a total. Compute the amounts yourself. Items: Design review, 3 hours at 120.00 each. Print setup, 1 at 85.00. Proofs, 4 at 15.00 each. Align the number columns on the right.",
+  "required": [
+   "INVOICE",
+   "No. 004217",
+   "Qty",
+   "Unit price",
+   "Amount",
+   "Design review",
+   "Print setup",
+   "Proofs",
+   "3",
+   "120.00",
+   "360.00",
+   "1",
+   "85.00",
+   "4",
+   "15.00",
+   "60.00",
+   "Subtotal",
+   "505.00",
+   "Tax (8%)",
+   "40.40",
+   "Total",
+   "545.40"
+  ]
+ },
+ {
+  "id": "card-grid",
+  "kind": "team page",
+  "canvas": {
+   "w": 1200,
+   "h": 900
+  },
+  "pages": 1,
+  "margin": 40,
+  "brief": "Design a team page with a heading and a grid of twelve equal cards in 4 columns and 3 rows. Rows and columns must line up exactly with equal gaps. Each card shows a two-digit number and a name.",
+  "required": [
+   "Meet the crew",
+   "01",
+   "Ada",
+   "02",
+   "Ben",
+   "03",
+   "Cleo",
+   "04",
+   "Dev",
+   "05",
+   "Eli",
+   "06",
+   "Fay",
+   "07",
+   "Gus",
+   "08",
+   "Hana",
+   "09",
+   "Ivo",
+   "10",
+   "Jun",
+   "11",
+   "Kai",
+   "12",
+   "Lena"
+  ]
+ },
+ {
+  "id": "six-pager",
+  "kind": "report",
+  "canvas": {
+   "w": 794,
+   "h": 1123
+  },
+  "pages": 6,
+  "margin": 48,
+  "brief": "Design a six-page report. Page 1 is a cover. Pages 2 to 6 each have a section title and a short paragraph. Every content page has a page number at the same position in the footer. Keep the grid identical across pages.",
+  "required": [
+   "Annual Review",
+   "2026",
+   "1. Summary",
+   "2. Customers",
+   "3. Product",
+   "4. Finance",
+   "5. Outlook",
+   "Page 2",
+   "Page 3",
+   "Page 4",
+   "Page 5",
+   "Page 6"
+  ]
+ },
+ {
+  "id": "ticket",
+  "kind": "event ticket",
+  "canvas": {
+   "w": 1200,
+   "h": 500
+  },
+  "pages": 1,
+  "margin": 24,
+  "brief": "Design an event ticket with rounded corners, a dashed perforation line that splits the main part from a narrow stub, a half-circle notch cut at the top and bottom of the perforation, and a barcode made of vertical bars on the stub.",
+  "required": [
+   "ADMIT ONE",
+   "Harbor Lights Festival",
+   "Oct 24 - 19:30",
+   "Gate B - Row 4 - Seat 12",
+   "No. 004217"
+  ]
+ }
+]

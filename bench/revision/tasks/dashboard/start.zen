@@ -1,0 +1,57 @@
+zenith version=1 {
+  project id="proj.dash" name="Dashboard"
+  tokens format="zenith-token-v1" {
+    token id="color.bg" type="color" value="#0f172a"
+    token id="color.card" type="color" value="#1e293b"
+    token id="color.white" type="color" value="#ffffff"
+    token id="color.muted" type="color" value="#cbd5e1"
+    token id="color.up" type="color" value="#34d399"
+    token id="font.body" type="fontFamily" value="Noto Sans"
+    token id="weight.bold" type="fontWeight" value=700
+    token id="size.title" type="dimension" value=(px)36
+    token id="size.sub" type="dimension" value=(px)16
+    token id="size.label" type="dimension" value=(px)14
+    token id="size.value" type="dimension" value=(px)44
+    token id="size.delta" type="dimension" value=(px)16
+    token id="radius.card" type="dimension" value=(px)16
+  }
+  styles {}
+  document id="doc.dash" title="Dashboard" {
+    page id="page.dash" w=(px)960 h=(px)700 background=(token)"color.bg" {
+      text id="text.title" x=(px)40 y=(px)32 w=(px)600 h=(px)48 fill=(token)"color.white" font-family=(token)"font.body" font-size=(token)"size.title" font-weight=(token)"weight.bold" { span "Q2 Metrics" }
+      text id="text.sub" x=(px)40 y=(px)80 w=(px)600 h=(px)24 fill=(token)"color.muted" font-family=(token)"font.body" font-size=(token)"size.sub" { span "Updated today" }
+      frame id="grid" x=(px)40 y=(px)120 w=(px)880 layout="row" wrap=#true gap=(px)20 wrap-gap=(px)20 {
+        frame id="card.1" w=(px)280 h=(px)160 fill=(token)"color.card" radius=(token)"radius.card" layout="column" padding=(px)20 gap=(px)8 {
+          text id="card.1.label" w="fill" h="hug" fill=(token)"color.muted" font-family=(token)"font.body" font-size=(token)"size.label" { span "Visitors" }
+          text id="card.1.value" w="fill" h="hug" fill=(token)"color.white" font-family=(token)"font.body" font-size=(token)"size.value" font-weight=(token)"weight.bold" { span "48.2k" }
+          text id="card.1.delta" w="fill" h="hug" fill=(token)"color.up" font-family=(token)"font.body" font-size=(token)"size.delta" font-weight=(token)"weight.bold" { span "+12%" }
+        }
+        frame id="card.2" w=(px)280 h=(px)160 fill=(token)"color.card" radius=(token)"radius.card" layout="column" padding=(px)20 gap=(px)8 {
+          text id="card.2.label" w="fill" h="hug" fill=(token)"color.muted" font-family=(token)"font.body" font-size=(token)"size.label" { span "Revenue" }
+          text id="card.2.value" w="fill" h="hug" fill=(token)"color.white" font-family=(token)"font.body" font-size=(token)"size.value" font-weight=(token)"weight.bold" { span "$91.4k" }
+          text id="card.2.delta" w="fill" h="hug" fill=(token)"color.up" font-family=(token)"font.body" font-size=(token)"size.delta" font-weight=(token)"weight.bold" { span "+8%" }
+        }
+        frame id="card.3" w=(px)280 h=(px)160 fill=(token)"color.card" radius=(token)"radius.card" layout="column" padding=(px)20 gap=(px)8 {
+          text id="card.3.label" w="fill" h="hug" fill=(token)"color.muted" font-family=(token)"font.body" font-size=(token)"size.label" { span "Orders" }
+          text id="card.3.value" w="fill" h="hug" fill=(token)"color.white" font-family=(token)"font.body" font-size=(token)"size.value" font-weight=(token)"weight.bold" { span "1,204" }
+          text id="card.3.delta" w="fill" h="hug" fill=(token)"color.up" font-family=(token)"font.body" font-size=(token)"size.delta" font-weight=(token)"weight.bold" { span "+5%" }
+        }
+        frame id="card.4" w=(px)280 h=(px)160 fill=(token)"color.card" radius=(token)"radius.card" layout="column" padding=(px)20 gap=(px)8 {
+          text id="card.4.label" w="fill" h="hug" fill=(token)"color.muted" font-family=(token)"font.body" font-size=(token)"size.label" { span "Refunds" }
+          text id="card.4.value" w="fill" h="hug" fill=(token)"color.white" font-family=(token)"font.body" font-size=(token)"size.value" font-weight=(token)"weight.bold" { span "38" }
+          text id="card.4.delta" w="fill" h="hug" fill=(token)"color.up" font-family=(token)"font.body" font-size=(token)"size.delta" font-weight=(token)"weight.bold" { span "+2%" }
+        }
+        frame id="card.5" w=(px)280 h=(px)160 fill=(token)"color.card" radius=(token)"radius.card" layout="column" padding=(px)20 gap=(px)8 {
+          text id="card.5.label" w="fill" h="hug" fill=(token)"color.muted" font-family=(token)"font.body" font-size=(token)"size.label" { span "Signups" }
+          text id="card.5.value" w="fill" h="hug" fill=(token)"color.white" font-family=(token)"font.body" font-size=(token)"size.value" font-weight=(token)"weight.bold" { span "912" }
+          text id="card.5.delta" w="fill" h="hug" fill=(token)"color.up" font-family=(token)"font.body" font-size=(token)"size.delta" font-weight=(token)"weight.bold" { span "+17%" }
+        }
+        frame id="card.6" w=(px)280 h=(px)160 fill=(token)"color.card" radius=(token)"radius.card" layout="column" padding=(px)20 gap=(px)8 {
+          text id="card.6.label" w="fill" h="hug" fill=(token)"color.muted" font-family=(token)"font.body" font-size=(token)"size.label" { span "Support" }
+          text id="card.6.value" w="fill" h="hug" fill=(token)"color.white" font-family=(token)"font.body" font-size=(token)"size.value" font-weight=(token)"weight.bold" { span "214" }
+          text id="card.6.delta" w="fill" h="hug" fill=(token)"color.up" font-family=(token)"font.body" font-size=(token)"size.delta" font-weight=(token)"weight.bold" { span "+3%" }
+        }
+      }
+    }
+  }
+}
