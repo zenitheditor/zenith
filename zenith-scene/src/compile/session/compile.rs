@@ -20,7 +20,7 @@ use super::super::field::{
 use super::super::footnote;
 use super::super::intrinsic::lower_expanded;
 use super::super::line_jumps;
-use super::super::lint::{LintEnv, PaintEnv, lint_page};
+use super::super::lint::{LintEnv, PaintEnv, lint_page, note_flow_on_overflow};
 use super::super::page_source::{PageSourceEnv, compile_page_source};
 use super::super::paint::{resolve_property_color, resolve_property_gradient};
 use super::super::text::ShapeEnv;
@@ -361,6 +361,7 @@ impl<F: ?Sized + FontProvider> PageCompiler<'_, F> {
 
         // Internal defaults copy ids never leave the compile.
         prep.id_aliases.scrub(&mut diagnostics);
+        note_flow_on_overflow(&page.children, &mut diagnostics);
 
         (
             CompileResult {

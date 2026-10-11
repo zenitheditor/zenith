@@ -13,6 +13,7 @@
 //! - `arrange` — `align.near_miss`, `spacing.uneven_gap`, and
 //!   `connector.crosses_node` (`align`, `spacing`, `connector`).
 //! - `blocks` — `layout.block_overlap`.
+//! - `flow_note` — the sibling-shift note on a `text.overflow` in a stack.
 //! - `chart_overflow` — `chart.overflow`.
 //! - `run` — the entry point the page compile calls.
 
@@ -23,6 +24,7 @@ mod chart_overflow;
 mod connector;
 mod contrast;
 mod edges;
+mod flow_note;
 mod geom;
 mod label_overflow;
 mod ledger;
@@ -35,6 +37,7 @@ mod spacing;
 mod text_facts;
 mod type_scale;
 
+pub(in crate::compile) use flow_note::note_flow_on_overflow;
 pub(in crate::compile) use paint::PaintEnv;
 pub(in crate::compile) use run::{LintEnv, lint_page};
 pub use small_text::text_size_floor_px;
