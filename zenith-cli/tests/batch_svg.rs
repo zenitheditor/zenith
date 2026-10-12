@@ -169,7 +169,10 @@ fn fallback_advisories_appear_in_human_and_json_reports() {
 fn png_default_keeps_manifest_and_json_fields_and_ignores_svg_policy() {
     for command in ["merge", "variant"] {
         let env = Env::new(DOC);
-        fs::write(env.dir.path().join(".zenith.kdl"), "malformed {").unwrap();
+        if command == "variant" {
+            // Variant PNG output ignores config. Merge governs every row by config.
+            fs::write(env.dir.path().join(".zenith.kdl"), "malformed {").unwrap();
+        }
         let output = env.run(command, &["--json", "--manifest", "manifest.json"]);
         assert!(
             output.status.success(),
@@ -195,10 +198,21 @@ fn png_default_keeps_manifest_and_json_fields_and_ignores_svg_policy() {
                 manifest["rows"][0],
                 serde_json::json!({"row":0,"outputs":["row-0001-page-1.png","row-0001-page-2.png"]})
             );
+            // Merge governs every row, so the PNG report carries the row's advisories.
+            let row = &report["rows"][0];
+            assert_eq!(row["row"], 0);
+            assert_eq!(row["status"], "ok");
             assert_eq!(
-                report["rows"][0],
-                serde_json::json!({"row":0,"status":"ok","outputs":["row-0001-page-1.png","row-0001-page-2.png"],"diagnostics":[]})
+                row["outputs"],
+                serde_json::json!(["row-0001-page-1.png", "row-0001-page-2.png"])
             );
+            let codes: Vec<&str> = row["diagnostics"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|d| d["code"].as_str().unwrap())
+                .collect();
+            assert_eq!(codes, ["text.edge_crowding"]);
         }
         assert!(
             !String::from_utf8(output.stdout)
@@ -206,6 +220,21 @@ fn png_default_keeps_manifest_and_json_fields_and_ignores_svg_policy() {
                 .contains("outputs_svg")
         );
     }
+}
+
+#[test]
+fn merge_png_reports_a_malformed_config_instead_of_ignoring_it() {
+    let env = Env::new(DOC);
+    fs::write(env.dir.path().join(".zenith.kdl"), "malformed {").unwrap();
+    let output = env.run("merge", &["--json"]);
+    assert_eq!(output.status.code(), Some(2));
+    assert!(
+        !env.dir
+            .path()
+            .join("out")
+            .join("row-0001-page-1.png")
+            .exists()
+    );
 }
 
 #[test]

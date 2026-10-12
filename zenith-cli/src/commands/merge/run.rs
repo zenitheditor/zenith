@@ -14,15 +14,18 @@ use zenith_core::{AssetKind, BytesAssetProvider, KdlAdapter, KdlSource};
 use zenith_scene::{DocumentPrep, PageCompiler};
 use zenith_tx::{AddAssetMetadata, Op, OpSpan, Transaction, TxStatus, run_transaction};
 
+use zenith_pipeline::PolicyFlags;
 use zenith_pipeline::assets::{
     build_asset_provider, build_font_provider, collect_missing_asset_diagnostics, image_sizes,
     resolve_text_sources,
 };
+use zenith_pipeline::policy::ConfigLayers;
 
+use super::blocking::block_row_defects;
 use crate::commands::render::{
     BatchExportOptions, BatchFormat, encode_batch_scene, load_batch_policy,
 };
-use crate::native::{self, NativeFs};
+use crate::native::{self, NativeConfig, NativeFs};
 
 // ── Error type ────────────────────────────────────────────────────────────────
 
@@ -336,6 +339,11 @@ pub fn run_with_output_constraints(
         .map_err(|e| MergeError::new(crate::report::parse_error_line(doc_src, &e)))?;
 
     let policy = load_batch_policy(format, &doc, project_dir).map_err(MergeError::new)?;
+    // Every row is validated and compiled under the merged config policy and brand,
+    // the same governance `zenith validate` applies, whatever the output format.
+    let layers = ConfigLayers::load(&NativeConfig, project_dir).map_err(MergeError::new)?;
+    let row_policy = layers.policy(&doc.diagnostic_policy, &PolicyFlags::default());
+    let row_brand = layers.brand(&doc.brand_contract);
 
     // ── 2. Collect data bindings ──────────────────────────────────────────
     let mut bindings: Vec<DataBinding> = Vec::new();
@@ -607,6 +615,28 @@ pub fn run_with_output_constraints(
             }
         }
 
+        // Validate the row document: contrast, safe zone, brand, and the rest.
+        // An Error fails the row. Warnings and advice go to the row report.
+        let mut row_validation =
+            zenith_core::validate_with_policy(&row_doc, &row_policy, &row_brand).diagnostics;
+        let validation_errors: Vec<String> = row_validation
+            .iter()
+            .filter(|d| d.is_error())
+            .map(zenith_pipeline::format_error_diag)
+            .collect();
+        if !validation_errors.is_empty() {
+            push_failure(
+                &mut rows,
+                row_idx,
+                row_key,
+                format!("validation error(s): {}", validation_errors.join("; ")),
+            );
+            if let Some(row) = rows.last_mut() {
+                row.diagnostics = row_validation;
+            }
+            continue;
+        }
+
         // Build per-row asset provider: template assets + row-specific images.
         // BytesAssetProvider is not Clone, so we rebuild from template doc and
         // then layer the row image(s) on top.
@@ -738,7 +768,7 @@ pub fn run_with_output_constraints(
 
         // Compile and render every page; collect failures.
         let mut page_failures: Vec<String> = Vec::new();
-        let mut diagnostics = Vec::new();
+        let mut diagnostics = std::mem::take(&mut row_validation);
         let mut page_images: Vec<(String, Vec<u8>)> = Vec::new();
 
         let row_provider = row_assets.as_ref().unwrap_or(&template_assets);
@@ -750,10 +780,10 @@ pub fn run_with_output_constraints(
         let compiler = PageCompiler::new(&prep, &fonts);
         for (page_index, page_fname) in page_filenames.iter().enumerate() {
             let mut compile_result = compiler.compile_page(page_index);
-            if let Some(policy) = &policy {
-                compile_result.diagnostics =
-                    zenith_core::apply_policy(compile_result.diagnostics, policy);
-            }
+            compile_result.diagnostics = block_row_defects(
+                zenith_core::apply_policy(compile_result.diagnostics, &row_policy),
+                &row_policy,
+            );
 
             // Block on Error-severity compile diagnostics.
             let hard_diags: Vec<String> = compile_result
@@ -762,9 +792,7 @@ pub fn run_with_output_constraints(
                 .filter(|d| d.is_error())
                 .map(zenith_pipeline::format_error_diag)
                 .collect();
-            if policy.is_some() {
-                diagnostics.extend(std::mem::take(&mut compile_result.diagnostics));
-            }
+            diagnostics.extend(std::mem::take(&mut compile_result.diagnostics));
             if !hard_diags.is_empty() {
                 page_failures.push(format!(
                     "page {}: compile error(s): {}",
@@ -842,7 +870,7 @@ pub fn run_with_output_constraints(
             row: row_idx,
             key: row_key,
             outputs: newly_written,
-            diagnostics,
+            diagnostics: Diagnostic::dedup(diagnostics),
             failure: None,
         });
     }

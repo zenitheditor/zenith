@@ -957,3 +957,58 @@ fn svg_merge_embeds_row_scoped_image_assets() {
     assert!(second.contains("data:image/png;base64,"));
     assert_ne!(first, second);
 }
+
+// ── Per-row validation ────────────────────────────────────────────────────────
+
+/// `TEMPLATE_DOC` with light gray ink on the white background.
+fn low_contrast_template() -> String {
+    TEMPLATE_DOC.replace(
+        r##"token id="color.ink" type="color" value="#111111""##,
+        r##"token id="color.ink" type="color" value="#cccccc""##,
+    )
+}
+
+#[test]
+fn row_validation_reports_contrast_low_on_a_written_row() {
+    let csv = "name,title\nAlice,Engineer\n";
+    let tmp = tempfile::TempDir::new().expect("tempdir");
+    let report = merge_run(&low_contrast_template(), csv, None, tmp.path(), None)
+        .expect("merge run itself must not error");
+
+    assert!(
+        report.failed().is_empty(),
+        "contrast.low is not an error; rows: {:?}",
+        report.rows
+    );
+    assert_eq!(report.written(), vec!["row-0001.png".to_owned()]);
+    let codes: Vec<&str> = report.rows[0]
+        .diagnostics
+        .iter()
+        .map(|d| d.code.as_str())
+        .collect();
+    assert!(
+        codes.contains(&"contrast.low"),
+        "row report must carry contrast.low; codes: {codes:?}"
+    );
+}
+
+#[test]
+fn denied_contrast_low_fails_the_row_and_writes_nothing() {
+    // The in-file policy denies contrast.low, so the row policy raises it to an Error.
+    let template = low_contrast_template().replace(
+        "  styles {}",
+        "  diagnostics {\n    deny \"contrast.low\"\n  }\n  styles {}",
+    );
+    let csv = "name,title\nAlice,Engineer\n";
+    let tmp = tempfile::TempDir::new().expect("tempdir");
+    let report =
+        merge_run(&template, csv, None, tmp.path(), None).expect("merge run itself must not error");
+
+    assert!(report.written().is_empty(), "no row may be written");
+    let reason = report.rows[0].failure.as_deref().unwrap_or("");
+    assert!(
+        reason.contains("error[contrast.low]"),
+        "failure must name the denied code; got: {reason}"
+    );
+    assert!(!tmp.path().join("row-0001.png").exists());
+}

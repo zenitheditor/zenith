@@ -1,5 +1,6 @@
 //! Variable-data merge command wiring.
 
+mod blocking;
 mod output;
 mod run;
 
