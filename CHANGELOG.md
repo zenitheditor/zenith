@@ -15,6 +15,12 @@ it.
 
 ## [Unreleased]
 
+### Added
+
+- **`zenith schema write`, `zenith tx --help`, and the starter output list `duplicate_node` and `duplicate_page`.** The `schema write` rules also say to check many pages in one call with `zenith render --contact-sheet`. Before, agents retyped each copy of a repeated row or page and looked at every page on its own. In a 3-brief build run they used `duplicate_node` and `duplicate_page` where they used neither before.
+- **`zenith tx --apply --png OUT` renders the edited document in the same call.** An edit and a look at it are one step instead of two. `--page N` picks the page (default 1). The page renders before anything is written, so a page that does not render (`tx.png_failed`) leaves the document and the PNG as they were. A rejected edit writes neither file. `--png` may not name the document or the tx file, and its directory must exist, as for `zenith render --png`. If the PNG cannot be written after the edit, the result says the edit is written. The result adds a `png` object (`path`, `width`, `height`, `page`, `pages`) or a `png_error` string to `--json`, always as one object.
+- **`content.placeholder` warns about sample text left in a document.** A text or shape node with `role="placeholder"`, or a span that is exactly the fill-command text `<new text>`, still holds sample content. `zenith validate` and `zenith tx` give one document-level warning that names the first six node ids and a count. It has no subject, so `allow "content.placeholder"` silences it. The text ops of `tx` (`set_span_text`, `replace_text`, `find_replace_text`) clear the mark on any node whose text they change, even when only part of the text changed. Other ops and other roles keep it. `role` holds one value, so a node that needs another role cannot also carry the mark. Every text node of every `zenith new --starter` layout carries the mark. In the benchmark, two runs delivered a starter with its sample text in place (1 of 7 and 1 of 17 required strings).
+
 ---
 
 ## [0.0.13] — 2026-10-12
