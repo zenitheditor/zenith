@@ -4,6 +4,15 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+// A repo-root `.env` (gitignored) can hold OLLAMA_API_KEY. A variable already set in the
+// environment wins over the file.
+try {
+  process.loadEnvFile(fileURLToPath(new URL("../../.env", import.meta.url)));
+} catch (err) {
+  if (err.code !== "ENOENT") throw err;
+}
 
 const BASE = process.env.ZENITH_BENCH_BASE_URL ?? "https://ollama.com/v1";
 

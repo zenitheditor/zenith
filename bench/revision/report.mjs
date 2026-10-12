@@ -9,6 +9,7 @@ for (const name of readdirSync(dir)) {
   const f = path.join(dir, name, "result.json");
   if (!existsSync(f) || name.includes(".noop.")) continue;
   const r = JSON.parse(readFileSync(f, "utf8"));
+  if (!Array.isArray(r.steps)) continue; // build runs have no steps; build/report.mjs covers them
   if (task && r.task !== task) continue;
   const key = `${r.arm}${r.skill ? " +skill" : "      "} | ${r.model}`;
   if (!cells.has(key)) cells.set(key, []);

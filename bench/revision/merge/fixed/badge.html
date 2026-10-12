@@ -1,0 +1,86 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  /* The same design as badge.zen: photo band, scrim with the event name, three text boxes. */
+  html, body { margin: 0; padding: 0; background: #ffffff; }
+  .page { position: relative; width: 900px; height: 600px; overflow: hidden; background: #ffffff;
+    font-family: "Noto Sans", "Noto Sans CJK SC", "Noto Color Emoji", sans-serif; }
+  .photo { position: absolute; left: 0; top: 0; width: 900px; height: 220px; object-fit: cover; display: block; }
+  .scrim { position: absolute; left: 0; top: 140px; width: 900px; height: 80px; background: #0b1220; opacity: 0.82; }
+  .box { position: absolute; left: 40px; width: 820px; overflow: hidden; display: flex; line-height: 1.4; }
+  /* Line height 1.4 holds the Noto Sans glyph box (1.362 em), so no glyph box leaves its text box. */
+  .box > span { display: block; max-width: 100%; overflow-wrap: normal; }
+  .event { top: 150px; height: 60px; align-items: center; color: #ffffff; font-weight: 700; font-size: 34px; }
+  .name { top: 244px; height: 160px; align-items: center; color: #101828; font-weight: 700; font-size: 64px; }
+  .title { top: 416px; height: 76px; align-items: flex-start; color: #475467; font-weight: 400; font-size: 28px; }
+  .company { top: 504px; height: 48px; align-items: flex-start; color: #101828; font-weight: 600; font-size: 24px; }
+</style>
+</head>
+<body>
+<section class="page">
+  <img class="photo" id="photo" alt="">
+  <div class="scrim"></div>
+  <div class="box event" data-max="34" data-min="16"><span id="event">Northwind Summit 2026</span></div>
+  <div class="box name" data-max="64" data-min="28"><span id="name"></span></div>
+  <div class="box title" data-max="28" data-min="16"><span id="title"></span></div>
+  <div class="box company" data-max="24" data-min="16"><span id="company"></span></div>
+</section>
+<script type="application/json" id="row">{}</script>
+<script>
+// Fills the row, shrinks each box until it fits, and reports what it cannot fix in window.__badge.
+(async () => {
+  const row = JSON.parse(document.getElementById("row").textContent);
+  const problems = [];
+  for (const col of ["name", "title", "company"]) {
+    const el = document.getElementById(col);
+    const value = row[col] ?? "";
+    el.textContent = value;
+    // An empty cell shows nothing: the box stays empty.
+    if (!value.trim()) el.parentElement.style.display = "none";
+  }
+  const photo = document.getElementById("photo");
+  if (row.photo) {
+    photo.src = "../" + row.photo;
+    try { await photo.decode(); } catch { problems.push(`photo does not load: ${row.photo}`); }
+  } else photo.style.display = "none";
+  await document.fonts.ready;
+
+  // Shrink loop: 1 px steps from data-max down to data-min.
+  const fits = (box, span) => span.scrollWidth <= box.clientWidth && span.offsetWidth <= box.clientWidth && span.offsetHeight <= box.clientHeight;
+  for (const box of document.querySelectorAll(".box")) {
+    if (box.style.display === "none") continue;
+    const span = box.firstElementChild;
+    let size = Number(box.dataset.max);
+    const min = Number(box.dataset.min);
+    box.style.fontSize = `${size}px`;
+    while (!fits(box, span) && size > min) box.style.fontSize = `${--size}px`;
+    if (!fits(box, span)) problems.push(`${span.id} does not fit at ${min}px`);
+  }
+
+  // Missing-glyph check: a character that draws the same pixels as an unassigned code point has no glyph.
+  const canvas = document.createElement("canvas");
+  canvas.width = 64;
+  canvas.height = 64;
+  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+  const draw = (ch, weight) => {
+    ctx.clearRect(0, 0, 64, 64);
+    ctx.font = `${weight} 40px ${getComputedStyle(document.querySelector(".page")).fontFamily}`;
+    ctx.fillStyle = "#000";
+    ctx.textBaseline = "middle";
+    ctx.fillText(ch, 4, 32);
+    return ctx.getImageData(0, 0, 64, 64).data.join(",");
+  };
+  for (const span of document.querySelectorAll(".box > span")) {
+    if (span.parentElement.style.display === "none") continue;
+    const weight = getComputedStyle(span).fontWeight;
+    const tofu = draw("\u{10FFFD}", weight);
+    const missing = [...new Set([...span.textContent].filter((ch) => ch.trim() && draw(ch, weight) === tofu))];
+    if (missing.length) problems.push(`${span.id} has no glyph for ${missing.join(" ")}`);
+  }
+  window.__badge = { ok: problems.length === 0, problems };
+})();
+</script>
+</body>
+</html>

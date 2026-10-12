@@ -1,0 +1,42 @@
+zenith version=1 {
+  project id="proj.badge" name="Northwind Summit 2026 badge"
+  assets {
+    asset id="asset.photo" kind="image" src="photos/p01.png"
+  }
+  tokens format="zenith-token-v1" {
+    token id="color.bg" type="color" value="#ffffff"
+    token id="color.ink" type="color" value="#101828"
+    token id="color.muted" type="color" value="#475467"
+    token id="color.scrim" type="color" value="#0b1220"
+    token id="color.on-scrim" type="color" value="#ffffff"
+    token id="font.body" type="fontFamily" value="Noto Sans"
+    token id="weight.bold" type="fontWeight" value=700
+    token id="weight.semibold" type="fontWeight" value=600
+    token id="weight.regular" type="fontWeight" value=400
+    token id="size.event" type="dimension" value=(px)34
+    token id="size.name" type="dimension" value=(px)64
+    token id="size.name-min" type="dimension" value=(px)28
+    token id="size.title" type="dimension" value=(px)28
+    token id="size.title-min" type="dimension" value=(px)16
+    token id="size.company" type="dimension" value=(px)24
+    token id="size.company-min" type="dimension" value=(px)16
+  }
+  document id="doc.badge" title="Northwind Summit 2026 badge" {
+    page id="page.badge" w=(px)900 h=(px)600 background=(token)"color.bg" {
+      image id="photo" role="data.photo" asset="asset.photo" x=(px)0 y=(px)0 w=(px)900 h=(px)220 fit="cover"
+      rect id="scrim" role="decoration" x=(px)0 y=(px)140 w=(px)900 h=(px)80 fill=(token)"color.scrim" opacity=0.82
+      text id="event" x=(px)40 y=(px)150 w=(px)820 h=(px)60 v-align="middle" overflow="autofit" font-size-min=(token)"size.title-min" font-family=(token)"font.body" font-size=(token)"size.event" font-weight=(token)"weight.bold" fill=(token)"color.on-scrim" contrast-bg=(token)"color.scrim" {
+        span "Northwind Summit 2026"
+      }
+      text id="name" role="data.name" x=(px)40 y=(px)244 w=(px)820 h=(px)160 v-align="middle" overflow="autofit" font-size-min=(token)"size.name-min" font-family=(token)"font.body" font-size=(token)"size.name" font-weight=(token)"weight.bold" fill=(token)"color.ink" {
+        span "Ximena Haddad"
+      }
+      text id="title" role="data.title" x=(px)40 y=(px)416 w=(px)820 h=(px)76 overflow="autofit" font-size-min=(token)"size.title-min" font-family=(token)"font.body" font-size=(token)"size.title" font-weight=(token)"weight.regular" fill=(token)"color.muted" {
+        span "Data Scientist"
+      }
+      text id="company" role="data.company" x=(px)40 y=(px)504 w=(px)820 h=(px)48 overflow="autofit" font-size-min=(token)"size.company-min" font-family=(token)"font.body" font-size=(token)"size.company" font-weight=(token)"weight.semibold" fill=(token)"color.ink" {
+        span "Northwind Traders"
+      }
+    }
+  }
+}

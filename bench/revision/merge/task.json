@@ -1,0 +1,10 @@
+{
+  "id": "badges",
+  "canvas": { "w": 900, "h": 600 },
+  "margin": 12,
+  "minContrast": 3,
+  "event": "Northwind Summit 2026",
+  "csv": "attendees.csv",
+  "sampleRows": 10,
+  "brief": "Design a conference name badge for the event \"Northwind Summit 2026\" and produce one badge per attendee in the CSV. Each badge shows the event name, the attendee's name (the largest text), their job title, and their company. The attendee's photo (the `photo` column, a path relative to the working directory) fills a full-width band across the top 220 px of the badge, and the event name sits on top of that photo."
+}

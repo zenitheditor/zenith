@@ -81,16 +81,16 @@ const EXTRACT = `(() => {
   });
 })()`;
 
-/** Returns a function (ws) => { pages, source } | { error } over one reused CDP page. */
+/** Returns a function (ws, doc?) => { pages, source } | { error } over one reused CDP page. `doc` defaults to design.html. */
 export async function htmlPages(browser, sizes) {
   const page = await browser.newPage();
   const wide = Math.max(...sizes.map((s) => s.w));
   const tall = Math.max(...sizes.map((s) => s.h));
-  return async (ws) => {
+  return async (ws, doc = "design.html") => {
     const out = mkdtempSync(path.join(tmpdir(), "zbuild-"));
     try {
       await page.viewport(wide, tall);
-      await page.goto(pathToFileURL(path.join(ws, "design.html")).href);
+      await page.goto(pathToFileURL(path.join(ws, doc)).href);
       await page.eval("document.fonts.ready.then(() => true)");
       const n = await page.eval("document.querySelectorAll('.page').length");
       if (!n) return { error: 'no element with class "page" found' };
@@ -109,7 +109,7 @@ export async function htmlPages(browser, sizes) {
         const img = crop(whole, 0, top, w, Math.max(1, h));
         return { png: encode(img), rects: p.rects, w: p.w, h: p.h, text: p.text };
       });
-      return { pages, source: readFileSync(path.join(ws, "design.html"), "utf8"), text: info.map((p) => p.text).join("\n") };
+      return { pages, source: readFileSync(path.join(ws, doc), "utf8"), text: info.map((p) => p.text).join("\n") };
     } catch (err) {
       return { error: String(err.message ?? err) };
     } finally {

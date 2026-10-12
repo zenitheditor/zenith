@@ -41,7 +41,7 @@ function modeColor(img, rect, pad, ringOnly) {
 }
 
 /** Ink lines (one rectangle per band of ink rows) and text colour of `rect`; no lines when nothing is drawn. */
-function inkOf(img, rect) {
+export function inkOf(img, rect) {
   const bg = modeColor(img, rect, 3, true);
   const x0 = Math.max(0, Math.floor(rect.x));
   const y0 = Math.max(0, Math.floor(rect.y));
