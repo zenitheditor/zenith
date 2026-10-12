@@ -15,6 +15,18 @@ it.
 
 ## [Unreleased]
 
+### Added
+
+- **Bundled fallback fonts for Arabic, Hebrew, Chinese, Japanese, Korean, and emoji.** The new `zenith-fonts-fallback` crate embeds Noto Sans Arabic, Noto Sans Hebrew, a Noto Sans CJK SC subset, and monochrome Noto Emoji, and the CLI tries them in that order for a glyph the requested face lacks. A document with no missing glyph renders the same bytes as before. The browser module does not embed them.
+
+### Fixed
+
+- **The bundled Noto font notices name the SIL Open Font License 1.1.** They said Apache-2.0, but each face's name table states OFL 1.1.
+
+### Changed
+
+- **`zenith merge` reports each row's warnings and applies the config policy, for PNG as well as SVG.** A `deny`ed code fails the row. A malformed config now fails the merge with exit code 2.
+
 ---
 
 ## [0.0.14] — 2026-10-12
