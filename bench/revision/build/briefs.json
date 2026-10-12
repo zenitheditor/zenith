@@ -395,5 +395,79 @@
    "Gate B - Row 4 - Seat 12",
    "No. 004217"
   ]
+ },
+ {
+  "id": "resize",
+  "kind": "flyer set",
+  "canvas": {
+   "w": 559,
+   "h": 794
+  },
+  "pages": 5,
+  "canvases": [
+   {
+    "w": 559,
+    "h": 794
+   },
+   {
+    "w": 794,
+    "h": 1123
+   },
+   {
+    "w": 1080,
+    "h": 1080
+   },
+   {
+    "w": 1080,
+    "h": 1920
+   },
+   {
+    "w": 1600,
+    "h": 400
+   }
+  ],
+  "margin": 24,
+  "brief": "Design one volunteer-event flyer at five sizes in one document: page 1 is A5 portrait, page 2 is A4 portrait, page 3 is a square social post, page 4 is a tall story, page 5 is a wide banner. All five pages carry the same text and the same look, and each is laid out for its own shape rather than stretched.",
+  "required": [
+   "Neighborhood Cleanup Day",
+   "Saturday, March 14",
+   "9:00 AM - 12:00 PM",
+   "Riverside Park, Main Street entrance",
+   "Bring gloves. We supply bags and water.",
+   "riversidecleanup.org"
+  ]
+ },
+ {
+  "id": "badges",
+  "kind": "badge set",
+  "canvas": {
+   "w": 400,
+   "h": 600
+  },
+  "pages": 12,
+  "margin": 24,
+  "brief": "Design conference badges, one page per attendee, 12 pages in all. Every badge has the same layout: the name large, the role below it, and the table number at the bottom. Attendees in order: Ada Lovelace, Speaker, Table 1; Grace Hopper, Speaker, Table 1; Alan Turing, Speaker, Table 2; Katherine Johnson, Volunteer, Table 2; Linus Torvalds, Attendee, Table 3; Margaret Hamilton, Sponsor, Table 3; Dennis Ritchie, Attendee, Table 4; Barbara Liskov, Attendee, Table 4; Tim Berners-Lee, Volunteer, Table 1; Radia Perlman, Speaker, Table 2; Ken Thompson, Sponsor, Table 3; Hedy Lamarr, Attendee, Table 4.",
+  "required": [
+   "Ada Lovelace",
+   "Grace Hopper",
+   "Alan Turing",
+   "Katherine Johnson",
+   "Linus Torvalds",
+   "Margaret Hamilton",
+   "Dennis Ritchie",
+   "Barbara Liskov",
+   "Tim Berners-Lee",
+   "Radia Perlman",
+   "Ken Thompson",
+   "Hedy Lamarr",
+   "Speaker",
+   "Volunteer",
+   "Attendee",
+   "Sponsor",
+   "Table 1",
+   "Table 2",
+   "Table 3",
+   "Table 4"
+  ]
  }
 ]

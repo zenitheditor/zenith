@@ -82,17 +82,21 @@ const EXTRACT = `(() => {
 })()`;
 
 /** Returns a function (ws) => { pages, source } | { error } over one reused CDP page. */
-export async function htmlPages(browser, canvas) {
+export async function htmlPages(browser, sizes) {
   const page = await browser.newPage();
+  const wide = Math.max(...sizes.map((s) => s.w));
+  const tall = Math.max(...sizes.map((s) => s.h));
   return async (ws) => {
     const out = mkdtempSync(path.join(tmpdir(), "zbuild-"));
     try {
-      await page.viewport(canvas.w, canvas.h);
+      await page.viewport(wide, tall);
       await page.goto(pathToFileURL(path.join(ws, "design.html")).href);
       await page.eval("document.fonts.ready.then(() => true)");
       const n = await page.eval("document.querySelectorAll('.page').length");
       if (!n) return { error: 'no element with class "page" found' };
-      await page.viewport(canvas.w, canvas.h * n);
+      // Sections stack with no gap: the viewport holds the sum of the page heights, or the stack of mixed sizes when pages differ.
+      const heights = Array.from({ length: n }, (_, i) => (sizes[i] ?? sizes[0]).h);
+      await page.viewport(wide, heights.reduce((a, b) => a + b, 0));
       await page.eval("document.fonts.ready.then(() => true)");
       const info = await page.eval(EXTRACT);
       const file = path.join(out, "all.png");

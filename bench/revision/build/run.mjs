@@ -31,10 +31,19 @@ function findChromium() {
   throw new Error("no Chromium on PATH; set ZENITH_E2E_CHROMIUM");
 }
 
+/** The size of each page: `canvases` when the brief mixes sizes, else `canvas` on every page. */
+export function pageSizes(brief) {
+  return brief.canvases ?? Array.from({ length: brief.pages }, () => brief.canvas);
+}
+
 /** Score a built design against its brief. */
 export function score(built, brief) {
   if (built.error) return { rendered: false, error: built.error.slice(0, 400), pagesOk: false, content: { found: 0, total: brief.required.length, missing: brief.required }, audit: null };
-  const sizeOk = built.pages.every((p) => Math.abs(p.w - brief.canvas.w) <= 1 && Math.abs(p.h - brief.canvas.h) <= 1);
+  const sizes = pageSizes(brief);
+  const sizeOk = built.pages.every((p, i) => {
+    const want = sizes[i] ?? sizes[0];
+    return Math.abs(p.w - want.w) <= 1 && Math.abs(p.h - want.h) <= 1;
+  });
   const pagesOk = built.pages.length === brief.pages && sizeOk;
   const haystack = built.text ?? built.source;
   const audit = auditPages(
@@ -69,7 +78,7 @@ async function main() {
     cpSync(skillSrc, path.join(ws, "skill"), { recursive: true });
     skillBody = readFileSync(path.join(skillSrc, "SKILL.md"), "utf8").replace(/^---[\s\S]*?---\n/, "");
   }
-  const arm = makeArm(kind, ws, brief.canvas, skillBody, { kind: brief.kind, pages: brief.pages });
+  const arm = makeArm(kind, ws, brief.canvas, skillBody, { kind: brief.kind, pages: brief.pages, sizes: pageSizes(brief) });
   const logFile = path.join(runDir, "log.jsonl");
   const log = (o) => appendFileSync(logFile, `${JSON.stringify(o)}\n`);
 
@@ -77,7 +86,7 @@ async function main() {
   let build;
   if (kind === "html") {
     browser = await Browser.launch(findChromium());
-    build = await htmlPages(browser, brief.canvas);
+    build = await htmlPages(browser, pageSizes(brief));
   } else {
     build = zenithPages;
   }
@@ -85,7 +94,7 @@ async function main() {
     const r = await build(ws);
     if (r.error) return { error: r.error };
     const page = r.pages[Math.min(Math.max(n, 1), r.pages.length) - 1];
-    return { png: page.png };
+    return { png: page.png, all: r.pages.map((p) => p.png) };
   };
 
   try {

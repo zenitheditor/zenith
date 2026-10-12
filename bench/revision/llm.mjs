@@ -20,7 +20,9 @@ function readKey() {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // Returns { message, usage, finish }. Retries 429 and 5xx with backoff.
-export async function chat({ model, messages, tools, maxTokens = 16384, temperature = 0.6, seed }) {
+// ZENITH_BENCH_MAX_TOKENS raises the reply cap for briefs whose whole design is one long reply.
+const DEFAULT_MAX_TOKENS = Number(process.env.ZENITH_BENCH_MAX_TOKENS) || 16384;
+export async function chat({ model, messages, tools, maxTokens = DEFAULT_MAX_TOKENS, temperature = 0.6, seed }) {
   const key = readKey();
   const body = { model, messages, max_tokens: maxTokens, temperature };
   if (seed !== undefined) body.seed = seed;

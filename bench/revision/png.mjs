@@ -99,3 +99,55 @@ export function crop(img, x, y, w, h) {
   }
   return { width: w, height: h, data };
 }
+
+/** Resize an RGBA image `{width,height,data}` to `w` x `h` by averaging the source pixels under each target pixel. */
+function resize(img, w, h) {
+  const data = Buffer.alloc(w * h * 4);
+  for (let y = 0; y < h; y++) {
+    const y0 = Math.floor((y * img.height) / h);
+    const y1 = Math.max(y0 + 1, Math.floor(((y + 1) * img.height) / h));
+    for (let x = 0; x < w; x++) {
+      const x0 = Math.floor((x * img.width) / w);
+      const x1 = Math.max(x0 + 1, Math.floor(((x + 1) * img.width) / w));
+      let r = 0, g = 0, b = 0, a = 0, n = 0;
+      for (let sy = y0; sy < y1; sy++) {
+        for (let sx = x0; sx < x1; sx++) {
+          const i = (sy * img.width + sx) * 4;
+          r += img.data[i]; g += img.data[i + 1]; b += img.data[i + 2]; a += img.data[i + 3];
+          n++;
+        }
+      }
+      const o = (y * w + x) * 4;
+      data[o] = r / n; data[o + 1] = g / n; data[o + 2] = b / n; data[o + 3] = a / n;
+    }
+  }
+  return { width: w, height: h, data };
+}
+
+/**
+ * One image with every page of `images` (decoded RGBA) tiled in a grid of
+ * ceil(sqrt(n)) columns on a white ground, at most `maxWidth` px wide and never
+ * above scale 1. Both arms use this for `view` with `all`.
+ */
+export function contactSheet(images, maxWidth = 2048) {
+  const gutter = 16;
+  const cols = Math.ceil(Math.sqrt(images.length));
+  const rows = Math.ceil(images.length / cols);
+  const cellW = Math.max(...images.map((i) => i.width));
+  const cellH = Math.max(...images.map((i) => i.height));
+  const scale = Math.min(1, (maxWidth - gutter * (cols + 1)) / (cols * cellW));
+  const w = Math.round(cellW * scale);
+  const h = Math.round(cellH * scale);
+  const width = gutter + cols * (w + gutter);
+  const height = gutter + rows * (h + gutter);
+  const data = Buffer.alloc(width * height * 4, 255);
+  images.forEach((img, i) => {
+    const small = resize(img, Math.max(1, Math.round(img.width * scale)), Math.max(1, Math.round(img.height * scale)));
+    const ox = gutter + (i % cols) * (w + gutter);
+    const oy = gutter + Math.floor(i / cols) * (h + gutter);
+    for (let y = 0; y < small.height; y++) {
+      small.data.copy(data, ((oy + y) * width + ox) * 4, y * small.width * 4, (y + 1) * small.width * 4);
+    }
+  });
+  return { width, height, data };
+}

@@ -48,7 +48,7 @@ export async function judgeRun(dirName, judge) {
   const pages = pagesOf(dir);
   if (!brief || pages.length === 0) return null;
   const content = [{ type: "text", text: `${RUBRIC}\n\nBrief: ${brief.brief}\n${pages.length} page(s) follow in order.` }];
-  for (const p of pages.slice(0, 4)) {
+  for (const p of pages.slice(0, 6)) {
     content.push({ type: "image_url", image_url: { url: `data:image/png;base64,${readFileSync(p).toString("base64")}` } });
   }
   let verdict = null;

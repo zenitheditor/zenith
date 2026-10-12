@@ -1,13 +1,18 @@
-// The two arms. Both get the same file tools and the same `view` tool; the Zenith
-// arm also gets the Zenith CLI. Nothing else differs except the document format.
+// The two arms. Both get the same file tools and the same `view` tool (one page,
+// or every page tiled with `all`); the Zenith arm also gets the Zenith CLI. A PNG
+// the CLI writes with `--png` or `--contact-sheet` comes back as an image, as it
+// would to an agent that opens the file. The HTML arm's `view all` is the same
+// capability. Nothing else differs except the document format.
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import path from "node:path";
 import { readFileSync, writeFileSync } from "node:fs";
 import { zenithBin } from "./render.mjs";
+import { contactSheet, decode, encode } from "./png.mjs";
 
 const run = promisify(execFile);
 const LIMIT = 8000;
+const MAX_SHEET_PAGES = 16;
 // Everything except the commands that start a server, change the install, or run an MCP server.
 const ZENITH_BLOCKED = new Set(["edit", "update", "plugin", "mcp"]);
 
@@ -20,7 +25,7 @@ const FILE_TOOLS = [
   fn("read_file", "Read a text file in the working directory.", { path: { type: "string" } }, ["path"]),
   fn("write_file", "Write a text file in the working directory, replacing it.", { path: { type: "string" }, content: { type: "string" } }, ["path", "content"]),
   fn("edit_file", "Replace one exact occurrence of a string in a text file. Fails if the string is missing or appears more than once.", { path: { type: "string" }, old: { type: "string" }, new: { type: "string" } }, ["path", "old", "new"]),
-  fn("view", "Render the current design and show it as an image. Pass `page` (1-based) to see another page.", { page: { type: "integer" } }, []),
+  fn("view", "Render the current design and show it as an image. Pass `page` (1-based) to see another page, or `all: true` to see every page tiled in one image.", { page: { type: "integer" }, all: { type: "boolean" } }, []),
 ];
 
 const ZENITH_TOOL = fn(
@@ -75,6 +80,12 @@ export function makeArm(kind, ws, canvas, skill, build) {
             return { text: `edited ${args.path}` };
           }
           case "view": {
+            if (args.all === true) {
+              const r = await render(1);
+              if (!r.png) return { text: `render failed:\n${clip(r.error)}` };
+              const pages = (r.all ?? [r.png]).slice(0, MAX_SHEET_PAGES).map((png) => decode(png));
+              return { text: `rendered ${pages.length} page(s); the image follows`, image: encode(contactSheet(pages)) };
+            }
             const r = await render(Number.isInteger(args.page) ? args.page : 1);
             return r.png ? { text: "rendered; the image follows", image: r.png } : { text: `render failed:\n${clip(r.error)}` };
           }
@@ -85,7 +96,19 @@ export function makeArm(kind, ws, canvas, skill, build) {
             if (list.some((a) => path.isAbsolute(a) || a.split(/[\\/]/).includes(".."))) return { text: "paths must stay inside the working directory" };
             try {
               const { stdout, stderr } = await run(zenithBin(), list, { cwd: ws, timeout: 60000, maxBuffer: 4 << 20 });
-              return { text: clip(`${stdout}${stderr}`.trim() || "(no output)") };
+              const out = { text: clip(`${stdout}${stderr}`.trim() || "(no output)") };
+              // A PNG the command wrote comes back as an image, as an agent that opens the file would see it.
+              for (const flag of ["--png", "--contact-sheet"]) {
+                const joined = list.find((a) => a.startsWith(`${flag}=`));
+                const at = list.indexOf(flag);
+                const file = joined ? joined.slice(flag.length + 1) : at >= 0 ? list[at + 1] : null;
+                if (file) {
+                  try {
+                    out.image = readFileSync(path.join(ws, file));
+                  } catch {}
+                }
+              }
+              return out;
             } catch (err) {
               return { text: clip(`exit ${err.code ?? "?"}\n${err.stdout ?? ""}${err.stderr ?? ""}`.trim()) };
             }
@@ -102,10 +125,14 @@ export function makeArm(kind, ws, canvas, skill, build) {
 
 /** System prompt for authoring a design from a brief: the file contract differs per arm. */
 function buildPrompt(kind, file, canvas, build) {
+  const mixed = build.sizes && new Set(build.sizes.map((s) => `${s.w}x${s.h}`)).size > 1;
   const pages = build.pages === 1 ? "one page" : `${build.pages} pages`;
+  const sizeText = mixed
+    ? `. The pages have these sizes in px, in order: ${build.sizes.map((s, i) => `page ${i + 1} ${s.w}x${s.h}`).join(", ")}.`
+    : `, each ${canvas.w}x${canvas.h} px.`;
   const contract =
     kind === "zenith"
-      ? "Author a Zenith document (KDL text) in design.zen with the `zenith` tool (start with `zenith --help`). Every page is exactly the canvas size."
-      : 'Author one HTML file with inline CSS in design.html. Wrap every page in `<section class="page">` that is exactly the canvas size in px, with body margin 0, the sections stacked top to bottom with no gap.';
-  return `You design a ${build.kind} from a brief, starting from an empty working directory. The design has ${pages}, each ${canvas.w}x${canvas.h} px. ${contract} Use only the fonts Noto Sans and Noto Sans Mono. Use no images: build the design from text and shapes. Include every text item the user lists, exactly as written. Do not invent other text. Use \`view\` to check each page before you finish. When it is done, reply with one short sentence and no tool call.`;
+      ? "Author a Zenith document (KDL text) in design.zen with the `zenith` tool (start with `zenith --help`). Every page is exactly its stated size."
+      : 'Author one HTML file with inline CSS in design.html. Wrap every page in `<section class="page">` that is exactly its stated size in px, with body margin 0, the sections stacked top to bottom with no gap.';
+  return `You design a ${build.kind} from a brief, starting from an empty working directory. The design has ${pages}${sizeText} ${contract} Use only the fonts Noto Sans and Noto Sans Mono. Use no images: build the design from text and shapes. Include every text item the user lists, exactly as written. Do not invent other text. Use \`view\` to check each page before you finish. When it is done, reply with one short sentence and no tool call.`;
 }
