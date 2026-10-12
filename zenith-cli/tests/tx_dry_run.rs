@@ -242,6 +242,12 @@ fn every_common_edit_names_a_real_op() {
         let op = v["op"].as_str().expect("op name");
         let out = env.zenith(&["schema", "op", op]);
         assert_eq!(out.status.code(), Some(0), "unknown op {op} in: {edit}");
+        let parsed = zenith_tx::Transaction::from_json(&format!("{{\"ops\":[{edit}]}}"));
+        assert!(
+            parsed.is_ok(),
+            "fields do not match the op {op}: {edit}: {:?}",
+            parsed.err().map(|e| e.message)
+        );
     }
 }
 
@@ -342,4 +348,165 @@ fn tx_diagnostics_are_not_repeated() {
         );
         assert!(seen.insert(key.clone()), "repeated diagnostic {key:?}");
     }
+}
+
+// ── `--apply --png`: the edit and its render in one call ──────────────────
+
+const SET_FILL: &str = r#"{"ops":[{"op":"set_fill","node":"card.3","fill":"color.w"}]}"#;
+
+fn is_png(env: &Env, name: &str) -> bool {
+    std::fs::read(env.path(name)).is_ok_and(|b| b.starts_with(b"\x89PNG\r\n\x1a\n"))
+}
+
+#[test]
+fn apply_with_png_writes_the_edit_and_the_render() {
+    let env = Env::with_doc(CARDS);
+    let before = env.read();
+    let out = env.tx(SET_FILL, &["--apply", "--png", "c.png"]);
+    assert_eq!(out.status.code(), Some(0), "{}", stdout(&out));
+    assert_ne!(env.read(), before, "the edit is written");
+    assert!(is_png(&env, "c.png"), "the render is a PNG");
+    let text = stdout(&out);
+    assert!(text.contains("png: c.png ("), "{text}");
+    assert!(text.contains("page 1 of "), "{text}");
+}
+
+#[test]
+fn json_reports_the_render() {
+    let env = Env::with_doc(CARDS);
+    let v = json(&env.tx(SET_FILL, &["--apply", "--png", "c.png", "--json"]));
+    assert_eq!(v["png"]["path"], "c.png");
+    assert_eq!(v["png"]["page"], 1);
+    assert!(v["png"]["width"].as_u64().is_some_and(|w| w > 0), "{v}");
+    assert!(v["png"]["pages"].as_u64().is_some_and(|n| n >= 1), "{v}");
+}
+
+#[test]
+fn png_needs_apply() {
+    let env = Env::with_doc(CARDS);
+    let out = env.tx(SET_FILL, &["--png", "c.png"]);
+    assert_eq!(out.status.code(), Some(2));
+    assert!(!is_png(&env, "c.png"));
+}
+
+#[test]
+fn a_rejected_edit_writes_neither_file() {
+    let env = Env::with_doc(CARDS);
+    let before = env.read();
+    let out = env.tx(
+        r#"{"ops":[{"op":"set_fill","node":"no-such-node","fill":"color.w"}]}"#,
+        &["--apply", "--png", "c.png"],
+    );
+    assert_eq!(out.status.code(), Some(1), "{}", stdout(&out));
+    assert_eq!(env.read(), before);
+    assert!(!is_png(&env, "c.png"));
+}
+
+#[test]
+fn png_may_not_overwrite_the_document() {
+    let env = Env::with_doc(CARDS);
+    let before = env.read();
+    let out = env.tx(SET_FILL, &["--apply", "--png", DOC]);
+    assert_eq!(out.status.code(), Some(2));
+    assert_eq!(
+        env.read(),
+        before,
+        "the edit is refused before it is written"
+    );
+}
+
+#[test]
+fn a_page_that_does_not_render_writes_neither_file() {
+    let env = Env::with_doc(CARDS);
+    let before = env.read();
+    let out = env.tx(SET_FILL, &["--apply", "--png", "c.png", "--page", "9"]);
+    assert_eq!(out.status.code(), Some(2), "{}", stdout(&out));
+    assert_eq!(env.read(), before, "the edit is not written");
+    assert!(!is_png(&env, "c.png"));
+    let text = stdout(&out);
+    assert!(text.contains("tx.png_failed"), "{text}");
+    assert!(text.contains("neither the edit nor the PNG"), "{text}");
+}
+
+#[test]
+fn a_png_failure_in_json_mode_is_one_object() {
+    let env = Env::with_doc(CARDS);
+    let out = env.tx(
+        SET_FILL,
+        &["--apply", "--png", "c.png", "--page", "9", "--json"],
+    );
+    assert_eq!(out.status.code(), Some(2));
+    let v = json(&out);
+    assert!(
+        v["png_error"]
+            .as_str()
+            .is_some_and(|m| m.contains("tx.png_failed")),
+        "{v}"
+    );
+    assert!(v.get("png").is_none(), "{v}");
+}
+
+#[test]
+fn page_zero_is_a_usage_error_and_writes_nothing() {
+    let env = Env::with_doc(CARDS);
+    let before = env.read();
+    let out = env.tx(SET_FILL, &["--apply", "--png", "c.png", "--page", "0"]);
+    assert_eq!(out.status.code(), Some(2));
+    assert_eq!(env.read(), before);
+}
+
+#[test]
+fn png_may_not_overwrite_the_tx_file_or_a_directory() {
+    let env = Env::with_doc(CARDS);
+    let before = env.read();
+    let tx_file = env.tx(SET_FILL, &["--apply", "--png", "tx.json"]);
+    assert_eq!(tx_file.status.code(), Some(2));
+    assert_eq!(env.read(), before, "refused before the edit is written");
+    let missing = env.tx(SET_FILL, &["--apply", "--png", "no-such-dir/c.png"]);
+    assert_eq!(missing.status.code(), Some(2));
+    assert_eq!(
+        env.read(),
+        before,
+        "a missing directory is refused up front"
+    );
+    std::fs::create_dir(env.path("outdir")).expect("mkdir");
+    let dir = env.tx(SET_FILL, &["--apply", "--png", "outdir"]);
+    assert_eq!(dir.status.code(), Some(2));
+    assert_eq!(env.read(), before, "refused before the edit is written");
+}
+
+#[test]
+fn a_partial_fill_does_not_report_the_placeholder_warning_as_introduced() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let data = tempfile::tempdir().expect("data");
+    let zenith = |args: &[&str]| {
+        std::process::Command::new(env!("CARGO_BIN_EXE_zenith"))
+            .args(args)
+            .current_dir(dir.path())
+            .env("ZENITH_DATA_DIR", data.path())
+            .output()
+            .expect("run zenith")
+    };
+    assert!(
+        zenith(&["new", "c.zen", "--starter", "card"])
+            .status
+            .success()
+    );
+    let out = zenith(&[
+        "tx",
+        "c.zen",
+        "--apply",
+        "--json",
+        "--ops",
+        r#"[{"op":"set_span_text","node":"card.name","span":0,"text":"Real"}]"#,
+    ]);
+    let v: serde_json::Value = serde_json::from_slice(&out.stdout).expect("json");
+    let n = v["diagnostics"]
+        .as_array()
+        .expect("diagnostics")
+        .iter()
+        .filter(|d| d["code"] == "content.placeholder")
+        .count();
+    assert_eq!(n, 1, "one placeholder warning, listed once: {v}");
+    assert_eq!(v["status"], "accepted_with_warnings");
 }

@@ -20,6 +20,7 @@ use super::introduced::introduced;
 use super::render::{TxView, render_human, render_json};
 use super::tree::Tree;
 use super::written::written_source;
+use crate::json_types::TxPngJson;
 
 // ── Error type ────────────────────────────────────────────────────────────────
 
@@ -51,6 +52,24 @@ pub struct TxOutcome {
     pub json_str: String,
     /// Status-derived exit code: 0 for Accepted/AcceptedWithWarnings, 1 for Rejected.
     pub exit_code: u8,
+    /// The review parts `human` and `json_str` were rendered from.
+    view: TxView,
+}
+
+impl TxOutcome {
+    /// Add the reason `--png` produced no render to `human` and `json_str`.
+    pub fn attach_png_error(&mut self, message: String) {
+        self.view.png_error = Some(message);
+        self.human = render_human(&self.result, &self.view);
+        self.json_str = render_json(&self.result, self.view.clone());
+    }
+
+    /// Add the render written after the edit to `human` and `json_str`.
+    pub fn attach_png(&mut self, png: TxPngJson) {
+        self.view.png = Some(png);
+        self.human = render_human(&self.result, &self.view);
+        self.json_str = render_json(&self.result, self.view.clone());
+    }
 }
 
 /// What the compiled review of a tx run needs from the caller.
@@ -230,13 +249,14 @@ fn finish(
     view.applied = ctx.map(|c| c.apply && result.status != TxStatus::Rejected && changed);
     let exit_code = status_exit_code(&result.status);
     let human = render_human(&result, &view);
-    let json_str = render_json(&result, view);
+    let json_str = render_json(&result, view.clone());
     TxOutcome {
         result,
         written,
         human,
         json_str,
         exit_code,
+        view,
     }
 }
 

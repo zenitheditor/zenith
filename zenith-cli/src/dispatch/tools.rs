@@ -86,7 +86,7 @@ fn print_starter_tip(path: &std::path::Path) {
         crate::cli::COMMON_EDITS
     );
     println!(
-        "This is a finished layout: replace the text above, restyle with `zenith tokens {shown}` and {{\"op\":\"update_token_value\",\"id\":\"color.primary\",\"value\":\"#rrggbb\"}}, and add or remove nodes (`duplicate_node` repeats a row). `zenith inspect {shown}` prints its layout outline (id, box, layout, text per node). To write nodes by hand, `zenith schema write` has the syntax and common attributes. Run `zenith validate {shown}` after."
+        "This is a finished layout: replace the text above, restyle with `zenith tokens {shown}` and {{\"op\":\"update_token_value\",\"id\":\"color.primary\",\"value\":\"#rrggbb\"}}, and add or remove nodes (`duplicate_node` repeats a row). `zenith inspect {shown}` prints its layout outline (id, box, layout, text per node). Add `--png out.png` to `zenith tx --apply` to see the result in the same call. Every text node is marked role=\"placeholder\": `zenith validate {shown}` warns once (content.placeholder), naming the first ones you leave, and a `tx` text op on a node clears its mark. To write nodes by hand, `zenith schema write` has the syntax and common attributes."
     );
 }
 

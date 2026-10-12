@@ -15,6 +15,8 @@ move or resize      {\"op\":\"set_geometry\",\"node\":\"r\",\"x\":10,\"w\":200} 
 offset one child    {\"op\":\"set_layout\",\"node\":\"button\",\"margin_top\":40}  (child of a row/column frame)\n  \
 add a node          {\"op\":\"add_node\",\"parent\":\"page.main\",\"source\":\"rect id=\\\"box\\\" x=(px)10 y=(px)10 w=(px)100 h=(px)80\"}\n  \
 remove a node       {\"op\":\"remove_node\",\"node\":\"old-rect\"}\n  \
+repeat a row or card {\"op\":\"duplicate_node\",\"node\":\"topics.1\",\"new_id\":\"topics.1-b\"}  (then change the copy's text)\n  \
+repeat a page       {\"op\":\"duplicate_page\",\"page\":\"page.1\",\"new_id\":\"page.2\",\"id_suffix\":\".2\"}  (then change the copy's text)\n  \
 show or hide        {\"op\":\"set_visible\",\"node\":\"caption\",\"visible\":false}"
     };
 }
@@ -40,6 +42,7 @@ EXAMPLES:\n  \
 zenith tx poster.zen edits.json                 # preview the diff and moved boxes (dry-run)\n  \
 zenith tx poster.zen edits.json --apply         # write the change to disk\n  \
 zenith tx poster.zen edits.json --apply --diff  # write, and print the diff and moved boxes\n  \
+zenith tx poster.zen edits.json --apply --png out.png  # write, and render page 1 in the same call\n  \
 zenith tx poster.zen --apply --ops '[{\"op\":\"set_fill\",\"node\":\"hero\",\"fill\":\"color.brand\"}]'  # inline ops, no file"))]
 pub struct TxArgs {
     /// Path to the `.zen` document.
@@ -56,6 +59,19 @@ pub struct TxArgs {
     /// Apply the result back to disk (dry-run by default).
     #[arg(long)]
     pub apply: bool,
+
+    /// With `--apply`, render the edited document to this PNG in the same call, so the edit and its look are one step. An edit that is rejected writes neither file.
+    #[arg(long, value_name = "OUT", requires = "apply")]
+    pub png: Option<PathBuf>,
+
+    /// The 1-based page `--png` renders (default 1).
+    #[arg(
+        long,
+        value_name = "N",
+        requires = "png",
+        value_parser = clap::builder::RangedU64ValueParser::<usize>::new().range(1..)
+    )]
+    pub page: Option<usize>,
 
     /// Print the source diff and moved/resized boxes with `--apply` (a dry-run always prints them).
     #[arg(long)]

@@ -3,13 +3,13 @@
 use zenith_tx::{TxResult, TxStatus};
 
 use crate::commands::serialize_pretty;
-use crate::json_types::{self, DiagnosticJson, TxOutputJson};
+use crate::json_types::{self, DiagnosticJson, TxOutputJson, TxPngJson};
 
 use super::boxes::{BoxDelta, fmt_box, moved};
 
 /// The optional review parts of a tx outcome: the source diff and the
 /// compiled box delta. `None` means the part is not shown.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct TxView {
     /// Unified diff of the canonical source before and after.
     pub source_diff: Option<String>,
@@ -18,6 +18,10 @@ pub struct TxView {
     /// Whether the edit was written to disk. `None` when the caller does not
     /// say (an AST-only run).
     pub applied: Option<bool>,
+    /// The render written after the edit, with `--apply --png`.
+    pub png: Option<TxPngJson>,
+    /// Why `--png` produced no render.
+    pub png_error: Option<String>,
 }
 
 /// The status as shown in human output.
@@ -89,6 +93,16 @@ pub fn render_human(result: &TxResult, view: &TxView) -> String {
         out.push('\n');
         out.push_str(diff.trim_end());
     }
+    if let Some(png) = &view.png {
+        out.push_str(&format!(
+            "\npng: {} ({}x{} px, page {} of {})",
+            png.path, png.width, png.height, png.page, png.pages
+        ));
+    }
+    if let Some(message) = &view.png_error {
+        out.push('\n');
+        out.push_str(message);
+    }
     if let Some(boxes) = &view.boxes {
         if boxes.is_empty() {
             out.push_str("\nboxes: (none)");
@@ -141,6 +155,8 @@ pub(super) fn render_json(result: &TxResult, view: TxView) -> String {
         applied: view.applied,
         source_diff: view.source_diff,
         boxes: view.boxes,
+        png: view.png,
+        png_error: view.png_error,
     };
     serialize_pretty(&out)
 }

@@ -37,24 +37,137 @@ pub(super) fn dispatch_tx(args: TxArgs) -> ExitCode {
         (None, None) => String::new(),
     };
     let label = args.path.display().to_string();
+    // Refuse a `--png` target that is the document or another output before
+    // the edit is written.
+    let mut png_guard = match png_target(&args) {
+        Ok(guard) => guard,
+        Err(e) => return e.emit(json),
+    };
     let ctx = commands::tx::TxCtx {
         project_dir: args.path.parent(),
         label: &label,
         show_diff: !args.apply || args.diff,
         apply: args.apply,
     };
-    let outcome = match commands::tx::run_with(&doc_src, &tx_json, &ctx) {
+    let mut outcome = match commands::tx::run_with(&doc_src, &tx_json, &ctx) {
         Ok(o) => o,
         Err(e) => return CliError::new("tx.failed", e.message, e.exit_code).emit(json),
     };
+    // Render before anything is written: a page that does not render leaves
+    // both files as they were.
+    let mut png = None;
+    if let (Some(out), true) = (&args.png, outcome.exit_code != 1) {
+        match render_png(
+            &outcome.written.text,
+            args.path.parent(),
+            args.page.unwrap_or(1),
+            out,
+        ) {
+            Ok(rendered) => png = Some(rendered),
+            Err(message) => {
+                outcome.attach_png_error(message);
+                print_outcome(json, &outcome.json_str, &outcome.human);
+                return ExitCode::from(2);
+            }
+        }
+    }
     if args.apply
         && outcome.exit_code != 1
         && let Err(e) = apply_edit(&args.path, outcome.written.text.as_bytes(), "tx.apply")
     {
         return e.emit(json);
     }
+    let mut exit_code = outcome.exit_code;
+    if let (Some(rendered), Some(guard)) = (png, png_guard.as_mut()) {
+        match write_png(guard, rendered) {
+            Ok(note) => outcome.attach_png(note),
+            Err(message) => {
+                outcome.attach_png_error(message);
+                exit_code = 2;
+            }
+        }
+    }
     print_outcome(json, &outcome.json_str, &outcome.human);
-    ExitCode::from(outcome.exit_code)
+    ExitCode::from(exit_code)
+}
+
+/// The output guard for `--png`: the document and the tx file are protected,
+/// and the target must be replaceable. `None` without `--png`.
+fn png_target(args: &TxArgs) -> Result<Option<crate::output_file::OutputGuard>, CliError> {
+    let Some(out) = &args.png else {
+        return Ok(None);
+    };
+    let mut protected = vec![args.path.as_path()];
+    protected.extend(args.tx_file.as_deref());
+    let mut guard = crate::output_file::OutputGuard::new(&protected)
+        .map_err(|e| write_error(&args.path, &e))?;
+    guard.check(out).map_err(|e| write_error(out, &e))?;
+    crate::output_file::check_replaceable(out).map_err(|e| write_error(out, &e))?;
+    Ok(Some(guard))
+}
+
+/// A rendered page and where it goes.
+struct RenderedPng {
+    bytes: Vec<u8>,
+    out: std::path::PathBuf,
+    width: u32,
+    height: u32,
+    page: usize,
+    pages: usize,
+}
+
+/// Render page `page` of the edited source `src`. The error is the message
+/// for the result: nothing was written.
+fn render_png(
+    src: &str,
+    project_dir: Option<&std::path::Path>,
+    page: usize,
+    out: &std::path::Path,
+) -> Result<RenderedPng, String> {
+    let artifact = commands::render::to_png_with_dir(
+        src,
+        project_dir,
+        page,
+        false,
+        &zenith_pipeline::PolicyFlags::default(),
+        None,
+    )
+    .map_err(|e| {
+        format!(
+            "error[tx.png_failed]: page {page} did not render, so neither the edit nor the PNG was written: {}",
+            e.message
+        )
+    })?;
+    Ok(RenderedPng {
+        bytes: artifact.png,
+        out: out.to_path_buf(),
+        width: artifact.width,
+        height: artifact.height,
+        page,
+        pages: artifact.page_count,
+    })
+}
+
+/// Write the rendered page. The edit is already on disk when this runs.
+fn write_png(
+    guard: &mut crate::output_file::OutputGuard,
+    rendered: RenderedPng,
+) -> Result<crate::json_types::TxPngJson, String> {
+    let out = &rendered.out;
+    let failed = |e: &std::io::Error| {
+        format!(
+            "error[tx.png_failed]: the edit is written but the PNG was not: {}",
+            crate::output_file::write_failure(out, e)
+        )
+    };
+    guard.write(out, &rendered.bytes).map_err(|e| failed(&e))?;
+    Ok(crate::json_types::TxPngJson {
+        path: out.display().to_string(),
+        width: rendered.width,
+        height: rendered.height,
+        page: rendered.page,
+        pages: rendered.pages,
+    })
 }
 
 pub(super) fn dispatch_outline_text(args: OutlineTextArgs) -> ExitCode {

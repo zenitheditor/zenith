@@ -224,6 +224,19 @@ pub struct ErrorOutput {
     pub diagnostics: Vec<DiagnosticJson>,
 }
 
+/// The render `zenith tx --apply --png` wrote after the edit.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct TxPngJson {
+    /// The PNG file.
+    pub path: String,
+    pub width: u32,
+    pub height: u32,
+    /// The 1-based page rendered.
+    pub page: usize,
+    /// The number of pages in the document.
+    pub pages: usize,
+}
+
 /// Top-level JSON envelope for `tx`.
 #[derive(Debug, Serialize)]
 pub struct TxOutputJson {
@@ -244,6 +257,12 @@ pub struct TxOutputJson {
     /// `source_diff`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub boxes: Option<Vec<crate::commands::tx::BoxDelta>>,
+    /// The render written after the edit, with `--apply --png`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub png: Option<TxPngJson>,
+    /// Why `--png` produced no render, with `--apply --png`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub png_error: Option<String>,
 }
 
 /// One skipped-token entry in the `zenith theme apply --json` extras.
