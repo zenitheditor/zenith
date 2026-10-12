@@ -126,6 +126,8 @@ Rules:
   - Colors, fonts, and sizes come from tokens: write (token)\"color.ink\". A plain size is (px)16.
   - A frame with layout=\"column\", \"row\", or \"grid\" stacks its children. Give those children w/h (px, a token, \"fill\", or \"hug\") and no x/y.
   - Outside a layout frame, a node takes x and y from its parent's top-left corner.
+  - Repeat what repeats: `duplicate_node` copies a row or card and `duplicate_page` copies a page, then change the text of the copy. Do not write each copy out by hand.
+  - Check many pages in one call: `zenith render <file> --contact-sheet sheet.png` tiles every page, so no page needs its own look.
   - Keep text inside its box: a long line needs a wider w or a smaller font-size. Check with `zenith validate` and `zenith render <file> --png out.png`.";
 
 fn attrs_of(entry: &Entry) -> Vec<SchemaAttr> {

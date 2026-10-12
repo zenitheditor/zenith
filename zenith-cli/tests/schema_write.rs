@@ -56,6 +56,15 @@ fn the_guide_names_the_common_kinds_and_json_matches() {
 }
 
 #[test]
+fn the_guide_says_to_repeat_and_to_check_pages_together() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let (_, guide) = zenith(&["schema", "write"], dir.path());
+    for want in ["duplicate_page", "duplicate_node", "--contact-sheet"] {
+        assert!(guide.contains(want), "the guide lacks {want}");
+    }
+}
+
+#[test]
 fn the_guide_carries_the_same_common_edits_as_tx_help() {
     let dir = tempfile::tempdir().expect("tempdir");
     let (_, guide) = zenith(&["schema", "write"], dir.path());
