@@ -42,11 +42,12 @@ pub use node::{
     CodeNode, ConnectorAnchor, ConnectorAnchorParseError, ConnectorNode, EllipseNode, FieldNode,
     FootnoteNode, FrameNode, GroupNode, ImageNode, InstanceNode, LayoutAlign, LayoutContainer,
     LayoutItem, LayoutJustify, LayoutKind, LayoutPosition, LightNode, LineNode, MeshNode, Node,
-    ObjectPosition, Override, PathAnchor, PathNode, PathSubpath, PathSubpathRef, PatternNode,
-    Point, PolygonNode, PolylineNode, ProtectedRegion, RectNode, ShapeNode, SizeKeyword, TableCell,
-    TableColumn, TableNode, TableRow, TextNode, TextSpan, TocNode, UnknownNode, UnknownProperty,
-    UnknownValue, anchor_xy, derive_anchor_origin, parse_anchor, parse_anchor_edge,
-    parse_connector_anchor, resolve_geometry_px, subtree_uses_layout, translate_node,
+    ObjectPosition, Override, PLACEHOLDER_ROLE, PLACEHOLDER_TEXT, PathAnchor, PathNode,
+    PathSubpath, PathSubpathRef, PatternNode, Point, PolygonNode, PolylineNode, ProtectedRegion,
+    RectNode, ShapeNode, SizeKeyword, TableCell, TableColumn, TableNode, TableRow, TextNode,
+    TextSpan, TocNode, UnknownNode, UnknownProperty, UnknownValue, anchor_xy, derive_anchor_origin,
+    parse_anchor, parse_anchor_edge, parse_connector_anchor, resolve_geometry_px,
+    subtree_uses_layout, translate_node,
 };
 pub use policy::{DiagnosticPolicy, PolicyEntry, PolicyVerb};
 pub use provenance::ProvenanceDef;

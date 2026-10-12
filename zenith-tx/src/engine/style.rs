@@ -10,7 +10,7 @@ use zenith_core::{
 
 use crate::op::OpSpan;
 
-use super::{find_node_any_mut, record_affected};
+use super::{clear_placeholder, find_node_any_mut, record_affected};
 
 // ── Field accessor helpers ────────────────────────────────────────────────────
 
@@ -782,6 +782,7 @@ pub(super) fn apply_find_replace_text(
             }
             Some(Node::Text(text_node)) => {
                 if replace_in_text_node(text_node, find, replace) {
+                    clear_placeholder(&mut text_node.role);
                     record_affected(node_id, affected);
                 } else {
                     diagnostics.push(Diagnostic::advisory(
@@ -797,6 +798,7 @@ pub(super) fn apply_find_replace_text(
             }
             Some(Node::Shape(shape_node)) => {
                 if replace_in_spans(&mut shape_node.spans, find, replace) {
+                    clear_placeholder(&mut shape_node.role);
                     record_affected(node_id, affected);
                 } else {
                     diagnostics.push(Diagnostic::advisory(
@@ -849,9 +851,19 @@ pub(super) fn apply_find_replace_text(
                 // Mutate via find_node_any_mut. Text nodes and shapes both own
                 // span lists; any other node kind is not a text target here.
                 let changed = match find_node_any_mut(doc, id) {
-                    Some(Node::Text(text_node)) => replace_in_text_node(text_node, find, replace),
+                    Some(Node::Text(text_node)) => {
+                        let changed = replace_in_text_node(text_node, find, replace);
+                        if changed {
+                            clear_placeholder(&mut text_node.role);
+                        }
+                        changed
+                    }
                     Some(Node::Shape(shape_node)) => {
-                        replace_in_spans(&mut shape_node.spans, find, replace)
+                        let changed = replace_in_spans(&mut shape_node.spans, find, replace);
+                        if changed {
+                            clear_placeholder(&mut shape_node.role);
+                        }
+                        changed
                     }
                     Some(Node::Rect(_))
                     | Some(Node::Ellipse(_))
@@ -932,10 +944,12 @@ pub(super) fn apply_replace_text(
         }
         Some(Node::Text(text_node)) => {
             text_node.spans = op_spans_to_text_spans(spans);
+            clear_placeholder(&mut text_node.role);
             record_affected(node_id, affected);
         }
         Some(Node::Shape(shape_node)) => {
             shape_node.spans = op_spans_to_text_spans(spans);
+            clear_placeholder(&mut shape_node.role);
             record_affected(node_id, affected);
         }
         Some(other) => {

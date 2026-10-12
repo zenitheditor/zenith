@@ -18,38 +18,38 @@ zenith version=1 {
         frame id="header" layout="column" gap=(token)"space.md" {
           frame id="header.row" layout="row" justify="space-between" align="end" gap=(token)"space.xl" {
             frame id="header.brand" w="hug" layout="column" gap=(token)"space.xs" {
-              text id="header.firm" w="hug" style="ui.h1" { span "Calloway & Reyes" }
-              text id="header.tagline" w="hug" style="ui.caption" font-weight=(token)"font.weight.heading" { span "SOLICITORS AND NOTARIES" }
+              text id="header.firm" role="placeholder" w="hug" style="ui.h1" { span "Calloway & Reyes" }
+              text id="header.tagline" role="placeholder" w="hug" style="ui.caption" font-weight=(token)"font.weight.heading" { span "SOLICITORS AND NOTARIES" }
             }
             frame id="header.contact" w="hug" layout="column" align="end" {
-              text id="header.address" w="hug" { span "7 Tannery Court, Northgate" }
-              text id="header.phone" w="hug" { span "+44 161 496 0587" }
-              text id="header.email" w="hug" { span "office@callowayreyes.example" }
+              text id="header.address" role="placeholder" w="hug" { span "7 Tannery Court, Northgate" }
+              text id="header.phone" role="placeholder" w="hug" { span "+44 161 496 0587" }
+              text id="header.email" role="placeholder" w="hug" { span "office@callowayreyes.example" }
             }
           }
           rect id="header.rule" h=(token)"space.xs" fill=(token)"color.primary"
         }
         frame id="letter" h="fill" layout="column" gap=(token)"space.md" {
-          text id="letter.date" { span "12 May 2026" }
+          text id="letter.date" role="placeholder" { span "12 May 2026" }
           frame id="letter.recipient" layout="column" margin-bottom=(token)"space.sm" {
-            text id="letter.recipient.name" { span "Mr Tomasz Lindqvist" }
-            text id="letter.recipient.street" { span "22 Orchard Rise" }
-            text id="letter.recipient.town" { span "Westbury, WB4 7QT" }
+            text id="letter.recipient.name" role="placeholder" { span "Mr Tomasz Lindqvist" }
+            text id="letter.recipient.street" role="placeholder" { span "22 Orchard Rise" }
+            text id="letter.recipient.town" role="placeholder" { span "Westbury, WB4 7QT" }
           }
-          text id="letter.subject" font-weight=(token)"font.weight.heading" { span "Re: Purchase of 22 Orchard Rise" }
-          text id="letter.salutation" { span "Dear Mr Lindqvist," }
-          text id="letter.body.1" { span "Thank you for instructing us on your purchase. We have received the draft contract from the seller's solicitors and have begun our searches with the local authority." }
-          text id="letter.body.2" { span "We expect the search results within three weeks. Once they arrive we will send you a short report on anything that needs your attention before exchange." }
-          text id="letter.body.3" { span "If you have any questions in the meantime, please call me on the number above." }
+          text id="letter.subject" role="placeholder" font-weight=(token)"font.weight.heading" { span "Re: Purchase of 22 Orchard Rise" }
+          text id="letter.salutation" role="placeholder" { span "Dear Mr Lindqvist," }
+          text id="letter.body.1" role="placeholder" { span "Thank you for instructing us on your purchase. We have received the draft contract from the seller's solicitors and have begun our searches with the local authority." }
+          text id="letter.body.2" role="placeholder" { span "We expect the search results within three weeks. Once they arrive we will send you a short report on anything that needs your attention before exchange." }
+          text id="letter.body.3" role="placeholder" { span "If you have any questions in the meantime, please call me on the number above." }
           frame id="letter.signoff" layout="column" margin-top=(token)"space.sm" {
-            text id="letter.closing" { span "Yours sincerely," }
-            text id="letter.signatory" margin-top=(token)"space.xxl" font-weight=(token)"font.weight.heading" { span "Priya Calloway" }
-            text id="letter.role" { span "Partner" }
+            text id="letter.closing" role="placeholder" { span "Yours sincerely," }
+            text id="letter.signatory" role="placeholder" margin-top=(token)"space.xxl" font-weight=(token)"font.weight.heading" { span "Priya Calloway" }
+            text id="letter.role" role="placeholder" { span "Partner" }
           }
         }
         frame id="footer" layout="column" gap=(token)"space.sm" {
           rect id="footer.rule" h=(token)"border.width" fill=(token)"color.base.300"
-          text id="footer.text" style="ui.caption" { span "Calloway & Reyes LLP · callowayreyes.example · A list of partners is available on request." }
+          text id="footer.text" role="placeholder" style="ui.caption" { span "Calloway & Reyes LLP · callowayreyes.example · A list of partners is available on request." }
         }
       }
     }

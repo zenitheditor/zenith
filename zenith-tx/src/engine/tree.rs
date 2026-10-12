@@ -286,6 +286,14 @@ pub(super) fn px(v: f64) -> Dimension {
 
 // ── Utility ───────────────────────────────────────────────────────────────────
 
+/// Clear `role="placeholder"`: the text of the node was replaced, so it no
+/// longer holds sample content. Any other role stays.
+pub(super) fn clear_placeholder(role: &mut Option<String>) {
+    if role.as_deref() == Some(zenith_core::ast::PLACEHOLDER_ROLE) {
+        *role = None;
+    }
+}
+
 /// Append `id` to `affected` only if it is not already present.
 /// Uses a linear scan to maintain deterministic first-seen insertion order
 /// without HashMap (which has non-deterministic iteration).

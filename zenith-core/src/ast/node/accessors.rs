@@ -20,6 +20,13 @@ pub struct BoxView<'a> {
     pub layout_item: &'a LayoutItem,
 }
 
+/// The `role` of a node that still holds sample content.
+pub const PLACEHOLDER_ROLE: &str = "placeholder";
+
+/// Text a fill command leaves where the author must type. A span with exactly
+/// this text is placeholder content, whatever the node's role.
+pub const PLACEHOLDER_TEXT: &str = "<new text>";
+
 impl Node {
     /// Stable authored id, if any. `Unknown` nodes may omit `id`.
     pub fn id(&self) -> Option<&str> {
@@ -118,6 +125,13 @@ impl Node {
     /// whole subtree. Lint and placement advisories skip exempt nodes.
     pub fn is_decorative(&self) -> bool {
         matches!(self.role(), Some("decoration" | "background"))
+    }
+
+    /// `true` when the node's `role` is `placeholder`: sample content a starter
+    /// or template left for the author to replace. Validation warns on it, and
+    /// the text ops of `zenith tx` clear it.
+    pub fn is_placeholder(&self) -> bool {
+        self.role() == Some(PLACEHOLDER_ROLE)
     }
 
     /// Optional `role` attribute (`guide`, block roles, …). `Unknown` has none.

@@ -30,6 +30,7 @@ use super::passes::{
     check_footnote_refs, collect_local_ids, register_id, validate_asset_decl, validate_import_decl,
     validate_library_decl, validate_provenance_def, validate_style_block,
 };
+use super::placeholder::check_placeholders;
 use super::policy::{apply_policy, check_policy_entries};
 use super::recipes::check_recipes;
 use super::report::ValidationReport;
@@ -869,6 +870,7 @@ fn validate_pass(
     // ── Step 3: unused token check ────────────────────────────────────────
     referenced_token_ids.extend(extra_referenced.iter().cloned());
     check_unused_tokens(doc, &referenced_token_ids, &mut diagnostics);
+    check_placeholders(doc, &mut diagnostics);
 
     // ── Step 4: diagnostic policy ─────────────────────────────────────────
     // Apply the document's `diagnostics { … }` policy to the assembled list

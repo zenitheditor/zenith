@@ -16,22 +16,22 @@ zenith version=1 {
       frame id="card" x=(token)"space.margin" y=(token)"space.margin" w=(token)"layout.width" h=(token)"layout.height" layout="column" justify="space-between" gap=(token)"space.lg" {
         frame id="card.head" layout="row" justify="space-between" align="start" gap=(token)"space.lg" {
           frame id="card.identity" w="fill" layout="column" gap=(token)"space.xs" {
-            text id="card.name" style="ui.h1" { span "Ines Varga" }
-            text id="card.title" { span "Portrait & Event Photographer" }
+            text id="card.name" role="placeholder" style="ui.h1" { span "Ines Varga" }
+            text id="card.title" role="placeholder" { span "Portrait & Event Photographer" }
           }
           frame id="card.mark" w=(token)"layout.mark" h=(token)"layout.mark" layout="row" justify="center" align="center" fill=(token)"color.primary" radius=(token)"radius.selector" {
-            text id="card.mark.label" w="hug" style="ui.h2" { span "IV" }
+            text id="card.mark.label" role="placeholder" w="hug" style="ui.h2" { span "IV" }
           }
         }
         frame id="card.foot" layout="column" gap=(token)"space.md" {
           rect id="card.rule" h=(token)"border.width" fill=(token)"color.base.300"
           frame id="card.contact" layout="row" justify="space-between" align="end" gap=(token)"space.lg" {
             frame id="card.contact.lines" w="hug" layout="column" {
-              text id="card.phone" w="hug" { span "+44 20 7946 0321" }
-              text id="card.email" w="hug" { span "ines@vargastudio.example" }
-              text id="card.web" w="hug" { span "vargastudio.example" }
+              text id="card.phone" role="placeholder" w="hug" { span "+44 20 7946 0321" }
+              text id="card.email" role="placeholder" w="hug" { span "ines@vargastudio.example" }
+              text id="card.web" role="placeholder" w="hug" { span "vargastudio.example" }
             }
-            text id="card.city" w="hug" { span "Lisbon · Available to travel" }
+            text id="card.city" role="placeholder" w="hug" { span "Lisbon · Available to travel" }
           }
         }
       }

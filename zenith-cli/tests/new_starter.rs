@@ -92,6 +92,27 @@ fn png_size(path: &Path) -> (u32, u32) {
     (be(16), be(20))
 }
 
+/// The `text` nodes under `nodes`, table cells included.
+fn count_text_nodes(nodes: &[Node]) -> usize {
+    nodes
+        .iter()
+        .map(|node| {
+            let own = usize::from(matches!(node, Node::Text(_)));
+            let cells = match node {
+                Node::Table(table) => table
+                    .rows
+                    .iter()
+                    .flat_map(|row| &row.cells)
+                    .map(|cell| count_text_nodes(&cell.children))
+                    .sum(),
+                _ => 0,
+            };
+            let kids = node.children().map_or(0, count_text_nodes);
+            own + cells + kids
+        })
+        .sum()
+}
+
 /// Every span string under `nodes`, depth first.
 fn collect_text(nodes: &[Node], out: &mut Vec<String>) {
     for node in nodes {
@@ -124,10 +145,32 @@ fn every_starter_writes_with_a_doc_id_and_validates_clean() {
         let out = env.zenith(&["validate", path.to_str().expect("utf-8"), "--json"]);
         let report = json(&out);
         assert_eq!(report["valid"], true, "{}: {report}", starter.kind());
-        assert_eq!(
-            report["diagnostics"],
-            serde_json::json!([]),
-            "{}: diagnostics must be empty",
+        // A fresh starter has one placeholder warning: all of its text is sample.
+        let others: Vec<&serde_json::Value> = report["diagnostics"]
+            .as_array()
+            .expect("diagnostics")
+            .iter()
+            .filter(|d| d["code"] != "content.placeholder")
+            .collect();
+        assert!(others.is_empty(), "{}: {others:?}", starter.kind());
+        let text_nodes: usize = doc
+            .body
+            .pages
+            .iter()
+            .map(|p| count_text_nodes(&p.children))
+            .chain(doc.masters.iter().map(|m| count_text_nodes(&m.children)))
+            .sum();
+        let placeholder = report["diagnostics"]
+            .as_array()
+            .expect("diagnostics")
+            .iter()
+            .filter(|d| d["code"] == "content.placeholder")
+            .collect::<Vec<_>>();
+        assert_eq!(placeholder.len(), 1, "{}: one warning", starter.kind());
+        let message = placeholder[0]["message"].as_str().expect("message");
+        assert!(
+            message.starts_with(&format!("{text_nodes} text node(s)")),
+            "{}: every text node is a placeholder: {message}",
             starter.kind()
         );
         assert!(out.status.success(), "{}", starter.kind());
@@ -200,7 +243,15 @@ fn name_retitles_the_starter() {
     assert_eq!(doc.body.id, "doc.harbour-kitchen");
     assert_eq!(doc.body.title.as_deref(), Some("Harbour Kitchen"));
     let out = env.zenith(&["validate", path.to_str().expect("utf-8"), "--json"]);
-    assert_eq!(json(&out)["diagnostics"], serde_json::json!([]));
+    let report = json(&out);
+    assert!(
+        report["diagnostics"]
+            .as_array()
+            .expect("diagnostics")
+            .iter()
+            .all(|d| d["code"] == "content.placeholder"),
+        "{report}"
+    );
 }
 
 #[test]

@@ -38,4 +38,6 @@ pub use text_outline::{
 pub(crate) use lock::op_lock_targets;
 use run::{finish_candidate, format_source};
 pub(crate) use tree::find_node_any_shared;
-use tree::{find_node_any_mut, find_node_shared, px, record_affected, subtree_contains};
+use tree::{
+    clear_placeholder, find_node_any_mut, find_node_shared, px, record_affected, subtree_contains,
+};

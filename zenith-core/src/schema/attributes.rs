@@ -259,7 +259,7 @@ fn attribute_type_generic(name: &str, fallback: &'static str) -> &'static str {
         "id" => "string",
         "name" => "string",
         "role" => {
-            "string. Reserved: guide (never drawn), decoration|background (node and subtree skip overlap, occlusion, crossing, frame.child_overflow, layout.off_canvas lint)"
+            "string. Reserved: guide (never drawn), decoration|background (node and subtree skip overlap, occlusion, crossing, frame.child_overflow, layout.off_canvas lint), placeholder (text or shape sample content: content.placeholder warns until a text op of tx changes it). One role per node."
         }
         "style" => "string",
         "source" => "string",

@@ -2,6 +2,8 @@
 //! `zenith new --starter` prints them so an agent fills the whole layout with
 //! one batched `set_span_text` transaction, with no re-read of the file.
 
+use zenith_core::ast::PLACEHOLDER_TEXT;
+
 use crate::commands::inspect::{NodeEntry, PageEntry, clip_text};
 
 /// One editable text node.
@@ -39,7 +41,8 @@ pub fn text_slots(pages: &[PageEntry]) -> Vec<Slot> {
 }
 
 /// The command that fills the single-span slots: one `set_span_text` per slot
-/// with its real id, and `<new text>` where the text goes.
+/// with its real id, and the placeholder text where the new text goes. A span
+/// left at that text still warns as `content.placeholder`.
 fn fill_command(slots: &[Slot], path: &str, limit: usize) -> String {
     let ops: Vec<serde_json::Value> = slots
         .iter()
@@ -50,7 +53,7 @@ fn fill_command(slots: &[Slot], path: &str, limit: usize) -> String {
                 "op": "set_span_text",
                 "node": slot.id,
                 "span": 0,
-                "text": "<new text>",
+                "text": PLACEHOLDER_TEXT,
             })
         })
         .collect();

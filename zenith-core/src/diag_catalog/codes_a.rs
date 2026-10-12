@@ -213,6 +213,11 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
         "A divided anchor targets a node whose exact outline is not modeled; the point is approximated on the bounds perimeter.",
     ),
     info(
+        "content.placeholder",
+        Severity::Warning,
+        "A text node with role=\"placeholder\", or a span left at the fill text, still holds sample content.",
+    ),
+    info(
         "import.asset_missing",
         Severity::Error,
         "An imported document's declared asset file could not be resolved on disk.",

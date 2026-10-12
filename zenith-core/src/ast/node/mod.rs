@@ -18,7 +18,7 @@ mod meta;
 mod space;
 mod special;
 
-pub use accessors::BoxView;
+pub use accessors::{BoxView, PLACEHOLDER_ROLE, PLACEHOLDER_TEXT};
 pub use anchor::{
     Anchor, AnchorEdge, ConnectorAnchor, ConnectorAnchorParseError, anchor_xy, parse_anchor,
     parse_anchor_edge, parse_connector_anchor,

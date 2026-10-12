@@ -16,32 +16,32 @@ zenith version=1 {
     page id="page.1" w=(px)794 h=(px)1123 background=(token)"color.base.100" {
       frame id="report" x=(token)"space.margin" y=(token)"space.margin" w=(token)"layout.width" h=(token)"layout.height" layout="column" gap=(token)"space.xl" {
         frame id="header" layout="column" gap=(token)"space.sm" {
-          text id="header.kicker" style="ui.caption" font-weight=(token)"font.weight.heading" { span "ASHFORD PUBLIC LIBRARY" }
-          text id="header.title" style="ui.display" { span "Year in Review 2024" }
+          text id="header.kicker" role="placeholder" style="ui.caption" font-weight=(token)"font.weight.heading" { span "ASHFORD PUBLIC LIBRARY" }
+          text id="header.title" role="placeholder" style="ui.display" { span "Year in Review 2024" }
           rect id="header.rule" h=(token)"space.xs" margin-top=(token)"space.sm" fill=(token)"color.primary"
         }
         frame id="stats" layout="row" gap=(token)"space.md" {
           frame id="stats.loans" w="fill" layout="column" gap=(token)"space.xs" padding=(token)"space.lg" fill=(token)"color.base.200" radius=(token)"radius.box" {
-            text id="stats.loans.value" style="ui.h1" { span "86,500" }
-            text id="stats.loans.label" { span "books and films lent" }
+            text id="stats.loans.value" role="placeholder" style="ui.h1" { span "86,500" }
+            text id="stats.loans.label" role="placeholder" { span "books and films lent" }
           }
           frame id="stats.members" w="fill" layout="column" gap=(token)"space.xs" padding=(token)"space.lg" fill=(token)"color.base.200" radius=(token)"radius.box" {
-            text id="stats.members.value" style="ui.h1" { span "1,940" }
-            text id="stats.members.label" { span "new card holders" }
+            text id="stats.members.value" role="placeholder" style="ui.h1" { span "1,940" }
+            text id="stats.members.label" role="placeholder" { span "new card holders" }
           }
           frame id="stats.events" w="fill" layout="column" gap=(token)"space.xs" padding=(token)"space.lg" fill=(token)"color.base.200" radius=(token)"radius.box" {
-            text id="stats.events.value" style="ui.h1" { span "275" }
-            text id="stats.events.label" { span "events and classes" }
+            text id="stats.events.value" role="placeholder" style="ui.h1" { span "275" }
+            text id="stats.events.label" role="placeholder" { span "events and classes" }
           }
         }
-        text id="summary" { span "More people came through our doors this year than in any year since we reopened. Evening hours and the new study room did the most to bring readers back." }
+        text id="summary" role="placeholder" { span "More people came through our doors this year than in any year since we reopened. Evening hours and the new study room did the most to bring readers back." }
         frame id="visits" h="fill" layout="column" gap=(token)"space.sm" {
-          text id="visits.heading" style="ui.h2" { span "Visits per year, in thousands" }
+          text id="visits.heading" role="placeholder" style="ui.h2" { span "Visits per year, in thousands" }
           chart id="visits.chart" kind="bar" h="fill" style="ui.label" axis-min=0.0 axis-max=100.0 value-labels="top" {
             categories "2020" "2021" "2022" "2023" "2024"
             series label="Visits" color=(token)"color.primary" 38.5 52.4 67.3 74.8 81.6
           }
-          text id="visits.caption" style="ui.caption" { span "Counted at the entrance gates. The branch was closed for part of 2020." }
+          text id="visits.caption" role="placeholder" style="ui.caption" { span "Counted at the entrance gates. The branch was closed for part of 2020." }
         }
       }
     }

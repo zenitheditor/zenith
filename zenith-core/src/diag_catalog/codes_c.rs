@@ -831,6 +831,11 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
         Severity::Error,
         "The transaction file cannot be parsed.",
     ),
+    info(
+        "tx.png_failed",
+        Severity::Error,
+        "`zenith tx --png` could not render the page, or could not write the PNG after the edit.",
+    ),
     info("update.failed", Severity::Error, "`zenith update` failed."),
     info(
         "variant.failed",

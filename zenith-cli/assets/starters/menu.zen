@@ -17,79 +17,79 @@ zenith version=1 {
     page id="page.1" w=(px)794 h=(px)1123 background=(token)"color.base.100" {
       frame id="menu" x=(token)"space.margin" y=(token)"space.margin" w=(token)"layout.width" h=(token)"layout.height" layout="column" justify="space-between" gap=(token)"space.xxl" {
         frame id="masthead" layout="column" align="center" gap=(token)"space.sm" {
-          text id="masthead.kicker" w="hug" style="ui.caption" font-weight=(token)"font.weight.heading" { span "LOOSE-LEAF TEAS · SMALL PLATES" }
-          text id="masthead.title" w="hug" style="ui.display" { span "Kettle & Leaf" }
-          text id="masthead.note" w="hug" { span "Served daily from 10:00 until the last pot is poured" }
+          text id="masthead.kicker" role="placeholder" w="hug" style="ui.caption" font-weight=(token)"font.weight.heading" { span "LOOSE-LEAF TEAS · SMALL PLATES" }
+          text id="masthead.title" role="placeholder" w="hug" style="ui.display" { span "Kettle & Leaf" }
+          text id="masthead.note" role="placeholder" w="hug" { span "Served daily from 10:00 until the last pot is poured" }
         }
         frame id="teas" layout="column" gap=(token)"space.md" {
           frame id="teas.head" layout="column" gap=(token)"space.sm" {
-            text id="teas.title" style="ui.h2" { span "Teas" }
+            text id="teas.title" role="placeholder" style="ui.h2" { span "Teas" }
             rect id="teas.rule" h=(token)"space.xs" fill=(token)"color.primary"
           }
           frame id="teas.sencha" layout="row" gap=(token)"space.lg" {
             frame id="teas.sencha.text" w="fill" layout="column" {
-              text id="teas.sencha.name" font-weight=(token)"font.weight.heading" { span "First Flush Sencha" }
-              text id="teas.sencha.desc" { span "Grassy green tea from the spring harvest" }
+              text id="teas.sencha.name" role="placeholder" font-weight=(token)"font.weight.heading" { span "First Flush Sencha" }
+              text id="teas.sencha.desc" role="placeholder" { span "Grassy green tea from the spring harvest" }
             }
-            text id="teas.sencha.price" w=(token)"layout.price" align="end" font-weight=(token)"font.weight.heading" { span "3.80" }
+            text id="teas.sencha.price" role="placeholder" w=(token)"layout.price" align="end" font-weight=(token)"font.weight.heading" { span "3.80" }
           }
           frame id="teas.oolong" layout="row" gap=(token)"space.lg" {
             frame id="teas.oolong.text" w="fill" layout="column" {
-              text id="teas.oolong.name" font-weight=(token)"font.weight.heading" { span "Roasted Oolong" }
-              text id="teas.oolong.desc" { span "Toasty, honeyed and good for a second steep" }
+              text id="teas.oolong.name" role="placeholder" font-weight=(token)"font.weight.heading" { span "Roasted Oolong" }
+              text id="teas.oolong.desc" role="placeholder" { span "Toasty, honeyed and good for a second steep" }
             }
-            text id="teas.oolong.price" w=(token)"layout.price" align="end" font-weight=(token)"font.weight.heading" { span "4.20" }
+            text id="teas.oolong.price" role="placeholder" w=(token)"layout.price" align="end" font-weight=(token)"font.weight.heading" { span "4.20" }
           }
           frame id="teas.assam" layout="row" gap=(token)"space.lg" {
             frame id="teas.assam.text" w="fill" layout="column" {
-              text id="teas.assam.name" font-weight=(token)"font.weight.heading" { span "Malty Assam" }
-              text id="teas.assam.desc" { span "A strong breakfast black, with or without milk" }
+              text id="teas.assam.name" role="placeholder" font-weight=(token)"font.weight.heading" { span "Malty Assam" }
+              text id="teas.assam.desc" role="placeholder" { span "A strong breakfast black, with or without milk" }
             }
-            text id="teas.assam.price" w=(token)"layout.price" align="end" font-weight=(token)"font.weight.heading" { span "3.50" }
+            text id="teas.assam.price" role="placeholder" w=(token)"layout.price" align="end" font-weight=(token)"font.weight.heading" { span "3.50" }
           }
           frame id="teas.chamomile" layout="row" gap=(token)"space.lg" {
             frame id="teas.chamomile.text" w="fill" layout="column" {
-              text id="teas.chamomile.name" font-weight=(token)"font.weight.heading" { span "Chamomile & Lemon Balm" }
-              text id="teas.chamomile.desc" { span "Caffeine-free and calm for the late afternoon" }
+              text id="teas.chamomile.name" role="placeholder" font-weight=(token)"font.weight.heading" { span "Chamomile & Lemon Balm" }
+              text id="teas.chamomile.desc" role="placeholder" { span "Caffeine-free and calm for the late afternoon" }
             }
-            text id="teas.chamomile.price" w=(token)"layout.price" align="end" font-weight=(token)"font.weight.heading" { span "3.60" }
+            text id="teas.chamomile.price" role="placeholder" w=(token)"layout.price" align="end" font-weight=(token)"font.weight.heading" { span "3.60" }
           }
         }
         frame id="plates" layout="column" gap=(token)"space.md" {
           frame id="plates.head" layout="column" gap=(token)"space.sm" {
-            text id="plates.title" style="ui.h2" { span "Small Plates" }
+            text id="plates.title" role="placeholder" style="ui.h2" { span "Small Plates" }
             rect id="plates.rule" h=(token)"space.xs" fill=(token)"color.primary"
           }
           frame id="plates.scones" layout="row" gap=(token)"space.lg" {
             frame id="plates.scones.text" w="fill" layout="column" {
-              text id="plates.scones.name" font-weight=(token)"font.weight.heading" { span "Cardamom Scones" }
-              text id="plates.scones.desc" { span "Two warm scones, clotted cream and plum jam" }
+              text id="plates.scones.name" role="placeholder" font-weight=(token)"font.weight.heading" { span "Cardamom Scones" }
+              text id="plates.scones.desc" role="placeholder" { span "Two warm scones, clotted cream and plum jam" }
             }
-            text id="plates.scones.price" w=(token)"layout.price" align="end" font-weight=(token)"font.weight.heading" { span "5.40" }
+            text id="plates.scones.price" role="placeholder" w=(token)"layout.price" align="end" font-weight=(token)"font.weight.heading" { span "5.40" }
           }
           frame id="plates.sandwiches" layout="row" gap=(token)"space.lg" {
             frame id="plates.sandwiches.text" w="fill" layout="column" {
-              text id="plates.sandwiches.name" font-weight=(token)"font.weight.heading" { span "Cucumber Sandwiches" }
-              text id="plates.sandwiches.desc" { span "Soft white bread, dill butter and cracked pepper" }
+              text id="plates.sandwiches.name" role="placeholder" font-weight=(token)"font.weight.heading" { span "Cucumber Sandwiches" }
+              text id="plates.sandwiches.desc" role="placeholder" { span "Soft white bread, dill butter and cracked pepper" }
             }
-            text id="plates.sandwiches.price" w=(token)"layout.price" align="end" font-weight=(token)"font.weight.heading" { span "6.20" }
+            text id="plates.sandwiches.price" role="placeholder" w=(token)"layout.price" align="end" font-weight=(token)"font.weight.heading" { span "6.20" }
           }
           frame id="plates.dumplings" layout="row" gap=(token)"space.lg" {
             frame id="plates.dumplings.text" w="fill" layout="column" {
-              text id="plates.dumplings.name" font-weight=(token)"font.weight.heading" { span "Steamed Mushroom Dumplings" }
-              text id="plates.dumplings.desc" { span "Four dumplings with a ginger and soy dip" }
+              text id="plates.dumplings.name" role="placeholder" font-weight=(token)"font.weight.heading" { span "Steamed Mushroom Dumplings" }
+              text id="plates.dumplings.desc" role="placeholder" { span "Four dumplings with a ginger and soy dip" }
             }
-            text id="plates.dumplings.price" w=(token)"layout.price" align="end" font-weight=(token)"font.weight.heading" { span "7.80" }
+            text id="plates.dumplings.price" role="placeholder" w=(token)"layout.price" align="end" font-weight=(token)"font.weight.heading" { span "7.80" }
           }
           frame id="plates.cake" layout="row" gap=(token)"space.lg" {
             frame id="plates.cake.text" w="fill" layout="column" {
-              text id="plates.cake.name" font-weight=(token)"font.weight.heading" { span "Matcha Sponge" }
-              text id="plates.cake.desc" { span "A light slice with white chocolate cream" }
+              text id="plates.cake.name" role="placeholder" font-weight=(token)"font.weight.heading" { span "Matcha Sponge" }
+              text id="plates.cake.desc" role="placeholder" { span "A light slice with white chocolate cream" }
             }
-            text id="plates.cake.price" w=(token)"layout.price" align="end" font-weight=(token)"font.weight.heading" { span "4.90" }
+            text id="plates.cake.price" role="placeholder" w=(token)"layout.price" align="end" font-weight=(token)"font.weight.heading" { span "4.90" }
           }
         }
-        text id="menu.footnote" align="center" { span "Prices in pounds. Ask us about allergens; every tea is also sold by the tin." }
+        text id="menu.footnote" role="placeholder" align="center" { span "Prices in pounds. Ask us about allergens; every tea is also sold by the tin." }
       }
     }
   }

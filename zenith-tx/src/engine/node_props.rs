@@ -3,7 +3,7 @@
 
 use zenith_core::{Diagnostic, Document, Node, PropertyValue, TextSpan};
 
-use super::{find_node_any_mut, record_affected};
+use super::{clear_placeholder, find_node_any_mut, record_affected};
 
 /// The token-valued node properties `set_node_token` writes, in their KDL
 /// spelling.
@@ -223,9 +223,9 @@ pub(super) fn apply_set_span_text(
         return;
     };
     let kind = node.kind_str();
-    let spans: &mut Vec<TextSpan> = match node {
-        Node::Text(n) => &mut n.spans,
-        Node::Shape(n) => &mut n.spans,
+    let (spans, role): (&mut Vec<TextSpan>, &mut Option<String>) = match node {
+        Node::Text(n) => (&mut n.spans, &mut n.role),
+        Node::Shape(n) => (&mut n.spans, &mut n.role),
         Node::Rect(_)
         | Node::Ellipse(_)
         | Node::Line(_)
@@ -260,6 +260,7 @@ pub(super) fn apply_set_span_text(
     match spans.get_mut(index) {
         Some(span) => {
             text.clone_into(&mut span.text);
+            clear_placeholder(role);
             record_affected(node_id, affected);
         }
         None => diagnostics.push(Diagnostic::error(
