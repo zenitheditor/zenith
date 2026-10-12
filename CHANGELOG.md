@@ -15,6 +15,10 @@ it.
 
 ## [Unreleased]
 
+---
+
+## [0.0.14] — 2026-10-12
+
 ### Added
 
 - **`zenith schema write`, `zenith tx --help`, and the starter output list `duplicate_node` and `duplicate_page`.** The `schema write` rules also say to check many pages in one call with `zenith render --contact-sheet`. Before, agents retyped each copy of a repeated row or page and looked at every page on its own. In a 3-brief build run they used `duplicate_node` and `duplicate_page` where they used neither before.
