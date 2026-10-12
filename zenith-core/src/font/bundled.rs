@@ -210,8 +210,9 @@ fn base() -> &'static BytesFontProvider {
 /// Noto Sans Regular (400) and Bold (700), both Normal, are always present.
 /// With the default `bundled-fonts-extended` feature the provider also holds
 /// Noto Sans Italic and Bold Italic, the four Noto Serif faces (400 and 700,
-/// Normal and Italic), and Noto Sans Mono Regular and Bold. All are
-/// Apache-2.0. [`bundled_faces`] lists which a build embeds.
+/// Normal and Italic), and Noto Sans Mono Regular and Bold. All are under
+/// the SIL Open Font License 1.1. [`bundled_faces`] lists which a build
+/// embeds.
 #[must_use]
 pub fn default_provider() -> BytesFontProvider {
     base().clone()

@@ -38,6 +38,8 @@ zenith-producers = { workspace = true }
 zenith-zpx = { workspace = true }
 zenith-pipeline = { workspace = true }
 zenith-editor = { workspace = true }
+# Embeds the fallback chain (Arabic, Hebrew, CJK SC, emoji) in the binary.
+zenith-fonts-fallback = { workspace = true, features = ["embed"] }
 clap = { version = "4", features = ["derive"] }
 # `library.kdl` manifests of SVG icon libraries. Same version zenith-core parses
 # `.zen` with, so no second KDL implementation enters the graph.

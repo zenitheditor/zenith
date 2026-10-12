@@ -823,4 +823,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for how to work on the engine, and [AGENT
 
 ## License
 
-Apache-2.0. See [LICENSE](LICENSE).
+Apache-2.0. See [LICENSE](LICENSE). The bundled fonts are under the SIL Open Font License 1.1 (see `zenith-core/assets/fonts/LICENSE.txt` and `zenith-fonts-fallback/OFL.txt`).

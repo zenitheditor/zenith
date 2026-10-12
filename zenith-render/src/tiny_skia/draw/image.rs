@@ -62,17 +62,9 @@ pub(in crate::tiny_skia) fn draw_image(
         AssetKind::Svg => {
             // Build the fontdb at most once per render, only when
             // an SVG is drawn. Loaded from the registered faces in
-            // deterministic BTreeMap (by_id) order — no system fonts.
-            let fontdb: &resvg::usvg::fontdb::Database = svg_fontdb.get_or_insert_with(|| {
-                let mut db = resvg::usvg::fontdb::Database::new();
-                db.set_sans_serif_family("Noto Sans");
-                db.set_serif_family("Noto Sans");
-                db.set_monospace_family("Noto Sans Mono");
-                for face in fonts.all_faces() {
-                    db.load_font_data(face.bytes.to_vec());
-                }
-                db
-            });
+            // `all_faces()` order — no system fonts.
+            let fontdb: &resvg::usvg::fontdb::Database =
+                svg_fontdb.get_or_insert_with(|| crate::svg_fontdb::font_database(fonts));
             // Set default font-family so unstyled SVG <text> resolves
             // to "Noto Sans" instead of the usvg default "Times New Roman".
             let opts = usvg::Options {

@@ -105,7 +105,7 @@ jobs:
       # Publish in dependency order. Each tier waits until crates.io indexes the
       # new versions before the next tier (which depends on them) publishes.
       # Include development dependencies when ordering packages.
-      #   Tier 1: geometry, session
+      #   Tier 1: geometry, session, fonts-fallback
       #   Tier 2: core
       #   Tier 3: layout, raster
       #   Tier 4: scene, perception, zpx
@@ -162,7 +162,7 @@ jobs:
             echo "::endgroup::"
           }
 
-          publish_tier "1 (geometry, session)"  zenith-geometry zenith-session
+          publish_tier "1 (geometry, session, fonts-fallback)" zenith-geometry zenith-session zenith-fonts-fallback
           publish_tier "2 (core)"               zenith-core
           publish_tier "3 (layout, raster)"     zenith-layout zenith-raster
           publish_tier "4 (scene, perception, zpx)" zenith-scene zenith-perception zenith-zpx

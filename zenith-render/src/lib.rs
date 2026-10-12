@@ -16,6 +16,7 @@ mod region;
 mod render;
 mod scopes;
 mod svg;
+mod svg_fontdb;
 mod svg_style;
 mod tiny_skia;
 

@@ -2,19 +2,7 @@
 use super::svg::SvgPlacement;
 use resvg::usvg::tiny_skia_path::Point;
 use resvg::usvg::{self, TreeParsing, TreeTextToPath};
-use zenith_core::FontProvider;
 use zenith_scene::{FitMode, SvgStyle};
-
-pub(super) fn font_database(fonts: &dyn FontProvider) -> usvg::fontdb::Database {
-    let mut database = usvg::fontdb::Database::new();
-    database.set_sans_serif_family("Noto Sans");
-    database.set_serif_family("Noto Sans");
-    database.set_monospace_family("Noto Sans Mono");
-    for face in fonts.all_faces() {
-        database.load_font_data(face.bytes.to_vec());
-    }
-    database
-}
 
 pub(super) fn parse(
     bytes: &[u8],

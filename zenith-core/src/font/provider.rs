@@ -22,7 +22,8 @@ pub enum FontStyle {
 /// advisory: a face resolved from [`FontSource::Local`] is sourced from the
 /// machine running the render, so the output is NOT guaranteed deterministic
 /// across machines. `Bundled` and `Project` faces travel with the engine /
-/// document and are portable.
+/// document and are portable. `Fallback` faces are embedded too, and serve
+/// only the glyphs no requested face covers.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FontSource {
     /// Embedded in the engine binary (the bundled Noto faces). Fully portable.
@@ -32,6 +33,10 @@ pub enum FontSource {
     /// Discovered on the local/system font directories of the render machine.
     /// Non-deterministic across machines — emits a `font.local` advisory.
     Local,
+    /// Embedded fallback face for glyphs the requested faces lack. Fully
+    /// portable. A family name never resolves to it: shaping picks it per
+    /// glyph. Registered with [`BytesFontProvider::register_fallback`].
+    Fallback,
 }
 
 /// Resolved font bytes ready for shaping or outlining. Cheap to clone (`Arc`).
@@ -93,16 +98,19 @@ struct FaceKey {
 /// In-memory font registry. Register bundled and project fonts up front;
 /// this implementation never scans the system.
 ///
-/// Two `BTreeMap`s are maintained:
+/// Two `BTreeMap`s and one `Vec` are maintained:
 /// - `by_key`: `(family_lower, weight, style) -> FontData` for `resolve`.
 /// - `by_id`: `id -> FontData` for `by_id`.
+/// - `fallback`: the fallback faces, in registration order.
 ///
-/// Cloning copies the two maps and shares every face's bytes (`Arc`), so a
+/// Cloning copies the maps and the list and shares every face's bytes (`Arc`), so a
 /// clone is the cheap way to layer extra faces over a shared base.
 #[derive(Clone)]
 pub struct BytesFontProvider {
     by_key: BTreeMap<FaceKey, FontData>,
     by_id: BTreeMap<String, FontData>,
+    /// Fallback faces in registration order. `resolve` never returns them.
+    fallback: Vec<(FaceKey, FontData)>,
     /// When set, `resolve` records every request with no exact face.
     miss_log: Option<FontMissLog>,
 }
@@ -110,8 +118,10 @@ pub struct BytesFontProvider {
 impl std::fmt::Debug for BytesFontProvider {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let ids: Vec<&str> = self.by_id.keys().map(String::as_str).collect();
+        let fallback: Vec<&str> = self.fallback.iter().map(|(_, d)| d.id.as_str()).collect();
         f.debug_struct("BytesFontProvider")
             .field("registered_faces", &ids)
+            .field("fallback_faces", &fallback)
             .finish()
     }
 }
@@ -123,6 +133,7 @@ impl BytesFontProvider {
         Self {
             by_key: BTreeMap::new(),
             by_id: BTreeMap::new(),
+            fallback: Vec::new(),
             miss_log: None,
         }
     }
@@ -158,33 +169,13 @@ impl BytesFontProvider {
         index: u32,
         source: FontSource,
     ) -> String {
-        let family_lower = family.to_lowercase();
-        let family_kebab = family_lower.replace(' ', "-");
-        let style_str = match style {
-            FontStyle::Normal => "normal",
-            FontStyle::Italic => "italic",
-        };
-        let base_id = format!("{family_kebab}-{weight}-{style_str}");
-
-        let key = FaceKey {
-            family_lower,
-            weight,
-            style,
-        };
+        let (key, base_id) = face_key(family, weight, style);
 
         // Re-registering the same face reuses its id; a new face whose base id
         // collides with a different face gets a numeric suffix.
         let id = match self.by_key.get(&key) {
             Some(existing) => existing.id.clone(),
-            None => {
-                let mut candidate = base_id.clone();
-                let mut n = 2u32;
-                while self.by_id.contains_key(&candidate) {
-                    candidate = format!("{base_id}-{n}");
-                    n += 1;
-                }
-                candidate
-            }
+            None => self.fresh_id(&base_id),
         };
 
         let data = FontData {
@@ -200,6 +191,54 @@ impl BytesFontProvider {
         id
     }
 
+    /// Register a fallback face and return its stable id.
+    ///
+    /// [`FontProvider::all_faces`] lists fallback faces after every other
+    /// face, in registration order. Shaping tries them in that order for a
+    /// glyph the requested face lacks. `resolve` never returns them, so a
+    /// document that does not need them renders as before.
+    ///
+    /// The id follows [`Self::register`]. Re-registering the same family,
+    /// weight, and style replaces the bytes, keeps the id, and keeps the
+    /// position in the order.
+    pub fn register_fallback(
+        &mut self,
+        family: &str,
+        weight: u16,
+        style: FontStyle,
+        bytes: Arc<[u8]>,
+        index: u32,
+    ) -> String {
+        let (key, base_id) = face_key(family, weight, style);
+        if let Some((_, existing)) = self.fallback.iter_mut().find(|(k, _)| *k == key) {
+            existing.bytes = bytes;
+            existing.index = index;
+            return existing.id.clone();
+        }
+        let id = self.fresh_id(&base_id);
+        let data = FontData {
+            id: id.clone(),
+            bytes,
+            index,
+            source: FontSource::Fallback,
+        };
+        self.fallback.push((key, data));
+        id
+    }
+
+    /// `base_id`, or `base_id-N` for the first N from 2 that no face holds.
+    fn fresh_id(&self, base_id: &str) -> String {
+        let taken =
+            |id: &str| self.by_id.contains_key(id) || self.fallback.iter().any(|(_, d)| d.id == id);
+        let mut candidate = base_id.to_owned();
+        let mut n = 2u32;
+        while taken(&candidate) {
+            candidate = format!("{base_id}-{n}");
+            n += 1;
+        }
+        candidate
+    }
+
     /// Return the lowercase family names of all registered faces (deduplicated, sorted).
     #[must_use]
     pub fn available_families(&self) -> Vec<String> {
@@ -208,6 +247,24 @@ impl BytesFontProvider {
         families.dedup();
         families
     }
+}
+
+/// The registry key and the base id (`"{family_kebab_lower}-{weight}-{style}"`)
+/// of a face.
+fn face_key(family: &str, weight: u16, style: FontStyle) -> (FaceKey, String) {
+    let family_lower = family.to_lowercase();
+    let family_kebab = family_lower.replace(' ', "-");
+    let style_str = match style {
+        FontStyle::Normal => "normal",
+        FontStyle::Italic => "italic",
+    };
+    let base_id = format!("{family_kebab}-{weight}-{style_str}");
+    let key = FaceKey {
+        family_lower,
+        weight,
+        style,
+    };
+    (key, base_id)
 }
 
 impl Default for BytesFontProvider {
@@ -255,11 +312,25 @@ impl FontProvider for BytesFontProvider {
     }
 
     fn by_id(&self, id: &str) -> Option<FontData> {
-        self.by_id.get(id).cloned()
+        self.by_id
+            .get(id)
+            .or_else(|| {
+                self.fallback
+                    .iter()
+                    .find(|(_, d)| d.id == id)
+                    .map(|(_, d)| d)
+            })
+            .cloned()
     }
 
+    /// Every face in `by_id` order, then the fallback faces in registration
+    /// order.
     fn all_faces(&self) -> Vec<FontData> {
-        self.by_id.values().cloned().collect()
+        self.by_id
+            .values()
+            .chain(self.fallback.iter().map(|(_, d)| d))
+            .cloned()
+            .collect()
     }
 }
 
@@ -605,6 +676,85 @@ mod tests {
             .resolve(&["Noto Sans".to_string()], 400, FontStyle::Normal)
             .expect("bundled face resolves");
         assert_eq!(bundled.source, FontSource::Bundled);
+    }
+
+    fn fallback_bytes(tag: u8) -> Arc<[u8]> {
+        Arc::from(vec![tag; 4].as_slice())
+    }
+
+    #[test]
+    fn all_faces_lists_fallback_last_in_registration_order() {
+        let mut p = BytesFontProvider::new();
+        p.register_fallback("Zeta", 400, FontStyle::Normal, fallback_bytes(1), 0);
+        p.register(
+            "Inter",
+            400,
+            FontStyle::Normal,
+            fallback_bytes(2),
+            0,
+            FontSource::Project,
+        );
+        p.register_fallback("Alpha", 400, FontStyle::Normal, fallback_bytes(3), 0);
+        let ids: Vec<String> = p.all_faces().into_iter().map(|f| f.id).collect();
+        assert_eq!(
+            ids,
+            ["inter-400-normal", "zeta-400-normal", "alpha-400-normal"]
+        );
+        let sources: Vec<FontSource> = p.all_faces().into_iter().map(|f| f.source).collect();
+        assert_eq!(
+            sources,
+            [
+                FontSource::Project,
+                FontSource::Fallback,
+                FontSource::Fallback
+            ]
+        );
+    }
+
+    #[test]
+    fn fallback_by_id_round_trips_and_never_resolves_by_family() {
+        let mut p = BytesFontProvider::new();
+        let id = p.register_fallback("Noto Emoji", 400, FontStyle::Normal, fallback_bytes(7), 0);
+        assert_eq!(id, "noto-emoji-400-normal");
+        let face = p.by_id(&id).expect("fallback face by id");
+        assert_eq!(face.id, id);
+        assert_eq!(face.source, FontSource::Fallback);
+        assert_eq!(face.bytes[0], 7);
+        assert!(
+            p.resolve(&["Noto Emoji".to_owned()], 400, FontStyle::Normal)
+                .is_none()
+        );
+        assert!(p.available_families().is_empty());
+    }
+
+    #[test]
+    fn re_registering_a_fallback_keeps_id_and_position() {
+        let mut p = BytesFontProvider::new();
+        let a = p.register_fallback("A", 400, FontStyle::Normal, fallback_bytes(1), 0);
+        p.register_fallback("B", 400, FontStyle::Normal, fallback_bytes(2), 0);
+        let again = p.register_fallback("a", 400, FontStyle::Normal, fallback_bytes(9), 0);
+        assert_eq!(a, again);
+        let faces = p.all_faces();
+        assert_eq!(faces.len(), 2);
+        assert_eq!(faces[0].id, a);
+        assert_eq!(faces[0].bytes[0], 9);
+    }
+
+    #[test]
+    fn fallback_and_regular_faces_never_share_an_id() {
+        let mut p = BytesFontProvider::new();
+        let fallback = p.register_fallback("X", 400, FontStyle::Normal, fallback_bytes(1), 0);
+        let regular = p.register(
+            "X",
+            400,
+            FontStyle::Normal,
+            fallback_bytes(2),
+            0,
+            FontSource::Project,
+        );
+        assert_ne!(fallback, regular);
+        assert_eq!(p.by_id(&fallback).expect("fallback").bytes[0], 1);
+        assert_eq!(p.by_id(&regular).expect("regular").bytes[0], 2);
     }
 
     #[test]

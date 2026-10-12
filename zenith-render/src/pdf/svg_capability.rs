@@ -42,7 +42,7 @@ impl SvgCapabilities {
         }
         let database = self
             .database
-            .get_or_insert_with(|| svg_parse::font_database(fonts));
+            .get_or_insert_with(|| crate::svg_fontdb::font_database(fonts));
         let Some(tree) = svg_parse::parse(&asset.bytes, *svg_style, database) else {
             return false;
         };

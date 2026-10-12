@@ -1,0 +1,40 @@
+[package]
+name = "zenith-fonts-fallback"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+# Code is Apache-2.0. The font files under `fonts/` are OFL-1.1.
+license = "Apache-2.0 AND OFL-1.1"
+repository.workspace = true
+homepage.workspace = true
+categories = ["rendering", "text-processing"]
+keywords = ["fonts", "noto", "cjk", "fallback", "zenith"]
+publish.workspace = true
+description = "Zenith fallback fonts: Noto Sans Arabic, Hebrew, CJK SC (subset), and monochrome Noto Emoji as embedded bytes."
+include = [
+    "Cargo.toml",
+    "ABOUT.txt",
+    "OFL.txt",
+    "src/**/*.rs",
+    "tests/**/*.rs",
+    "fonts/NotoSansArabic-Regular.ttf",
+    "fonts/NotoSansHebrew-Regular.ttf",
+    "fonts/NotoSansCJKsc-Fallback.otf",
+    "fonts/NotoEmoji-Regular.ttf",
+    "fonts/cjk-sc-codepoints.txt",
+    "fonts/cjk-sc-codepoints.py",
+]
+
+[features]
+# Embed the four font files (about 6.7 MB). Without it the manifest still
+# lists every face, with `bytes: None`, so a host can supply the files.
+default = ["embed"]
+embed = []
+
+[dev-dependencies]
+# Both are pure Rust and already in Cargo.lock, so the C-free invariant holds.
+sha2 = "0.10"
+ttf-parser = "0.25"
+
+[lints]
+workspace = true

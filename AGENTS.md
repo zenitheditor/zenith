@@ -9,6 +9,7 @@ Zenith is a Rust workspace (`edition = "2024"`). Each crate owns one concern and
 stable contract; `zenith-geometry` depends on no other Zenith crate; `zenith-core` may depend only on pure `zenith-geometry` for path math (validation / fill queries).
 
 - `zenith-core/` — KDL parser adapter, semantic AST, canonical formatter, tokens, validation, the full diagnostic set. May depend on pure `zenith-geometry` only among Zenith crates.
+- `zenith-fonts-fallback/` — the fallback font chain (Noto Sans Arabic, Hebrew, CJK SC subset, monochrome Noto Emoji) as embedded bytes behind the `embed` feature. Depends on no Zenith crate. `ABOUT.txt` records the subset commands.
 - `zenith-geometry/` — pure geometry (paths, contours, booleans). C-free; depends on no other Zenith crate; used by core, layout, scene, and tx.
 - `zenith-layout/` — text shaping & font metrics (`rustybuzz` + `ttf-parser`); all third-party shaping types confined here.
 - `zenith-raster/` — raster surface, blend modes, adjustments used by perception and render.

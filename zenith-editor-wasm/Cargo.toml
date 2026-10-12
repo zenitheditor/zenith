@@ -17,6 +17,10 @@ path = "src/main.rs"
 # Embed every bundled font (about 5.2 MB more). Off by default: the module
 # embeds Noto Sans Regular and Bold, and the page fetches the other faces.
 bundled-fonts-extended = ["zenith-core/bundled-fonts-extended"]
+# The module leaves the `embed` feature of `zenith-fonts-fallback` off (the
+# workspace dependency has no default features), so it carries no fallback
+# font bytes (about 6.7 MB). Text that needs the chain reports
+# `font.glyph_missing`.
 
 [dependencies]
 zenith-core = { workspace = true }

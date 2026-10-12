@@ -3,39 +3,84 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use zenith_core::{
     AssetKind, BytesFontProvider, Document, FontProvider, FontSource, FontStyle, TokenLiteral,
     TokenType, TokenValue, default_provider,
 };
+use zenith_fonts_fallback::{FallbackFace, fallback_faces};
 
 use super::lock::verify_locked_sha256;
 use crate::error::PipelineError;
 use crate::host::Host;
 use crate::imports::LoadedImportGraph;
 
-/// The bundled provider layered with the host's extra faces and miss log.
+/// The bundled provider layered with the embedded fallback chain, the host's
+/// extra faces, and the miss log.
 ///
 /// [`default_provider`] clones one process-wide registry and shares its font
-/// bytes, so this copies no font. Registering on the clone leaves the shared
-/// base unchanged.
-fn base_provider(host: Host<'_>) -> BytesFontProvider {
+/// bytes, so this copies no font. The fallback chain is `'static` and built
+/// once per process. Registering on the clone leaves the shared base
+/// unchanged. An extra face with [`FontSource::Fallback`] joins the end of
+/// the chain.
+pub(crate) fn base_provider(host: Host<'_>) -> BytesFontProvider {
     let mut provider = default_provider();
-    for font in host.extra_fonts {
-        provider.register(
-            &font.family,
-            font.weight,
-            font.style,
-            Arc::clone(&font.bytes),
-            font.index,
-            font.source,
+    for (face, bytes) in embedded_fallback_chain() {
+        provider.register_fallback(
+            face.family,
+            face.weight,
+            FontStyle::Normal,
+            bytes.clone(),
+            0,
         );
+    }
+    for font in host.extra_fonts {
+        let bytes = Arc::clone(&font.bytes);
+        match font.source {
+            FontSource::Fallback => {
+                provider.register_fallback(
+                    &font.family,
+                    font.weight,
+                    font.style,
+                    bytes,
+                    font.index,
+                );
+            }
+            FontSource::Bundled | FontSource::Project | FontSource::Local => {
+                provider.register(
+                    &font.family,
+                    font.weight,
+                    font.style,
+                    bytes,
+                    font.index,
+                    font.source,
+                );
+            }
+        }
     }
     match host.font_log {
         Some(log) => provider.with_miss_log(log.clone()),
         None => provider,
     }
+}
+
+/// One embedded fallback face and its shared bytes.
+type ChainFace = (&'static FallbackFace, Arc<[u8]>);
+
+/// The embedded fallback faces in chain order, with shared bytes.
+///
+/// Built once per process, so every provider shares one `Arc` per face. A
+/// build without the `embed` feature of `zenith-fonts-fallback` gets an
+/// empty chain.
+fn embedded_fallback_chain() -> &'static [ChainFace] {
+    static CHAIN: OnceLock<Vec<ChainFace>> = OnceLock::new();
+    CHAIN.get_or_init(|| {
+        fallback_faces()
+            .iter()
+            .filter_map(|face| face.bytes.map(|bytes| (face, Arc::from(bytes))))
+            .collect()
+    })
 }
 
 /// Build a [`BytesFontProvider`] with the bundled fonts, the document's

@@ -6,6 +6,7 @@ members = [
     "zenith-raster",
     "zenith-perception",
     "zenith-geometry",
+    "zenith-fonts-fallback",
     "zenith-scene",
     "zenith-render",
     "zenith-tx",
@@ -52,6 +53,9 @@ zenith-zpx = { version = "=0.0.14", path = "zenith-zpx" }
 zenith-producers = { version = "=0.0.14", path = "zenith-producers" }
 zenith-pipeline = { version = "=0.0.14", path = "zenith-pipeline" }
 zenith-editor = { version = "=0.0.14", path = "zenith-editor" }
+# Default features off: the 6.7 MB of fallback font bytes is chosen per
+# binary. The CLI adds `features = ["embed"]`. The browser module does not.
+zenith-fonts-fallback = { version = "=0.0.14", path = "zenith-fonts-fallback", default-features = false }
 
 # Size-tuned build of `zenith-editor-wasm` for the browser:
 #   cargo build --profile release-wasm --target wasm32-wasip1 -p zenith-editor-wasm

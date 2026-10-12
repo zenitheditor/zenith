@@ -1,0 +1,46 @@
+Zenith fallback fonts
+=====================
+
+Four faces, in chain order. A Zenith provider tries them, in this order,
+for a glyph the requested face lacks. All four are under the SIL Open Font
+License 1.1 (see OFL.txt). Each name table states that license. Noto
+declares no Reserved Font Name.
+
+Tools: fonttools 4.54.1 (pyftsubset, fonttools varLib.instancer), Python 3.
+Every command runs with SOURCE_DATE_EPOCH=1760227200, so the output bytes
+are reproducible.
+
+1. fonts/NotoSansArabic-Regular.ttf (family "Noto Sans Arabic", 400)
+   Upstream: https://github.com/google/fonts/raw/main/ofl/notosansarabic/NotoSansArabic%5Bwdth,wght%5D.ttf
+   sha256(upstream) = 63111b5b2e074dd48cc67692e0a2726d86ee94c1c37fe8598257b7b4e87e869e
+   Command: fonttools varLib.instancer "NotoSansArabic[wdth,wght].ttf" wght=400 wdth=100 --update-name-table -q -o NotoSansArabic-Regular.ttf
+   sha256(committed) = bdca411e84c02a4fc78337f06babbb9384a4c125a49cd288bc10ec3711c5fe8b
+
+2. fonts/NotoSansHebrew-Regular.ttf (family "Noto Sans Hebrew", 400)
+   Upstream: https://github.com/google/fonts/raw/main/ofl/notosanshebrew/NotoSansHebrew%5Bwdth,wght%5D.ttf
+   sha256(upstream) = 7ef36a2c3593758cdb622e1bdef4f84523e92fbc3ccc667438dd80ff54c2de88
+   Command: fonttools varLib.instancer "NotoSansHebrew[wdth,wght].ttf" wght=400 wdth=100 --update-name-table -q -o NotoSansHebrew-Regular.ttf
+   sha256(committed) = b2af525b860f344139e1fca57fe545f375a8ef3c6b1b0728bb51c7c86c870163
+
+3. fonts/NotoSansCJKsc-Fallback.otf (family "Noto Sans CJK SC", 400)
+   Upstream: https://github.com/notofonts/noto-cjk/raw/main/Sans/OTF/SimplifiedChinese/NotoSansCJKsc-Regular.otf
+   sha256(upstream) = 2c76254f6fc379fddfce0a7e84fb5385bb135d3e399294f6eeb6680d0365b74b
+   Code points: fonts/cjk-sc-codepoints.txt (21,429 lines; 21,408 are in
+   the font). fonts/cjk-sc-codepoints.py writes the list:
+     python3 -I cjk-sc-codepoints.py > cjk-sc-codepoints.txt
+   The set is GB2312 (all rows), JIS X 0208 level 1 kanji plus its kana and
+   symbol rows, Big5 common hanzi, all 11,172 Hangul syllables plus
+   compatibility jamo, CJK punctuation (U+3000-30FF), and fullwidth forms
+   (U+FF00-FFEF).
+   sha256(cjk-sc-codepoints.txt) = 8d7ceb65c4dd22a1f034549f32a3fd6e44b2f72f39e2c672c5b0ad0facbd024c
+   Command: pyftsubset NotoSansCJKsc-Regular.otf --unicodes-file=cjk-sc-codepoints.txt --layout-features='*' --name-IDs='*' --name-languages='*' --notdef-outline --no-hinting --output-file=NotoSansCJKsc-Fallback.otf
+   Every layout feature stays. CFF hints are dropped: Zenith renders
+   outlines without hinting.
+   sha256(committed) = 2e827dfaab2a1f3195c09fab6efd20e78f087069bb3f6bbaeac3692fde3ac128
+
+4. fonts/NotoEmoji-Regular.ttf (family "Noto Emoji", 400, monochrome)
+   Upstream: https://github.com/google/fonts/raw/main/ofl/notoemoji/NotoEmoji%5Bwght%5D.ttf
+   sha256(upstream) = de6c18832938afc99caf132b39d6a30a19bac7f2e812e28db2535b4608d27551
+   Command: fonttools varLib.instancer "NotoEmoji[wght].ttf" wght=400 --update-name-table -q -o NotoEmoji-Regular.ttf
+   sha256(committed) = 73cd897c832fa39bb7f78f8aa3f039e298734873653b3351de49c90839f976db
+   Noto Color Emoji is not bundled.

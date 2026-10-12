@@ -135,13 +135,7 @@ pub(crate) fn checked_svg(
             "SVG asset contains unresolved external or unsupported image references",
         ));
     }
-    let mut database = usvg::fontdb::Database::new();
-    database.set_sans_serif_family("Noto Sans");
-    database.set_serif_family("Noto Sans");
-    database.set_monospace_family("Noto Sans Mono");
-    for font in fonts.all_faces() {
-        database.load_font_data(font.bytes.to_vec());
-    }
+    let database = crate::svg_fontdb::font_database(fonts);
     super::asset_text::outline(&tree.root, &database)?;
     Ok(tree)
 }

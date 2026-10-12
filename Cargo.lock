@@ -2244,6 +2244,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "zenith-fonts-fallback"
+version = "0.0.14"
+dependencies = [
+ "sha2",
+ "ttf-parser 0.25.1",
+]
+
+[[package]]
 name = "zenith-geometry"
 version = "0.0.14"
 dependencies = [
@@ -2279,6 +2287,7 @@ dependencies = [
  "sha2",
  "tempfile",
  "zenith-core",
+ "zenith-fonts-fallback",
  "zenith-geometry",
  "zenith-layout",
  "zenith-perception",
@@ -2367,6 +2376,7 @@ dependencies = [
  "tiny-skia",
  "zenith-core",
  "zenith-editor",
+ "zenith-fonts-fallback",
  "zenith-geometry",
  "zenith-layout",
  "zenith-perception",

@@ -68,7 +68,7 @@ pub(super) fn emit_svg(
         return;
     }
 
-    let database = super::svg_parse::font_database(fonts);
+    let database = crate::svg_fontdb::font_database(fonts);
     let Some(tree) = super::svg_parse::parse(bytes, svg_style, &database) else {
         return;
     };

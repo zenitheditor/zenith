@@ -3,10 +3,12 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use zenith_core::{Diagnostic, Document, default_provider};
+use zenith_core::{Diagnostic, Document};
 use zenith_scene::{CompiledBox, DocumentPrep, PageCompiler};
 
-use crate::assets::{build_font_provider_with_imports, read_image_sizes, resolve_text_sources};
+use crate::assets::{
+    base_provider, build_font_provider_with_imports, read_image_sizes, resolve_text_sources,
+};
 use crate::host::Host;
 use crate::imports::load_import_graph;
 
@@ -16,7 +18,7 @@ use crate::imports::load_import_graph;
 /// Each page compiles with the render path's setup: text sources, imports,
 /// project fonts, and image intrinsic sizes from `project_dir`. No config is
 /// read, and diagnostics are dropped. A font load error falls back to the
-/// bundled fonts.
+/// bundled fonts and the fallback chain.
 #[must_use]
 pub fn resolved_boxes(
     host: Host<'_>,
@@ -28,7 +30,7 @@ pub fn resolved_boxes(
     resolve_text_sources(host.fs, &mut doc, project_dir, &mut ignored);
     let imports = load_import_graph(host.fs, &doc, project_dir);
     let fonts = build_font_provider_with_imports(host, &doc, project_dir, &imports, false)
-        .unwrap_or_else(|_| default_provider());
+        .unwrap_or_else(|_| base_provider(host));
     let scene_imports = imports.to_scene_graph();
     let prep = DocumentPrep::new(&doc, None, Some(&scene_imports))
         .with_image_sizes(read_image_sizes(host.fs, &doc, project_dir, &imports));
