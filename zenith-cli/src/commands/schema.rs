@@ -27,5 +27,5 @@ pub use defaults::defaults;
 pub use listings::{
     node_detail, node_detail_with, nodes, op_detail, ops, overview, token_detail, tokens,
 };
-pub use surfaces::{asset, diagnostics, document, page, ports, variant};
+pub use surfaces::{asset, diagnostics, diagnostics_matching, document, page, ports, variant};
 pub use write::write;

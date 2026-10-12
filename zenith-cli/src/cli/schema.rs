@@ -132,7 +132,15 @@ pub enum SchemaSub {
     /// (in-file policy now; CLI flags/config resolve in a later unit), and the
     /// full list of governable diagnostic codes (code · severity · summary).
     /// Integrity Errors are listed as non-suppressible.
-    Diagnostics,
+    ///
+    /// With FILTER, lists only the codes whose name or summary contains the
+    /// text (case-insensitive), Errors included. Use it to look up one area,
+    /// for example `zenith schema diagnostics font`.
+    Diagnostics {
+        /// Keep only codes whose name or summary contains this text.
+        #[arg(value_name = "FILTER")]
+        filter: Option<String>,
+    },
 
     /// Show the structure and semantics of the top-level `brand { … }` block.
     ///

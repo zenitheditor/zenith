@@ -18,6 +18,7 @@ it.
 ### Added
 
 - **Bundled fallback fonts for Arabic, Hebrew, Chinese, Japanese, Korean, and emoji.** The new `zenith-fonts-fallback` crate embeds Noto Sans Arabic, Noto Sans Hebrew, a Noto Sans CJK SC subset, and monochrome Noto Emoji, and the CLI tries them in that order for a glyph the requested face lacks. A document with no missing glyph renders the same bytes as before. The browser module does not embed them.
+- **`zenith schema diagnostics <FILTER>` lists only the codes that match.** The match is case-insensitive on the code and summary, and it includes Error codes. The full list is 15 KB as text and 63 KB as JSON. In a merge benchmark, agents called the full list up to 14 times in one run because a tool-output cap cut it off before the codes they needed.
 
 ### Fixed
 

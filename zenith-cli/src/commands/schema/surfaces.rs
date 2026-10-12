@@ -217,6 +217,69 @@ pub fn ports(json: bool) -> (String, u8) {
     }
 }
 
+/// `zenith schema diagnostics FILTER`: the catalog codes whose name or summary
+/// contains `filter` (case-insensitive), Errors included.
+///
+/// Returns `(stdout, exit_code)`. No match is exit code 1 with a hint.
+pub fn diagnostics_matching(json: bool, filter: &str) -> (String, u8) {
+    let needle = filter.to_lowercase();
+    let catalog = core_schema::diagnostic_codes();
+    let matched: Vec<&_> = catalog
+        .iter()
+        .filter(|info| {
+            info.code.to_lowercase().contains(&needle)
+                || info.summary.to_lowercase().contains(&needle)
+        })
+        .collect();
+
+    if json {
+        let codes: Vec<SchemaDiagnosticCode> = matched
+            .iter()
+            .map(|info| SchemaDiagnosticCode {
+                code: info.code.to_owned(),
+                severity: crate::json_types::severity_str(&info.severity).to_owned(),
+                summary: info.summary.to_owned(),
+                governable: info.is_governable(),
+            })
+            .collect();
+        let out = SchemaDiagnosticsOutput {
+            schema: "zenith-schema-v1",
+            summary: core_schema::diagnostics_summary().to_owned(),
+            verbs: core_schema::diagnostics_verbs()
+                .iter()
+                .map(|&v| v.to_owned())
+                .collect(),
+            syntax: DIAGNOSTICS_SYNTAX.iter().map(|&s| s.to_owned()).collect(),
+            precedence: DIAGNOSTICS_PRECEDENCE,
+            codes,
+        };
+        return (serialize_pretty(&out), u8::from(matched.is_empty()));
+    }
+    if matched.is_empty() {
+        return (
+            format!(
+                "no diagnostic code matches '{filter}'. Run `zenith schema diagnostics` for the full list."
+            ),
+            1,
+        );
+    }
+    let col_width = matched.iter().map(|i| i.code.len()).max().unwrap_or(0);
+    let mut text = format!(
+        "{} code(s) match '{filter}' (code · severity · summary). Only advisory and warning codes can be allowed, warned, or denied.\n",
+        matched.len()
+    );
+    for info in matched {
+        text.push_str(&format!(
+            "  {:<col_width$}  {:<9}  {}\n",
+            info.code,
+            crate::json_types::severity_str(&info.severity),
+            info.summary,
+            col_width = col_width,
+        ));
+    }
+    (text.trim_end().to_owned(), 0)
+}
+
 /// `zenith schema diagnostics`: the in-file diagnostic-policy verbs and the
 /// governable diagnostic codes.
 ///
@@ -281,9 +344,9 @@ pub fn diagnostics(json: bool) -> (String, u8) {
         text.push_str(
             "\nNote: integrity Errors cannot be suppressed or weakened — `allow`/`warn` on an \
              Error code is reported as `policy.ineffective_on_error`. Only governable \
-             (Warning/Advisory) codes are listed above; for the COMPLETE catalog including the \
-             always-enforced Error codes (e.g. `token.raw_visual_literal`), run \
-             `zenith schema diagnostics --json`.",
+             (Warning/Advisory) codes are listed above. To look up one area, including the \
+             always-enforced Error codes, run `zenith schema diagnostics <FILTER>`, for \
+             example `zenith schema diagnostics font`.",
         );
         (text.trim_end().to_owned(), 0)
     }

@@ -240,7 +240,10 @@ pub(super) fn dispatch_schema(args: SchemaArgs) -> ExitCode {
         Some(cli::SchemaSub::Document) => commands::schema::document(json),
         Some(cli::SchemaSub::Ports) => commands::schema::ports(json),
         Some(cli::SchemaSub::Variant) => commands::schema::variant(json),
-        Some(cli::SchemaSub::Diagnostics) => commands::schema::diagnostics(json),
+        Some(cli::SchemaSub::Diagnostics { filter }) => match filter {
+            Some(filter) => commands::schema::diagnostics_matching(json, &filter),
+            None => commands::schema::diagnostics(json),
+        },
         Some(cli::SchemaSub::Brand) => commands::schema::brand(json),
         Some(cli::SchemaSub::Block) => commands::schema::block(json),
         Some(cli::SchemaSub::Style) => commands::schema::style(json),

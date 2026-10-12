@@ -883,6 +883,42 @@ fn diagnostics_json_carries_policy_syntax() {
     );
 }
 
+#[test]
+fn diagnostics_filter_keeps_only_matching_codes_and_includes_errors() {
+    let (text, code) = diagnostics_matching(false, "FONT");
+    assert_eq!(code, 0);
+    assert!(text.contains("font.glyph_missing"), "got:\n{text}");
+    assert!(!text.contains("layout.off_canvas"), "got:\n{text}");
+    assert!(
+        text.lines()
+            .skip(1)
+            .all(|l| l.to_lowercase().contains("font")),
+        "every listed row must match the filter; got:\n{text}"
+    );
+}
+
+#[test]
+fn diagnostics_filter_json_lists_only_matches() {
+    let (text, code) = diagnostics_matching(true, "text.overflow");
+    assert_eq!(code, 0);
+    let value: serde_json::Value = serde_json::from_str(&text).expect("valid JSON");
+    let codes = value["codes"].as_array().expect("codes array");
+    assert!(!codes.is_empty());
+    assert!(codes.iter().any(|c| c["code"] == "text.overflow"));
+    assert!(
+        codes.len() < 10,
+        "filter must narrow the list; got {}",
+        codes.len()
+    );
+}
+
+#[test]
+fn diagnostics_filter_without_match_exits_1_with_a_hint() {
+    let (text, code) = diagnostics_matching(false, "zzz-no-such-code");
+    assert_eq!(code, 1);
+    assert!(text.contains("zenith schema diagnostics"), "got:\n{text}");
+}
+
 /// `token.set_partially_used` is defined in the core diagnostic catalog and
 /// must flow through automatically to the `zenith schema diagnostics`
 /// listing (both human and JSON), with no CLI-side row needed.
