@@ -238,6 +238,11 @@ fn article_zen_renders_to_valid_png() {
     assert_example_renders("article");
 }
 
+#[test]
+fn variants_zen_renders_to_valid_png() {
+    assert_example_renders("variants");
+}
+
 // ── --locked sha256 verification ────────────────────────────────────────────────
 
 /// Path to the workspace-root `examples/` directory (where `assets/swatch.png`

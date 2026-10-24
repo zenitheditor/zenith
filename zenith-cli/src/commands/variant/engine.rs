@@ -9,8 +9,11 @@
 
 use std::collections::BTreeMap;
 
-use zenith_core::{Document, KdlAdapter, KdlSource, PropertyValue, dim_to_px};
-use zenith_tx::{Op, OpSpan, Permissions, Transaction, TxStatus, run_transaction};
+use zenith_core::{Document, KdlAdapter, KdlSource};
+use zenith_tx::{Op, Permissions, Transaction, TxStatus, run_transaction};
+
+use super::ops::override_ops;
+use super::prune::{prune_orphaned_tokens, unused_token_ids};
 
 // ── Result / outcome types ────────────────────────────────────────────────────
 
@@ -92,6 +95,10 @@ pub fn expand_variants(doc: &Document) -> VariantExpansion {
     let mut base = doc.clone();
     base.variants.clear();
 
+    // Tokens the source leaves unused. A generated variant drops every other
+    // token it leaves without a reference (see `prune`).
+    let source_unused = unused_token_ids(doc);
+
     let mut results: Vec<VariantResult> = Vec::with_capacity(sorted.len());
 
     for variant in sorted.values() {
@@ -105,61 +112,19 @@ pub fn expand_variants(doc: &Document) -> VariantExpansion {
             h: variant.h.to_kdl_string(),
         });
 
-        // 2. Per-override ops, in stored order, sub-ordered:
-        //    visible → geometry → fill → text.
-        for ov in &variant.overrides {
-            if let Some(visible) = ov.visible {
-                ops.push(Op::SetVisible {
-                    node: ov.node.clone(),
-                    visible,
+        // 2. Per-override ops, in stored order. `override_ops` documents the
+        //    order within one override.
+        let per_override: Result<Vec<Vec<Op>>, String> =
+            variant.overrides.iter().map(override_ops).collect();
+        match per_override {
+            Ok(batches) => ops.extend(batches.into_iter().flatten()),
+            Err(reason) => {
+                results.push(VariantResult {
+                    id: variant.id.clone(),
+                    source: variant.source.clone(),
+                    outcome: VariantOutcome::Failed(reason),
                 });
-            }
-            if ov.x.is_some() || ov.y.is_some() || ov.w.is_some() || ov.h.is_some() {
-                ops.push(Op::SetGeometry {
-                    node: ov.node.clone(),
-                    x: ov
-                        .x
-                        .as_ref()
-                        .and_then(|d| dim_to_px(d.value, &d.unit))
-                        .map(Some),
-                    y: ov
-                        .y
-                        .as_ref()
-                        .and_then(|d| dim_to_px(d.value, &d.unit))
-                        .map(Some),
-                    w: ov
-                        .w
-                        .as_ref()
-                        .and_then(|d| dim_to_px(d.value, &d.unit))
-                        .map(|v| Some(v.into())),
-                    h: ov
-                        .h
-                        .as_ref()
-                        .and_then(|d| dim_to_px(d.value, &d.unit))
-                        .map(|v| Some(v.into())),
-                    rotate: None,
-                });
-            }
-            if let Some(fill) = &ov.fill {
-                ops.push(Op::SetFill {
-                    node: ov.node.clone(),
-                    fill: property_value_to_fill_str(fill),
-                });
-            }
-            if let Some(text) = &ov.text {
-                ops.push(Op::ReplaceText {
-                    node: ov.node.clone(),
-                    spans: vec![OpSpan {
-                        text: text.clone(),
-                        fill: None,
-                        font_weight: None,
-                        italic: None,
-                        underline: None,
-                        strikethrough: None,
-                        vertical_align: None,
-                        footnote_ref: None,
-                    }],
-                });
+                continue;
             }
         }
 
@@ -193,7 +158,10 @@ pub fn expand_variants(doc: &Document) -> VariantExpansion {
                         "post-transaction parse error: {}",
                         e.message
                     )),
-                    Ok(materialized) => VariantOutcome::Generated(Box::new(materialized)),
+                    Ok(mut materialized) => {
+                        prune_orphaned_tokens(&mut materialized, &source_unused);
+                        VariantOutcome::Generated(Box::new(materialized))
+                    }
                 }
             }
         };
@@ -208,31 +176,12 @@ pub fn expand_variants(doc: &Document) -> VariantExpansion {
     VariantExpansion { results }
 }
 
-// ── Private helpers ───────────────────────────────────────────────────────────
-
-/// Extract a string to pass to [`Op::SetFill`] from a [`PropertyValue`].
-///
-/// [`Op::SetFill`] accepts a token id and stores it as
-/// `PropertyValue::TokenRef`.  For `TokenRef` fills this is straightforward.
-/// For `Literal` and `Dimension` fills the raw string is passed through; the
-/// engine will still wrap it as `TokenRef`, which post-validation will then
-/// reject as `token.unknown_reference` — surfacing a `Failed` outcome for that
-/// variant rather than silently producing a corrupt document.
-fn property_value_to_fill_str(pv: &PropertyValue) -> String {
-    match pv {
-        PropertyValue::TokenRef(id) => id.clone(),
-        PropertyValue::Literal(s) => s.clone(),
-        PropertyValue::Dimension(d) => d.to_kdl_string(),
-        PropertyValue::DataRef(path) => path.clone(),
-    }
-}
-
 // ── Unit tests ────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use zenith_core::KdlAdapter;
+    use zenith_core::{KdlAdapter, PropertyValue};
 
     // ── Fixtures ──────────────────────────────────────────────────────────────
 

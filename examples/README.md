@@ -62,6 +62,7 @@ zenith validate examples/<name>.zen --json
 | Shared styles                     | [`styled.zen`](styled.zen)       | ![styled](styled.png)       |
 | Image asset                       | [`image.zen`](image.zen)         | ![image](image.png)         |
 | Multipage (page 1 shown)          | [`multipage.zen`](multipage.zen) | ![multipage](multipage.png) |
+| Size variants that re-layout (square shown; `zenith variant` makes story + banner) | [`variants.zen`](variants.zen) | ![variants](variants.png) |
 
 ## Diagrams & data
 

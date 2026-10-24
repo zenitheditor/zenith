@@ -1,0 +1,107 @@
+zenith version=1 {
+  project id="proj.variants" name="Retarget Variants"
+  tokens format="zenith-token-v1" {
+    token id="color.bg" type="color" value="#0b1324"
+    token id="color.card" type="color" value="#16223b"
+    token id="color.border" type="color" value="#2b3d63"
+    token id="color.text" type="color" value="#f4f7fc"
+    token id="color.muted" type="color" value="#a9b7d0"
+    token id="color.accent" type="color" value="#5eead4"
+    token id="color.on-accent" type="color" value="#0b1324"
+    token id="font.sans" type="fontFamily" value="Noto Sans"
+    token id="weight.bold" type="fontWeight" value=700
+    token id="size.brand" type="dimension" value=(px)36
+    token id="size.label" type="dimension" value=(px)24
+    token id="size.body" type="dimension" value=(px)30
+    token id="size.stat" type="dimension" value=(px)64
+    token id="size.title" type="dimension" value=(px)88
+    token id="size.title.story" type="dimension" value=(px)112
+    token id="size.title.banner" type="dimension" value=(px)96
+    token id="size.border" type="dimension" value=(px)2
+    token id="radius.card" type="dimension" value=(px)24
+    token id="radius.pill" type="dimension" value=(px)999
+  }
+  styles {}
+  // One square source page built from layout frames. The variants below
+  // retarget it to a story and a banner by changing frame modes, spacing,
+  // and type size. No node is placed by hand.
+  variants {
+    variant id="banner" source="page.main" w=(px)1920 h=(px)1080 {
+      override node="root" w=(px)1920 h=(px)1080 padding-x=(px)120
+      override node="main" layout="row" gap=(px)96 align="center"
+      override node="hero" w="fill"
+      override node="title" font-size=(token)"size.title.banner"
+      override node="stats" w=(px)640 layout="column" gap=(px)24
+    }
+    variant id="square" source="page.main" w=(px)1080 h=(px)1080 {
+    }
+    variant id="story" source="page.main" w=(px)1080 h=(px)1920 {
+      override node="root" w=(px)1080 h=(px)1920 padding-y=(px)120
+      override node="main" gap=(px)120
+      override node="title" font-size=(token)"size.title.story"
+      override node="stats" layout="column" gap=(px)32
+    }
+  }
+  document id="doc.variants" title="Retarget Variants" {
+    page id="page.main" w=(px)1080 h=(px)1080 background=(token)"color.bg" {
+      frame id="root" x=(px)0 y=(px)0 w=(px)1080 h=(px)1080 layout="column" padding=(px)80 justify="space-between" {
+        frame id="header" layout="row" justify="space-between" align="center" {
+          text id="brand" fill=(token)"color.text" font-family=(token)"font.sans" font-size=(token)"size.brand" font-weight=(token)"weight.bold" {
+            span "ZENITH"
+          }
+          frame id="tag" w="hug" h="hug" layout="row" padding-x=(px)20 padding-y=(px)8 stroke=(token)"color.accent" stroke-width=(token)"size.border" radius=(token)"radius.pill" {
+            text id="tag.label" fill=(token)"color.accent" font-family=(token)"font.sans" font-size=(token)"size.label" {
+              span "Launch week"
+            }
+          }
+        }
+        frame id="main" layout="column" gap=(px)56 {
+          frame id="hero" layout="column" gap=(px)24 {
+            text id="title" fill=(token)"color.text" font-family=(token)"font.sans" font-size=(token)"size.title" font-weight=(token)"weight.bold" {
+              span "Ship designs to every screen"
+            }
+            text id="subtitle" fill=(token)"color.muted" font-family=(token)"font.sans" font-size=(token)"size.body" {
+              span "One source page. Three sizes. Layout does the work."
+            }
+          }
+          frame id="stats" layout="row" gap=(px)24 {
+            frame id="stat.a" w="fill" layout="column" gap=(px)8 padding=(px)32 fill=(token)"color.card" stroke=(token)"color.border" stroke-width=(token)"size.border" radius=(token)"radius.card" {
+              text id="stat.a.value" fill=(token)"color.accent" font-family=(token)"font.sans" font-size=(token)"size.stat" font-weight=(token)"weight.bold" {
+                span "3x"
+              }
+              text id="stat.a.label" fill=(token)"color.muted" font-family=(token)"font.sans" font-size=(token)"size.label" {
+                span "faster handoff"
+              }
+            }
+            frame id="stat.b" w="fill" layout="column" gap=(px)8 padding=(px)32 fill=(token)"color.card" stroke=(token)"color.border" stroke-width=(token)"size.border" radius=(token)"radius.card" {
+              text id="stat.b.value" fill=(token)"color.accent" font-family=(token)"font.sans" font-size=(token)"size.stat" font-weight=(token)"weight.bold" {
+                span "1"
+              }
+              text id="stat.b.label" fill=(token)"color.muted" font-family=(token)"font.sans" font-size=(token)"size.label" {
+                span "source page"
+              }
+            }
+            frame id="stat.c" w="fill" layout="column" gap=(px)8 padding=(px)32 fill=(token)"color.card" stroke=(token)"color.border" stroke-width=(token)"size.border" radius=(token)"radius.card" {
+              text id="stat.c.value" fill=(token)"color.accent" font-family=(token)"font.sans" font-size=(token)"size.stat" font-weight=(token)"weight.bold" {
+                span "0"
+              }
+              text id="stat.c.label" fill=(token)"color.muted" font-family=(token)"font.sans" font-size=(token)"size.label" {
+                span "hand-placed nodes"
+              }
+            }
+          }
+        }
+        frame id="footer" layout="row" justify="space-between" align="center" {
+          frame id="cta" w="hug" h="hug" layout="row" padding-x=(px)32 padding-y=(px)16 fill=(token)"color.accent" radius=(token)"radius.pill" {
+            text id="cta.label" fill=(token)"color.on-accent" font-family=(token)"font.sans" font-size=(token)"size.label" font-weight=(token)"weight.bold" {
+              span "Try it today"
+            }
+          }
+          text id="url" fill=(token)"color.muted" font-family=(token)"font.sans" font-size=(token)"size.label" {
+            span "zenith variant poster.zen"
+          }
+        }
+      }
+    }
+  }
+}

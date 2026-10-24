@@ -365,16 +365,24 @@ Two complementary ways to generate many outputs from one design — one varies *
 
 ### Size / format variants (`zenith variant`)
 
-A `variants` block expands one canonical page into named target sizes. Each target produces a `.zen` companion and PNG or SVG image. Per-target `override`s change visibility, text, and visual properties. Source token edits propagate to every variant. Anchored nodes reflow to each size.
+A `variants` block expands one canonical page into named target sizes. Each target produces a `.zen` companion and PNG or SVG image. Per-target `override`s change visibility, text, geometry, fill, and `font-size`. On a layout frame they also change `layout`, `gap`, `padding*`, `justify`, `align`, and `wrap`, and auto-layout runs again at the new size. Source token edits propagate to every variant. Anchored nodes reflow to each size.
 
 ```kdl
 variants {
-  variant id="square" source="page.main" w=(px)1080 h=(px)1080 {
-    override node="qr" visible=#false
+  variant id="story" source="page.main" w=(px)1080 h=(px)1920 {
+    override node="root" w=(px)1080 h=(px)1920 padding-y=(px)120
+    override node="title" font-size=(token)"size.title.story"
+    override node="stats" layout="column" gap=(px)32
   }
-  variant id="story" source="page.main" w=(px)1080 h=(px)1920 { }
+  variant id="banner" source="page.main" w=(px)1920 h=(px)1080 {
+    override node="root" w=(px)1920 h=(px)1080
+    override node="main" layout="row" gap=(px)96 align="center"
+    override node="hero" w="fill"
+  }
 }
 ```
+
+[`examples/variants.zen`](examples/variants.zen) retargets one auto-layout square to a story and a banner this way.
 
 ```bash
 zenith variant poster.zen --out-dir out/ --manifest manifest.json

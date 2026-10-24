@@ -20,12 +20,14 @@ zenith variant --help
 ### Why it's reliable
 
 - **Token propagation:** Variants inherit canonical page tokens. One token modification propagates to every size.
+- **Layout overrides:** Build the source page from layout frames (`layout.md`). Each variant then needs a few overrides, not a coordinate per node. Set the outer frame `w`/`h`. Switch a frame between `row` and `column`. Change `gap`, `padding*`, `justify`, `align`, `wrap`, a child `w`/`h` (`"fill"`/`"hug"`), or a text `font-size` token. Auto-layout runs again at the variant size. Run `zenith schema variant` for every override key.
 - **Anchored nodes:** Use `anchor` and `anchor-zone` from `layout.md` for placement across sizes. Free-coordinate decoration needs per-variant repositioning.
+- **Variant-only tokens:** A token that one override uses (a story title size) counts as used in the source. A generated variant drops each token it leaves unreferenced.
 - **Deterministic.** Same source → byte-identical `.zen`, PNG or SVG, and manifest across runs.
 
 ### Workflow
 
-1. Build and `zenith validate` the canonical page first — a broken source fails every variant. Variant-specific diagnostics: `variant.duplicate_id`, `variant.unknown_source`, `variant.invalid_dimension` (non-px or ≤ 0), `variant.override_unknown_node`.
+1. Build and `zenith validate` the canonical page first — a broken source fails every variant. Variant-specific diagnostics: `variant.duplicate_id`, `variant.unknown_source`, `variant.invalid_dimension` (non-px or ≤ 0), `variant.override_unknown_node`, `variant.override_unsupported_property` (a key the target kind lacks, such as `gap` on a text node).
 2. Generate, then open a couple of the PNGs to eyeball reflow at the widest/tallest sizes.
 3. For CI, pass `--manifest` and commit it so the batch is auditable and reproducible.
 

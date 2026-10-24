@@ -120,9 +120,11 @@ pub enum SchemaSub {
     /// Documents the `variants { variant id=… source=<page-id> w=(px)N h=(px)N { … } }`
     /// block structure, the `override node="<id>" …` entry, and its recognised
     /// properties: `node` (required, the target node id selector — NOT `id`),
-    /// `visible` (#true/#false), `text` (string), `fill` (token ref or color),
-    /// and geometry `x`/`y`/`w`/`h` (typed dimensions, e.g. `(px)100`).
-    /// Includes a concrete worked example.
+    /// `visible` (#true/#false), `text` (string), `fill` (token ref),
+    /// geometry `x`/`y`/`w`/`h` (typed dimensions, e.g. `(px)100`, and
+    /// `hug`/`fill` for `w`/`h`), `font-size` (token ref), and the frame
+    /// layout keys `layout`, `gap`, `wrap-gap`, `padding*`, `justify`,
+    /// `align`, `wrap`. Includes a concrete worked example.
     Variant,
 
     /// Show the in-file diagnostic-policy verbs and the governable diagnostic codes.

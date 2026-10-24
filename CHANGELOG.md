@@ -18,11 +18,14 @@ it.
 ### Added
 
 - **Bundled fallback fonts for Arabic, Hebrew, Chinese, Japanese, Korean, and emoji.** The new `zenith-fonts-fallback` crate embeds Noto Sans Arabic, Noto Sans Hebrew, a Noto Sans CJK SC subset, and monochrome Noto Emoji, and the CLI tries them in that order for a glyph the requested face lacks. A document with no missing glyph renders the same bytes as before. The browser module does not embed them.
+- **Variant overrides re-layout.** An `override` in a `variants` block now takes `font-size` (a dimension token ref), `w`/`h` `"hug"`/`"fill"`, and the frame keys `layout`, `gap`, `wrap-gap`, `padding`, `padding-x`, `padding-y`, `padding-top`, `padding-right`, `padding-bottom`, `padding-left`, `justify`, `align`, and `wrap`. Auto-layout runs again at the variant size. A square page built from layout frames retargets to a story or a banner with three to five overrides. `examples/variants.zen` shows it. `variant.override_unsupported_property` reports a key the target node kind does not have. A bad value takes the node codes (`node.invalid_value`, `node.invalid_geometry`, `token.*`). A document whose overrides use none of the new keys generates the same files as before, except for the token fix below.
 - **`zenith schema diagnostics <FILTER>` lists only the codes that match.** The match is case-insensitive on the code and summary, and it includes Error codes. The full list is 15 KB as text and 63 KB as JSON. In a merge benchmark, agents called the full list up to 14 times in one run because a tool-output cap cut it off before the codes they needed.
 
 ### Fixed
 
 - **The bundled Noto font notices name the SIL Open Font License 1.1.** They said Apache-2.0, but each face's name table states OFL 1.1.
+- **A token that only a variant override uses no longer raises `token.unused`.** `zenith validate` now counts override token refs as references and checks them. `zenith variant` drops each token that a generated variant leaves without a reference. A token the source already leaves unused stays.
+- **A bad override `x`/`y`/`w`/`h` is a parse error.** A value without a unit, or a string other than `"hug"`/`"fill"`, was silently dropped.
 
 ### Changed
 
