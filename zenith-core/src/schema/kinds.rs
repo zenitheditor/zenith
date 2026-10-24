@@ -116,7 +116,7 @@ pub fn node_example(kind: &str) -> Option<&'static str> {
     match kind {
         "frame" => Some(FRAME_EXAMPLE),
         "light" => Some(
-            "light id=\"bg.glow\" kind=\"ambient\" x=(%)85 y=(%)12 \
+            "light id=\"bg.glow\" kind=\"ambient\" x=(px)1630 y=(px)130 \
              radius=(token)\"size.glow\" color=(token)\"color.glow\" opacity=0.35",
         ),
         "mesh" => Some(
