@@ -3,33 +3,14 @@
 
 use std::path::{Path, PathBuf};
 
-use zenith_pipeline::{FsError, MemFs, SourceFs};
+use zenith_pipeline::MemFs;
+
+mod disk_fs;
+
+pub use disk_fs::DiskFs;
 
 /// The repository `examples/` directory, relative to this crate.
 pub const EXAMPLES: &str = "../examples";
-
-/// Project files read from disk with `std::fs`, the way the CLI reads them.
-pub struct DiskFs;
-
-impl SourceFs for DiskFs {
-    fn read(&self, path: &Path) -> Result<Vec<u8>, FsError> {
-        std::fs::read(path).map_err(|e| {
-            if e.kind() == std::io::ErrorKind::NotFound {
-                FsError::not_found(e.to_string())
-            } else {
-                FsError::other(e.to_string())
-            }
-        })
-    }
-
-    fn exists(&self, path: &Path) -> bool {
-        path.exists()
-    }
-
-    fn is_file(&self, path: &Path) -> bool {
-        path.is_file()
-    }
-}
 
 /// Every file under `dir`, recursively, sorted.
 pub fn files_under(dir: &Path) -> Vec<PathBuf> {

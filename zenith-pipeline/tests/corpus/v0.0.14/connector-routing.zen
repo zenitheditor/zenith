@@ -1,0 +1,42 @@
+zenith version=1 {
+  project id="proj.routing" name="Connector Auto-Routing"
+  tokens format="zenith-token-v1" {
+    token id="c.bg" type="color" value="#f8fafc"
+    token id="c.node" type="color" value="#dbeafe"
+    token id="c.nodeline" type="color" value="#1e3a8a"
+    token id="c.block" type="color" value="#fee2e2"
+    token id="c.blockline" type="color" value="#b91c1c"
+    token id="c.flow" type="color" value="#0f766e"
+    token id="c.cross" type="color" value="#7c3aed"
+    token id="c.text" type="color" value="#0f172a"
+    token id="bw" type="dimension" value=(px)2
+    token id="cw" type="dimension" value=(px)2.5
+    token id="r" type="dimension" value=(px)8
+    token id="pad" type="dimension" value=(px)10
+    token id="fs" type="dimension" value=(px)15
+    token id="ff" type="fontFamily" value="Noto Sans"
+    token id="fw" type="fontWeight" value=600
+  }
+  styles {
+    style id="lbl" {
+      font-family (token)"ff"
+      font-size (token)"fs"
+      font-weight (token)"fw"
+      fill (token)"c.text"
+    }
+  }
+  document id="doc.routing" title="Connector Auto-Routing" {
+    page id="pg" name="Routing" w=(px)640 h=(px)360 background=(token)"c.bg" line-jumps="arc" {
+      shape id="n.start" kind="process" x=(px)40 y=(px)150 w=(px)130 h=(px)60 fill=(token)"c.node" stroke=(token)"c.nodeline" stroke-width=(token)"bw" radius=(token)"r" padding=(token)"pad" text-style="lbl" { span "Start" }
+      shape id="n.end" kind="process" x=(px)470 y=(px)150 w=(px)130 h=(px)60 fill=(token)"c.node" stroke=(token)"c.nodeline" stroke-width=(token)"bw" radius=(token)"r" padding=(token)"pad" text-style="lbl" { span "Finish" }
+      shape id="n.block" kind="process" x=(px)290 y=(px)130 w=(px)70 h=(px)100 fill=(token)"c.block" stroke=(token)"c.blockline" stroke-width=(token)"bw" radius=(token)"r" padding=(token)"pad" text-style="lbl" { span "Block" }
+      shape id="n.top" kind="process" x=(px)285 y=(px)20 w=(px)80 h=(px)50 fill=(token)"c.node" stroke=(token)"c.nodeline" stroke-width=(token)"bw" radius=(token)"r" padding=(token)"pad" text-style="lbl" { span "Top" }
+      shape id="n.bottom" kind="process" x=(px)285 y=(px)290 w=(px)80 h=(px)50 fill=(token)"c.node" stroke=(token)"c.nodeline" stroke-width=(token)"bw" radius=(token)"r" padding=(token)"pad" text-style="lbl" { span "Bottom" }
+
+      // Auto-routed flow: bends around the Block instead of crossing it.
+      connector id="e.flow" from="n.start" to="n.end" route="avoid" marker-end="arrow" stroke=(token)"c.flow" stroke-width=(token)"cw"
+      // A second connector that crosses the flow; the page's line-jumps hops it.
+      connector id="e.cross" from="n.top" to="n.bottom" marker-end="arrow" stroke=(token)"c.cross" stroke-width=(token)"cw"
+    }
+  }
+}

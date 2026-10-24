@@ -1,0 +1,15 @@
+zenith version=1 {
+  project id="proj.blur" name="Blur and Blend Example"
+  tokens format="zenith-token-v1" {
+    token id="color.bg" type="color" value="#0f172a"
+    token id="color.a" type="color" value="#f472b6"
+    token id="color.b" type="color" value="#22d3ee"
+  }
+  styles {}
+  document id="doc.blur" title="Blur and Blend Example" {
+    page id="page.blur" w=(px)400 h=(px)260 background=(token)"color.bg" {
+      ellipse id="ell.a" x=(px)80 y=(px)50 w=(px)160 h=(px)160 fill=(token)"color.a" blur=(px)6
+      ellipse id="ell.b" x=(px)170 y=(px)60 w=(px)160 h=(px)160 fill=(token)"color.b" blend-mode="screen"
+    }
+  }
+}

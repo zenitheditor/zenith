@@ -1,0 +1,21 @@
+zenith version=1 {
+  project id="proj.polyline" name="Polyline Example"
+  tokens format="zenith-token-v1" {
+    token id="color.bg" type="color" value="#f8fafc"
+    token id="color.stroke" type="color" value="#0ea5e9"
+    token id="size.stroke" type="dimension" value=(px)3
+  }
+  styles {
+  }
+  document id="doc.polyline" title="Polyline Example" {
+    page id="page.polyline" w=(px)320 h=(px)200 {
+      rect id="rect.bg" x=(px)0 y=(px)0 w=(px)320 h=(px)200 fill=(token)"color.bg"
+      polyline id="poly.connector" stroke=(token)"color.stroke" stroke-width=(token)"size.stroke" {
+        point x=(px)40 y=(px)160
+        point x=(px)120 y=(px)60
+        point x=(px)200 y=(px)140
+        point x=(px)280 y=(px)50
+      }
+    }
+  }
+}

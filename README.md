@@ -823,7 +823,23 @@ Only put files in the showcase if you have the rights to share them and you allo
 
 ## Status
 
-Zenith is in its first public release series. The author → validate → edit → render pipeline works end-to-end: parsing, the diagnostic set, the transaction engine, PNG/SVG/PDF rendering, local history, the library subsystem, and variable-data merge are implemented and tested. The format, wire types, and command surface may still evolve while the project matures.
+Zenith is in its first public release series. The author → validate → edit → render pipeline works end-to-end: parsing, the diagnostic set, the transaction engine, PNG/SVG/PDF rendering, local history, the library subsystem, and variable-data merge are implemented and tested. The format, wire types, and command surface still change. [Stability](#stability) states what a release keeps.
+
+## Stability
+
+Zenith is pre-1.0. Each 0.0.x release keeps three promises:
+
+- A `.zen` document that validates on release N parses and validates without Error on N+1.
+- The canonical formatter is idempotent: `zenith fmt` on formatted text changes nothing.
+- A CLI `--json` output keeps its shape while its `schema` string (`zenith-validate-v1`, `zenith-schema-v1`, …) stays the same.
+
+Anything else can change in any release. This includes diagnostic codes and messages, tx op names and fields, and render pixels when fonts or text shaping change.
+
+The frozen corpus in `zenith-pipeline/tests/corpus/` holds the first promise. `cargo test` fails when a release breaks a frozen document. An intended break follows this process in one commit:
+
+1. Add a `### Breaking` section to the release in [CHANGELOG.md](CHANGELOG.md), and list the break.
+2. Refresh the frozen corpus as its `README.md` states.
+3. Bump the `schema` string of every CLI JSON output whose shape changes.
 
 ## Contributing
 

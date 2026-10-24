@@ -1,0 +1,24 @@
+zenith version=1 {
+  project id="proj.gradient" name="Gradient Example"
+  tokens format="zenith-token-v1" {
+    token id="color.sky.top" type="color" value="#1e3a8a"
+    token id="color.sky.bottom" type="color" value="#60a5fa"
+    token id="color.sun.core" type="color" value="#fde68a"
+    token id="color.sun.edge" type="color" value="#f97316"
+    token id="grad.sky" type="gradient" angle=(deg)90 {
+      stop offset=0.0 color=(token)"color.sky.top"
+      stop offset=1.0 color=(token)"color.sky.bottom"
+    }
+    token id="grad.sun" type="gradient" radial=#true center-x=0.5 center-y=0.45 radius=0.55 {
+      stop offset=0.0 color=(token)"color.sun.core"
+      stop offset=1.0 color=(token)"color.sun.edge"
+    }
+  }
+  styles {}
+  document id="doc.gradient" title="Gradient Example" {
+    page id="page.gradient" w=(px)400 h=(px)300 {
+      rect id="rect.sky" x=(px)0 y=(px)0 w=(px)400 h=(px)300 fill=(token)"grad.sky"
+      ellipse id="ell.sun" x=(px)120 y=(px)80 w=(px)160 h=(px)160 fill=(token)"grad.sun"
+    }
+  }
+}

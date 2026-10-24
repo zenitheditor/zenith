@@ -1,0 +1,22 @@
+zenith version=1 {
+  project id="proj.deco" name="Text Decorations Example"
+  tokens format="zenith-token-v1" {
+    token id="color.bg" type="color" value="#f8fafc"
+    token id="color.ink" type="color" value="#111827"
+    token id="color.link" type="color" value="#2563eb"
+    token id="font.body" type="fontFamily" value="Noto Sans"
+    token id="size.body" type="dimension" value=(px)30
+  }
+  styles {}
+  document id="doc.deco" title="Text Decorations Example" {
+    page id="page.deco" w=(px)520 h=(px)140 {
+      rect id="rect.bg" x=(px)0 y=(px)0 w=(px)520 h=(px)140 fill=(token)"color.bg"
+      text id="text.line" x=(px)24 y=(px)48 w=(px)472 h=(px)60 fill=(token)"color.ink" font-family=(token)"font.body" font-size=(token)"size.body" {
+        span "See the "
+        span "link" fill=(token)"color.link" underline=#true
+        span " or "
+        span "removed" strikethrough=#true
+      }
+    }
+  }
+}

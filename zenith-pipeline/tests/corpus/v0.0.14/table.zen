@@ -1,0 +1,45 @@
+zenith version=1 {
+  project id="proj.table" name="Table Example"
+  tokens format="zenith-token-v1" {
+    token id="color.bg" type="color" value="#ffffff"
+    token id="color.ink" type="color" value="#0f172a"
+    token id="color.line" type="color" value="#cbd5e1"
+    token id="color.head" type="color" value="#e2e8f0"
+    token id="font.body" type="fontFamily" value="Noto Sans"
+    token id="size.fs" type="dimension" value=(px)18
+    token id="size.bw" type="dimension" value=(px)1
+    token id="size.pad" type="dimension" value=(px)10
+    token id="size.gap" type="dimension" value=(px)0
+  }
+  styles {
+    style id="style.cell" {
+      font-family (token)"font.body"
+      font-size (token)"size.fs"
+      fill (token)"color.ink"
+    }
+  }
+  document id="doc.table" title="Table Example" {
+    page id="page.table" w=(px)520 h=(px)220 background=(token)"color.bg" {
+      table id="tbl.people" x=(px)40 y=(px)40 w=(px)440 h=(px)140 border=(token)"color.line" border-width=(token)"size.bw" header-rows=1 header-fill=(token)"color.head" cell-padding=(token)"size.pad" gap=(token)"size.gap" {
+        column width=(px)200
+        column width=(px)140
+        column width=(px)100
+        row {
+          cell { text id="h1" style="style.cell" { span "Name" } }
+          cell { text id="h2" style="style.cell" { span "Role" } }
+          cell { text id="h3" style="style.cell" { span "Year" } }
+        }
+        row {
+          cell { text id="r1c1" style="style.cell" { span "Ada Lovelace" } }
+          cell { text id="r1c2" style="style.cell" { span "Analyst" } }
+          cell { text id="r1c3" style="style.cell" { span "1843" } }
+        }
+        row {
+          cell { text id="r2c1" style="style.cell" { span "Alan Turing" } }
+          cell { text id="r2c2" style="style.cell" { span "Logician" } }
+          cell { text id="r2c3" style="style.cell" { span "1936" } }
+        }
+      }
+    }
+  }
+}

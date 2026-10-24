@@ -1,0 +1,20 @@
+zenith version=1 {
+  project id="proj.filter" name="Filter Example"
+  assets {
+    asset id="asset.swatch" kind="image" src="assets/swatch.png"
+  }
+  tokens format="zenith-token-v1" {
+    token id="color.bg" type="color" value="#f8fafc"
+    token id="color.duo.shadow" type="color" value="#1e1b4b"
+    token id="color.duo.highlight" type="color" value="#fbbf24"
+    token id="filter.duotone" type="filter" {
+      duotone shadow=(token)"color.duo.shadow" highlight=(token)"color.duo.highlight"
+    }
+  }
+  styles {}
+  document id="doc.filter" title="Filter Example" {
+    page id="page.filter" w=(px)320 h=(px)200 background=(token)"color.bg" {
+      image id="img.duo" asset="asset.swatch" x=(px)40 y=(px)40 w=(px)240 h=(px)120 fit="cover" filter=(token)"filter.duotone"
+    }
+  }
+}

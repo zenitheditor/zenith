@@ -1,0 +1,21 @@
+zenith version=1 {
+  project id="proj.polygon" name="Polygon Example"
+  tokens format="zenith-token-v1" {
+    token id="color.bg" type="color" value="#f8fafc"
+    token id="color.fill" type="color" value="#6366f1"
+    token id="color.stroke" type="color" value="#312e81"
+    token id="size.stroke" type="dimension" value=(px)2
+  }
+  styles {
+  }
+  document id="doc.polygon" title="Polygon Example" {
+    page id="page.polygon" w=(px)320 h=(px)200 {
+      rect id="rect.bg" x=(px)0 y=(px)0 w=(px)320 h=(px)200 fill=(token)"color.bg"
+      polygon id="poly.tri" fill=(token)"color.fill" stroke=(token)"color.stroke" stroke-width=(token)"size.stroke" {
+        point x=(px)160 y=(px)40
+        point x=(px)260 y=(px)170
+        point x=(px)60 y=(px)170
+      }
+    }
+  }
+}

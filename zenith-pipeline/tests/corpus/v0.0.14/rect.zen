@@ -1,0 +1,14 @@
+zenith version=1 {
+  project id="proj.rect" name="Rect Example"
+  tokens format="zenith-token-v1" {
+    token id="color.bg" type="color" value="#f8fafc"
+    token id="color.accent" type="color" value="#3b82f6"
+  }
+  styles {}
+  document id="doc.rect" title="Rect Example" {
+    page id="page.rect" w=(px)320 h=(px)200 {
+      rect id="rect.bg" x=(px)0 y=(px)0 w=(px)320 h=(px)200 fill=(token)"color.bg"
+      rect id="rect.accent" x=(px)40 y=(px)40 w=(px)240 h=(px)120 fill=(token)"color.accent"
+    }
+  }
+}

@@ -1,0 +1,20 @@
+zenith version=1 {
+  project id="proj.noise" name="Noise Filter Example"
+  tokens format="zenith-token-v1" {
+    token id="color.bg" type="color" value="#f8fafc"
+    token id="color.fill" type="color" value="#3b82f6"
+    token id="filter.grain.fine" type="filter" {
+      noise seed=7 scale=1 amount=0.35
+    }
+    token id="filter.grain.coarse" type="filter" {
+      noise seed=3 scale=6 amount=0.5
+    }
+  }
+  styles {}
+  document id="doc.noise" title="Noise Filter Example" {
+    page id="page.noise" w=(px)320 h=(px)200 background=(token)"color.bg" {
+      rect id="r.fine" x=(px)20 y=(px)20 w=(px)130 h=(px)160 fill=(token)"color.fill" filter=(token)"filter.grain.fine"
+      rect id="r.coarse" x=(px)170 y=(px)20 w=(px)130 h=(px)160 fill=(token)"color.fill" filter=(token)"filter.grain.coarse"
+    }
+  }
+}

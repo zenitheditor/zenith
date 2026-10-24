@@ -1,0 +1,20 @@
+zenith version=1 doc-id="01M5QYWNKGYBM4MRVV6TFBBVBY" {
+  project id="proj.corpus-brand" name="Corpus Brand"
+  assets {
+  }
+  tokens format="zenith-token-v1" {
+    token id="color.chip" type="color" value="#fde68a"
+    token id="size.radius" type="dimension" value=(px)8
+  }
+  styles {
+  }
+  components {
+    component id="chip" {
+      rect id="bg" x=(px)0 y=(px)0 w=(px)160 h=(px)40 radius=(token)"size.radius" fill=(token)"color.chip"
+    }
+  }
+  document id="doc.corpus-brand" title="Corpus Brand" {
+    page id="page.corpus-brand" w=(px)10 h=(px)10 {
+    }
+  }
+}

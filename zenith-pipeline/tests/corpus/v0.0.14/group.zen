@@ -1,0 +1,18 @@
+zenith version=1 {
+  project id="proj.group" name="Group Example"
+  tokens format="zenith-token-v1" {
+    token id="color.bg" type="color" value="#f8fafc"
+    token id="color.rect" type="color" value="#3b82f6"
+    token id="color.ellipse" type="color" value="#f97316"
+  }
+  styles {}
+  document id="doc.group" title="Group Example" {
+    page id="page.group" w=(px)320 h=(px)200 {
+      rect id="rect.bg" x=(px)0 y=(px)0 w=(px)320 h=(px)200 fill=(token)"color.bg"
+      group id="group.shapes" {
+        rect id="rect.blue" x=(px)20 y=(px)40 w=(px)120 h=(px)120 fill=(token)"color.rect"
+        ellipse id="ellipse.orange" x=(px)180 y=(px)60 w=(px)120 h=(px)80 fill=(token)"color.ellipse"
+      }
+    }
+  }
+}

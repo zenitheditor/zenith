@@ -1,0 +1,18 @@
+zenith version=1 {
+  project id="proj.mask" name="Mask Example"
+  assets {
+    asset id="asset.swatch" kind="image" src="assets/swatch.png"
+  }
+  tokens format="zenith-token-v1" {
+    token id="color.bg" type="color" value="#0f172a"
+    token id="mask.portrait" type="mask" {
+      ellipse feather=48
+    }
+  }
+  styles {}
+  document id="doc.mask" title="Mask Example" {
+    page id="page.mask" w=(px)280 h=(px)280 background=(token)"color.bg" {
+      image id="img.portrait" asset="asset.swatch" x=(px)40 y=(px)40 w=(px)200 h=(px)200 fit="cover" mask=(token)"mask.portrait"
+    }
+  }
+}

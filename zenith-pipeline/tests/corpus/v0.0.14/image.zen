@@ -1,0 +1,16 @@
+zenith version=1 {
+  project id="proj.image" name="Image Example"
+  assets {
+    asset id="asset.swatch" kind="image" src="assets/swatch.png"
+  }
+  tokens format="zenith-token-v1" {
+    token id="color.bg" type="color" value="#f8fafc"
+  }
+  styles {
+  }
+  document id="doc.image" title="Image Example" {
+    page id="page.image" w=(px)320 h=(px)200 background=(token)"color.bg" {
+      image id="img.swatch" asset="asset.swatch" x=(px)40 y=(px)40 w=(px)160 h=(px)120 fit="stretch"
+    }
+  }
+}

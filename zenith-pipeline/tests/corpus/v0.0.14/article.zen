@@ -1,0 +1,25 @@
+zenith version=1 {
+  project id="proj.article" name="Article"
+  tokens format="zenith-token-v1" {
+    token id="color.bg" type="color" value="#fafaf8"
+    token id="color.ink" type="color" value="#1c1917"
+    token id="color.heading" type="color" value="#0c2340"
+    token id="font.serif" type="fontFamily" value="Noto Sans"
+    token id="size.h1" type="dimension" value=(px)30
+    token id="size.h2" type="dimension" value=(px)20
+    token id="size.body" type="dimension" value=(px)15
+    token id="weight.bold" type="fontWeight" value=700
+    token id="weight.normal" type="fontWeight" value=400
+  }
+  styles {
+  }
+  document id="doc.article" title="Article" {
+    block role="h1" font-family=(token)"font.serif" font-size=(token)"size.h1" font-weight=(token)"weight.bold" fill=(token)"color.heading" space-before=(px)0 space-after=(px)12
+    block role="h2" font-family=(token)"font.serif" font-size=(token)"size.h2" font-weight=(token)"weight.bold" fill=(token)"color.heading" space-before=(px)16 space-after=(px)8
+    block role="p" font-family=(token)"font.serif" font-size=(token)"size.body" font-weight=(token)"weight.normal" fill=(token)"color.ink" space-before=(px)0 space-after=(px)10
+    page id="page.article" w=(px)720 h=(px)900 background=(token)"color.bg" {
+      text id="text.body" x=(px)60 y=(px)60 w=(px)600 h=(px)780 fill=(token)"color.ink" font-family=(token)"font.serif" font-size=(token)"size.body" format="markdown" src="copy/article.md" {
+      }
+    }
+  }
+}

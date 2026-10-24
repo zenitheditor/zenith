@@ -1,0 +1,42 @@
+zenith version=1 {
+  project id="proj.margin" name="Per-child margin"
+  tokens format="zenith-token-v1" {
+    token id="color.bg" type="color" value="#f8fafc"
+    token id="color.card" type="color" value="#ffffff"
+    token id="color.border" type="color" value="#cbd5e1"
+    token id="color.ink" type="color" value="#0f172a"
+    token id="color.muted" type="color" value="#475569"
+    token id="color.accent" type="color" value="#2563eb"
+    token id="color.on-accent" type="color" value="#ffffff"
+    token id="color.chip" type="color" value="#e2e8f0"
+    token id="font.sans" type="fontFamily" value="Noto Sans"
+    token id="size.title" type="dimension" value=(px)20
+    token id="size.body" type="dimension" value=(px)14
+    token id="size.border" type="dimension" value=(px)1
+    token id="size.radius" type="dimension" value=(px)8
+    token id="space.push" type="dimension" value=(px)40
+  }
+  styles {}
+  document id="doc.margin" title="Per-child margin" {
+    // In a row or column frame, a child's margin adds outer space around
+    // that child only. The frame's gap stays the same for every sibling.
+    page id="page.margin" w=(px)480 h=(px)240 background=(token)"color.bg" {
+      // Column: margin-top pushes the button 40px below the body text, and
+      // the hugging card grows by the same 40px.
+      frame id="card" x=(px)24 y=(px)24 w=(px)260 h="hug" layout="column" gap=(px)8 padding=(px)20 align="start" fill=(token)"color.card" stroke=(token)"color.border" stroke-width=(token)"size.border" radius=(token)"size.radius" {
+        text id="card.title" w="fill" fill=(token)"color.ink" font-family=(token)"font.sans" font-size=(token)"size.title" { span "Ship the release" }
+        text id="card.body" w="fill" fill=(token)"color.muted" font-family=(token)"font.sans" font-size=(token)"size.body" { span "Margin moves one child without changing the gap." }
+        frame id="card.button" w="hug" h="hug" layout="row" padding-x=(px)16 padding-y=(px)8 margin-top=(token)"space.push" fill=(token)"color.accent" radius=(token)"size.radius" {
+          text id="card.button.label" fill=(token)"color.on-accent" font-family=(token)"font.sans" font-size=(token)"size.body" { span "Publish" }
+        }
+      }
+
+      // Row: margin-left opens extra space before the last chip only.
+      frame id="chips" x=(px)308 y=(px)24 w="hug" h="hug" layout="row" gap=(px)6 {
+        rect id="chip.a" w=(px)32 h=(px)32 fill=(token)"color.chip" radius=(token)"size.radius"
+        rect id="chip.b" w=(px)32 h=(px)32 fill=(token)"color.chip" radius=(token)"size.radius"
+        rect id="chip.c" w=(px)32 h=(px)32 margin-left=(px)24 fill=(token)"color.accent" radius=(token)"size.radius"
+      }
+    }
+  }
+}

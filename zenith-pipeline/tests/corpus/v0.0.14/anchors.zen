@@ -1,0 +1,21 @@
+zenith version=1 {
+  project id="proj.anchors" name="Anchor Placement Example"
+  tokens format="zenith-token-v1" {
+    token id="color.bg" type="color" value="#0f172a"
+    token id="color.box" type="color" value="#38bdf8"
+  }
+  styles {}
+  document id="doc.anchors" title="Anchor Placement Example" {
+    page id="page.anchors" w=(px)360 h=(px)360 background=(token)"color.bg" {
+      rect id="r.tl" w=(px)80 h=(px)60 fill=(token)"color.box" anchor="top-left"
+      rect id="r.tc" w=(px)80 h=(px)60 fill=(token)"color.box" anchor="top-center"
+      rect id="r.tr" w=(px)80 h=(px)60 fill=(token)"color.box" anchor="top-right"
+      rect id="r.cl" w=(px)80 h=(px)60 fill=(token)"color.box" anchor="center-left"
+      rect id="r.cc" w=(px)80 h=(px)60 fill=(token)"color.box" anchor="center"
+      rect id="r.cr" w=(px)80 h=(px)60 fill=(token)"color.box" anchor="center-right"
+      rect id="r.bl" w=(px)80 h=(px)60 fill=(token)"color.box" anchor="bottom-left"
+      rect id="r.bc" w=(px)80 h=(px)60 fill=(token)"color.box" anchor="bottom-center"
+      rect id="r.br" w=(px)80 h=(px)60 fill=(token)"color.box" anchor="bottom-right"
+    }
+  }
+}

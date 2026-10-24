@@ -1,0 +1,53 @@
+zenith version=1 doc-id="01M5QYWNK7RXV8M4GN9TMVSD2M" {
+  project id="proj.coverage" name="Corpus Coverage"
+  assets {
+  }
+  imports {
+    import id="brand" kind="zen" src="brand/brand.zen"
+  }
+  tokens format="zenith-token-v1" {
+    token id="color.bg" type="color" value="#ffffff"
+    token id="color.ink" type="color" value="#111827"
+    token id="color.shape" type="color" value="#2563eb"
+    token id="color.glow" type="color" value="#f59e0b"
+    token id="color.grid" type="color" value="#94a3b8"
+    token id="size.glow" type="dimension" value=(px)240
+    token id="stroke.hairline" type="dimension" value=(px)1
+  }
+  styles {
+  }
+  masters {
+    master id="m.body" {
+      field id="rh" type="running-head" recto="Corpus Recto" verso="Corpus Verso" y=(px)40 h=(px)32 fill=(token)"color.ink"
+      field id="folio" type="page-number" y=(px)840 h=(px)32 fill=(token)"color.ink"
+    }
+  }
+  document id="doc.coverage" title="Corpus Coverage" {
+    page id="p1" w=(px)600 h=(px)900 background=(token)"color.bg" margin-inner=(px)60 margin-outer=(px)60 margin-top=(px)80 margin-bottom=(px)80 master="m.body" {
+      toc id="contents" match-role="heading" x=(px)60 y=(px)100 w=(px)480 h=(px)120 fill=(token)"color.ink"
+      text id="body" x=(px)60 y=(px)240 w=(px)480 h=(px)80 fill=(token)"color.ink" {
+        span "Strong evidence" footnote-ref="fn.1"
+        span " supports the claim."
+      }
+      footnote id="fn.1" {
+        span "See also page 2."
+      }
+    }
+    page id="p2" w=(px)600 h=(px)900 background=(token)"color.bg" margin-inner=(px)60 margin-outer=(px)60 margin-top=(px)80 margin-bottom=(px)80 master="m.body" {
+      light id="bg.glow" kind="ambient" x=(px)510 y=(px)110 radius=(token)"size.glow" color=(token)"color.glow" opacity=0.35
+      mesh id="bg.mesh" role="background" kind="perspective" x=(px)0 y=(px)0 w=(px)600 h=(px)900 rows=7 columns=8 vanishing-x=(px)400 vanishing-y=(px)-200 extend=(px)60 stroke=(token)"color.grid" stroke-width=(token)"stroke.hairline" opacity=0.34
+      path id="blob" fill=(token)"color.shape" {
+        subpath closed=#true {
+          anchor x=(px)360 y=(px)500 out-x=(px)380 out-y=(px)500
+          anchor x=(px)440 y=(px)500 kind="smooth" in-x=(px)420 in-y=(px)500 out-x=(px)460 out-y=(px)540
+          anchor x=(px)440 y=(px)580 in-x=(px)460 in-y=(px)540
+        }
+      }
+      instance id="chip" source="brand#component.chip" x=(px)60 y=(px)300 {
+      }
+      text id="ref" role="heading" x=(px)60 y=(px)400 w=(px)480 h=(px)40 fill=(token)"color.ink" {
+        span "Imported chip"
+      }
+    }
+  }
+}

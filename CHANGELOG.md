@@ -27,6 +27,7 @@ it.
 - **`zenith tx` names the ids a `duplicate_page` or `duplicate_node` op creates.** Human output adds `created: p5b, p5.kicker.5b ... (+9 more)` with up to 5 ids. `--json` adds the full `created` array.
 - **A parse error names sibling nodes on one line.** `text … { … } text …` now hints to end each node with `;`. `rect id="a" rect id="b"` on one line was read as one rect that kept only `b`. It is now a parse error with the same hint.
 - **`zenith schema write`, `zenith tx --help`, and the starter output list `move_page` and `set_override`.** `tx --help` no longer points at `examples/*.tx.json`, which agents cannot see. The `duplicate_page` entry says that child ids become `<id><id_suffix>`.
+- **A stated stability promise and a frozen corpus that holds it.** README.md `## Stability` lists what a 0.0.x release keeps and what it can break. `zenith-pipeline/tests/corpus/v0.0.14/` freezes 39 documents. A test checks that each one parses, validates without Error, formats idempotently, and renders to its pinned PNG hashes. A refresh of the corpus needs a `### Breaking` section in this file.
 - **`zenith schema diagnostics <FILTER>` lists only the codes that match.** The match is case-insensitive on the code and summary, and it includes Error codes. The full list is 15 KB as text and 63 KB as JSON. In a merge benchmark, agents called the full list up to 14 times in one run because a tool-output cap cut it off before the codes they needed.
 
 ### Fixed
@@ -34,6 +35,7 @@ it.
 - **The bundled Noto font notices name the SIL Open Font License 1.1.** They said Apache-2.0, but each face's name table states OFL 1.1.
 - **A token that only a variant override uses no longer raises `token.unused`.** `zenith validate` now counts override token refs as references and checks them. `zenith variant` drops each token that a generated variant leaves without a reference. A token the source already leaves unused stays.
 - **A bad override `x`/`y`/`w`/`h` is a parse error.** A value without a unit, or a string other than `"hug"`/`"fill"`, was silently dropped.
+- **The `zenith schema node light` example uses a valid unit.** It taught `x=(%)85`, and `zenith validate` rejects the `%` unit.
 - **`find_replace_text` reaches instance override texts, masters, and components.** The document-wide run skipped them. With `node` set to an instance, it edits that instance only and adds a text override where the component text matches.
 
 ### Changed

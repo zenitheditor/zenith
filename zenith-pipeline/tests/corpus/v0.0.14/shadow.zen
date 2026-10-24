@@ -1,0 +1,18 @@
+zenith version=1 {
+  project id="proj.shadow" name="Shadow Example"
+  tokens format="zenith-token-v1" {
+    token id="color.bg" type="color" value="#e2e8f0"
+    token id="color.card" type="color" value="#ffffff"
+    token id="color.shadow" type="color" value="#0f172a55"
+    token id="size.radius" type="dimension" value=(px)16
+    token id="shadow.card" type="shadow" {
+      layer dx=(px)0 dy=(px)10 blur=(px)28 color=(token)"color.shadow"
+    }
+  }
+  styles {}
+  document id="doc.shadow" title="Shadow Example" {
+    page id="page.shadow" w=(px)360 h=(px)260 background=(token)"color.bg" {
+      rect id="rect.card" x=(px)60 y=(px)50 w=(px)240 h=(px)160 fill=(token)"color.card" radius=(token)"size.radius" shadow=(token)"shadow.card"
+    }
+  }
+}

@@ -1,0 +1,21 @@
+zenith version=1 {
+  project id="proj.richtext" name="Rich Text"
+  tokens format="zenith-token-v1" {
+    token id="color.bg" type="color" value="#f8fafc"
+    token id="color.ink" type="color" value="#111827"
+    token id="color.ok" type="color" value="#16a34a"
+    token id="font.body" type="fontFamily" value="Noto Sans"
+    token id="size.body" type="dimension" value=(px)32
+    token id="weight.bold" type="fontWeight" value=700
+  }
+  styles {}
+  document id="doc.richtext" title="Rich Text" {
+    page id="page.richtext" w=(px)480 h=(px)120 {
+      rect id="rect.bg" x=(px)0 y=(px)0 w=(px)480 h=(px)120 fill=(token)"color.bg"
+      text id="text.status" x=(px)24 y=(px)40 w=(px)432 h=(px)48 fill=(token)"color.ink" font-family=(token)"font.body" font-size=(token)"size.body" {
+        span "Status: "
+        span "OK" fill=(token)"color.ok" font-weight=(token)"weight.bold"
+      }
+    }
+  }
+}

@@ -1,0 +1,35 @@
+zenith version=1 {
+  project id="proj.pattern" name="Pattern Example"
+  tokens format="zenith-token-v1" {
+    token id="color.ink" type="color" value="#10121d"
+    token id="color.text" type="color" value="#f7f8fa"
+    token id="color.dot" type="color" value="#22d3ee"
+    token id="color.star" type="color" value="#f59e0b"
+    token id="size.title" type="dimension" value=(px)28
+    token id="size.label" type="dimension" value=(px)14
+    token id="weight.bold" type="fontWeight" value=700
+  }
+  styles {}
+  document id="doc.pattern" title="Pattern Example" {
+    // The `pattern` node tiles ONE motif (its single child) across a bounds box.
+    // It is deterministic: same `seed` -> identical layout on every machine.
+    page id="page.pattern" w=(px)480 h=(px)320 background=(token)"color.ink" {
+      // Grid: evenly-spaced dots with a touch of seed-driven jitter.
+      // `spacing` is a literal (px) dimension, not a token reference.
+      pattern id="bg.dots" kind="grid" x=(px)0 y=(px)0 w=(px)480 h=(px)320 spacing=(px)32 jitter=0.2 seed=7 {
+        ellipse id="dot" x=(px)0 y=(px)0 w=(px)6 h=(px)6 fill=(token)"color.dot"
+      }
+
+      // Scatter: exactly `count` instances at seed-derived pseudo-random positions.
+      pattern id="bg.stars" kind="scatter" x=(px)0 y=(px)0 w=(px)480 h=(px)320 count=14 seed=42 {
+        rect id="star" x=(px)0 y=(px)0 w=(px)12 h=(px)12 fill=(token)"color.star" rotate=(deg)45
+      }
+
+      text id="title" x=(px)24 y=(px)24 w=(px)432 h=(px)40 fill=(token)"color.text" font-size=(token)"size.title" font-weight=(token)"weight.bold" { span "pattern" }
+      rect id="sw.grid" x=(px)24 y=(px)68 w=(px)12 h=(px)12 fill=(token)"color.dot"
+      text id="lbl.grid" x=(px)44 y=(px)64 w=(px)220 h=(px)22 fill=(token)"color.text" font-size=(token)"size.label" { span "grid · jittered dots" }
+      rect id="sw.scatter" x=(px)24 y=(px)92 w=(px)12 h=(px)12 fill=(token)"color.star"
+      text id="lbl.scatter" x=(px)44 y=(px)88 w=(px)260 h=(px)22 fill=(token)"color.text" font-size=(token)"size.label" { span "scatter · seeded placement" }
+    }
+  }
+}
