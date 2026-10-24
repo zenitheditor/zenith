@@ -32,6 +32,7 @@ it.
 
 ### Fixed
 
+- **`light` and `mesh` with a `pct` position or size are skipped with `scene.unsupported_unit`.** Before, `x=(pct)85` drew the node at x of 0 and `validate` stayed silent. Now `light` and `mesh` match `rect`. A document that uses `px` or `pt` renders the same bytes as before.
 - **The bundled Noto font notices name the SIL Open Font License 1.1.** They said Apache-2.0, but each face's name table states OFL 1.1.
 - **A token that only a variant override uses no longer raises `token.unused`.** `zenith validate` now counts override token refs as references and checks them. `zenith variant` drops each token that a generated variant leaves without a reference. A token the source already leaves unused stays.
 - **A bad override `x`/`y`/`w`/`h` is a parse error.** A value without a unit, or a string other than `"hug"`/`"fill"`, was silently dropped.

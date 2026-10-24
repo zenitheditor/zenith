@@ -2,7 +2,7 @@
 
 use std::collections::BTreeMap;
 
-use zenith_core::{Diagnostic, LightNode, MeshNode, ResolvedToken};
+use zenith_core::{Diagnostic, LightNode, MeshNode, PropertyValue, ResolvedToken, Span};
 use zenith_geometry::math;
 
 use crate::ir::{GradientPaint, GradientStop, Paint, SceneCommand};
@@ -10,7 +10,32 @@ use crate::ir::{GradientPaint, GradientStop, Paint, SceneCommand};
 use super::RenderCtx;
 use super::leaf::resolve_dash_params;
 use super::paint::resolve_property_color;
-use super::util::{resolve_geometry_px, resolve_property_dimension_px};
+use super::util::{resolve_geometry_px, resolve_property_dimension_px, unsupported_unit_diag};
+
+/// Resolve an authored geometry field of an effect node to pixels.
+///
+/// An absent field gives `0.0`. A present field that has no px value (`pct`,
+/// `deg`, or a token that is not a dimension) pushes `scene.unsupported_unit`
+/// and gives `None`. The caller must skip the node, as every other node kind
+/// does.
+fn effect_geometry_px(
+    kind: &str,
+    node_id: &str,
+    field: &str,
+    prop: Option<&PropertyValue>,
+    scope: (&BTreeMap<String, ResolvedToken>, Option<Span>),
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<f64> {
+    let Some(prop) = prop else {
+        return Some(0.0);
+    };
+    let (resolved, span) = scope;
+    let px = resolve_geometry_px(Some(prop), resolved);
+    if px.is_none() {
+        diagnostics.push(unsupported_unit_diag(kind, node_id, field, span));
+    }
+    px
+}
 
 pub(super) fn compile_light(
     light: &LightNode,
@@ -23,8 +48,27 @@ pub(super) fn compile_light(
         return;
     }
 
-    let x = resolve_property_dimension_px(light.x.as_ref(), resolved, 0.0) + ctx.dx;
-    let y = resolve_property_dimension_px(light.y.as_ref(), resolved, 0.0) + ctx.dy;
+    let scope = (resolved, light.source_span);
+    let x = effect_geometry_px(
+        "light",
+        &light.id,
+        "x",
+        light.x.as_ref(),
+        scope,
+        diagnostics,
+    );
+    let y = effect_geometry_px(
+        "light",
+        &light.id,
+        "y",
+        light.y.as_ref(),
+        scope,
+        diagnostics,
+    );
+    let (Some(x), Some(y)) = (x, y) else {
+        return;
+    };
+    let (x, y) = (x + ctx.dx, y + ctx.dy);
     let radius = resolve_property_dimension_px(light.radius.as_ref(), resolved, 0.0);
     if !radius.is_finite() || radius <= 0.0 {
         return;
@@ -109,11 +153,20 @@ pub(super) fn compile_mesh(
         return;
     }
 
+    let scope = (resolved, mesh.source_span);
+    let mut axis = |field: &str, prop: Option<&PropertyValue>| {
+        effect_geometry_px("mesh", &mesh.id, field, prop, scope, diagnostics)
+    };
+    let (x, y) = (axis("x", mesh.x.as_ref()), axis("y", mesh.y.as_ref()));
+    let (w, h) = (axis("w", mesh.w.as_ref()), axis("h", mesh.h.as_ref()));
+    let (Some(x), Some(y), Some(w), Some(h)) = (x, y, w, h) else {
+        return;
+    };
     let box_px = MeshBox {
-        x: resolve_property_dimension_px(mesh.x.as_ref(), resolved, 0.0) + ctx.dx,
-        y: resolve_property_dimension_px(mesh.y.as_ref(), resolved, 0.0) + ctx.dy,
-        w: resolve_property_dimension_px(mesh.w.as_ref(), resolved, 0.0),
-        h: resolve_property_dimension_px(mesh.h.as_ref(), resolved, 0.0),
+        x: x + ctx.dx,
+        y: y + ctx.dy,
+        w,
+        h,
         extend: resolve_property_dimension_px(mesh.extend.as_ref(), resolved, 0.0).max(0.0),
     };
     if !box_px.x.is_finite()
@@ -271,4 +324,67 @@ fn push_mesh_line(
         stroke_gap: stroke.stroke_gap,
         stroke_linecap: stroke.stroke_linecap,
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use zenith_core::{Dimension, Unit};
+
+    fn dim(value: f64, unit: Unit) -> PropertyValue {
+        PropertyValue::Dimension(Dimension { value, unit })
+    }
+
+    #[test]
+    fn absent_field_is_zero_without_advisory() {
+        let resolved = BTreeMap::new();
+        let mut diagnostics = Vec::new();
+        let px = effect_geometry_px("light", "l", "x", None, (&resolved, None), &mut diagnostics);
+        assert_eq!(px, Some(0.0));
+        assert!(diagnostics.is_empty());
+    }
+
+    #[test]
+    fn px_and_pt_resolve() {
+        let resolved = BTreeMap::new();
+        let mut diagnostics = Vec::new();
+        let scope = (&resolved, None);
+        let a = effect_geometry_px(
+            "mesh",
+            "m",
+            "x",
+            Some(&dim(12.0, Unit::Px)),
+            scope,
+            &mut diagnostics,
+        );
+        let b = effect_geometry_px(
+            "mesh",
+            "m",
+            "x",
+            Some(&dim(72.0, Unit::Pt)),
+            scope,
+            &mut diagnostics,
+        );
+        assert_eq!(a, Some(12.0));
+        assert_eq!(b, Some(96.0));
+        assert!(diagnostics.is_empty());
+    }
+
+    #[test]
+    fn pct_gives_none_and_advisory() {
+        let resolved = BTreeMap::new();
+        let mut diagnostics = Vec::new();
+        let px = effect_geometry_px(
+            "light",
+            "l.1",
+            "y",
+            Some(&dim(85.0, Unit::Pct)),
+            (&resolved, None),
+            &mut diagnostics,
+        );
+        assert_eq!(px, None);
+        assert_eq!(diagnostics.len(), 1);
+        assert_eq!(diagnostics[0].code, "scene.unsupported_unit");
+        assert!(diagnostics[0].message.contains("light 'l.1' field 'y'"));
+    }
 }
