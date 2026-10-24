@@ -12,7 +12,9 @@ import { contactSheet, decode, encode } from "./png.mjs";
 
 const run = promisify(execFile);
 const LIMIT = 8000;
-const MAX_SHEET_PAGES = 16;
+// `read_file` returns whole design files: the 20-page starts are 10-19k chars.
+const READ_LIMIT = 48000;
+const MAX_SHEET_PAGES = 32;
 // Everything except the commands that start a server, change the install, or run an MCP server.
 const ZENITH_BLOCKED = new Set(["edit", "update", "plugin", "mcp"]);
 
@@ -35,10 +37,10 @@ const ZENITH_TOOL = fn(
   ["args"],
 );
 
-const COMMON = (file, canvas) =>
-  `You are revising an existing design in the working directory. The design file is ${file}, a ${canvas.w}x${canvas.h} px canvas. Do exactly what the request asks and change nothing else: every other element must keep its position, size, color and text. Use the tools. When the change is done, reply with one short sentence and no tool call.`;
+const COMMON = (file, canvas, multi) =>
+  `You are revising an existing design in the working directory. The design file is ${file}, ${multi ? `a multi-page design; every page is ${canvas.w}x${canvas.h} px` : `a ${canvas.w}x${canvas.h} px canvas`}. Do exactly what the request asks and change nothing else: every other element must keep its position, size, color and text. Use the tools. When the change is done, reply with one short sentence and no tool call.`;
 
-const clip = (s) => (s.length > LIMIT ? `${s.slice(0, LIMIT)}\n[truncated ${s.length - LIMIT} chars]` : s);
+const clip = (s, limit = LIMIT) => (s.length > limit ? `${s.slice(0, limit)}\n[truncated ${s.length - limit} chars]` : s);
 
 function safe(ws, rel) {
   if (typeof rel !== "string" || !rel || path.isAbsolute(rel) || rel.split(/[\\/]/).includes("..")) {
@@ -47,26 +49,27 @@ function safe(ws, rel) {
   return path.join(ws, rel);
 }
 
-export function makeArm(kind, ws, canvas, skill, build) {
+/** `multi` marks a multi-page revision task: the prompt says how pages are stored in each format. */
+export function makeArm(kind, ws, canvas, skill, build, multi = false) {
   const file = kind === "zenith" ? "design.zen" : "design.html";
   const extra =
     kind === "zenith"
-      ? " The design is a Zenith document (KDL text). The `zenith` tool runs the Zenith CLI (try `--help` and `schema`)."
-      : " The design is one HTML file with inline CSS. `view` renders it in Chromium.";
+      ? ` The design is a Zenith document (KDL text)${multi ? "; each page is one `page` node, in order" : ""}. The \`zenith\` tool runs the Zenith CLI (try \`--help\` and \`schema\`).`
+      : ` The design is one HTML file with inline CSS${multi ? '; each page is one `<section class="page">`, in order' : ""}. \`view\` renders it in Chromium.`;
   const skillText = skill
     ? `\n\nA skill is available for this work. Its SKILL.md follows. Paths in it are relative to the skill/ directory of the working directory, and you can read them with read_file.\n\n--- SKILL.md ---\n${skill}`
     : "";
   return {
     kind,
     file,
-    system: (build ? buildPrompt(kind, file, canvas, build) : COMMON(file, canvas) + extra) + (build ? "" : "") + skillText,
+    system: (build ? buildPrompt(kind, file, canvas, build) : COMMON(file, canvas, multi) + extra) + skillText,
     tools: kind === "zenith" ? [...FILE_TOOLS, ZENITH_TOOL] : FILE_TOOLS,
     /** Returns { text, image? } where image is PNG bytes. */
     async exec(name, args, render) {
       try {
         switch (name) {
           case "read_file":
-            return { text: clip(readFileSync(safe(ws, args.path), "utf8")) };
+            return { text: clip(readFileSync(safe(ws, args.path), "utf8"), READ_LIMIT) };
           case "write_file":
             writeFileSync(safe(ws, args.path), String(args.content ?? ""));
             return { text: `wrote ${args.path}` };

@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Brochure</title>
+<style>
+  :root { --bg: #ffffff; --ink: #1c1917; --muted: #57534e; --accent: #0f766e; --card: #e7e5e4; --badge: #c2410c; --onaccent: #ffffff; }
+  html, body { margin: 0; }
+  body { font-family: "Noto Sans", sans-serif; }
+  .page { position: relative; width: 800px; height: 1000px; overflow: hidden; background: var(--bg); }
+  .page *, .page { box-sizing: border-box; }
+  .page > *, .card > *, .panel > * { position: absolute; margin: 0; overflow: hidden; line-height: 1.3; }
+  .brand { left:48px;top:40px;width:400px;height:20px; font-size: 14px; font-weight: 700; color: var(--accent); }
+  .headline { left:48px;top:72px;width:704px;height:52px; font-size: 40px; font-weight: 700; color: var(--ink); }
+  .lede { left:48px;top:136px;width:704px;height:48px; font-size: 18px; color: var(--muted); }
+  .photo { left:48px;top:200px;width:704px;height:360px; object-fit: cover; display: block; }
+  .caption { left:48px;top:568px;width:704px;height:20px; font-size: 12px; color: var(--muted); }
+  .panel { left:48px;top:200px;width:704px;height:360px; background: var(--accent); border-radius: 16px; }
+  .price { left:40px;top:120px;width:624px;height:64px; font-size: 48px; font-weight: 700; color: var(--onaccent); }
+  .note { left:40px;top:196px;width:624px;height:24px; font-size: 18px; color: var(--onaccent); }
+  .cards { left:48px;top:608px;width:704px;height:220px; display: flex; gap: 24px; overflow: visible; }
+  .card { position: relative; flex: none; width: 208px; height: 220px; background: var(--card); border-radius: 16px; }
+  .card-title { left:20px;top:20px;width:168px;height:24px; font-size: 18px; font-weight: 700; color: var(--ink); }
+  .card-body { left:20px;top:56px;width:168px;height:56px; font-size: 14px; color: var(--muted); }
+  .badge { left:140px;top:16px;width:52px;height:22px; background: var(--badge); border-radius: 11px; color: var(--onaccent); font-size: 11px; font-weight: 700; line-height: 22px; text-align: center; }
+  .footer { left:48px;top:948px;width:704px;height:20px; font-size: 12px; color: var(--muted); }
+</style>
+</head>
+<body>
+<section class="page" id="page-1">
+  <p class="brand">HARBOR &amp; CO.</p>
+  <h1 class="headline">Design that ships on time</h1>
+  <p class="lede">Harbor &amp; Co. builds brand systems for small teams, from the first logo to the last printed page.</p>
+  <img class="photo" src="assets/studio.png" alt="">
+  <p class="caption">Our studio in Lisbon</p>
+  <div class="cards">
+    <div class="card"><h2 class="card-title">Fast setup</h2><p class="card-body">Your workspace is ready in a day, with templates for every team.</p></div>
+    <div class="card"><h2 class="card-title">Shared library</h2><p class="card-body">Logos, colors and type live in one place everyone can reach.</p></div>
+    <div class="card"><h2 class="card-title">Live chat</h2><p class="card-body">Talk to a person in under two minutes, every working day.</p></div>
+  </div>
+  <p class="footer">harbor-co.example · hello@harbor-co.example</p>
+</section>
+<section class="page" id="page-2">
+  <p class="brand">HARBOR &amp; CO.</p>
+  <h1 class="headline">Built for busy teams</h1>
+  <p class="lede">Every draft, comment and export lives in one place, so nobody waits on an email thread.</p>
+  <img class="photo" src="assets/workshop.png" alt="">
+  <p class="caption">Review day with the Harbor team</p>
+  <div class="cards">
+    <div class="card"><h2 class="card-title">Reviews</h2><p class="card-body">Collect comments on every draft without long email threads.</p></div>
+    <div class="card"><h2 class="card-title">Delivery</h2><p class="card-body">Export print and web files in one step.</p></div>
+    <div class="card"><h2 class="card-title">Templates</h2><p class="card-body">Start from layouts made by our studio.</p><span class="badge">NEW</span></div>
+  </div>
+  <p class="footer">harbor-co.example · hello@harbor-co.example</p>
+</section>
+<section class="page" id="page-3">
+  <p class="brand">HARBOR &amp; CO.</p>
+  <h1 class="headline">From draft to print</h1>
+  <p class="lede">We check every file before it goes to press and stay with you until the boxes arrive.</p>
+  <img class="photo" src="assets/print.png" alt="">
+  <p class="caption">Proofs from our print partner</p>
+  <div class="cards">
+    <div class="card"><h2 class="card-title">Proofing</h2><p class="card-body">See exactly what the printer will see before you send.</p></div>
+    <div class="card"><h2 class="card-title">Print partners</h2><p class="card-body">Coming soon.</p></div>
+    <div class="card"><h2 class="card-title">Archive</h2><p class="card-body">Every version is kept, so nothing is lost.</p></div>
+  </div>
+  <p class="footer">harbor-co.example · hello@harbor-co.example</p>
+</section>
+<section class="page" id="page-4">
+  <p class="brand">HARBOR &amp; CO.</p>
+  <h1 class="headline">Plans and pricing</h1>
+  <p class="lede">Pick the plan that fits your team today and change it whenever you need to.</p>
+  <div class="panel">
+    <p class="price">From $49 per month</p>
+    <p class="note">Billed yearly. Cancel any time.</p>
+  </div>
+  <div class="cards">
+    <div class="card"><h2 class="card-title">Starter</h2><p class="card-body">One brand, three seats and the shared library.</p></div>
+    <div class="card"><h2 class="card-title">Studio</h2><p class="card-body">Five brands, ten seats and print partners.</p></div>
+    <div class="card"><h2 class="card-title">Agency</h2><p class="card-body">Unlimited brands and a dedicated account manager.</p></div>
+  </div>
+  <p class="footer">harbor-co.example · hello@harbor-co.example</p>
+</section>
+</body>
+</html>

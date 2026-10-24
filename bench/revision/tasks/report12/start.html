@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Operations report</title>
+<style>
+  :root { --bg: #ffffff; --ink: #111827; --muted: #6b7280; --brand: #4f46e5; --soft: #f3f4f6; --line: #e5e7eb; --up: #047857; --down: #dc2626; --head: #1f2937; --onhead: #ffffff; }
+  html, body { margin: 0; }
+  body { font-family: "Noto Sans", sans-serif; }
+  .page { position: relative; width: 960px; height: 1280px; overflow: hidden; background: var(--bg); }
+  .page *, .page { box-sizing: border-box; }
+  .page > *, .card > * { position: absolute; margin: 0; overflow: hidden; line-height: 1.3; }
+  .title { left:48px;top:40px;width:864px;height:44px; font-size: 32px; font-weight: 700; color: var(--ink); }
+  .subtitle { left:48px;top:88px;width:864px;height:22px; font-size: 16px; color: var(--muted); }
+  .card { top: 136px; width: 204px; height: 112px; background: var(--soft); border-radius: 12px; }
+  .label { left:16px;top:14px;width:172px;height:20px; font-size: 14px; color: var(--muted); }
+  .value { left:16px;top:37px;width:172px;height:42px; font-size: 32px; font-weight: 700; color: var(--ink); }
+  .delta { left:16px;top:82px;width:172px;height:20px; font-size: 14px; font-weight: 700; }
+  .up { color: var(--up); }
+  .down { color: var(--down); }
+  .chart-panel { left:48px;top:272px;width:864px;height:400px; background: var(--bg); border: 1px solid var(--line); border-radius: 12px; }
+  .chart-title { left:72px;top:292px;width:600px;height:26px; font-size: 20px; font-weight: 700; color: var(--ink); }
+  .bar { width: 64px; background: var(--brand); }
+  .axis { width: 100px; height: 20px; font-size: 14px; color: var(--muted); text-align: center; }
+  .baseline { left:96px;top:600px;width:768px;height:2px; background: var(--line); }
+  .caption { left:72px;top:640px;width:816px;height:20px; font-size: 12px; color: var(--muted); }
+  .row { left: 48px; width: 864px; height: 36px; display: grid; grid-template-columns: 284px 200px 200px 180px; align-items: center; padding-left: 16px; font-size: 14px; color: var(--ink); border-bottom: 1px solid var(--line); }
+  .row span { overflow: hidden; white-space: nowrap; }
+  .row.head { top: 704px; background: var(--head); color: var(--onhead); font-weight: 700; border-bottom: none; }
+  .paragraph { left:48px;top:984px;width:864px;height:104px; font-size: 16px; color: var(--ink); }
+  .footer { left:48px;top:1228px;width:864px;height:20px; font-size: 12px; color: var(--muted); }
+</style>
+</head>
+<body>
+<section class="page">
+  <h1 class="title">Quarterly operations report</h1>
+  <p class="subtitle">Q2 2027 · Prepared by the operations team</p>
+  <div class="card" style="left: 48px;"><p class="label">Orders</p><p class="value">12,480</p><p class="delta up">+8.2%</p></div>
+  <div class="card" style="left: 268px;"><p class="label">Revenue</p><p class="value">$1.92M</p><p class="delta up">+5.4%</p></div>
+  <div class="card" style="left: 488px;"><p class="label">On-time rate</p><p class="value">96.1%</p><p class="delta down">-0.6%</p></div>
+  <div class="card" style="left: 708px;"><p class="label">Active sites</p><p class="value">38</p><p class="delta up">+3</p></div>
+  <div class="chart-panel"></div>
+  <h2 class="chart-title">Monthly orders</h2>
+  <div class="bar" id="bar-jan" style="left: 120px; top: 418px; height: 182px;"></div>
+  <p class="axis" style="left: 102px; top: 394px;">1,820</p>
+  <p class="axis" style="left: 102px; top: 608px;">Jan</p>
+  <div class="bar" id="bar-feb" style="left: 250px; top: 404px; height: 196px;"></div>
+  <p class="axis" style="left: 232px; top: 380px;">1,960</p>
+  <p class="axis" style="left: 232px; top: 608px;">Feb</p>
+  <div class="bar" id="bar-mar" style="left: 380px; top: 395px; height: 205px;"></div>
+  <p class="axis" style="left: 362px; top: 371px;">2,050</p>
+  <p class="axis" style="left: 362px; top: 608px;">Mar</p>
+  <div class="bar" id="bar-apr" style="left: 510px; top: 411px; height: 189px;"></div>
+  <p class="axis" style="left: 492px; top: 387px;">1,890</p>
+  <p class="axis" style="left: 492px; top: 608px;">Apr</p>
+  <div class="bar" id="bar-may" style="left: 640px; top: 379px; height: 221px;"></div>
+  <p class="axis" style="left: 622px; top: 355px;">2,210</p>
+  <p class="axis" style="left: 622px; top: 608px;">May</p>
+  <div class="bar" id="bar-jun" style="left: 770px; top: 385px; height: 215px;"></div>
+  <p class="axis" style="left: 752px; top: 361px;">2,150</p>
+  <p class="axis" style="left: 752px; top: 608px;">Jun</p>
+  <div class="baseline"></div>
+  <p class="caption">Figure 1. Orders by month, Q1–Q2 2027</p>
+  <div class="row head"><span>Region</span><span>Orders</span><span>Revenue</span><span>On-time</span></div>
+  <div class="row" style="top: 740px;"><span>North</span><span>3,420</span><span>$0.52M</span><span>97.2%</span></div>
+  <div class="row" style="top: 776px;"><span>South</span><span>2,980</span><span>$0.46M</span><span>96.4%</span></div>
+  <div class="row" style="top: 812px;"><span>East</span><span>2,610</span><span>$0.41M</span><span>95.8%</span></div>
+  <div class="row" style="top: 848px;"><span>West</span><span>2,270</span><span>$0.35M</span><span>96.9%</span></div>
+  <div class="row" style="top: 884px;"><span>APAC</span><span>1,200</span><span>$0.18M</span><span>91.2%</span></div>
+  <p class="paragraph">Orders reached 12,480 in the first half, up 8.2% on last year. Revenue grew to $1.92M. On-time delivery slipped slightly to 96.1% as Asia-Pacific volumes doubled. The East region needs a second depot before the autumn peak.</p>
+  <p class="footer">Internal · Generated for the operations review</p>
+</section>
+</body>
+</html>

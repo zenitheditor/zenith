@@ -1,0 +1,186 @@
+zenith version=1 {
+  project id="proj.mailer" name="Brochure"
+  assets {
+    asset id="asset.studio" kind="image" src="assets/studio.png"
+    asset id="asset.workshop" kind="image" src="assets/workshop.png"
+    asset id="asset.print" kind="image" src="assets/print.png"
+  }
+  tokens format="zenith-token-v1" {
+    token id="color.bg" type="color" value="#ffffff"
+    token id="color.ink" type="color" value="#1c1917"
+    token id="color.muted" type="color" value="#57534e"
+    token id="color.accent" type="color" value="#0f766e"
+    token id="color.card" type="color" value="#e7e5e4"
+    token id="color.badge" type="color" value="#c2410c"
+    token id="color.onaccent" type="color" value="#ffffff"
+    token id="font.body" type="fontFamily" value="Noto Sans"
+    token id="weight.bold" type="fontWeight" value=700
+    token id="size.brand" type="dimension" value=(px)14
+    token id="size.headline" type="dimension" value=(px)40
+    token id="size.lede" type="dimension" value=(px)18
+    token id="size.caption" type="dimension" value=(px)12
+    token id="size.card.title" type="dimension" value=(px)18
+    token id="size.card.body" type="dimension" value=(px)14
+    token id="size.badge" type="dimension" value=(px)11
+    token id="size.price" type="dimension" value=(px)48
+    token id="size.note" type="dimension" value=(px)18
+    token id="radius.card" type="dimension" value=(px)16
+    token id="radius.panel" type="dimension" value=(px)16
+    token id="radius.pill" type="dimension" value=(px)11
+    token id="gap.cards" type="dimension" value=(px)24
+  }
+  styles {
+    style id="ui.brand" {
+      font-family (token)"font.body"
+      font-size (token)"size.brand"
+      font-weight (token)"weight.bold"
+      fill (token)"color.accent"
+    }
+    style id="ui.headline" {
+      font-family (token)"font.body"
+      font-size (token)"size.headline"
+      font-weight (token)"weight.bold"
+      fill (token)"color.ink"
+    }
+    style id="ui.lede" {
+      font-family (token)"font.body"
+      font-size (token)"size.lede"
+      fill (token)"color.muted"
+    }
+    style id="ui.caption" {
+      font-family (token)"font.body"
+      font-size (token)"size.caption"
+      fill (token)"color.muted"
+    }
+    style id="card.title" {
+      font-family (token)"font.body"
+      font-size (token)"size.card.title"
+      font-weight (token)"weight.bold"
+      fill (token)"color.ink"
+    }
+    style id="card.body" {
+      font-family (token)"font.body"
+      font-size (token)"size.card.body"
+      fill (token)"color.muted"
+    }
+    style id="card.badge" {
+      font-family (token)"font.body"
+      font-size (token)"size.badge"
+      font-weight (token)"weight.bold"
+      fill (token)"color.onaccent"
+    }
+    style id="ui.price" {
+      font-family (token)"font.body"
+      font-size (token)"size.price"
+      font-weight (token)"weight.bold"
+      fill (token)"color.onaccent"
+    }
+    style id="ui.note" {
+      font-family (token)"font.body"
+      font-size (token)"size.note"
+      fill (token)"color.onaccent"
+    }
+  }
+  components {
+    component id="card" {
+      rect id="card.bg" x=(px)0 y=(px)0 w=(px)208 h=(px)220 fill=(token)"color.card" radius=(token)"radius.card"
+      text id="card.title" x=(px)20 y=(px)20 w=(px)168 h=(px)24 style="card.title" { span "Title" }
+      text id="card.body" x=(px)20 y=(px)56 w=(px)168 h=(px)56 style="card.body" { span "Body" }
+      rect id="card.badge" x=(px)140 y=(px)16 w=(px)52 h=(px)22 fill=(token)"color.badge" radius=(token)"radius.pill" visible=#false
+      text id="card.badge.label" x=(px)140 y=(px)16 w=(px)52 h=(px)22 style="card.badge" align="center" v-align="middle" visible=#false { span "NEW" }
+    }
+  }
+  document id="doc.mailer" title="Brochure" {
+    page id="p1" w=(px)800 h=(px)1000 background=(token)"color.bg" {
+      text id="p1.brand" x=(px)48 y=(px)40 w=(px)400 h=(px)20 style="ui.brand" { span "HARBOR & CO." }
+      text id="p1.headline" x=(px)48 y=(px)72 w=(px)704 h=(px)52 style="ui.headline" { span "Design that ships on time" }
+      text id="p1.lede" x=(px)48 y=(px)136 w=(px)704 h=(px)48 style="ui.lede" { span "Harbor & Co. builds brand systems for small teams, from the first logo to the last printed page." }
+      image id="p1.photo" asset="asset.studio" x=(px)48 y=(px)200 w=(px)704 h=(px)360 fit="cover"
+      text id="p1.caption" x=(px)48 y=(px)568 w=(px)704 h=(px)20 style="ui.caption" { span "Our studio in Lisbon" }
+      frame id="p1.cards" x=(px)48 y=(px)608 w=(px)704 h=(px)220 layout="row" gap=(token)"gap.cards" {
+        instance id="p1.c1" component="card" w=(px)208 h=(px)220 {
+          override ref="card.title" { span "Fast setup" }
+          override ref="card.body" { span "Your workspace is ready in a day, with templates for every team." }
+        }
+        instance id="p1.c2" component="card" w=(px)208 h=(px)220 {
+          override ref="card.title" { span "Shared library" }
+          override ref="card.body" { span "Logos, colors and type live in one place everyone can reach." }
+        }
+        instance id="p1.c3" component="card" w=(px)208 h=(px)220 {
+          override ref="card.title" { span "Live chat" }
+          override ref="card.body" { span "Talk to a person in under two minutes, every working day." }
+        }
+      }
+      text id="p1.footer" x=(px)48 y=(px)948 w=(px)704 h=(px)20 style="ui.caption" { span "harbor-co.example · hello@harbor-co.example" }
+    }
+    page id="p2" w=(px)800 h=(px)1000 background=(token)"color.bg" {
+      text id="p2.brand" x=(px)48 y=(px)40 w=(px)400 h=(px)20 style="ui.brand" { span "HARBOR & CO." }
+      text id="p2.headline" x=(px)48 y=(px)72 w=(px)704 h=(px)52 style="ui.headline" { span "Built for busy teams" }
+      text id="p2.lede" x=(px)48 y=(px)136 w=(px)704 h=(px)48 style="ui.lede" { span "Every draft, comment and export lives in one place, so nobody waits on an email thread." }
+      image id="p2.photo" asset="asset.workshop" x=(px)48 y=(px)200 w=(px)704 h=(px)360 fit="cover"
+      text id="p2.caption" x=(px)48 y=(px)568 w=(px)704 h=(px)20 style="ui.caption" { span "Review day with the Harbor team" }
+      frame id="p2.cards" x=(px)48 y=(px)608 w=(px)704 h=(px)220 layout="row" gap=(token)"gap.cards" {
+        instance id="p2.c1" component="card" w=(px)208 h=(px)220 {
+          override ref="card.title" { span "Reviews" }
+          override ref="card.body" { span "Collect comments on every draft without long email threads." }
+        }
+        instance id="p2.c2" component="card" w=(px)208 h=(px)220 {
+          override ref="card.title" { span "Delivery" }
+          override ref="card.body" { span "Export print and web files in one step." }
+        }
+        instance id="p2.c3" component="card" w=(px)208 h=(px)220 {
+          override ref="card.title" { span "Templates" }
+          override ref="card.body" { span "Start from layouts made by our studio." }
+          override ref="card.badge" visible=#true
+          override ref="card.badge.label" visible=#true
+        }
+      }
+      text id="p2.footer" x=(px)48 y=(px)948 w=(px)704 h=(px)20 style="ui.caption" { span "harbor-co.example · hello@harbor-co.example" }
+    }
+    page id="p3" w=(px)800 h=(px)1000 background=(token)"color.bg" {
+      text id="p3.brand" x=(px)48 y=(px)40 w=(px)400 h=(px)20 style="ui.brand" { span "HARBOR & CO." }
+      text id="p3.headline" x=(px)48 y=(px)72 w=(px)704 h=(px)52 style="ui.headline" { span "From draft to print" }
+      text id="p3.lede" x=(px)48 y=(px)136 w=(px)704 h=(px)48 style="ui.lede" { span "We check every file before it goes to press and stay with you until the boxes arrive." }
+      image id="p3.photo" asset="asset.print" x=(px)48 y=(px)200 w=(px)704 h=(px)360 fit="cover"
+      text id="p3.caption" x=(px)48 y=(px)568 w=(px)704 h=(px)20 style="ui.caption" { span "Proofs from our print partner" }
+      frame id="p3.cards" x=(px)48 y=(px)608 w=(px)704 h=(px)220 layout="row" gap=(token)"gap.cards" {
+        instance id="p3.c1" component="card" w=(px)208 h=(px)220 {
+          override ref="card.title" { span "Proofing" }
+          override ref="card.body" { span "See exactly what the printer will see before you send." }
+        }
+        instance id="p3.c2" component="card" w=(px)208 h=(px)220 {
+          override ref="card.title" { span "Print partners" }
+          override ref="card.body" { span "Coming soon." }
+        }
+        instance id="p3.c3" component="card" w=(px)208 h=(px)220 {
+          override ref="card.title" { span "Archive" }
+          override ref="card.body" { span "Every version is kept, so nothing is lost." }
+        }
+      }
+      text id="p3.footer" x=(px)48 y=(px)948 w=(px)704 h=(px)20 style="ui.caption" { span "harbor-co.example · hello@harbor-co.example" }
+    }
+    page id="p4" w=(px)800 h=(px)1000 background=(token)"color.bg" {
+      text id="p4.brand" x=(px)48 y=(px)40 w=(px)400 h=(px)20 style="ui.brand" { span "HARBOR & CO." }
+      text id="p4.headline" x=(px)48 y=(px)72 w=(px)704 h=(px)52 style="ui.headline" { span "Plans and pricing" }
+      text id="p4.lede" x=(px)48 y=(px)136 w=(px)704 h=(px)48 style="ui.lede" { span "Pick the plan that fits your team today and change it whenever you need to." }
+      rect id="p4.panel" x=(px)48 y=(px)200 w=(px)704 h=(px)360 fill=(token)"color.accent" radius=(token)"radius.panel"
+      text id="p4.price" x=(px)88 y=(px)320 w=(px)624 h=(px)64 style="ui.price" { span "From $49 per month" }
+      text id="p4.note" x=(px)88 y=(px)396 w=(px)624 h=(px)24 style="ui.note" { span "Billed yearly. Cancel any time." }
+      frame id="p4.cards" x=(px)48 y=(px)608 w=(px)704 h=(px)220 layout="row" gap=(token)"gap.cards" {
+        instance id="p4.c1" component="card" w=(px)208 h=(px)220 {
+          override ref="card.title" { span "Starter" }
+          override ref="card.body" { span "One brand, three seats and the shared library." }
+        }
+        instance id="p4.c2" component="card" w=(px)208 h=(px)220 {
+          override ref="card.title" { span "Studio" }
+          override ref="card.body" { span "Five brands, ten seats and print partners." }
+        }
+        instance id="p4.c3" component="card" w=(px)208 h=(px)220 {
+          override ref="card.title" { span "Agency" }
+          override ref="card.body" { span "Unlimited brands and a dedicated account manager." }
+        }
+      }
+      text id="p4.footer" x=(px)48 y=(px)948 w=(px)704 h=(px)20 style="ui.caption" { span "harbor-co.example · hello@harbor-co.example" }
+    }
+  }
+}

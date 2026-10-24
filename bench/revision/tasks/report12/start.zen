@@ -1,0 +1,191 @@
+zenith version=1 {
+  project id="proj.report12" name="Operations report"
+  tokens format="zenith-token-v1" {
+    token id="color.bg" type="color" value="#ffffff"
+    token id="color.ink" type="color" value="#111827"
+    token id="color.muted" type="color" value="#6b7280"
+    token id="color.brand" type="color" value="#4f46e5"
+    token id="color.soft" type="color" value="#f3f4f6"
+    token id="color.line" type="color" value="#e5e7eb"
+    token id="color.up" type="color" value="#047857"
+    token id="color.down" type="color" value="#dc2626"
+    token id="color.head" type="color" value="#1f2937"
+    token id="color.onhead" type="color" value="#ffffff"
+    token id="font.body" type="fontFamily" value="Noto Sans"
+    token id="weight.bold" type="fontWeight" value=700
+    token id="size.title" type="dimension" value=(px)32
+    token id="size.subtitle" type="dimension" value=(px)16
+    token id="size.label" type="dimension" value=(px)14
+    token id="size.value" type="dimension" value=(px)32
+    token id="size.chart" type="dimension" value=(px)20
+    token id="size.cell" type="dimension" value=(px)14
+    token id="size.paragraph" type="dimension" value=(px)16
+    token id="size.small" type="dimension" value=(px)12
+    token id="radius.card" type="dimension" value=(px)12
+    token id="stroke.thin" type="dimension" value=(px)1
+  }
+  styles {
+    style id="r.title" {
+      font-family (token)"font.body"
+      font-size (token)"size.title"
+      font-weight (token)"weight.bold"
+      fill (token)"color.ink"
+    }
+    style id="r.subtitle" {
+      font-family (token)"font.body"
+      font-size (token)"size.subtitle"
+      fill (token)"color.muted"
+    }
+    style id="r.label" {
+      font-family (token)"font.body"
+      font-size (token)"size.label"
+      fill (token)"color.muted"
+    }
+    style id="r.value" {
+      font-family (token)"font.body"
+      font-size (token)"size.value"
+      font-weight (token)"weight.bold"
+      fill (token)"color.ink"
+    }
+    style id="r.up" {
+      font-family (token)"font.body"
+      font-size (token)"size.label"
+      font-weight (token)"weight.bold"
+      fill (token)"color.up"
+    }
+    style id="r.down" {
+      font-family (token)"font.body"
+      font-size (token)"size.label"
+      font-weight (token)"weight.bold"
+      fill (token)"color.down"
+    }
+    style id="r.chart" {
+      font-family (token)"font.body"
+      font-size (token)"size.chart"
+      font-weight (token)"weight.bold"
+      fill (token)"color.ink"
+    }
+    style id="r.axis" {
+      font-family (token)"font.body"
+      font-size (token)"size.label"
+      fill (token)"color.muted"
+    }
+    style id="r.caption" {
+      font-family (token)"font.body"
+      font-size (token)"size.small"
+      fill (token)"color.muted"
+    }
+    style id="r.head" {
+      font-family (token)"font.body"
+      font-size (token)"size.cell"
+      font-weight (token)"weight.bold"
+      fill (token)"color.onhead"
+    }
+    style id="r.cell" {
+      font-family (token)"font.body"
+      font-size (token)"size.cell"
+      fill (token)"color.ink"
+    }
+    style id="r.paragraph" {
+      font-family (token)"font.body"
+      font-size (token)"size.paragraph"
+      fill (token)"color.ink"
+    }
+    style id="r.footer" {
+      font-family (token)"font.body"
+      font-size (token)"size.small"
+      fill (token)"color.muted"
+    }
+  }
+  document id="doc.report12" title="Operations report" {
+    page id="p1" w=(px)960 h=(px)1280 background=(token)"color.bg" {
+      text id="title" x=(px)48 y=(px)40 w=(px)864 h=(px)44 style="r.title" { span "Quarterly operations report" }
+      text id="subtitle" x=(px)48 y=(px)88 w=(px)864 h=(px)22 style="r.subtitle" { span "Q2 2027 · Prepared by the operations team" }
+      frame id="card1" x=(px)48 y=(px)136 w=(px)204 h=(px)112 fill=(token)"color.soft" radius=(token)"radius.card" {
+        text id="card1.label" x=(px)16 y=(px)14 w=(px)172 h=(px)20 style="r.label" { span "Orders" }
+        text id="card1.value" x=(px)16 y=(px)37 w=(px)172 h=(px)42 style="r.value" { span "12,480" }
+        text id="card1.delta" x=(px)16 y=(px)82 w=(px)172 h=(px)20 style="r.up" { span "+8.2%" }
+      }
+      frame id="card2" x=(px)268 y=(px)136 w=(px)204 h=(px)112 fill=(token)"color.soft" radius=(token)"radius.card" {
+        text id="card2.label" x=(px)16 y=(px)14 w=(px)172 h=(px)20 style="r.label" { span "Revenue" }
+        text id="card2.value" x=(px)16 y=(px)37 w=(px)172 h=(px)42 style="r.value" { span "$1.92M" }
+        text id="card2.delta" x=(px)16 y=(px)82 w=(px)172 h=(px)20 style="r.up" { span "+5.4%" }
+      }
+      frame id="card3" x=(px)488 y=(px)136 w=(px)204 h=(px)112 fill=(token)"color.soft" radius=(token)"radius.card" {
+        text id="card3.label" x=(px)16 y=(px)14 w=(px)172 h=(px)20 style="r.label" { span "On-time rate" }
+        text id="card3.value" x=(px)16 y=(px)37 w=(px)172 h=(px)42 style="r.value" { span "96.1%" }
+        text id="card3.delta" x=(px)16 y=(px)82 w=(px)172 h=(px)20 style="r.down" { span "-0.6%" }
+      }
+      frame id="card4" x=(px)708 y=(px)136 w=(px)204 h=(px)112 fill=(token)"color.soft" radius=(token)"radius.card" {
+        text id="card4.label" x=(px)16 y=(px)14 w=(px)172 h=(px)20 style="r.label" { span "Active sites" }
+        text id="card4.value" x=(px)16 y=(px)37 w=(px)172 h=(px)42 style="r.value" { span "38" }
+        text id="card4.delta" x=(px)16 y=(px)82 w=(px)172 h=(px)20 style="r.up" { span "+3" }
+      }
+      rect id="chart.panel" x=(px)48 y=(px)272 w=(px)864 h=(px)400 fill=(token)"color.bg" stroke=(token)"color.line" stroke-width=(token)"stroke.thin" radius=(token)"radius.card"
+      text id="chart.title" x=(px)72 y=(px)292 w=(px)600 h=(px)26 style="r.chart" { span "Monthly orders" }
+      rect id="bar.jan" x=(px)120 y=(px)418 w=(px)64 h=(px)182 fill=(token)"color.brand"
+      text id="val.jan" x=(px)102 y=(px)394 w=(px)100 h=(px)20 style="r.axis" align="center" { span "1,820" }
+      text id="mon.jan" x=(px)102 y=(px)608 w=(px)100 h=(px)20 style="r.axis" align="center" { span "Jan" }
+      rect id="bar.feb" x=(px)250 y=(px)404 w=(px)64 h=(px)196 fill=(token)"color.brand"
+      text id="val.feb" x=(px)232 y=(px)380 w=(px)100 h=(px)20 style="r.axis" align="center" { span "1,960" }
+      text id="mon.feb" x=(px)232 y=(px)608 w=(px)100 h=(px)20 style="r.axis" align="center" { span "Feb" }
+      rect id="bar.mar" x=(px)380 y=(px)395 w=(px)64 h=(px)205 fill=(token)"color.brand"
+      text id="val.mar" x=(px)362 y=(px)371 w=(px)100 h=(px)20 style="r.axis" align="center" { span "2,050" }
+      text id="mon.mar" x=(px)362 y=(px)608 w=(px)100 h=(px)20 style="r.axis" align="center" { span "Mar" }
+      rect id="bar.apr" x=(px)510 y=(px)411 w=(px)64 h=(px)189 fill=(token)"color.brand"
+      text id="val.apr" x=(px)492 y=(px)387 w=(px)100 h=(px)20 style="r.axis" align="center" { span "1,890" }
+      text id="mon.apr" x=(px)492 y=(px)608 w=(px)100 h=(px)20 style="r.axis" align="center" { span "Apr" }
+      rect id="bar.may" x=(px)640 y=(px)379 w=(px)64 h=(px)221 fill=(token)"color.brand"
+      text id="val.may" x=(px)622 y=(px)355 w=(px)100 h=(px)20 style="r.axis" align="center" { span "2,210" }
+      text id="mon.may" x=(px)622 y=(px)608 w=(px)100 h=(px)20 style="r.axis" align="center" { span "May" }
+      rect id="bar.jun" x=(px)770 y=(px)385 w=(px)64 h=(px)215 fill=(token)"color.brand"
+      text id="val.jun" x=(px)752 y=(px)361 w=(px)100 h=(px)20 style="r.axis" align="center" { span "2,150" }
+      text id="mon.jun" x=(px)752 y=(px)608 w=(px)100 h=(px)20 style="r.axis" align="center" { span "Jun" }
+      rect id="chart.baseline" x=(px)96 y=(px)600 w=(px)768 h=(px)2 fill=(token)"color.line"
+      text id="chart.caption" x=(px)72 y=(px)640 w=(px)816 h=(px)20 style="r.caption" { span "Figure 1. Orders by month, Q1–Q2 2027" }
+      frame id="table.head" x=(px)48 y=(px)704 w=(px)864 h=(px)36 fill=(token)"color.head" {
+        text id="table.head.c1" x=(px)16 y=(px)8 w=(px)264 h=(px)20 style="r.head" { span "Region" }
+        text id="table.head.c2" x=(px)300 y=(px)8 w=(px)180 h=(px)20 style="r.head" { span "Orders" }
+        text id="table.head.c3" x=(px)500 y=(px)8 w=(px)180 h=(px)20 style="r.head" { span "Revenue" }
+        text id="table.head.c4" x=(px)700 y=(px)8 w=(px)148 h=(px)20 style="r.head" { span "On-time" }
+      }
+      frame id="row.north" x=(px)48 y=(px)740 w=(px)864 h=(px)36 {
+        rect id="row.north.rule" x=(px)0 y=(px)35 w=(px)864 h=(px)1 fill=(token)"color.line"
+        text id="row.north.c1" x=(px)16 y=(px)8 w=(px)264 h=(px)20 style="r.cell" { span "North" }
+        text id="row.north.c2" x=(px)300 y=(px)8 w=(px)180 h=(px)20 style="r.cell" { span "3,420" }
+        text id="row.north.c3" x=(px)500 y=(px)8 w=(px)180 h=(px)20 style="r.cell" { span "$0.52M" }
+        text id="row.north.c4" x=(px)700 y=(px)8 w=(px)148 h=(px)20 style="r.cell" { span "97.2%" }
+      }
+      frame id="row.south" x=(px)48 y=(px)776 w=(px)864 h=(px)36 {
+        rect id="row.south.rule" x=(px)0 y=(px)35 w=(px)864 h=(px)1 fill=(token)"color.line"
+        text id="row.south.c1" x=(px)16 y=(px)8 w=(px)264 h=(px)20 style="r.cell" { span "South" }
+        text id="row.south.c2" x=(px)300 y=(px)8 w=(px)180 h=(px)20 style="r.cell" { span "2,980" }
+        text id="row.south.c3" x=(px)500 y=(px)8 w=(px)180 h=(px)20 style="r.cell" { span "$0.46M" }
+        text id="row.south.c4" x=(px)700 y=(px)8 w=(px)148 h=(px)20 style="r.cell" { span "96.4%" }
+      }
+      frame id="row.east" x=(px)48 y=(px)812 w=(px)864 h=(px)36 {
+        rect id="row.east.rule" x=(px)0 y=(px)35 w=(px)864 h=(px)1 fill=(token)"color.line"
+        text id="row.east.c1" x=(px)16 y=(px)8 w=(px)264 h=(px)20 style="r.cell" { span "East" }
+        text id="row.east.c2" x=(px)300 y=(px)8 w=(px)180 h=(px)20 style="r.cell" { span "2,610" }
+        text id="row.east.c3" x=(px)500 y=(px)8 w=(px)180 h=(px)20 style="r.cell" { span "$0.41M" }
+        text id="row.east.c4" x=(px)700 y=(px)8 w=(px)148 h=(px)20 style="r.cell" { span "95.8%" }
+      }
+      frame id="row.west" x=(px)48 y=(px)848 w=(px)864 h=(px)36 {
+        rect id="row.west.rule" x=(px)0 y=(px)35 w=(px)864 h=(px)1 fill=(token)"color.line"
+        text id="row.west.c1" x=(px)16 y=(px)8 w=(px)264 h=(px)20 style="r.cell" { span "West" }
+        text id="row.west.c2" x=(px)300 y=(px)8 w=(px)180 h=(px)20 style="r.cell" { span "2,270" }
+        text id="row.west.c3" x=(px)500 y=(px)8 w=(px)180 h=(px)20 style="r.cell" { span "$0.35M" }
+        text id="row.west.c4" x=(px)700 y=(px)8 w=(px)148 h=(px)20 style="r.cell" { span "96.9%" }
+      }
+      frame id="row.apac" x=(px)48 y=(px)884 w=(px)864 h=(px)36 {
+        rect id="row.apac.rule" x=(px)0 y=(px)35 w=(px)864 h=(px)1 fill=(token)"color.line"
+        text id="row.apac.c1" x=(px)16 y=(px)8 w=(px)264 h=(px)20 style="r.cell" { span "APAC" }
+        text id="row.apac.c2" x=(px)300 y=(px)8 w=(px)180 h=(px)20 style="r.cell" { span "1,200" }
+        text id="row.apac.c3" x=(px)500 y=(px)8 w=(px)180 h=(px)20 style="r.cell" { span "$0.18M" }
+        text id="row.apac.c4" x=(px)700 y=(px)8 w=(px)148 h=(px)20 style="r.cell" { span "91.2%" }
+      }
+      text id="paragraph" x=(px)48 y=(px)984 w=(px)864 h=(px)104 style="r.paragraph" { span "Orders reached 12,480 in the first half, up 8.2% on last year. Revenue grew to $1.92M. On-time delivery slipped slightly to 96.1% as Asia-Pacific volumes doubled. The East region needs a second depot before the autumn peak." }
+      text id="footer" x=(px)48 y=(px)1228 w=(px)864 h=(px)20 style="r.footer" { span "Internal · Generated for the operations review" }
+    }
+  }
+}

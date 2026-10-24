@@ -1,0 +1,222 @@
+zenith version=1 {
+  project id="proj.deck20" name="Board deck"
+  tokens format="zenith-token-v1" {
+    token id="color.bg" type="color" value="#ffffff"
+    token id="color.ink" type="color" value="#0f172a"
+    token id="color.muted" type="color" value="#475569"
+    token id="color.brand" type="color" value="#2563eb"
+    token id="color.soft" type="color" value="#eff6ff"
+    token id="font.body" type="fontFamily" value="Noto Sans"
+    token id="weight.bold" type="fontWeight" value=700
+    token id="size.kicker" type="dimension" value=(px)14
+    token id="size.title" type="dimension" value=(px)40
+    token id="size.body" type="dimension" value=(px)20
+    token id="size.stat" type="dimension" value=(px)44
+    token id="size.label" type="dimension" value=(px)16
+    token id="size.footer" type="dimension" value=(px)12
+    token id="radius.panel" type="dimension" value=(px)12
+  }
+  styles {
+    style id="deck.kicker" {
+      font-family (token)"font.body"
+      font-size (token)"size.kicker"
+      font-weight (token)"weight.bold"
+      fill (token)"color.brand"
+    }
+    style id="deck.title" {
+      font-family (token)"font.body"
+      font-size (token)"size.title"
+      font-weight (token)"weight.bold"
+      fill (token)"color.ink"
+    }
+    style id="deck.body" {
+      font-family (token)"font.body"
+      font-size (token)"size.body"
+      fill (token)"color.muted"
+    }
+    style id="deck.stat" {
+      font-family (token)"font.body"
+      font-size (token)"size.stat"
+      font-weight (token)"weight.bold"
+      fill (token)"color.brand"
+    }
+    style id="deck.label" {
+      font-family (token)"font.body"
+      font-size (token)"size.label"
+      fill (token)"color.muted"
+    }
+    style id="deck.footer" {
+      font-family (token)"font.body"
+      font-size (token)"size.footer"
+      fill (token)"color.muted"
+    }
+  }
+  masters {
+    master id="master.slide" {
+      rect id="chrome.bar" x=(px)48 y=(px)40 w=(px)64 h=(px)6 fill=(token)"color.brand"
+      text id="chrome.footer" x=(px)48 y=(px)496 w=(px)864 h=(px)20 style="deck.footer" { span "Northwind Labs · Series B review · Confidential" }
+    }
+  }
+  document id="doc.deck20" title="Board deck" {
+    page id="p1" w=(px)960 h=(px)540 background=(token)"color.bg" master="master.slide" {
+      text id="p1.kicker" x=(px)48 y=(px)56 w=(px)600 h=(px)20 style="deck.kicker" { span "SERIES B REVIEW" }
+      text id="p1.title" x=(px)48 y=(px)80 w=(px)864 h=(px)56 style="deck.title" { span "Northwind Labs" }
+      text id="p1.body" x=(px)48 y=(px)168 w=(px)520 h=(px)104 style="deck.body" { span "Board update on growth, product and the plan for the next eighteen months." }
+      rect id="p1.panel" x=(px)616 y=(px)168 w=(px)296 h=(px)200 fill=(token)"color.soft" radius=(token)"radius.panel"
+      text id="p1.stat" x=(px)640 y=(px)196 w=(px)248 h=(px)60 style="deck.stat" { span "2027" }
+      text id="p1.statlabel" x=(px)640 y=(px)268 w=(px)248 h=(px)84 style="deck.label" { span "Plan year under review" }
+    }
+    page id="p2" w=(px)960 h=(px)540 background=(token)"color.bg" master="master.slide" {
+      text id="p2.kicker" x=(px)48 y=(px)56 w=(px)600 h=(px)20 style="deck.kicker" { span "CONTEXT" }
+      text id="p2.title" x=(px)48 y=(px)80 w=(px)864 h=(px)56 style="deck.title" { span "Why now" }
+      text id="p2.body" x=(px)48 y=(px)168 w=(px)520 h=(px)104 style="deck.body" { span "Freight teams still plan loads in spreadsheets. Our tools cut planning time by more than half." }
+      rect id="p2.panel" x=(px)616 y=(px)168 w=(px)296 h=(px)200 fill=(token)"color.soft" radius=(token)"radius.panel"
+      text id="p2.stat" x=(px)640 y=(px)196 w=(px)248 h=(px)60 style="deck.stat" { span "52%" }
+      text id="p2.statlabel" x=(px)640 y=(px)268 w=(px)248 h=(px)84 style="deck.label" { span "Less time spent planning each load" }
+    }
+    page id="p3" w=(px)960 h=(px)540 background=(token)"color.bg" master="master.slide" {
+      text id="p3.kicker" x=(px)48 y=(px)56 w=(px)600 h=(px)20 style="deck.kicker" { span "MARKET" }
+      text id="p3.title" x=(px)48 y=(px)80 w=(px)864 h=(px)56 style="deck.title" { span "Market overview" }
+      text id="p3.body" x=(px)48 y=(px)168 w=(px)520 h=(px)104 style="deck.body" { span "Mid-size carriers in North America and Europe spend over four billion a year on planning software." }
+      rect id="p3.panel" x=(px)616 y=(px)168 w=(px)296 h=(px)200 fill=(token)"color.soft" radius=(token)"radius.panel"
+      text id="p3.stat" x=(px)640 y=(px)196 w=(px)248 h=(px)60 style="deck.stat" { span "$4.2B" }
+      text id="p3.statlabel" x=(px)640 y=(px)268 w=(px)248 h=(px)84 style="deck.label" { span "Yearly spend in our segment" }
+    }
+    page id="p4" w=(px)960 h=(px)540 background=(token)"color.bg" master="master.slide" {
+      text id="p4.kicker" x=(px)48 y=(px)56 w=(px)600 h=(px)20 style="deck.kicker" { span "PRODUCT" }
+      text id="p4.title" x=(px)48 y=(px)80 w=(px)864 h=(px)56 style="deck.title" { span "What we built" }
+      text id="p4.body" x=(px)48 y=(px)168 w=(px)520 h=(px)104 style="deck.body" { span "A load planner, a live yard map and a carrier portal that share one data model." }
+      rect id="p4.panel" x=(px)616 y=(px)168 w=(px)296 h=(px)200 fill=(token)"color.soft" radius=(token)"radius.panel"
+      text id="p4.stat" x=(px)640 y=(px)196 w=(px)248 h=(px)60 style="deck.stat" { span "3" }
+      text id="p4.statlabel" x=(px)640 y=(px)268 w=(px)248 h=(px)84 style="deck.label" { span "Products on one platform" }
+    }
+    page id="p5" w=(px)960 h=(px)540 background=(token)"color.bg" master="master.slide" {
+      text id="p5.kicker" x=(px)48 y=(px)56 w=(px)600 h=(px)20 style="deck.kicker" { span "CUSTOMERS" }
+      text id="p5.title" x=(px)48 y=(px)80 w=(px)864 h=(px)56 style="deck.title" { span "Who buys it" }
+      text id="p5.body" x=(px)48 y=(px)168 w=(px)520 h=(px)104 style="deck.body" { span "Regional carriers with 50 to 500 trucks. Most start with the planner and add the map within a year." }
+      rect id="p5.panel" x=(px)616 y=(px)168 w=(px)296 h=(px)200 fill=(token)"color.soft" radius=(token)"radius.panel"
+      text id="p5.stat" x=(px)640 y=(px)196 w=(px)248 h=(px)60 style="deck.stat" { span "212" }
+      text id="p5.statlabel" x=(px)640 y=(px)268 w=(px)248 h=(px)84 style="deck.label" { span "Paying carriers today" }
+    }
+    page id="p6" w=(px)960 h=(px)540 background=(token)"color.bg" master="master.slide" {
+      text id="p6.kicker" x=(px)48 y=(px)56 w=(px)600 h=(px)20 style="deck.kicker" { span "TRACTION" }
+      text id="p6.title" x=(px)48 y=(px)80 w=(px)864 h=(px)56 style="deck.title" { span "Growth so far" }
+      text id="p6.body" x=(px)48 y=(px)168 w=(px)520 h=(px)104 style="deck.body" { span "Revenue grew every quarter last year as carriers moved from monthly to annual plans." }
+      rect id="p6.panel" x=(px)616 y=(px)168 w=(px)296 h=(px)200 fill=(token)"color.soft" radius=(token)"radius.panel"
+      text id="p6.stat" x=(px)640 y=(px)196 w=(px)248 h=(px)60 style="deck.stat" { span "$41k" }
+      text id="p6.statlabel" x=(px)640 y=(px)268 w=(px)248 h=(px)84 style="deck.label" { span "Average yearly contract" }
+    }
+    page id="p7" w=(px)960 h=(px)540 background=(token)"color.bg" master="master.slide" {
+      text id="p7.kicker" x=(px)48 y=(px)56 w=(px)600 h=(px)20 style="deck.kicker" { span "TRACTION" }
+      text id="p7.title" x=(px)48 y=(px)80 w=(px)864 h=(px)56 style="deck.title" { span "Usage" }
+      text id="p7.body" x=(px)48 y=(px)168 w=(px)520 h=(px)104 style="deck.body" { span "Planners open the tool on four out of five working days. Weekly use rose through the winter peak." }
+      rect id="p7.panel" x=(px)616 y=(px)168 w=(px)296 h=(px)200 fill=(token)"color.soft" radius=(token)"radius.panel"
+      text id="p7.stat" x=(px)640 y=(px)196 w=(px)248 h=(px)60 style="deck.stat" { span "81%" }
+      text id="p7.statlabel" x=(px)640 y=(px)268 w=(px)248 h=(px)84 style="deck.label" { span "Weekly active planners" }
+    }
+    page id="p8" w=(px)960 h=(px)540 background=(token)"color.bg" master="master.slide" {
+      text id="p8.kicker" x=(px)48 y=(px)56 w=(px)600 h=(px)20 style="deck.kicker" { span "FINANCE" }
+      text id="p8.title" x=(px)48 y=(px)80 w=(px)864 h=(px)56 style="deck.title" { span "Revenue" }
+      text id="p8.body" x=(px)48 y=(px)168 w=(px)520 h=(px)104 style="deck.body" { span "Annual recurring revenue at year end, up from the year before on the back of larger accounts." }
+      rect id="p8.panel" x=(px)616 y=(px)168 w=(px)296 h=(px)200 fill=(token)"color.soft" radius=(token)"radius.panel"
+      text id="p8.stat" x=(px)640 y=(px)196 w=(px)248 h=(px)60 style="deck.stat" { span "$3.1M" }
+      text id="p8.statlabel" x=(px)640 y=(px)268 w=(px)248 h=(px)84 style="deck.label" { span "Annual recurring revenue" }
+    }
+    page id="p9" w=(px)960 h=(px)540 background=(token)"color.bg" master="master.slide" {
+      text id="p9.kicker" x=(px)48 y=(px)56 w=(px)600 h=(px)20 style="deck.kicker" { span "SALES" }
+      text id="p9.title" x=(px)48 y=(px)80 w=(px)864 h=(px)56 style="deck.title" { span "Pipeline" }
+      text id="p9.body" x=(px)48 y=(px)168 w=(px)520 h=(px)104 style="deck.body" { span "Qualified pipeline for the next two quarters, weighted by stage and by deal size." }
+      rect id="p9.panel" x=(px)616 y=(px)168 w=(px)296 h=(px)200 fill=(token)"color.soft" radius=(token)"radius.panel"
+      text id="p9.stat" x=(px)640 y=(px)196 w=(px)248 h=(px)60 style="deck.stat" { span "$6.8M" }
+      text id="p9.statlabel" x=(px)640 y=(px)268 w=(px)248 h=(px)84 style="deck.label" { span "Weighted pipeline" }
+    }
+    page id="p10" w=(px)960 h=(px)540 background=(token)"color.bg" master="master.slide" {
+      text id="p10.kicker" x=(px)48 y=(px)56 w=(px)600 h=(px)20 style="deck.kicker" { span "PLAN" }
+      text id="p10.title" x=(px)48 y=(px)80 w=(px)864 h=(px)56 style="deck.title" { span "Roadmap" }
+      text id="p10.body" x=(px)48 y=(px)168 w=(px)520 h=(px)104 style="deck.body" { span "Route optimisation ships in spring. A fuel and emissions module follows in the autumn release." }
+      rect id="p10.panel" x=(px)616 y=(px)168 w=(px)296 h=(px)200 fill=(token)"color.soft" radius=(token)"radius.panel"
+      text id="p10.stat" x=(px)640 y=(px)196 w=(px)248 h=(px)60 style="deck.stat" { span "2" }
+      text id="p10.statlabel" x=(px)640 y=(px)268 w=(px)248 h=(px)84 style="deck.label" { span "Major releases this year" }
+    }
+    page id="p11" w=(px)960 h=(px)540 background=(token)"color.bg" master="master.slide" {
+      text id="p11.kicker" x=(px)48 y=(px)56 w=(px)600 h=(px)20 style="deck.kicker" { span "TEAM" }
+      text id="p11.title" x=(px)48 y=(px)80 w=(px)864 h=(px)56 style="deck.title" { span "Hirring plan" }
+      text id="p11.body" x=(px)48 y=(px)168 w=(px)520 h=(px)104 style="deck.body" { span "We add engineers first, then account managers once the new modules are live." }
+      rect id="p11.panel" x=(px)616 y=(px)168 w=(px)296 h=(px)200 fill=(token)"color.soft" radius=(token)"radius.panel"
+      text id="p11.stat" x=(px)640 y=(px)196 w=(px)248 h=(px)60 style="deck.stat" { span "24" }
+      text id="p11.statlabel" x=(px)640 y=(px)268 w=(px)248 h=(px)84 style="deck.label" { span "New hires planned" }
+    }
+    page id="p12" w=(px)960 h=(px)540 background=(token)"color.bg" master="master.slide" {
+      text id="p12.kicker" x=(px)48 y=(px)56 w=(px)600 h=(px)20 style="deck.kicker" { span "TEAM" }
+      text id="p12.title" x=(px)48 y=(px)80 w=(px)864 h=(px)56 style="deck.title" { span "Leadership" }
+      text id="p12.body" x=(px)48 y=(px)168 w=(px)520 h=(px)104 style="deck.body" { span "The founding team stays in place. We hire a finance lead and a head of sales this year." }
+      rect id="p12.panel" x=(px)616 y=(px)168 w=(px)296 h=(px)200 fill=(token)"color.soft" radius=(token)"radius.panel"
+      text id="p12.stat" x=(px)640 y=(px)196 w=(px)248 h=(px)60 style="deck.stat" { span "6" }
+      text id="p12.statlabel" x=(px)640 y=(px)268 w=(px)248 h=(px)84 style="deck.label" { span "People on the leadership team" }
+    }
+    page id="p13" w=(px)960 h=(px)540 background=(token)"color.bg" master="master.slide" {
+      text id="p13.kicker" x=(px)48 y=(px)56 w=(px)600 h=(px)20 style="deck.kicker" { span "SUPPORT" }
+      text id="p13.title" x=(px)48 y=(px)80 w=(px)864 h=(px)56 style="deck.title" { span "Service quality" }
+      text id="p13.body" x=(px)48 y=(px)168 w=(px)520 h=(px)104 style="deck.body" { span "Most tickets close on the first reply. Carriers rate support above every other part of the product." }
+      rect id="p13.panel" x=(px)616 y=(px)168 w=(px)296 h=(px)200 fill=(token)"color.soft" radius=(token)"radius.panel"
+      text id="p13.stat" x=(px)640 y=(px)196 w=(px)248 h=(px)60 style="deck.stat" { span "94%" }
+      text id="p13.statlabel" x=(px)640 y=(px)268 w=(px)248 h=(px)84 style="deck.label" { span "Tickets solved on first reply" }
+    }
+    page id="p14" w=(px)960 h=(px)540 background=(token)"color.bg" master="master.slide" {
+      text id="p14.kicker" x=(px)48 y=(px)56 w=(px)600 h=(px)20 style="deck.kicker" { span "FINANCE" }
+      text id="p14.title" x=(px)48 y=(px)80 w=(px)864 h=(px)56 style="deck.title" { span "Unit economics" }
+      text id="p14.body" x=(px)48 y=(px)168 w=(px)520 h=(px)104 style="deck.body" { span "Gross margin is 78% and payback on sales spend is under fourteen months." }
+      rect id="p14.panel" x=(px)616 y=(px)168 w=(px)296 h=(px)200 fill=(token)"color.soft" radius=(token)"radius.panel"
+      text id="p14.stat" x=(px)640 y=(px)196 w=(px)248 h=(px)60 style="deck.stat" { span "78%" }
+      text id="p14.statlabel" x=(px)640 y=(px)268 w=(px)248 h=(px)84 style="deck.label" { span "Gross margin" }
+    }
+    page id="p15" w=(px)960 h=(px)540 background=(token)"color.bg" master="master.slide" {
+      text id="p15.kicker" x=(px)48 y=(px)56 w=(px)600 h=(px)20 style="deck.kicker" { span "FINANCE" }
+      text id="p15.title" x=(px)48 y=(px)80 w=(px)864 h=(px)56 style="deck.title" { span "Burn and runway" }
+      text id="p15.body" x=(px)48 y=(px)168 w=(px)520 h=(px)104 style="deck.body" { span "Monthly net burn is steady. The raise extends runway well past the next two releases." }
+      rect id="p15.panel" x=(px)616 y=(px)168 w=(px)296 h=(px)200 fill=(token)"color.soft" radius=(token)"radius.panel"
+      text id="p15.stat" x=(px)640 y=(px)196 w=(px)248 h=(px)60 style="deck.stat" { span "26" }
+      text id="p15.statlabel" x=(px)640 y=(px)268 w=(px)248 h=(px)84 style="deck.label" { span "Months of runway after the raise" }
+    }
+    page id="p16" w=(px)960 h=(px)540 background=(token)"color.bg" master="master.slide" {
+      text id="p16.kicker" x=(px)48 y=(px)56 w=(px)600 h=(px)20 style="deck.kicker" { span "RISK" }
+      text id="p16.title" x=(px)48 y=(px)80 w=(px)864 h=(px)56 style="deck.title" { span "Risks" }
+      text id="p16.body" x=(px)48 y=(px)168 w=(px)520 h=(px)104 style="deck.body" { span "Larger platforms could bundle planning tools. Our answer is depth for mid-size fleets." }
+      rect id="p16.panel" x=(px)616 y=(px)168 w=(px)296 h=(px)200 fill=(token)"color.soft" radius=(token)"radius.panel"
+      text id="p16.stat" x=(px)640 y=(px)196 w=(px)248 h=(px)60 style="deck.stat" { span "3" }
+      text id="p16.statlabel" x=(px)640 y=(px)268 w=(px)248 h=(px)84 style="deck.label" { span "Risks we track monthly" }
+    }
+    page id="p17" w=(px)960 h=(px)540 background=(token)"color.bg" master="master.slide" {
+      text id="p17.kicker" x=(px)48 y=(px)56 w=(px)600 h=(px)20 style="deck.kicker" { span "ASK" }
+      text id="p17.title" x=(px)48 y=(px)80 w=(px)864 h=(px)56 style="deck.title" { span "The raise" }
+      text id="p17.body" x=(px)48 y=(px)168 w=(px)520 h=(px)104 style="deck.body" { span "We are raising a Series B to fund the roadmap and the sales team." }
+      rect id="p17.panel" x=(px)616 y=(px)168 w=(px)296 h=(px)200 fill=(token)"color.soft" radius=(token)"radius.panel"
+      text id="p17.stat" x=(px)640 y=(px)196 w=(px)248 h=(px)60 style="deck.stat" { span "$18M" }
+      text id="p17.statlabel" x=(px)640 y=(px)268 w=(px)248 h=(px)84 style="deck.label" fill=(token)"color.ink" { span "Series B target" }
+    }
+    page id="p18" w=(px)960 h=(px)540 background=(token)"color.bg" master="master.slide" {
+      text id="p18.kicker" x=(px)48 y=(px)56 w=(px)600 h=(px)20 style="deck.kicker" { span "USE OF FUNDS" }
+      text id="p18.title" x=(px)48 y=(px)80 w=(px)864 h=(px)56 style="deck.title" { span "Use of funds" }
+      text id="p18.body" x=(px)48 y=(px)168 w=(px)520 h=(px)104 style="deck.body" { span "Sixty percent goes to product and engineering, the rest to sales, support and finance." }
+      rect id="p18.panel" x=(px)616 y=(px)168 w=(px)296 h=(px)200 fill=(token)"color.soft" radius=(token)"radius.panel"
+      text id="p18.stat" x=(px)640 y=(px)196 w=(px)248 h=(px)60 style="deck.stat" { span "60%" }
+      text id="p18.statlabel" x=(px)640 y=(px)268 w=(px)248 h=(px)84 style="deck.label" { span "Share for product and engineering" }
+    }
+    page id="p19" w=(px)960 h=(px)540 background=(token)"color.bg" master="master.slide" {
+      text id="p19.kicker" x=(px)48 y=(px)56 w=(px)600 h=(px)20 style="deck.kicker" { span "CONTEXT" }
+      text id="p19.title" x=(px)48 y=(px)80 w=(px)864 h=(px)56 style="deck.title" { span "Why now" }
+      text id="p19.body" x=(px)48 y=(px)168 w=(px)520 h=(px)104 style="deck.body" { span "Freight teams still plan loads in spreadsheets. Our tools cut planning time by more than half." }
+      rect id="p19.panel" x=(px)616 y=(px)168 w=(px)296 h=(px)200 fill=(token)"color.soft" radius=(token)"radius.panel"
+      text id="p19.stat" x=(px)640 y=(px)196 w=(px)248 h=(px)60 style="deck.stat" { span "52%" }
+      text id="p19.statlabel" x=(px)640 y=(px)268 w=(px)248 h=(px)84 style="deck.label" { span "Less time spent planning each load" }
+    }
+    page id="p20" w=(px)960 h=(px)540 background=(token)"color.bg" master="master.slide" {
+      text id="p20.kicker" x=(px)48 y=(px)56 w=(px)600 h=(px)20 style="deck.kicker" { span "NEXT STEPS" }
+      text id="p20.title" x=(px)48 y=(px)80 w=(px)864 h=(px)56 style="deck.title" { span "Questions" }
+      text id="p20.body" x=(px)48 y=(px)168 w=(px)520 h=(px)104 style="deck.body" { span "Thank you. The data room is open to the board from today." }
+      rect id="p20.panel" x=(px)616 y=(px)168 w=(px)296 h=(px)200 fill=(token)"color.soft" radius=(token)"radius.panel"
+      text id="p20.stat" x=(px)640 y=(px)196 w=(px)248 h=(px)60 style="deck.stat" { span "Q&A" }
+      text id="p20.statlabel" x=(px)640 y=(px)268 w=(px)248 h=(px)84 style="deck.label" { span "Open discussion" }
+    }
+  }
+}

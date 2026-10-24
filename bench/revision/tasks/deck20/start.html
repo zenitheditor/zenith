@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Board deck</title>
+<style>
+  :root { --bg: #ffffff; --ink: #0f172a; --muted: #475569; --brand: #2563eb; --soft: #eff6ff; }
+  html, body { margin: 0; }
+  body { font-family: "Noto Sans", sans-serif; }
+  .page { position: relative; width: 960px; height: 540px; overflow: hidden; background: var(--bg); }
+  .page *, .page { box-sizing: border-box; }
+  .page > *, .panel > * { position: absolute; margin: 0; overflow: hidden; line-height: 1.3; }
+  .bar { left:48px;top:40px;width:64px;height:6px; background: var(--brand); }
+  .kicker { left:48px;top:56px;width:600px;height:20px; font-size: 14px; font-weight: 700; color: var(--brand); }
+  .title { left:48px;top:80px;width:864px;height:56px; font-size: 40px; font-weight: 700; color: var(--ink); }
+  .body { left:48px;top:168px;width:520px;height:104px; font-size: 20px; color: var(--muted); }
+  .panel { left:616px;top:168px;width:296px;height:200px; background: var(--soft); border-radius: 12px; }
+  .stat { left:24px;top:28px;width:248px;height:60px; font-size: 44px; font-weight: 700; color: var(--brand); }
+  .statlabel { left:24px;top:100px;width:248px;height:84px; font-size: 16px; color: var(--muted); }
+  .footer { left:48px;top:496px;width:864px;height:20px; font-size: 12px; color: var(--muted); }
+</style>
+</head>
+<body>
+<section class="page" id="slide-1">
+  <div class="bar"></div>
+  <p class="kicker">SERIES B REVIEW</p>
+  <h1 class="title">Northwind Labs</h1>
+  <p class="body">Board update on growth, product and the plan for the next eighteen months.</p>
+  <div class="panel"><p class="stat">2027</p><p class="statlabel">Plan year under review</p></div>
+  <p class="footer">Northwind Labs · Series B review · Confidential</p>
+</section>
+<section class="page" id="slide-2">
+  <div class="bar"></div>
+  <p class="kicker">CONTEXT</p>
+  <h1 class="title">Why now</h1>
+  <p class="body">Freight teams still plan loads in spreadsheets. Our tools cut planning time by more than half.</p>
+  <div class="panel"><p class="stat">52%</p><p class="statlabel">Less time spent planning each load</p></div>
+  <p class="footer">Northwind Labs · Series B review · Confidential</p>
+</section>
+<section class="page" id="slide-3">
+  <div class="bar"></div>
+  <p class="kicker">MARKET</p>
+  <h1 class="title">Market overview</h1>
+  <p class="body">Mid-size carriers in North America and Europe spend over four billion a year on planning software.</p>
+  <div class="panel"><p class="stat">$4.2B</p><p class="statlabel">Yearly spend in our segment</p></div>
+  <p class="footer">Northwind Labs · Series B review · Confidential</p>
+</section>
+<section class="page" id="slide-4">
+  <div class="bar"></div>
+  <p class="kicker">PRODUCT</p>
+  <h1 class="title">What we built</h1>
+  <p class="body">A load planner, a live yard map and a carrier portal that share one data model.</p>
+  <div class="panel"><p class="stat">3</p><p class="statlabel">Products on one platform</p></div>
+  <p class="footer">Northwind Labs · Series B review · Confidential</p>
+</section>
+<section class="page" id="slide-5">
+  <div class="bar"></div>
+  <p class="kicker">CUSTOMERS</p>
+  <h1 class="title">Who buys it</h1>
+  <p class="body">Regional carriers with 50 to 500 trucks. Most start with the planner and add the map within a year.</p>
+  <div class="panel"><p class="stat">212</p><p class="statlabel">Paying carriers today</p></div>
+  <p class="footer">Northwind Labs · Series B review · Confidential</p>
+</section>
+<section class="page" id="slide-6">
+  <div class="bar"></div>
+  <p class="kicker">TRACTION</p>
+  <h1 class="title">Growth so far</h1>
+  <p class="body">Revenue grew every quarter last year as carriers moved from monthly to annual plans.</p>
+  <div class="panel"><p class="stat">$41k</p><p class="statlabel">Average yearly contract</p></div>
+  <p class="footer">Northwind Labs · Series B review · Confidential</p>
+</section>
+<section class="page" id="slide-7">
+  <div class="bar"></div>
+  <p class="kicker">TRACTION</p>
+  <h1 class="title">Usage</h1>
+  <p class="body">Planners open the tool on four out of five working days. Weekly use rose through the winter peak.</p>
+  <div class="panel"><p class="stat">81%</p><p class="statlabel">Weekly active planners</p></div>
+  <p class="footer">Northwind Labs · Series B review · Confidential</p>
+</section>
+<section class="page" id="slide-8">
+  <div class="bar"></div>
+  <p class="kicker">FINANCE</p>
+  <h1 class="title">Revenue</h1>
+  <p class="body">Annual recurring revenue at year end, up from the year before on the back of larger accounts.</p>
+  <div class="panel"><p class="stat">$3.1M</p><p class="statlabel">Annual recurring revenue</p></div>
+  <p class="footer">Northwind Labs · Series B review · Confidential</p>
+</section>
+<section class="page" id="slide-9">
+  <div class="bar"></div>
+  <p class="kicker">SALES</p>
+  <h1 class="title">Pipeline</h1>
+  <p class="body">Qualified pipeline for the next two quarters, weighted by stage and by deal size.</p>
+  <div class="panel"><p class="stat">$6.8M</p><p class="statlabel">Weighted pipeline</p></div>
+  <p class="footer">Northwind Labs · Series B review · Confidential</p>
+</section>
+<section class="page" id="slide-10">
+  <div class="bar"></div>
+  <p class="kicker">PLAN</p>
+  <h1 class="title">Roadmap</h1>
+  <p class="body">Route optimisation ships in spring. A fuel and emissions module follows in the autumn release.</p>
+  <div class="panel"><p class="stat">2</p><p class="statlabel">Major releases this year</p></div>
+  <p class="footer">Northwind Labs · Series B review · Confidential</p>
+</section>
+<section class="page" id="slide-11">
+  <div class="bar"></div>
+  <p class="kicker">TEAM</p>
+  <h1 class="title">Hirring plan</h1>
+  <p class="body">We add engineers first, then account managers once the new modules are live.</p>
+  <div class="panel"><p class="stat">24</p><p class="statlabel">New hires planned</p></div>
+  <p class="footer">Northwind Labs · Series B review · Confidential</p>
+</section>
+<section class="page" id="slide-12">
+  <div class="bar"></div>
+  <p class="kicker">TEAM</p>
+  <h1 class="title">Leadership</h1>
+  <p class="body">The founding team stays in place. We hire a finance lead and a head of sales this year.</p>
+  <div class="panel"><p class="stat">6</p><p class="statlabel">People on the leadership team</p></div>
+  <p class="footer">Northwind Labs · Series B review · Confidential</p>
+</section>
+<section class="page" id="slide-13">
+  <div class="bar"></div>
+  <p class="kicker">SUPPORT</p>
+  <h1 class="title">Service quality</h1>
+  <p class="body">Most tickets close on the first reply. Carriers rate support above every other part of the product.</p>
+  <div class="panel"><p class="stat">94%</p><p class="statlabel">Tickets solved on first reply</p></div>
+  <p class="footer">Northwind Labs · Series B review · Confidential</p>
+</section>
+<section class="page" id="slide-14">
+  <div class="bar"></div>
+  <p class="kicker">FINANCE</p>
+  <h1 class="title">Unit economics</h1>
+  <p class="body">Gross margin is 78% and payback on sales spend is under fourteen months.</p>
+  <div class="panel"><p class="stat">78%</p><p class="statlabel">Gross margin</p></div>
+  <p class="footer">Northwind Labs · Series B review · Confidential</p>
+</section>
+<section class="page" id="slide-15">
+  <div class="bar"></div>
+  <p class="kicker">FINANCE</p>
+  <h1 class="title">Burn and runway</h1>
+  <p class="body">Monthly net burn is steady. The raise extends runway well past the next two releases.</p>
+  <div class="panel"><p class="stat">26</p><p class="statlabel">Months of runway after the raise</p></div>
+  <p class="footer">Northwind Labs · Series B review · Confidential</p>
+</section>
+<section class="page" id="slide-16">
+  <div class="bar"></div>
+  <p class="kicker">RISK</p>
+  <h1 class="title">Risks</h1>
+  <p class="body">Larger platforms could bundle planning tools. Our answer is depth for mid-size fleets.</p>
+  <div class="panel"><p class="stat">3</p><p class="statlabel">Risks we track monthly</p></div>
+  <p class="footer">Northwind Labs · Series B review · Confidential</p>
+</section>
+<section class="page" id="slide-17">
+  <div class="bar"></div>
+  <p class="kicker">ASK</p>
+  <h1 class="title">The raise</h1>
+  <p class="body">We are raising a Series B to fund the roadmap and the sales team.</p>
+  <div class="panel"><p class="stat">$18M</p><p class="statlabel" style="color: var(--ink);">Series B target</p></div>
+  <p class="footer">Northwind Labs · Series B review · Confidential</p>
+</section>
+<section class="page" id="slide-18">
+  <div class="bar"></div>
+  <p class="kicker">USE OF FUNDS</p>
+  <h1 class="title">Use of funds</h1>
+  <p class="body">Sixty percent goes to product and engineering, the rest to sales, support and finance.</p>
+  <div class="panel"><p class="stat">60%</p><p class="statlabel">Share for product and engineering</p></div>
+  <p class="footer">Northwind Labs · Series B review · Confidential</p>
+</section>
+<section class="page" id="slide-19">
+  <div class="bar"></div>
+  <p class="kicker">CONTEXT</p>
+  <h1 class="title">Why now</h1>
+  <p class="body">Freight teams still plan loads in spreadsheets. Our tools cut planning time by more than half.</p>
+  <div class="panel"><p class="stat">52%</p><p class="statlabel">Less time spent planning each load</p></div>
+  <p class="footer">Northwind Labs · Series B review · Confidential</p>
+</section>
+<section class="page" id="slide-20">
+  <div class="bar"></div>
+  <p class="kicker">NEXT STEPS</p>
+  <h1 class="title">Questions</h1>
+  <p class="body">Thank you. The data room is open to the board from today.</p>
+  <div class="panel"><p class="stat">Q&amp;A</p><p class="statlabel">Open discussion</p></div>
+  <p class="footer">Northwind Labs · Series B review · Confidential</p>
+</section>
+</body>
+</html>

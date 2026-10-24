@@ -1,0 +1,2691 @@
+{
+ "id": "deck20",
+ "canvas": {
+  "w": 960,
+  "h": 540
+ },
+ "background": [
+  255,
+  255,
+  255
+ ],
+ "pages": 20,
+ "maxTurns": 20,
+ "maxCalls": 30,
+ "elements": [
+  {
+   "id": "p1.bar",
+   "page": "p1",
+   "x": 48,
+   "y": 40,
+   "w": 64,
+   "h": 6
+  },
+  {
+   "id": "p1.kicker",
+   "page": "p1",
+   "x": 48,
+   "y": 56,
+   "w": 600,
+   "h": 20
+  },
+  {
+   "id": "p1.title",
+   "page": "p1",
+   "x": 48,
+   "y": 80,
+   "w": 864,
+   "h": 56
+  },
+  {
+   "id": "p1.body",
+   "page": "p1",
+   "x": 48,
+   "y": 168,
+   "w": 520,
+   "h": 104
+  },
+  {
+   "id": "p1.panel",
+   "page": "p1",
+   "x": 616,
+   "y": 168,
+   "w": 296,
+   "h": 200
+  },
+  {
+   "id": "p1.stat",
+   "page": "p1",
+   "x": 640,
+   "y": 196,
+   "w": 248,
+   "h": 60
+  },
+  {
+   "id": "p1.statlabel",
+   "page": "p1",
+   "x": 640,
+   "y": 268,
+   "w": 248,
+   "h": 84
+  },
+  {
+   "id": "p1.footer",
+   "page": "p1",
+   "x": 48,
+   "y": 496,
+   "w": 864,
+   "h": 20
+  },
+  {
+   "id": "p2.bar",
+   "page": "p2",
+   "x": 48,
+   "y": 40,
+   "w": 64,
+   "h": 6
+  },
+  {
+   "id": "p2.kicker",
+   "page": "p2",
+   "x": 48,
+   "y": 56,
+   "w": 600,
+   "h": 20
+  },
+  {
+   "id": "p2.title",
+   "page": "p2",
+   "x": 48,
+   "y": 80,
+   "w": 864,
+   "h": 56
+  },
+  {
+   "id": "p2.body",
+   "page": "p2",
+   "x": 48,
+   "y": 168,
+   "w": 520,
+   "h": 104
+  },
+  {
+   "id": "p2.panel",
+   "page": "p2",
+   "x": 616,
+   "y": 168,
+   "w": 296,
+   "h": 200
+  },
+  {
+   "id": "p2.stat",
+   "page": "p2",
+   "x": 640,
+   "y": 196,
+   "w": 248,
+   "h": 60
+  },
+  {
+   "id": "p2.statlabel",
+   "page": "p2",
+   "x": 640,
+   "y": 268,
+   "w": 248,
+   "h": 84
+  },
+  {
+   "id": "p2.footer",
+   "page": "p2",
+   "x": 48,
+   "y": 496,
+   "w": 864,
+   "h": 20
+  },
+  {
+   "id": "p3.bar",
+   "page": "p3",
+   "x": 48,
+   "y": 40,
+   "w": 64,
+   "h": 6
+  },
+  {
+   "id": "p3.kicker",
+   "page": "p3",
+   "x": 48,
+   "y": 56,
+   "w": 600,
+   "h": 20
+  },
+  {
+   "id": "p3.title",
+   "page": "p3",
+   "x": 48,
+   "y": 80,
+   "w": 864,
+   "h": 56
+  },
+  {
+   "id": "p3.body",
+   "page": "p3",
+   "x": 48,
+   "y": 168,
+   "w": 520,
+   "h": 104
+  },
+  {
+   "id": "p3.panel",
+   "page": "p3",
+   "x": 616,
+   "y": 168,
+   "w": 296,
+   "h": 200
+  },
+  {
+   "id": "p3.stat",
+   "page": "p3",
+   "x": 640,
+   "y": 196,
+   "w": 248,
+   "h": 60
+  },
+  {
+   "id": "p3.statlabel",
+   "page": "p3",
+   "x": 640,
+   "y": 268,
+   "w": 248,
+   "h": 84
+  },
+  {
+   "id": "p3.footer",
+   "page": "p3",
+   "x": 48,
+   "y": 496,
+   "w": 864,
+   "h": 20
+  },
+  {
+   "id": "p4.bar",
+   "page": "p4",
+   "x": 48,
+   "y": 40,
+   "w": 64,
+   "h": 6
+  },
+  {
+   "id": "p4.kicker",
+   "page": "p4",
+   "x": 48,
+   "y": 56,
+   "w": 600,
+   "h": 20
+  },
+  {
+   "id": "p4.title",
+   "page": "p4",
+   "x": 48,
+   "y": 80,
+   "w": 864,
+   "h": 56
+  },
+  {
+   "id": "p4.body",
+   "page": "p4",
+   "x": 48,
+   "y": 168,
+   "w": 520,
+   "h": 104
+  },
+  {
+   "id": "p4.panel",
+   "page": "p4",
+   "x": 616,
+   "y": 168,
+   "w": 296,
+   "h": 200
+  },
+  {
+   "id": "p4.stat",
+   "page": "p4",
+   "x": 640,
+   "y": 196,
+   "w": 248,
+   "h": 60
+  },
+  {
+   "id": "p4.statlabel",
+   "page": "p4",
+   "x": 640,
+   "y": 268,
+   "w": 248,
+   "h": 84
+  },
+  {
+   "id": "p4.footer",
+   "page": "p4",
+   "x": 48,
+   "y": 496,
+   "w": 864,
+   "h": 20
+  },
+  {
+   "id": "p5.bar",
+   "page": "p5",
+   "x": 48,
+   "y": 40,
+   "w": 64,
+   "h": 6
+  },
+  {
+   "id": "p5.kicker",
+   "page": "p5",
+   "x": 48,
+   "y": 56,
+   "w": 600,
+   "h": 20
+  },
+  {
+   "id": "p5.title",
+   "page": "p5",
+   "x": 48,
+   "y": 80,
+   "w": 864,
+   "h": 56
+  },
+  {
+   "id": "p5.body",
+   "page": "p5",
+   "x": 48,
+   "y": 168,
+   "w": 520,
+   "h": 104
+  },
+  {
+   "id": "p5.panel",
+   "page": "p5",
+   "x": 616,
+   "y": 168,
+   "w": 296,
+   "h": 200
+  },
+  {
+   "id": "p5.stat",
+   "page": "p5",
+   "x": 640,
+   "y": 196,
+   "w": 248,
+   "h": 60
+  },
+  {
+   "id": "p5.statlabel",
+   "page": "p5",
+   "x": 640,
+   "y": 268,
+   "w": 248,
+   "h": 84
+  },
+  {
+   "id": "p5.footer",
+   "page": "p5",
+   "x": 48,
+   "y": 496,
+   "w": 864,
+   "h": 20
+  },
+  {
+   "id": "p6.bar",
+   "page": "p6",
+   "x": 48,
+   "y": 40,
+   "w": 64,
+   "h": 6
+  },
+  {
+   "id": "p6.kicker",
+   "page": "p6",
+   "x": 48,
+   "y": 56,
+   "w": 600,
+   "h": 20
+  },
+  {
+   "id": "p6.title",
+   "page": "p6",
+   "x": 48,
+   "y": 80,
+   "w": 864,
+   "h": 56
+  },
+  {
+   "id": "p6.body",
+   "page": "p6",
+   "x": 48,
+   "y": 168,
+   "w": 520,
+   "h": 104
+  },
+  {
+   "id": "p6.panel",
+   "page": "p6",
+   "x": 616,
+   "y": 168,
+   "w": 296,
+   "h": 200
+  },
+  {
+   "id": "p6.stat",
+   "page": "p6",
+   "x": 640,
+   "y": 196,
+   "w": 248,
+   "h": 60
+  },
+  {
+   "id": "p6.statlabel",
+   "page": "p6",
+   "x": 640,
+   "y": 268,
+   "w": 248,
+   "h": 84
+  },
+  {
+   "id": "p6.footer",
+   "page": "p6",
+   "x": 48,
+   "y": 496,
+   "w": 864,
+   "h": 20
+  },
+  {
+   "id": "p7.bar",
+   "page": "p7",
+   "x": 48,
+   "y": 40,
+   "w": 64,
+   "h": 6
+  },
+  {
+   "id": "p7.kicker",
+   "page": "p7",
+   "x": 48,
+   "y": 56,
+   "w": 600,
+   "h": 20
+  },
+  {
+   "id": "p7.title",
+   "page": "p7",
+   "x": 48,
+   "y": 80,
+   "w": 864,
+   "h": 56
+  },
+  {
+   "id": "p7.body",
+   "page": "p7",
+   "x": 48,
+   "y": 168,
+   "w": 520,
+   "h": 104
+  },
+  {
+   "id": "p7.panel",
+   "page": "p7",
+   "x": 616,
+   "y": 168,
+   "w": 296,
+   "h": 200
+  },
+  {
+   "id": "p7.stat",
+   "page": "p7",
+   "x": 640,
+   "y": 196,
+   "w": 248,
+   "h": 60
+  },
+  {
+   "id": "p7.statlabel",
+   "page": "p7",
+   "x": 640,
+   "y": 268,
+   "w": 248,
+   "h": 84
+  },
+  {
+   "id": "p7.footer",
+   "page": "p7",
+   "x": 48,
+   "y": 496,
+   "w": 864,
+   "h": 20
+  },
+  {
+   "id": "p8.bar",
+   "page": "p8",
+   "x": 48,
+   "y": 40,
+   "w": 64,
+   "h": 6
+  },
+  {
+   "id": "p8.kicker",
+   "page": "p8",
+   "x": 48,
+   "y": 56,
+   "w": 600,
+   "h": 20
+  },
+  {
+   "id": "p8.title",
+   "page": "p8",
+   "x": 48,
+   "y": 80,
+   "w": 864,
+   "h": 56
+  },
+  {
+   "id": "p8.body",
+   "page": "p8",
+   "x": 48,
+   "y": 168,
+   "w": 520,
+   "h": 104
+  },
+  {
+   "id": "p8.panel",
+   "page": "p8",
+   "x": 616,
+   "y": 168,
+   "w": 296,
+   "h": 200
+  },
+  {
+   "id": "p8.stat",
+   "page": "p8",
+   "x": 640,
+   "y": 196,
+   "w": 248,
+   "h": 60
+  },
+  {
+   "id": "p8.statlabel",
+   "page": "p8",
+   "x": 640,
+   "y": 268,
+   "w": 248,
+   "h": 84
+  },
+  {
+   "id": "p8.footer",
+   "page": "p8",
+   "x": 48,
+   "y": 496,
+   "w": 864,
+   "h": 20
+  },
+  {
+   "id": "p9.bar",
+   "page": "p9",
+   "x": 48,
+   "y": 40,
+   "w": 64,
+   "h": 6
+  },
+  {
+   "id": "p9.kicker",
+   "page": "p9",
+   "x": 48,
+   "y": 56,
+   "w": 600,
+   "h": 20
+  },
+  {
+   "id": "p9.title",
+   "page": "p9",
+   "x": 48,
+   "y": 80,
+   "w": 864,
+   "h": 56
+  },
+  {
+   "id": "p9.body",
+   "page": "p9",
+   "x": 48,
+   "y": 168,
+   "w": 520,
+   "h": 104
+  },
+  {
+   "id": "p9.panel",
+   "page": "p9",
+   "x": 616,
+   "y": 168,
+   "w": 296,
+   "h": 200
+  },
+  {
+   "id": "p9.stat",
+   "page": "p9",
+   "x": 640,
+   "y": 196,
+   "w": 248,
+   "h": 60
+  },
+  {
+   "id": "p9.statlabel",
+   "page": "p9",
+   "x": 640,
+   "y": 268,
+   "w": 248,
+   "h": 84
+  },
+  {
+   "id": "p9.footer",
+   "page": "p9",
+   "x": 48,
+   "y": 496,
+   "w": 864,
+   "h": 20
+  },
+  {
+   "id": "p10.bar",
+   "page": "p10",
+   "x": 48,
+   "y": 40,
+   "w": 64,
+   "h": 6
+  },
+  {
+   "id": "p10.kicker",
+   "page": "p10",
+   "x": 48,
+   "y": 56,
+   "w": 600,
+   "h": 20
+  },
+  {
+   "id": "p10.title",
+   "page": "p10",
+   "x": 48,
+   "y": 80,
+   "w": 864,
+   "h": 56
+  },
+  {
+   "id": "p10.body",
+   "page": "p10",
+   "x": 48,
+   "y": 168,
+   "w": 520,
+   "h": 104
+  },
+  {
+   "id": "p10.panel",
+   "page": "p10",
+   "x": 616,
+   "y": 168,
+   "w": 296,
+   "h": 200
+  },
+  {
+   "id": "p10.stat",
+   "page": "p10",
+   "x": 640,
+   "y": 196,
+   "w": 248,
+   "h": 60
+  },
+  {
+   "id": "p10.statlabel",
+   "page": "p10",
+   "x": 640,
+   "y": 268,
+   "w": 248,
+   "h": 84
+  },
+  {
+   "id": "p10.footer",
+   "page": "p10",
+   "x": 48,
+   "y": 496,
+   "w": 864,
+   "h": 20
+  },
+  {
+   "id": "p11.bar",
+   "page": "p11",
+   "x": 48,
+   "y": 40,
+   "w": 64,
+   "h": 6
+  },
+  {
+   "id": "p11.kicker",
+   "page": "p11",
+   "x": 48,
+   "y": 56,
+   "w": 600,
+   "h": 20
+  },
+  {
+   "id": "p11.title",
+   "page": "p11",
+   "x": 48,
+   "y": 80,
+   "w": 864,
+   "h": 56
+  },
+  {
+   "id": "p11.body",
+   "page": "p11",
+   "x": 48,
+   "y": 168,
+   "w": 520,
+   "h": 104
+  },
+  {
+   "id": "p11.panel",
+   "page": "p11",
+   "x": 616,
+   "y": 168,
+   "w": 296,
+   "h": 200
+  },
+  {
+   "id": "p11.stat",
+   "page": "p11",
+   "x": 640,
+   "y": 196,
+   "w": 248,
+   "h": 60
+  },
+  {
+   "id": "p11.statlabel",
+   "page": "p11",
+   "x": 640,
+   "y": 268,
+   "w": 248,
+   "h": 84
+  },
+  {
+   "id": "p11.footer",
+   "page": "p11",
+   "x": 48,
+   "y": 496,
+   "w": 864,
+   "h": 20
+  },
+  {
+   "id": "p12.bar",
+   "page": "p12",
+   "x": 48,
+   "y": 40,
+   "w": 64,
+   "h": 6
+  },
+  {
+   "id": "p12.kicker",
+   "page": "p12",
+   "x": 48,
+   "y": 56,
+   "w": 600,
+   "h": 20
+  },
+  {
+   "id": "p12.title",
+   "page": "p12",
+   "x": 48,
+   "y": 80,
+   "w": 864,
+   "h": 56
+  },
+  {
+   "id": "p12.body",
+   "page": "p12",
+   "x": 48,
+   "y": 168,
+   "w": 520,
+   "h": 104
+  },
+  {
+   "id": "p12.panel",
+   "page": "p12",
+   "x": 616,
+   "y": 168,
+   "w": 296,
+   "h": 200
+  },
+  {
+   "id": "p12.stat",
+   "page": "p12",
+   "x": 640,
+   "y": 196,
+   "w": 248,
+   "h": 60
+  },
+  {
+   "id": "p12.statlabel",
+   "page": "p12",
+   "x": 640,
+   "y": 268,
+   "w": 248,
+   "h": 84
+  },
+  {
+   "id": "p12.footer",
+   "page": "p12",
+   "x": 48,
+   "y": 496,
+   "w": 864,
+   "h": 20
+  },
+  {
+   "id": "p13.bar",
+   "page": "p13",
+   "x": 48,
+   "y": 40,
+   "w": 64,
+   "h": 6
+  },
+  {
+   "id": "p13.kicker",
+   "page": "p13",
+   "x": 48,
+   "y": 56,
+   "w": 600,
+   "h": 20
+  },
+  {
+   "id": "p13.title",
+   "page": "p13",
+   "x": 48,
+   "y": 80,
+   "w": 864,
+   "h": 56
+  },
+  {
+   "id": "p13.body",
+   "page": "p13",
+   "x": 48,
+   "y": 168,
+   "w": 520,
+   "h": 104
+  },
+  {
+   "id": "p13.panel",
+   "page": "p13",
+   "x": 616,
+   "y": 168,
+   "w": 296,
+   "h": 200
+  },
+  {
+   "id": "p13.stat",
+   "page": "p13",
+   "x": 640,
+   "y": 196,
+   "w": 248,
+   "h": 60
+  },
+  {
+   "id": "p13.statlabel",
+   "page": "p13",
+   "x": 640,
+   "y": 268,
+   "w": 248,
+   "h": 84
+  },
+  {
+   "id": "p13.footer",
+   "page": "p13",
+   "x": 48,
+   "y": 496,
+   "w": 864,
+   "h": 20
+  },
+  {
+   "id": "p14.bar",
+   "page": "p14",
+   "x": 48,
+   "y": 40,
+   "w": 64,
+   "h": 6
+  },
+  {
+   "id": "p14.kicker",
+   "page": "p14",
+   "x": 48,
+   "y": 56,
+   "w": 600,
+   "h": 20
+  },
+  {
+   "id": "p14.title",
+   "page": "p14",
+   "x": 48,
+   "y": 80,
+   "w": 864,
+   "h": 56
+  },
+  {
+   "id": "p14.body",
+   "page": "p14",
+   "x": 48,
+   "y": 168,
+   "w": 520,
+   "h": 104
+  },
+  {
+   "id": "p14.panel",
+   "page": "p14",
+   "x": 616,
+   "y": 168,
+   "w": 296,
+   "h": 200
+  },
+  {
+   "id": "p14.stat",
+   "page": "p14",
+   "x": 640,
+   "y": 196,
+   "w": 248,
+   "h": 60
+  },
+  {
+   "id": "p14.statlabel",
+   "page": "p14",
+   "x": 640,
+   "y": 268,
+   "w": 248,
+   "h": 84
+  },
+  {
+   "id": "p14.footer",
+   "page": "p14",
+   "x": 48,
+   "y": 496,
+   "w": 864,
+   "h": 20
+  },
+  {
+   "id": "p15.bar",
+   "page": "p15",
+   "x": 48,
+   "y": 40,
+   "w": 64,
+   "h": 6
+  },
+  {
+   "id": "p15.kicker",
+   "page": "p15",
+   "x": 48,
+   "y": 56,
+   "w": 600,
+   "h": 20
+  },
+  {
+   "id": "p15.title",
+   "page": "p15",
+   "x": 48,
+   "y": 80,
+   "w": 864,
+   "h": 56
+  },
+  {
+   "id": "p15.body",
+   "page": "p15",
+   "x": 48,
+   "y": 168,
+   "w": 520,
+   "h": 104
+  },
+  {
+   "id": "p15.panel",
+   "page": "p15",
+   "x": 616,
+   "y": 168,
+   "w": 296,
+   "h": 200
+  },
+  {
+   "id": "p15.stat",
+   "page": "p15",
+   "x": 640,
+   "y": 196,
+   "w": 248,
+   "h": 60
+  },
+  {
+   "id": "p15.statlabel",
+   "page": "p15",
+   "x": 640,
+   "y": 268,
+   "w": 248,
+   "h": 84
+  },
+  {
+   "id": "p15.footer",
+   "page": "p15",
+   "x": 48,
+   "y": 496,
+   "w": 864,
+   "h": 20
+  },
+  {
+   "id": "p16.bar",
+   "page": "p16",
+   "x": 48,
+   "y": 40,
+   "w": 64,
+   "h": 6
+  },
+  {
+   "id": "p16.kicker",
+   "page": "p16",
+   "x": 48,
+   "y": 56,
+   "w": 600,
+   "h": 20
+  },
+  {
+   "id": "p16.title",
+   "page": "p16",
+   "x": 48,
+   "y": 80,
+   "w": 864,
+   "h": 56
+  },
+  {
+   "id": "p16.body",
+   "page": "p16",
+   "x": 48,
+   "y": 168,
+   "w": 520,
+   "h": 104
+  },
+  {
+   "id": "p16.panel",
+   "page": "p16",
+   "x": 616,
+   "y": 168,
+   "w": 296,
+   "h": 200
+  },
+  {
+   "id": "p16.stat",
+   "page": "p16",
+   "x": 640,
+   "y": 196,
+   "w": 248,
+   "h": 60
+  },
+  {
+   "id": "p16.statlabel",
+   "page": "p16",
+   "x": 640,
+   "y": 268,
+   "w": 248,
+   "h": 84
+  },
+  {
+   "id": "p16.footer",
+   "page": "p16",
+   "x": 48,
+   "y": 496,
+   "w": 864,
+   "h": 20
+  },
+  {
+   "id": "p17.bar",
+   "page": "p17",
+   "x": 48,
+   "y": 40,
+   "w": 64,
+   "h": 6
+  },
+  {
+   "id": "p17.kicker",
+   "page": "p17",
+   "x": 48,
+   "y": 56,
+   "w": 600,
+   "h": 20
+  },
+  {
+   "id": "p17.title",
+   "page": "p17",
+   "x": 48,
+   "y": 80,
+   "w": 864,
+   "h": 56
+  },
+  {
+   "id": "p17.body",
+   "page": "p17",
+   "x": 48,
+   "y": 168,
+   "w": 520,
+   "h": 104
+  },
+  {
+   "id": "p17.panel",
+   "page": "p17",
+   "x": 616,
+   "y": 168,
+   "w": 296,
+   "h": 200
+  },
+  {
+   "id": "p17.stat",
+   "page": "p17",
+   "x": 640,
+   "y": 196,
+   "w": 248,
+   "h": 60
+  },
+  {
+   "id": "p17.statlabel",
+   "page": "p17",
+   "x": 640,
+   "y": 268,
+   "w": 248,
+   "h": 84
+  },
+  {
+   "id": "p17.footer",
+   "page": "p17",
+   "x": 48,
+   "y": 496,
+   "w": 864,
+   "h": 20
+  },
+  {
+   "id": "p18.bar",
+   "page": "p18",
+   "x": 48,
+   "y": 40,
+   "w": 64,
+   "h": 6
+  },
+  {
+   "id": "p18.kicker",
+   "page": "p18",
+   "x": 48,
+   "y": 56,
+   "w": 600,
+   "h": 20
+  },
+  {
+   "id": "p18.title",
+   "page": "p18",
+   "x": 48,
+   "y": 80,
+   "w": 864,
+   "h": 56
+  },
+  {
+   "id": "p18.body",
+   "page": "p18",
+   "x": 48,
+   "y": 168,
+   "w": 520,
+   "h": 104
+  },
+  {
+   "id": "p18.panel",
+   "page": "p18",
+   "x": 616,
+   "y": 168,
+   "w": 296,
+   "h": 200
+  },
+  {
+   "id": "p18.stat",
+   "page": "p18",
+   "x": 640,
+   "y": 196,
+   "w": 248,
+   "h": 60
+  },
+  {
+   "id": "p18.statlabel",
+   "page": "p18",
+   "x": 640,
+   "y": 268,
+   "w": 248,
+   "h": 84
+  },
+  {
+   "id": "p18.footer",
+   "page": "p18",
+   "x": 48,
+   "y": 496,
+   "w": 864,
+   "h": 20
+  },
+  {
+   "id": "p19.bar",
+   "page": "p19",
+   "x": 48,
+   "y": 40,
+   "w": 64,
+   "h": 6
+  },
+  {
+   "id": "p19.kicker",
+   "page": "p19",
+   "x": 48,
+   "y": 56,
+   "w": 600,
+   "h": 20
+  },
+  {
+   "id": "p19.title",
+   "page": "p19",
+   "x": 48,
+   "y": 80,
+   "w": 864,
+   "h": 56
+  },
+  {
+   "id": "p19.body",
+   "page": "p19",
+   "x": 48,
+   "y": 168,
+   "w": 520,
+   "h": 104
+  },
+  {
+   "id": "p19.panel",
+   "page": "p19",
+   "x": 616,
+   "y": 168,
+   "w": 296,
+   "h": 200
+  },
+  {
+   "id": "p19.stat",
+   "page": "p19",
+   "x": 640,
+   "y": 196,
+   "w": 248,
+   "h": 60
+  },
+  {
+   "id": "p19.statlabel",
+   "page": "p19",
+   "x": 640,
+   "y": 268,
+   "w": 248,
+   "h": 84
+  },
+  {
+   "id": "p19.footer",
+   "page": "p19",
+   "x": 48,
+   "y": 496,
+   "w": 864,
+   "h": 20
+  },
+  {
+   "id": "p20.bar",
+   "page": "p20",
+   "x": 48,
+   "y": 40,
+   "w": 64,
+   "h": 6
+  },
+  {
+   "id": "p20.kicker",
+   "page": "p20",
+   "x": 48,
+   "y": 56,
+   "w": 600,
+   "h": 20
+  },
+  {
+   "id": "p20.title",
+   "page": "p20",
+   "x": 48,
+   "y": 80,
+   "w": 864,
+   "h": 56
+  },
+  {
+   "id": "p20.body",
+   "page": "p20",
+   "x": 48,
+   "y": 168,
+   "w": 520,
+   "h": 104
+  },
+  {
+   "id": "p20.panel",
+   "page": "p20",
+   "x": 616,
+   "y": 168,
+   "w": 296,
+   "h": 200
+  },
+  {
+   "id": "p20.stat",
+   "page": "p20",
+   "x": 640,
+   "y": 196,
+   "w": 248,
+   "h": 60
+  },
+  {
+   "id": "p20.statlabel",
+   "page": "p20",
+   "x": 640,
+   "y": 268,
+   "w": 248,
+   "h": 84
+  },
+  {
+   "id": "p20.footer",
+   "page": "p20",
+   "x": 48,
+   "y": 496,
+   "w": 864,
+   "h": 20
+  }
+ ],
+ "steps": [
+  {
+   "instruction": "Change the brand blue (#2563eb) to #7c3aed everywhere it is used.",
+   "touch": [
+    "*.bar",
+    "*.kicker",
+    "*.stat"
+   ],
+   "frozen": [
+    {
+     "name": "p1-body",
+     "page": "p1",
+     "x": 48,
+     "y": 168,
+     "w": 520,
+     "h": 104
+    },
+    {
+     "name": "p8-body",
+     "page": "p8",
+     "x": 48,
+     "y": 168,
+     "w": 520,
+     "h": 104
+    },
+    {
+     "name": "p20-body",
+     "page": "p20",
+     "x": 48,
+     "y": 168,
+     "w": 520,
+     "h": 104
+    },
+    {
+     "name": "p1-footer",
+     "page": "p1",
+     "x": 48,
+     "y": 496,
+     "w": 864,
+     "h": 20
+    }
+   ],
+   "checks": [
+    {
+     "kind": "colorcount",
+     "page": 1,
+     "x": 48,
+     "y": 40,
+     "w": 64,
+     "h": 6,
+     "rgb": [
+      124,
+      58,
+      237
+     ],
+     "tol": 10,
+     "min": 300
+    },
+    {
+     "kind": "colorcount",
+     "page": 2,
+     "x": 48,
+     "y": 40,
+     "w": 64,
+     "h": 6,
+     "rgb": [
+      124,
+      58,
+      237
+     ],
+     "tol": 10,
+     "min": 300
+    },
+    {
+     "kind": "colorcount",
+     "page": 3,
+     "x": 48,
+     "y": 40,
+     "w": 64,
+     "h": 6,
+     "rgb": [
+      124,
+      58,
+      237
+     ],
+     "tol": 10,
+     "min": 300
+    },
+    {
+     "kind": "colorcount",
+     "page": 4,
+     "x": 48,
+     "y": 40,
+     "w": 64,
+     "h": 6,
+     "rgb": [
+      124,
+      58,
+      237
+     ],
+     "tol": 10,
+     "min": 300
+    },
+    {
+     "kind": "colorcount",
+     "page": 5,
+     "x": 48,
+     "y": 40,
+     "w": 64,
+     "h": 6,
+     "rgb": [
+      124,
+      58,
+      237
+     ],
+     "tol": 10,
+     "min": 300
+    },
+    {
+     "kind": "colorcount",
+     "page": 6,
+     "x": 48,
+     "y": 40,
+     "w": 64,
+     "h": 6,
+     "rgb": [
+      124,
+      58,
+      237
+     ],
+     "tol": 10,
+     "min": 300
+    },
+    {
+     "kind": "colorcount",
+     "page": 7,
+     "x": 48,
+     "y": 40,
+     "w": 64,
+     "h": 6,
+     "rgb": [
+      124,
+      58,
+      237
+     ],
+     "tol": 10,
+     "min": 300
+    },
+    {
+     "kind": "colorcount",
+     "page": 8,
+     "x": 48,
+     "y": 40,
+     "w": 64,
+     "h": 6,
+     "rgb": [
+      124,
+      58,
+      237
+     ],
+     "tol": 10,
+     "min": 300
+    },
+    {
+     "kind": "colorcount",
+     "page": 9,
+     "x": 48,
+     "y": 40,
+     "w": 64,
+     "h": 6,
+     "rgb": [
+      124,
+      58,
+      237
+     ],
+     "tol": 10,
+     "min": 300
+    },
+    {
+     "kind": "colorcount",
+     "page": 10,
+     "x": 48,
+     "y": 40,
+     "w": 64,
+     "h": 6,
+     "rgb": [
+      124,
+      58,
+      237
+     ],
+     "tol": 10,
+     "min": 300
+    },
+    {
+     "kind": "colorcount",
+     "page": 11,
+     "x": 48,
+     "y": 40,
+     "w": 64,
+     "h": 6,
+     "rgb": [
+      124,
+      58,
+      237
+     ],
+     "tol": 10,
+     "min": 300
+    },
+    {
+     "kind": "colorcount",
+     "page": 12,
+     "x": 48,
+     "y": 40,
+     "w": 64,
+     "h": 6,
+     "rgb": [
+      124,
+      58,
+      237
+     ],
+     "tol": 10,
+     "min": 300
+    },
+    {
+     "kind": "colorcount",
+     "page": 13,
+     "x": 48,
+     "y": 40,
+     "w": 64,
+     "h": 6,
+     "rgb": [
+      124,
+      58,
+      237
+     ],
+     "tol": 10,
+     "min": 300
+    },
+    {
+     "kind": "colorcount",
+     "page": 14,
+     "x": 48,
+     "y": 40,
+     "w": 64,
+     "h": 6,
+     "rgb": [
+      124,
+      58,
+      237
+     ],
+     "tol": 10,
+     "min": 300
+    },
+    {
+     "kind": "colorcount",
+     "page": 15,
+     "x": 48,
+     "y": 40,
+     "w": 64,
+     "h": 6,
+     "rgb": [
+      124,
+      58,
+      237
+     ],
+     "tol": 10,
+     "min": 300
+    },
+    {
+     "kind": "colorcount",
+     "page": 16,
+     "x": 48,
+     "y": 40,
+     "w": 64,
+     "h": 6,
+     "rgb": [
+      124,
+      58,
+      237
+     ],
+     "tol": 10,
+     "min": 300
+    },
+    {
+     "kind": "colorcount",
+     "page": 17,
+     "x": 48,
+     "y": 40,
+     "w": 64,
+     "h": 6,
+     "rgb": [
+      124,
+      58,
+      237
+     ],
+     "tol": 10,
+     "min": 300
+    },
+    {
+     "kind": "colorcount",
+     "page": 18,
+     "x": 48,
+     "y": 40,
+     "w": 64,
+     "h": 6,
+     "rgb": [
+      124,
+      58,
+      237
+     ],
+     "tol": 10,
+     "min": 300
+    },
+    {
+     "kind": "colorcount",
+     "page": 19,
+     "x": 48,
+     "y": 40,
+     "w": 64,
+     "h": 6,
+     "rgb": [
+      124,
+      58,
+      237
+     ],
+     "tol": 10,
+     "min": 300
+    },
+    {
+     "kind": "colorcount",
+     "page": 20,
+     "x": 48,
+     "y": 40,
+     "w": 64,
+     "h": 6,
+     "rgb": [
+      124,
+      58,
+      237
+     ],
+     "tol": 10,
+     "min": 300
+    },
+    {
+     "kind": "colorcount",
+     "page": 1,
+     "x": 640,
+     "y": 196,
+     "w": 248,
+     "h": 60,
+     "rgb": [
+      124,
+      58,
+      237
+     ],
+     "tol": 10,
+     "min": 40
+    },
+    {
+     "kind": "colorcount",
+     "page": 1,
+     "x": 48,
+     "y": 56,
+     "w": 600,
+     "h": 20,
+     "rgb": [
+      124,
+      58,
+      237
+     ],
+     "tol": 10,
+     "min": 20
+    },
+    {
+     "kind": "colorcount",
+     "page": 10,
+     "x": 640,
+     "y": 196,
+     "w": 248,
+     "h": 60,
+     "rgb": [
+      124,
+      58,
+      237
+     ],
+     "tol": 10,
+     "min": 40
+    },
+    {
+     "kind": "colorcount",
+     "page": 10,
+     "x": 48,
+     "y": 56,
+     "w": 600,
+     "h": 20,
+     "rgb": [
+      124,
+      58,
+      237
+     ],
+     "tol": 10,
+     "min": 20
+    },
+    {
+     "kind": "colorcount",
+     "page": 20,
+     "x": 640,
+     "y": 196,
+     "w": 248,
+     "h": 60,
+     "rgb": [
+      124,
+      58,
+      237
+     ],
+     "tol": 10,
+     "min": 40
+    },
+    {
+     "kind": "colorcount",
+     "page": 20,
+     "x": 48,
+     "y": 56,
+     "w": 600,
+     "h": 20,
+     "rgb": [
+      124,
+      58,
+      237
+     ],
+     "tol": 10,
+     "min": 20
+    }
+   ]
+  },
+  {
+   "instruction": "Make every slide title 34px instead of 40px.",
+   "touch": [
+    "*.title"
+   ],
+   "frozen": [
+    {
+     "name": "p3-body",
+     "page": "p3",
+     "x": 48,
+     "y": 168,
+     "w": 520,
+     "h": 104
+    },
+    {
+     "name": "p3-panel",
+     "page": "p3",
+     "x": 616,
+     "y": 168,
+     "w": 296,
+     "h": 200
+    },
+    {
+     "name": "p20-footer",
+     "page": "p20",
+     "x": 48,
+     "y": 496,
+     "w": 864,
+     "h": 20
+    }
+   ],
+   "checks": [
+    {
+     "kind": "ink-ratio",
+     "page": 1,
+     "ref": "start",
+     "ref_page": 1,
+     "x": 48,
+     "y": 80,
+     "w": 864,
+     "h": 56,
+     "metric": "w",
+     "min": 0.78,
+     "max": 0.92
+    },
+    {
+     "kind": "ink-ratio",
+     "page": 2,
+     "ref": "start",
+     "ref_page": 2,
+     "x": 48,
+     "y": 80,
+     "w": 864,
+     "h": 56,
+     "metric": "w",
+     "min": 0.78,
+     "max": 0.92
+    },
+    {
+     "kind": "ink-ratio",
+     "page": 3,
+     "ref": "start",
+     "ref_page": 3,
+     "x": 48,
+     "y": 80,
+     "w": 864,
+     "h": 56,
+     "metric": "w",
+     "min": 0.78,
+     "max": 0.92
+    },
+    {
+     "kind": "ink-ratio",
+     "page": 4,
+     "ref": "start",
+     "ref_page": 4,
+     "x": 48,
+     "y": 80,
+     "w": 864,
+     "h": 56,
+     "metric": "w",
+     "min": 0.78,
+     "max": 0.92
+    },
+    {
+     "kind": "ink-ratio",
+     "page": 5,
+     "ref": "start",
+     "ref_page": 5,
+     "x": 48,
+     "y": 80,
+     "w": 864,
+     "h": 56,
+     "metric": "w",
+     "min": 0.78,
+     "max": 0.92
+    },
+    {
+     "kind": "ink-ratio",
+     "page": 6,
+     "ref": "start",
+     "ref_page": 6,
+     "x": 48,
+     "y": 80,
+     "w": 864,
+     "h": 56,
+     "metric": "w",
+     "min": 0.78,
+     "max": 0.92
+    },
+    {
+     "kind": "ink-ratio",
+     "page": 7,
+     "ref": "start",
+     "ref_page": 7,
+     "x": 48,
+     "y": 80,
+     "w": 864,
+     "h": 56,
+     "metric": "w",
+     "min": 0.78,
+     "max": 0.92
+    },
+    {
+     "kind": "ink-ratio",
+     "page": 8,
+     "ref": "start",
+     "ref_page": 8,
+     "x": 48,
+     "y": 80,
+     "w": 864,
+     "h": 56,
+     "metric": "w",
+     "min": 0.78,
+     "max": 0.92
+    },
+    {
+     "kind": "ink-ratio",
+     "page": 9,
+     "ref": "start",
+     "ref_page": 9,
+     "x": 48,
+     "y": 80,
+     "w": 864,
+     "h": 56,
+     "metric": "w",
+     "min": 0.78,
+     "max": 0.92
+    },
+    {
+     "kind": "ink-ratio",
+     "page": 10,
+     "ref": "start",
+     "ref_page": 10,
+     "x": 48,
+     "y": 80,
+     "w": 864,
+     "h": 56,
+     "metric": "w",
+     "min": 0.78,
+     "max": 0.92
+    },
+    {
+     "kind": "ink-ratio",
+     "page": 11,
+     "ref": "start",
+     "ref_page": 11,
+     "x": 48,
+     "y": 80,
+     "w": 864,
+     "h": 56,
+     "metric": "w",
+     "min": 0.78,
+     "max": 0.92
+    },
+    {
+     "kind": "ink-ratio",
+     "page": 12,
+     "ref": "start",
+     "ref_page": 12,
+     "x": 48,
+     "y": 80,
+     "w": 864,
+     "h": 56,
+     "metric": "w",
+     "min": 0.78,
+     "max": 0.92
+    },
+    {
+     "kind": "ink-ratio",
+     "page": 13,
+     "ref": "start",
+     "ref_page": 13,
+     "x": 48,
+     "y": 80,
+     "w": 864,
+     "h": 56,
+     "metric": "w",
+     "min": 0.78,
+     "max": 0.92
+    },
+    {
+     "kind": "ink-ratio",
+     "page": 14,
+     "ref": "start",
+     "ref_page": 14,
+     "x": 48,
+     "y": 80,
+     "w": 864,
+     "h": 56,
+     "metric": "w",
+     "min": 0.78,
+     "max": 0.92
+    },
+    {
+     "kind": "ink-ratio",
+     "page": 15,
+     "ref": "start",
+     "ref_page": 15,
+     "x": 48,
+     "y": 80,
+     "w": 864,
+     "h": 56,
+     "metric": "w",
+     "min": 0.78,
+     "max": 0.92
+    },
+    {
+     "kind": "ink-ratio",
+     "page": 16,
+     "ref": "start",
+     "ref_page": 16,
+     "x": 48,
+     "y": 80,
+     "w": 864,
+     "h": 56,
+     "metric": "w",
+     "min": 0.78,
+     "max": 0.92
+    },
+    {
+     "kind": "ink-ratio",
+     "page": 17,
+     "ref": "start",
+     "ref_page": 17,
+     "x": 48,
+     "y": 80,
+     "w": 864,
+     "h": 56,
+     "metric": "w",
+     "min": 0.78,
+     "max": 0.92
+    },
+    {
+     "kind": "ink-ratio",
+     "page": 18,
+     "ref": "start",
+     "ref_page": 18,
+     "x": 48,
+     "y": 80,
+     "w": 864,
+     "h": 56,
+     "metric": "w",
+     "min": 0.78,
+     "max": 0.92
+    },
+    {
+     "kind": "ink-ratio",
+     "page": 19,
+     "ref": "start",
+     "ref_page": 19,
+     "x": 48,
+     "y": 80,
+     "w": 864,
+     "h": 56,
+     "metric": "w",
+     "min": 0.78,
+     "max": 0.92
+    },
+    {
+     "kind": "ink-ratio",
+     "page": 20,
+     "ref": "start",
+     "ref_page": 20,
+     "x": 48,
+     "y": 80,
+     "w": 864,
+     "h": 56,
+     "metric": "w",
+     "min": 0.78,
+     "max": 0.92
+    }
+   ]
+  },
+  {
+   "instruction": "Replace the paragraph that begins \"Gross margin\" with this text: \"Gross margin is 78% after hosting and support costs, up six points in a year as larger carriers moved to annual plans. Payback on sales and marketing spend is under fourteen months, and the newest cohorts pay back faster than any group before them because they adopt the yard map in their first quarter.\" All of the text must stay fully visible inside its box.",
+   "touch": [
+    "p14.body"
+   ],
+   "mask": [
+    {
+     "page": "p14",
+     "x": 48,
+     "y": 168,
+     "w": 540,
+     "h": 320
+    }
+   ],
+   "relocate": [
+    {
+     "ids": "p14.body",
+     "dh": 216
+    }
+   ],
+   "frozen": [
+    {
+     "name": "p1-page",
+     "page": "p1"
+    },
+    {
+     "name": "p13-page",
+     "page": "p13"
+    },
+    {
+     "name": "p15-page",
+     "page": "p15"
+    }
+   ],
+   "checks": [
+    {
+     "kind": "source-contains",
+     "text": "newest cohorts pay back faster"
+    },
+    {
+     "kind": "no-clip",
+     "page": 14
+    },
+    {
+     "kind": "ink-ratio",
+     "page": 14,
+     "ref": "prev",
+     "x": 48,
+     "y": 168,
+     "w": 540,
+     "h": 320,
+     "metric": "count",
+     "min": 1.3
+    }
+   ]
+  },
+  {
+   "instruction": "Insert a new slide after slide 5, in the same style as the other slides. Kicker \"CUSTOMERS\", title \"Customer voice\", paragraph \"Carriers say the planner pays for itself within the first quarter of use.\", panel figure \"4.8\", panel label \"Average review score out of 5\".",
+   "pages": {
+    "insert": 6,
+    "key": "n6"
+   },
+   "touch": [],
+   "frozen": [
+    {
+     "name": "p5-page",
+     "page": "p5"
+    },
+    {
+     "name": "p6-page",
+     "page": "p6"
+    },
+    {
+     "name": "p20-page",
+     "page": "p20"
+    }
+   ],
+   "checks": [
+    {
+     "kind": "page-count",
+     "n": 21
+    },
+    {
+     "kind": "source-contains",
+     "text": "Customer voice"
+    },
+    {
+     "kind": "colorcount",
+     "page": 6,
+     "x": 48,
+     "y": 40,
+     "w": 64,
+     "h": 6,
+     "rgb": [
+      124,
+      58,
+      237
+     ],
+     "tol": 10,
+     "min": 300
+    },
+    {
+     "kind": "colorcount",
+     "page": 6,
+     "x": 48,
+     "y": 56,
+     "w": 600,
+     "h": 20,
+     "rgb": [
+      124,
+      58,
+      237
+     ],
+     "tol": 10,
+     "min": 20
+    },
+    {
+     "kind": "ink",
+     "page": 6,
+     "x": 48,
+     "y": 80,
+     "w": 864,
+     "h": 56,
+     "min": 800
+    },
+    {
+     "kind": "ink",
+     "page": 6,
+     "x": 48,
+     "y": 496,
+     "w": 864,
+     "h": 20,
+     "min": 150
+    },
+    {
+     "kind": "ink-ratio",
+     "page": 6,
+     "ref": "start",
+     "ref_page": 1,
+     "x": 48,
+     "y": 496,
+     "w": 864,
+     "h": 20,
+     "metric": "w",
+     "min": 0.98,
+     "max": 1.02
+    }
+   ]
+  },
+  {
+   "instruction": "Swap the slides titled \"Roadmap\" and \"Risks\".",
+   "pages": {
+    "swap": [
+     11,
+     17
+    ]
+   },
+   "touch": [],
+   "frozen": [
+    {
+     "name": "p1-page",
+     "page": "p1"
+    },
+    {
+     "name": "p10-page",
+     "page": "p10"
+    },
+    {
+     "name": "p16-page",
+     "page": "p16"
+    }
+   ],
+   "checks": [
+    {
+     "kind": "same-as",
+     "page": 11,
+     "ref": "prev",
+     "ref_page": 17
+    },
+    {
+     "kind": "same-as",
+     "page": 17,
+     "ref": "prev",
+     "ref_page": 11
+    }
+   ]
+  },
+  {
+   "instruction": "Change the footer on every slide to \"Northwind Labs · Board meeting · March 2027\".",
+   "touch": [
+    "*.footer"
+   ],
+   "frozen": [
+    {
+     "name": "p1-title",
+     "page": "p1",
+     "x": 48,
+     "y": 80,
+     "w": 864,
+     "h": 56
+    },
+    {
+     "name": "p10-body",
+     "page": "p10",
+     "x": 48,
+     "y": 168,
+     "w": 520,
+     "h": 104
+    },
+    {
+     "name": "p20-panel",
+     "page": "p20",
+     "x": 616,
+     "y": 168,
+     "w": 296,
+     "h": 200
+    }
+   ],
+   "checks": [
+    {
+     "kind": "source-absent",
+     "text": "Northwind Labs · Series B review · Confidential"
+    },
+    {
+     "kind": "source-contains",
+     "text": "Northwind Labs · Board meeting · March 2027"
+    },
+    {
+     "kind": "changed",
+     "page": 1,
+     "ref": "prev",
+     "x": 48,
+     "y": 496,
+     "w": 864,
+     "h": 20,
+     "min": 30
+    },
+    {
+     "kind": "changed",
+     "page": 2,
+     "ref": "prev",
+     "x": 48,
+     "y": 496,
+     "w": 864,
+     "h": 20,
+     "min": 30
+    },
+    {
+     "kind": "changed",
+     "page": 3,
+     "ref": "prev",
+     "x": 48,
+     "y": 496,
+     "w": 864,
+     "h": 20,
+     "min": 30
+    },
+    {
+     "kind": "changed",
+     "page": 4,
+     "ref": "prev",
+     "x": 48,
+     "y": 496,
+     "w": 864,
+     "h": 20,
+     "min": 30
+    },
+    {
+     "kind": "changed",
+     "page": 5,
+     "ref": "prev",
+     "x": 48,
+     "y": 496,
+     "w": 864,
+     "h": 20,
+     "min": 30
+    },
+    {
+     "kind": "changed",
+     "page": 6,
+     "ref": "prev",
+     "x": 48,
+     "y": 496,
+     "w": 864,
+     "h": 20,
+     "min": 30
+    },
+    {
+     "kind": "changed",
+     "page": 7,
+     "ref": "prev",
+     "x": 48,
+     "y": 496,
+     "w": 864,
+     "h": 20,
+     "min": 30
+    },
+    {
+     "kind": "changed",
+     "page": 8,
+     "ref": "prev",
+     "x": 48,
+     "y": 496,
+     "w": 864,
+     "h": 20,
+     "min": 30
+    },
+    {
+     "kind": "changed",
+     "page": 9,
+     "ref": "prev",
+     "x": 48,
+     "y": 496,
+     "w": 864,
+     "h": 20,
+     "min": 30
+    },
+    {
+     "kind": "changed",
+     "page": 10,
+     "ref": "prev",
+     "x": 48,
+     "y": 496,
+     "w": 864,
+     "h": 20,
+     "min": 30
+    },
+    {
+     "kind": "changed",
+     "page": 11,
+     "ref": "prev",
+     "x": 48,
+     "y": 496,
+     "w": 864,
+     "h": 20,
+     "min": 30
+    },
+    {
+     "kind": "changed",
+     "page": 12,
+     "ref": "prev",
+     "x": 48,
+     "y": 496,
+     "w": 864,
+     "h": 20,
+     "min": 30
+    },
+    {
+     "kind": "changed",
+     "page": 13,
+     "ref": "prev",
+     "x": 48,
+     "y": 496,
+     "w": 864,
+     "h": 20,
+     "min": 30
+    },
+    {
+     "kind": "changed",
+     "page": 14,
+     "ref": "prev",
+     "x": 48,
+     "y": 496,
+     "w": 864,
+     "h": 20,
+     "min": 30
+    },
+    {
+     "kind": "changed",
+     "page": 15,
+     "ref": "prev",
+     "x": 48,
+     "y": 496,
+     "w": 864,
+     "h": 20,
+     "min": 30
+    },
+    {
+     "kind": "changed",
+     "page": 16,
+     "ref": "prev",
+     "x": 48,
+     "y": 496,
+     "w": 864,
+     "h": 20,
+     "min": 30
+    },
+    {
+     "kind": "changed",
+     "page": 17,
+     "ref": "prev",
+     "x": 48,
+     "y": 496,
+     "w": 864,
+     "h": 20,
+     "min": 30
+    },
+    {
+     "kind": "changed",
+     "page": 18,
+     "ref": "prev",
+     "x": 48,
+     "y": 496,
+     "w": 864,
+     "h": 20,
+     "min": 30
+    },
+    {
+     "kind": "changed",
+     "page": 19,
+     "ref": "prev",
+     "x": 48,
+     "y": 496,
+     "w": 864,
+     "h": 20,
+     "min": 30
+    },
+    {
+     "kind": "changed",
+     "page": 20,
+     "ref": "prev",
+     "x": 48,
+     "y": 496,
+     "w": 864,
+     "h": 20,
+     "min": 30
+    },
+    {
+     "kind": "changed",
+     "page": 21,
+     "ref": "prev",
+     "x": 48,
+     "y": 496,
+     "w": 864,
+     "h": 20,
+     "min": 30
+    }
+   ]
+  },
+  {
+   "instruction": "One slide still shows last year's revenue figure, $3.1M. Update it to $4.6M.",
+   "touch": [
+    "p8.stat"
+   ],
+   "frozen": [
+    {
+     "name": "p7-page",
+     "page": "p7"
+    },
+    {
+     "name": "p9-page",
+     "page": "p9"
+    },
+    {
+     "name": "p8-title",
+     "page": "p8",
+     "x": 48,
+     "y": 80,
+     "w": 864,
+     "h": 56
+    }
+   ],
+   "checks": [
+    {
+     "kind": "source-contains",
+     "text": "$4.6M"
+    },
+    {
+     "kind": "source-absent",
+     "text": "$3.1M"
+    }
+   ]
+  },
+  {
+   "instruction": "The slide about hiring has a typo in its title. Fix it.",
+   "touch": [
+    "p11.title"
+   ],
+   "frozen": [
+    {
+     "name": "p10-page",
+     "page": "p10"
+    },
+    {
+     "name": "p12-page",
+     "page": "p12"
+    },
+    {
+     "name": "p11-body",
+     "page": "p11",
+     "x": 48,
+     "y": 168,
+     "w": 520,
+     "h": 104
+    }
+   ],
+   "checks": [
+    {
+     "kind": "source-contains",
+     "text": "Hiring plan"
+    },
+    {
+     "kind": "source-absent",
+     "text": "Hirring"
+    }
+   ]
+  },
+  {
+   "instruction": "One panel figure is above 90%. Make that figure green (#16a34a) to flag it.",
+   "touch": [
+    "p13.stat"
+   ],
+   "frozen": [
+    {
+     "name": "p12-page",
+     "page": "p12"
+    },
+    {
+     "name": "p14-page",
+     "page": "p14"
+    },
+    {
+     "name": "p13-title",
+     "page": "p13",
+     "x": 48,
+     "y": 80,
+     "w": 864,
+     "h": 56
+    }
+   ],
+   "checks": [
+    {
+     "kind": "colorcount",
+     "page": 14,
+     "x": 640,
+     "y": 196,
+     "w": 248,
+     "h": 60,
+     "rgb": [
+      22,
+      163,
+      74
+     ],
+     "tol": 10,
+     "min": 40
+    },
+    {
+     "kind": "colorcount",
+     "page": 14,
+     "x": 640,
+     "y": 196,
+     "w": 248,
+     "h": 60,
+     "rgb": [
+      124,
+      58,
+      237
+     ],
+     "tol": 10,
+     "max": 0
+    }
+   ]
+  },
+  {
+   "instruction": "Delete the slide that repeats slide 2.",
+   "pages": {
+    "delete": 20
+   },
+   "touch": [],
+   "frozen": [
+    {
+     "name": "p2-page",
+     "page": "p2"
+    },
+    {
+     "name": "p18-page",
+     "page": "p18"
+    },
+    {
+     "name": "p20-page",
+     "page": "p20"
+    }
+   ],
+   "checks": [
+    {
+     "kind": "page-count",
+     "n": 20
+    },
+    {
+     "kind": "source-count",
+     "text": "Why now",
+     "min": 1,
+     "max": 1
+    },
+    {
+     "kind": "same-as",
+     "page": 20,
+     "ref": "prev",
+     "ref_page": 21
+    },
+    {
+     "kind": "same-as",
+     "page": 2,
+     "ref": "prev",
+     "ref_page": 2
+    }
+   ]
+  },
+  {
+   "instruction": "One panel label uses a darker color than the others. Make it match the rest.",
+   "touch": [
+    "p17.statlabel"
+   ],
+   "frozen": [
+    {
+     "name": "p16-page",
+     "page": "p16"
+    },
+    {
+     "name": "p18-page",
+     "page": "p18"
+    },
+    {
+     "name": "p17-stat",
+     "page": "p17",
+     "x": 640,
+     "y": 196,
+     "w": 248,
+     "h": 60
+    }
+   ],
+   "checks": [
+    {
+     "kind": "colorcount",
+     "page": 18,
+     "x": 640,
+     "y": 268,
+     "w": 248,
+     "h": 84,
+     "rgb": [
+      71,
+      85,
+      105
+     ],
+     "tol": 16,
+     "min": 15
+    },
+    {
+     "kind": "colorcount",
+     "page": 18,
+     "x": 640,
+     "y": 268,
+     "w": 248,
+     "h": 84,
+     "rgb": [
+      15,
+      23,
+      42
+     ],
+     "tol": 16,
+     "max": 2
+    }
+   ]
+  }
+ ]
+}
