@@ -624,6 +624,11 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
         "A variant override carries an unrecognized property.",
     ),
     info(
+        "variant.override_unsupported_property",
+        Severity::Error,
+        "A variant override sets a property its target node kind does not have.",
+    ),
+    info(
         "variant.unknown_source",
         Severity::Error,
         "A variant `source` references an unknown page.",

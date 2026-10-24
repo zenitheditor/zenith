@@ -22,7 +22,7 @@ pub(super) fn write_box_size(
 }
 
 /// Emit an `instance` `w`/`h`: the keyword when set, else the dimension.
-pub(super) fn write_box_dimension(
+pub(in crate::format::writer) fn write_box_dimension(
     out: &mut String,
     key: &str,
     value: &Option<Dimension>,
@@ -65,7 +65,7 @@ pub(super) fn write_layout_item(out: &mut String, item: &LayoutItem) {
 /// Emit the frame container attributes in canonical order: `gap`, `wrap-gap`,
 /// `padding`, `padding-x`, `padding-y`, `padding-top`, `padding-right`,
 /// `padding-bottom`, `padding-left`, `justify`, `align`, `wrap`.
-pub(super) fn write_layout_container(out: &mut String, c: &LayoutContainer) {
+pub(in crate::format::writer) fn write_layout_container(out: &mut String, c: &LayoutContainer) {
     write_opt_property_value(out, "gap", &c.gap);
     write_opt_property_value(out, "wrap-gap", &c.wrap_gap);
     write_opt_property_value(out, "padding", &c.padding);

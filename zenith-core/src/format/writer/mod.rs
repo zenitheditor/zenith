@@ -28,6 +28,7 @@
 //! - [`tokens`] writes the `tokens` block;
 //! - [`styles`] writes the `styles` block;
 //! - [`defaults`] writes the document- and page-scope `defaults` blocks;
+//! - [`variants`] writes the `variants` block;
 //! - [`nodes`] writes the `document` body, pages, and every node kind.
 
 use std::fmt::Write as _;
@@ -35,7 +36,7 @@ use std::fmt::Write as _;
 use crate::ast::{
     ActionDef, AssetBlock, AssetDecl, BrandContract, ComponentDef, DiagnosticPolicy, Document,
     ImportDecl, LibraryDef, MasterDef, PolicyVerb, Project, ProvenanceDef, RecipeDef, RecipeParam,
-    SectionDef, VariantDef,
+    SectionDef,
 };
 use crate::error::FormatError;
 
@@ -44,6 +45,7 @@ mod nodes;
 mod primitives;
 mod styles;
 mod tokens;
+mod variants;
 
 #[cfg(test)]
 mod tests;
@@ -52,6 +54,7 @@ use defaults::write_defaults_block;
 use nodes::{write_component_children, write_document_body, write_ports_block};
 use styles::write_style_block;
 use tokens::write_token_block;
+use variants::write_variants_block;
 
 pub(in crate::format::writer) use primitives::*;
 
@@ -575,78 +578,6 @@ fn write_provenance_block(provenance: &[ProvenanceDef], out: &mut String, depth:
             out.push_str(&fmt_unknown_property(prop));
         }
         out.push('\n');
-    }
-    indent(out, depth);
-    out.push_str("}\n");
-}
-
-// ---------------------------------------------------------------------------
-// Variants
-// ---------------------------------------------------------------------------
-
-/// Emit the `variants { … }` block.
-///
-/// Stable position: after `provenance`, before `actions`. Emitted ONLY when at
-/// least one variant is declared, so documents without variants keep their
-/// existing canonical form (and round-trip) unchanged. Each variant emits:
-///
-/// ```text
-/// variant id="…" source="…" w=(px)N h=(px)N {
-///   override node="…" visible=#false x=(px)N y=(px)N w=(px)N h=(px)N fill=… text="…"
-/// }
-/// ```
-///
-/// Optional override props (`visible`, `x`, `y`, `w`, `h`, `fill`, `text`) are omitted when `None`.
-/// Unknown props follow known ones in BTreeMap key order. Variants with no
-/// overrides still emit a brace block (consistent with other block nodes).
-/// Mirrors [`write_provenance_block`].
-fn write_variants_block(variants: &[VariantDef], out: &mut String, depth: usize) {
-    if variants.is_empty() {
-        return;
-    }
-    indent(out, depth);
-    out.push_str("variants {\n");
-    for def in variants {
-        indent(out, depth + 1);
-        out.push_str("variant id=\"");
-        out.push_str(&def.id);
-        out.push_str("\" source=\"");
-        out.push_str(&def.source);
-        out.push_str("\" w=");
-        out.push_str(&fmt_dimension(&def.w));
-        out.push_str(" h=");
-        out.push_str(&fmt_dimension(&def.h));
-        // Unknown props on the variant node itself, in sorted key order.
-        for (key, prop) in &def.unknown_props {
-            out.push(' ');
-            out.push_str(key);
-            out.push('=');
-            out.push_str(&fmt_unknown_property(prop));
-        }
-        out.push_str(" {\n");
-        for ov in &def.overrides {
-            indent(out, depth + 2);
-            out.push_str("override node=\"");
-            out.push_str(&ov.node);
-            out.push('"');
-            write_opt_bool(out, "visible", &ov.visible);
-            write_opt_dimension(out, "x", &ov.x);
-            write_opt_dimension(out, "y", &ov.y);
-            write_opt_dimension(out, "w", &ov.w);
-            write_opt_dimension(out, "h", &ov.h);
-            write_opt_property_value(out, "fill", &ov.fill);
-            write_opt_str_escaped(out, "text", &ov.text);
-            // Unknown props on the override node, in sorted key order.
-            for (key, prop) in &ov.unknown_props {
-                out.push(' ');
-                out.push_str(key);
-                out.push('=');
-                out.push_str(&fmt_unknown_property(prop));
-            }
-            out.push('\n');
-        }
-        indent(out, depth + 1);
-        out.push_str("}\n");
     }
     indent(out, depth);
     out.push_str("}\n");

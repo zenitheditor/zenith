@@ -16,7 +16,7 @@ use super::helpers::{
 
 /// The keyword form of `key` (`w="hug"`), when the entry is an unannotated
 /// string that names a [`SizeKeyword`].
-fn size_keyword(node: &KdlNode, key: &str) -> Option<SizeKeyword> {
+pub(super) fn size_keyword(node: &KdlNode, key: &str) -> Option<SizeKeyword> {
     let entry = node.entry(key)?;
     if entry_annotation(entry).is_some() {
         return None;

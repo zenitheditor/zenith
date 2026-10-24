@@ -20,7 +20,10 @@ use super::visual::attach_visual_spans;
 mod node;
 mod placement;
 
-pub(super) use node::shared::{AnchorParentCtx, check_sibling_anchors, node_bbox};
+pub(super) use node::shared::{
+    AnchorParentCtx, TokenEnv, check_optional_dim, check_sibling_anchors, node_bbox,
+};
+pub(super) use node::suggest::push_invalid_value;
 pub(super) use placement::{PlacementSite, placement_walk};
 
 /// Walk-wide immutable validation context (never changes during a page walk).

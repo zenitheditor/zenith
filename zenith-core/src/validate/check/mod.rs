@@ -59,6 +59,7 @@ mod recipes;
 mod report;
 mod safezone;
 mod unsupported;
+mod variant_overrides;
 mod variants;
 mod visual;
 

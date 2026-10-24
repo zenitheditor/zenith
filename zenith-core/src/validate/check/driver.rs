@@ -25,7 +25,7 @@ use super::brand::check_brand_contract;
 use super::construction::check_construction;
 use super::defaults::check_defaults;
 use super::geometry::page_is_layout_managed;
-use super::nodes::{WalkCtx, WalkPos, check_sibling_anchors, walk_node};
+use super::nodes::{TokenEnv, WalkCtx, WalkPos, check_sibling_anchors, walk_node};
 use super::passes::{
     check_footnote_refs, collect_local_ids, register_id, validate_asset_decl, validate_import_decl,
     validate_library_decl, validate_provenance_def, validate_style_block,
@@ -516,7 +516,16 @@ fn validate_pass(
     // ── Variants ──────────────────────────────────────────────────────────
     // Validate the top-level `variants` block: duplicate ids, unknown source
     // pages, invalid dimensions, and override-node resolution.
-    check_variants(doc, &page_ids, &page_node_ids, &mut diagnostics);
+    check_variants(
+        doc,
+        &page_ids,
+        &page_node_ids,
+        &mut TokenEnv {
+            referenced: &mut referenced_token_ids,
+            resolved: resolved_tokens,
+        },
+        &mut diagnostics,
+    );
 
     // ── Recipes ───────────────────────────────────────────────────────────
     // Validate the top-level `recipes` block: duplicate ids, unknown/non-color

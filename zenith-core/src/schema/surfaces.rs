@@ -43,8 +43,15 @@ pub fn variant_descriptor() -> VariantDescriptor {
         override_entry: "override node=\"<id>\" …\n\
             \n\
             Targets the node whose id equals the `node=` value, and applies one or more \
-            property overrides. The `node` key is the only required field; all visual/geometry \
-            keys are optional and independent (omitted keys retain the source page value).\n\
+            property overrides. The `node` key is the only required field. All other keys \
+            are optional and independent. An omitted key keeps the source page value.\n\
+            \n\
+            Layout keys re-run auto-layout at the variant size. Build the source page from \
+            layout frames, then retarget it with a few overrides: set the outer frame `w`/`h`, \
+            switch a frame between `row` and `column`, and change `gap`, `padding*`, \
+            `font-size`, `justify`, or `align`. `font-size` needs a text, code, field, \
+            footnote, or toc node. `layout` and the container keys need a `frame`. A \
+            `hug`/`fill` size needs a box node.\n\
             \n\
             IMPORTANT: the selector key is `node` (the target node's id string), NOT `id`.\n\
             Wrong:   override id=\"hero\" visible=#false\n\
@@ -53,21 +60,81 @@ pub fn variant_descriptor() -> VariantDescriptor {
             ("node", "string — target node id selector (required)", true),
             ("visible", "#true or #false", false),
             ("text", "string — replacement text content", false),
-            ("fill", "token ref or color string", false),
+            ("fill", "token ref — color or gradient token", false),
             ("x", "typed dimension, e.g. (px)100", false),
             ("y", "typed dimension, e.g. (px)50", false),
-            ("w", "typed dimension, e.g. (px)800", false),
-            ("h", "typed dimension, e.g. (px)600", false),
+            (
+                "w",
+                "typed dimension, e.g. (px)800, or \"hug\" / \"fill\"",
+                false,
+            ),
+            (
+                "h",
+                "typed dimension, e.g. (px)600, or \"hug\" / \"fill\"",
+                false,
+            ),
+            (
+                "font-size",
+                "dimension token ref, e.g. (token)\"size.title\" (text kinds)",
+                false,
+            ),
+            ("layout", "absolute | row | column | grid (frame)", false),
+            ("gap", "dimension or dimension token ref (frame)", false),
+            (
+                "wrap-gap",
+                "dimension or dimension token ref (frame)",
+                false,
+            ),
+            ("padding", "dimension or dimension token ref (frame)", false),
+            (
+                "padding-x",
+                "dimension or dimension token ref (frame)",
+                false,
+            ),
+            (
+                "padding-y",
+                "dimension or dimension token ref (frame)",
+                false,
+            ),
+            (
+                "padding-top",
+                "dimension or dimension token ref (frame)",
+                false,
+            ),
+            (
+                "padding-right",
+                "dimension or dimension token ref (frame)",
+                false,
+            ),
+            (
+                "padding-bottom",
+                "dimension or dimension token ref (frame)",
+                false,
+            ),
+            (
+                "padding-left",
+                "dimension or dimension token ref (frame)",
+                false,
+            ),
+            (
+                "justify",
+                "start | center | end | space-between (frame)",
+                false,
+            ),
+            ("align", "start | center | end | stretch (frame)", false),
+            ("wrap", "#true or #false (frame)", false),
         ],
         example: concat!(
             "variants {\n",
-            "  variant id=\"mobile\" source=\"page.main\" w=(px)390 h=(px)844 {\n",
+            "  variant id=\"story\" source=\"page.main\" w=(px)1080 h=(px)1920 {\n",
+            "    // grow the outer layout frame to the new page\n",
+            "    override node=\"root\" w=(px)1080 h=(px)1920 padding=(px)96\n",
+            "    // stack the cards instead of placing them side by side\n",
+            "    override node=\"cards\" layout=\"column\" gap=(px)32\n",
+            "    // a larger headline for the tall format\n",
+            "    override node=\"headline\" font-size=(token)\"size.title.story\"\n",
             "    // hide the desktop-only sidebar\n",
             "    override node=\"sidebar\" visible=#false\n",
-            "    // shrink the hero to fit the narrower canvas\n",
-            "    override node=\"hero\" x=(px)0 y=(px)0 w=(px)390 h=(px)260\n",
-            "    // swap the headline copy\n",
-            "    override node=\"headline\" text=\"Mobile headline\"\n",
             "  }\n",
             "}",
         ),
@@ -173,4 +240,38 @@ pub fn diagnostics_verbs() -> &'static [&'static str] {
 /// `zenith schema diagnostics` surface and the policy checker can never diverge.
 pub fn diagnostic_codes() -> &'static [DiagnosticCodeInfo] {
     DIAGNOSTIC_CODES
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::parse::transform::known_props_for_kind;
+
+    #[test]
+    fn variant_override_props_match_the_parser() {
+        let schema: Vec<&str> = variant_descriptor()
+            .override_props
+            .iter()
+            .map(|(name, _, _)| *name)
+            .collect();
+        let mut parser: Vec<&str> = known_props_for_kind("override").to_vec();
+        let mut listed = schema.clone();
+        parser.sort_unstable();
+        listed.sort_unstable();
+        assert_eq!(
+            listed, parser,
+            "schema variant must list every override key"
+        );
+        for key in [
+            "font-size",
+            "layout",
+            "gap",
+            "padding-x",
+            "justify",
+            "align",
+            "wrap",
+        ] {
+            assert!(schema.contains(&key), "missing {key}");
+        }
+    }
 }

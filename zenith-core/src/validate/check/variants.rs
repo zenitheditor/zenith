@@ -12,9 +12,11 @@
 //! 4. **`variant.override_unknown_node`** (Error) — an `override.node` names a node id
 //!    absent from the variant's source page. Suppressed when the source page
 //!    itself failed to resolve (diagnostic #2) to avoid cascading noise.
-//! 5. **`variant.override_unknown_property`** (Warning) — an `override` entry carries
-//!    an unrecognized property key. The known keys are `node`, `visible`, `text`,
-//!    `fill`, `x`, `y`, `w`, and `h`; anything else is unknown.
+//! 5. **`variant.override_unknown_property`** (Error) — an `override` entry carries
+//!    an unrecognized property key. The known keys are in
+//!    `VARIANT_OVERRIDE_KNOWN_PROPS`.
+//! 6. Override property values and node kinds — see
+//!    [`check_override_props`].
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -24,6 +26,9 @@ use crate::diagnostics::Diagnostic;
 use crate::parse::transform::known_props_for_kind;
 use crate::suggest::unknown_property_message;
 
+use super::nodes::TokenEnv;
+use super::variant_overrides::{check_override_props, find_node};
+
 /// Validate the `variants` block of `doc`.
 ///
 /// `page_ids` — the set of page ids present in the document body.
@@ -32,10 +37,13 @@ use crate::suggest::unknown_property_message;
 /// (descendants at any depth) within that page. Built once by the driver
 /// before calling this function; both collections use `BTreeSet`/`BTreeMap`
 /// for determinism.
+///
+/// `tokens` records every token ref an override names and resolves it.
 pub(in crate::validate::check) fn check_variants(
     doc: &Document,
     page_ids: &BTreeSet<&str>,
     page_node_ids: &BTreeMap<&str, BTreeSet<String>>,
+    tokens: &mut TokenEnv<'_>,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
     // ── 1. Duplicate variant id detection ────────────────────────────────────
@@ -131,6 +139,11 @@ pub(in crate::validate::check) fn check_variants(
         // ── 4. Override node resolution ───────────────────────────────────────
         // Only checked when the source page resolved successfully (#2). If the
         // source is unknown we skip override checks to avoid diagnostic noise.
+        let source_page = doc.body.pages.iter().find(|p| p.id == variant.source);
+        for ov in &variant.overrides {
+            let target = source_page.and_then(|p| find_node(&p.children, &ov.node));
+            check_override_props(variant, ov, target, tokens, diagnostics);
+        }
         if source_known {
             let node_ids = page_node_ids.get(variant.source.as_str());
             for ov in &variant.overrides {
@@ -152,8 +165,7 @@ pub(in crate::validate::check) fn check_variants(
 
         // ── 5. Override unknown properties ────────────────────────────────────
         // Emitted for every unrecognized property on every override, regardless
-        // of whether the source page or node resolved. The known keys are:
-        // `node`, `visible`, `text`, `fill`, `x`, `y`, `w`, `h`.
+        // of whether the source page or node resolved.
         // Iterating `unknown_props` (a BTreeMap) gives stable alphabetical order.
         for ov in &variant.overrides {
             for prop_name in ov.unknown_props.keys() {
