@@ -71,17 +71,23 @@ impl KdlSource for KdlAdapter {
                         && m.contains("child block")
                     {
                         // Put the hint on its own line so it is not buried after
-                        // the raw kdl message — this is the most common real cause.
-                        msg.push_str(
-                            "\n  hint: a node and all its arguments must be on ONE line. If you \
-                             split a node's attributes across lines, end each line with `\\` to \
-                             continue it — otherwise a `{` is genuinely unclosed.",
-                        );
-                        if let Some(found) = super::unclosed::missing_close_hint(text)
-                            .or_else(|| super::unclosed::bad_line_hint(text))
-                        {
+                        // the raw kdl message. Sibling nodes on one line come
+                        // first: the one-line rule would mislead there.
+                        if let Some(found) = super::siblings::sibling_line_hint(text) {
                             msg.push_str("\n  ");
                             msg.push_str(&found);
+                        } else {
+                            msg.push_str(
+                                "\n  hint: a node and all its arguments must be on ONE line. If you \
+                                 split a node's attributes across lines, end each line with `\\` to \
+                                 continue it — otherwise a `{` is genuinely unclosed.",
+                            );
+                            if let Some(found) = super::unclosed::missing_close_hint(text)
+                                .or_else(|| super::unclosed::bad_line_hint(text))
+                            {
+                                msg.push_str("\n  ");
+                                msg.push_str(&found);
+                            }
                         }
                     }
                     // KDL v2 booleans require a leading `#` (`#true` / `#false`).
@@ -112,7 +118,17 @@ impl KdlSource for KdlAdapter {
             }
         })?;
 
-        // Step 3: transform the KDL tree into the Zenith AST.
+        // Step 3: reject two sibling nodes that KDL read as one, before the
+        // second one silently overwrites the first.
+        if let Some((offset, msg)) = super::siblings::merged_sibling(&kdl_doc, text) {
+            let span = crate::ast::Span {
+                start: offset,
+                end: offset,
+            };
+            return Err(ParseError::with_span(ParseErrorCode::InvalidKdl, span, msg));
+        }
+
+        // Step 4: transform the KDL tree into the Zenith AST.
         transform::transform(&kdl_doc)
     }
 

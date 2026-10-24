@@ -14,7 +14,7 @@ mod hints;
 mod messages;
 mod value;
 
-pub use distance::find_suggestion;
+pub use distance::{find_suggestion, nearest_names};
 pub use messages::format_candidate_list;
 
 pub(crate) use distance::{common_dotted_prefix, find_token_suggestion};

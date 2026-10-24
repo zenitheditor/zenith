@@ -209,6 +209,28 @@ pub(crate) fn token_fix_target<'a>(
         .or_else(|| unique_nearest(name, candidates.iter().copied(), 2))
 }
 
+/// Up to `limit` candidates within edit distance `max` of `name`, nearest
+/// first.
+///
+/// Ties go to the lexicographically smallest candidate, so the result does
+/// not depend on candidate order. A candidate equal to `name` is skipped and
+/// a repeated candidate counts once.
+pub fn nearest_names<'a>(
+    name: &str,
+    candidates: impl IntoIterator<Item = &'a str>,
+    max: usize,
+    limit: usize,
+) -> Vec<&'a str> {
+    let mut ranked: Vec<(usize, &'a str)> = candidates
+        .into_iter()
+        .filter(|c| *c != name)
+        .filter_map(|c| edit_distance_within(name, c, max).map(|d| (d, c)))
+        .collect();
+    ranked.sort_unstable();
+    ranked.dedup();
+    ranked.into_iter().take(limit).map(|(_, c)| c).collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -374,5 +396,23 @@ mod tests {
             token_fix_target("color.primry", known),
             Some("color.primary")
         );
+    }
+
+    #[test]
+    fn nearest_names_rank_by_distance_then_name() {
+        let found = nearest_names(
+            "p5b.kicker",
+            ["p5.kicker", "p5b.kickey", "zzz", "p5b.kicker"],
+            3,
+            3,
+        );
+        assert_eq!(found, ["p5.kicker", "p5b.kickey"]);
+    }
+
+    #[test]
+    fn nearest_names_cap_the_count_and_ignore_far_names() {
+        let found = nearest_names("a1", ["a2", "a3", "a4", "a5", "long.name"], 1, 3);
+        assert_eq!(found, ["a2", "a3", "a4"]);
+        assert!(nearest_names("a1", ["long.name"], 1, 3).is_empty());
     }
 }

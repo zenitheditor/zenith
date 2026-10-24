@@ -68,7 +68,7 @@ pub use font::{
 pub use markdown::{ListKind, MdBlock, parse_block_markdown, parse_inline_markdown};
 pub use parse::{KdlAdapter, KdlSource, parse_brand_contract, parse_diagnostic_policy};
 pub use patch::{PatchError, PatchErrorCode, Patched, patch_source, try_patch_source};
-pub use suggest::{find_suggestion, format_candidate_list};
+pub use suggest::{find_suggestion, format_candidate_list, nearest_names};
 pub use tokens::{
     HighlightToken, ResolvedFilter, ResolvedFilterOp, ResolvedGradient, ResolvedMask,
     ResolvedShadow, ResolvedShadowLayer, ResolvedToken, ResolvedValue, SyntaxTheme, TokenKind,

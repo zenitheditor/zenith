@@ -36,3 +36,33 @@ fn a_forgotten_close_names_the_line_it_belongs_before() {
     assert!(msg.contains("opened on line 9"), "{msg}");
     assert!(msg.contains("before line 11"), "{msg}");
 }
+
+#[test]
+fn sibling_nodes_after_a_block_name_the_line_and_the_semicolon() {
+    let msg = message(
+        "      text id=\"a\" w=(px)10 h=(px)10 { span \"A\" } text id=\"b\" w=(px)10 h=(px)10 { span \"B\" }\n",
+    );
+    assert!(
+        msg.contains("hint: line 9 has sibling nodes on one line"),
+        "{msg}"
+    );
+    assert!(msg.contains("`;`"), "{msg}");
+    assert!(!msg.contains("ONE line"), "{msg}");
+}
+
+#[test]
+fn merged_sibling_rects_are_an_error_and_a_semicolon_fixes_them() {
+    let msg = message("      rect id=\"a\" w=(px)10 h=(px)10 rect id=\"b\" w=(px)10 h=(px)10\n");
+    assert!(
+        msg.contains("sets `id` again after the word `rect`"),
+        "{msg}"
+    );
+
+    let fixed = format!(
+        "{HEAD}      rect id=\"a\" w=(px)10 h=(px)10; rect id=\"b\" w=(px)10 h=(px)10\n      text id=\"c\" w=(px)10 h=(px)10 {{ span \"C\" }}; text id=\"d\" w=(px)10 h=(px)10 {{ span \"D\" }}\n    }}\n  }}\n}}\n"
+    );
+    let doc = KdlAdapter
+        .parse(fixed.as_bytes())
+        .expect("`;` separates siblings");
+    assert_eq!(doc.body.pages[0].children.len(), 4);
+}
