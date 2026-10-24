@@ -143,7 +143,9 @@ impl TextLayoutEngine for CachedShaper<'_> {
                 provider,
                 primary_id: primary.id.as_str(),
             };
-            if let Some(result) = shape_with_fallback_in(&self.faces, slot, fallbacks, req)? {
+            if let Some(result) =
+                shape_with_fallback_in(&self.faces, slot, fallbacks, req, provider)?
+            {
                 return Ok(result);
             }
         }
@@ -162,7 +164,7 @@ impl TextLayoutEngine for CachedShaper<'_> {
         let store = FontFaceStore::from_faces(faces);
         let cache = FaceCache::new(&store);
         let fallbacks = FallbackSlots::Ready((1..store.face_count()).collect());
-        shape_with_fallback_in(&cache, 0, fallbacks, req)?.ok_or_else(|| {
+        shape_with_fallback_in(&cache, 0, fallbacks, req, provider)?.ok_or_else(|| {
             LayoutError::new("internal: call-local face store is missing a face".to_owned())
         })
     }

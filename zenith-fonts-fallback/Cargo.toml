@@ -13,6 +13,7 @@ publish.workspace = true
 description = "Zenith fallback fonts: Noto Sans Arabic, Hebrew, CJK SC (subset), and monochrome Noto Emoji as embedded bytes."
 include = [
     "Cargo.toml",
+    "build.rs",
     "ABOUT.txt",
     "OFL.txt",
     "src/**/*.rs",
@@ -30,6 +31,11 @@ include = [
 # lists every face, with `bytes: None`, so a host can supply the files.
 default = ["embed"]
 embed = []
+
+[build-dependencies]
+# build.rs reads each face's coverage with the version the shaper uses.
+# Pure Rust and already in Cargo.lock, so the C-free invariant holds.
+ttf-parser = "0.25"
 
 [dev-dependencies]
 # Both are pure Rust and already in Cargo.lock, so the C-free invariant holds.

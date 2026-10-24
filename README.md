@@ -589,7 +589,7 @@ cargo build --target wasm32-wasip1 -p zenith-editor-wasm --profile release-wasm
 node zenith-cli/scripts/build-static-editor.mjs --out dist/editor
 ```
 
-The script reads the module from `target/wasm32-wasip1/release-wasm/` (or `$CARGO_TARGET_DIR`). Pass `--wasm <file>` to name another. It copies the page, the module, the bundled fonts, and `samples/` (the examples) into `--out`. Every URL is relative, so the site can live in a subdirectory. Test it locally with any file server, for example `python3 -m http.server -d dist/editor`.
+The script reads the module from `target/wasm32-wasip1/release-wasm/` (or `$CARGO_TARGET_DIR`). Pass `--wasm <file>` to name another. It copies the page, the module, the bundled and fallback fonts, and `samples/` (the examples) into `--out`. Every URL is relative, so the site can live in a subdirectory. Test it locally with any file server, for example `python3 -m http.server -d dist/editor`.
 
 Host requirements:
 
@@ -606,6 +606,7 @@ How it behaves:
 - The page picks its host at startup. `<meta name="zenith-host" content="wasm">` (written by the build) selects the wasm engine. Without the meta, the page asks `/api/state` once. `zenith edit` answers and the page uses it.
 - Open a `.zen` file or a project folder with the toolbar buttons. A folder gives the document its imports and assets. Chromium writes saves back to the file. Other browsers read through `<input type=file>` and save by download.
 - Bundled fonts beyond Noto Sans Regular and Bold load on demand from `fonts/`.
+- The fallback fonts (Arabic, Hebrew, CJK, emoji) load on demand from `fonts/` too. The page fetches a file only when the text has a character that only that face covers. The render equals the CLI render.
 - `?doc=samples/<name>.zen` opens a sample. The default is `samples/stack.zen`.
 - Each engine call sends the session and the project files to the module. Keep large images out of a project folder.
 - A save on the static site does not stamp a `doc-id` into the file.

@@ -18,6 +18,7 @@ const TYPES = {
   ".json": "application/json",
   ".wasm": "application/wasm",
   ".ttf": "font/ttf",
+  ".otf": "font/otf",
   ".zen": "text/plain; charset=utf-8",
   ".png": "image/png",
   ".svg": "image/svg+xml",

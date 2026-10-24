@@ -12,7 +12,7 @@
 //   index.html, css/, js/, vendor/     the editor page (zenith-cli/assets/editor),
 //                                      with `<meta name="zenith-host" content="wasm">`
 //   zenith-editor-wasm.wasm            the engine
-//   fonts/                             bundled fonts the engine asks for by name
+//   fonts/                             bundled and fallback fonts the engine asks for by name
 //   samples/                           examples/*.zen, their project files, manifest.json
 //   _headers                           content types and CSP for Netlify and Cloudflare Pages
 //
@@ -97,6 +97,11 @@ function main() {
 
   const fonts = path.join(repo, "zenith-core/assets/fonts");
   for (const rel of walk(fonts)) copy(path.join(fonts, rel), path.join(out, "fonts", rel));
+  // The fallback chain. The directory also holds the CJK subset recipe, which is not a font.
+  const fallback = path.join(repo, "zenith-fonts-fallback/fonts");
+  for (const rel of walk(fallback).filter((f) => /\.(ttf|otf)$/.test(f))) {
+    copy(path.join(fallback, rel), path.join(out, "fonts", rel));
+  }
 
   let documents = 0;
   if (a.samples) {

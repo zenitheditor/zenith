@@ -68,3 +68,36 @@ fn each_face_covers_its_script() {
         }
     }
 }
+
+#[test]
+fn coverage_table_equals_the_cmap_test() {
+    for face in fallback_faces() {
+        let parsed = ttf_parser::Face::parse(bytes_of(face.file), 0).expect(face.file);
+        for ch in (0..=u32::from(char::MAX)).filter_map(char::from_u32) {
+            assert_eq!(
+                face.covers(ch),
+                parsed.glyph_index(ch).is_some(),
+                "{} U+{:04X}",
+                face.file,
+                u32::from(ch)
+            );
+        }
+    }
+}
+
+#[test]
+fn face_for_a_char_is_the_first_face_that_maps_it() {
+    let parsed: Vec<ttf_parser::Face<'_>> = fallback_faces()
+        .iter()
+        .map(|f| ttf_parser::Face::parse(bytes_of(f.file), 0).expect(f.file))
+        .collect();
+    for ch in "عש你안こ😀©→€A".chars() {
+        let first = fallback_faces()
+            .iter()
+            .zip(&parsed)
+            .find(|(_, p)| p.glyph_index(ch).is_some())
+            .map(|(f, _)| f.file);
+        let got = zenith_fonts_fallback::fallback_face_for(ch).map(|f| f.file);
+        assert_eq!(got, first, "{ch}");
+    }
+}

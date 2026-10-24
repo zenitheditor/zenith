@@ -41,9 +41,9 @@ pub(crate) struct RenderParams {
     /// Project files: path → base64 bytes.
     #[serde(default)]
     pub(crate) files: BTreeMap<String, String>,
-    /// Bundled font files the module does not embed: file name (for example
-    /// `NotoSerif-Bold.ttf`) → base64 bytes. `fonts` lists the ones a
-    /// document needs.
+    /// Bundled and fallback font files the module does not embed: file name
+    /// (for example `NotoSerif-Bold.ttf`) → base64 bytes. `fonts` lists the
+    /// ones a document needs.
     #[serde(default)]
     pub(crate) fonts: BTreeMap<String, String>,
     /// The path in `files` of the global config.
@@ -378,6 +378,58 @@ mod tests {
                 png_bytes(&supplied),
                 png_bytes(&without),
                 "the serif face must change the page"
+            );
+        }
+    }
+
+    const SCRIPTS: &str = include_str!("../../../examples/text-scripts.zen");
+
+    fn fallback_map() -> BTreeMap<String, String> {
+        zenith_fonts_fallback::fallback_faces()
+            .iter()
+            .map(|face| {
+                let path = format!(
+                    "{}/../zenith-fonts-fallback/fonts/{}",
+                    env!("CARGO_MANIFEST_DIR"),
+                    face.file
+                );
+                let bytes = std::fs::read(&path).expect("fallback font file");
+                (face.file.to_owned(), STANDARD.encode(bytes))
+            })
+            .collect()
+    }
+
+    fn codes(out: &Value) -> Vec<String> {
+        out["diagnostics"]
+            .as_array()
+            .expect("diagnostics")
+            .iter()
+            .filter_map(|d| d["code"].as_str().map(str::to_owned))
+            .collect()
+    }
+
+    #[test]
+    fn supplied_fallback_files_render_like_the_embedded_chain() {
+        let supplied = run(&RenderParams {
+            fonts: fallback_map(),
+            ..params(SCRIPTS)
+        })
+        .expect("render ok");
+        let got = codes(&supplied);
+        assert!(!got.iter().any(|c| c == "font.glyph_missing"), "{got:?}");
+        assert!(!got.iter().any(|c| c == "font.unresolved"), "{got:?}");
+        let without = run(&params(SCRIPTS)).expect("render ok");
+        let embedded = zenith_fonts_fallback::fallback_faces()
+            .iter()
+            .all(|f| f.is_embedded());
+        if embedded {
+            assert_eq!(png_bytes(&supplied), png_bytes(&without));
+        } else {
+            assert_ne!(png_bytes(&supplied), png_bytes(&without));
+            let notices = codes(&without);
+            assert!(
+                notices.iter().any(|c| c == "font.unresolved"),
+                "{notices:?}"
             );
         }
     }

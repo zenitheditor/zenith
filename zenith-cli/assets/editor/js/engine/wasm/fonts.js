@@ -1,10 +1,13 @@
-// Lazy bundled fonts of the static host.
+// Lazy bundled and fallback fonts of the static host.
 //
 // The wasm module embeds Noto Sans Regular and Bold. Any other bundled face
 // the document needs comes from the `fonts` protocol (the `fonts.required`
 // command): the engine names the files, the page fetches them from the
-// static site, and asks again until the list is empty. A fetched file is
-// cached for the life of the page.
+// static site, and asks again until the list is empty. The fallback faces
+// (Arabic, Hebrew, CJK, emoji) use the same protocol: the engine names the
+// file when text has a char only that face covers. The engine registers
+// fallback files in chain order, so fetch order never changes the render.
+// A fetched file is cached for the life of the page.
 
 import { blobToBase64 } from "./files.js";
 

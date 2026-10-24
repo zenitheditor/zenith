@@ -1,10 +1,12 @@
-//! Lazy bundled fonts over the wire: decode the base64 `fonts` request map
-//! for the engine. Face lists and notices come from `zenith_editor::fonts`.
+//! Lazy bundled and fallback fonts over the wire: decode the base64 `fonts`
+//! request map for the engine. Face lists and notices come from
+//! `zenith_editor::fonts`.
 //!
 //! The module embeds only Noto Sans Regular and Bold (see the
-//! `bundled-fonts-extended` feature of `zenith-core`). The other eight
-//! bundled faces are plain files the page fetches and passes back in
-//! `fonts`, keyed by file name (`NotoSerif-Bold.ttf`). Such a face registers
+//! `bundled-fonts-extended` feature of `zenith-core`) and no fallback face.
+//! The other eight bundled faces and the four fallback faces are plain
+//! files the page fetches and passes back in `fonts`, keyed by file name
+//! (`NotoSerif-Bold.ttf`, `NotoEmoji-Regular.ttf`). Such a face registers
 //! exactly as the embedded face does, so the output equals the full build.
 
 use std::collections::BTreeMap;
@@ -44,7 +46,8 @@ pub(crate) fn decode_font_bytes(
 ///
 /// # Errors
 ///
-/// `request.invalid_params` when a name is not a bundled font file name, or
+/// `request.invalid_params` when a name is not a bundled or fallback font
+/// file name, or
 /// its bytes are not base64. Project fonts a document declares as assets
 /// go in `files`, not here.
 pub(crate) fn decode_fonts(fonts: &BTreeMap<String, String>) -> Result<Vec<ExtraFont>, ErrorBody> {

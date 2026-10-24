@@ -24,6 +24,7 @@ zenith-geometry = { workspace = true }
 zenith-scene = { workspace = true }
 zenith-tx = { workspace = true }
 zenith-pipeline = { workspace = true }
+zenith-fonts-fallback = { workspace = true }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.10"

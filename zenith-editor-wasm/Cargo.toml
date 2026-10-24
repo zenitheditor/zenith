@@ -19,8 +19,8 @@ path = "src/main.rs"
 bundled-fonts-extended = ["zenith-core/bundled-fonts-extended"]
 # The module leaves the `embed` feature of `zenith-fonts-fallback` off (the
 # workspace dependency has no default features), so it carries no fallback
-# font bytes (about 6.7 MB). Text that needs the chain reports
-# `font.glyph_missing`.
+# font bytes (about 6.7 MB). The page fetches a fallback file when the
+# engine names it, as for the bundled faces.
 
 [dependencies]
 zenith-core = { workspace = true }
@@ -31,6 +31,9 @@ serde_json = "1"
 # Pure Rust and already in Cargo.lock at this version, so no new crate enters
 # the graph and the C-free invariant holds.
 base64 = "0.21"
+
+[dev-dependencies]
+zenith-fonts-fallback = { workspace = true }
 
 [lints]
 workspace = true

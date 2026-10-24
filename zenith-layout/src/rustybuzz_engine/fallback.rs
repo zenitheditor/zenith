@@ -2,7 +2,7 @@
 
 use std::collections::BTreeSet;
 
-use zenith_core::FontProvider;
+use zenith_core::{FontProvider, FontSource};
 
 use super::face_cache::{FaceCache, FontFaceStore, parse_error};
 use super::run::{FaceShapeRequest, shape_run_with_face};
@@ -76,6 +76,9 @@ impl FallbackSlots<'_> {
 /// `primary` is the primary face slot. Fallback faces parse only when a char
 /// is not covered by the primary or an earlier fallback face.
 ///
+/// Each char that goes to a fallback face, or to no face, is noted on
+/// `notes` ([`FontProvider::note_fallback_glyphs`]) once shaping succeeds.
+///
 /// Returns `Ok(None)` when a needed fallback face is not in the cache's store.
 /// The caller then retries with a store built for this call.
 ///
@@ -88,6 +91,7 @@ pub(super) fn shape_with_fallback_in(
     primary: usize,
     fallbacks: FallbackSlots<'_>,
     req: &ShapeRequest<'_>,
+    notes: &dyn FontProvider,
 ) -> Result<Option<FallbackResult>, LayoutError> {
     let store = cache.store();
     let primary_data = store
@@ -116,6 +120,8 @@ pub(super) fn shape_with_fallback_in(
     // substring is shaped (and reported as the run's source text). Chars no
     // face covers are recorded in `missing` (unless ignorable).
     let mut missing: BTreeSet<char> = BTreeSet::new();
+    // Chars given to a fallback face (its slot) or to no face (`None`).
+    let mut fallback_glyphs: BTreeSet<(char, Option<usize>)> = BTreeSet::new();
     let mut pending = Some(fallbacks);
     let mut fallback_slots: Vec<usize> = Vec::new();
 
@@ -163,10 +169,19 @@ pub(super) fn shape_with_fallback_in(
                         .is_some_and(|face| face.glyph_index(ch).is_some())
                 });
                 match covering {
-                    Some(slot) => slot,
+                    Some(slot) => {
+                        if store
+                            .data(slot)
+                            .is_some_and(|data| data.source == FontSource::Fallback)
+                        {
+                            fallback_glyphs.insert((ch, Some(slot)));
+                        }
+                        slot
+                    }
                     None => {
                         if !is_ignorable_for_coverage(ch) {
                             missing.insert(ch);
+                            fallback_glyphs.insert((ch, None));
                         }
                         primary
                     }
@@ -252,6 +267,19 @@ pub(super) fn shape_with_fallback_in(
         && let Some(last) = runs.last_mut()
     {
         last.advance_width -= letter_spacing_px;
+    }
+
+    if !fallback_glyphs.is_empty() {
+        let noted: Vec<(char, Option<&str>)> = fallback_glyphs
+            .iter()
+            .map(|&(ch, slot)| {
+                let id = slot
+                    .and_then(|slot| store.data(slot))
+                    .map(|d| d.id.as_str());
+                (ch, id)
+            })
+            .collect();
+        notes.note_fallback_glyphs(&noted);
     }
 
     Ok(Some(FallbackResult {
@@ -365,6 +393,42 @@ mod tests {
         assert!(extends_cluster('\u{064E}'), "Arabic fatha is a mark");
         assert!(!extends_cluster('a'));
         assert!(!extends_cluster(' '));
+    }
+
+    #[test]
+    fn fallback_and_missing_chars_are_noted_on_the_provider() {
+        let log = zenith_core::FontMissLog::new();
+        let provider = provider().with_miss_log(log.clone());
+        let store = FontFaceStore::new(&provider);
+        let engine = RustybuzzEngine::new(&store);
+        let families = vec!["Noto Sans".to_owned()];
+        let req = ShapeRequest {
+            text: "a \u{0639}\u{1F600}\u{E000}",
+            families: &families,
+            weight: 400,
+            style: FontStyle::Normal,
+            font_size: 20.0,
+            direction: TextDirection::Ltr,
+            features: &[],
+            kerning_pairs: &[],
+            letter_spacing_px: 0.0,
+        };
+        engine
+            .shape_with_fallback(&req, &provider)
+            .expect("fallback shape");
+        let got: Vec<(char, Option<String>)> = log
+            .fallback_glyphs()
+            .into_iter()
+            .map(|g| (g.ch, g.face_family))
+            .collect();
+        assert_eq!(
+            got,
+            vec![
+                ('\u{0639}', Some("noto sans arabic".to_owned())),
+                ('\u{E000}', None),
+                ('\u{1F600}', Some("noto emoji".to_owned())),
+            ]
+        );
     }
 
     #[test]

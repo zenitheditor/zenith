@@ -1,11 +1,13 @@
 //! `fonts {source, path?, files?, fonts?, global_config?}`: list the font
 //! faces the document needs and the module does not hold.
 //!
-//! The module embeds only Noto Sans Regular and Bold. This method compiles
-//! every page of the document (as `diagnose` does) while recording each face
-//! the shaper asks for, then returns the ones with no face. An entry whose
-//! `file` is set names a bundled font file. The page fetches that file and
-//! passes it as `fonts: {"<file>": "<base64>"}` to `diagnose` and `render`.
+//! The module embeds only Noto Sans Regular and Bold, and no fallback face.
+//! This method compiles every page of the document (as `diagnose` does)
+//! while recording each face the shaper asks for and each char it gives to
+//! a fallback face or to no face. It returns the faces the module lacks. An
+//! entry whose `file` is set names a bundled or fallback font file
+//! (`fallback: true` for the second). The page fetches that file and passes
+//! it as `fonts: {"<file>": "<base64>"}` to `diagnose` and `render`.
 //!
 //! A document can ask for a further face only after the first is supplied,
 //! because an unresolved family falls back to Noto Sans. The page calls
@@ -35,7 +37,8 @@ pub(crate) struct FontsParams {
     /// Project files: path → base64 bytes.
     #[serde(default)]
     pub(crate) files: BTreeMap<String, String>,
-    /// Bundled font files the page already holds: file name → base64.
+    /// Bundled and fallback font files the page already holds: file name →
+    /// base64.
     #[serde(default)]
     pub(crate) fonts: BTreeMap<String, String>,
     /// The path in `files` of the global config.
@@ -43,10 +46,11 @@ pub(crate) struct FontsParams {
     pub(crate) global_config: Option<String>,
 }
 
-/// The `fonts` result: `{"faces": [{"family", "weight", "style", "file"}],
+/// The `fonts` result: `{"faces": [{"family", "weight", "style", "file",
+/// "fallback"}],
 /// "embedded": ["<file>"], "complete"}`.
 ///
-/// `embedded` lists the bundled files this module embeds. `complete` is
+/// `embedded` lists the bundled and fallback files this module embeds. `complete` is
 /// `false` when the document has an error that stops compilation, so the
 /// list can be short until the error is fixed.
 pub(crate) fn run(params: &FontsParams) -> Result<Value, ErrorBody> {
@@ -179,6 +183,73 @@ mod tests {
                 .any(|f| f["family"] == "Some Unbundled Face" && f["file"].is_null()),
             "{out}"
         );
+    }
+
+    const SCRIPTS: &str = include_str!("../../../examples/text-scripts.zen");
+
+    /// Every fallback file, read from the fallback crate.
+    fn fallback_fonts() -> BTreeMap<String, String> {
+        zenith_fonts_fallback::fallback_faces()
+            .iter()
+            .map(|face| {
+                let path = format!(
+                    "{}/../zenith-fonts-fallback/fonts/{}",
+                    env!("CARGO_MANIFEST_DIR"),
+                    face.file
+                );
+                let bytes = std::fs::read(&path).expect("fallback font file");
+                (face.file.to_owned(), STANDARD.encode(bytes))
+            })
+            .collect()
+    }
+
+    /// `true` when this build embeds the fallback chain, as when the
+    /// workspace builds the CLI beside this crate.
+    fn chain_embedded() -> bool {
+        zenith_fonts_fallback::fallback_faces()
+            .iter()
+            .all(|f| f.is_embedded())
+    }
+
+    #[test]
+    fn script_document_names_each_fallback_file_once() {
+        let out = run(&params(SCRIPTS)).expect("fonts runs");
+        let fallback: Vec<&str> = out["faces"]
+            .as_array()
+            .expect("faces")
+            .iter()
+            .filter(|f| f["fallback"] == true)
+            .filter_map(|f| f["file"].as_str())
+            .collect();
+        if chain_embedded() {
+            assert!(fallback.is_empty(), "{out}");
+            return;
+        }
+        assert_eq!(
+            fallback,
+            [
+                "NotoSansArabic-Regular.ttf",
+                "NotoSansHebrew-Regular.ttf",
+                "NotoSansCJKsc-Fallback.otf",
+                "NotoEmoji-Regular.ttf",
+            ],
+            "{out}"
+        );
+    }
+
+    #[test]
+    fn supplied_fallback_files_leave_the_list() {
+        let out = run(&FontsParams {
+            fonts: fallback_fonts(),
+            ..params(SCRIPTS)
+        })
+        .expect("fonts runs");
+        let fallback = out["faces"]
+            .as_array()
+            .expect("faces")
+            .iter()
+            .any(|f| f["fallback"] == true);
+        assert!(!fallback, "{out}");
     }
 
     #[test]

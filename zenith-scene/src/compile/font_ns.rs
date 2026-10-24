@@ -56,6 +56,10 @@ impl FontProvider for NamespacedFontProvider<'_> {
     fn all_faces(&self) -> Vec<FontData> {
         self.inner.all_faces()
     }
+
+    fn note_fallback_glyphs(&self, glyphs: &[(char, Option<&str>)]) {
+        self.inner.note_fallback_glyphs(glyphs);
+    }
 }
 
 #[cfg(test)]

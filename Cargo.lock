@@ -2221,6 +2221,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "zenith-core",
+ "zenith-fonts-fallback",
  "zenith-geometry",
  "zenith-pipeline",
  "zenith-scene",
@@ -2246,6 +2247,7 @@ dependencies = [
  "serde_json",
  "zenith-core",
  "zenith-editor",
+ "zenith-fonts-fallback",
  "zenith-pipeline",
 ]
 

@@ -85,6 +85,12 @@ pub trait FontProvider {
     /// All registered faces, in a deterministic order (for building an SVG fontdb, etc.).
     #[must_use]
     fn all_faces(&self) -> Vec<FontData>;
+
+    /// Note the chars the shaper gave to a fallback face (`Some(face id)`)
+    /// or to no face (`None`). A provider with a [`FontMissLog`] records
+    /// them, so a host can name the fallback file a glyph needs. A wrapper
+    /// forwards the call. Shaping never depends on it.
+    fn note_fallback_glyphs(&self, glyphs: &[(char, Option<&str>)]);
 }
 
 // Internal key type for the primary registry map.
@@ -226,6 +232,16 @@ impl BytesFontProvider {
         id
     }
 
+    /// The lowercase family of the face with id `id`.
+    fn family_of(&self, id: &str) -> Option<&str> {
+        self.fallback
+            .iter()
+            .map(|(k, d)| (k, d))
+            .chain(self.by_key.iter())
+            .find(|(_, d)| d.id == id)
+            .map(|(k, _)| k.family_lower.as_str())
+    }
+
     /// `base_id`, or `base_id-N` for the first N from 2 that no face holds.
     fn fresh_id(&self, base_id: &str) -> String {
         let taken =
@@ -331,6 +347,16 @@ impl FontProvider for BytesFontProvider {
             .chain(self.fallback.iter().map(|(_, d)| d))
             .cloned()
             .collect()
+    }
+
+    fn note_fallback_glyphs(&self, glyphs: &[(char, Option<&str>)]) {
+        let Some(log) = &self.miss_log else {
+            return;
+        };
+        for &(ch, id) in glyphs {
+            let family = id.and_then(|id| self.family_of(id));
+            log.record_glyph(ch, family);
+        }
     }
 }
 

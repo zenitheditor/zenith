@@ -12,5 +12,5 @@ pub use bundled::{
     BundledFace, bundled_face_by_file, bundled_face_for, bundled_faces, default_provider,
 };
 pub use local::{LocalFontEntry, filter_wanted_families, scan_font_dirs};
-pub use miss_log::{FaceRequest, FontMissLog};
+pub use miss_log::{FaceRequest, FallbackGlyph, FontMissLog};
 pub use provider::{BytesFontProvider, FontData, FontProvider, FontSource, FontStyle};

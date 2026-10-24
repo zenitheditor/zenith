@@ -21,4 +21,8 @@ impl<F: ?Sized + FontProvider> FontProvider for FontsRef<'_, F> {
     fn all_faces(&self) -> Vec<FontData> {
         self.0.all_faces()
     }
+
+    fn note_fallback_glyphs(&self, glyphs: &[(char, Option<&str>)]) {
+        self.0.note_fallback_glyphs(glyphs);
+    }
 }

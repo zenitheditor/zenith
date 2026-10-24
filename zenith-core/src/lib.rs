@@ -60,9 +60,9 @@ pub use data::{DataContext, DataFormat, format_data_value};
 pub use diagnostics::{Diagnostic, DiagnosticExtra, FixHint, Severity};
 pub use error::{FormatError, ParseError, ParseErrorCode};
 pub use font::{
-    BundledFace, BytesFontProvider, FaceRequest, FontAlternateFeature, FontAlternateParseError,
-    FontData, FontMissLog, FontProvider, FontSource, FontStyle, LocalFontEntry,
-    bundled_face_by_file, bundled_face_for, bundled_faces, default_provider,
+    BundledFace, BytesFontProvider, FaceRequest, FallbackGlyph, FontAlternateFeature,
+    FontAlternateParseError, FontData, FontMissLog, FontProvider, FontSource, FontStyle,
+    LocalFontEntry, bundled_face_by_file, bundled_face_for, bundled_faces, default_provider,
     filter_wanted_families, parse_font_alternate_spec, scan_font_dirs,
 };
 pub use markdown::{ListKind, MdBlock, parse_block_markdown, parse_inline_markdown};

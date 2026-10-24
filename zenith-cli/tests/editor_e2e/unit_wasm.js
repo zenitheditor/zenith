@@ -61,10 +61,16 @@ class FakeWorker {
 }
 
 const fontFiles = path.join(root, "zenith-core/assets/fonts");
+const fallbackFiles = path.join(root, "zenith-fonts-fallback/fonts");
+/** The base64 bytes of a bundled or fallback font file. */
+const fontBase64 = (file) => {
+  const bundled = path.join(fontFiles, file);
+  return readFileSync(existsSync(bundled) ? bundled : path.join(fallbackFiles, file)).toString("base64");
+};
 const fontsFromDisk = (log = []) => ({
   get: async (file) => {
     log.push(file);
-    return readFileSync(path.join(fontFiles, file)).toString("base64");
+    return fontBase64(file);
   },
 });
 
@@ -233,6 +239,26 @@ await test("lazy fonts: the named files load, the render equals one with the fon
   await all.openDocument({ name: "code.zen", text });
   assert.equal((await all.run("doc.render", { scale: 1 })).result.sha256, lazy);
   assert.equal(new Set(fetched).size, fetched.length, "each font file is fetched once");
+});
+
+await test("lazy fallback fonts: each script loads its file once, and fetch order does not change the render", async () => {
+  const text = example("text-scripts.zen");
+  const fetched = [];
+  const e = engine({ fonts: fontsFromDisk(fetched) });
+  await e.openDocument({ name: "text-scripts.zen", text });
+  for (const file of ["NotoSansArabic-Regular.ttf", "NotoSansHebrew-Regular.ttf", "NotoSansCJKsc-Fallback.otf", "NotoEmoji-Regular.ttf"]) {
+    assert.ok(e.loadedFonts.has(file), `loaded ${[...e.loadedFonts]}`);
+  }
+  assert.equal(new Set(fetched).size, fetched.length, "each font file is fetched once");
+  assert.deepEqual((await e.run("fonts.required")).result.faces, []);
+  const codes = (await e.run("doc.diagnose")).result.diagnostics.map((d) => d.code);
+  assert.ok(!codes.includes("font.glyph_missing") && !codes.includes("font.unresolved"), codes.join(", "));
+  const lazy = (await e.run("doc.render", { scale: 1 })).result.sha256;
+  // Files that arrive in reverse order register in chain order all the same.
+  const delays = new Map(["NotoEmoji-Regular.ttf", "NotoSansCJKsc-Fallback.otf", "NotoSansHebrew-Regular.ttf", "NotoSansArabic-Regular.ttf"].map((f, i) => [f, i * 20]));
+  const reversed = engine({ fonts: { get: (file) => new Promise((ok) => setTimeout(() => ok(fontBase64(file)), delays.get(file) ?? 0)) } });
+  await reversed.openDocument({ name: "text-scripts.zen", text });
+  assert.equal((await reversed.run("doc.render", { scale: 1 })).result.sha256, lazy);
 });
 
 await test("a font file that cannot be fetched leaves the advisory and ends the loop", async () => {
