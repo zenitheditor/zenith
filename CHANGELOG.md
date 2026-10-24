@@ -34,6 +34,7 @@ it.
 
 ### Fixed
 
+- **The browser editor no longer sends font files as base64 JSON on every request.** The Worker keeps each fetched font as raw bytes and sends them after the request envelope: the envelope lists `"fonts": [{"file", "size"}]`, then one NUL byte, then the bytes. For `examples/text-scripts.zen` a request held 8.99 MB of JSON and 6.7 MB of base64 to decode. It now holds about 10 KB of JSON and no base64. The `fonts` key inside `params` is gone. Native paths are unchanged.
 - **A fallback-font run on a single line sits on the line's baseline.** An Arabic word on a Latin line drew lower, on its own face's ascent.
 - **A hyphenated or broken `code` word keeps the mono face.** Its fragments reshaped in the node family.
 - **`light` and `mesh` with a `pct` position or size are skipped with `scene.unsupported_unit`.** Before, `x=(pct)85` drew the node at x of 0 and `validate` stayed silent. Now `light` and `mesh` match `rect`. A document that uses `px` or `pt` renders the same bytes as before.

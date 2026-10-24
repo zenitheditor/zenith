@@ -1,5 +1,5 @@
 // Tests of `WasmEngine` in Node, over the real wasm module and a Node
-// stand-in for the Worker (same project splicing as `worker.js`). They run
+// stand-in for the Worker (the same `ProjectStore` as `worker.js`). They run
 // without a browser: the envelope and events, stale versions, lazy fonts,
 // and file open, save, reload, and conflict over a mock file handle.
 //
@@ -27,7 +27,7 @@ globalThis.document = { baseURI: "http://localhost/site/", visibilityState: "vis
 globalThis.window = { addEventListener: (n, f) => listeners.push([n, f]), removeEventListener() {} };
 
 const { WasmEngine } = await import(path.join(assets, "engine/wasm.js"));
-const { requestText, takePng } = await import(path.join(assets, "engine/wasm/request.js"));
+const { ProjectStore, requestParts, takePng } = await import(path.join(assets, "engine/wasm/request.js"));
 const { runRequest } = await import(path.join(assets, "engine/wasm/wasi.js"));
 const { fontAdvisoryKey } = await import(path.join(assets, "engine/wasm/fonts.js"));
 const { applyDelta } = await import("./delta.js");
@@ -37,40 +37,38 @@ const module = await WebAssembly.compile(readFileSync(wasmFile));
 /** The Worker's job, in this process. */
 class FakeWorker {
   constructor() {
-    this.filesJson = "{}";
-    this.fonts = {};
-    this.fontsJson = "{}";
+    this.store = new ProjectStore();
     this.timings = [];
     this.compileMs = 0;
     this.calls = [];
+    /** `{command, jsonBytes, fontBytes}` per call. */
+    this.sent = [];
   }
   async ready() {}
   async project(update) {
-    if (update.files) this.filesJson = JSON.stringify(update.files);
-    if (update.resetFonts) this.fonts = {};
-    if (update.fonts) Object.assign(this.fonts, update.fonts);
-    this.fontsJson = JSON.stringify(this.fonts);
+    this.store.update(update);
   }
   async call(method, params, { project = true, command = "" } = {}) {
     this.calls.push(command);
-    const text = requestText(method, params, project, this.filesJson, this.fontsJson);
-    const run = await runRequest(module, text);
+    const stdin = this.store.request(method, params, project);
+    this.sent.push({ command, jsonBytes: stdin.jsonBytes, fontBytes: stdin.fontBytes });
+    const run = await runRequest(module, stdin.chunks);
     const response = JSON.parse(run.response);
-    return { response, png: takePng(response), runMs: run.runMs, instantiateMs: run.instantiateMs, parseMs: 0, requestBytes: text.length };
+    return { response, png: takePng(response), runMs: run.runMs, instantiateMs: run.instantiateMs, parseMs: 0, requestBytes: stdin.jsonBytes };
   }
 }
 
 const fontFiles = path.join(root, "zenith-core/assets/fonts");
 const fallbackFiles = path.join(root, "zenith-fonts-fallback/fonts");
-/** The base64 bytes of a bundled or fallback font file. */
-const fontBase64 = (file) => {
+/** The bytes (Uint8Array) of a bundled or fallback font file. */
+const fontFile = (file) => {
   const bundled = path.join(fontFiles, file);
-  return readFileSync(existsSync(bundled) ? bundled : path.join(fallbackFiles, file)).toString("base64");
+  return new Uint8Array(readFileSync(existsSync(bundled) ? bundled : path.join(fallbackFiles, file)));
 };
 const fontsFromDisk = (log = []) => ({
   get: async (file) => {
     log.push(file);
-    return fontBase64(file);
+    return fontFile(file);
   },
 });
 
@@ -129,14 +127,88 @@ async function test(name, fn) {
   }
 }
 
-await test("request text splices the project and stays valid JSON", () => {
-  const text = requestText("editor", { command: { command: "x" }, path: "a.zen" }, true, '{"a.png":"QQ=="}', '{"f.ttf":"QQ=="}');
-  const parsed = JSON.parse(text);
-  assert.deepEqual(parsed.params.files, { "a.png": "QQ==" });
-  assert.deepEqual(parsed.params.fonts, { "f.ttf": "QQ==" });
-  assert.equal(parsed.params.path, "a.zen");
-  assert.deepEqual(JSON.parse(requestText("ping", {}, true, "{}", "{}")).params, { files: {}, fonts: {} });
-  assert.deepEqual(JSON.parse(requestText("ping", { x: 1 }, false, "{}", "{}")).params, { x: 1 });
+/** The envelope of request parts `parts`, parsed. */
+const envelopeOf = (parts) => JSON.parse(Buffer.from(parts.chunks[0]).toString("utf8"));
+
+await test("request parts splice the files and attach the fonts as raw bytes after one NUL", () => {
+  const fonts = new Map([["b.ttf", new Uint8Array([7, 8])], ["a.ttf", new Uint8Array([1, 2, 3])]]);
+  const parts = requestParts("editor", { command: { command: "x" }, path: "a.zen" }, true, '{"a.png":"QQ=="}', fonts);
+  const env = envelopeOf(parts);
+  assert.deepEqual(env.params.files, { "a.png": "QQ==" });
+  assert.equal(env.params.fonts, undefined, "no font bytes in the JSON");
+  assert.equal(env.params.path, "a.zen");
+  assert.deepEqual(env.fonts, [{ file: "a.ttf", size: 3 }, { file: "b.ttf", size: 2 }]);
+  assert.deepEqual(parts.chunks.slice(1).map((c) => [...c]), [[0], [1, 2, 3], [7, 8]]);
+  assert.equal(parts.fontBytes, 5);
+  assert.equal(parts.jsonBytes, parts.chunks[0].length);
+  const bare = requestParts("ping", {}, true, "{}", new Map());
+  assert.deepEqual(envelopeOf(bare), { method: "ping", params: { files: {} } });
+  assert.equal(bare.chunks.length, 1, "no separator without fonts");
+  const off = requestParts("ping", { x: 1 }, false, "{}", fonts);
+  assert.deepEqual(envelopeOf(off), { method: "ping", params: { x: 1 } });
+  assert.equal(off.fontBytes, 0);
+});
+
+await test("project store: a font under the same name replaces the old bytes, and reset drops all", () => {
+  const store = new ProjectStore();
+  store.update({ fonts: { "a.ttf": new Uint8Array([1, 1]) } });
+  store.update({ fonts: { "a.ttf": new Uint8Array([2, 2, 2]) } });
+  let parts = store.request("ping", {}, true);
+  assert.deepEqual(envelopeOf(parts).fonts, [{ file: "a.ttf", size: 3 }]);
+  assert.deepEqual([...parts.chunks[2]], [2, 2, 2], "the newer bytes, never the stale ones");
+  store.update({ resetFonts: true, files: { "x.txt": "eA==" } });
+  parts = store.request("ping", {}, true);
+  assert.equal(parts.chunks.length, 1);
+  assert.deepEqual(envelopeOf(parts).params.files, { "x.txt": "eA==" });
+  assert.throws(() => store.update({ fonts: { "a.ttf": "AA==" } }), /not a Uint8Array/);
+});
+
+await test("the module reads stdin across chunks and checks the listed sizes", async () => {
+  const hebrew = fontFile("NotoSansHebrew-Regular.ttf");
+  const text = example("text-scripts.zen");
+  const ask = async (fonts) => {
+    const parts = requestParts("fonts", { source: text }, true, "{}", fonts);
+    return JSON.parse((await runRequest(module, parts.chunks)).response);
+  };
+  const needed = (out) => out.result.faces.filter((f) => f.fallback).map((f) => f.file);
+  const without = await ask(new Map());
+  assert.ok(needed(without).includes("NotoSansHebrew-Regular.ttf"), JSON.stringify(without));
+  const withFont = await ask(new Map([["NotoSansHebrew-Regular.ttf", hebrew]]));
+  assert.equal(withFont.ok, true, JSON.stringify(withFont));
+  assert.ok(!needed(withFont).includes("NotoSansHebrew-Regular.ttf"), JSON.stringify(withFont));
+  // The envelope lists one byte more than follows it.
+  const parts = requestParts("ping", {}, true, "{}", new Map([["a.ttf", new Uint8Array([1])]]));
+  parts.chunks[0] = new TextEncoder().encode('{"method":"ping","params":{"files":{}},"fonts":[{"file":"a.ttf","size":2}]}');
+  const bad = JSON.parse((await runRequest(module, parts.chunks)).response);
+  assert.equal(bad.error.code, "request.invalid_fonts");
+});
+
+await test("a font that changes content under the same name reaches the module, never the stale bytes", async () => {
+  const file = "NotoSansHebrew-Regular.ttf";
+  const real = fontFile(file);
+  const e = engine();
+  await e.openDocument({ name: "text-scripts.zen", text: example("text-scripts.zen") });
+  const needsHebrew = async () => (await e.run("fonts.required")).result.faces.some((f) => f.file === file);
+  assert.equal(await needsHebrew(), false, "the real face covers the Hebrew text");
+  await e.worker.project({ fonts: { [file]: new Uint8Array([1, 2, 3, 4]) } });
+  assert.equal(await needsHebrew(), true, "the junk bytes reached the module");
+  await e.worker.project({ fonts: { [file]: real } });
+  assert.equal(await needsHebrew(), false, "the real bytes are back");
+});
+
+await test("steady-state requests carry the fonts as raw bytes, with no base64 in the JSON", async () => {
+  const e = engine();
+  const text = example("text-scripts.zen");
+  await e.openDocument({ name: "text-scripts.zen", text });
+  e.worker.sent.length = 0;
+  await e.run("doc.render", { scale: 1 });
+  const v = (await e.state()).version;
+  await e.run("buffer.set", { text: `${text}// k\n` }, { version: v });
+  const held = [...e.worker.store.fonts.values()].reduce((n, b) => n + b.length, 0);
+  for (const s of e.worker.sent) {
+    assert.equal(s.fontBytes, held, s.command);
+    assert.ok(s.jsonBytes < 64 * 1024, `${s.command}: ${s.jsonBytes} JSON bytes`);
+  }
 });
 
 await test("takePng moves the base64 PNG out of the response", () => {
@@ -235,7 +307,7 @@ await test("lazy fonts: the named files load, the render equals one with the fon
   const lazy = (await e.run("doc.render", { scale: 1 })).result.sha256;
   // The same document with every font file given up front.
   const all = engine();
-  await all.worker.project({ fonts: Object.fromEntries([...e.loadedFonts].map((f) => [f, readFileSync(path.join(fontFiles, f)).toString("base64")])) });
+  await all.worker.project({ fonts: Object.fromEntries([...e.loadedFonts].map((f) => [f, fontFile(f)])) });
   await all.openDocument({ name: "code.zen", text });
   assert.equal((await all.run("doc.render", { scale: 1 })).result.sha256, lazy);
   assert.equal(new Set(fetched).size, fetched.length, "each font file is fetched once");
@@ -256,7 +328,7 @@ await test("lazy fallback fonts: each script loads its file once, and fetch orde
   const lazy = (await e.run("doc.render", { scale: 1 })).result.sha256;
   // Files that arrive in reverse order register in chain order all the same.
   const delays = new Map(["NotoEmoji-Regular.ttf", "NotoSansCJKsc-Fallback.otf", "NotoSansHebrew-Regular.ttf", "NotoSansArabic-Regular.ttf"].map((f, i) => [f, i * 20]));
-  const reversed = engine({ fonts: { get: (file) => new Promise((ok) => setTimeout(() => ok(fontBase64(file)), delays.get(file) ?? 0)) } });
+  const reversed = engine({ fonts: { get: (file) => new Promise((ok) => setTimeout(() => ok(fontFile(file)), delays.get(file) ?? 0)) } });
   await reversed.openDocument({ name: "text-scripts.zen", text });
   assert.equal((await reversed.run("doc.render", { scale: 1 })).result.sha256, lazy);
 });

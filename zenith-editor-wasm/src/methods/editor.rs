@@ -1,5 +1,6 @@
-//! `editor {session?, command, path?, files?, fonts?, global_config?, data?,
-//! allow?, warn?, deny?}`: one `zenith-editor` command.
+//! `editor {session?, command, path?, files?, global_config?, data?, allow?,
+//! warn?, deny?}`: one `zenith-editor` command. Font files come after the
+//! envelope.
 //!
 //! `command` is the engine request `{command, params?, version?}` (see
 //! `zenith_editor` for the command table). `session` is the session the
@@ -23,7 +24,6 @@ use serde_json::{Map, Value, json};
 use zenith_editor::{DEFAULT_DOCUMENT_PATH, MemProject, Request, Session};
 use zenith_pipeline::PolicyFlags;
 
-use super::font_supply::decode_font_bytes;
 use crate::protocol::ErrorBody;
 
 /// The `params` of `editor`.
@@ -41,9 +41,6 @@ pub(crate) struct EditorParams {
     /// Project files: path → base64 bytes.
     #[serde(default)]
     pub(crate) files: BTreeMap<String, String>,
-    /// Bundled font files the module does not embed: file name → base64.
-    #[serde(default)]
-    pub(crate) fonts: BTreeMap<String, String>,
     /// The path in `files` of the global config.
     #[serde(default)]
     pub(crate) global_config: Option<String>,
@@ -61,8 +58,12 @@ pub(crate) struct EditorParams {
     pub(crate) deny: Vec<String>,
 }
 
-/// Run one engine command over the request's project.
-pub(crate) fn run(params: EditorParams) -> Result<Value, ErrorBody> {
+/// Run one engine command over the request's project. `fonts` are the font
+/// files sent after the envelope (file name → raw bytes).
+pub(crate) fn run(
+    params: EditorParams,
+    fonts: BTreeMap<String, Vec<u8>>,
+) -> Result<Value, ErrorBody> {
     let mut files = BTreeMap::new();
     for (path, b64) in &params.files {
         let bytes = STANDARD.decode(b64).map_err(|e| {
@@ -81,7 +82,7 @@ pub(crate) fn run(params: EditorParams) -> Result<Value, ErrorBody> {
     };
     let mut project = MemProject::new(params.path.as_deref().unwrap_or(DEFAULT_DOCUMENT_PATH))
         .with_files(files)
-        .with_fonts(decode_font_bytes(&params.fonts)?)
+        .with_fonts(fonts)
         .map_err(invalid)?
         .with_flags(PolicyFlags {
             allow: params.allow,
@@ -112,6 +113,11 @@ mod tests {
     use super::*;
 
     const FLOWCHART: &str = include_str!("../../../examples/flowchart.zen");
+
+    /// `run` with no font files after the envelope.
+    fn run(params: EditorParams) -> Result<Value, ErrorBody> {
+        super::run(params, BTreeMap::new())
+    }
 
     fn params(session: Option<Session>, command: Value) -> EditorParams {
         serde_json::from_value(json!({ "session": session, "command": command }))
@@ -284,10 +290,10 @@ mod tests {
 
     #[test]
     fn bad_font_key_is_invalid_params() {
-        let mut p = params(None, json!({ "command": "commands.list" }));
-        p.fonts
-            .insert("Inter.ttf".to_owned(), STANDARD.encode(b"x"));
-        let err = run(p).expect_err("unknown font");
+        let p = params(None, json!({ "command": "commands.list" }));
+        let mut fonts = BTreeMap::new();
+        fonts.insert("Inter.ttf".to_owned(), b"x".to_vec());
+        let err = super::run(p, fonts).expect_err("unknown font");
         assert_eq!(err.code, "request.invalid_params");
     }
 }

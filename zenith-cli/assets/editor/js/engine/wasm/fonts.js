@@ -7,9 +7,9 @@
 // (Arabic, Hebrew, CJK, emoji) use the same protocol: the engine names the
 // file when text has a char only that face covers. The engine registers
 // fallback files in chain order, so fetch order never changes the render.
-// A fetched file is cached for the life of the page.
-
-import { blobToBase64 } from "./files.js";
+// A fetched file is cached for the life of the page as raw bytes. The page
+// gives it to the Worker once, and the Worker sends the bytes after the
+// envelope of each request (see `request.js`).
 
 export class FontCache {
   /** `baseUrl`: the directory URL that holds the font files. */
@@ -18,14 +18,14 @@ export class FontCache {
     this.cache = new Map();
   }
 
-  /** The base64 text of font file `file`. Rejects when it cannot be fetched. */
+  /** The bytes (Uint8Array) of font file `file`. Rejects when it cannot be fetched. */
   get(file) {
     let entry = this.cache.get(file);
     if (!entry) {
       entry = (async () => {
         const res = await fetch(new URL(file, this.baseUrl));
         if (!res.ok) throw new Error(`${file} answered ${res.status} ${res.statusText}`);
-        return blobToBase64(await res.blob());
+        return new Uint8Array(await res.arrayBuffer());
       })();
       entry.catch(() => this.cache.delete(file));
       this.cache.set(file, entry);

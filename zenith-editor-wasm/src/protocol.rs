@@ -4,16 +4,22 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 pub(crate) use zenith_editor::DiagnosticOut;
+
+use crate::framing::FontPart;
 use zenith_editor::{EditorError, Offer};
 
 /// One request: a method name and its parameters.
 #[derive(Debug, Deserialize)]
 pub(crate) struct Envelope {
-    /// `ping`, `diagnose`, `fonts`, or `render`.
+    /// `ping`, `diagnose`, `fonts`, `render`, or `editor`.
     pub(crate) method: String,
     /// Method parameters. A missing `params` reads as `null`.
     #[serde(default)]
     pub(crate) params: Value,
+    /// The bundled and fallback font files whose raw bytes follow the
+    /// envelope on stdin (see `framing`).
+    #[serde(default)]
+    pub(crate) fonts: Vec<FontPart>,
 }
 
 /// A method error: a stable code, a message that names the next action, the
@@ -100,5 +106,6 @@ mod tests {
         let env: Envelope = serde_json::from_str(r#"{"method":"ping"}"#).expect("envelope");
         assert_eq!(env.method, "ping");
         assert!(env.params.is_null());
+        assert!(env.fonts.is_empty());
     }
 }

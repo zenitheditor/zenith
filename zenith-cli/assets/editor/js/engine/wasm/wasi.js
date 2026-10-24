@@ -2,9 +2,11 @@
 // module. A static host runs the engine in a Worker through it (see
 // `worker.js`). `zenith edit` uses the native engine and never loads it.
 //
-// It implements exactly the 13 imports the module declares. stdin is one
-// request buffer, stdout and stderr are captured. There is no filesystem,
-// no preopen, and no environment. One instance runs one request.
+// It implements exactly the 13 imports the module declares. stdin is the
+// request chunks read in order (the envelope, then any font bytes; see
+// `request.js`), stdout and stderr are captured. There is no filesystem,
+// no preopen, and no environment. One instance runs one request: a WASI
+// command traps when `_start` runs twice.
 
 const ERRNO_SUCCESS = 0;
 const ERRNO_BADF = 8;
@@ -19,8 +21,10 @@ export class WasiExit extends Error {
 }
 
 export class Wasi {
-  constructor(stdinBytes) {
-    this.stdin = stdinBytes;
+  /** `stdinChunks`: the Uint8Arrays stdin reads, in order. */
+  constructor(stdinChunks) {
+    this.stdin = stdinChunks;
+    this.chunk = 0;
     this.stdinPos = 0;
     this.stdout = [];
     this.stderr = [];
@@ -90,11 +94,20 @@ export class Wasi {
           for (let i = 0; i < iovsLen; i++) {
             const ptr = v.getUint32(iovs + i * 8, true);
             const len = v.getUint32(iovs + i * 8 + 4, true);
-            const n = Math.min(len, self.stdin.length - self.stdinPos);
-            mem.set(self.stdin.subarray(self.stdinPos, self.stdinPos + n), ptr);
-            self.stdinPos += n;
-            total += n;
-            if (n < len) break;
+            let filled = 0;
+            while (filled < len && self.chunk < self.stdin.length) {
+              const src = self.stdin[self.chunk];
+              const n = Math.min(len - filled, src.length - self.stdinPos);
+              mem.set(src.subarray(self.stdinPos, self.stdinPos + n), ptr + filled);
+              self.stdinPos += n;
+              filled += n;
+              if (self.stdinPos === src.length) {
+                self.chunk++;
+                self.stdinPos = 0;
+              }
+            }
+            total += filled;
+            if (filled < len) break;
           }
           v.setUint32(nreadPtr, total, true);
           return ERRNO_SUCCESS;
@@ -142,19 +155,20 @@ function concat(chunks) {
 
 /** Names of the imports `module` needs that this shim does not provide. */
 export function missingImports(module) {
-  const provided = new Wasi(new Uint8Array()).imports();
+  const provided = new Wasi([]).imports();
   return WebAssembly.Module.imports(module)
     .filter((i) => !(provided[i.module] && i.name in provided[i.module]))
     .map((i) => `${i.module}.${i.name}`);
 }
 
 /**
- * Run one request on a fresh instance of `module`. Returns the response
- * text, the stderr text, the exit code, and the instantiate and run times
- * in ms.
+ * Run one request on a fresh instance of `module`. `stdinChunks` are the
+ * Uint8Arrays of the request (see `requestParts` in `request.js`). Returns
+ * the response text, the stderr text, the exit code, and the instantiate
+ * and run times in ms.
  */
-export async function runRequest(module, requestText) {
-  const wasi = new Wasi(new TextEncoder().encode(requestText));
+export async function runRequest(module, stdinChunks) {
+  const wasi = new Wasi(stdinChunks);
   const t0 = performance.now();
   const instance = await WebAssembly.instantiate(module, wasi.imports());
   wasi.memory = instance.exports.memory;

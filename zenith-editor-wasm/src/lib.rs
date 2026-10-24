@@ -14,16 +14,20 @@
 //! fonts, text sources, and data files therefore resolve as on the CLI.
 //!
 //! `editor` runs one `zenith-editor` command: `{session?, command: {command,
-//! params?, version?}, files?, fonts?, ...}` returns `{session, result, work,
+//! params?, version?}, files?, ...}` returns `{session, result, work,
 //! png_base64?}`. The page holds the session between calls; the module
 //! keeps no state. `commands.batch` runs several commands in one call, so
 //! the session and the project decode once per keystroke, not per command.
 //!
 //! The module embeds only Noto Sans Regular and Bold. `fonts` lists the other
-//! bundled faces a document needs. The page fetches those font files and
-//! passes them as `fonts` to `diagnose` and `render`.
+//! bundled and fallback faces a document needs. The page fetches those font
+//! files and sends their raw bytes after the envelope: the envelope lists
+//! `"fonts": [{"file", "size"}]`, then one NUL byte, then each file's bytes
+//! in list order. Every method reads them. Raw bytes skip base64 and JSON,
+//! so a 5.6 MB face costs one copy per request, not a decode.
 
 mod dispatch;
+mod framing;
 mod methods;
 mod protocol;
 

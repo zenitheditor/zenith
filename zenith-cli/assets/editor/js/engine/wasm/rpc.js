@@ -28,9 +28,9 @@ export class WorkerClient {
     this.nextId = 1;
     /** The project files map last sent, or `null`; sent again to a new Worker. */
     this.files = null;
-    /** Every font file sent since the last reset; sent again to a new Worker. */
+    /** Every font file (file -> Uint8Array) sent since the last reset; sent again to a new Worker. */
     this.fonts = {};
-    /** One entry per call: `{method, command, ms, runMs, instantiateMs, parseMs, bytes}`. */
+    /** One entry per call: `{method, command, ms, runMs, instantiateMs, parseMs, bytes, fontBytes}`. */
     this.timings = [];
     /** Milliseconds the module took to compile, once loaded. */
     this.compileMs = 0;
@@ -158,6 +158,7 @@ export class WorkerClient {
       instantiateMs: reply.instantiateMs,
       parseMs: reply.parseMs,
       bytes: reply.requestBytes,
+      fontBytes: reply.fontBytes,
     });
     if (this.timings.length > KEEP_TIMINGS) this.timings.splice(0, this.timings.length - KEEP_TIMINGS);
     return reply;

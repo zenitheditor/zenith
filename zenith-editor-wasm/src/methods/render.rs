@@ -41,11 +41,6 @@ pub(crate) struct RenderParams {
     /// Project files: path → base64 bytes.
     #[serde(default)]
     pub(crate) files: BTreeMap<String, String>,
-    /// Bundled and fallback font files the module does not embed: file name
-    /// (for example `NotoSerif-Bold.ttf`) → base64 bytes. `fonts` lists the
-    /// ones a document needs.
-    #[serde(default)]
-    pub(crate) fonts: BTreeMap<String, String>,
     /// The path in `files` of the global config.
     #[serde(default)]
     pub(crate) global_config: Option<String>,
@@ -70,20 +65,26 @@ pub(crate) struct RenderParams {
 }
 
 /// The `render` result: `{"png_base64", "width", "height", "page",
-/// "page_count", "scale", "diagnostics"}`.
-pub(crate) fn run(params: &RenderParams) -> Result<Value, ErrorBody> {
+/// "page_count", "scale", "diagnostics"}`. `fonts` are the font files sent
+/// after the envelope (file name → raw bytes).
+pub(crate) fn run(
+    params: &RenderParams,
+    fonts: BTreeMap<String, Vec<u8>>,
+) -> Result<Value, ErrorBody> {
     let src = params.source.as_str();
     let scale = checked_scale(params.scale)?;
     let page = params.page.unwrap_or(1);
-    let project = Project::decode(&ProjectFields {
-        path: params.path.as_deref(),
-        files: &params.files,
-        fonts: &params.fonts,
-        global_config: params.global_config.as_deref(),
-        allow: &params.allow,
-        warn: &params.warn,
-        deny: &params.deny,
-    })?;
+    let project = Project::decode(
+        &ProjectFields {
+            path: params.path.as_deref(),
+            files: &params.files,
+            global_config: params.global_config.as_deref(),
+            allow: &params.allow,
+            warn: &params.warn,
+            deny: &params.deny,
+        },
+        fonts,
+    )?;
     let data = load_data(&project, params.data.as_deref())?;
     let config = project.config();
     let opts = RenderOptions::new(&project.flags)
@@ -175,6 +176,11 @@ mod tests {
     const MULTIPAGE: &str = include_str!("../../../examples/multipage.zen");
     const IMAGE: &str = include_str!("../../../examples/image.zen");
     const SWATCH: &[u8] = include_bytes!("../../../examples/assets/swatch.png");
+
+    /// `run` with no font files after the envelope.
+    fn run(params: &RenderParams) -> Result<Value, ErrorBody> {
+        super::run(params, BTreeMap::new())
+    }
 
     fn params(source: &str) -> RenderParams {
         RenderParams {
@@ -321,7 +327,7 @@ mod tests {
         zenith_core::bundled_faces().iter().all(|f| f.is_embedded())
     }
 
-    fn font_map(files: &[&str]) -> BTreeMap<String, String> {
+    fn font_map(files: &[&str]) -> BTreeMap<String, Vec<u8>> {
         files
             .iter()
             .map(|name| {
@@ -330,7 +336,7 @@ mod tests {
                     env!("CARGO_MANIFEST_DIR")
                 );
                 let bytes = std::fs::read(&path).expect("bundled font file");
-                ((*name).to_owned(), STANDARD.encode(bytes))
+                ((*name).to_owned(), bytes)
             })
             .collect()
     }
@@ -358,11 +364,8 @@ mod tests {
     #[test]
     fn supplied_fonts_render_like_the_full_build() {
         let plain = SERIF_DOC;
-        let supplied = run(&RenderParams {
-            fonts: font_map(&["NotoSerif-Regular.ttf"]),
-            ..params(plain)
-        })
-        .expect("render ok");
+        let supplied =
+            super::run(&params(plain), font_map(&["NotoSerif-Regular.ttf"])).expect("render ok");
         let has_font_notice = supplied["diagnostics"]
             .as_array()
             .expect("diagnostics")
@@ -384,7 +387,7 @@ mod tests {
 
     const SCRIPTS: &str = include_str!("../../../examples/text-scripts.zen");
 
-    fn fallback_map() -> BTreeMap<String, String> {
+    fn fallback_map() -> BTreeMap<String, Vec<u8>> {
         zenith_fonts_fallback::fallback_faces()
             .iter()
             .map(|face| {
@@ -394,7 +397,7 @@ mod tests {
                     face.file
                 );
                 let bytes = std::fs::read(&path).expect("fallback font file");
-                (face.file.to_owned(), STANDARD.encode(bytes))
+                (face.file.to_owned(), bytes)
             })
             .collect()
     }
@@ -410,11 +413,7 @@ mod tests {
 
     #[test]
     fn supplied_fallback_files_render_like_the_embedded_chain() {
-        let supplied = run(&RenderParams {
-            fonts: fallback_map(),
-            ..params(SCRIPTS)
-        })
-        .expect("render ok");
+        let supplied = super::run(&params(SCRIPTS), fallback_map()).expect("render ok");
         let got = codes(&supplied);
         assert!(!got.iter().any(|c| c == "font.glyph_missing"), "{got:?}");
         assert!(!got.iter().any(|c| c == "font.unresolved"), "{got:?}");
@@ -437,12 +436,8 @@ mod tests {
     #[test]
     fn unknown_font_key_is_invalid_params() {
         let mut fonts = BTreeMap::new();
-        fonts.insert("Inter.ttf".to_owned(), STANDARD.encode(b"x"));
-        let err = run(&RenderParams {
-            fonts,
-            ..params(FLOWCHART)
-        })
-        .expect_err("unknown key");
+        fonts.insert("Inter.ttf".to_owned(), b"x".to_vec());
+        let err = super::run(&params(FLOWCHART), fonts).expect_err("unknown key");
         assert_eq!(err.code, "request.invalid_params");
     }
 }

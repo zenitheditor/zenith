@@ -6,12 +6,12 @@
 //! while recording each face the shaper asks for and each char it gives to
 //! a fallback face or to no face. It returns the faces the module lacks. An
 //! entry whose `file` is set names a bundled or fallback font file
-//! (`fallback: true` for the second). The page fetches that file and passes
-//! it as `fonts: {"<file>": "<base64>"}` to `diagnose` and `render`.
+//! (`fallback: true` for the second). The page fetches that file and sends
+//! its bytes after the envelope of every later request.
 //!
 //! A document can ask for a further face only after the first is supplied,
 //! because an unresolved family falls back to Noto Sans. The page calls
-//! `fonts` again with the faces it holds in `fonts` until `faces` is empty.
+//! `fonts` again with the faces it holds until `faces` is empty.
 //! An entry with `file: null` is a family that is neither bundled nor a
 //! font asset of the project. Supply it as a font asset in `files`.
 
@@ -37,10 +37,6 @@ pub(crate) struct FontsParams {
     /// Project files: path → base64 bytes.
     #[serde(default)]
     pub(crate) files: BTreeMap<String, String>,
-    /// Bundled and fallback font files the page already holds: file name →
-    /// base64.
-    #[serde(default)]
-    pub(crate) fonts: BTreeMap<String, String>,
     /// The path in `files` of the global config.
     #[serde(default)]
     pub(crate) global_config: Option<String>,
@@ -52,17 +48,23 @@ pub(crate) struct FontsParams {
 ///
 /// `embedded` lists the bundled and fallback files this module embeds. `complete` is
 /// `false` when the document has an error that stops compilation, so the
-/// list can be short until the error is fixed.
-pub(crate) fn run(params: &FontsParams) -> Result<Value, ErrorBody> {
-    let project = Project::decode(&ProjectFields {
-        path: params.path.as_deref(),
-        files: &params.files,
-        fonts: &params.fonts,
-        global_config: params.global_config.as_deref(),
-        allow: &[],
-        warn: &[],
-        deny: &[],
-    })?;
+/// list can be short until the error is fixed. `fonts` are the font files
+/// the page already holds, sent after the envelope (file name → raw bytes).
+pub(crate) fn run(
+    params: &FontsParams,
+    fonts: BTreeMap<String, Vec<u8>>,
+) -> Result<Value, ErrorBody> {
+    let project = Project::decode(
+        &ProjectFields {
+            path: params.path.as_deref(),
+            files: &params.files,
+            global_config: params.global_config.as_deref(),
+            allow: &[],
+            warn: &[],
+            deny: &[],
+        },
+        fonts,
+    )?;
     let config = project.config();
     let validation = validate_source(
         project.host(&config),
@@ -80,8 +82,6 @@ pub(crate) fn run(params: &FontsParams) -> Result<Value, ErrorBody> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use base64::Engine as _;
-    use base64::engine::general_purpose::STANDARD;
 
     const SERIF: &str = r##"zenith version=1 {
   project id="proj.s" name="S"
@@ -111,6 +111,11 @@ mod tests {
   }
 }
 "##;
+
+    /// `run` with no font files after the envelope.
+    fn run(params: &FontsParams) -> Result<Value, ErrorBody> {
+        super::run(params, BTreeMap::new())
+    }
 
     fn params(source: &str) -> FontsParams {
         FontsParams {
@@ -154,12 +159,8 @@ mod tests {
     fn supplied_face_leaves_the_list() {
         let regular = include_bytes!("../../../zenith-core/assets/fonts/NotoSerif-Regular.ttf");
         let mut fonts = BTreeMap::new();
-        fonts.insert("NotoSerif-Regular.ttf".to_owned(), STANDARD.encode(regular));
-        let out = run(&FontsParams {
-            fonts,
-            ..params(SERIF)
-        })
-        .expect("fonts runs");
+        fonts.insert("NotoSerif-Regular.ttf".to_owned(), regular.to_vec());
+        let out = super::run(&params(SERIF), fonts).expect("fonts runs");
         assert_eq!(out["faces"], serde_json::json!([]), "{out}");
     }
 
@@ -188,7 +189,7 @@ mod tests {
     const SCRIPTS: &str = include_str!("../../../examples/text-scripts.zen");
 
     /// Every fallback file, read from the fallback crate.
-    fn fallback_fonts() -> BTreeMap<String, String> {
+    fn fallback_fonts() -> BTreeMap<String, Vec<u8>> {
         zenith_fonts_fallback::fallback_faces()
             .iter()
             .map(|face| {
@@ -198,7 +199,7 @@ mod tests {
                     face.file
                 );
                 let bytes = std::fs::read(&path).expect("fallback font file");
-                (face.file.to_owned(), STANDARD.encode(bytes))
+                (face.file.to_owned(), bytes)
             })
             .collect()
     }
@@ -239,11 +240,7 @@ mod tests {
 
     #[test]
     fn supplied_fallback_files_leave_the_list() {
-        let out = run(&FontsParams {
-            fonts: fallback_fonts(),
-            ..params(SCRIPTS)
-        })
-        .expect("fonts runs");
+        let out = super::run(&params(SCRIPTS), fallback_fonts()).expect("fonts runs");
         let fallback = out["faces"]
             .as_array()
             .expect("faces")

@@ -29,11 +29,6 @@ pub(crate) struct DiagnoseParams {
     /// Project files: path → base64 bytes.
     #[serde(default)]
     pub(crate) files: BTreeMap<String, String>,
-    /// Bundled font files the module does not embed: file name (for example
-    /// `NotoSerif-Bold.ttf`) → base64 bytes. `fonts` lists the ones a
-    /// document needs.
-    #[serde(default)]
-    pub(crate) fonts: BTreeMap<String, String>,
     /// The path in `files` of the global config.
     #[serde(default)]
     pub(crate) global_config: Option<String>,
@@ -49,17 +44,23 @@ pub(crate) struct DiagnoseParams {
 }
 
 /// The `diagnose` result: `{"valid", "exit_code", "diagnostics"}`.
-/// `exit_code` is the `zenith validate` exit code: 0, 1, or 2.
-pub(crate) fn run(params: &DiagnoseParams) -> Result<Value, ErrorBody> {
-    let project = Project::decode(&ProjectFields {
-        path: params.path.as_deref(),
-        files: &params.files,
-        fonts: &params.fonts,
-        global_config: params.global_config.as_deref(),
-        allow: &params.allow,
-        warn: &params.warn,
-        deny: &params.deny,
-    })?;
+/// `exit_code` is the `zenith validate` exit code: 0, 1, or 2. `fonts` are
+/// the font files sent after the envelope (file name → raw bytes).
+pub(crate) fn run(
+    params: &DiagnoseParams,
+    fonts: BTreeMap<String, Vec<u8>>,
+) -> Result<Value, ErrorBody> {
+    let project = Project::decode(
+        &ProjectFields {
+            path: params.path.as_deref(),
+            files: &params.files,
+            global_config: params.global_config.as_deref(),
+            allow: &params.allow,
+            warn: &params.warn,
+            deny: &params.deny,
+        },
+        fonts,
+    )?;
     let config = project.config();
     let src = params.source.as_str();
     let validation = validate_source(
@@ -84,7 +85,7 @@ mod tests {
     use base64::engine::general_purpose::STANDARD;
 
     fn diagnose(params: DiagnoseParams) -> Value {
-        run(&params).expect("diagnose runs")
+        run(&params, BTreeMap::new()).expect("diagnose runs")
     }
 
     fn source(source: &str) -> DiagnoseParams {

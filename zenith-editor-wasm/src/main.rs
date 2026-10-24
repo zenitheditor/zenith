@@ -1,15 +1,20 @@
-//! `zenith-editor-wasm`: one JSON request on stdin, one JSON response on stdout.
+//! `zenith-editor-wasm`: one request on stdin, one JSON response on stdout.
+//!
+//! Stdin holds the JSON envelope, then any font bytes it lists (see
+//! `zenith_editor_wasm::handle_request`).
 
 use std::io::{Read, Write};
 use std::process::ExitCode;
 
 fn main() -> ExitCode {
-    let mut input = String::new();
-    let response = match std::io::stdin().read_to_string(&mut input) {
+    let mut input = Vec::new();
+    let response = match std::io::stdin().read_to_end(&mut input) {
         Ok(_) => zenith_editor_wasm::handle_request(&input),
         Err(e) => zenith_editor_wasm::error_response(
             "request.stdin_read_failed",
-            &format!("could not read the request from stdin: {e}; send one UTF-8 JSON object"),
+            &format!(
+                "could not read the request from stdin: {e}; send one UTF-8 JSON envelope, then any font bytes it lists"
+            ),
         ),
     };
     let mut stdout = std::io::stdout().lock();

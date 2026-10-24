@@ -404,7 +404,7 @@ export const tests = [
       const fake = installFakeWorker();
       const client = new WorkerClient("w.js", "e.wasm", { timeoutMs: 40 });
       await client.project({ files: { "a.svg": "eA==" }, resetFonts: true });
-      await client.project({ fonts: { "F.ttf": "AA==" } });
+      await client.project({ fonts: { "F.ttf": new Uint8Array([0, 1]) } });
       fake.hang = true;
       await assert.rejects(
         client.call("editor", { command: { command: "doc.render" } }),
@@ -416,7 +416,7 @@ export const tests = [
       assert.equal(reply.response.ok, true);
       const replay = fake.instances[1].seen.find((m) => m.type === "project");
       assert.deepEqual(replay.files, { "a.svg": "eA==" });
-      assert.deepEqual(replay.fonts, { "F.ttf": "AA==" });
+      assert.deepEqual(replay.fonts, { "F.ttf": new Uint8Array([0, 1]) });
       client.close();
     },
   ],

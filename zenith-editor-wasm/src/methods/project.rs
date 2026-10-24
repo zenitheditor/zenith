@@ -25,8 +25,6 @@ pub(crate) struct ProjectFields<'a> {
     pub(crate) path: Option<&'a str>,
     /// Project files as path → base64 bytes.
     pub(crate) files: &'a BTreeMap<String, String>,
-    /// Bundled font files the module does not embed: file name → base64.
-    pub(crate) fonts: &'a BTreeMap<String, String>,
     /// The path in `files` of the global config, when any.
     pub(crate) global_config: Option<&'a str>,
     /// `--allow` codes.
@@ -43,20 +41,24 @@ pub(crate) struct Project {
     pub(crate) dir: PathBuf,
     pub(crate) global_config: Option<PathBuf>,
     pub(crate) flags: PolicyFlags,
-    /// Bundled faces the request supplied in `fonts`.
+    /// Bundled and fallback faces sent after the envelope.
     pub(crate) extra_fonts: Vec<ExtraFont>,
     /// Every face request the provider could not match exactly.
     pub(crate) font_log: FontMissLog,
 }
 
 impl Project {
-    /// Decode `fields`.
+    /// Decode `fields`, with `fonts` (file name → raw bytes) as the bundled
+    /// and fallback font files sent after the envelope.
     ///
     /// # Errors
     ///
-    /// `request.invalid_params` naming the file or font whose bytes are not
-    /// base64, or a `fonts` key that is not a bundled font file.
-    pub(crate) fn decode(fields: &ProjectFields<'_>) -> Result<Self, ErrorBody> {
+    /// `request.invalid_params` naming the file whose bytes are not base64,
+    /// or a font file name that is not a bundled or fallback font file.
+    pub(crate) fn decode(
+        fields: &ProjectFields<'_>,
+        fonts: BTreeMap<String, Vec<u8>>,
+    ) -> Result<Self, ErrorBody> {
         let mut fs = MemFs::new();
         for (path, b64) in fields.files {
             let bytes = STANDARD.decode(b64).map_err(|e| {
@@ -74,7 +76,7 @@ impl Project {
         Ok(Self {
             fs,
             dir,
-            extra_fonts: decode_fonts(fields.fonts)?,
+            extra_fonts: decode_fonts(fonts)?,
             font_log: FontMissLog::new(),
             global_config: fields.global_config.map(PathBuf::from),
             flags: PolicyFlags {
@@ -91,7 +93,7 @@ impl Project {
     }
 
     /// The host over this project's files and `config`: no local fonts,
-    /// sequential pages, ignored warnings. It adds the request's `fonts` and
+    /// sequential pages, ignored warnings. It adds the request's fonts and
     /// records the faces the document asks for.
     pub(crate) fn host<'a>(&'a self, config: &'a FsConfig<'a>) -> Host<'a> {
         Host::new(&self.fs, config)
@@ -106,11 +108,9 @@ mod tests {
     use zenith_pipeline::SourceFs;
 
     fn fields<'a>(path: Option<&'a str>, files: &'a BTreeMap<String, String>) -> ProjectFields<'a> {
-        static NO_FONTS: BTreeMap<String, String> = BTreeMap::new();
         ProjectFields {
             path,
             files,
-            fonts: &NO_FONTS,
             global_config: None,
             allow: &[],
             warn: &[],
@@ -122,13 +122,14 @@ mod tests {
     fn decodes_files_and_places_the_document() {
         let mut files = BTreeMap::new();
         files.insert("site/a.txt".to_owned(), STANDARD.encode(b"hi"));
-        let project = Project::decode(&fields(Some("site/page.zen"), &files)).expect("decode");
+        let project = Project::decode(&fields(Some("site/page.zen"), &files), BTreeMap::new())
+            .expect("decode");
         assert_eq!(project.dir, PathBuf::from("site"));
         assert_eq!(
             project.fs.read(Path::new("site/a.txt")).expect("read"),
             b"hi"
         );
-        let default = Project::decode(&fields(None, &files)).expect("decode");
+        let default = Project::decode(&fields(None, &files), BTreeMap::new()).expect("decode");
         assert_eq!(default.dir, PathBuf::new());
     }
 
@@ -136,7 +137,7 @@ mod tests {
     fn bad_base64_names_the_file() {
         let mut files = BTreeMap::new();
         files.insert("x.png".to_owned(), "***".to_owned());
-        let err = Project::decode(&fields(None, &files))
+        let err = Project::decode(&fields(None, &files), BTreeMap::new())
             .err()
             .expect("bad base64");
         assert_eq!(err.code, "request.invalid_params");
