@@ -8,12 +8,13 @@ use std::collections::BTreeMap;
 use zenith_core::{
     Diagnostic, FontProvider, FontStyle, PropertyValue, ResolvedToken, Style, TextNode,
 };
-use zenith_layout::{RustybuzzEngine, TextDirection};
+use zenith_layout::RustybuzzEngine;
 
 use crate::ir::Color;
 
 use super::super::style_prop;
 use super::super::util::resolve_property_dimension_px;
+use super::bidi::node_direction;
 use super::ctx::{NodeShape, ShapeEnv};
 use super::kerning::resolve_kerning_pairs;
 use super::pack::pack_lines;
@@ -223,10 +224,7 @@ pub(in crate::compile) fn measure_text_natural(
     if spans.is_empty() {
         return None;
     }
-    let node_direction = match text.direction.as_deref() {
-        Some("rtl") => TextDirection::Rtl,
-        _ => TextDirection::Ltr,
-    };
+    let node_direction = node_direction(text);
     let kerning_pairs = resolve_kerning_pairs(&text.kerning_pairs, env.resolved);
     let (tokens, metrics) = shape_words(
         &spans,
@@ -283,10 +281,7 @@ pub(in crate::compile) fn measure_text_wrapped_height(
     if spans.is_empty() {
         return None;
     }
-    let node_direction = match text.direction.as_deref() {
-        Some("rtl") => TextDirection::Rtl,
-        _ => TextDirection::Ltr,
-    };
+    let node_direction = node_direction(text);
     let kerning_pairs = resolve_kerning_pairs(&text.kerning_pairs, env.resolved);
     let (tokens, metrics) = shape_words(
         &spans,

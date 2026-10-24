@@ -8,6 +8,7 @@ use zenith_layout::TextDirection;
 
 use crate::ir::{Color, Paint, SceneCommand};
 
+use super::bidi::{PlacedPiece, place_line};
 use super::ctx::{EmitStyle, UniformGeom};
 use super::pack::{Line, LineDecoration, LineStyle};
 use super::shape::{CODE_BG, WordToken, run_to_scene_glyphs};
@@ -65,7 +66,6 @@ pub(in crate::compile) fn emit_lines_profiled<F>(
     // Node-global fallback scalars (used when `line.line_style` is `None`,
     // which is every existing path → byte-identical output).
     let global_ascent = metrics.ascent;
-    let global_space_advance = metrics.space_advance;
     let global_font_size = style.font_size;
     let global_deco_thickness = style.deco_thickness;
 
@@ -120,48 +120,20 @@ pub(in crate::compile) fn emit_lines_profiled<F>(
         // back to the node-global values. When `line_style` is `None` for every
         // line (all existing paths) the values are identical to the old hoisted
         // reads → byte-identical output guaranteed.
-        let (ascent, space_advance, font_size, deco_thickness) = match line.line_style {
+        let (ascent, font_size, deco_thickness) = match line.line_style {
             Some(LineStyle {
                 ascent,
-                space_advance,
                 font_size,
                 deco_thickness,
-            }) => (ascent, space_advance, font_size, deco_thickness),
-            None => (
-                global_ascent,
-                global_space_advance,
-                global_font_size,
-                global_deco_thickness,
-            ),
+            }) => (ascent, font_size, deco_thickness),
+            None => (global_ascent, global_font_size, global_deco_thickness),
         };
         let baseline_y = text_y + ascent + y_offset;
-        let word_count = line.words.len();
 
-        // Visual left-to-right word order. LTR is logical order (byte-identical
-        // to before); RTL reverses the words so the first LOGICAL word sits
-        // rightmost (each word's own glyphs are already in visual order from the
-        // shaper). Words are then placed left-to-right by `word_x` in this order.
-        let visual: Vec<&WordToken> = if is_rtl {
-            line.words.iter().rev().collect()
-        } else {
-            line.words.iter().collect()
-        };
-
-        // Whether the inter-word gap BEFORE visual word `vi` (1-based boundary;
-        // `vi` in `1..word_count`) is SUPPRESSED because the two words are glued
-        // (source-adjacent, no whitespace). The glue flag lives on the
-        // logically-LATER word. In LTR, visual order is logical order, so the
-        // later word of the pair is `visual[vi]`. In RTL, the words are reversed,
-        // so the later word is `visual[vi - 1]`. A line with no glued words has
-        // every gap present, byte-identical to before.
-        let gap_suppressed = |vi: usize| -> bool {
-            let later = if is_rtl { vi.checked_sub(1) } else { Some(vi) };
-            later.and_then(|j| visual.get(j)).is_some_and(|w| w.glued)
-        };
-        // Number of REAL (non-suppressed) gaps on the line — the count of
-        // boundaries justify can stretch. Equals `word_count - 1` when no word is
-        // glued, so justify is byte-identical for whitespace-only lines.
-        let real_gap_count = (1..word_count).filter(|&vi| !gap_suppressed(vi)).count();
+        // Every boundary between two words is a gap unless the later word
+        // is glued (source-adjacent, no whitespace). Justify stretches only
+        // real gaps. With no glued word this is `word_count - 1`.
+        let real_gap_count = line.words.iter().skip(1).filter(|w| !w.glued).count();
 
         // `(base_x, extra)`: the line's left origin and the PER-REAL-GAP stretch
         // added on top of `space_advance` under justify (0 otherwise). LTR keeps
@@ -212,22 +184,11 @@ pub(in crate::compile) fn emit_lines_profiled<F>(
             }
         };
 
-        // Precompute each VISUAL word's left x along the line, left-to-right. A
-        // suppressed (glued) boundary adds NO gap, so the glued word sits flush
-        // against its neighbour; every other boundary adds the next word's
-        // resolved gap plus `extra` (`extra` is non-zero only under justify).
-        let mut word_x: Vec<f64> = Vec::with_capacity(word_count);
-        {
-            let mut x = base_x;
-            for (wi, word) in visual.iter().enumerate() {
-                word_x.push(x);
-                x += word.advance;
-                let next = wi + 1;
-                if next < word_count && !gap_suppressed(next) {
-                    x += visual.get(next).map_or(space_advance, |w| w.gap_before_px) + extra;
-                }
-            }
-        }
+        // Place the line's bidi pieces left to right in visual order. Each
+        // non-glued word opens with its gap plus `extra`. A level-0 line keeps
+        // logical order (byte-identical to the plain placement). An RTL line
+        // reverses, and an LTR stretch inside it keeps its own order.
+        let placed = place_line(&line.words, base_x, extra);
 
         // Background rects FIRST (painted before decorations and glyphs so
         // everything sits on top). A multi-word highlighted run (or `code` run)
@@ -242,10 +203,8 @@ pub(in crate::compile) fn emit_lines_profiled<F>(
         // `highlight` and `code` are independent passes (a word may carry both),
         // mirroring the underline/strikethrough decoration grouping below. The
         // band geometry (y/h) is taken from the FIRST run-bearing word of the run.
-        emit_background_run(&visual, &word_x, base_x, baseline_y, commands, |w| {
-            w.highlight
-        });
-        emit_background_run(&visual, &word_x, base_x, baseline_y, commands, |w| {
+        emit_background_run(&placed, baseline_y, commands, |w| w.highlight);
+        emit_background_run(&placed, baseline_y, commands, |w| {
             if w.code { Some(CODE_BG) } else { None }
         });
 
@@ -256,18 +215,18 @@ pub(in crate::compile) fn emit_lines_profiled<F>(
         for (is_underline, deco_y) in [(true, underline_y), (false, strike_y)] {
             let mut run_start: Option<(f64, Color)> = None;
             let mut run_right: f64 = base_x;
-            for (wi, word) in visual.iter().enumerate() {
+            for piece in &placed {
+                let word = piece.word;
                 let on = if is_underline {
                     word.underline
                 } else {
                     word.strikethrough
                 };
-                let wx = word_x.get(wi).copied().unwrap_or(base_x);
                 if on {
                     if run_start.is_none() {
-                        run_start = Some((wx, word.color));
+                        run_start = Some((piece.x, word.color));
                     }
-                    run_right = wx + word.advance;
+                    run_right = piece.x + piece.advance;
                 } else if let Some((sx, color)) = run_start.take() {
                     commands.push(SceneCommand::FillRect {
                         x: sx,
@@ -292,10 +251,11 @@ pub(in crate::compile) fn emit_lines_profiled<F>(
         // Glyphs. A super/subscript word carries a non-zero `baseline_dy`,
         // shifting its runs off the shared line baseline (negative = up); a
         // baseline word has dy 0 and is byte-identical to before.
-        for (wi, word) in visual.iter().enumerate() {
-            let mut run_x = word_x.get(wi).copied().unwrap_or(base_x);
+        for piece in &placed {
+            let word = piece.word;
+            let mut run_x = piece.x;
             let word_baseline_y = baseline_y + word.baseline_dy;
-            for run in &word.runs {
+            for run in piece.glyph_runs() {
                 commands.push(SceneCommand::DrawGlyphRun {
                     x: run_x,
                     y: word_baseline_y,
@@ -319,21 +279,19 @@ pub(in crate::compile) fn emit_lines_profiled<F>(
 }
 
 /// Emit coalesced background FillRects for one background channel of a line's
-/// VISUAL words. `key(word)` returns `Some(color)` when the word carries this
+/// placed pieces, in visual order. `key(word)` returns `Some(color)` when the word carries this
 /// background (the highlight color, or [`CODE_BG`] for a `code` word) and `None`
 /// otherwise. Maximal runs of consecutive words sharing the SAME `Some(color)`
 /// are merged into a single rect spanning the first word's left edge to the last
 /// word's right edge — which INCLUDES the inter-word spaces between them, since
-/// `word_x` already encodes each word's placed origin. A `None`, a colour change,
+/// each piece carries its placed origin. A `None`, a colour change,
 /// or the end of the line closes the current run. The band's vertical geometry
 /// (`y`/`h`) is taken from the FIRST run-bearing word of the run; a run made
 /// entirely of empty (run-less) words emits nothing, matching the prior per-word
 /// guard. A line with at most one background word per run is byte-identical to
 /// the previous per-word emission.
 fn emit_background_run<F>(
-    visual: &[&WordToken],
-    word_x: &[f64],
-    base_x: f64,
+    placed: &[PlacedPiece<'_>],
     baseline_y: f64,
     commands: &mut Vec<SceneCommand>,
     key: F,
@@ -362,9 +320,10 @@ fn emit_background_run<F>(
         }
     };
 
-    for (wi, word) in visual.iter().enumerate() {
-        let wx = word_x.get(wi).copied().unwrap_or(base_x);
-        let band = word.runs.first().map(|r| {
+    for piece in placed {
+        let word = piece.word;
+        let wx = piece.x;
+        let band = piece.glyph_runs().first().map(|r| {
             let y = baseline_y - r.ascent as f64;
             let h = (r.ascent + r.descent) as f64;
             (y, h)
@@ -376,7 +335,7 @@ fn emit_background_run<F>(
                     run = Some(BgRun {
                         color,
                         left: cur.left,
-                        right: wx + word.advance,
+                        right: wx + piece.advance,
                         // Adopt the band from the first run-bearing word if not yet set.
                         band: cur.band.or(band),
                     });
@@ -387,7 +346,7 @@ fn emit_background_run<F>(
                     run = Some(BgRun {
                         color,
                         left: wx,
-                        right: wx + word.advance,
+                        right: wx + piece.advance,
                         band,
                     });
                 }
@@ -418,10 +377,13 @@ mod rtl_tests {
 
     use super::super::shape::{WordMetrics, WordSource};
 
-    /// Build a single-run [`WordToken`] of the given `advance` so per-word x
-    /// positions in the emitted commands are deterministic and checkable.
-    fn word(advance: f64) -> WordToken {
+    /// Build a single-run [`WordToken`] of the given `advance` at bidi `level`
+    /// (1 for an RTL word in an RTL paragraph), so per-word x positions in the
+    /// emitted commands are deterministic and checkable.
+    fn leveled_word(advance: f64, level: u8) -> WordToken {
         WordToken {
+            run_levels: vec![level],
+            gap_level: level,
             runs: vec![ZenithGlyphRun {
                 font_id: "test-font".to_owned(),
                 font_size: 16.0,
@@ -443,6 +405,7 @@ mod rtl_tests {
             glued: false,
             src: WordSource {
                 text: String::new(),
+                levels: Vec::new(),
                 weight: 400,
                 style: FontStyle::Normal,
                 font_size: 16.0,
@@ -477,8 +440,13 @@ mod rtl_tests {
     /// and align, returning the per-word x origins in COMMAND order.
     fn emit_line(direction: TextDirection, align: &str) -> Vec<f64> {
         // content_w = 10 + 5 + 20 + 5 + 30 = 70.
+        let level = zenith_layout::base_level(direction);
         let line = Line {
-            words: vec![word(10.0), word(20.0), word(30.0)],
+            words: vec![
+                leveled_word(10.0, level),
+                leveled_word(20.0, level),
+                leveled_word(30.0, level),
+            ],
             content_w: 70.0,
             paragraph: 0,
             height_px: 18.0,
@@ -571,6 +539,7 @@ mod line_style_tests {
                 advance_width: advance as f32,
                 glyphs: Vec::new(),
             }],
+            run_levels: vec![0],
             advance,
             color: Color::srgb(0, 0, 0, 255),
             underline: false,
@@ -580,9 +549,11 @@ mod line_style_tests {
             link: None,
             baseline_dy: 0.0,
             gap_before_px: 5.0,
+            gap_level: 0,
             glued: false,
             src: WordSource {
                 text: String::new(),
+                levels: Vec::new(),
                 weight: 400,
                 style: FontStyle::Normal,
                 font_size: 16.0,
@@ -662,7 +633,6 @@ mod line_style_tests {
             height_px: 36.0,
             line_style: Some(LineStyle {
                 ascent: 24.0,
-                space_advance: 8.0,
                 font_size: 32.0,
                 deco_thickness: 2.0,
             }),
@@ -718,7 +688,6 @@ mod line_style_tests {
             height_px: 36.0,
             line_style: Some(LineStyle {
                 ascent: 24.0,
-                space_advance: 8.0,
                 font_size: 32.0,
                 deco_thickness: 2.0,
             }),

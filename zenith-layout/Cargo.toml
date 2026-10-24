@@ -16,10 +16,14 @@ description = "Zenith text shaping and font metrics (rustybuzz + ttf-parser)."
 zenith-core = { workspace = true }
 zenith-geometry = { workspace = true }
 rustybuzz = "0.20"
+unicode-bidi = "0.3.18"
+unicode-linebreak = "0.1.5"
 
 [dev-dependencies]
 # Tests use the serif and mono faces.
 zenith-core = { workspace = true, features = ["bundled-fonts-extended"] }
+# Bidi, CJK, and emoji tests shape with the fallback faces.
+zenith-fonts-fallback = { workspace = true, features = ["embed"] }
 
 [lints]
 workspace = true

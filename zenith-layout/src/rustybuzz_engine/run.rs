@@ -51,6 +51,12 @@ impl<'r, 'f> FaceShapeRequest<'r, 'f> {
         self.plans = Some((cache, slot));
         self
     }
+
+    /// This request shaped in `direction` in place of the request direction.
+    pub(super) fn with_direction(mut self, direction: TextDirection) -> Self {
+        self.direction = direction;
+        self
+    }
 }
 
 /// Shape `text` with an already-parsed `face` and produce a single
@@ -92,9 +98,9 @@ pub(super) fn shape_run_with_face(
     let mut buffer = rustybuzz::UnicodeBuffer::new();
     buffer.push_str(req.text);
     // RTL sets the buffer direction so rustybuzz reorders glyphs to visual
-    // order and applies RTL-correct joining (Arabic, Hebrew). The run's
-    // advance + glyph pen positions stay left-to-right, so a word emitted
-    // at its left x renders correctly; LTR is the default (unchanged).
+    // order, mirrors brackets, and joins Arabic letters. The run's advance and
+    // pen positions stay left to right, so a run drawn at its left x reads
+    // correctly. LTR is the default.
     buffer.set_direction(match req.direction {
         TextDirection::Ltr => rustybuzz::Direction::LeftToRight,
         TextDirection::Rtl => rustybuzz::Direction::RightToLeft,

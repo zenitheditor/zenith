@@ -345,7 +345,7 @@ fn attribute_type_generic(name: &str, fallback: &'static str) -> &'static str {
         "page-parity-start" => "enum: recto|verso",
         "page-progression" => "enum: ltr|rtl",
         "colorspace" => "enum: srgb|cmyk",
-        "direction" => "enum: ltr|rtl",
+        "direction" => "enum: ltr|rtl (absent: the first strong char decides)",
         "overflow-wrap" => "enum: normal|break-word",
         "h-align" => "enum: start|center|end",
         "v-align" => "enum: top|middle|bottom",

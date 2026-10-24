@@ -5,7 +5,6 @@
 use std::collections::BTreeMap;
 
 use zenith_core::{Diagnostic, ResolvedToken, TextNode, dim_to_px};
-use zenith_layout::TextDirection;
 
 use crate::ir::SceneCommand;
 
@@ -16,6 +15,7 @@ use super::super::paint::{
 use super::super::util::{blend_mode_ir, resolve_geometry_px, rotation_degrees};
 use super::super::{style_enum, style_prop};
 use super::baseline::{baseline_grid_snap_failed_diag, snap_to_baseline_grid};
+use super::bidi::explicit_direction;
 use super::ctx::{ChainMemberPlace, EmitStyle};
 use super::emit::emit_lines;
 use super::ink::{BlockOverflow, block_overflow, ink_bounds};
@@ -159,14 +159,10 @@ pub(in crate::compile) fn render_chain_member(
     // bracket them with the effect and/or mask (byte-identical when neither set).
     let mut draws: Vec<SceneCommand> = Vec::new();
 
-    // Honor the node's direction for line layout. The chain pre-pass shapes the
-    // source's spans with the source direction (see [`super::super::chain`]); here
-    // the member's own `direction` drives line ordering/alignment. RTL chains are
-    // feasible because shaping + this emit both consult direction.
-    let chain_direction = match text.direction.as_deref() {
-        Some("rtl") => TextDirection::Rtl,
-        _ => TextDirection::Ltr,
-    };
+    // The member's explicit `direction` drives line alignment. Without one,
+    // the member takes the chain source's direction: a continuation member has
+    // no text of its own to detect from.
+    let chain_direction = explicit_direction(text).unwrap_or(assignment.direction);
 
     emit_lines(
         &assignment.lines,

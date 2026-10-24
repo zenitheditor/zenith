@@ -11,10 +11,11 @@ use std::sync::OnceLock;
 use hyphenation::{Hyphenator, Language, Load, Standard};
 
 use zenith_core::FontProvider;
-use zenith_layout::{RustybuzzEngine, ShapeRequest, TextDirection, TextLayoutEngine};
+use zenith_layout::{RustybuzzEngine, ShapeRequest, TextDirection, base_level};
 
+use super::bidi::shape_leveled;
 use super::pack::Line;
-use super::shape::{WordSource, WordToken};
+use super::shape::{CODE_MONO_FAMILY, WordSource, WordToken};
 
 /// Process-wide cache for the embedded en-US hyphenation dictionary. Loaded at
 /// most once; `None` only if the embedded blob fails to decode (it should not,
@@ -60,18 +61,23 @@ pub(in crate::compile) struct HyphenSplit {
 }
 
 /// Re-shape `text` into a [`WordToken`] inheriting `donor`'s visual attributes,
-/// at `donor`'s weight/style/size. `hyphen_part` tags the result as a
+/// at `donor`'s weight/style/size. `levels` holds the bidi level of each byte
+/// of `text`, sliced from the donor. `hyphen_part` tags the result as a
 /// hyphenation head/tail (or `None` for a plain reconstruction). Returns `None`
 /// on a shaping failure so the caller falls back to NOT splitting. Deterministic.
 fn reshape_fragment(
     text: &str,
+    levels: Vec<u8>,
     donor: &WordToken,
     hyphen_part: Option<(String, bool)>,
     ctx: &HyphenationContext,
 ) -> Option<WordToken> {
+    // A `code` word keeps the mono family it shaped with.
+    let mono = [CODE_MONO_FAMILY.to_owned()];
+    let families: &[String] = if donor.code { &mono } else { ctx.families };
     let req = ShapeRequest {
         text,
-        families: ctx.families,
+        families,
         weight: donor.src.weight,
         style: donor.src.style,
         font_size: donor.src.font_size,
@@ -80,10 +86,12 @@ fn reshape_fragment(
         kerning_pairs: &[],
         letter_spacing_px: donor.src.letter_spacing_px,
     };
-    let result = ctx.engine.shape_with_fallback(&req, ctx.fonts).ok()?;
+    let base = base_level(ctx.direction);
+    let result = shape_leveled(ctx.engine, ctx.fonts, &req, &levels, base).ok()?;
     let advance: f64 = result.runs.iter().map(|r| r.advance_width as f64).sum();
     Some(WordToken {
         runs: result.runs,
+        run_levels: result.run_levels,
         advance,
         color: donor.color,
         underline: donor.underline,
@@ -93,6 +101,7 @@ fn reshape_fragment(
         link: donor.link.clone(),
         baseline_dy: donor.baseline_dy,
         gap_before_px: donor.gap_before_px,
+        gap_level: donor.gap_level,
         // A fragment inherits the original word's glue: the head starts exactly
         // where the donor started (so its glue to the previous word is preserved);
         // the tail begins a fresh line where glue is inert (a first-of-line word
@@ -101,6 +110,7 @@ fn reshape_fragment(
         glued: donor.glued,
         src: WordSource {
             text: text.to_owned(),
+            levels,
             weight: donor.src.weight,
             style: donor.src.style,
             font_size: donor.src.font_size,
@@ -149,14 +159,28 @@ pub(in crate::compile) fn try_hyphenate(
         }
         let head_with_hyphen = format!("{head_txt}{}", ctx.hyphen);
         let orig = text.to_owned();
-        let Some(head) = reshape_fragment(&head_with_hyphen, word, Some((orig.clone(), true)), ctx)
-        else {
+        // The hyphen takes the level of the char before it.
+        let mut head_levels = level_slice(word, 0, b);
+        let hyphen_level = head_levels
+            .last()
+            .copied()
+            .unwrap_or(base_level(ctx.direction));
+        head_levels.extend(std::iter::repeat_n(hyphen_level, ctx.hyphen.len()));
+        let Some(head) = reshape_fragment(
+            &head_with_hyphen,
+            head_levels,
+            word,
+            Some((orig.clone(), true)),
+            ctx,
+        ) else {
             continue;
         };
         if head.advance > avail {
             continue;
         }
-        let Some(tail) = reshape_fragment(tail_txt, word, Some((orig, false)), ctx) else {
+        let tail_levels = level_slice(word, b, text.len());
+        let Some(tail) = reshape_fragment(tail_txt, tail_levels, word, Some((orig, false)), ctx)
+        else {
             continue;
         };
         return Some(HyphenSplit { head, tail });
@@ -203,7 +227,8 @@ pub(in crate::compile) fn try_break_word(
         if head_txt.is_empty() {
             continue;
         }
-        let Some(head) = reshape_fragment(head_txt, word, None, ctx) else {
+        let Some(head) = reshape_fragment(head_txt, level_slice(word, 0, b), word, None, ctx)
+        else {
             // Shaping failure on this prefix: stop and use the best-so-far.
             break;
         };
@@ -218,8 +243,18 @@ pub(in crate::compile) fn try_break_word(
     }
     let (b, head) = best?;
     let tail_txt = text.get(b..)?;
-    let tail = reshape_fragment(tail_txt, word, None, ctx)?;
+    let tail = reshape_fragment(tail_txt, level_slice(word, b, text.len()), word, None, ctx)?;
     Some((head, tail))
+}
+
+/// The bidi levels of bytes `start..end` of `word`'s source text. Empty when
+/// the word carries no levels.
+fn level_slice(word: &WordToken, start: usize, end: usize) -> Vec<u8> {
+    word.src
+        .levels
+        .get(start..end)
+        .map(<[u8]>::to_vec)
+        .unwrap_or_default()
 }
 
 /// Flatten packed lines back into a single ordered word stream for re-wrapping in
@@ -253,7 +288,13 @@ pub(in crate::compile) fn flatten_lines_to_tokens(
             if is_tail_next {
                 let orig = orig.clone();
                 let tail = iter.next();
-                match reshape_fragment(&orig, &w, None, ctx) {
+                // The head's levels before its hyphen, then the tail's.
+                let tail_len = tail.as_ref().map_or(0, |t| t.src.text.len());
+                let mut levels = level_slice(&w, 0, orig.len().saturating_sub(tail_len));
+                if let Some(t) = &tail {
+                    levels.extend_from_slice(&t.src.levels);
+                }
+                match reshape_fragment(&orig, levels, &w, None, ctx) {
                     Some(merged) => out.push(merged),
                     None => {
                         // Reshape failed: keep both fragments rather than drop text.
@@ -462,6 +503,108 @@ mod break_word_tests {
                 .collect::<String>(),
             "betagamma",
             "the wrapped word stays intact (not split mid-word)"
+        );
+    }
+}
+
+#[cfg(test)]
+mod fragment_tests {
+    use zenith_core::default_provider;
+    use zenith_layout::{FontFaceStore, RustybuzzEngine, TextDirection};
+
+    use super::{HyphenationContext, try_break_word};
+    use crate::compile::text::shape::CODE_MONO_FAMILY;
+    use crate::compile::text::shape::WordToken;
+
+    fn ctx<'a>(
+        engine: &'a RustybuzzEngine<'a>,
+        fonts: &'a dyn zenith_core::FontProvider,
+        families: &'a [String],
+    ) -> HyphenationContext<'a> {
+        HyphenationContext {
+            dict: None,
+            engine,
+            fonts,
+            families,
+            hyphen: "-",
+            direction: TextDirection::Ltr,
+            break_word: true,
+        }
+    }
+
+    /// Break `word` in half with `code` set as given, and return both halves.
+    fn split(code: bool, levels: Vec<u8>) -> (WordToken, WordToken) {
+        let provider = default_provider();
+        let store = FontFaceStore::new(&provider);
+        let engine = RustybuzzEngine::new(&store);
+        let families = vec!["Noto Sans".to_owned()];
+        let text = "abcdefghijklmnop";
+        let mut word = super::reshape_fragment(
+            text,
+            levels,
+            &donor(code),
+            None,
+            &ctx(&engine, &provider, &families),
+        )
+        .expect("shapes");
+        word.src.text = text.to_owned();
+        let avail = word.advance / 2.0;
+        try_break_word(&word, avail, &ctx(&engine, &provider, &families)).expect("splits")
+    }
+
+    fn donor(code: bool) -> WordToken {
+        WordToken {
+            runs: Vec::new(),
+            run_levels: Vec::new(),
+            advance: 0.0,
+            color: crate::ir::Color::srgb(0, 0, 0, 255),
+            underline: false,
+            strikethrough: false,
+            highlight: None,
+            code,
+            link: None,
+            baseline_dy: 0.0,
+            gap_before_px: 0.0,
+            gap_level: 0,
+            glued: false,
+            src: crate::compile::text::shape::WordSource {
+                text: String::new(),
+                levels: Vec::new(),
+                weight: 400,
+                style: zenith_core::FontStyle::Normal,
+                font_size: 16.0,
+                letter_spacing_px: 0.0,
+                features: Vec::new(),
+                paragraph: 0,
+                hyphen_part: None,
+            },
+        }
+    }
+
+    #[test]
+    fn code_fragments_keep_the_mono_face() {
+        let (head, tail) = split(true, Vec::new());
+        let mono = CODE_MONO_FAMILY.to_lowercase().replace(' ', "-");
+        for part in [&head, &tail] {
+            assert!(
+                part.runs.iter().all(|r| r.font_id.starts_with(&mono)),
+                "{:?}",
+                part.runs.iter().map(|r| &r.font_id).collect::<Vec<_>>()
+            );
+        }
+    }
+
+    #[test]
+    fn fragments_keep_their_level_slices() {
+        let levels = vec![2; 16];
+        let (head, tail) = split(false, levels);
+        assert_eq!(head.src.levels.len(), head.src.text.len());
+        assert_eq!(tail.src.levels.len(), tail.src.text.len());
+        assert!(
+            head.run_levels
+                .iter()
+                .chain(&tail.run_levels)
+                .all(|&l| l == 2)
         );
     }
 }

@@ -5,7 +5,8 @@
 // hits, the selection box, a snapped preview, and selection gestures), and
 // the text after each edit must be equal. With `--hashes`, the wasm page-1
 // PNG at scale 1 must also equal the pinned `<stem>/page-1.png` SHA-256 of
-// that manifest (`zenith-cli/tests/render_hashes.json`).
+// that manifest (`zenith-cli/tests/render_hashes.json`). An example in
+// `NEEDS_FALLBACK_FONTS` is checked for the expected font gap instead.
 //
 // Run: node cross_target.js --zenith <bin> --wasm <file.wasm> --chromium <bin>
 //        --examples <dir> [--hashes <manifest.json>] [--gesture-sample <n>]
@@ -110,6 +111,14 @@ async function native(zenith, file, gestures) {
   }
 }
 
+/**
+ * Examples that need the fallback faces (Arabic, Hebrew, CJK, emoji). The
+ * browser module does not embed them, so its render differs by design. For
+ * these, the wasm render must report `font.glyph_missing` and the native one
+ * must not. Nothing else is compared.
+ */
+const NEEDS_FALLBACK_FONTS = new Set(["text-scripts.zen"]);
+
 /** The page-side driver: a private WasmEngine, one document per example. */
 const PAGE = `(async () => {
   const { WasmEngine } = await import(new URL('js/engine/wasm.js', document.baseURI));
@@ -186,6 +195,15 @@ async function main() {
       const pin = pinned ? (pinned[`${name.replace(/\.zen$/, "")}/page-1.png`] ?? "no manifest entry") : null;
       const pinOk = pin === null || was.page?.sha === pin;
       if (pinned && pinOk) pinnedEqual++;
+      if (NEEDS_FALLBACK_FONTS.has(name)) {
+        const missing = (rec) => (rec.page?.codes ?? []).includes("font.glyph_missing");
+        const ok = missing(was) && !missing(nat);
+        if (ok) equal++;
+        else bad.push(name);
+        if (pinned && ok) pinnedEqual++;
+        console.log(JSON.stringify({ example: name, equal: ok, fallbackFonts: "native only", wasmMissingGlyphs: missing(was), nativeMissingGlyphs: missing(nat) }));
+        continue;
+      }
       const same = JSON.stringify(nat) === JSON.stringify(was) && blob === "equal" && pinOk;
       if (same) equal++;
       else bad.push(name);

@@ -30,7 +30,6 @@ pub(in crate::compile) struct LineMetrics {
 #[derive(Clone, Copy)]
 pub(in crate::compile) struct LineStyle {
     pub(in crate::compile) ascent: f64,
-    pub(in crate::compile) space_advance: f64,
     pub(in crate::compile) font_size: f32,
     pub(in crate::compile) deco_thickness: f64,
 }
@@ -68,7 +67,7 @@ pub(in crate::compile) struct Line {
     pub(in crate::compile) height_px: f64,
     /// Per-line style override. `None` (the default) means use the node-global
     /// [`EmitStyle`] values; `Some(ls)` substitutes `ls` for this line's
-    /// ascent, space_advance, font_size, and deco_thickness. Byte-identical
+    /// ascent, font_size, and deco_thickness. Byte-identical
     /// when `None` for every line (all existing paths).
     pub(in crate::compile) line_style: Option<LineStyle>,
     /// Left indent (px) applied to this line's text origin, also shrinking the
@@ -480,6 +479,7 @@ mod packer_tests {
                 advance_width: advance as f32,
                 glyphs: Vec::new(),
             }],
+            run_levels: vec![0],
             advance,
             color: Color::srgb(0, 0, 0, 255),
             underline: false,
@@ -489,9 +489,11 @@ mod packer_tests {
             link: None,
             baseline_dy: 0.0,
             gap_before_px: 5.0,
+            gap_level: 0,
             glued: false,
             src: WordSource {
                 text: String::new(),
+                levels: Vec::new(),
                 weight: 400,
                 style: FontStyle::Normal,
                 font_size: 16.0,

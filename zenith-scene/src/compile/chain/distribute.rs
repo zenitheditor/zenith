@@ -9,8 +9,8 @@ use zenith_layout::{RustybuzzEngine, TextDirection};
 use crate::compile::markdown_resolve::MdBlockMap;
 use crate::compile::text::{
     BlockStyleEnv, ChainSourceShape, HyphenationContext, Line, LineDecoration, LineStyle,
-    NodeShape, ShapeEnv, WordToken, en_us_hyphenator, flatten_lines_to_tokens, pack_lines,
-    resolve_kerning_pairs, shape_source_blocks, shape_words,
+    NodeShape, ShapeEnv, WordToken, en_us_hyphenator, flatten_lines_to_tokens, node_direction,
+    pack_lines, resolve_kerning_pairs, shape_source_blocks, shape_words,
 };
 
 use super::style::{resolve_chain_base_style, resolve_chain_style};
@@ -51,12 +51,9 @@ pub(super) fn distribute_chains(
             continue;
         };
 
-        // Source writing direction drives RTL shaping for the whole chain (the
-        // per-member emit re-reads each member's own direction for line layout).
-        let direction = match src.direction.as_deref() {
-            Some("rtl") => TextDirection::Rtl,
-            _ => TextDirection::Ltr,
-        };
+        // The source's base direction drives bidi shaping for the whole chain.
+        // A member without its own `direction` aligns with it too.
+        let direction = node_direction(src);
 
         // ── BLOCK PATH ────────────────────────────────────────────────────
         // When the source id is in the parsed-markdown side-channel, this chain
@@ -149,6 +146,7 @@ pub(super) fn distribute_chains(
                         lines,
                         metrics,
                         is_last_member: true,
+                        direction,
                     },
                 );
                 break;
@@ -194,6 +192,7 @@ pub(super) fn distribute_chains(
                     lines,
                     metrics,
                     is_last_member: false,
+                    direction,
                 },
             );
         }
@@ -484,6 +483,7 @@ fn distribute_block_chain(
                 lines: member_lines,
                 metrics: rep_metrics,
                 is_last_member: is_last,
+                direction,
             },
         );
 

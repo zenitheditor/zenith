@@ -8,11 +8,14 @@ use std::collections::{BTreeMap, BTreeSet};
 use zenith_core::{
     Diagnostic, FontProvider, FontSource, FontStyle, PropertyValue, ResolvedToken, ResolvedValue,
 };
-use zenith_layout::{FontFeature, ShapeRequest, TextDirection, TextLayoutEngine, ZenithGlyphRun};
+use zenith_layout::{
+    FontFeature, ShapeRequest, TextDirection, TextLayoutEngine, ZenithGlyphRun, base_level,
+};
 
 use crate::ir::{Color, SceneCommand, SceneGlyph};
 
 use super::super::util::resolve_property_dimension_px;
+use super::bidi::{ParagraphLevels, break_pieces, shape_leveled, split_whitespace_indexed};
 use super::ctx::{NodeShape, ShapeEnv};
 
 /// The bundled monospace family used for `code` spans and the `code` node.
@@ -30,10 +33,14 @@ pub(in crate::compile) const LINK_COLOR: Color = Color::srgb(0, 102, 204, 255);
 
 /// A re-shaped word plus the visual attributes inherited from its source span.
 ///
-/// A word may shape to multiple font-runs (per-glyph fallback), so `runs` is a
-/// Vec laid out left-to-right; `advance` is their summed width.
+/// A word may shape to multiple font-runs (per-glyph fallback) and to several
+/// bidi pieces. `runs` lists the pieces in logical order, each piece's runs in
+/// visual order. `advance` is their summed width.
 pub(in crate::compile) struct WordToken {
     pub(in crate::compile) runs: Vec<ZenithGlyphRun>,
+    /// The bidi level of each run, parallel to `runs`. Consecutive runs of one
+    /// level form one piece. See [`super::bidi`].
+    pub(in crate::compile) run_levels: Vec<u8>,
     pub(in crate::compile) advance: f64,
     pub(in crate::compile) color: Color,
     pub(in crate::compile) underline: bool,
@@ -56,6 +63,9 @@ pub(in crate::compile) struct WordToken {
     /// Inter-word gap before this word when it follows another word on the same
     /// line. Ignored for line-opening words and glued boundaries.
     pub(in crate::compile) gap_before_px: f64,
+    /// The bidi level of the whitespace before this word. It orders the gap
+    /// among the line's pieces.
+    pub(in crate::compile) gap_level: u8,
     /// `true` when this word was source-adjacent to the PREVIOUS word with NO
     /// whitespace between them (e.g. a bold span `"24%"` immediately followed by
     /// a plain span `","` in the source). A glued word contributes ONLY its own
@@ -78,6 +88,9 @@ pub(in crate::compile) struct WordToken {
 #[derive(Clone)]
 pub(in crate::compile) struct WordSource {
     pub(in crate::compile) text: String,
+    /// The bidi level of each byte of `text`, resolved in its paragraph. A
+    /// fragment reshapes with its slice. Empty reads as the base level.
+    pub(in crate::compile) levels: Vec<u8>,
     pub(in crate::compile) weight: u16,
     pub(in crate::compile) style: FontStyle,
     pub(in crate::compile) font_size: f32,
@@ -343,6 +356,12 @@ pub(in crate::compile) fn shape_words(
     // before the first span so the very first word of the node is never glued.
     let mut prev_ends_with_ws = true;
 
+    // Bidi levels per paragraph, over the text of every span in it. A span
+    // segment's words read their levels at `segment_starts` offsets.
+    let paragraphs = ParagraphLevels::new(spans, direction);
+    let base = base_level(direction);
+    let mut segment_index: usize = 0;
+
     for shaped in spans {
         // Inspect the ORIGINAL span text (before `split_whitespace` discards the
         // leading/trailing whitespace) so source-adjacency across the span
@@ -407,67 +426,93 @@ pub(in crate::compile) fn shape_words(
             if seg_idx > 0 {
                 paragraph += 1;
             }
-            for word in segment.split_whitespace() {
-                let req = ShapeRequest {
-                    text: word,
-                    families: span_families,
-                    weight: shaped.weight,
-                    style: shaped.style,
-                    font_size: word_font_size,
-                    direction,
-                    features: &shaped.features,
-                    kerning_pairs,
-                    letter_spacing_px: shaped.letter_spacing_px,
-                };
-                match engine.shape_with_fallback(&req, fonts) {
-                    Err(e) => {
-                        diagnostics.push(Diagnostic::advisory(
-                            "scene.text_unshaped",
-                            format!("text node '{}' could not be shaped: {}", node_id, e.message),
-                            span,
-                            Some(node_id.to_owned()),
-                        ));
-                    }
-                    Ok(result) => {
-                        node_missing.extend(result.missing_chars);
-                        if !have_metrics
-                            && !is_vertical_align
-                            && let Some(first) = result.runs.first()
-                        {
-                            metrics.ascent = first.ascent as f64;
-                            metrics.line_height = first.line_height as f64;
-                            have_metrics = true;
+            let this_segment = segment_index;
+            segment_index += 1;
+            let segment_levels = paragraphs.segment(this_segment, segment.len());
+            for (word_off, whole_word) in split_whitespace_indexed(segment) {
+                // The whitespace before the word sets its gap level.
+                let gap_level = paragraphs
+                    .level_before(this_segment, word_off)
+                    .unwrap_or(base);
+                // CJK text breaks between ideographs: each piece is its own
+                // token, glued to the one before it.
+                for (piece_idx, (piece_off, word)) in
+                    break_pieces(whole_word).into_iter().enumerate()
+                {
+                    let offset = word_off + piece_off;
+                    let levels = segment_levels
+                        .get(offset..offset + word.len())
+                        .map(<[u8]>::to_vec)
+                        .unwrap_or_default();
+                    let req = ShapeRequest {
+                        text: word,
+                        families: span_families,
+                        weight: shaped.weight,
+                        style: shaped.style,
+                        font_size: word_font_size,
+                        direction,
+                        features: &shaped.features,
+                        kerning_pairs,
+                        letter_spacing_px: shaped.letter_spacing_px,
+                    };
+                    match shape_leveled(engine, fonts, &req, &levels, base) {
+                        Err(e) => {
+                            diagnostics.push(Diagnostic::advisory(
+                                "scene.text_unshaped",
+                                format!(
+                                    "text node '{}' could not be shaped: {}",
+                                    node_id, e.message
+                                ),
+                                span,
+                                Some(node_id.to_owned()),
+                            ));
                         }
-                        // Only the FIRST word emitted from this span can be glued
-                        // (to the previous span's last word). Every later word was
-                        // produced by splitting on real whitespace, so it keeps the
-                        // normal inter-word space.
-                        let glued = first_word_of_span && span_first_glued;
-                        first_word_of_span = false;
-                        let advance: f64 = result.runs.iter().map(|r| r.advance_width as f64).sum();
-                        tokens.push(WordToken {
-                            advance,
-                            color: shaped.color,
-                            underline: shaped.underline,
-                            strikethrough: shaped.strikethrough,
-                            highlight: shaped.highlight,
-                            code: shaped.code,
-                            link: shaped.link.clone(),
-                            baseline_dy: shaped.baseline_dy,
-                            gap_before_px: span_gap_before_px,
-                            glued,
-                            runs: result.runs,
-                            src: WordSource {
-                                text: word.to_owned(),
-                                weight: shaped.weight,
-                                style: shaped.style,
-                                font_size: word_font_size,
-                                letter_spacing_px: shaped.letter_spacing_px,
-                                features: shaped.features.clone(),
-                                paragraph,
-                                hyphen_part: None,
-                            },
-                        });
+                        Ok(result) => {
+                            node_missing.extend(result.missing_chars);
+                            if !have_metrics
+                                && !is_vertical_align
+                                && let Some(first) = result.runs.first()
+                            {
+                                metrics.ascent = first.ascent as f64;
+                                metrics.line_height = first.line_height as f64;
+                                have_metrics = true;
+                            }
+                            // Only the FIRST word emitted from this span can be glued
+                            // (to the previous span's last word). Every later word was
+                            // produced by splitting on real whitespace, so it keeps the
+                            // normal inter-word space. A later CJK piece of the same
+                            // word is always glued.
+                            let glued = piece_idx > 0 || (first_word_of_span && span_first_glued);
+                            first_word_of_span = false;
+                            let advance: f64 =
+                                result.runs.iter().map(|r| r.advance_width as f64).sum();
+                            tokens.push(WordToken {
+                                advance,
+                                color: shaped.color,
+                                underline: shaped.underline,
+                                strikethrough: shaped.strikethrough,
+                                highlight: shaped.highlight,
+                                code: shaped.code,
+                                link: shaped.link.clone(),
+                                baseline_dy: shaped.baseline_dy,
+                                gap_before_px: span_gap_before_px,
+                                gap_level,
+                                glued,
+                                runs: result.runs,
+                                run_levels: result.run_levels,
+                                src: WordSource {
+                                    text: word.to_owned(),
+                                    levels,
+                                    weight: shaped.weight,
+                                    style: shaped.style,
+                                    font_size: word_font_size,
+                                    letter_spacing_px: shaped.letter_spacing_px,
+                                    features: shaped.features.clone(),
+                                    paragraph,
+                                    hyphen_part: None,
+                                },
+                            });
+                        }
                     }
                 }
             }

@@ -7,6 +7,7 @@
 //!
 //! - [`ctx`] — the `Copy` context structs that bundle the threaded parameters.
 //! - [`shape`] — word shaping, resolved-span carriers, metrics, font resolvers.
+//! - [`bidi`] — base direction, bidi pieces, CJK break pieces, line visual order.
 //! - [`hyphen`] — opt-in hyphenation + break-word fragment splitting.
 //! - [`pack`] — greedy line packing (uniform / variable / runaround).
 //! - [`emit`] — line emission (decorations + glyph runs).
@@ -23,6 +24,7 @@
 //! - [`code_node`] — the `compile_code` entry.
 
 mod baseline;
+mod bidi;
 mod chain_blocks;
 mod chain_member;
 mod code_node;
@@ -44,6 +46,7 @@ mod wrap;
 
 // ── Public surface re-exported for sibling `compile` modules ────────────────
 
+pub(in crate::compile) use bidi::node_direction;
 pub(in crate::compile) use chain_blocks::{BlockStyleEnv, ChainSourceShape, shape_source_blocks};
 pub(in crate::compile) use code_node::{CodeExtent, compile_code};
 pub(in crate::compile) use ctx::{NodeShape, ShapeEnv, TextCompileEnv, empty_md_blocks};

@@ -5,7 +5,7 @@
 //! a span whole differs glyph-for-glyph from shaping its words apart, so this
 //! path stays exact for every fitting node.
 
-use zenith_layout::TextDirection;
+use zenith_layout::{TextDirection, visual_order};
 
 use crate::compile::text::shape::{CODE_BG, run_to_scene_glyphs};
 use crate::ir::{Paint, SceneCommand};
@@ -22,6 +22,10 @@ struct RunPlace {
 }
 
 /// Emit every span of `set` as one line.
+///
+/// The bidi pieces take their visual order from their levels (UAX #9 rule
+/// L2). A level-0 line keeps logical order. Every run sits on one baseline:
+/// the ascent of the first full-size run.
 pub(super) fn emit_single_line(
     style: &NodeStyle,
     layout: BoxLayout,
@@ -29,39 +33,53 @@ pub(super) fn emit_single_line(
     commands: &mut Vec<SceneCommand>,
 ) {
     let ShapedSet {
-        mut spans,
+        spans,
         total_advance,
         node_ascent,
     } = set;
     let is_rtl = style.direction == TextDirection::Rtl;
     let mut x_cursor = layout.text_x + x_offset(layout, total_advance, is_rtl);
 
-    // RTL: reverse the span order so the first logical span sits rightmost. Each
-    // run is already in visual RTL order from the shaper.
-    if is_rtl {
-        spans.reverse();
-    }
+    // Group the runs into pieces, then order the pieces visually. The runs of
+    // one piece are in visual order from the shaper.
+    let mut pieces: Vec<Vec<ShapedSpan>> = Vec::new();
+    let mut piece_levels: Vec<u8> = Vec::new();
+    let mut last_piece: Option<usize> = None;
     for shaped in spans {
-        let advance = shaped.run.advance_width as f64;
-        // A super/subscript span sits on the shared full-size baseline plus its
-        // shift. A plain span keeps its own run ascent. Without a full-size span,
-        // fall back to the span's own ascent.
-        let baseline_y = if shaped.look.vertical_align {
-            layout.text_y
-                + node_ascent.unwrap_or(shaped.run.ascent as f64)
-                + shaped.look.baseline_dy
-        } else {
-            layout.text_y + shaped.run.ascent as f64
+        match pieces.last_mut() {
+            Some(runs) if last_piece == Some(shaped.piece) => runs.push(shaped),
+            _ => {
+                last_piece = Some(shaped.piece);
+                piece_levels.push(shaped.level);
+                pieces.push(vec![shaped]);
+            }
+        }
+    }
+    let mut slots: Vec<Option<Vec<ShapedSpan>>> = pieces.into_iter().map(Some).collect();
+    for idx in visual_order(&piece_levels) {
+        let Some(runs) = slots.get_mut(idx).and_then(Option::take) else {
+            continue;
         };
-        let place = RunPlace {
-            x: x_cursor,
-            baseline_y,
-            advance,
-        };
-        emit_backgrounds(&shaped, place, commands);
-        emit_decorations(&shaped, place, layout.deco_thickness, commands);
-        emit_glyphs(style, shaped, place, commands);
-        x_cursor += advance;
+        for shaped in runs {
+            let advance = shaped.run.advance_width as f64;
+            // A super/subscript span sits on the shared full-size baseline plus
+            // its shift. Without a full-size span, a run uses its own ascent.
+            let ascent = node_ascent.unwrap_or(shaped.run.ascent as f64);
+            let baseline_y = if shaped.look.vertical_align {
+                layout.text_y + ascent + shaped.look.baseline_dy
+            } else {
+                layout.text_y + ascent
+            };
+            let place = RunPlace {
+                x: x_cursor,
+                baseline_y,
+                advance,
+            };
+            emit_backgrounds(&shaped, place, commands);
+            emit_decorations(&shaped, place, layout.deco_thickness, commands);
+            emit_glyphs(style, shaped, place, commands);
+            x_cursor += advance;
+        }
     }
 }
 

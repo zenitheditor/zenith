@@ -187,7 +187,6 @@ pub(in crate::compile) fn shape_source_blocks(
                 },
                 line_style: LineStyle {
                     ascent: 0.0,
-                    space_advance: 0.0,
                     font_size: block_font_size,
                     deco_thickness,
                 },
@@ -251,7 +250,6 @@ pub(in crate::compile) fn shape_source_blocks(
             metrics,
             line_style: LineStyle {
                 ascent: metrics.ascent,
-                space_advance: metrics.space_advance,
                 font_size: block_font_size,
                 deco_thickness,
             },

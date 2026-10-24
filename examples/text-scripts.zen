@@ -1,0 +1,52 @@
+zenith version=1 {
+  project id="proj.scripts" name="Text Scripts Example"
+  tokens format="zenith-token-v1" {
+    token id="color.bg" type="color" value="#f8fafc"
+    token id="color.ink" type="color" value="#111827"
+    token id="color.muted" type="color" value="#64748b"
+    token id="color.panel" type="color" value="#e2e8f0"
+    token id="font.body" type="fontFamily" value="Noto Sans"
+    token id="size.label" type="dimension" value=(px)12
+    token id="size.body" type="dimension" value=(px)18
+  }
+  styles {
+    style id="style.label" {
+      fill (token)"color.muted"
+      font-family (token)"font.body"
+      font-size (token)"size.label"
+    }
+    style id="style.body" {
+      fill (token)"color.ink"
+      font-family (token)"font.body"
+      font-size (token)"size.body"
+    }
+  }
+  document id="doc.scripts" title="Text Scripts Example" {
+    page id="page.scripts" w=(px)640 h=(px)1020 {
+      rect id="rect.bg" x=(px)0 y=(px)0 w=(px)640 h=(px)1020 fill=(token)"color.bg"
+
+      text id="label.mixed" x=(px)24 y=(px)20 w=(px)592 h=(px)16 style="style.label" { span "Arabic and Hebrew inside English" }
+      text id="text.mixed.ar" x=(px)24 y=(px)40 w=(px)592 h=(px)30 style="style.body" { span "Say مرحبا بالعالم to greet the world." }
+      text id="text.mixed.he" x=(px)24 y=(px)72 w=(px)592 h=(px)30 style="style.body" { span "He said שלום עולם and left." }
+
+      text id="label.rtl" x=(px)24 y=(px)116 w=(px)592 h=(px)16 style="style.label" { span "Right-to-left paragraphs wrap and align right; digits and Latin keep their order" }
+      rect id="rect.rtl" x=(px)24 y=(px)136 w=(px)316 h=(px)236 fill=(token)"color.panel" role="background"
+      text id="text.arabic" x=(px)32 y=(px)140 w=(px)300 h=(px)130 style="style.body" { span "اللغة العربية لغة جميلة يتحدث بها ملايين الناس وتكتب من اليمين إلى اليسار" }
+      text id="text.hebrew" x=(px)32 y=(px)276 w=(px)300 h=(px)90 style="style.body" { span "השפה העברית נכתבת מימין לשמאל ומדוברת על ידי מיליוני אנשים בישראל ובעולם" }
+      text id="text.numbers" x=(px)24 y=(px)380 w=(px)592 h=(px)36 style="style.body" { span "السعر 25.50 دولار (خصم 10%)، شكرا!" }
+      text id="text.rtl.latin" x=(px)24 y=(px)418 w=(px)592 h=(px)30 style="style.body" direction="rtl" { span "שלום Zenith 2025 עולם" }
+
+      text id="label.cjk" x=(px)24 y=(px)462 w=(px)592 h=(px)16 style="style.label" { span "CJK breaks between characters, never before closing punctuation; Korean breaks at spaces" }
+      rect id="rect.cjk" x=(px)24 y=(px)482 w=(px)316 h=(px)332 fill=(token)"color.panel" role="background"
+      text id="text.chinese" x=(px)32 y=(px)486 w=(px)300 h=(px)136 style="style.body" { span "中文是世界上使用人数最多的语言之一。汉字之间没有空格，所以换行可以发生在任何两个字之间，「但是」标点不能出现在行首。" }
+      text id="text.japanese" x=(px)32 y=(px)628 w=(px)300 h=(px)84 style="style.body" { span "日本語はひらがなとカタカナと漢字を使います。ちょっとした文章です。" }
+      text id="text.korean" x=(px)32 y=(px)718 w=(px)300 h=(px)90 style="style.body" { span "한국어는 띄어쓰기를 사용합니다 그래서 줄바꿈은 공백에서 일어납니다" }
+      text id="text.cjk.latin" x=(px)24 y=(px)822 w=(px)592 h=(px)30 style="style.body" { span "Zenith 支持中文和English混排。" }
+
+      text id="label.emoji" x=(px)24 y=(px)866 w=(px)592 h=(px)16 style="style.label" { span "Emoji in a sentence and ZWJ sequences" }
+      text id="text.emoji" x=(px)24 y=(px)886 w=(px)592 h=(px)30 style="style.body" { span "I love pizza 🍕 and coffee ☕ today 😀!" }
+      text id="text.zwj" x=(px)24 y=(px)918 w=(px)592 h=(px)30 style="style.body" { span "Family 👨‍👩‍👧 and rainbow flag 🏳️‍🌈" }
+      text id="text.mixed.wrap" x=(px)24 y=(px)952 w=(px)592 h=(px)56 style="style.body" { span "A long English line carries مرحبا بالعالم in the middle and wraps onto a second line at the box edge." }
+    }
+  }
+}

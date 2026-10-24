@@ -4,9 +4,10 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use zenith_core::{Diagnostic, FontStyle, TextNode, TextSpan};
-use zenith_layout::{FontFeature, ShapeRequest, TextLayoutEngine, ZenithGlyphRun};
+use zenith_layout::{FontFeature, ShapeRequest, ZenithGlyphRun, base_level, bidi_levels};
 
 use crate::compile::paint::resolve_property_color;
+use crate::compile::text::bidi::shape_leveled;
 use crate::compile::text::shape::{
     CODE_MONO_FAMILY, LINK_COLOR, ResolvedSpan, emit_glyph_missing, resolve_font_weight,
     resolve_letter_spacing, resolve_span_font_feature_set, resolve_vertical_align,
@@ -111,6 +112,11 @@ pub(super) struct ShapedSpan {
     pub(super) run: ZenithGlyphRun,
     pub(super) text: String,
     pub(super) look: SpanLook,
+    /// The bidi level of the run.
+    pub(super) level: u8,
+    /// The bidi piece the run belongs to. The runs of one piece share one
+    /// shaping call and sit in visual order already.
+    pub(super) piece: usize,
 }
 
 impl ShapedSpan {
@@ -173,7 +179,22 @@ pub(super) fn shape_spans(
     };
     let mut missing: BTreeSet<char> = BTreeSet::new();
 
-    for span in spans.iter().filter(|s| !s.text.is_empty()) {
+    // Bidi levels over the whole node text, so a neutral at a span edge
+    // resolves in its paragraph context. Latin LTR text is all level 0.
+    let joined: String = spans.iter().map(|s| s.text.as_str()).collect();
+    let levels = bidi_levels(&joined, style.direction);
+    let base = base_level(style.direction);
+    let mut span_start: usize = 0;
+    let mut piece: usize = 0;
+
+    for span in spans {
+        let span_levels = levels
+            .get(span_start..span_start + span.text.len())
+            .unwrap_or(&[]);
+        span_start += span.text.len();
+        if span.text.is_empty() {
+            continue;
+        }
         let look = resolve_span_look(style, span, diagnostics);
         // `code` spans use the bundled mono family instead of the node family.
         let mono_families;
@@ -194,7 +215,7 @@ pub(super) fn shape_spans(
             kerning_pairs: style.kerning_pairs,
             letter_spacing_px: look.letter_spacing_px,
         };
-        match style.env.engine.shape_with_fallback(&req, style.env.fonts) {
+        match shape_leveled(style.env.engine, style.env.fonts, &req, span_levels, base) {
             // Skip this span: the cursor does not advance.
             Err(e) => diagnostics.push(Diagnostic::advisory(
                 "scene.text_unshaped",
@@ -204,7 +225,14 @@ pub(super) fn shape_spans(
             )),
             Ok(result) => {
                 missing.extend(result.missing_chars);
-                for (i, run) in result.runs.into_iter().enumerate() {
+                let mut prev_level: Option<u8> = None;
+                for (i, (run, level)) in result.runs.into_iter().zip(result.run_levels).enumerate()
+                {
+                    // A level change inside the span opens a new piece.
+                    if prev_level.is_some_and(|prev| prev != level) {
+                        piece += 1;
+                    }
+                    prev_level = Some(level);
                     set.total_advance += run.advance_width as f64;
                     if !look.vertical_align && set.node_ascent.is_none() {
                         set.node_ascent = Some(run.ascent as f64);
@@ -218,8 +246,11 @@ pub(super) fn shape_spans(
                         run,
                         text: run_text,
                         look: look.clone(),
+                        level,
+                        piece,
                     });
                 }
+                piece += 1;
             }
         }
     }

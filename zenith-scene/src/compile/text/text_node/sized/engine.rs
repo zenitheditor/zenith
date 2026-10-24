@@ -3,10 +3,10 @@
 //! wrap emit, then applies the rotation, blend, effect, mask, and clip brackets.
 
 use zenith_core::{Diagnostic, PropertyValue, TextNode};
-use zenith_layout::TextDirection;
 
 use crate::compile::RenderCtx;
 use crate::compile::paint::{emit_node_with_effects, resolve_property_mask};
+use crate::compile::text::bidi::node_direction;
 use crate::compile::text::chain_member::render_chain_member;
 use crate::compile::text::ctx::{ChainMemberPlace, ShapeEnv, TextCompileEnv};
 use crate::compile::text::ink::ink_bounds;
@@ -150,11 +150,8 @@ pub(in crate::compile::text::text_node) fn compile_text_core(
         .as_ref()
         .or_else(|| style_prop(&text.style, env.style_map, "letter-spacing"));
     let kerning_pairs = resolve_kerning_pairs(&text.kerning_pairs, env.resolved);
-    // `direction="rtl"` shapes RTL and flips line layout. Anything else is LTR.
-    let direction = match text.direction.as_deref() {
-        Some("rtl") => TextDirection::Rtl,
-        _ => TextDirection::Ltr,
-    };
+    // The base direction: explicit `direction`, else the first strong char.
+    let direction = node_direction(text);
 
     let style = NodeStyle {
         text,

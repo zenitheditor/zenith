@@ -6,6 +6,7 @@ use zenith_core::FontProvider;
 
 use super::face_cache::{FaceCache, FontFaceStore, parse_error};
 use super::run::{FaceShapeRequest, shape_run_with_face};
+use crate::bidi::{base_level, bidi_levels, level_direction, level_runs, visual_order};
 use crate::engine::{FallbackResult, ShapeRequest, TextDirection, ZenithGlyphRun};
 use crate::error::LayoutError;
 
@@ -24,8 +25,19 @@ fn is_ignorable_for_coverage(ch: char) -> bool {
             | 0x2060..=0x206F // word joiner, invisible operators, deprecated format
             | 0xFEFF          // BOM / ZWNBSP
             | 0xFE00..=0xFE0F // variation selectors
+            | 0xE0000..=0xE007F // tags (emoji subdivision flags)
             | 0xE0100..=0xE01EF // variation selectors supplement
         )
+}
+
+/// Whether `ch` extends the cluster before it: a combining mark, a joiner,
+/// a variation selector, an emoji skin-tone modifier, or a tag.
+///
+/// An extender stays in the face of the char before it, so an emoji ZWJ
+/// sequence or a base letter with its marks shapes as one cluster.
+fn extends_cluster(ch: char) -> bool {
+    matches!(ch as u32, 0x200C | 0x200D | 0x1F3FB..=0x1F3FF | 0xE0020..=0xE007F)
+        || unicode_bidi::bidi_class(ch) == unicode_bidi::BidiClass::NSM
 }
 
 /// Fallback faces for one call, in priority order.
@@ -91,53 +103,85 @@ pub(super) fn shape_with_fallback_in(
         0.0
     };
 
-    // ── 1. Itemize text into contiguous sub-runs by chosen face slot ──────
-    // For each char: prefer the primary when it covers the char; otherwise
+    // ── 1. Itemize text into sub-runs by bidi level, then by face slot ────
+    // Bidi first: `req.direction` is the paragraph direction, and each
+    // maximal same-level byte range shapes in its own direction. Latin text
+    // in an LTR request is one level-0 range, so it itemizes as before.
+    //
+    // Then per char: prefer the primary when it covers the char; otherwise
     // the FIRST fallback face that covers it; otherwise the primary (so it
-    // shapes as .notdef / tofu). Consecutive chars with the same chosen face
-    // merge. Sub-run boundaries are byte ranges into `req.text` so the exact
+    // shapes as .notdef / tofu). A cluster extender stays in the face of the
+    // char before it. Consecutive chars with the same chosen face merge.
+    // Sub-run boundaries are byte ranges into `req.text` so the exact
     // substring is shaped (and reported as the run's source text). Chars no
     // face covers are recorded in `missing` (unless ignorable).
     let mut missing: BTreeSet<char> = BTreeSet::new();
     let mut pending = Some(fallbacks);
     let mut fallback_slots: Vec<usize> = Vec::new();
 
-    // (face_slot, byte_start, byte_end) per sub-run, in text order.
+    let base = base_level(req.direction);
+    let levels = bidi_levels(req.text, req.direction);
+    let level_ranges = level_runs(req.text, &levels, base);
+
+    // (face_slot, byte_start, byte_end) per sub-run, in text order, and the
+    // index into `level_ranges` of the level range each sub-run belongs to.
     let mut segments: Vec<(usize, usize, usize)> = Vec::new();
-    for (byte_off, ch) in req.text.char_indices() {
-        let slot = if primary_face.glyph_index(ch).is_some() {
-            primary
-        } else {
-            // The fallback list is read once, on the first uncovered char.
-            if let Some(source) = pending.take() {
-                match source.resolve(store) {
-                    Some(slots) => fallback_slots = slots,
-                    None => return Ok(None),
-                }
-            }
-            // Coverage uses ttf-parser's `Face::glyph_index`, exposed on
-            // `rustybuzz::Face` via Deref. Each probe parses at most once.
-            let covering = fallback_slots.iter().copied().find(|&slot| {
-                cache
-                    .face(slot)
-                    .is_some_and(|face| face.glyph_index(ch).is_some())
-            });
-            match covering {
-                Some(slot) => slot,
-                None => {
-                    if !is_ignorable_for_coverage(ch) {
-                        missing.insert(ch);
+    let mut segment_range: Vec<usize> = Vec::new();
+    for (range_idx, &(range_start, range_end, _)) in level_ranges.iter().enumerate() {
+        let range_text = req.text.get(range_start..range_end).unwrap_or("");
+        let first_segment = segments.len();
+        for (rel_off, ch) in range_text.char_indices() {
+            let byte_off = range_start + rel_off;
+            let sticky = segments
+                .get(first_segment..)
+                .and_then(<[_]>::last)
+                .map(|&(slot, _, _)| slot)
+                .filter(|&slot| {
+                    extends_cluster(ch)
+                        && (is_ignorable_for_coverage(ch)
+                            || cache
+                                .face(slot)
+                                .is_some_and(|face| face.glyph_index(ch).is_some()))
+                });
+            let slot = if let Some(slot) = sticky {
+                slot
+            } else if primary_face.glyph_index(ch).is_some() {
+                primary
+            } else {
+                // The fallback list is read once, on the first uncovered char.
+                if let Some(source) = pending.take() {
+                    match source.resolve(store) {
+                        Some(slots) => fallback_slots = slots,
+                        None => return Ok(None),
                     }
-                    primary
+                }
+                // Coverage uses ttf-parser's `Face::glyph_index`, exposed on
+                // `rustybuzz::Face` via Deref. Each probe parses at most once.
+                let covering = fallback_slots.iter().copied().find(|&slot| {
+                    cache
+                        .face(slot)
+                        .is_some_and(|face| face.glyph_index(ch).is_some())
+                });
+                match covering {
+                    Some(slot) => slot,
+                    None => {
+                        if !is_ignorable_for_coverage(ch) {
+                            missing.insert(ch);
+                        }
+                        primary
+                    }
+                }
+            };
+            let ch_end = byte_off + ch.len_utf8();
+            match segments.get_mut(first_segment..).and_then(<[_]>::last_mut) {
+                Some((last_slot, _, last_end)) if *last_slot == slot => {
+                    *last_end = ch_end;
+                }
+                _ => {
+                    segments.push((slot, byte_off, ch_end));
+                    segment_range.push(range_idx);
                 }
             }
-        };
-        let ch_end = byte_off + ch.len_utf8();
-        match segments.last_mut() {
-            Some((last_slot, _, last_end)) if *last_slot == slot => {
-                *last_end = ch_end;
-            }
-            _ => segments.push((slot, byte_off, ch_end)),
         }
     }
 
@@ -166,31 +210,43 @@ pub(super) fn shape_with_fallback_in(
     // `shape_run_with_face` with the same face, text, id, and size.
     //
     // Segments are itemized in LOGICAL (text) order. The returned runs are
-    // concatenated left-to-right by the caller, so for RTL the FIRST logical
-    // segment must sit rightmost: reverse the emission order. A single
-    // segment (the common all-primary case) is unaffected, and LTR keeps
-    // logical order — so both the LTR path and a single-run RTL word stay
-    // byte-identical.
-    if req.direction == TextDirection::Rtl {
-        segments.reverse();
-    }
+    // concatenated left to right by the caller. Inside one RTL level range
+    // the first logical segment sits rightmost, so that range reverses. The
+    // level ranges then take their visual order (UAX #9 rule L2). One level
+    // range at the base level (all Latin LTR text, or all-RTL text in an RTL
+    // request) keeps the order it had before bidi itemization.
+    let range_levels: Vec<u8> = level_ranges.iter().map(|&(_, _, level)| level).collect();
     let mut runs: Vec<ZenithGlyphRun> = Vec::with_capacity(segments.len());
-    for (slot, start, end) in segments {
-        let data = store.data(slot).ok_or_else(|| {
-            LayoutError::new("internal: chosen face slot out of range".to_owned())
-        })?;
-        let face = cache.face(slot).ok_or_else(|| parse_error(data))?;
-        let sub_text = req.text.get(start..end).ok_or_else(|| {
-            LayoutError::new("internal: sub-run byte range out of bounds".to_owned())
-        })?;
-        let mut run = shape_run_with_face(
-            FaceShapeRequest::from_shape_request(req, face, sub_text, data.id.clone())
-                .with_plans(cache, slot),
-        )?;
-        if letter_spacing_px != 0.0 {
-            run.advance_width += letter_spacing_px;
+    for range_idx in visual_order(&range_levels) {
+        let level = range_levels.get(range_idx).copied().unwrap_or(base);
+        let direction = level_direction(level);
+        let mut in_range: Vec<(usize, usize, usize)> = segments
+            .iter()
+            .zip(&segment_range)
+            .filter(|&(_, &r)| r == range_idx)
+            .map(|(&segment, _)| segment)
+            .collect();
+        if direction == TextDirection::Rtl {
+            in_range.reverse();
         }
-        runs.push(run);
+        for (slot, start, end) in in_range {
+            let data = store.data(slot).ok_or_else(|| {
+                LayoutError::new("internal: chosen face slot out of range".to_owned())
+            })?;
+            let face = cache.face(slot).ok_or_else(|| parse_error(data))?;
+            let sub_text = req.text.get(start..end).ok_or_else(|| {
+                LayoutError::new("internal: sub-run byte range out of bounds".to_owned())
+            })?;
+            let mut run = shape_run_with_face(
+                FaceShapeRequest::from_shape_request(req, face, sub_text, data.id.clone())
+                    .with_plans(cache, slot)
+                    .with_direction(direction),
+            )?;
+            if letter_spacing_px != 0.0 {
+                run.advance_width += letter_spacing_px;
+            }
+            runs.push(run);
+        }
     }
     if letter_spacing_px != 0.0
         && let Some(last) = runs.last_mut()
@@ -202,4 +258,119 @@ pub(super) fn shape_with_fallback_in(
         runs,
         missing_chars: missing.into_iter().collect(),
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use zenith_core::{BytesFontProvider, FontStyle, default_provider};
+
+    use crate::engine::{FallbackResult, ShapeRequest, TextDirection, TextLayoutEngine};
+    use crate::rustybuzz_engine::{FontFaceStore, RustybuzzEngine};
+
+    use super::extends_cluster;
+
+    /// The bundled faces plus the embedded fallback chain.
+    fn provider() -> BytesFontProvider {
+        let mut provider = default_provider();
+        for face in zenith_fonts_fallback::fallback_faces() {
+            if let Some(bytes) = face.bytes {
+                provider.register_fallback(
+                    face.family,
+                    face.weight,
+                    FontStyle::Normal,
+                    Arc::from(bytes),
+                    0,
+                );
+            }
+        }
+        provider
+    }
+
+    fn shape(text: &str, direction: TextDirection) -> FallbackResult {
+        let provider = provider();
+        let store = FontFaceStore::new(&provider);
+        let engine = RustybuzzEngine::new(&store);
+        let families = vec!["Noto Sans".to_owned()];
+        let req = ShapeRequest {
+            text,
+            families: &families,
+            weight: 400,
+            style: FontStyle::Normal,
+            font_size: 20.0,
+            direction,
+            features: &[],
+            kerning_pairs: &[],
+            letter_spacing_px: 0.0,
+        };
+        engine
+            .shape_with_fallback(&req, &provider)
+            .expect("fallback shape")
+    }
+
+    /// Each run's source text, in visual order.
+    fn run_texts(result: &FallbackResult) -> Vec<String> {
+        result
+            .runs
+            .iter()
+            .map(|run| run.glyphs.iter().map(|g| g.text.as_str()).collect())
+            .collect()
+    }
+
+    #[test]
+    fn hebrew_inside_ltr_shapes_rtl() {
+        let result = shape("ab שלום", TextDirection::Ltr);
+        let texts = run_texts(&result);
+        assert_eq!(texts.first().map(String::as_str), Some("ab "));
+        // The RTL run lists its glyphs right to left: the last letter first.
+        assert_eq!(texts.get(1).map(String::as_str), Some("םולש"));
+        assert!(result.missing_chars.is_empty());
+    }
+
+    #[test]
+    fn latin_inside_rtl_shapes_ltr_and_sits_left() {
+        let result = shape("שלום abc", TextDirection::Rtl);
+        let texts = run_texts(&result);
+        // Visual order: the LTR word on the left, then the space and Hebrew.
+        assert_eq!(texts.first().map(String::as_str), Some("abc"));
+        assert_eq!(texts.last().map(String::as_str), Some("םולש"));
+    }
+
+    #[test]
+    fn digits_inside_rtl_keep_their_order() {
+        let result = shape("السعر 25", TextDirection::Rtl);
+        let texts = run_texts(&result);
+        assert!(texts.iter().any(|t| t == "25"), "{texts:?}");
+    }
+
+    #[test]
+    fn emoji_zwj_sequence_is_one_run() {
+        let family = "\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}";
+        let result = shape(family, TextDirection::Ltr);
+        assert_eq!(
+            result.runs.len(),
+            1,
+            "the ZWJ joins stay with the emoji face"
+        );
+        assert!(result.missing_chars.is_empty());
+    }
+
+    #[test]
+    fn cluster_extenders_are_marks_joiners_and_modifiers() {
+        assert!(extends_cluster('\u{200D}'));
+        assert!(extends_cluster('\u{FE0F}'));
+        assert!(extends_cluster('\u{1F3FD}'));
+        assert!(extends_cluster('\u{0301}'));
+        assert!(extends_cluster('\u{064E}'), "Arabic fatha is a mark");
+        assert!(!extends_cluster('a'));
+        assert!(!extends_cluster(' '));
+    }
+
+    #[test]
+    fn latin_ltr_output_is_unchanged_by_bidi() {
+        let result = shape("Hello, world 42!", TextDirection::Ltr);
+        assert_eq!(result.runs.len(), 1);
+        assert_eq!(run_texts(&result), vec!["Hello, world 42!".to_owned()]);
+    }
 }

@@ -139,7 +139,7 @@ pub struct ZenithGlyphRun {
 /// registered face (primary or fallback) could supply a glyph for.
 pub struct FallbackResult {
     /// Shaped glyph runs, one per contiguous sub-run that resolved to a single
-    /// face, in visual order.
+    /// face and a single bidi level, in visual order.
     pub runs: Vec<ZenithGlyphRun>,
     /// Characters (deduped, sorted by codepoint) for which no registered face
     /// had a glyph. Excludes default-ignorable code points (joiners, variation
@@ -177,8 +177,14 @@ pub trait TextLayoutEngine {
     /// primary covers stay with the primary, so mixed-script runs do not
     /// fragment on shared characters.
     ///
-    /// When every character is covered by the primary face this returns exactly
-    /// one run, identical to [`Self::shape`], with an empty `missing_chars`.
+    /// `req.direction` is the paragraph direction for the UAX #9 bidi
+    /// algorithm. Each same-level stretch shapes in its own direction, and the
+    /// runs come back in visual order. Hebrew inside an LTR request shapes RTL.
+    /// Latin or digits inside an RTL request shape LTR.
+    ///
+    /// When every character is covered by the primary face and resolves to
+    /// the base level, this returns exactly one run, identical to
+    /// [`Self::shape`], with an empty `missing_chars`.
     ///
     /// # Errors
     ///

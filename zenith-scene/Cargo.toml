@@ -23,6 +23,8 @@ hyphenation = { version = "0.8.4", default-features = false, features = ["embed_
 [dev-dependencies]
 # Tests use the serif and mono faces.
 zenith-core = { workspace = true, features = ["bundled-fonts-extended"] }
+# Bidi, CJK, and emoji tests shape with the fallback faces.
+zenith-fonts-fallback = { workspace = true, features = ["embed"] }
 
 [lints]
 workspace = true
