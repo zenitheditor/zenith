@@ -19,6 +19,14 @@ it.
 
 - **Bundled fallback fonts for Arabic, Hebrew, Chinese, Japanese, Korean, and emoji.** The new `zenith-fonts-fallback` crate embeds Noto Sans Arabic, Noto Sans Hebrew, a Noto Sans CJK SC subset, and monochrome Noto Emoji, and the CLI tries them in that order for a glyph the requested face lacks. A document with no missing glyph renders the same bytes as before. The browser module does not embed them.
 - **Variant overrides re-layout.** An `override` in a `variants` block now takes `font-size` (a dimension token ref), `w`/`h` `"hug"`/`"fill"`, and the frame keys `layout`, `gap`, `wrap-gap`, `padding`, `padding-x`, `padding-y`, `padding-top`, `padding-right`, `padding-bottom`, `padding-left`, `justify`, `align`, and `wrap`. Auto-layout runs again at the variant size. A square page built from layout frames retargets to a story or a banner with three to five overrides. `examples/variants.zen` shows it. `variant.override_unsupported_property` reports a key the target node kind does not have. A bad value takes the node codes (`node.invalid_value`, `node.invalid_geometry`, `token.*`). A document whose overrides use none of the new keys generates the same files as before, except for the token fix below.
+- **`set_override` sets the text, fill, or visibility of one component child on one instance.** `{"op":"set_override","instance":"p1.c2","ref":"card.body","text":"New body"}`. `null` removes a field, and an override with no field left goes. Before, no `tx` op could change one card of a row.
+- **Node ops reach component children by their id.** A node id resolves on pages, then masters, then component definitions. `set_geometry` on `card.body` changes every instance. `add_node` takes a component id as `parent`. `group` now also works on master children.
+- **`move_page` and `swap_pages` move one page or swap two.** `{"op":"move_page","page":"p16","position":{"at":"after","id":"p10"}}`. `reorder_pages` takes a full order, and in a revision benchmark an agent wrote a wrong one.
+- **`zenith tx` prints the page order before and after a page op.** Human output adds `pages: a, b, c -> a, c, b`. `--json` adds `pages.before` and `pages.after`.
+- **`tx.unknown_node` suggests the closest ids.** The message ends with `(did you mean: a, b, c?)` for up to 3 ids within a few edits, across pages, masters, and components. No id close enough gives no hint. In a benchmark an agent guessed `p5b.kicker.5b` 37 times where the id was `p5.kicker.5b`.
+- **`zenith tx` names the ids a `duplicate_page` or `duplicate_node` op creates.** Human output adds `created: p5b, p5.kicker.5b ... (+9 more)` with up to 5 ids. `--json` adds the full `created` array.
+- **A parse error names sibling nodes on one line.** `text … { … } text …` now hints to end each node with `;`. `rect id="a" rect id="b"` on one line was read as one rect that kept only `b`. It is now a parse error with the same hint.
+- **`zenith schema write`, `zenith tx --help`, and the starter output list `move_page` and `set_override`.** `tx --help` no longer points at `examples/*.tx.json`, which agents cannot see. The `duplicate_page` entry says that child ids become `<id><id_suffix>`.
 - **`zenith schema diagnostics <FILTER>` lists only the codes that match.** The match is case-insensitive on the code and summary, and it includes Error codes. The full list is 15 KB as text and 63 KB as JSON. In a merge benchmark, agents called the full list up to 14 times in one run because a tool-output cap cut it off before the codes they needed.
 
 ### Fixed
@@ -26,6 +34,7 @@ it.
 - **The bundled Noto font notices name the SIL Open Font License 1.1.** They said Apache-2.0, but each face's name table states OFL 1.1.
 - **A token that only a variant override uses no longer raises `token.unused`.** `zenith validate` now counts override token refs as references and checks them. `zenith variant` drops each token that a generated variant leaves without a reference. A token the source already leaves unused stays.
 - **A bad override `x`/`y`/`w`/`h` is a parse error.** A value without a unit, or a string other than `"hug"`/`"fill"`, was silently dropped.
+- **`find_replace_text` reaches instance override texts, masters, and components.** The document-wide run skipped them. With `node` set to an instance, it edits that instance only and adds a text override where the component text matches.
 
 ### Changed
 

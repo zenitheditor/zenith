@@ -37,7 +37,9 @@ If `zenith --version` fails, give the installer from https://github.com/zenithed
 5. **Preview.** `zenith render <file> --contact-sheet <png> --scale 0.5 --json`. Open the PNG. `status: blocked` means Errors remain.
 6. **Iterate** with `zenith tx <file> <tx.json>` (dry-run, then `--apply`). `zenith inspect <file>` prints the layout outline: one line per node with its id, final box, layout mode, and text. Use it instead of reading the file. `--json` adds authored geometry and ink bounds.
    - The dry-run prints the source diff and every moved or resized box. Check them before `--apply`.
-   - `tx --apply --png out.png` also renders the edited page in the same call, so an edit and a look are one step. `--page N` picks the page.
+   - `tx --apply --png out.png --page N` also renders edited page N in the same call, so an edit and a look are one step. Do not spend separate `validate` and `render` turns on it. For many pages, use `zenith render --contact-sheet`.
+   - After a page op, the result prints `pages:` before and after. Check the order there.
+   - When no `tx` op covers an edit, edit the `.zen` source directly with your file-edit tool.
    - The result also lists the Error and Warning diagnostics the edit introduces, such as `text.overflow`. An edit that breaks the render, such as `text.fit_failed`, is rejected and not written. A separate `validate` after each edit adds nothing. Run it once before delivery.
    - `tx --apply` patches the file in place and keeps comments, node add, remove, move, group, and reparent included. A removed node takes the comment lines directly above it. A few layouts rewrite the file in canonical form: a new child inside an inline `{ … }` block, or a node sharing its line with another node. The file changes on every apply. Re-read it before text edits.
    - `set_geometry` writes absolute px. To move or resize by a delta and keep tokens and units, use `nudge_geometry`. Anchored nodes take `nudge_anchor_gap`, `set_anchor`, or `detach_anchor`. `zenith schema op <name>` gives the fields.

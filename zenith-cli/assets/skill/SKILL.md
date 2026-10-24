@@ -20,7 +20,7 @@ A new design:
 2. For any other design, run `zenith schema write` once. It holds a working document, the layout rules, the common attributes, and the common `tx` ops as runnable JSON. Run `zenith schema node <kind>` or `zenith schema op <name>` only for what it does not list.
 3. Run `zenith validate`, then `zenith render --png`, and look at the PNG before delivery. Export the requested format alongside the `.zen` source.
 
-To revise an existing document, start with `zenith tx --help`, which lists the common edits as runnable ops. Read a reference only when a step fails or the task is not covered above. Never invent attributes or transaction fields.
+To revise an existing document, start with `zenith tx --help`, which lists the common edits as runnable ops. After an edit on page N, check it in the same call with `zenith tx --apply --png out.png --page N`. After a page op, the result prints the page order before and after. Check many pages with `zenith render --contact-sheet`. When no op covers an edit, edit the `.zen` source directly with your file-edit tool. Read a reference only when a step fails or the task is not covered above. Never invent attributes or transaction fields.
 
 If the CLI is unavailable, use the installer at https://github.com/zenitheditor/zenith#install. Never fabricate execution results.
 
