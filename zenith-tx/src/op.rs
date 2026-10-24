@@ -17,12 +17,14 @@
 //!
 //! Submodules: `types` (supporting value types), `layout` (auto-layout
 //! payloads), `anchor` (the anchor edit payload), `ops` (the [`Op`] enum
-//! itself), `subjects` (the ids an op keeps at their page position),
+//! itself), `pages` (whether an op changes the page order), `subjects` (the
+//! ids an op keeps at their page position),
 //! `transaction` (the [`Transaction`] envelope).
 
 mod anchor;
 mod layout;
 mod ops;
+mod pages;
 mod subjects;
 mod transaction;
 mod types;

@@ -4,7 +4,7 @@
 //! extract per-node identity/kind, and record affected ids. They are pure and
 //! contain no per-op business logic.
 
-use zenith_core::{Dimension, Node, Unit};
+use zenith_core::{Dimension, Document, Node, Unit};
 
 // ── Shared tree-walk helpers ──────────────────────────────────────────────────
 
@@ -44,10 +44,72 @@ pub(super) fn subtree_contains(node: &Node, id: &str) -> bool {
     }
 }
 
-/// Walk the document tree and return a mutable reference to the node with
-/// the given `id`, or `None` if not found.
+// ── Root lists ────────────────────────────────────────────────────────────────
+
+/// The top-level child lists that hold addressable nodes, with the id of
+/// their owner, in lookup order: pages, then masters, then component
+/// definitions.
 ///
-/// Two-phase approach: shared scan first (to find the page index), then a
+/// This order is the one addressing rule of the engine. A node id resolves
+/// to the first list that holds it. Master and component child ids are
+/// local to their owner, so a page node wins over a master or component
+/// child with the same id. An edit to a component child changes every
+/// instance of the component.
+pub(crate) fn root_entries(doc: &Document) -> impl Iterator<Item = (&str, &[Node])> {
+    let pages = doc
+        .body
+        .pages
+        .iter()
+        .map(|p| (p.id.as_str(), p.children.as_slice()));
+    let masters = doc
+        .masters
+        .iter()
+        .map(|m| (m.id.as_str(), m.children.as_slice()));
+    let components = doc
+        .components
+        .iter()
+        .map(|c| (c.id.as_str(), c.children.as_slice()));
+    pages.chain(masters).chain(components)
+}
+
+/// The mutable form of [`root_entries`], in the same order.
+pub(crate) fn root_entries_mut(doc: &mut Document) -> impl Iterator<Item = (&str, &mut Vec<Node>)> {
+    let pages = doc
+        .body
+        .pages
+        .iter_mut()
+        .map(|p| (p.id.as_str(), &mut p.children));
+    let masters = doc
+        .masters
+        .iter_mut()
+        .map(|m| (m.id.as_str(), &mut m.children));
+    let components = doc
+        .components
+        .iter_mut()
+        .map(|c| (c.id.as_str(), &mut c.children));
+    pages.chain(masters).chain(components)
+}
+
+/// The child lists of [`root_entries`] without their owner ids.
+pub(crate) fn root_lists(doc: &Document) -> impl Iterator<Item = &[Node]> {
+    root_entries(doc).map(|(_, children)| children)
+}
+
+/// The child lists of [`root_entries_mut`] without their owner ids.
+pub(crate) fn root_lists_mut(doc: &mut Document) -> impl Iterator<Item = &mut Vec<Node>> {
+    root_entries_mut(doc).map(|(_, children)| children)
+}
+
+/// The index in [`root_lists`] of the first list whose subtree holds `id`.
+pub(crate) fn root_index_of(doc: &Document, id: &str) -> Option<usize> {
+    root_lists(doc).position(|children| children.iter().any(|n| subtree_contains(n, id)))
+}
+
+/// Walk the document tree and return a mutable reference to the node with
+/// the given `id`, or `None` if not found. The lookup order is the one of
+/// [`root_entries`].
+///
+/// Two-phase approach: shared scan first (to find the root list), then a
 /// single targeted mutable borrow. This pattern avoids the borrow-checker
 /// conflict that would arise if we tried to return a mutable reference from
 /// within an `&mut`-iterating for loop.
@@ -55,44 +117,9 @@ pub(super) fn find_node_any_mut<'doc>(
     doc: &'doc mut zenith_core::Document,
     id: &str,
 ) -> Option<&'doc mut Node> {
-    // Phase 1: find which page or master hosts the id (shared borrow only).
-    enum Host {
-        Page(usize),
-        Master(usize),
-    }
-    let host = doc
-        .body
-        .pages
-        .iter()
-        .enumerate()
-        .find_map(|(pi, page)| {
-            page.children
-                .iter()
-                .any(|n| subtree_contains(n, id))
-                .then_some(Host::Page(pi))
-        })
-        .or_else(|| {
-            doc.masters.iter().enumerate().find_map(|(mi, master)| {
-                master
-                    .children
-                    .iter()
-                    .any(|n| subtree_contains(n, id))
-                    .then_some(Host::Master(mi))
-            })
-        });
-
-    // Phase 2: act on the found host with an exclusive borrow.
-    match host {
-        None => None,
-        Some(Host::Page(pi)) => match doc.body.pages.get_mut(pi) {
-            None => None,
-            Some(page) => find_in_children_any_mut(&mut page.children, id),
-        },
-        Some(Host::Master(mi)) => match doc.masters.get_mut(mi) {
-            None => None,
-            Some(master) => find_in_children_any_mut(&mut master.children, id),
-        },
-    }
+    let index = root_index_of(doc, id)?;
+    let children = root_lists_mut(doc).nth(index)?;
+    find_in_children_any_mut(children, id)
 }
 
 /// Descend into a children slice and return a mutable reference to the node
@@ -203,22 +230,13 @@ fn find_in_children_any_mut<'a>(children: &'a mut [Node], id: &str) -> Option<&'
     }
 }
 
-/// Shared-borrow document walk: find a node with `id` on any page or master.
+/// Shared-borrow document walk: find a node with `id` on any page, master,
+/// or component definition, in the order of [`root_entries`].
 pub(crate) fn find_node_any_shared<'doc>(
     doc: &'doc zenith_core::Document,
     id: &str,
 ) -> Option<&'doc Node> {
-    for page in &doc.body.pages {
-        if let Some(found) = find_node_shared(&page.children, id) {
-            return Some(found);
-        }
-    }
-    for master in &doc.masters {
-        if let Some(found) = find_node_shared(&master.children, id) {
-            return Some(found);
-        }
-    }
-    None
+    root_lists(doc).find_map(|children| find_node_shared(children, id))
 }
 
 /// Shared-borrow tree walk: find a node with `id` anywhere in `children`.

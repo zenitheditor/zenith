@@ -478,6 +478,10 @@ pub enum Op {
         new_id: String,
     },
     /// Duplicate an entire page (and its full subtree), inserting the copy
+    /// directly after the original.
+    ///
+    /// The copy takes `new_id`. Every child id of the copy becomes
+    /// `<id><id_suffix>`: with `id_suffix` `".2"`, `title` becomes `title.2`.
     DuplicatePage {
         /// Source page id to clone.
         page: String,
@@ -582,6 +586,24 @@ pub enum Op {
     ReorderPages {
         /// The new full ordering of page ids (a permutation of the existing set).
         order: Vec<String>,
+    },
+    /// Move one page to a new place in the page order. The other pages keep
+    /// their order.
+    ///
+    /// `position` is the place after the move: `first`, `last`, a 0-based
+    /// `index` in the final order, or `before` / `after` another page id.
+    MovePage {
+        /// Id of the page to move.
+        page: String,
+        /// Where the page goes.
+        position: Position,
+    },
+    /// Swap the places of two pages. The other pages keep their places.
+    SwapPages {
+        /// Id of the first page.
+        a: String,
+        /// Id of the second page.
+        b: String,
     },
     /// Declare a new asset in the document's `assets` block.
     AddAsset {
@@ -734,14 +756,54 @@ pub enum Op {
         /// The new direction value: `"ltr"` or `"rtl"`.
         direction: String,
     },
+    /// Set or clear the override of one component child on one instance.
+    ///
+    /// `instance` names the instance node. `target` (JSON `ref`) is the
+    /// component-local id of the child, as an `override ref="…"` names it.
+    /// Each field is tri-state: omit it to keep the override value, pass
+    /// `null` to remove it, pass a value to set it. An override with no field
+    /// left is removed. To change the child on every instance, edit the
+    /// component child by its id with the node ops.
+    SetOverride {
+        /// The instance node id.
+        instance: String,
+        /// The component-local id of the child to override.
+        #[serde(rename = "ref")]
+        target: String,
+        /// New text of a text child. It replaces the spans with one span
+        /// that keeps the first span's attributes.
+        #[serde(
+            default,
+            deserialize_with = "super::layout::nullable",
+            skip_serializing_if = "Option::is_none"
+        )]
+        text: Option<Option<String>>,
+        /// Color token id for the child's fill.
+        #[serde(
+            default,
+            deserialize_with = "super::layout::nullable",
+            skip_serializing_if = "Option::is_none"
+        )]
+        fill: Option<Option<String>>,
+        /// `false` hides the child on this instance, `true` shows it.
+        #[serde(
+            default,
+            deserialize_with = "super::layout::nullable",
+            skip_serializing_if = "Option::is_none"
+        )]
+        visible: Option<Option<bool>>,
+    },
     /// Literal find-and-replace across text node spans and shape label spans,
     FindReplaceText {
         /// The literal substring to search for (not a regex). Must be non-empty.
         find: String,
         /// The replacement string (may be empty to delete occurrences).
         replace: String,
-        /// When `Some(id)`, only the named text node or shape is scoped.
-        /// When `None`, all text nodes and shape labels in the document are scanned.
+        /// When `Some(id)`, only the named text node, shape, or instance is
+        /// scoped. An instance scope edits its override text and adds a text
+        /// override for a component text child that matches.
+        /// When `None`, all text nodes, shape labels, and instance override
+        /// texts are scanned: pages, masters, and component definitions.
         #[serde(default)]
         node: Option<String>,
     },

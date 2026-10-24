@@ -6,6 +6,8 @@ use crate::commands::serialize_pretty;
 use crate::json_types::{self, DiagnosticJson, TxOutputJson, TxPngJson};
 
 use super::boxes::{BoxDelta, fmt_box, moved};
+use super::created::created_line;
+use super::pages::{PageOrder, page_order_line};
 
 /// The optional review parts of a tx outcome: the source diff and the
 /// compiled box delta. `None` means the part is not shown.
@@ -22,6 +24,12 @@ pub struct TxView {
     pub png: Option<TxPngJson>,
     /// Why `--png` produced no render.
     pub png_error: Option<String>,
+    /// The page order before and after, when an op adds, removes, or moves
+    /// pages.
+    pub pages: Option<PageOrder>,
+    /// The ids a `duplicate_page` or `duplicate_node` op creates, in
+    /// document order.
+    pub created: Option<Vec<String>>,
 }
 
 /// The status as shown in human output.
@@ -66,6 +74,14 @@ pub fn render_human(result: &TxResult, view: &TxView) -> String {
             "affected: {}\n",
             result.affected_node_ids.join(", ")
         ));
+    }
+    if let Some(order) = &view.pages {
+        out.push_str(&page_order_line(order));
+        out.push('\n');
+    }
+    if let Some(ids) = &view.created {
+        out.push_str(&created_line(ids));
+        out.push('\n');
     }
 
     if result.diagnostics.is_empty() {
@@ -157,6 +173,8 @@ pub(super) fn render_json(result: &TxResult, view: TxView) -> String {
         boxes: view.boxes,
         png: view.png,
         png_error: view.png_error,
+        pages: view.pages,
+        created: view.created,
     };
     serialize_pretty(&out)
 }

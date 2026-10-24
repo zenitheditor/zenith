@@ -7,42 +7,42 @@ use zenith_core::{Diagnostic, Document, GroupNode, Node, ResolvedToken, translat
 
 use super::super::layout::{flow_placed, flow_slot_mode};
 use super::super::space::{container_chain, parent_frame, resolved_tokens};
-use super::super::{find_node_any_shared, record_affected};
+use super::super::{find_node_any_shared, record_affected, root_lists, root_lists_mut};
 use super::finders::find_container_children_mut;
 
-/// Find which page directly contains (at the top level of `page.children`) ALL
-/// of the ids in `node_ids`. Returns `(page_index, sorted_indices)` where
-/// `sorted_indices` is the list of positions within `page.children` in
-/// ascending order, or `None` if the ids are not all siblings on one page.
+/// Return the children vec that directly holds ALL of the ids in
+/// `node_ids`: a page, master, or component root, or a container inside one.
+/// `None` when the ids are not all siblings.
 ///
-/// We walk each page's *direct* children only — a flat O(pages × ids) scan.
-/// Nesting is handled by a second pass that descends into containers.
+/// Each root's *direct* children are checked first. A second pass descends
+/// into containers.
 fn find_common_parent_children_mut<'doc>(
     doc: &'doc mut Document,
     node_ids: &[String],
 ) -> Option<&'doc mut Vec<Node>> {
-    // Phase 1 (shared scan): find which page + container has ALL ids as direct
-    // children.  We search each page's full subtree of containers.
+    // Phase 1 (shared scan): find which root + container has ALL ids as
+    // direct children.
     struct Hit {
+        /// Index into the root lists.
         page_index: usize,
-        /// If `None` the parent is the page itself; otherwise it's the container id.
+        /// If `None` the parent is the root itself; otherwise it's the container id.
         container_id: Option<String>,
     }
 
     let hit: Option<Hit> = 'outer: {
-        for (pi, page) in doc.body.pages.iter().enumerate() {
-            // Check if all are direct children of this page.
+        for (pi, children) in root_lists(doc).enumerate() {
+            // Check if all are direct children of this root.
             if node_ids
                 .iter()
-                .all(|id| page.children.iter().any(|n| n.id() == Some(id.as_str())))
+                .all(|id| children.iter().any(|n| n.id() == Some(id.as_str())))
             {
                 break 'outer Some(Hit {
                     page_index: pi,
                     container_id: None,
                 });
             }
-            // Walk containers within this page.
-            if let Some(cid) = find_container_with_all_children(&page.children, node_ids) {
+            // Walk containers within this root.
+            if let Some(cid) = find_container_with_all_children(children, node_ids) {
                 break 'outer Some(Hit {
                     page_index: pi,
                     container_id: Some(cid),
@@ -59,7 +59,7 @@ fn find_common_parent_children_mut<'doc>(
 
     // Phase 2 (exclusive borrow): return a mutable ref to the right vec.
     match container_id {
-        None => doc.body.pages.get_mut(page_index).map(|p| &mut p.children),
+        None => root_lists_mut(doc).nth(page_index),
         Some(cid) => find_container_children_mut(doc, &cid),
     }
 }
@@ -384,13 +384,7 @@ pub(in crate::engine) fn apply_ungroup(
         shifts: &info.shifts,
         resolved: &resolved,
     };
-    let lists = doc
-        .body
-        .pages
-        .iter_mut()
-        .map(|p| &mut p.children)
-        .chain(doc.masters.iter_mut().map(|m| &mut m.children));
-    for children in lists {
+    for children in root_lists_mut(doc) {
         if splice_ungroup(children, &splice) {
             record_affected(group_id, affected);
             for (id, frame, mode) in &info.flow {

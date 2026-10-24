@@ -2,7 +2,7 @@
 
 use zenith_core::{Document, Node};
 
-use super::find_node_shared;
+use super::find_node_any_shared;
 use crate::op::Op;
 
 /// Return the node id(s) a *mutating* op would edit, for the lock-guarded ops
@@ -61,6 +61,8 @@ pub(crate) fn op_lock_targets(op: &Op) -> Vec<&str> {
             node_ids.iter().map(String::as_str).collect()
         }
         Op::SetAsset { node_id, .. } => vec![node_id.as_str()],
+        // An override lives on the instance: guard the instance.
+        Op::SetOverride { instance, .. } => vec![instance.as_str()],
         Op::SetLayout(edit) => vec![edit.node.as_str()],
         Op::SetAnchor(edit) => vec![edit.node.as_str()],
         Op::SetLocked { .. }
@@ -79,6 +81,8 @@ pub(crate) fn op_lock_targets(op: &Op) -> Vec<&str> {
         | Op::AddPage { .. }
         | Op::DeletePage { .. }
         | Op::ReorderPages { .. }
+        | Op::MovePage { .. }
+        | Op::SwapPages { .. }
         | Op::SetPageSize { .. }
         // AddAsset creates new content and never mutates a node; exempt like AddNode.
         | Op::AddAsset { .. }
@@ -108,14 +112,5 @@ pub(crate) fn op_lock_targets(op: &Op) -> Vec<&str> {
 /// Missing nodes and nodes with `locked` absent/`Some(false)` return `false`;
 /// the missing-node case is left for the op's own `tx.unknown_node` path.
 pub(super) fn node_is_locked(doc: &Document, id: &str) -> bool {
-    doc.body
-        .pages
-        .iter()
-        .find_map(|page| find_node_shared(&page.children, id))
-        .or_else(|| {
-            doc.masters
-                .iter()
-                .find_map(|master| find_node_shared(&master.children, id))
-        })
-        .is_some_and(Node::is_locked)
+    find_node_any_shared(doc, id).is_some_and(Node::is_locked)
 }

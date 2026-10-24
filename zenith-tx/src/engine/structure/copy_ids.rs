@@ -100,8 +100,9 @@ fn collect_node_ids(nodes: &[Node], out: &mut BTreeSet<String>) {
     }
 }
 
-/// Every page, node, safe-zone, and fold id in the document.
-fn collect_doc_ids(doc: &Document, out: &mut BTreeSet<String>) {
+/// Every page, node, safe-zone, and fold id in the document, with the
+/// master and component child ids.
+pub(in crate::engine) fn collect_doc_ids(doc: &Document, out: &mut BTreeSet<String>) {
     for page in &doc.body.pages {
         out.insert(page.id.clone());
         out.extend(page.safe_zones.iter().map(|z| z.id.clone()));
@@ -110,6 +111,9 @@ fn collect_doc_ids(doc: &Document, out: &mut BTreeSet<String>) {
     }
     for master in &doc.masters {
         collect_node_ids(&master.children, out);
+    }
+    for component in &doc.components {
+        collect_node_ids(&component.children, out);
     }
 }
 

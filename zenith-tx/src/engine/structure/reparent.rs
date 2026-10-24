@@ -9,7 +9,9 @@ use super::super::layout::{flow_placed, flow_slot_mode, places_in_flow};
 use super::super::space::{
     container_chain, parent_chain, parent_frame, resolved_tokens, shift_between,
 };
-use super::super::{find_node_any_shared, record_affected, subtree_contains};
+use super::super::{
+    find_node_any_shared, record_affected, root_index_of, root_lists_mut, subtree_contains,
+};
 use super::finders::{find_container_children_mut, remove_node_by_id, resolve_position};
 
 /// How a reparent rewrites the moved node's coordinates.
@@ -62,35 +64,18 @@ fn conversion(doc: &Document, node_id: &str, new_parent: &str) -> Conversion {
     }
 }
 
-/// The top-level list that holds a node.
+/// The top-level list that holds a node: its index in the root lists.
 #[derive(Clone, Copy)]
-enum Host {
-    Page(usize),
-    Master(usize),
-}
+struct Host(usize);
 
-/// The page or master whose subtree holds node `id`.
+/// The page, master, or component whose subtree holds node `id`.
 fn host_of(doc: &Document, id: &str) -> Option<Host> {
-    let holds = |children: &[Node]| children.iter().any(|n| subtree_contains(n, id));
-    doc.body
-        .pages
-        .iter()
-        .position(|p| holds(&p.children))
-        .map(Host::Page)
-        .or_else(|| {
-            doc.masters
-                .iter()
-                .position(|m| holds(&m.children))
-                .map(Host::Master)
-        })
+    root_index_of(doc, id).map(Host)
 }
 
 /// The top-level children of `host`.
 fn host_children(doc: &mut Document, host: Host) -> Option<&mut Vec<Node>> {
-    match host {
-        Host::Page(i) => doc.body.pages.get_mut(i).map(|p| &mut p.children),
-        Host::Master(i) => doc.masters.get_mut(i).map(|m| &mut m.children),
-    }
+    root_lists_mut(doc).nth(host.0)
 }
 
 pub(in crate::engine) fn apply_reparent(

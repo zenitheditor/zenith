@@ -98,7 +98,10 @@ pub fn op_summary(name: &str) -> Option<&'static str> {
         "duplicate_node" => Some(
             "Clone a node with its whole subtree (descendants get a suffix derived from new_id) and insert the copy after the original.",
         ),
-        "duplicate_page" => Some("Deep-clone a page and insert the copy after the original."),
+        "duplicate_page" => Some(
+            "Deep-clone a page and insert the copy after the original. The copy takes new_id. \
+             Every child id becomes <id><id_suffix>: with id_suffix \".2\", title becomes title.2.",
+        ),
         "group" => Some(
             "Wrap a set of sibling nodes inside a new group node; members keep document (paint) \
              order whatever order node_ids lists; in a layout flow frame the group \
@@ -123,7 +126,15 @@ pub fn op_summary(name: &str) -> Option<&'static str> {
         }
         "add_page" => Some("Create a new empty page and insert it at the given index."),
         "delete_page" => Some("Remove a page and its entire subtree from the document."),
-        "reorder_pages" => Some("Reorder all document pages to match the given id permutation."),
+        "reorder_pages" => Some(
+            "Reorder all document pages to match the given id permutation. To move one page, use \
+             move_page. To swap two, use swap_pages.",
+        ),
+        "move_page" => Some(
+            "Move one page to first, last, a 0-based index in the final order, or before/after \
+             another page. The other pages keep their order.",
+        ),
+        "swap_pages" => Some("Swap the places of two pages. The other pages keep their places."),
         "add_asset" => Some("Declare a new asset (image, svg, or font) in the assets block."),
         "set_asset" => Some("Assign an asset reference to an image node."),
         "distribute_nodes" => {
@@ -147,7 +158,16 @@ pub fn op_summary(name: &str) -> Option<&'static str> {
             Some("Assign or clear a page's master attribute (shared chrome projection).")
         }
         "set_text_direction" => Some("Set the text direction (ltr or rtl) of a text node."),
-        "find_replace_text" => Some("Literal find-and-replace across text and shape label spans."),
+        "find_replace_text" => Some(
+            "Literal find-and-replace across text spans, shape labels, and instance override \
+             texts, on pages, masters, and components. With node set to an instance, only that \
+             instance changes.",
+        ),
+        "set_override" => Some(
+            "Set or clear text, fill, or visible of one component child (ref) on one instance. \
+             Omit a field to keep it. null removes it. To change the child on every instance, \
+             edit the component child by its id with the node ops.",
+        ),
         "set_layout" => Some(
             "Set or clear auto-layout attributes: frame container fields (layout, gap, padding*, \
              justify, align, wrap, clip) and box-node item fields (position, min/max w/h, \

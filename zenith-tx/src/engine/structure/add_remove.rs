@@ -8,7 +8,7 @@ use zenith_core::{
 
 use crate::op::{OpPathAnchor, OpPathSubpath, Position};
 
-use super::super::{px, record_affected};
+use super::super::{px, record_affected, root_lists_mut};
 use super::finders::{find_container_children_mut, remove_node_by_id, resolve_position};
 
 /// Construct a single [`Node`] from a `.zen` node fragment by wrapping it in a
@@ -218,14 +218,8 @@ pub(in crate::engine) fn apply_remove_node(
     diagnostics: &mut Vec<Diagnostic>,
     affected: &mut Vec<String>,
 ) {
-    for page in doc.body.pages.iter_mut() {
-        if remove_node_by_id(&mut page.children, node_id).is_some() {
-            record_affected(node_id, affected);
-            return;
-        }
-    }
-    for master in doc.masters.iter_mut() {
-        if remove_node_by_id(&mut master.children, node_id).is_some() {
+    for children in root_lists_mut(doc) {
+        if remove_node_by_id(children, node_id).is_some() {
             record_affected(node_id, affected);
             return;
         }

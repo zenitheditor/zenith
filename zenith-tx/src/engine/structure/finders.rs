@@ -4,75 +4,41 @@
 
 use zenith_core::{Diagnostic, Document, Node};
 
+use super::super::{root_entries, root_entries_mut};
 use crate::op::Position;
 
 /// Return a mutable reference to the children vec of the container identified by
-/// `parent_id` — a page, a master, or a nested `group`/`frame` (matched by node
-/// `id`). Returns `None` if no such container exists (including when the id
-/// names a leaf node).
+/// `parent_id`: a page, a master, a component definition, or a nested
+/// `group`/`frame` (matched by node `id`). Returns `None` if no such container
+/// exists (including when the id names a leaf node).
 ///
-/// Two-phase borrow, mirroring [`find_node_any_mut`]: a shared scan locates the
-/// host first, then a single exclusive borrow descends.
+/// Two-phase borrow, mirroring [`find_node_any_mut`](super::super::find_node_any_mut):
+/// a shared scan locates the root list first, then a single exclusive borrow
+/// descends.
 pub(super) fn find_container_children_mut<'doc>(
     doc: &'doc mut Document,
     parent_id: &str,
 ) -> Option<&'doc mut Vec<Node>> {
-    enum Host {
-        Page(usize),
-        Master(usize),
-    }
-
-    // Phase 1: find which page or master is, or contains, the target container.
-    let host = doc
-        .body
-        .pages
-        .iter()
-        .enumerate()
-        .find_map(|(pi, page)| {
-            if page.id == parent_id {
-                return Some(Host::Page(pi));
-            }
-            page.children
-                .iter()
-                .any(|n| subtree_contains_container(n, parent_id))
-                .then_some(Host::Page(pi))
-        })
-        .or_else(|| {
-            doc.masters.iter().enumerate().find_map(|(mi, master)| {
-                if master.id == parent_id {
-                    return Some(Host::Master(mi));
+    // Phase 1: find which root is, or contains, the target container.
+    let (index, is_root) =
+        root_entries(doc)
+            .enumerate()
+            .find_map(|(index, (root_id, children))| {
+                if root_id == parent_id {
+                    return Some((index, true));
                 }
-                master
-                    .children
+                children
                     .iter()
                     .any(|n| subtree_contains_container(n, parent_id))
-                    .then_some(Host::Master(mi))
-            })
-        });
+                    .then_some((index, false))
+            })?;
 
     // Phase 2: take the exclusive borrow we deferred.
-    match host {
-        None => None,
-        Some(Host::Page(pi)) => match doc.body.pages.get_mut(pi) {
-            None => None,
-            Some(page) => {
-                if page.id == parent_id {
-                    Some(&mut page.children)
-                } else {
-                    find_container_in_children_mut(&mut page.children, parent_id)
-                }
-            }
-        },
-        Some(Host::Master(mi)) => match doc.masters.get_mut(mi) {
-            None => None,
-            Some(master) => {
-                if master.id == parent_id {
-                    Some(&mut master.children)
-                } else {
-                    find_container_in_children_mut(&mut master.children, parent_id)
-                }
-            }
-        },
+    let (_, children) = root_entries_mut(doc).nth(index)?;
+    if is_root {
+        Some(children)
+    } else {
+        find_container_in_children_mut(children, parent_id)
     }
 }
 

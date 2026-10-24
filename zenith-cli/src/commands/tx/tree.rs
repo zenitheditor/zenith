@@ -71,6 +71,37 @@ impl Tree {
         }
     }
 
+    /// Every id of a page, master, or component and of the nodes inside
+    /// it, owner first, depth first in document order.
+    fn ordered(doc: &Document) -> Vec<String> {
+        let owners: Vec<(&str, &[Node])> = doc
+            .body
+            .pages
+            .iter()
+            .map(|p| (p.id.as_str(), p.children.as_slice()))
+            .chain(
+                doc.masters
+                    .iter()
+                    .map(|m| (m.id.as_str(), m.children.as_slice())),
+            )
+            .chain(
+                doc.components
+                    .iter()
+                    .map(|c| (c.id.as_str(), c.children.as_slice())),
+            )
+            .collect();
+        let mut tree = Tree::default();
+        for (owner, children) in &owners {
+            tree.add(owner, children);
+        }
+        let mut out = Vec::new();
+        for (owner, _) in &owners {
+            out.push((*owner).to_owned());
+            out.extend(tree.descendants(owner).into_iter().map(str::to_owned));
+        }
+        out
+    }
+
     /// The other children of `id`'s parent.
     pub(super) fn siblings<'t>(&'t self, id: &'t str) -> impl Iterator<Item = &'t str> + 't {
         self.parent
@@ -108,6 +139,12 @@ impl Tree {
             self.parent.get(*p).map(String::as_str)
         })
     }
+}
+
+/// Every owner and node id of `doc` in document order: pages, masters,
+/// then components, each followed by its nodes.
+pub(super) fn ordered_ids(doc: &Document) -> Vec<String> {
+    Tree::ordered(doc)
 }
 
 #[cfg(test)]

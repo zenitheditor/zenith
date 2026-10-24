@@ -1,11 +1,10 @@
 //! Style and text op application: fill, stroke, stroke-width, opacity,
-//! text-align, text-direction, find-replace-text, and text-replacement setters,
+//! text-align, text-direction, and text-replacement setters,
 //! plus the property accessors they use.
 
 use zenith_core::schema::enums::{CODE_OVERFLOWS, TEXT_ALIGNS, TEXT_OVERFLOWS};
 use zenith_core::{
-    Diagnostic, Document, Node, PropertyValue, TextNode, TextSpan, canonicalize_style_key,
-    style_enum_values,
+    Diagnostic, Document, Node, PropertyValue, TextSpan, canonicalize_style_key, style_enum_values,
 };
 
 use crate::op::OpSpan;
@@ -17,7 +16,7 @@ use super::{clear_placeholder, find_node_any_mut, record_affected};
 /// Return a mutable reference to the `fill` field of a node, or `None` for
 /// node variants that do not have a `fill` property
 /// (`Line`, `Frame`, `Group`, `Image`, `Unknown`).
-fn node_fill_mut(node: &mut Node) -> Option<&mut Option<PropertyValue>> {
+pub(super) fn node_fill_mut(node: &mut Node) -> Option<&mut Option<PropertyValue>> {
     match node {
         Node::Rect(n) => Some(&mut n.fill),
         Node::Ellipse(n) => Some(&mut n.fill),
@@ -641,32 +640,7 @@ pub(super) fn apply_set_text_direction(
     }
 }
 
-// ── FindReplaceText ───────────────────────────────────────────────────────────
-
-/// Replace all occurrences of `find` in every span's `text` of `spans`,
-/// returning `true` if any span was modified.
-///
-/// Only `TextSpan::text` is mutated; all formatting fields are preserved.
-/// Shared by both text nodes and shape labels (their spans are the same type).
-fn replace_in_spans(spans: &mut Vec<TextSpan>, find: &str, replace: &str) -> bool {
-    let mut changed = false;
-    for span in spans {
-        if span.text.contains(find) {
-            span.text = span.text.replace(find, replace);
-            changed = true;
-        }
-    }
-    changed
-}
-
-/// Replace all occurrences of `find` in every span's text of `text_node`,
-/// returning `true` if any span was modified.
-///
-/// Thin wrapper over [`replace_in_spans`] so text and shape paths share one
-/// source of truth.
-fn replace_in_text_node(text_node: &mut TextNode, find: &str, replace: &str) -> bool {
-    replace_in_spans(&mut text_node.spans, find, replace)
-}
+// ── ReplaceText helpers ───────────────────────────────────────────────────────
 
 /// Map a slice of transaction [`OpSpan`]s to owned [`TextSpan`]s.
 ///
@@ -701,227 +675,6 @@ fn op_spans_to_text_spans(spans: &[OpSpan]) -> Vec<TextSpan> {
             link: None,
         })
         .collect()
-}
-
-/// Collect `(id, is_locked)` pairs for every `TextNode` and `ShapeNode`
-/// (whose owned label spans are find-replace targets) reachable in
-/// `children`, in document order, recursing into `Frame` and `Group`
-/// containers. Capturing the locked flag here avoids a second O(n) tree walk
-/// per node in the doc-wide find-replace loop. Exhaustive over all `Node`
-/// variants — no wildcard.
-fn collect_text_entries(children: &[Node], out: &mut Vec<(String, bool)>) {
-    for node in children {
-        match node {
-            Node::Text(t) => out.push((t.id.clone(), t.locked == Some(true))),
-            // A shape owns its label spans directly (not as child Nodes), so it
-            // is a leaf for this collection — do not recurse into it.
-            Node::Shape(s) => out.push((s.id.clone(), s.locked == Some(true))),
-            Node::Frame(f) => collect_text_entries(&f.children, out),
-            Node::Group(g) => collect_text_entries(&g.children, out),
-            Node::Table(t) => {
-                for row in &t.rows {
-                    for cell in &row.cells {
-                        collect_text_entries(&cell.children, out);
-                    }
-                }
-            }
-            Node::Rect(_)
-            | Node::Ellipse(_)
-            | Node::Line(_)
-            | Node::Code(_)
-            | Node::Image(_)
-            | Node::Polygon(_)
-            | Node::Polyline(_)
-            | Node::Path(_)
-            | Node::Instance(_)
-            | Node::Field(_)
-            | Node::Toc(_)
-            | Node::Footnote(_)
-            | Node::Connector(_)
-            | Node::Pattern(_)
-            | Node::Chart(_)
-            | Node::Light(_)
-            | Node::Mesh(_)
-            | Node::Unknown(_) => {}
-        }
-    }
-}
-
-/// Apply a literal find-and-replace across one or all text nodes in `doc`.
-///
-/// See [`Op::FindReplaceText`] for the full specification.
-pub(super) fn apply_find_replace_text(
-    find: &str,
-    replace: &str,
-    node: Option<&str>,
-    doc: &mut Document,
-    diagnostics: &mut Vec<Diagnostic>,
-    affected: &mut Vec<String>,
-) {
-    // Eager: empty find string is invalid.
-    if find.is_empty() {
-        diagnostics.push(Diagnostic::error(
-            "tx.invalid_value",
-            "find string must be non-empty",
-            None,
-            None,
-        ));
-        return;
-    }
-
-    match node {
-        // ── Scoped mode: one named text node ─────────────────────────────────
-        Some(node_id) => match find_node_any_mut(doc, node_id) {
-            None => {
-                diagnostics.push(Diagnostic::error(
-                    "tx.unknown_node",
-                    format!("node {:?} not found in document", node_id),
-                    None,
-                    Some(node_id.to_owned()),
-                ));
-            }
-            Some(Node::Text(text_node)) => {
-                if replace_in_text_node(text_node, find, replace) {
-                    clear_placeholder(&mut text_node.role);
-                    record_affected(node_id, affected);
-                } else {
-                    diagnostics.push(Diagnostic::advisory(
-                        "tx.noop",
-                        format!(
-                            "find_replace_text: {:?} not found in node {:?}; document is unchanged",
-                            find, node_id
-                        ),
-                        None,
-                        Some(node_id.to_owned()),
-                    ));
-                }
-            }
-            Some(Node::Shape(shape_node)) => {
-                if replace_in_spans(&mut shape_node.spans, find, replace) {
-                    clear_placeholder(&mut shape_node.role);
-                    record_affected(node_id, affected);
-                } else {
-                    diagnostics.push(Diagnostic::advisory(
-                        "tx.noop",
-                        format!(
-                            "find_replace_text: {:?} not found in node {:?}; document is unchanged",
-                            find, node_id
-                        ),
-                        None,
-                        Some(node_id.to_owned()),
-                    ));
-                }
-            }
-            Some(other) => {
-                let kind = other.kind_str();
-                diagnostics.push(Diagnostic::error(
-                    "tx.wrong_node_type",
-                    format!(
-                        "find_replace_text requires a text or shape node but {:?} is a {}",
-                        node_id, kind
-                    ),
-                    None,
-                    Some(node_id.to_owned()),
-                ));
-            }
-        },
-
-        // ── Doc-wide mode: all text nodes ─────────────────────────────────────
-        None => {
-            // Phase 1: collect (id, is_locked) for every text node in the
-            // document in one shared pass — avoids a second O(n) tree walk
-            // per node in Phase 2.
-            let mut all_text_entries: Vec<(String, bool)> = Vec::new();
-            for page in &doc.body.pages {
-                collect_text_entries(&page.children, &mut all_text_entries);
-            }
-
-            let mut skipped: Vec<String> = Vec::new();
-            // Track whether this op changed anything (independent of prior ops
-            // in the same transaction that may have already populated `affected`).
-            let mut this_op_changed = false;
-
-            // Phase 2: for each text node, skip locked ones then mutate.
-            for (id, is_locked) in &all_text_entries {
-                if *is_locked {
-                    skipped.push(id.clone());
-                    continue;
-                }
-
-                // Mutate via find_node_any_mut. Text nodes and shapes both own
-                // span lists; any other node kind is not a text target here.
-                let changed = match find_node_any_mut(doc, id) {
-                    Some(Node::Text(text_node)) => {
-                        let changed = replace_in_text_node(text_node, find, replace);
-                        if changed {
-                            clear_placeholder(&mut text_node.role);
-                        }
-                        changed
-                    }
-                    Some(Node::Shape(shape_node)) => {
-                        let changed = replace_in_spans(&mut shape_node.spans, find, replace);
-                        if changed {
-                            clear_placeholder(&mut shape_node.role);
-                        }
-                        changed
-                    }
-                    Some(Node::Rect(_))
-                    | Some(Node::Ellipse(_))
-                    | Some(Node::Line(_))
-                    | Some(Node::Code(_))
-                    | Some(Node::Frame(_))
-                    | Some(Node::Group(_))
-                    | Some(Node::Image(_))
-                    | Some(Node::Polygon(_))
-                    | Some(Node::Polyline(_))
-                    | Some(Node::Path(_))
-                    | Some(Node::Instance(_))
-                    | Some(Node::Field(_))
-                    | Some(Node::Footnote(_))
-                    | Some(Node::Toc(_))
-                    | Some(Node::Table(_))
-                    | Some(Node::Connector(_))
-                    | Some(Node::Pattern(_))
-                    | Some(Node::Chart(_))
-                    | Some(Node::Light(_))
-                    | Some(Node::Mesh(_))
-                    | Some(Node::Unknown(_))
-                    | None => false,
-                };
-                if changed {
-                    record_affected(id, affected);
-                    this_op_changed = true;
-                }
-            }
-
-            // Sort skipped list for determinism, then emit advisory if any.
-            skipped.sort();
-            if !skipped.is_empty() {
-                diagnostics.push(Diagnostic::warning(
-                    "tx.locked_skipped",
-                    format!(
-                        "find_replace_text: skipped locked node(s): {}",
-                        skipped.join(", ")
-                    ),
-                    None,
-                    None,
-                ));
-            }
-
-            // If this op changed nothing AND nothing was skipped, emit noop advisory.
-            if !this_op_changed && skipped.is_empty() {
-                diagnostics.push(Diagnostic::advisory(
-                    "tx.noop",
-                    format!(
-                        "find_replace_text: {:?} not found in any text node or shape label; document is unchanged",
-                        find
-                    ),
-                    None,
-                    None,
-                ));
-            }
-        }
-    }
 }
 
 // ── ReplaceText ───────────────────────────────────────────────────────────────

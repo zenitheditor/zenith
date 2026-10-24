@@ -2,7 +2,9 @@
 //! cover every `Op` variant, and the op→tag map must stay consistent.
 
 use super::common::{all_exhaustive_tags, op_tag};
-use crate::op::{AddAssetMetadata, Op, OpPathBooleanOperation, OpPathHandle, OpPathTransform};
+use crate::op::{
+    AddAssetMetadata, Op, OpPathBooleanOperation, OpPathHandle, OpPathTransform, Position,
+};
 use crate::schema::*;
 use std::collections::BTreeSet;
 
@@ -268,6 +270,21 @@ fn op_tag_strings_match_exhaustive_set() {
             page: String::new(),
         },
         Op::ReorderPages { order: vec![] },
+        Op::MovePage {
+            page: String::new(),
+            position: Position::First,
+        },
+        Op::SwapPages {
+            a: String::new(),
+            b: String::new(),
+        },
+        Op::SetOverride {
+            instance: String::new(),
+            target: String::new(),
+            text: None,
+            fill: None,
+            visible: None,
+        },
         Op::AddAsset {
             id: String::new(),
             kind: String::new(),

@@ -84,6 +84,8 @@ impl Op {
             | Op::AddPage { .. }
             | Op::DeletePage { .. }
             | Op::ReorderPages { .. }
+            | Op::MovePage { .. }
+            | Op::SwapPages { .. }
             | Op::AddAsset { .. }
             | Op::SetAsset { .. }
             | Op::DistributeNodes { .. }
@@ -96,6 +98,7 @@ impl Op {
             | Op::DeleteMaster { .. }
             | Op::SetPageMaster { .. }
             | Op::SetTextDirection { .. }
+            | Op::SetOverride { .. }
             | Op::FindReplaceText { .. }
             | Op::SetPageSize { .. }
             | Op::AlignToEdge { .. }

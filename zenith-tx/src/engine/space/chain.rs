@@ -5,6 +5,7 @@ use std::collections::BTreeMap;
 
 use zenith_core::{Document, FrameNode, Node, ResolvedToken, resolve_geometry_px, resolve_tokens};
 
+use super::super::root_lists;
 use super::offset::{Scope, own_offset, placed_anchor_origin};
 
 /// One container between a page (or master) and a child space.
@@ -107,15 +108,9 @@ pub(in crate::engine) fn shift_between(from: &[Link], to: &[Link]) -> Result<(f6
 }
 
 /// The frame that directly holds node `id`, or `None` when its parent is a
-/// page, a master, or a non-frame container.
+/// page, a master, a component, or a non-frame container.
 pub(in crate::engine) fn parent_frame<'d>(doc: &'d Document, id: &str) -> Option<&'d FrameNode> {
-    let roots = doc
-        .body
-        .pages
-        .iter()
-        .map(|p| p.children.as_slice())
-        .chain(doc.masters.iter().map(|m| m.children.as_slice()));
-    for children in roots {
+    for children in root_lists(doc) {
         if let Some(found) = find_parent_frame(children, None, id) {
             return found;
         }
@@ -189,7 +184,8 @@ fn walk_roots(
     resolved: &BTreeMap<String, ResolvedToken>,
     hit: &mut Hit<'_>,
 ) -> Option<Chain> {
-    // Master chrome projects onto pages of any size: no page for anchors.
+    // Master chrome projects onto pages of any size, and a component onto
+    // any instance: no page for anchors.
     let roots = doc
         .body
         .pages
@@ -199,6 +195,11 @@ fn walk_roots(
             doc.masters
                 .iter()
                 .map(|m| (m.id.as_str(), m.children.as_slice(), None)),
+        )
+        .chain(
+            doc.components
+                .iter()
+                .map(|c| (c.id.as_str(), c.children.as_slice(), None)),
         );
     for (root_id, children, page) in roots {
         if let Query::Container(id) = query

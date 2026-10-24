@@ -8,8 +8,10 @@ mod asset;
 mod defaults;
 mod dispatch;
 mod fill_rule;
+mod find_replace;
 mod flags;
 mod geometry;
+mod instance_override;
 mod layout;
 mod lock;
 mod node_props;
@@ -25,6 +27,7 @@ mod style;
 mod text_outline;
 mod token;
 mod tree;
+mod unknown_hint;
 
 pub use node_props::{NODE_TOKEN_PROPERTIES, node_token_properties};
 pub use run::run_transaction;
@@ -39,5 +42,6 @@ pub(crate) use lock::op_lock_targets;
 use run::{finish_candidate, format_source};
 pub(crate) use tree::find_node_any_shared;
 use tree::{
-    clear_placeholder, find_node_any_mut, find_node_shared, px, record_affected, subtree_contains,
+    clear_placeholder, find_node_any_mut, find_node_shared, px, record_affected, root_entries,
+    root_entries_mut, root_index_of, root_lists, root_lists_mut, subtree_contains,
 };

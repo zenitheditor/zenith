@@ -66,7 +66,7 @@ pub(super) fn op_fields(name: &str) -> Option<&'static [OpFieldSchema]> {
                 },
                 OpFieldSchema {
                     name: "id_suffix",
-                    ty: "string",
+                    ty: "string appended to every child id (title + .2 = title.2)",
                     required: true,
                 },
             ];

@@ -8,6 +8,7 @@ use zenith_core::{Diagnostic, Document, KdlAdapter, KdlSource, Severity, validat
 use super::dispatch::apply_op;
 use super::lock::{node_is_locked, op_lock_targets};
 use super::range;
+use super::unknown_hint::add_unknown_node_hints;
 use crate::op::{Op, Transaction};
 use crate::result::{TxError, TxResult, TxStatus};
 
@@ -61,7 +62,9 @@ pub fn run_transaction(doc: &Document, tx: &Transaction) -> Result<TxResult, TxE
         let targets: Vec<String> = op_lock_targets(op).into_iter().map(str::to_owned).collect();
         let mut before = range::snapshot(&candidate, &targets);
         let known = affected.len();
+        let reported = diagnostics.len();
         apply_op(op, &mut candidate, &mut diagnostics, &mut affected);
+        add_unknown_node_hints(&candidate, diagnostics.iter_mut().skip(reported));
         for id in affected.iter().skip(known) {
             if !before.iter().any(|(t, _)| t == id) {
                 before.push((id.clone(), Vec::new()));

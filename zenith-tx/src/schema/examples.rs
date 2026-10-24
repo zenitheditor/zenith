@@ -85,7 +85,7 @@ pub fn op_example(name: &str) -> Option<&'static str> {
         ),
         "duplicate_node" => Some(r#"{"op":"duplicate_node","node":"box","new_id":"box-copy"}"#),
         "duplicate_page" => {
-            Some(r#"{"op":"duplicate_page","page":"page.x","new_id":"page.x2","id_suffix":".v2"}"#)
+            Some(r#"{"op":"duplicate_page","page":"page.1","new_id":"page.2","id_suffix":".2"}"#)
         }
         "group" => Some(r#"{"op":"group","node_ids":["rect1","rect2"],"group_id":"grp-new"}"#),
         "ungroup" => Some(r#"{"op":"ungroup","group_id":"grp1"}"#),
@@ -103,6 +103,10 @@ pub fn op_example(name: &str) -> Option<&'static str> {
         }
         "delete_page" => Some(r#"{"op":"delete_page","page":"page.old"}"#),
         "reorder_pages" => Some(r#"{"op":"reorder_pages","order":["page.b","page.a","page.c"]}"#),
+        "move_page" => {
+            Some(r#"{"op":"move_page","page":"page.16","position":{"at":"after","id":"page.10"}}"#)
+        }
+        "swap_pages" => Some(r#"{"op":"swap_pages","a":"page.10","b":"page.16"}"#),
         "add_asset" => Some(
             r#"{"op":"add_asset","id":"asset.logo","kind":"image","src":"images/logo.png","sha256":"abc123","ai_model":"gpt-image-1","ai_provider":"openai"}"#,
         ),
@@ -132,6 +136,9 @@ pub fn op_example(name: &str) -> Option<&'static str> {
         "find_replace_text" => {
             Some(r#"{"op":"find_replace_text","find":"Draft","replace":"Final"}"#)
         }
+        "set_override" => Some(
+            r#"{"op":"set_override","instance":"p1.c2","ref":"card.body","text":"New body","fill":"color.accent","visible":true}"#,
+        ),
         "set_layout" => Some(
             r#"{"op":"set_layout","node":"chips","layout":"row","gap":8,"padding":"space.md","align":"center","wrap":true,"margin_top":40}"#,
         ),

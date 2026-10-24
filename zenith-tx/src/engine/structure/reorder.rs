@@ -3,7 +3,7 @@
 
 use zenith_core::{Diagnostic, Document, Node};
 
-use super::super::record_affected;
+use super::super::{record_affected, root_lists_mut};
 
 /// Which z-order reorder to perform.
 #[derive(Copy, Clone)]
@@ -29,16 +29,8 @@ pub(in crate::engine) fn apply_reorder(
     diagnostics: &mut Vec<Diagnostic>,
     affected: &mut Vec<String>,
 ) {
-    // Try each page, then each master (chrome lives on masters).
-    let mut hosts: Vec<&mut [Node]> = doc
-        .body
-        .pages
-        .iter_mut()
-        .map(|p| p.children.as_mut_slice())
-        .collect();
-    hosts.extend(doc.masters.iter_mut().map(|m| m.children.as_mut_slice()));
-
-    for children in hosts {
+    // Try each page, then each master, then each component definition.
+    for children in root_lists_mut(doc) {
         match reorder_in(children, node_id, kind) {
             MoveOutcome::NotFound => {
                 // Try the next host.

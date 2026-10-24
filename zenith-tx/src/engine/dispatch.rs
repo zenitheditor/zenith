@@ -6,11 +6,13 @@ use super::anchor::{apply_detach_anchor, apply_nudge_anchor_gap, apply_set_ancho
 use super::asset::{AddAssetSpec, apply_add_asset, apply_set_asset};
 use super::defaults::{SetDefaultScalars, apply_remove_default, apply_set_default};
 use super::fill_rule::apply_set_fill_rule;
+use super::find_replace::apply_find_replace_text;
 use super::flags::{apply_set_locked, apply_set_points, apply_set_visible};
 use super::geometry::{
     GeometryDelta, LineDelta, NudgeDelta, apply_align_nodes, apply_align_to_edge,
     apply_distribute_nodes, apply_nudge_geometry, apply_nudge_line_points, apply_set_geometry,
 };
+use super::instance_override::{OverrideEdit, apply_set_override};
 use super::layout::apply_set_layout;
 use super::node_props::{apply_set_node_token, apply_set_span_text};
 use super::path::{
@@ -26,14 +28,13 @@ use super::structure;
 use super::structure::{
     AddPathSpec, ReorderKind, apply_add_node, apply_add_page, apply_add_path, apply_create_master,
     apply_delete_master, apply_delete_page, apply_duplicate_node, apply_duplicate_page,
-    apply_group, apply_remove_node, apply_reorder, apply_reorder_pages, apply_reparent,
-    apply_set_page_master, apply_set_page_size, apply_ungroup,
+    apply_group, apply_move_page, apply_remove_node, apply_reorder, apply_reorder_pages,
+    apply_reparent, apply_set_page_master, apply_set_page_size, apply_swap_pages, apply_ungroup,
 };
 use super::style::{
-    apply_create_style, apply_delete_style, apply_find_replace_text, apply_replace_text,
-    apply_set_fill, apply_set_opacity, apply_set_stroke, apply_set_stroke_width,
-    apply_set_style_property, apply_set_text_align, apply_set_text_direction,
-    apply_set_text_overflow,
+    apply_create_style, apply_delete_style, apply_replace_text, apply_set_fill, apply_set_opacity,
+    apply_set_stroke, apply_set_stroke_width, apply_set_style_property, apply_set_text_align,
+    apply_set_text_direction, apply_set_text_overflow,
 };
 use super::token::{
     CreateTokenBody, CreateTokenScalars, apply_create_token, apply_update_token_value,
@@ -492,6 +493,12 @@ pub(super) fn apply_op(
         Op::ReorderPages { order } => {
             apply_reorder_pages(order, doc, diagnostics, affected);
         }
+        Op::MovePage { page, position } => {
+            apply_move_page(page, position, doc, diagnostics, affected);
+        }
+        Op::SwapPages { a, b } => {
+            apply_swap_pages(a, b, doc, diagnostics, affected);
+        }
         Op::AddAsset {
             id,
             kind,
@@ -591,6 +598,26 @@ pub(super) fn apply_op(
         }
         Op::SetTextDirection { node, direction } => {
             apply_set_text_direction(node, direction, doc, diagnostics, affected);
+        }
+        Op::SetOverride {
+            instance,
+            target,
+            text,
+            fill,
+            visible,
+        } => {
+            apply_set_override(
+                &OverrideEdit {
+                    instance,
+                    target,
+                    text: text.as_ref().map(Option::as_deref),
+                    fill: fill.as_ref().map(Option::as_deref),
+                    visible: *visible,
+                },
+                doc,
+                diagnostics,
+                affected,
+            );
         }
         Op::FindReplaceText {
             find,

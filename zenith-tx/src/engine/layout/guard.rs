@@ -8,6 +8,8 @@
 
 use zenith_core::{Diagnostic, Document, FrameNode, LayoutKind, LayoutPosition, Node};
 
+use super::super::root_lists;
+
 /// Push one `tx.layout_managed` Error per in-flow id in `ids` and return
 /// `true` when any was pushed. `op` names the rejected op in the message.
 pub(in crate::engine) fn reject_layout_managed<'a>(
@@ -63,13 +65,7 @@ pub(in crate::engine) fn flow_frame<'d>(
 /// The id and layout mode of the frame that places node `id` in flow, or
 /// `None` when no layout frame manages the node's position.
 fn managing_frame<'d>(doc: &'d Document, id: &str) -> Option<(&'d str, &'static str)> {
-    let roots = doc
-        .body
-        .pages
-        .iter()
-        .map(|p| p.children.as_slice())
-        .chain(doc.masters.iter().map(|m| m.children.as_slice()));
-    for children in roots {
+    for children in root_lists(doc) {
         if let Some(found) = search(children, id) {
             return found;
         }

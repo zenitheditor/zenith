@@ -16,7 +16,9 @@ offset one child    {\"op\":\"set_layout\",\"node\":\"button\",\"margin_top\":40
 add a node          {\"op\":\"add_node\",\"parent\":\"page.main\",\"source\":\"rect id=\\\"box\\\" x=(px)10 y=(px)10 w=(px)100 h=(px)80\"}\n  \
 remove a node       {\"op\":\"remove_node\",\"node\":\"old-rect\"}\n  \
 repeat a row or card {\"op\":\"duplicate_node\",\"node\":\"topics.1\",\"new_id\":\"topics.1-b\"}  (then change the copy's text)\n  \
-repeat a page       {\"op\":\"duplicate_page\",\"page\":\"page.1\",\"new_id\":\"page.2\",\"id_suffix\":\".2\"}  (then change the copy's text)\n  \
+repeat a page       {\"op\":\"duplicate_page\",\"page\":\"page.1\",\"new_id\":\"page.2\",\"id_suffix\":\".2\"}  (child ids get the suffix: title.2)\n  \
+move a page         {\"op\":\"move_page\",\"page\":\"page.5\",\"position\":{\"at\":\"after\",\"id\":\"page.2\"}}  (swap_pages swaps two)\n  \
+change one instance {\"op\":\"set_override\",\"instance\":\"card.2\",\"ref\":\"card.title\",\"text\":\"Hello\"}  (also fill, visible)\n  \
 show or hide        {\"op\":\"set_visible\",\"node\":\"caption\",\"visible\":false}"
     };
 }
@@ -36,13 +38,13 @@ COMMON EDITS (pass the ops with --ops '[...]'; a node needs the op that matches 
 DISCOVERING OPS:\n  \
 zenith schema op set_fill          # fields, types, and a working example\n  \
 zenith schema op add_node          # how to insert a new node from .zen source\n  \
-zenith schema ops                  # list every available op with a summary\n  \
-See examples/*.tx.json for runnable samples.\n\n\
+zenith schema ops                  # list every available op with a summary\n\n\
 EXAMPLES:\n  \
 zenith tx poster.zen edits.json                 # preview the diff and moved boxes (dry-run)\n  \
 zenith tx poster.zen edits.json --apply         # write the change to disk\n  \
 zenith tx poster.zen edits.json --apply --diff  # write, and print the diff and moved boxes\n  \
 zenith tx poster.zen edits.json --apply --png out.png  # write, and render page 1 in the same call\n  \
+zenith tx deck.zen edits.json --apply --png p3.png --page 3  # write, and render the edited page 3\n  \
 zenith tx poster.zen --apply --ops '[{\"op\":\"set_fill\",\"node\":\"hero\",\"fill\":\"color.brand\"}]'  # inline ops, no file"))]
 pub struct TxArgs {
     /// Path to the `.zen` document.

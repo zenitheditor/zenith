@@ -263,6 +263,14 @@ pub struct TxOutputJson {
     /// Why `--png` produced no render, with `--apply --png`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub png_error: Option<String>,
+    /// The page ids before and after, when an op adds, removes, or moves
+    /// pages.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pages: Option<crate::commands::tx::PageOrder>,
+    /// Every id a `duplicate_page` or `duplicate_node` op creates, in
+    /// document order.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub created: Option<Vec<String>>,
 }
 
 /// One skipped-token entry in the `zenith theme apply --json` extras.

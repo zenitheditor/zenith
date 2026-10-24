@@ -403,6 +403,30 @@ fn op_fields_names_match_serde_keys() {
                 order: vec!["a".into()],
             },
         ),
+        (
+            "move_page",
+            Op::MovePage {
+                page: "p".into(),
+                position: Position::After { id: "q".into() },
+            },
+        ),
+        (
+            "swap_pages",
+            Op::SwapPages {
+                a: "p".into(),
+                b: "q".into(),
+            },
+        ),
+        (
+            "set_override",
+            Op::SetOverride {
+                instance: "i".into(),
+                target: "card.body".into(),
+                text: Some(Some("x".into())),
+                fill: Some(Some("color.a".into())),
+                visible: Some(Some(true)),
+            },
+        ),
         ("add_asset", add_asset_sample_op()),
         (
             "set_asset",

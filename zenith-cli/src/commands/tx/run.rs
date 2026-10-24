@@ -16,7 +16,9 @@ use zenith_tx::{
 };
 
 use super::boxes::{BoxSides, box_deltas, page_box_warnings, page_boxes};
+use super::created::created_ids;
 use super::introduced::introduced;
+use super::pages::page_order;
 use super::render::{TxView, render_human, render_json};
 use super::tree::Tree;
 use super::written::written_source;
@@ -246,6 +248,8 @@ fn finish(
         }
     }
 
+    view.pages = page_order(ops, doc, &result);
+    view.created = created_ids(ops, doc, &result);
     view.applied = ctx.map(|c| c.apply && result.status != TxStatus::Rejected && changed);
     let exit_code = status_exit_code(&result.status);
     let human = render_human(&result, &view);

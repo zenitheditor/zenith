@@ -1,5 +1,5 @@
 //! Structural op application: reorder, add/remove, group/ungroup, reparent,
-//! duplicate — plus the container/child finders and tree-mutation helpers they
+//! duplicate, page order — plus the container/child finders and tree-mutation helpers they
 //! share.
 //!
 //! This is a wiring-only module root: it declares the concern-grouped submodules
@@ -11,6 +11,7 @@ mod duplicate;
 mod finders;
 mod group;
 mod page;
+mod page_order;
 mod reorder;
 mod reparent;
 mod suffix;
@@ -18,14 +19,16 @@ mod suffix;
 pub(in crate::engine) use add_remove::{
     AddPathSpec, apply_add_node, apply_add_path, apply_remove_node,
 };
+pub(in crate::engine) use copy_ids::collect_doc_ids;
 pub(in crate::engine) use duplicate::{
     apply_duplicate_node, apply_duplicate_page, node_set_id_any,
 };
 pub(in crate::engine) use group::{apply_group, apply_ungroup};
 pub(in crate::engine) use page::{
     AddPageSpec, apply_add_page, apply_create_master, apply_delete_master, apply_delete_page,
-    apply_reorder_pages, apply_set_page_master, apply_set_page_size, parse_dimension_str,
+    apply_set_page_master, apply_set_page_size, parse_dimension_str,
 };
+pub(in crate::engine) use page_order::{apply_move_page, apply_reorder_pages, apply_swap_pages};
 pub(in crate::engine) use reorder::{ReorderKind, apply_reorder};
 pub(in crate::engine) use reparent::apply_reparent;
 pub(crate) use suffix::suffix_page_copy;

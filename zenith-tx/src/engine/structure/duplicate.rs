@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 use zenith_core::ast::document::{Fold, SafeZone};
 use zenith_core::{Diagnostic, Document, Node};
 
-use super::super::{find_node_shared, record_affected, subtree_contains};
+use super::super::{find_node_shared, record_affected, root_index_of, root_lists, root_lists_mut};
 use super::copy_ids::{pick_suffix, subtree_id_map};
 use super::suffix::{copy_ports, copy_subtree, suffix_page_copy};
 
@@ -181,60 +181,24 @@ pub(in crate::engine) fn apply_duplicate_node(
     diagnostics: &mut Vec<Diagnostic>,
     affected: &mut Vec<String>,
 ) {
-    // 1. Verify the source node exists on a page or master (shared scan).
-    //    Use a two-phase approach mirroring find_node_any_mut.
-    enum Host {
-        Page(usize),
-        Master(usize),
-    }
-    let host = doc
-        .body
-        .pages
-        .iter()
-        .enumerate()
-        .find_map(|(pi, page)| {
-            page.children
-                .iter()
-                .any(|n| subtree_contains(n, node_id))
-                .then_some(Host::Page(pi))
-        })
-        .or_else(|| {
-            doc.masters.iter().enumerate().find_map(|(mi, master)| {
-                master
-                    .children
-                    .iter()
-                    .any(|n| subtree_contains(n, node_id))
-                    .then_some(Host::Master(mi))
-            })
-        });
-
-    let host = match host {
-        Some(h) => h,
-        None => {
-            diagnostics.push(Diagnostic::error(
-                "tx.unknown_node",
-                format!("node {:?} not found in document", node_id),
-                None,
-                Some(node_id.to_owned()),
-            ));
-            return;
-        }
+    // 1. Find the root list (page, master, or component) that holds the
+    //    source node (shared scan), mirroring find_node_any_mut.
+    let Some(root) = root_index_of(doc, node_id) else {
+        diagnostics.push(Diagnostic::error(
+            "tx.unknown_node",
+            format!("node {:?} not found in document", node_id),
+            None,
+            Some(node_id.to_owned()),
+        ));
+        return;
     };
 
     // 2. Pick the descendant id suffix from the source subtree and the ids
     //    already in the document (shared borrows only).
-    let src = match host {
-        Host::Page(pi) => doc
-            .body
-            .pages
-            .get(pi)
-            .and_then(|page| find_node_shared(&page.children, node_id)),
-        Host::Master(mi) => doc
-            .masters
-            .get(mi)
-            .and_then(|master| find_node_shared(&master.children, node_id)),
-    };
-    let Some(src) = src else {
+    let Some(src) = root_lists(doc)
+        .nth(root)
+        .and_then(|children| find_node_shared(children, node_id))
+    else {
         return;
     };
     let Some(suffix) = pick_suffix(doc, src, node_id, new_id) else {
@@ -250,21 +214,20 @@ pub(in crate::engine) fn apply_duplicate_node(
 
     // 3. Clone the source and insert it immediately after the original.
     //    `duplicate_in_children` does the clone+id-set+insert in one pass.
-    match host {
-        Host::Page(pi) => {
-            let Some(page) = doc.body.pages.get_mut(pi) else {
-                return;
-            };
-            duplicate_in_children(&mut page.children, node_id, new_id, &ids);
-            // Page ports that name nodes of the subtree get copies for the copy.
-            copy_ports(&mut page.ports, &ids);
-        }
-        Host::Master(mi) => {
-            let Some(master) = doc.masters.get_mut(mi) else {
-                return;
-            };
-            duplicate_in_children(&mut master.children, node_id, new_id, &ids);
-        }
+    if let Some(children) = root_lists_mut(doc).nth(root) {
+        duplicate_in_children(children, node_id, new_id, &ids);
+    }
+    // Page and component ports that name nodes of the subtree get copies for
+    // the copy. Masters have no ports.
+    let pages = doc.body.pages.len();
+    let masters = doc.masters.len();
+    if let Some(page) = doc.body.pages.get_mut(root) {
+        copy_ports(&mut page.ports, &ids);
+    } else if let Some(component) = root
+        .checked_sub(pages + masters)
+        .and_then(|ci| doc.components.get_mut(ci))
+    {
+        copy_ports(&mut component.ports, &ids);
     }
 
     // 4. Record the clone as affected. Post-validation (step 4 of run_transaction)

@@ -1,4 +1,4 @@
-//! Page-structure ops: `AddPage` / `DeletePage` / `SetPageSize` / `ReorderPages`,
+//! Page-structure ops: `AddPage` / `DeletePage` / `SetPageSize`,
 //! master create/delete/assign, plus the canonical dimension-string parser they
 //! share with geometry/token ops.
 
@@ -243,63 +243,6 @@ pub(in crate::engine) fn apply_set_page_size(
     page.width = w_dim;
     page.height = h_dim;
     record_affected(page_id, affected);
-}
-
-pub(in crate::engine) fn apply_reorder_pages(
-    order: &[String],
-    doc: &mut Document,
-    diagnostics: &mut Vec<Diagnostic>,
-    affected: &mut Vec<String>,
-) {
-    // The current page ids in document order.
-    let current: Vec<String> = doc.body.pages.iter().map(|p| p.id.clone()).collect();
-
-    // `order` must be a permutation of `current`: same length, no duplicates,
-    // and every requested id must exist exactly once. We verify via sorted
-    // comparison (deterministic, no HashMap).
-    let mut order_sorted: Vec<&String> = order.iter().collect();
-    order_sorted.sort();
-    let dup = order_sorted.windows(2).any(|w| w[0] == w[1]);
-    let mut current_sorted: Vec<&String> = current.iter().collect();
-    current_sorted.sort();
-
-    if dup || order_sorted != current_sorted {
-        diagnostics.push(Diagnostic::error(
-            "tx.invalid_value",
-            format!(
-                "reorder_pages: order {:?} is not a permutation of the existing \
-                 page ids {:?}",
-                order, current
-            ),
-            None,
-            None,
-        ));
-        return;
-    }
-
-    // Rebuild the page vec in the requested order. Each id resolves to exactly
-    // one page (guaranteed by the permutation check above). We drain the old
-    // pages into a lookup-by-index without HashMap: for each target id, find and
-    // take its page from a slot-tracking vec.
-    let mut slots: Vec<Option<Page>> = doc.body.pages.drain(..).map(Some).collect();
-    let mut reordered: Vec<Page> = Vec::with_capacity(order.len());
-    for id in order {
-        // Find the first remaining slot whose page id matches. The permutation
-        // check guarantees a match exists for every id.
-        if let Some(slot) = slots
-            .iter_mut()
-            .find(|s| s.as_ref().map(|p| p.id.as_str()) == Some(id.as_str()))
-            && let Some(page) = slot.take()
-        {
-            reordered.push(page);
-        }
-    }
-    doc.body.pages = reordered;
-
-    // Record every page id as affected (the whole list was restructured).
-    for id in order {
-        record_affected(id, affected);
-    }
 }
 
 // ── Masters ───────────────────────────────────────────────────────────────────
