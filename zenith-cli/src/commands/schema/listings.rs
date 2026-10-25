@@ -223,10 +223,22 @@ pub fn ops(json: bool) -> (String, u8) {
     } else {
         let mut text = String::from("tx ops:\n");
         for &name in names {
-            let summary = tx_schema::op_summary(name).unwrap_or("");
+            let summary = first_sentence(tx_schema::op_summary(name).unwrap_or(""));
             text.push_str(&format!("  {name:<24}  {summary}\n"));
         }
-        (text.trim_end().to_owned(), 0)
+        text.push_str(
+            "\n`zenith schema op <name>` prints the full summary, the fields, and an example.",
+        );
+        (text, 0)
+    }
+}
+
+/// The first sentence of an op summary, with its period. The op list shows
+/// only this; `zenith schema op <name>` prints the rest.
+fn first_sentence(summary: &str) -> &str {
+    match summary.find(". ") {
+        Some(end) => summary.get(..=end).unwrap_or(summary),
+        None => summary,
     }
 }
 
@@ -267,8 +279,7 @@ fn unknown_op_message(name: &str) -> String {
     }
     let mut msg = format!("error: unknown op '{name}'\nclosest ops:\n");
     for (_, op) in scored.iter().take(12) {
-        let full = tx_schema::op_summary(op).unwrap_or("");
-        let summary = full.split(". ").next().unwrap_or(full);
+        let summary = first_sentence(tx_schema::op_summary(op).unwrap_or(""));
         msg.push_str(&format!("  {op:<24}  {summary}\n"));
     }
     msg.push_str("run `zenith schema ops` for every op");
@@ -314,14 +325,54 @@ pub fn op_detail(name: &str, json: bool) -> (String, u8) {
             text.push_str("\nFields: (none — this op carries no fields beyond the \"op\" tag)\n");
         } else {
             text.push_str("\nFields:\n");
-            for f in fields {
-                let req = if f.required { ", required" } else { "" };
-                text.push_str(&format!("  {:<20}  ({}{req})\n", f.name, f.ty));
+            let rows: Vec<(&str, &str, bool)> =
+                fields.iter().map(|f| (f.name, f.ty, f.required)).collect();
+            for (name, ty, required, also) in fold_field_families(&rows) {
+                let req = if required { ", required" } else { "" };
+                let also = if also.is_empty() {
+                    String::new()
+                } else {
+                    format!(" (also {})", also.join(", "))
+                };
+                text.push_str(&format!("  {name:<20}  ({ty}{req}){also}\n"));
             }
         }
         text.push_str(&format!("\nExample:\n  {example}"));
         (text, 0)
     }
+}
+
+/// Side and axis suffixes of an op field family such as `padding_x`.
+const FIELD_SUFFIXES: [&str; 6] = ["x", "y", "top", "right", "bottom", "left"];
+
+/// A field row with the family members it folds: `(name, type, required,
+/// members)`.
+type FieldRow<'a> = (&'a str, &'a str, bool, Vec<&'a str>);
+
+/// Fold `padding_x`, `padding_top`, and the other members of a field family
+/// into the `padding` row when their type and required-ness match. Order and
+/// every other row stay as they were.
+fn fold_field_families<'a>(rows: &[(&'a str, &'a str, bool)]) -> Vec<FieldRow<'a>> {
+    let base_of = |name: &str| -> Option<(&'a str, &'a str, bool)> {
+        FIELD_SUFFIXES.iter().find_map(|suffix| {
+            let base = name.strip_suffix(suffix)?.strip_suffix('_')?;
+            rows.iter().find(|r| r.0 == base).copied()
+        })
+    };
+    let folds = |row: &(&str, &str, bool)| {
+        base_of(row.0).is_some_and(|base| base.1 == row.1 && base.2 == row.2)
+    };
+    rows.iter()
+        .filter(|row| !folds(row))
+        .map(|&(name, ty, required)| {
+            let members: Vec<&str> = rows
+                .iter()
+                .filter(|row| folds(row) && base_of(row.0).is_some_and(|b| b.0 == name))
+                .map(|row| row.0)
+                .collect();
+            (name, ty, required, members)
+        })
+        .collect()
 }
 
 // ── Token type formatters ─────────────────────────────────────────────────────
@@ -406,3 +457,68 @@ attribute: a free-form provenance id (e.g. a theme/pack id such as \
 \"@zenith/theme.cobalt\") stamped by tooling. It is never resolved as a \
 reference — only grouped and echoed (see token.set_partially_used in \
 `zenith schema diagnostics`).";
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn first_sentence_keeps_its_period() {
+        assert_eq!(first_sentence("One. Two."), "One.");
+        assert_eq!(first_sentence("Only one."), "Only one.");
+        assert_eq!(
+            first_sentence("Opacity (0.0 = clear)."),
+            "Opacity (0.0 = clear)."
+        );
+    }
+
+    #[test]
+    fn the_op_list_shows_first_sentences_and_routes_to_op_detail() {
+        let (text, code) = ops(false);
+        assert_eq!(code, 0);
+        let reorder = text
+            .lines()
+            .find(|l| l.trim_start().starts_with("reorder_pages "))
+            .expect("reorder_pages line");
+        assert!(reorder.ends_with("given id permutation."), "{reorder}");
+        assert!(
+            text.ends_with(
+                "`zenith schema op <name>` prints the full summary, the fields, and an example."
+            ),
+            "{text}"
+        );
+    }
+
+    #[test]
+    fn op_fields_fold_side_and_axis_families() {
+        let rows = [
+            ("node", "node id", true),
+            ("padding", "px", false),
+            ("padding_x", "px", false),
+            ("padding_top", "px", false),
+            ("margin", "px >= 0", false),
+            ("margin_x", "other", false),
+            ("min_w", "px", false),
+        ];
+        let folded = fold_field_families(&rows);
+        let names: Vec<&str> = folded.iter().map(|r| r.0).collect();
+        assert_eq!(names, ["node", "padding", "margin", "margin_x", "min_w"]);
+        assert_eq!(folded[1].3, ["padding_x", "padding_top"]);
+        assert!(folded[2].3.is_empty());
+    }
+
+    #[test]
+    fn set_layout_detail_lists_each_family_once() {
+        let (text, _) = op_detail("set_layout", false);
+        assert!(
+            text.contains("(also padding_x, padding_y, padding_top"),
+            "{text}"
+        );
+        assert!(!text.contains("\n  padding_left "), "{text}");
+        assert!(
+            text.contains("(also margin_x, margin_y, margin_top"),
+            "{text}"
+        );
+        assert!(!text.contains("\n  margin_top "), "{text}");
+    }
+}

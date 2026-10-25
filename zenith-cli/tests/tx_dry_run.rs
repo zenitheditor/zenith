@@ -205,10 +205,14 @@ fn help_names_the_real_review() {
     }
     let text = stdout(&env.zenith(&["tx", "--help"]));
     assert!(
-        text.contains("source diff and moved/resized node boxes"),
+        text.contains("A dry run prints the source diff and the moved or resized boxes."),
         "{text}"
     );
     assert!(text.contains("--diff"), "{text}");
+    assert!(
+        text.contains("Run `zenith inspect <PATH>` for ids, styles, and overrides."),
+        "{text}"
+    );
 }
 
 // `zenith tx --help` lists common edits as runnable JSON. Each op in that list

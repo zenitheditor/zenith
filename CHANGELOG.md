@@ -31,6 +31,16 @@ it.
 - **`zenith schema write`, `zenith tx --help`, and the starter output list `move_page` and `set_override`.** `tx --help` no longer points at `examples/*.tx.json`, which agents cannot see. The `duplicate_page` entry says that child ids become `<id><id_suffix>`.
 - **A stated stability promise and a frozen corpus that holds it.** README.md `## Stability` lists what a 0.0.x release keeps and what it can break. `zenith-pipeline/tests/corpus/v0.0.14/` freezes 39 documents. A test checks that each one parses, validates without Error, formats idempotently, and renders to its pinned PNG hashes. A refresh of the corpus needs a `### Breaking` section in this file.
 - **`zenith schema diagnostics <FILTER>` lists only the codes that match.** The match is case-insensitive on the code and summary, and it includes Error codes. The full list is 15 KB as text and 63 KB as JSON. In a merge benchmark, agents called the full list up to 14 times in one run because a tool-output cap cut it off before the codes they needed.
+- **The `zenith inspect` outline holds what a revision needs.** Text lines add `style=`, nodes add an authored `fill=`, and images add `asset=`. Each instance adds `component=` and one `override` line per entry. Page lines name their master. Assets, masters, components, and styles follow the pages. For a 4-page brochure the outline is 5.4 KB, against 10.5 KB of source. `--json` is unchanged.
+
+### Changed
+
+- **Agent-facing output is shorter.** An agent re-sends every earlier tool result on each turn, so these cut its input tokens.
+  - The `zenith tx` source diff prints no context lines, only the changed lines under each hunk header. `zenith fix` keeps 3 lines.
+  - `zenith schema ops` shows the first sentence of each summary and ends with a pointer to `zenith schema op <name>`.
+  - `zenith schema op` folds a side or axis family (`padding_x`, `margin_top`) into its base row when the types match.
+  - `zenith tx --help` is shorter. It adds `create_token` and `set_style_property` to the common edits, notes the `"(px)4"` form of a size token, and routes to `zenith inspect`.
+  - The skill routes a revision to `zenith inspect` and `zenith tokens`, and reads the source only when they miss a fact.
 
 ### Fixed
 

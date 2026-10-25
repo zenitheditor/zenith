@@ -130,10 +130,8 @@ pub enum Command {
 
     /// Apply a transaction to a `.zen` document (dry-run by default).
     ///
-    /// Apply a typed transaction (a JSON edit script) to a .zen document. This is
-    /// the preferred way to edit existing documents: it is dry-run by default (shows the source diff
-    /// and moved/resized node boxes), enforces id-uniqueness and referential integrity, and only
-    /// writes with `--apply` (`--diff` prints the diff and boxes then too).
+    /// The preferred way to edit a document. A dry run prints the source diff and the moved or
+    /// resized boxes. `--apply` writes. Every edit keeps ids unique and references valid.
     Tx(TxArgs),
 
     /// Serve a `.zen` document to the browser editor and to agents over local HTTP.
@@ -156,10 +154,11 @@ pub enum Command {
 
     /// Print the layout outline of a `.zen` document (read-only).
     ///
-    /// One line per node, indented by depth: kind, id, final page box, `layout=` for a row, column or
-    /// grid frame, and the text of a text node. Read it instead of the file to find node ids before a
-    /// `tx` edit, to see how a layout is built, or to see which recipes a document declares. `--json`
-    /// adds authored geometry and ink bounds.
+    /// One line per node, indented by depth: kind, id, final page box, `layout=`, `component=`,
+    /// `asset=`, `style=`, `fill=`, and the text cut at 48 characters. Each instance lists its overrides.
+    /// Page lines name their master. Assets, masters, components, styles, and recipes follow the pages.
+    /// Read it instead of the file before a `tx` edit. `zenith tokens` lists the token values.
+    /// `--json` adds authored geometry and ink bounds.
     Inspect(InspectArgs),
 
     /// Inspect composition import edges for a `.zen` document (read-only).
