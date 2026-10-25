@@ -7,7 +7,7 @@
 use std::collections::BTreeSet;
 use std::path::Path;
 
-use zenith_core::fix::unified_diff;
+use zenith_core::fix::unified_diff_with_context;
 use zenith_core::{Document, KdlAdapter, KdlSource, Patched, Severity};
 use zenith_scene::collect_text_outline_paths;
 use zenith_tx::{
@@ -202,7 +202,14 @@ fn finish(
         && changed
     {
         if ctx.show_diff {
-            view.source_diff = Some(unified_diff(ctx.label, doc_src, &written.text));
+            // No context lines: each changed line names its node, and an
+            // agent re-reads every line of output on each later turn.
+            view.source_diff = Some(unified_diff_with_context(
+                ctx.label,
+                doc_src,
+                &written.text,
+                0,
+            ));
         }
         // `source_after` is canonical output, so it parses. A parse error
         // leaves the box delta out.

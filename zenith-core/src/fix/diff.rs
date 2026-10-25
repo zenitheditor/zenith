@@ -1,6 +1,6 @@
-//! Line-based unified diff (Myers, 3 lines of context).
+//! Line-based unified diff (Myers, 3 lines of context by default).
 
-/// Lines of context around each change.
+/// Lines of context around each change in [`unified_diff`].
 const CONTEXT: usize = 3;
 
 /// One line-level edit.
@@ -12,8 +12,14 @@ enum Op {
 }
 
 /// Unified diff of `before` → `after`, with `--- a/<label>` / `+++ b/<label>`
-/// headers. Empty when the texts are equal.
+/// headers and 3 lines of context. Empty when the texts are equal.
 pub fn unified_diff(label: &str, before: &str, after: &str) -> String {
+    unified_diff_with_context(label, before, after, CONTEXT)
+}
+
+/// [`unified_diff`] with `context` lines around each change. A `context` of
+/// 0 prints only the changed lines under each hunk header.
+pub fn unified_diff_with_context(label: &str, before: &str, after: &str, context: usize) -> String {
     if before == after {
         return String::new();
     }
@@ -33,8 +39,8 @@ pub fn unified_diff(label: &str, before: &str, after: &str) -> String {
         else {
             break;
         };
-        let start = first_change.saturating_sub(CONTEXT);
-        // Extend the hunk while the gap between changes is ≤ 2 × CONTEXT.
+        let start = first_change.saturating_sub(context);
+        // Extend the hunk while the gap between changes is ≤ 2 × context.
         let mut end = first_change;
         let mut j = first_change;
         while j < rows.len() {
@@ -43,12 +49,12 @@ pub fn unified_diff(label: &str, before: &str, after: &str) -> String {
                 j += 1;
                 continue;
             }
-            if j - end > 2 * CONTEXT {
+            if j - end > 2 * context {
                 break;
             }
             j += 1;
         }
-        let stop = (end + CONTEXT + 1).min(rows.len());
+        let stop = (end + context + 1).min(rows.len());
         let hunk = rows.get(start..stop).unwrap_or(&[]);
         push_hunk(&mut out, hunk, &a, &b);
         i = stop;
@@ -238,6 +244,19 @@ mod tests {
             diff,
             "--- a/t.zen\n+++ b/t.zen\n@@ -2,7 +2,7 @@\n 2\n 3\n 4\n-5\n+five\n 6\n 7\n 8\n"
         );
+    }
+
+    #[test]
+    fn zero_context_prints_only_changed_lines() {
+        let before = "1\n2\n3\n4\n5\n6\n7\n8\n9\n";
+        let after = "1\n2\nthree\n4\n5\n6\n7\n8\nnine\n";
+        let diff = unified_diff_with_context("t.zen", before, after, 0);
+        assert_eq!(
+            diff,
+            "--- a/t.zen\n+++ b/t.zen\n@@ -3,1 +3,1 @@\n-3\n+three\n@@ -9,1 +9,1 @@\n-9\n+nine\n"
+        );
+        let inserted = unified_diff_with_context("t", "a\nb\n", "a\nnew\nb\n", 0);
+        assert_eq!(inserted, "--- a/t\n+++ b/t\n@@ -1,0 +2,1 @@\n+new\n");
     }
 
     #[test]

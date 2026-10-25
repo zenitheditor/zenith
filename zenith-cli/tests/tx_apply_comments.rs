@@ -102,13 +102,18 @@ fn dry_run_diff_shows_only_the_edited_line() {
 }
 
 #[test]
-fn dry_run_json_diff_keeps_comment_context() {
+fn dry_run_json_diff_keeps_the_comment_on_the_edited_line() {
     let env = Env::with_doc(COMMENTED);
     let v = json(&env.tx(SET_FILL, &["--json"]));
     let diff = v["source_diff"].as_str().expect("source_diff");
-    assert!(diff.contains(" // the box"), "{diff}");
     assert!(
-        diff.contains("        // Hand-indented on purpose."),
+        diff.contains("+        rect id=\"box\" x=(px)10 y=(px)10 w=(px)100 h=(px)50 fill=(token)\"c.b\" // the box"),
+        "{diff}"
+    );
+    // The diff carries no context lines: only headers and changed lines.
+    assert!(
+        diff.lines()
+            .all(|l| l.starts_with(['-', '+']) || l.starts_with("@@")),
         "{diff}"
     );
 }

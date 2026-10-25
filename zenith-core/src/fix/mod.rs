@@ -17,7 +17,7 @@ mod mint;
 mod plan;
 mod run;
 
-pub use diff::unified_diff;
+pub use diff::{unified_diff, unified_diff_with_context};
 pub use mint::MintedToken;
 pub use plan::AppliedFix;
 pub use run::{FixOutcome, fix_source, fix_source_with};
