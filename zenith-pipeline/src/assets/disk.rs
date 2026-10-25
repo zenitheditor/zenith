@@ -96,7 +96,10 @@ pub fn collect_missing_import_asset_diagnostics(
 /// - **`image.overflow`** (`fit="none"` only): the intrinsic pixels exceed
 ///   the declared box, so the image clips.
 /// - **`image.upscale`**: the image renders larger than its intrinsic pixels
-///   under its fit mode, so the raster looks pixelated.
+///   under its fit mode, so the raster looks pixelated. A print page (see
+///   [`Document::is_print_page`]) skips it. There the page compile reports
+///   `image.effective_ppi`, which carries the same fact as a ppi number: an
+///   upscaled image is under 96 ppi, so it is always under the 150 ppi floor.
 ///
 /// SVG assets are exempt. Boxes in non-pixel units or token refs, and nodes
 /// whose asset is unknown or unreadable, are skipped. Both are advisories.
@@ -108,7 +111,13 @@ pub fn collect_image_dimension_diagnostics(
 ) -> Vec<Diagnostic> {
     let mut out = Vec::new();
     for page in &doc.body.pages {
-        walk_images(fs, &page.children, doc, project_dir, &mut out);
+        let env = ImageEnv {
+            fs,
+            doc,
+            project_dir,
+            print: doc.is_print_page(page),
+        };
+        walk_images(env, &page.children, &mut out);
     }
     out
 }
@@ -146,32 +155,36 @@ pub fn disk_diagnostics_with_imports(
     d
 }
 
+/// What the image walk reads, for one page.
+#[derive(Clone, Copy)]
+struct ImageEnv<'a> {
+    fs: &'a dyn SourceFs,
+    doc: &'a Document,
+    project_dir: &'a Path,
+    /// The page is a print page: `image.upscale` is skipped.
+    print: bool,
+}
+
 /// Walk `nodes` recursively, collecting image dimension diagnostics.
 ///
 /// Every node variant is listed (exhaustive match), so a future container
 /// kind forces a decision here.
-fn walk_images(
-    fs: &dyn SourceFs,
-    nodes: &[Node],
-    doc: &Document,
-    project_dir: &Path,
-    out: &mut Vec<Diagnostic>,
-) {
+fn walk_images(env: ImageEnv<'_>, nodes: &[Node], out: &mut Vec<Diagnostic>) {
     for node in nodes {
         match node {
             Node::Image(img) => {
-                check_image(fs, img, doc, project_dir, out);
+                check_image(env, img, out);
             }
             Node::Frame(f) => {
-                walk_images(fs, &f.children, doc, project_dir, out);
+                walk_images(env, &f.children, out);
             }
             Node::Group(g) => {
-                walk_images(fs, &g.children, doc, project_dir, out);
+                walk_images(env, &g.children, out);
             }
             Node::Table(t) => {
                 for row in &t.rows {
                     for cell in &row.cells {
-                        walk_images(fs, &cell.children, doc, project_dir, out);
+                        walk_images(env, &cell.children, out);
                     }
                 }
             }
@@ -201,13 +214,13 @@ fn walk_images(
 
 /// Check one image node and push any `image.overflow` / `image.upscale`
 /// advisories into `out`.
-fn check_image(
-    fs: &dyn SourceFs,
-    img: &ImageNode,
-    doc: &Document,
-    project_dir: &Path,
-    out: &mut Vec<Diagnostic>,
-) {
+fn check_image(env: ImageEnv<'_>, img: &ImageNode, out: &mut Vec<Diagnostic>) {
+    let ImageEnv {
+        fs,
+        doc,
+        project_dir,
+        print,
+    } = env;
     // Only raw pixel boxes are checked; a token ref or a non-pixel unit is
     // skipped to avoid false positives (this layer has no token table).
     let w_dim = match img.w.as_ref() {
@@ -284,7 +297,7 @@ fn check_image(
         Some(_) => false,
     };
 
-    if upscales {
+    if upscales && !print {
         out.push(Diagnostic::advisory(
             "image.upscale",
             format!(

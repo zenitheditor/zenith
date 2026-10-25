@@ -1,0 +1,33 @@
+zenith version=1 {
+  project id="proj.preflight" name="Print preflight"
+  assets {
+    asset id="photo" kind="image" src="photo-300x200.png"
+  }
+  tokens format="zenith-token-v1" {
+    token id="color.rich" type="color" value="cmyk(60,40,40,100)"
+    token id="color.heavy" type="color" value="cmyk(80,70,70,100)"
+    token id="color.k" type="color" value="cmyk(0,0,0,100)"
+    token id="size.small" type="dimension" value=(px)12
+    token id="size.large" type="dimension" value=(px)32
+  }
+  styles {}
+  document id="doc.preflight" title="Print preflight" {
+    page id="page.print" w=(px)1000 h=(px)800 bleed=(px)9 {
+      image id="img.low" asset="photo" x=(px)10 y=(px)10 w=(px)288 h=(px)192
+      image id="img.mid" asset="photo" x=(px)310 y=(px)10 w=(px)144 h=(px)96
+      image id="img.high" asset="photo" x=(px)470 y=(px)10 w=(px)72 h=(px)48
+      image id="img.crop" asset="photo" x=(px)560 y=(px)10 w=(px)144 h=(px)96 src-x=(px)0 src-y=(px)0 src-w=(px)150 src-h=(px)100
+      image id="img.upscaled" asset="photo" x=(px)10 y=(px)220 w=(px)600 h=(px)400
+      text id="text.small" x=(px)620 y=(px)220 w=(px)300 h=(px)40 fill=(token)"color.rich" font-size=(token)"size.small" { span "Small rich black" }
+      text id="text.large" x=(px)620 y=(px)280 w=(px)300 h=(px)60 fill=(token)"color.rich" font-size=(token)"size.large" { span "Large" }
+      rect id="rect.heavy" x=(px)620 y=(px)360 w=(px)100 h=(px)100 fill=(token)"color.heavy"
+      rect id="rect.ok" x=(px)740 y=(px)360 w=(px)100 h=(px)100 fill=(token)"color.k"
+    }
+    page id="page.screen" w=(px)1000 h=(px)800 {
+      image id="img.screen" asset="photo" x=(px)10 y=(px)10 w=(px)288 h=(px)192
+      image id="img.screen_up" asset="photo" x=(px)10 y=(px)220 w=(px)600 h=(px)400
+      text id="text.screen" x=(px)620 y=(px)220 w=(px)300 h=(px)40 fill=(token)"color.rich" font-size=(token)"size.small" { span "Screen text" }
+      rect id="rect.screen" x=(px)620 y=(px)360 w=(px)100 h=(px)100 fill=(token)"color.heavy"
+    }
+  }
+}

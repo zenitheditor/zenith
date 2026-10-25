@@ -63,15 +63,16 @@ pub fn build_asset_provider_with_imports(
 
 /// The pixel size of every image / SVG asset `assets` holds, by the id an
 /// `image` node references (host ids, then `import-id/asset-id`), for
-/// auto-layout image hug sizing. Empty when no page, component, master, or
-/// imported document holds a layout frame, the only reader of the sizes.
+/// auto-layout image hug sizing and the `image.effective_ppi` print check.
+/// Empty when no page, component, master, or imported document holds a
+/// layout frame and the host has no print page. Those are the only readers.
 #[must_use]
 pub fn image_sizes(
     doc: &Document,
     imports: Option<&LoadedImportGraph>,
     assets: &BytesAssetProvider,
 ) -> BTreeMap<String, (f64, f64)> {
-    if !document_uses_layout(doc, imports) {
+    if !needs_image_sizes(doc, imports) {
         return BTreeMap::new();
     }
     let visual = |kind: &AssetKind| matches!(kind, AssetKind::Image | AssetKind::Svg);
@@ -95,6 +96,14 @@ pub fn image_sizes(
     zenith_render::asset_intrinsic_sizes(assets, ids.iter().map(String::as_str))
 }
 
+/// `true` when a reader of the image sizes exists: a layout frame (see
+/// [`document_uses_layout`]) or a print page of `doc` (see
+/// [`Document::is_print_page`]). Layout alone reads sizes for placement, so
+/// sizes for a print page change no geometry.
+fn needs_image_sizes(doc: &Document, imports: Option<&LoadedImportGraph>) -> bool {
+    document_uses_layout(doc, imports) || doc.body.pages.iter().any(|p| doc.is_print_page(p))
+}
+
 /// `true` when `doc` or any imported document holds an auto-layout frame in a
 /// page, a component, or a master. Components and masters lower when they
 /// expand, so a layout frame there needs image sizes on any page.
@@ -114,7 +123,7 @@ fn document_uses_layout(doc: &Document, imports: Option<&LoadedImportGraph>) -> 
 
 /// [`image_sizes`] for a caller that holds no asset provider: reads the
 /// image / SVG assets from `project_dir` (no sha256 check). Empty when
-/// `project_dir` is `None`, no layout frame exists anywhere, or the document
+/// `project_dir` is `None`, no reader of the sizes exists, or the document
 /// declares no such asset.
 #[must_use]
 pub fn read_image_sizes(
@@ -123,7 +132,7 @@ pub fn read_image_sizes(
     project_dir: Option<&Path>,
     imports: &LoadedImportGraph,
 ) -> BTreeMap<String, (f64, f64)> {
-    let Some(dir) = project_dir.filter(|_| document_uses_layout(doc, Some(imports))) else {
+    let Some(dir) = project_dir.filter(|_| needs_image_sizes(doc, Some(imports))) else {
         return BTreeMap::new();
     };
     match build_asset_provider_with_imports(fs, doc, dir, imports, false) {

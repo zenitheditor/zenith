@@ -15,6 +15,9 @@
 //! - `blocks` — `layout.block_overlap`.
 //! - `flow_note` — the sibling-shift note on a `text.overflow` in a stack.
 //! - `chart_overflow` — `chart.overflow`.
+//! - `print` — the print preflight: `image.effective_ppi`,
+//!   `image.effective_ppi_target`, `ink.rich_black`, `ink.total_coverage`,
+//!   and `font.not_embeddable`.
 //! - `run` — the entry point the page compile calls.
 
 mod align;
@@ -31,6 +34,7 @@ mod ledger;
 mod legibility;
 mod overlap;
 mod paint;
+mod print;
 mod run;
 mod small_text;
 mod spacing;

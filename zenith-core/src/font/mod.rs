@@ -3,6 +3,7 @@
 pub mod alternates;
 mod bundled;
 pub mod embedded;
+mod license;
 pub mod local;
 mod miss_log;
 mod provider;
@@ -11,6 +12,7 @@ pub use alternates::{FontAlternateFeature, FontAlternateParseError, parse_font_a
 pub use bundled::{
     BundledFace, bundled_face_by_file, bundled_face_for, bundled_faces, default_provider,
 };
+pub use license::{FontEmbedding, font_embedding};
 pub use local::{LocalFontEntry, filter_wanted_families, scan_font_dirs};
 pub use miss_log::{FaceRequest, FallbackGlyph, FontMissLog};
 pub use provider::{BytesFontProvider, FontData, FontProvider, FontSource, FontStyle};

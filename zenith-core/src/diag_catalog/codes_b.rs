@@ -173,6 +173,11 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
         "A text/code node's font family is unavailable; falling back to a default.",
     ),
     info(
+        "font.not_embeddable",
+        Severity::Warning,
+        "A face that draws selectable text forbids embedding in its OS/2 fsType bits (restricted or bitmap-only). PDF export draws that text as outlines, so it is not selectable.",
+    ),
+    info(
         "footnote.body_overlap",
         Severity::Advisory,
         "A footnote body overlaps another footnote or the page live area.",
@@ -233,6 +238,16 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
         "An id is used more than once in the document.",
     ),
     info(
+        "image.effective_ppi",
+        Severity::Warning,
+        "A raster image on a print page is under the 150 ppi floor: source pixels per placed inch, at 96 px per inch. On a print page it replaces `image.upscale`.",
+    ),
+    info(
+        "image.effective_ppi_target",
+        Severity::Advisory,
+        "A raster image on a print page is from 150 to under 300 ppi: under the 300 ppi print target, at 96 px per inch.",
+    ),
+    info(
         "image.invalid_fit",
         Severity::Error,
         "Image `fit` value is not recognized.",
@@ -261,7 +276,17 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
     info(
         "image.upscale",
         Severity::Advisory,
-        "Image is being scaled up beyond its native resolution.",
+        "Image is being scaled up beyond its native resolution. A print page reports `image.effective_ppi` instead.",
+    ),
+    info(
+        "ink.rich_black",
+        Severity::Warning,
+        "Text under 24 px (18 pt) on a print page is filled with rich black: a CMYK color with K of 60% or more and two or more of C, M, Y. The plates can misregister on small type.",
+    ),
+    info(
+        "ink.total_coverage",
+        Severity::Warning,
+        "A CMYK color on a print page puts more than 300% total ink (C+M+Y+K) on paper.",
     ),
     info(
         "io.write_failed",

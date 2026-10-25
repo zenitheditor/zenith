@@ -8,6 +8,7 @@ use crate::layout::LayoutBox;
 
 use super::super::boxes::{Recorded, glyph_inks};
 use super::super::imports::ImportScopes;
+use super::super::intrinsic::ImageSizes;
 use super::super::text::ShapeEnv;
 use super::arrange::arrangement;
 use super::blocks::block_overlap;
@@ -18,6 +19,7 @@ use super::ledger::{LedgerInput, PageLedger};
 use super::legibility::legibility;
 use super::overlap::{ink_overlap, occluded};
 use super::paint::{PaintEnv, authored_facts};
+use super::print::{PrintInput, print_preflight};
 
 /// What one compiled page hands the lint.
 pub(in crate::compile) struct LintEnv<'a> {
@@ -39,11 +41,16 @@ pub(in crate::compile) struct LintEnv<'a> {
     pub(in crate::compile) compiled: &'a [Diagnostic],
     /// The page or document declares book margins (a live area).
     pub(in crate::compile) margins_declared: bool,
+    /// The page is a print page (see `Document::is_print_page`).
+    pub(in crate::compile) print: bool,
+    /// Intrinsic pixel size of each image asset, by the id a node references.
+    pub(in crate::compile) image_sizes: &'a ImageSizes,
 }
 
 /// The lint diagnostics of one page: `text.ink_overlap`, `text.occluded`,
 /// `label.overflow`, the contrast of every text and label, legibility,
-/// arrangement, `layout.block_overlap`, and `chart.overflow`. `recorded` is
+/// arrangement, `layout.block_overlap`, `chart.overflow`, and the print
+/// preflight (`image.effective_ppi*`, `ink.*`, `font.not_embeddable`). `recorded` is
 /// what the page compile's box recorder collected.
 pub(in crate::compile) fn lint_page(env: &LintEnv<'_>, recorded: &Recorded) -> Vec<Diagnostic> {
     let Recorded {
@@ -88,5 +95,10 @@ pub(in crate::compile) fn lint_page(env: &LintEnv<'_>, recorded: &Recorded) -> V
     };
     out.extend(block_overlap(&ledger, trim));
     out.extend(chart_overflow(&ledger, &authored));
+    out.extend(print_preflight(&PrintInput {
+        env,
+        ledger: &ledger,
+        boxes,
+    }));
     out
 }

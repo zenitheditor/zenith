@@ -23,7 +23,7 @@ use std::collections::BTreeMap;
 
 use pdf_writer::types::{CidFontType, FontFlags, SystemInfo};
 use pdf_writer::{Filter, Finish, Name, Pdf, Rect, Ref, Str};
-use zenith_core::FontProvider;
+use zenith_core::{FontEmbedding, FontProvider, font_embedding};
 use zenith_scene::{Scene, SceneCommand};
 
 /// Number of PDF objects written per embedded font: the `Type0` dict, the
@@ -119,6 +119,11 @@ pub(super) fn collect_usage(scenes: &[Scene]) -> Usage {
 /// font is compacted to just its used glyphs; otherwise the whole face is
 /// embedded with an identity glyph→CID map. Fonts that cannot be resolved,
 /// parsed, or subsetted are skipped (their runs fall back to outlines).
+///
+/// The OS/2 `fsType` bits govern embedding (see [`font_embedding`]). A
+/// restricted or bitmap-only face is skipped, so its runs draw as outlines.
+/// A face that forbids subsetting embeds whole. The compile reports the
+/// skip as `font.not_embeddable`.
 pub(super) fn build_plan(usage: &Usage, fonts: &dyn FontProvider, subset: bool) -> FontPlan {
     let mut plan = FontPlan {
         fonts: Vec::new(),
@@ -127,6 +132,16 @@ pub(super) fn build_plan(usage: &Usage, fonts: &dyn FontProvider, subset: bool) 
     for (font_id, glyphs) in usage {
         let Some(font_data) = fonts.by_id(font_id) else {
             continue;
+        };
+        let license = font_embedding(&font_data.bytes, font_data.index);
+        if license.forbids_embedding() {
+            continue;
+        }
+        let subset = match license {
+            FontEmbedding::NoSubsetting => false,
+            FontEmbedding::Allowed | FontEmbedding::Restricted | FontEmbedding::BitmapOnly => {
+                subset
+            }
         };
         let Some(embedded) = build_font(&font_data.bytes, font_data.index, glyphs, subset) else {
             continue;
@@ -355,4 +370,87 @@ fn build_tounicode_cmap(font: &EmbeddedFont) -> String {
     }
     cmap.push_str("endcmap\nCMapName currentdict /CMap defineresource pop\nend\nend\n");
     cmap
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use zenith_core::{BytesFontProvider, FontSource, FontStyle, bundled_faces};
+
+    use super::*;
+
+    /// `bytes` with the OS/2 `fsType` field set to `fs_type`.
+    fn with_fs_type(bytes: &[u8], fs_type: u16) -> Vec<u8> {
+        let mut out = bytes.to_vec();
+        let num_tables = u16::from_be_bytes([out[4], out[5]]) as usize;
+        for i in 0..num_tables {
+            let rec = 12 + i * 16;
+            if &out[rec..rec + 4] == b"OS/2" {
+                let off =
+                    u32::from_be_bytes([out[rec + 8], out[rec + 9], out[rec + 10], out[rec + 11]])
+                        as usize;
+                out[off + 8..off + 10].copy_from_slice(&fs_type.to_be_bytes());
+                return out;
+            }
+        }
+        panic!("face has no OS/2 table");
+    }
+
+    /// A provider with one bundled face patched to `fs_type`, and its id.
+    fn provider(fs_type: u16) -> (BytesFontProvider, String, usize) {
+        let bytes = bundled_faces()
+            .iter()
+            .find_map(|f| f.bytes)
+            .expect("a bundled face");
+        let patched = with_fs_type(bytes, fs_type);
+        let len = patched.len();
+        let mut fonts = BytesFontProvider::new();
+        let id = fonts.register(
+            "Licensed",
+            400,
+            FontStyle::Normal,
+            Arc::from(patched),
+            0,
+            FontSource::Project,
+        );
+        (fonts, id, len)
+    }
+
+    fn usage(id: &str) -> Usage {
+        let mut glyphs = BTreeMap::new();
+        glyphs.insert(36, "A".to_owned());
+        let mut usage = Usage::new();
+        usage.insert(id.to_owned(), glyphs);
+        usage
+    }
+
+    #[test]
+    fn restricted_and_bitmap_only_faces_are_not_embedded() {
+        for fs_type in [0x0002, 0x0200] {
+            let (fonts, id, _) = provider(fs_type);
+            let plan = build_plan(&usage(&id), &fonts, true);
+            assert!(
+                plan.fonts.is_empty(),
+                "fsType {fs_type:#06x} must not embed"
+            );
+            assert_eq!(plan.cid_of(&id, 36), None, "its runs draw as outlines");
+        }
+    }
+
+    #[test]
+    fn no_subsetting_face_embeds_whole() {
+        let (fonts, id, len) = provider(0x0100);
+        let plan = build_plan(&usage(&id), &fonts, true);
+        let font = plan.fonts.first().expect("the face embeds");
+        assert_eq!(font.bytes.len(), len, "the whole face embeds, not a subset");
+    }
+
+    #[test]
+    fn installable_face_still_subsets() {
+        let (fonts, id, len) = provider(0x0000);
+        let plan = build_plan(&usage(&id), &fonts, true);
+        let font = plan.fonts.first().expect("the face embeds");
+        assert!(font.bytes.len() < len, "an installable face subsets");
+    }
 }

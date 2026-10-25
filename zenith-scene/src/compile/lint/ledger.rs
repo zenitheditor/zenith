@@ -9,7 +9,7 @@
 
 use std::collections::BTreeMap;
 
-use zenith_core::{Node, Span};
+use zenith_core::{Node, Span, dim_to_px};
 
 use crate::layout::LayoutBox;
 
@@ -41,6 +41,18 @@ pub(super) struct ConnectorFacts {
     pub(super) ends: [Option<String>; 2],
     /// `route`, `straight` when absent.
     pub(super) route: String,
+}
+
+/// The `image` facts the print resolution check reads.
+#[derive(Clone, Debug, PartialEq)]
+pub(super) struct ImageFacts {
+    /// The asset id, `<import-id>/` prefixed for an imported component.
+    pub(super) asset: String,
+    /// `fit`, as authored.
+    pub(super) fit: Option<String>,
+    /// The `src-x` / `src-y` / `src-w` / `src-h` crop in source px, when all
+    /// four resolve.
+    pub(super) src: Option<LayoutBox>,
 }
 
 /// The axis-aligned facts of a [`CompiledBox`] the checks read.
@@ -101,6 +113,7 @@ pub(super) struct Entry {
     pub(super) clip: Option<LayoutBox>,
     pub(super) shape: Option<ShapeFacts>,
     pub(super) connector: Option<ConnectorFacts>,
+    pub(super) image: Option<ImageFacts>,
 }
 
 #[cfg(test)]
@@ -126,6 +139,7 @@ impl Entry {
             clip: None,
             shape: None,
             connector: None,
+            image: None,
         }
     }
 }
@@ -313,6 +327,31 @@ impl PageLedger {
             | Node::Mesh(_)
             | Node::Unknown(_) => None,
         };
+        let image = match node {
+            Node::Image(img) => Some(image_facts(img)),
+            Node::Rect(_)
+            | Node::Ellipse(_)
+            | Node::Line(_)
+            | Node::Text(_)
+            | Node::Code(_)
+            | Node::Frame(_)
+            | Node::Group(_)
+            | Node::Polygon(_)
+            | Node::Polyline(_)
+            | Node::Path(_)
+            | Node::Instance(_)
+            | Node::Field(_)
+            | Node::Toc(_)
+            | Node::Footnote(_)
+            | Node::Table(_)
+            | Node::Shape(_)
+            | Node::Connector(_)
+            | Node::Pattern(_)
+            | Node::Chart(_)
+            | Node::Light(_)
+            | Node::Mesh(_)
+            | Node::Unknown(_) => None,
+        };
         let index = self.entries.len();
         self.entries.push(Entry {
             id: id.to_owned(),
@@ -333,6 +372,7 @@ impl PageLedger {
             clip: inherit.clip,
             shape,
             connector,
+            image,
         });
         if !visible {
             return;
@@ -476,6 +516,26 @@ impl PageLedger {
     /// The entry at `index`.
     pub(super) fn entry(&self, index: usize) -> Option<&Entry> {
         self.entries.get(index)
+    }
+}
+
+/// The [`ImageFacts`] of an `image` node.
+fn image_facts(img: &zenith_core::ImageNode) -> ImageFacts {
+    let px =
+        |d: &Option<zenith_core::Dimension>| d.as_ref().and_then(|d| dim_to_px(d.value, &d.unit));
+    let src = match (
+        px(&img.src_x),
+        px(&img.src_y),
+        px(&img.src_w),
+        px(&img.src_h),
+    ) {
+        (Some(x), Some(y), Some(w), Some(h)) => Some(LayoutBox { x, y, w, h }),
+        _ => None,
+    };
+    ImageFacts {
+        asset: img.asset.clone(),
+        fit: img.fit.clone(),
+        src,
     }
 }
 

@@ -505,6 +505,22 @@ impl Document {
                 .or_else(|| self.margin_bottom.clone()),
         )
     }
+
+    /// `true` when `page` is a print page: its `bleed` resolves to more than
+    /// 0 px, or the document declares `colorspace="cmyk"`.
+    ///
+    /// Print preflight checks (`image.effective_ppi`,
+    /// `image.effective_ppi_target`, `ink.rich_black`, `ink.total_coverage`)
+    /// run only on print pages. A screen design sets
+    /// neither, so it reports nothing new.
+    pub fn is_print_page(&self, page: &Page) -> bool {
+        let bled = page
+            .bleed
+            .as_ref()
+            .and_then(|b| super::value::dim_to_px(b.value, &b.unit))
+            .is_some_and(|px| px > 0.0);
+        bled || self.colorspace.as_deref() == Some("cmyk")
+    }
 }
 
 #[cfg(test)]
@@ -587,6 +603,25 @@ mod parity_tests {
             },
             unsupported_children: Vec::new(),
         }
+    }
+
+    #[test]
+    fn print_page_needs_positive_bleed_or_cmyk_colorspace() {
+        let screen = doc(None);
+        let plain = page("p1", None);
+        assert!(!screen.is_print_page(&plain), "no bleed, srgb: screen");
+
+        let mut bled = page("p1", None);
+        bled.bleed = Some(px(9.0));
+        assert!(screen.is_print_page(&bled), "positive bleed: print");
+
+        let mut zero = page("p1", None);
+        zero.bleed = Some(px(0.0));
+        assert!(!screen.is_print_page(&zero), "zero bleed: screen");
+
+        let mut cmyk = doc(None);
+        cmyk.colorspace = Some("cmyk".to_owned());
+        assert!(cmyk.is_print_page(&plain), "cmyk colorspace: print");
     }
 
     #[test]

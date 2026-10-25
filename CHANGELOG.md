@@ -37,9 +37,15 @@ it.
 - **A stated stability promise and a frozen corpus that holds it.** README.md `## Stability` lists what a 0.0.x release keeps and what it can break. `zenith-pipeline/tests/corpus/v0.0.14/` freezes 39 documents. A test checks that each one parses, validates without Error, formats idempotently, and renders to its pinned PNG hashes. A refresh of the corpus needs a `### Breaking` section in this file.
 - **`zenith schema diagnostics <FILTER>` lists only the codes that match.** The match is case-insensitive on the code and summary, and it includes Error codes. The full list is 15 KB as text and 63 KB as JSON. In a merge benchmark, agents called the full list up to 14 times in one run because a tool-output cap cut it off before the codes they needed.
 - **The `zenith inspect` outline holds what a revision needs.** Text lines add `style=`, nodes add an authored `fill=`, and images add `asset=`. Each instance adds `component=` and one `override` line per entry. Page lines name their master. Assets, masters, components, and styles follow the pages. For a 4-page brochure the outline is 5.4 KB, against 10.5 KB of source. `--json` is unchanged.
+- **Print preflight diagnostics.** They run on a print page: a page with a positive `bleed`, or any page of a `colorspace="cmyk"` document. A screen design reports nothing new. One inch is 96 px.
+  - `image.effective_ppi` and `image.effective_ppi_target`: a raster image's source pixels per placed inch, with `src-*` crops, fit mode, and instance scale counted. `image.effective_ppi` is a Warning below 150 ppi. `image.effective_ppi_target` is an Advisory from 150 to under 300 ppi. The message names the size of source or box that meets the threshold.
+  - `ink.rich_black`: text under 24 px (18 pt) filled with K of 60% or more plus two or more of C, M, Y.
+  - `ink.total_coverage`: a CMYK color over 300% total ink. The message gives a color within the limit.
+- **`font.not_embeddable` reports a restricted or bitmap-only face at validate time.** The PDF backend reads the OS/2 `fsType` bits. It draws such a face's text as outlines and embeds a no-subsetting face whole. Before, it embedded every face.
 
 ### Changed
 
+- **`image.upscale` is skipped on a print page.** `image.effective_ppi` reports the same image with its ppi number.
 - **Agent-facing output is shorter.** An agent re-sends every earlier tool result on each turn, so these cut its input tokens.
   - The `zenith tx` source diff prints no context lines, only the changed lines under each hunk header. `zenith fix` keeps 3 lines.
   - `zenith schema ops` shows the first sentence of each summary and ends with a pointer to `zenith schema op <name>`.

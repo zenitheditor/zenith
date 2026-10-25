@@ -354,6 +354,8 @@ impl<F: ?Sized + FontProvider> PageCompiler<'_, F> {
                     let (i, o, t, b) = doc.effective_margins(page);
                     i.is_some() || o.is_some() || t.is_some() || b.is_some()
                 },
+                print: doc.is_print_page(page),
+                image_sizes: &prep.image_sizes,
             };
             let found = lint_page(&env, &recorded);
             diagnostics.extend(found);
