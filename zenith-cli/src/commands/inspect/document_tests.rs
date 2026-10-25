@@ -519,3 +519,78 @@ fn find_known_node_inside_unknown() {
     assert_eq!(e.id, "inner");
     assert_eq!(e.kind, "rect");
 }
+
+// A page with a master, a styled text with a fill, an instance with
+// overrides, and an image.
+const REVISE_DOC: &str = r##"zenith version=1 {
+  assets {
+    asset id="asset.a" kind="image" src="a.png"
+  }
+  tokens format="zenith-token-v1" {
+    token id="color.ink" type="color" value="#111111"
+    token id="color.red" type="color" value="#dd0000"
+  }
+  styles {
+    style id="body" {
+      fill (token)"color.ink"
+    }
+  }
+  masters {
+    master id="m.slide" {}
+  }
+  components {
+    component id="card" {
+      text id="card.title" x=(px)0 y=(px)0 w=(px)100 h=(px)20 { span "Title" }
+      rect id="card.badge" x=(px)0 y=(px)30 w=(px)20 h=(px)20 visible=#false
+    }
+  }
+  document id="doc.r" {
+    page id="p1" w=(px)200 h=(px)100 master="m.slide" {
+      text id="t" x=(px)0 y=(px)0 w=(px)100 h=(px)20 style="body" fill=(token)"color.red" { span "Hi" }
+      instance id="c1" component="card" x=(px)0 y=(px)40 {
+        override ref="card.title" { span "Delivery" }
+        override ref="card.badge" visible=#true
+      }
+      image id="img" asset="asset.a" x=(px)100 y=(px)0 w=(px)50 h=(px)50
+    }
+  }
+}
+"##;
+
+#[test]
+fn run_human_shows_master_style_fill_overrides_and_assets() {
+    let out = run(REVISE_DOC, None, false, None).expect("run must succeed");
+    let lines: Vec<&str> = out.lines().collect();
+    assert_eq!(lines[0], "page p1 (200x100) master=m.slide", "{out}");
+    assert!(
+        lines[1].ends_with("style=body fill=color.red \"Hi\""),
+        "{out}"
+    );
+    assert!(
+        lines[2].contains("instance c1 ") && lines[2].ends_with("component=card"),
+        "{out}"
+    );
+    assert_eq!(lines[3], "    override card.title \"Delivery\"", "{out}");
+    assert_eq!(lines[4], "    override card.badge visible=true", "{out}");
+    assert!(
+        lines[5].contains("image img ") && lines[5].ends_with("asset=asset.a"),
+        "{out}"
+    );
+    assert!(out.contains("\n\nassets:\n  asset.a a.png\n"), "{out}");
+    assert!(out.contains("\n\ncomponents:\n  component card\n"), "{out}");
+    assert!(out.contains("\n\nstyles:\n  body fill=color.ink"), "{out}");
+}
+
+#[test]
+fn run_json_keeps_its_shape_without_outline_only_fields() {
+    let out = run(REVISE_DOC, None, true, None).expect("run must succeed");
+    let v: serde_json::Value = serde_json::from_str(&out).unwrap();
+    assert_eq!(v["schema"], "zenith-inspect-v1");
+    let page = &v["pages"][0];
+    assert!(page.get("master").is_none(), "{out}");
+    for node in page["children"].as_array().unwrap() {
+        for key in ["style", "fill", "asset", "component", "overrides"] {
+            assert!(node.get(key).is_none(), "{key} leaked into JSON: {out}");
+        }
+    }
+}

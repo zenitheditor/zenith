@@ -19,6 +19,7 @@ use crate::json_types::RecipeInspectJson;
 
 use super::boxes::{BoxInfo, NodeBox, attach_boxes, resolved_boxes};
 use super::recipes;
+use super::sections::render_sections;
 use super::tree::{build_doc_tree, find_node_tree};
 
 // ── Error type ────────────────────────────────────────────────────────────────
@@ -108,7 +109,37 @@ pub struct NodeEntry {
     /// an absolute frame and for every other kind.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub layout: Option<String>,
+    /// The authored `style` id. Human outline only.
+    #[serde(skip)]
+    pub style: Option<String>,
+    /// The authored node-level `fill` (a token id or a literal). Human
+    /// outline only.
+    #[serde(skip)]
+    pub fill: Option<String>,
+    /// An `image` node's asset id. Human outline only.
+    #[serde(skip)]
+    pub asset: Option<String>,
+    /// An `instance` node's component id. Human outline only.
+    #[serde(skip)]
+    pub component: Option<String>,
+    /// An `instance` node's override entries, in source order. Human outline
+    /// only.
+    #[serde(skip)]
+    pub overrides: Vec<OverrideLine>,
     pub children: Vec<NodeEntry>,
+}
+
+/// One `override` entry of an instance, as the human outline shows it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct OverrideLine {
+    /// The component-local id the override targets.
+    pub ref_id: String,
+    /// The replacement text: its spans joined in order.
+    pub text: Option<String>,
+    /// The replacement fill (a token id or a literal).
+    pub fill: Option<String>,
+    /// The replacement visibility.
+    pub visible: Option<bool>,
 }
 
 /// The resolved token table used to turn `(token)"id"` dimension refs into px
@@ -122,6 +153,9 @@ pub struct PageEntry {
     pub name: Option<String>,
     pub width: f64,
     pub height: f64,
+    /// The page's `master` id. Human outline only.
+    #[serde(skip)]
+    pub master: Option<String>,
     pub children: Vec<NodeEntry>,
     /// Final boxes of compiled nodes that are not in `children`: master
     /// projections (`<page-id>/<id>`) and instance content
@@ -196,6 +230,7 @@ pub fn run(
             serialize_pretty(&output)
         } else {
             let mut text = render_pages_human(&pages);
+            text.push_str(&render_sections(&doc, &resolved));
             let recipe_section = recipes::render_recipes_human(&doc.recipes);
             if !recipe_section.is_empty() {
                 text.push('\n');
@@ -382,8 +417,13 @@ fn render_pages_human(pages: &[PageEntry]) -> String {
             .as_deref()
             .map(|n| format!(" \"{}\"", n))
             .unwrap_or_default();
+        let master_part = page
+            .master
+            .as_deref()
+            .map(|m| format!(" master={m}"))
+            .unwrap_or_default();
         out.push_str(&format!(
-            "page {}{} ({}x{})\n",
+            "page {}{} ({}x{}){master_part}\n",
             page.id, name_part, page.width, page.height
         ));
         for child in &page.children {
@@ -414,11 +454,11 @@ pub fn clip_text(text: &str) -> String {
 /// Render a single node (and its subtree) as outline lines at `depth`.
 /// Called by both the whole-document path and the `--node` subtree path.
 ///
-/// One line per node: `kind id  box=x,y WxH layout=… [flags] "text"`. The box
+/// One line per node: `kind id  box=x,y WxH layout=… asset=… component=… style=… fill=… [flags] "text"`. The box
 /// is the final page box (layout and anchors resolved), rounded to 0.1 px,
 /// or the authored box when the compile skipped the node. Authored geometry
 /// and ink bounds are in `--json`.
-fn render_node_human(node: &NodeEntry, depth: usize) -> String {
+pub(super) fn render_node_human(node: &NodeEntry, depth: usize) -> String {
     let indent = "  ".repeat(depth);
     let mut parts = Vec::new();
     if let Some(b) = outline_box(node) {
@@ -437,6 +477,18 @@ fn render_node_human(node: &NodeEntry, depth: usize) -> String {
     if let Some(layout) = &node.layout {
         parts.push(format!("layout={layout}"));
     }
+    if let Some(asset) = &node.asset {
+        parts.push(format!("asset={asset}"));
+    }
+    if let Some(component) = &node.component {
+        parts.push(format!("component={component}"));
+    }
+    if let Some(style) = &node.style {
+        parts.push(format!("style={style}"));
+    }
+    if let Some(fill) = &node.fill {
+        parts.push(format!("fill={fill}"));
+    }
     let flags = render_flags(node);
     if !flags.is_empty() {
         parts.push(flags);
@@ -450,10 +502,29 @@ fn render_node_human(node: &NodeEntry, depth: usize) -> String {
         format!("  {}", parts.join(" "))
     };
     let mut out = format!("{}{} {}{}\n", indent, node.kind, node.id, suffix);
+    for o in &node.overrides {
+        out.push_str(&format!("{indent}  {}\n", override_line(o)));
+    }
     for child in &node.children {
         out.push_str(&render_node_human(child, depth + 1));
     }
     out
+}
+
+/// `override card.title fill=color.ink visible=false "Hello"`: one override
+/// entry of an instance, with the text cut as in the node lines.
+fn override_line(o: &OverrideLine) -> String {
+    let mut line = format!("override {}", o.ref_id);
+    if let Some(fill) = &o.fill {
+        line.push_str(&format!(" fill={fill}"));
+    }
+    if let Some(visible) = o.visible {
+        line.push_str(&format!(" visible={visible}"));
+    }
+    if let Some(text) = &o.text {
+        line.push_str(&format!(" \"{}\"", clip_text(text)));
+    }
+    line
 }
 
 /// `x,y WxH` rounded to 0.1 px.

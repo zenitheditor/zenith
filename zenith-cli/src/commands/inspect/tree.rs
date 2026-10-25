@@ -7,7 +7,7 @@ use zenith_core::{
     Dimension, FrameNode, GroupNode, Node, Page, PropertyValue, ResolvedValue, Unit,
 };
 
-use super::document::{NodeEntry, NodeGeometry, PageEntry, Resolved};
+use super::document::{NodeEntry, NodeGeometry, OverrideLine, PageEntry, Resolved};
 
 // ── Tree builders ─────────────────────────────────────────────────────────────
 
@@ -28,6 +28,7 @@ fn build_page_entry(page: &Page, resolved: &Resolved) -> PageEntry {
         name: page.name.clone(),
         width: dim_to_f64(&page.width),
         height: dim_to_f64(&page.height),
+        master: page.master.clone(),
         expanded: BTreeMap::new(),
         children: page
             .children
@@ -37,7 +38,7 @@ fn build_page_entry(page: &Page, resolved: &Resolved) -> PageEntry {
     }
 }
 
-fn build_node_entry(node: &Node, resolved: &Resolved) -> NodeEntry {
+pub(super) fn build_node_entry(node: &Node, resolved: &Resolved) -> NodeEntry {
     let children: Vec<NodeEntry> = match node {
         Node::Frame(FrameNode { children, .. }) | Node::Group(GroupNode { children, .. }) => {
             children
@@ -96,7 +97,78 @@ fn build_node_entry(node: &Node, resolved: &Resolved) -> NodeEntry {
         text: text_of(node),
         spans: span_count(node),
         layout: layout_of(node),
+        style: node.style_ref().map(str::to_owned),
+        fill: node_fill(node).and_then(value_text),
+        asset: if let Node::Image(n) = node {
+            Some(n.asset.clone())
+        } else {
+            None
+        },
+        component: if let Node::Instance(n) = node {
+            n.component.clone()
+        } else {
+            None
+        },
+        overrides: overrides_of(node),
         children,
+    }
+}
+
+/// The override entries of an `instance` node; empty for every other kind.
+fn overrides_of(node: &Node) -> Vec<OverrideLine> {
+    let Node::Instance(n) = node else {
+        return Vec::new();
+    };
+    n.overrides
+        .iter()
+        .map(|o| OverrideLine {
+            ref_id: o.ref_id.clone(),
+            text: o
+                .spans
+                .as_ref()
+                .map(|spans| spans.iter().map(|s| s.text.as_str()).collect()),
+            fill: o.fill.as_ref().and_then(value_text),
+            visible: o.visible,
+        })
+        .collect()
+}
+
+/// The node-level `fill` of the kinds that carry one.
+fn node_fill(node: &Node) -> Option<&PropertyValue> {
+    match node {
+        Node::Rect(n) => n.fill.as_ref(),
+        Node::Ellipse(n) => n.fill.as_ref(),
+        Node::Text(n) => n.fill.as_ref(),
+        Node::Code(n) => n.fill.as_ref(),
+        Node::Frame(n) => n.fill.as_ref(),
+        Node::Polygon(n) => n.fill.as_ref(),
+        Node::Polyline(n) => n.fill.as_ref(),
+        Node::Path(n) => n.fill.as_ref(),
+        Node::Field(n) => n.fill.as_ref(),
+        Node::Toc(n) => n.fill.as_ref(),
+        Node::Footnote(n) => n.fill.as_ref(),
+        Node::Table(n) => n.fill.as_ref(),
+        Node::Shape(n) => n.fill.as_ref(),
+        Node::Pattern(n) => n.fill.as_ref(),
+        Node::Chart(n) => n.fill.as_ref(),
+        Node::Line(_)
+        | Node::Group(_)
+        | Node::Image(_)
+        | Node::Instance(_)
+        | Node::Connector(_)
+        | Node::Light(_)
+        | Node::Mesh(_)
+        | Node::Unknown(_) => None,
+    }
+}
+
+/// A paint or style value as the outline shows it: a token id, a literal, or
+/// a dimension. A data ref has no fixed value, so it shows nothing.
+pub(super) fn value_text(value: &PropertyValue) -> Option<String> {
+    match value {
+        PropertyValue::TokenRef(id) | PropertyValue::Literal(id) => Some(id.clone()),
+        PropertyValue::Dimension(d) => Some(d.to_kdl_string()),
+        PropertyValue::DataRef(_) => None,
     }
 }
 
