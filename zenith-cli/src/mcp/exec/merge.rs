@@ -27,7 +27,8 @@ fn run(args: &Value) -> Result<(Value, bool), String> {
     let out_dir = Path::new(req_str(args, "out_dir")?);
     let name_by = opt_str(args, "name_by");
     let manifest_path = opt_str(args, "manifest").map(Path::new);
-    for path in [Some(Path::new(data)), Some(out_dir), manifest_path]
+    let combine = opt_str(args, "combine").map(Path::new);
+    for path in [Some(Path::new(data)), Some(out_dir), manifest_path, combine]
         .into_iter()
         .flatten()
     {
@@ -38,14 +39,17 @@ fn run(args: &Value) -> Result<(Value, bool), String> {
     let csv = read(Path::new(data))?;
     let mut reserved = vec![location.path.as_path(), Path::new(data)];
     reserved.extend(manifest_path);
-    let report = merge::run_with_output_constraints(
+    let report = merge::run_with_targets(
         &source,
         &csv,
         location.path.parent(),
         out_dir,
         name_by,
         options,
-        &reserved,
+        merge::MergeTargets {
+            reserved: &reserved,
+            combine,
+        },
     )
     .map_err(|error| error.message)?;
     let output = merge::to_json_output(&report);
@@ -58,11 +62,19 @@ fn run(args: &Value) -> Result<(Value, bool), String> {
                 .map(|error| json!({"row": row.row + 1, "error": error}))
         })
         .collect();
+    let combined_path = report
+        .combined
+        .as_ref()
+        .filter(|combined| combined.failure.is_none())
+        .map(|combined| combined.path.clone());
+    // Every committed path: row files in CSV order, then the combined PDF.
     let outputs: Vec<_> = report
         .rows
         .iter()
         .flat_map(|row| row.outputs.iter())
-        .map(|filename| out_dir.join(filename).display().to_string())
+        .map(|filename| out_dir.join(filename))
+        .chain(combined_path.clone())
+        .map(|path| path.display().to_string())
         .collect();
     let mut diagnostics = output.diagnostics;
     if let Some(path) = manifest_path {
@@ -75,6 +87,7 @@ fn run(args: &Value) -> Result<(Value, bool), String> {
                 .flat_map(|row| row.outputs.iter())
                 .map(|name| out_dir.join(name)),
         );
+        protected.extend(combined_path);
         if let Err(error) = write_manifest(path, &manifest, &protected) {
             diagnostics.push(DiagnosticJson::error(
                 "io.write_failed",
@@ -100,8 +113,11 @@ fn run(args: &Value) -> Result<(Value, bool), String> {
         if !diagnostics.is_empty() {
             object.insert("diagnostics".to_owned(), json!(diagnostics));
         }
-        if options.format == render::BatchFormat::Svg && options.raster_scale != 1.0 {
+        if options.format.is_vector() && options.raster_scale != 1.0 {
             object.insert("raster_scale".to_owned(), json!(options.raster_scale));
+        }
+        if let Some(combined) = output.combined {
+            object.insert("combined".to_owned(), json!(combined));
         }
     }
     Ok((value, is_error))
@@ -112,17 +128,18 @@ fn options(args: &Value) -> Result<render::BatchExportOptions, String> {
         None => render::BatchFormat::Png,
         Some(Value::String(value)) if value == "png" => render::BatchFormat::Png,
         Some(Value::String(value)) if value == "svg" => render::BatchFormat::Svg,
+        Some(Value::String(value)) if value == "pdf" => render::BatchFormat::Pdf,
         Some(value) => {
             return Err(format!(
-                "error[cli.invalid_argument]: invalid format {value}. Pass png or svg"
+                "error[cli.invalid_argument]: invalid format {value}. Pass png, svg, or pdf"
             ));
         }
     };
     let raster_scale = match args.get("raster_scale") {
         None => 1.0,
         Some(value) => {
-            if format != render::BatchFormat::Svg {
-                return Err("error[cli.invalid_argument]: raster_scale requires format 'svg'. Set format to svg".to_owned());
+            if !format.is_vector() {
+                return Err("error[cli.invalid_argument]: raster_scale requires format 'svg' or 'pdf'. Set format to svg or pdf".to_owned());
             }
             zenith_pipeline::render::check_render_scale(
                 value.as_f64().unwrap_or(f64::NAN),

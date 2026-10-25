@@ -241,7 +241,7 @@ fn merge_png_reports_a_malformed_config_instead_of_ignoring_it() {
 fn unsupported_batch_format_returns_argument_error_without_outputs() {
     for command in ["merge", "variant"] {
         let env = Env::new(DOC);
-        let output = env.run(command, &["--format", "pdf"]);
+        let output = env.run(command, &["--format", "jpg"]);
         assert_eq!(output.status.code(), Some(2));
         assert!(!env.dir.path().join("out").exists());
     }

@@ -14,8 +14,8 @@ mod scale;
 #[cfg(test)]
 mod tests;
 
-pub use batch::{BatchExportOptions, BatchFormat};
-pub(crate) use batch::{encode_batch_scene, load_batch_policy};
+pub use batch::{BatchExportOptions, BatchFormat, BatchLayout};
+pub(crate) use batch::{encode_batch_pdf, encode_batch_scene, load_batch_policy};
 pub use entry::{
     load_data_context, to_contact_sheet, to_pdf_all_pages_with_dir,
     to_pdf_all_pages_with_dir_options, to_pdf_with_dir, to_pdf_with_dir_options, to_png,

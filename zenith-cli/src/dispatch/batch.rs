@@ -27,14 +27,17 @@ pub(super) fn dispatch_merge(args: MergeArgs) -> ExitCode {
     };
     let mut reserved = vec![args.doc.as_path(), args.data.as_path()];
     reserved.extend(args.manifest.as_deref());
-    let report = match commands::merge::run_with_output_constraints(
+    let report = match commands::merge::run_with_targets(
         &doc_src,
         &csv_src,
         args.doc.parent(),
         &args.out_dir,
         args.name_by.as_deref(),
         options,
-        &reserved,
+        commands::merge::MergeTargets {
+            reserved: &reserved,
+            combine: args.combine.as_deref(),
+        },
     ) {
         Ok(report) => report,
         Err(e) => return CliError::new("merge.setup_failed", e.message, e.exit_code).emit(json),
@@ -56,6 +59,7 @@ pub(super) fn dispatch_merge(args: MergeArgs) -> ExitCode {
                 .flat_map(|row| row.outputs.iter())
                 .map(|name| args.out_dir.join(name)),
         );
+        protected.extend(written_combined(&report));
         if let Err(e) = write_manifest(manifest_path, &serialize_pretty(&manifest), &protected) {
             manifest_error = Some(e);
         }
@@ -76,7 +80,8 @@ pub(super) fn dispatch_merge(args: MergeArgs) -> ExitCode {
             .rows
             .iter()
             .map(|row| row.outputs.len())
-            .sum::<usize>();
+            .sum::<usize>()
+            + written_combined(&report).count();
         println!(
             "wrote {} file(s) to '{}'",
             n_written,
@@ -94,6 +99,17 @@ pub(super) fn dispatch_merge(args: MergeArgs) -> ExitCode {
         for r in report.failed() {
             eprintln!("row {}: {}", r.row + 1, r.failure.as_deref().unwrap_or(""));
         }
+        if let Some(combined) = &report.combined {
+            match &combined.failure {
+                None => println!(
+                    "combined {} page(s) from {} row(s) into '{}'",
+                    combined.pages,
+                    combined.rows.len(),
+                    combined.path.display()
+                ),
+                Some(reason) => eprintln!("{reason}"),
+            }
+        }
     }
     if let Some(error) = manifest_error {
         if !json {
@@ -101,7 +117,7 @@ pub(super) fn dispatch_merge(args: MergeArgs) -> ExitCode {
         }
         return ExitCode::from(error.exit_code);
     }
-    if report.rows.iter().any(|r| r.failure.is_some()) {
+    if report.has_failures() {
         ExitCode::from(1u8)
     } else {
         ExitCode::SUCCESS
@@ -152,9 +168,12 @@ pub(super) fn dispatch_variant(args: VariantArgs) -> ExitCode {
             if !outputs.png.is_empty() {
                 protected.push(args.out_dir.join(&outputs.png));
             }
-            if let Some(svg) = &outputs.svg {
-                protected.push(args.out_dir.join(svg));
-            }
+            protected.extend(
+                [&outputs.svg, &outputs.pdf]
+                    .into_iter()
+                    .flatten()
+                    .map(|name| args.out_dir.join(name)),
+            );
         }
         if let Err(e) = write_manifest(manifest_path, &serialize_pretty(&manifest), &protected) {
             manifest_error = Some(e);
@@ -178,7 +197,9 @@ pub(super) fn dispatch_variant(args: VariantArgs) -> ExitCode {
             .iter()
             .filter_map(|record| record.outputs.as_ref())
             .map(|outputs| {
-                1 + usize::from(!outputs.png.is_empty()) + usize::from(outputs.svg.is_some())
+                1 + usize::from(!outputs.png.is_empty())
+                    + usize::from(outputs.svg.is_some())
+                    + usize::from(outputs.pdf.is_some())
             })
             .sum::<usize>();
         println!(
@@ -213,6 +234,17 @@ pub(super) fn dispatch_variant(args: VariantArgs) -> ExitCode {
     }
 }
 
+/// The combined PDF path when `--combine` wrote it.
+fn written_combined(
+    report: &commands::merge::MergeReport,
+) -> impl Iterator<Item = std::path::PathBuf> + '_ {
+    report
+        .combined
+        .iter()
+        .filter(|combined| combined.failure.is_none())
+        .map(|combined| combined.path.clone())
+}
+
 /// Write `manifest_json` to `path`, creating its parent directory.
 fn write_manifest(
     path: &Path,
@@ -241,9 +273,9 @@ fn batch_options(
     format: commands::render::BatchFormat,
     raw: Option<&str>,
 ) -> Result<commands::render::BatchExportOptions, CliError> {
-    if raw.is_some() && format != commands::render::BatchFormat::Svg {
+    if raw.is_some() && !format.is_vector() {
         return Err(CliError::usage(
-            "error: --raster-scale requires --format svg",
+            "error: --raster-scale requires --format svg or --format pdf",
         ));
     }
     let raster_scale = raw

@@ -48,7 +48,7 @@ Render prepares outputs and applies diagnostic policy before writes. A blocking 
 
 ## Batch outputs
 
-CLI merge and variant support `--format png|svg`. PNG is the default. SVG variants retain their `.zen` companions. `--raster-scale` requires SVG output. Batch commands reject that flag for PNG, including an explicit value of 1.
+CLI merge and variant support `--format png|svg|pdf`. PNG is the default. Variants retain their `.zen` companions. A PDF merge row is one file with all its pages and the `page bleed` print boxes. `merge --combine FILE` also writes one PDF of all successful rows. `--raster-scale` requires SVG or PDF output. Batch commands reject that flag for PNG, including an explicit value of 1.
 
 Batch commands have no `--allow`, `--warn`, or `--deny` flags. Document, local, and global policy apply. A denied fallback prevents writes for that row or variant. Other successful items can remain.
 

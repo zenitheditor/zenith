@@ -8,6 +8,7 @@
 use std::collections::BTreeMap;
 use std::collections::BTreeSet;
 use std::path::Path;
+use std::sync::Arc;
 
 use zenith_core::Diagnostic;
 use zenith_core::{AssetKind, BytesAssetProvider, KdlAdapter, KdlSource};
@@ -21,9 +22,13 @@ use zenith_pipeline::assets::{
 };
 use zenith_pipeline::policy::ConfigLayers;
 
+use super::bindings::{AssetBinding, DataBinding, collect_data_nodes};
 use super::blocking::block_row_defects;
+use super::combine::{CombinedResult, Combiner, check_combine};
+use super::names::{row_filenames, sanitize_filename};
 use crate::commands::render::{
-    BatchExportOptions, BatchFormat, encode_batch_scene, load_batch_policy,
+    BatchExportOptions, BatchFormat, BatchLayout, encode_batch_pdf, encode_batch_scene,
+    load_batch_policy,
 };
 use crate::native::{self, NativeConfig, NativeFs};
 
@@ -43,7 +48,7 @@ pub struct MergeError {
 }
 
 impl MergeError {
-    fn new(msg: impl Into<String>) -> Self {
+    pub(super) fn new(msg: impl Into<String>) -> Self {
         Self {
             message: msg.into(),
             exit_code: 2,
@@ -72,6 +77,18 @@ pub struct RowResult {
 #[derive(Debug)]
 pub struct MergeReport {
     pub rows: Vec<RowResult>,
+    /// The `--combine` outcome. `None` when no combined file is asked for.
+    pub combined: Option<CombinedResult>,
+}
+
+/// Paths a merge writes or protects beyond the row files in `out_dir`.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct MergeTargets<'a> {
+    /// Paths no output can replace: the inputs and the manifest.
+    pub reserved: &'a [&'a Path],
+    /// Also write one PDF of every successful row's pages here, in CSV order.
+    /// It requires PDF output.
+    pub combine: Option<&'a Path>,
 }
 
 impl MergeReport {
@@ -86,167 +103,13 @@ impl MergeReport {
     pub fn failed(&self) -> Vec<&RowResult> {
         self.rows.iter().filter(|r| r.failure.is_some()).collect()
     }
-}
-
-// ── Internal binding types ────────────────────────────────────────────────────
-
-/// Maps a node id to the CSV column that supplies its replacement text.
-struct DataBinding {
-    node_id: String,
-    column: String,
-}
-
-/// Maps an image node id to the CSV column that supplies the per-row image path.
-struct AssetBinding {
-    node_id: String,
-    column: String,
-}
-
-// ── collect_data_nodes ────────────────────────────────────────────────────────
-
-/// Return an error if `role` starts with `"data."` on a non-text, non-image node.
-///
-/// The error message and format live here exactly once.
-fn reject_data_role_on_non_text(role: Option<&str>, id: &str) -> Result<(), MergeError> {
-    if let Some(role) = role
-        && role.starts_with("data.")
-    {
-        return Err(MergeError::new(format!(
-            "role=\"{}\" on non-text node {}: replace_text supports text nodes only",
-            role, id
-        )));
-    }
-    Ok(())
-}
-
-/// Walk `nodes` recursively and collect every node that carries a
-/// `role="data.<column>"` attribute.
-///
-/// `Node::Text` bindings are collected into `out`; `Node::Image` bindings are
-/// collected into `asset_out`.  Any other variant with a `data.*` role is a
-/// hard [`MergeError`].
-///
-/// Recurses into `Node::Frame`, `Node::Group`, and `Node::Table` cell children.
-fn collect_data_nodes(
-    nodes: &[zenith_core::Node],
-    out: &mut Vec<DataBinding>,
-    asset_out: &mut Vec<AssetBinding>,
-) -> Result<(), MergeError> {
-    for node in nodes {
-        match node {
-            zenith_core::Node::Text(n) => {
-                if let Some(role) = n.role.as_deref()
-                    && let Some(col) = role.strip_prefix("data.")
-                {
-                    out.push(DataBinding {
-                        node_id: n.id.clone(),
-                        column: col.to_owned(),
-                    });
-                }
-            }
-            zenith_core::Node::Image(n) => {
-                if let Some(role) = n.role.as_deref()
-                    && let Some(col) = role.strip_prefix("data.")
-                {
-                    asset_out.push(AssetBinding {
-                        node_id: n.id.clone(),
-                        column: col.to_owned(),
-                    });
-                }
-            }
-            zenith_core::Node::Rect(n) => {
-                reject_data_role_on_non_text(n.role.as_deref(), &n.id)?;
-            }
-            zenith_core::Node::Ellipse(n) => {
-                reject_data_role_on_non_text(n.role.as_deref(), &n.id)?;
-            }
-            zenith_core::Node::Line(n) => {
-                reject_data_role_on_non_text(n.role.as_deref(), &n.id)?;
-            }
-            zenith_core::Node::Code(n) => {
-                reject_data_role_on_non_text(n.role.as_deref(), &n.id)?;
-            }
-            zenith_core::Node::Frame(n) => {
-                reject_data_role_on_non_text(n.role.as_deref(), &n.id)?;
-                collect_data_nodes(&n.children, out, asset_out)?;
-            }
-            zenith_core::Node::Group(n) => {
-                reject_data_role_on_non_text(n.role.as_deref(), &n.id)?;
-                collect_data_nodes(&n.children, out, asset_out)?;
-            }
-            zenith_core::Node::Polygon(n) => {
-                reject_data_role_on_non_text(n.role.as_deref(), &n.id)?;
-            }
-            zenith_core::Node::Polyline(n) => {
-                reject_data_role_on_non_text(n.role.as_deref(), &n.id)?;
-            }
-            zenith_core::Node::Path(n) => {
-                reject_data_role_on_non_text(n.role.as_deref(), &n.id)?;
-            }
-            zenith_core::Node::Instance(n) => {
-                reject_data_role_on_non_text(n.role.as_deref(), &n.id)?;
-            }
-            zenith_core::Node::Field(n) => {
-                reject_data_role_on_non_text(n.role.as_deref(), &n.id)?;
-            }
-            zenith_core::Node::Toc(n) => {
-                reject_data_role_on_non_text(n.role.as_deref(), &n.id)?;
-            }
-            zenith_core::Node::Footnote(n) => {
-                reject_data_role_on_non_text(n.role.as_deref(), &n.id)?;
-            }
-            zenith_core::Node::Table(n) => {
-                reject_data_role_on_non_text(n.role.as_deref(), &n.id)?;
-                for row in &n.rows {
-                    for cell in &row.cells {
-                        collect_data_nodes(&cell.children, out, asset_out)?;
-                    }
-                }
-            }
-            zenith_core::Node::Shape(n) => {
-                reject_data_role_on_non_text(n.role.as_deref(), &n.id)?;
-            }
-            zenith_core::Node::Connector(n) => {
-                reject_data_role_on_non_text(n.role.as_deref(), &n.id)?;
-            }
-            zenith_core::Node::Pattern(n) => {
-                reject_data_role_on_non_text(n.role.as_deref(), &n.id)?;
-            }
-            zenith_core::Node::Chart(n) => {
-                reject_data_role_on_non_text(n.role.as_deref(), &n.id)?;
-            }
-            zenith_core::Node::Light(n) => {
-                reject_data_role_on_non_text(n.role.as_deref(), &n.id)?;
-            }
-            zenith_core::Node::Mesh(n) => {
-                reject_data_role_on_non_text(n.role.as_deref(), &n.id)?;
-            }
-            zenith_core::Node::Unknown(_n) => {
-                // UnknownNode has no id or role field; data.* roles cannot be
-                // placed on unknown nodes (the parser would not parse them).
-            }
-        }
-    }
-    Ok(())
-}
-
-// ── sanitize_filename ─────────────────────────────────────────────────────────
-
-/// Map filesystem-unsafe characters and NUL to `_`, trim leading/trailing
-/// dots and whitespace, and return `"_"` for the empty result.
-pub fn sanitize_filename(s: &str) -> String {
-    let mapped: String = s
-        .chars()
-        .map(|c| match c {
-            '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|' | '\0' => '_',
-            other => other,
-        })
-        .collect();
-    let trimmed = mapped.trim_matches(|c: char| c == '.' || c.is_whitespace());
-    if trimmed.is_empty() {
-        "_".to_owned()
-    } else {
-        trimmed.to_owned()
+    /// Whether any row or the combined file failed.
+    pub fn has_failures(&self) -> bool {
+        self.rows.iter().any(|r| r.failure.is_some())
+            || self
+                .combined
+                .as_ref()
+                .is_some_and(|combined| combined.failure.is_some())
     }
 }
 
@@ -311,28 +174,35 @@ pub fn run_with_options(
     name_by: Option<&str>,
     options: BatchExportOptions,
 ) -> Result<MergeReport, MergeError> {
-    run_with_output_constraints(
+    run_with_targets(
         doc_src,
         csv_src,
         project_dir,
         out_dir,
         name_by,
         options,
-        &[],
+        MergeTargets::default(),
     )
 }
 
-pub fn run_with_output_constraints(
+/// Run a merge that protects `targets.reserved` and can write a combined PDF.
+///
+/// # Errors
+///
+/// As [`run`], plus `--combine` with a format other than PDF, and a reserved
+/// path that a planned output aliases.
+pub fn run_with_targets(
     doc_src: &str,
     csv_src: &str,
     project_dir: Option<&Path>,
     out_dir: &Path,
     name_by: Option<&str>,
     options: BatchExportOptions,
-    reserved: &[&Path],
+    targets: MergeTargets<'_>,
 ) -> Result<MergeReport, MergeError> {
     options.check().map_err(MergeError::new)?;
     let format = options.format;
+    check_combine(format, targets.combine).map_err(MergeError::new)?;
     // ── 1. Parse the template document (once) ─────────────────────────────
     let doc = KdlAdapter
         .parse(doc_src.as_bytes())
@@ -447,7 +317,10 @@ pub fn run_with_output_constraints(
         ),
     };
 
-    let mut output_guard = crate::output_file::OutputGuard::new(reserved)
+    // Row files must not replace the inputs, the manifest, or the combined file.
+    let mut protected = targets.reserved.to_vec();
+    protected.extend(targets.combine);
+    let mut output_guard = crate::output_file::OutputGuard::new(&protected)
         .map_err(|error| MergeError::new(error.to_string()))?;
     // Check every planned page against reserved inputs and manifests before writes.
     let mut planned_reader = csv::Reader::from_reader(csv_src.as_bytes());
@@ -457,9 +330,9 @@ pub fn run_with_output_constraints(
             Some(index) => sanitize_filename(record.get(index).unwrap_or("")),
             None => format!("row-{:04}", row + 1),
         };
-        for page in 0..doc.body.pages.len() {
+        for name in row_filenames(&stem, doc.body.pages.len(), format) {
             output_guard
-                .check(&out_dir.join(page_filename(&stem, page, doc.body.pages.len(), format)))
+                .check(&out_dir.join(name))
                 .map_err(|error| MergeError::new(error.to_string()))?;
         }
     }
@@ -472,6 +345,15 @@ pub fn run_with_output_constraints(
         Some(dir) => build_asset_provider(&NativeFs, &doc, dir, false)
             .map_err(|e| MergeError::new(e.message))?,
         None => BytesAssetProvider::new(),
+    };
+    let mut combiner = match (targets.combine, project_dir) {
+        (None, _) => None,
+        (Some(path), Some(dir)) => Some(Combiner::new(
+            path,
+            build_asset_provider(&NativeFs, &doc, dir, false)
+                .map_err(|e| MergeError::new(e.message))?,
+        )),
+        (Some(path), None) => Some(Combiner::new(path, BytesAssetProvider::new())),
     };
 
     // ── 6. Ensure output directory exists ─────────────────────────────────
@@ -640,6 +522,7 @@ pub fn run_with_output_constraints(
         // Build per-row asset provider: template assets + row-specific images.
         // BytesAssetProvider is not Clone, so we rebuild from template doc and
         // then layer the row image(s) on top.
+        let mut row_images: Vec<(String, Arc<[u8]>)> = Vec::new();
         let row_assets = if asset_bindings.is_empty() {
             // No image bindings: the pre-built `template_assets` provider is used
             // directly by the render call below — no per-row provider is needed.
@@ -657,7 +540,7 @@ pub fn run_with_output_constraints(
             // Start with template assets.
             let mut row_provider = build_asset_provider(&NativeFs, &doc, dir, false)
                 .map_err(|e| MergeError::new(e.message))?;
-            // Layer in per-row images.
+            // Layer in per-row images. The combined file reuses their bytes.
             let mut row_asset_missing = false;
             for (binding, &col_idx) in asset_bindings.iter().zip(asset_binding_indices.iter()) {
                 let cell = record.get(col_idx).unwrap_or("").trim();
@@ -668,7 +551,9 @@ pub fn run_with_output_constraints(
                 let img_path = dir.join(cell);
                 match std::fs::read(&img_path) {
                     Ok(bytes) => {
-                        row_provider.register(&asset_id, AssetKind::Image, bytes.into());
+                        let bytes: Arc<[u8]> = bytes.into();
+                        row_provider.register(&asset_id, AssetKind::Image, Arc::clone(&bytes));
+                        row_images.push((asset_id, bytes));
                     }
                     Err(e) => {
                         push_failure(
@@ -732,9 +617,7 @@ pub fn run_with_output_constraints(
         };
 
         // Build all output filenames for this row upfront.
-        let page_filenames: Vec<String> = (0..page_count)
-            .map(|pi| page_filename(&row_stem, pi, page_count, format))
-            .collect();
+        let page_filenames = row_filenames(&row_stem, page_count, format);
 
         let planned_paths: Vec<_> = page_filenames
             .iter()
@@ -770,6 +653,8 @@ pub fn run_with_output_constraints(
         let mut page_failures: Vec<String> = Vec::new();
         let mut diagnostics = std::mem::take(&mut row_validation);
         let mut page_images: Vec<(String, Vec<u8>)> = Vec::new();
+        // A per-row format encodes every page of the row in one file.
+        let mut row_scenes = Vec::new();
 
         let row_provider = row_assets.as_ref().unwrap_or(&template_assets);
         let prep = DocumentPrep::new(&row_doc, None, None).with_image_sizes(image_sizes(
@@ -778,7 +663,7 @@ pub fn run_with_output_constraints(
             row_provider,
         ));
         let compiler = PageCompiler::new(&prep, &fonts);
-        for (page_index, page_fname) in page_filenames.iter().enumerate() {
+        for page_index in 0..page_count {
             let mut compile_result = compiler.compile_page(page_index);
             compile_result.diagnostics = block_row_defects(
                 zenith_core::apply_policy(compile_result.diagnostics, &row_policy),
@@ -802,6 +687,17 @@ pub fn run_with_output_constraints(
                 continue;
             }
 
+            let page_fname = match format.layout() {
+                BatchLayout::PerPage => page_filenames.get(page_index),
+                BatchLayout::PerRow => {
+                    row_scenes.push(compile_result.scene);
+                    continue;
+                }
+            };
+            let Some(page_fname) = page_fname else {
+                page_failures.push(format!("page {}: no output name", page_index + 1));
+                continue;
+            };
             // Encode the scene with row-scoped assets.
             let image_result = encode_batch_scene(
                 options,
@@ -825,9 +721,37 @@ pub fn run_with_output_constraints(
                             .collect::<Vec<_>>()
                             .join("; ")
                     ));
-                    if format == BatchFormat::Svg {
+                    if format.is_vector() {
                         diagnostics.extend(e);
                     }
+                }
+            }
+        }
+        if page_failures.is_empty()
+            && let (BatchLayout::PerRow, Some(row_fname)) =
+                (format.layout(), page_filenames.first())
+        {
+            let pages: Vec<usize> = (1..=page_count).collect();
+            match encode_batch_pdf(
+                options,
+                &row_scenes,
+                &pages,
+                &fonts,
+                row_provider,
+                policy.as_ref(),
+            ) {
+                Ok((bytes, row_diagnostics)) => {
+                    diagnostics.extend(row_diagnostics);
+                    page_images.push((row_fname.clone(), bytes));
+                }
+                Err(e) => {
+                    page_failures.push(
+                        e.iter()
+                            .map(|d| d.message.as_str())
+                            .collect::<Vec<_>>()
+                            .join("; "),
+                    );
+                    diagnostics.extend(e);
                 }
             }
         }
@@ -866,6 +790,9 @@ pub fn run_with_output_constraints(
         if write_failed {
             continue;
         }
+        if let Some(combiner) = &mut combiner {
+            combiner.add(row_idx, row_scenes, row_images);
+        }
         rows.push(RowResult {
             row: row_idx,
             key: row_key,
@@ -875,7 +802,9 @@ pub fn run_with_output_constraints(
         });
     }
 
-    Ok(MergeReport { rows })
+    let combined =
+        combiner.map(|combiner| combiner.finish(options, &fonts, targets.reserved, &rows));
+    Ok(MergeReport { rows, combined })
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -913,18 +842,4 @@ fn row_add_asset_op(row_idx: usize, column: &str, src: &str) -> (String, Op) {
         metadata: Box::new(AddAssetMetadata::default()),
     };
     (asset_id, op)
-}
-
-/// Output filename for one page of one row.
-///
-/// Single-page templates keep the bare stem (preserves existing behavior);
-/// multi-page templates use the `-page-N` suffix (1-based), matching
-/// `zenith render --all-pages`.
-fn page_filename(stem: &str, page_index: usize, page_count: usize, format: BatchFormat) -> String {
-    let extension = format.extension();
-    if page_count == 1 {
-        format!("{stem}.{extension}")
-    } else {
-        format!("{stem}-page-{}.{extension}", page_index + 1)
-    }
 }

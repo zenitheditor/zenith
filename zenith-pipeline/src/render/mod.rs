@@ -26,7 +26,7 @@ mod view;
 
 pub use compile::{CompiledPage, CompiledPages, PageSelection, compile_pages};
 pub use options::{RenderOptions, SpreadOptions};
-pub use pdf::{PdfArtifact, render_pdf, render_pdf_pages};
+pub use pdf::{PdfArtifact, pdf_rasterization_diagnostics, render_pdf, render_pdf_pages};
 pub use png::{
     PngArtifact, PngPagesArtifact, SceneArtifact, render_png, render_png_pages, render_png_spread,
     render_scene_json,

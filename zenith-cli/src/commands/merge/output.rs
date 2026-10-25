@@ -1,12 +1,13 @@
 //! Merge manifest and JSON report encoding.
 
 use super::MergeReport;
-use crate::json_types::{DiagnosticJson, MergeOutput, MergeRowResult};
+use crate::json_types::{DiagnosticJson, MergeCombinedJson, MergeOutput, MergeRowResult};
 
 /// Build a deterministic generation manifest from the merge inputs and report.
 /// Inputs are hashed as bytes; NO timestamps, absolute paths, or crate version
 /// are embedded, so identical inputs yield a byte-identical manifest.
 /// Rows with committed files are included. Partial rows carry failed status without error text.
+/// A written `--combine` PDF adds a `combined` entry with its path and rows.
 pub fn build_manifest(
     doc_src: &str,
     csv_src: &str,
@@ -39,6 +40,14 @@ pub fn build_manifest(
         data_sha256,
         name_by: name_by.map(str::to_owned),
         rows,
+        combined: report
+            .combined
+            .as_ref()
+            .filter(|combined| combined.failure.is_none())
+            .map(|combined| crate::json_types::ManifestCombined {
+                path: combined.path.display().to_string(),
+                rows: combined.rows.clone(),
+            }),
     }
 }
 
@@ -51,7 +60,24 @@ pub fn to_json_output(report: &MergeReport) -> MergeOutput {
         total_rows: report.rows.len(),
         written: n_written,
         failed: n_failed,
-        diagnostics: Vec::new(),
+        diagnostics: report
+            .combined
+            .iter()
+            .filter_map(|combined| combined.failure.clone())
+            .map(|reason| DiagnosticJson::error("merge.combine_failed", reason))
+            .collect(),
+        combined: report.combined.as_ref().map(|combined| MergeCombinedJson {
+            path: combined.path.display().to_string(),
+            status: if combined.failure.is_none() {
+                "ok"
+            } else {
+                "failed"
+            },
+            pages: combined.pages,
+            rows: combined.rows.clone(),
+            excluded_rows: combined.excluded.clone(),
+            error: combined.failure.clone(),
+        }),
         rows: report
             .rows
             .iter()

@@ -202,7 +202,7 @@ fn svg_native_and_captured_outputs_match_shared_batch_options() {
 fn invalid_format_and_raster_scale_return_errors_before_output_writes() {
     let env = Env::new(DOC, "title\nFirst\n");
     let invalid = [
-        json!({"format":"pdf"}),
+        json!({"format":"jpg"}),
         json!({"format":false}),
         json!({"format":null}),
         json!({"raster_scale":1}),
@@ -214,6 +214,7 @@ fn invalid_format_and_raster_scale_return_errors_before_output_writes() {
         json!({"format":"svg","raster_scale":"inf"}),
         json!({"format":"svg","raster_scale":null}),
         json!({"format":"svg","raster_scale":true}),
+        json!({"format":"pdf","raster_scale":5}),
     ];
     for extra in invalid {
         let mut args = env.arguments("out");
@@ -350,7 +351,7 @@ fn protected_manifest_error_keeps_previous_bytes_and_successful_row_counts() {
 }
 
 #[test]
-fn merge_schema_exposes_optional_format_and_svg_raster_scale_bounds() {
+fn merge_schema_exposes_optional_format_vector_raster_scale_and_combine() {
     let env = Env::new(DOC, "title\nFirst\n");
     let response = env.request(json!({"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}));
     let tool = response["result"]["tools"]
@@ -362,7 +363,7 @@ fn merge_schema_exposes_optional_format_and_svg_raster_scale_bounds() {
     let schema = &tool["inputSchema"];
     assert_eq!(
         schema["properties"]["format"]["enum"],
-        json!(["png", "svg"])
+        json!(["png", "svg", "pdf"])
     );
     assert_eq!(schema["properties"]["format"]["default"], "png");
     assert_eq!(schema["properties"]["raster_scale"]["exclusiveMinimum"], 0);
@@ -371,7 +372,13 @@ fn merge_schema_exposes_optional_format_and_svg_raster_scale_bounds() {
         schema["properties"]["raster_scale"]["description"]
             .as_str()
             .unwrap()
-            .contains("svg only")
+            .contains("svg/pdf only")
+    );
+    assert!(
+        schema["properties"]["combine"]["description"]
+            .as_str()
+            .unwrap()
+            .contains("pdf only")
     );
     assert_eq!(schema["required"], json!(["doc", "data", "out_dir"]));
 }
@@ -400,4 +407,52 @@ fn manifests_cannot_replace_inputs_or_planned_pages() {
             );
         }
     }
+}
+
+#[test]
+fn pdf_rows_and_combined_file_are_committed_outputs() {
+    let env = Env::new(DOC, "title\nFirst\nSecond\n");
+    let mut args = env.arguments("out");
+    args["format"] = json!("pdf");
+    args["raster_scale"] = json!(2.0);
+    args["combine"] = json!(env.dir.path().join("all.pdf"));
+    args["manifest"] = json!(env.dir.path().join("manifest.json"));
+    let result = env.merge(args);
+    assert_eq!(result["isError"], false, "{result}");
+    let output = structured(&result);
+    assert_eq!(output["format"], "pdf");
+    assert_eq!(output["raster_scale"], 2.0);
+    let paths: Vec<_> = [
+        env.dir.path().join("out/row-0001.pdf"),
+        env.dir.path().join("out/row-0002.pdf"),
+        env.dir.path().join("all.pdf"),
+    ]
+    .iter()
+    .map(|path| path.display().to_string())
+    .collect();
+    assert_eq!(output["outputs"], json!(paths));
+    assert_eq!(output["files_written"], 3);
+    assert_eq!(output["combined"]["status"], "ok");
+    assert_eq!(output["combined"]["pages"], 4);
+    assert_eq!(output["combined"]["rows"], json!([0, 1]));
+    let manifest: Value =
+        serde_json::from_slice(&fs::read(env.dir.path().join("manifest.json")).unwrap()).unwrap();
+    assert_eq!(manifest["combined"]["rows"], json!([0, 1]));
+    assert!(
+        fs::read(env.dir.path().join("all.pdf"))
+            .unwrap()
+            .starts_with(b"%PDF-")
+    );
+    mirror_matches(&result);
+}
+
+#[test]
+fn combine_without_pdf_format_is_an_error() {
+    let env = Env::new(DOC, "title\nFirst\n");
+    let mut args = env.arguments("out");
+    args["combine"] = json!(env.dir.path().join("all.pdf"));
+    let result = env.merge(args);
+    assert_eq!(result["isError"], true, "{result}");
+    assert!(!env.dir.path().join("out").exists());
+    assert!(!env.dir.path().join("all.pdf").exists());
 }

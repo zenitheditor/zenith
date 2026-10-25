@@ -197,8 +197,9 @@ changed and its content hash.",
         },
         Tool {
             name: "zenith_merge",
-            description: "Mail-merge a .zen template with CSV data, writing PNG or SVG pages per row. Mark \
-variable nodes with role=\"data.<column>\". Use for localized/personalized/batch variants.",
+            description: "Mail-merge a .zen template with CSV data. PNG and SVG write one file per page. \
+PDF writes one print file per row with all its pages. Mark variable nodes with role=\"data.<column>\". \
+Use for localized, personalized, and variable-data print batches.",
             schema: json!({
                 "type": "object",
                 "properties": {
@@ -207,8 +208,9 @@ variable nodes with role=\"data.<column>\". Use for localized/personalized/batch
                     "out_dir": { "type": "string", "description": "Directory for committed row pages." },
                     "name_by": { "type": "string", "description": "CSV column to name files by." },
                     "manifest": { "type": "string", "description": "Write a reproducibility manifest here." },
-                    "format": { "type": "string", "enum": ["png", "svg"], "default": "png", "description": "Output image format (default png)." },
-                    "raster_scale": { "type": "number", "exclusiveMinimum": 0, "maximum": 4, "description": "svg only: raster fallback resolution, 0 < raster_scale <= 4 (default 1). Vector geometry remains unchanged." }
+                    "format": { "type": "string", "enum": ["png", "svg", "pdf"], "default": "png", "description": "Output format (default png). pdf writes one file per row." },
+                    "raster_scale": { "type": "number", "exclusiveMinimum": 0, "maximum": 4, "description": "svg/pdf only: raster fallback resolution, 0 < raster_scale <= 4 (default 1). Vector geometry remains unchanged." },
+                    "combine": { "type": "string", "description": "pdf only: also write one PDF of every successful row's pages here, in CSV order. Failed rows are left out." }
                 },
                 "required": ["doc", "data", "out_dir"]
             }),

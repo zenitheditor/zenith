@@ -17,6 +17,7 @@
 //! - `workspace` — `WorkspaceArgs`, `WorkspaceSub`, scratch, candidate, and promote arg types.
 
 mod asset;
+mod batch;
 mod edit;
 mod fix;
 mod library;
@@ -28,6 +29,7 @@ mod tx;
 mod workspace;
 
 pub use asset::{AssetArgs, AssetImportArgs, AssetSub, AssetZpxBakeArgs};
+pub use batch::{MergeArgs, VariantArgs};
 pub use edit::EditArgs;
 pub use fix::FixArgs;
 pub use library::{
@@ -178,9 +180,10 @@ pub enum Command {
     /// judgments.
     Perceive(PerceiveArgs),
 
-    /// Mail-merge a `.zen` template with CSV data, writing PNG or SVG row pages.
+    /// Mail-merge a `.zen` template with CSV data, writing PNG, SVG, or PDF row files.
     ///
-    /// Render each CSV row as PNG pages by default, or SVG pages with `--format svg`. Mark variable
+    /// Render each CSV row as PNG pages by default, SVG pages with `--format svg`, or one
+    /// print PDF per row with `--format pdf`. Mark variable
     /// nodes with `role="data.<column>"` (text nodes substitute their text; image nodes substitute
     /// their asset path) where `<column>` matches a CSV header. Use this for localized posts,
     /// personalized graphics, certificates, badges, and campaign variants. For a SINGLE
@@ -235,7 +238,7 @@ pub enum Command {
     /// Generate size/format variants of a document (one design → many sizes).
     ///
     /// Expands the `variants` block: one canonical page becomes N named target sizes (square,
-    /// story, banner), each written as a native `.zen` companion plus a PNG or SVG image. PNG is the default. Per-variant
+    /// story, banner), each written as a native `.zen` companion plus a PNG, SVG, or PDF file. PNG is the default. Per-variant
     /// `override`s can hide/show nodes, swap text, or change visual properties; source token edits
     /// propagate to every variant. This varies DIMENSIONS — distinct from `merge`, which varies CONTENT
     /// across CSV rows. Deterministic: same source → byte-identical outputs.
@@ -504,36 +507,6 @@ pub struct ThemeApplyArgs {
     /// Emit machine-readable JSON instead of a human-readable summary.
     #[arg(long)]
     pub json: bool,
-}
-
-/// Arguments for `zenith variant`.
-#[derive(Debug, Args)]
-#[command(after_help = "EXAMPLE:\n  \
-zenith variant poster.zen --out-dir out/ --manifest run.json\n\n\
-The document must contain a `variants { variant id=\"square\" source=\"page.main\" w=(px)1080 \
-h=(px)1080 { … } }` block.")]
-pub struct VariantArgs {
-    /// Input `.zen` document containing a `variants` block.
-    pub doc: PathBuf,
-
-    /// Directory for each generated `.zen` companion and image.
-    #[arg(long, value_name = "DIR")]
-    pub out_dir: PathBuf,
-
-    /// Emit a machine-readable JSON batch report (per-variant provenance).
-    #[arg(long)]
-    pub json: bool,
-
-    /// Write a deterministic generation manifest (JSON) to this path for CI
-    /// reproducibility.  Independent of --json.
-    #[arg(long, value_name = "PATH")]
-    pub manifest: Option<PathBuf>,
-    /// Output image format.
-    #[arg(long, value_enum, default_value = "png")]
-    pub format: crate::commands::render::BatchFormat,
-    /// Raster fallback resolution for SVG: 0 < F <= 4 (default 1).
-    #[arg(long, value_name = "F", allow_hyphen_values = true)]
-    pub raster_scale: Option<String>,
 }
 
 /// Arguments for `zenith new`.
@@ -892,41 +865,6 @@ pub struct InspectPathArgs {
     /// Include perception craft scores and diagnostic codes.
     #[arg(long)]
     pub craft: bool,
-}
-
-/// Arguments for `zenith merge`.
-#[derive(Debug, Args)]
-#[command(after_help = "EXAMPLE:\n  \
-zenith merge card.zen people.csv --out-dir out/ --name-by name --manifest run.json")]
-pub struct MergeArgs {
-    /// Template `.zen` document with `role="data.<column>"` text nodes.
-    pub doc: PathBuf,
-
-    /// CSV data file; header row names the columns.
-    pub data: PathBuf,
-
-    /// Directory for rendered row pages.
-    #[arg(long, value_name = "DIR")]
-    pub out_dir: PathBuf,
-
-    /// CSV column for output names (default: row-NNNN with the chosen format extension).
-    #[arg(long, value_name = "COL")]
-    pub name_by: Option<String>,
-
-    /// Emit a machine-readable JSON batch report (per-row provenance).
-    #[arg(long)]
-    pub json: bool,
-
-    /// Write a deterministic generation manifest (JSON) to this path for CI
-    /// reproducibility. Independent of --json.
-    #[arg(long, value_name = "PATH")]
-    pub manifest: Option<PathBuf>,
-    /// Output image format.
-    #[arg(long, value_enum, default_value = "png")]
-    pub format: crate::commands::render::BatchFormat,
-    /// Raster fallback resolution for SVG: 0 < F <= 4 (default 1).
-    #[arg(long, value_name = "F", allow_hyphen_values = true)]
-    pub raster_scale: Option<String>,
 }
 
 /// Arguments for `zenith history`.

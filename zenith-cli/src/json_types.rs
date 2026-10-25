@@ -333,8 +333,35 @@ pub struct MergeOutput {
     pub written: usize,
     pub failed: usize,
     pub rows: Vec<MergeRowResult>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub combined: Option<MergeCombinedJson>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub diagnostics: Vec<DiagnosticJson>,
+}
+
+/// The `--combine` PDF in the `merge --json` report.
+#[derive(Debug, Serialize)]
+pub struct MergeCombinedJson {
+    /// The combined file path as given.
+    pub path: String,
+    pub status: &'static str,
+    /// Pages in the written file. Zero when nothing is written.
+    pub pages: usize,
+    /// 0-based CSV rows in the file, in CSV order.
+    pub rows: Vec<usize>,
+    /// 0-based CSV rows left out because they failed.
+    pub excluded_rows: Vec<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+/// The written `--combine` PDF in the merge manifest.
+#[derive(Debug, Serialize)]
+pub struct ManifestCombined {
+    /// The combined file path as given.
+    pub path: String,
+    /// 0-based CSV rows in the file, in CSV order.
+    pub rows: Vec<usize>,
 }
 
 /// One manifest row with committed files, including partial writes.
@@ -360,6 +387,9 @@ pub struct MergeManifest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name_by: Option<String>,
     pub rows: Vec<ManifestRow>,
+    /// Present only when the combined PDF is written.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub combined: Option<ManifestCombined>,
 }
 
 // ── Variant JSON types ────────────────────────────────────────────────────────
@@ -376,6 +406,8 @@ pub struct VariantResultJson {
     pub outputs_png: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub outputs_svg: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub outputs_pdf: Option<String>,
     pub diagnostics: Vec<DiagnosticJson>,
 }
 
@@ -401,6 +433,8 @@ pub struct VariantManifestTarget {
     pub outputs_png: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub outputs_svg: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub outputs_pdf: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub status: Option<&'static str>,
 }

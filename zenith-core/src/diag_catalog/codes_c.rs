@@ -774,6 +774,11 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
         "`zenith library show` failed.",
     ),
     info(
+        "merge.combine_failed",
+        Severity::Error,
+        "`zenith merge --combine` wrote no combined PDF.",
+    ),
+    info(
         "merge.no_data_nodes",
         Severity::Error,
         "The merge template has no node with a `data.*` role.",

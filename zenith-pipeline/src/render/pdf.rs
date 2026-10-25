@@ -179,7 +179,8 @@ fn render_pages(
 
 /// One `render.pdf_rasterized` advisory per rasterized command range, in
 /// order. `region.page` is a source document page.
-fn pdf_rasterization_diagnostics(regions: &[PdfRasterizedRegion]) -> Vec<Diagnostic> {
+#[must_use]
+pub fn pdf_rasterization_diagnostics(regions: &[PdfRasterizedRegion]) -> Vec<Diagnostic> {
     regions
         .iter()
         .map(|region| {

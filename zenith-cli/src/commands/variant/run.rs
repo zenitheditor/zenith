@@ -2,7 +2,7 @@
 //!
 //! [`run_variant`] is the single public entry point.  It loads and parses the
 //! input `.zen`, calls [`expand_variants`], renders each generated variant to
-//! PNG or SVG, writes a side-by-side `.zen` for review, and optionally writes a
+//! PNG, SVG, or PDF, writes a side-by-side `.zen` for review, and optionally writes a
 //! deterministic generation manifest.
 //!
 //! No clap parsing lives here — argument types are in `cli.rs`.  No FS I/O
@@ -60,7 +60,10 @@ pub struct VariantOutputs {
     pub zen: String,
     /// The rendered `.png` written to disk (relative filename within `out_dir`).
     pub png: String,
+    /// The `.svg` written to disk (relative filename within `out_dir`).
     pub svg: Option<String>,
+    /// The one-page `.pdf` written to disk (relative filename within `out_dir`).
+    pub pdf: Option<String>,
 }
 
 /// Result record for one variant (generated or failed).
@@ -107,7 +110,7 @@ impl VariantReport {
 ///
 /// - `doc_src`     — UTF-8 source of the input `.zen` document.
 /// - `project_dir` — directory of the `.zen` file (for asset/font resolution).
-/// - `out_dir`     — directory to write `<stem>-<id>.zen` and `<stem>-<id>.png`.
+/// - `out_dir`     — directory to write `<stem>-<id>.zen` and `<stem>-<id>.<ext>`.
 /// - `stem`        — output file stem (typically the `.zen` filename without extension).
 ///
 /// # Errors
@@ -337,7 +340,7 @@ pub fn run_variant_with_output_constraints(
                         source: result.source,
                         outputs: None,
                         failure: Some(format!("compile error(s): {}", hard_diags.join("; "))),
-                        diagnostics: if format == BatchFormat::Svg {
+                        diagnostics: if format.is_vector() {
                             compile_result.diagnostics
                         } else {
                             Vec::new()
@@ -367,17 +370,13 @@ pub fn run_variant_with_output_constraints(
                                     .collect::<Vec<_>>()
                                     .join("; "),
                             ),
-                            diagnostics: if format == BatchFormat::Svg {
-                                e
-                            } else {
-                                Vec::new()
-                            },
+                            diagnostics: if format.is_vector() { e } else { Vec::new() },
                         });
                         continue;
                     }
                 };
 
-                if format == BatchFormat::Svg {
+                if format.is_vector() {
                     diagnostics.extend(compile_result.diagnostics);
                 }
 
@@ -402,6 +401,7 @@ pub fn run_variant_with_output_constraints(
                             zen: zen_name,
                             png: String::new(),
                             svg: None,
+                            pdf: None,
                         }),
                         failure: Some(format!("write error '{}': {}", image_path.display(), e)),
                         diagnostics,
@@ -409,9 +409,10 @@ pub fn run_variant_with_output_constraints(
                     continue;
                 }
 
-                let (png, svg) = match format {
-                    BatchFormat::Png => (image_name, None),
-                    BatchFormat::Svg => (String::new(), Some(image_name)),
+                let (png, svg, pdf) = match format {
+                    BatchFormat::Png => (image_name, None, None),
+                    BatchFormat::Svg => (String::new(), Some(image_name), None),
+                    BatchFormat::Pdf => (String::new(), None, Some(image_name)),
                 };
                 records.push(VariantResultRecord {
                     id: result.id,
@@ -420,6 +421,7 @@ pub fn run_variant_with_output_constraints(
                         zen: zen_name,
                         png,
                         svg,
+                        pdf,
                     }),
                     failure: None,
                     diagnostics,
@@ -459,6 +461,7 @@ pub fn build_manifest(doc_src: &str, report: &VariantReport) -> VariantManifest 
                 outputs_zen: outputs.zen.clone(),
                 outputs_png: outputs.png.clone(),
                 outputs_svg: outputs.svg.clone(),
+                outputs_pdf: outputs.pdf.clone(),
                 status: r.failure.as_ref().map(|_| "failed"),
             })
         })
@@ -498,6 +501,7 @@ pub fn to_json_output(report: &VariantReport) -> VariantOutput {
                     .filter(|o| !o.png.is_empty())
                     .map(|o| o.png.clone()),
                 outputs_svg: r.outputs.as_ref().and_then(|o| o.svg.clone()),
+                outputs_pdf: r.outputs.as_ref().and_then(|o| o.pdf.clone()),
                 diagnostics: {
                     let mut diagnostics = DiagnosticJson::located_all(&r.diagnostics, "");
                     for diagnostic in &mut diagnostics {
