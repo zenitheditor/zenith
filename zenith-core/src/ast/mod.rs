@@ -64,5 +64,7 @@ pub use token::{
     TokenType, TokenValue,
 };
 pub use unsupported::{ChildSite, UnsupportedChild};
-pub use value::{Dimension, PropertyValue, Unit, dim_to_px, format_number};
+pub use value::{
+    Dimension, PT_PER_INCH, PX_PER_INCH, PX_TO_PT, PropertyValue, Unit, dim_to_px, format_number,
+};
 pub use variant::{VariantDef, VariantOverride};

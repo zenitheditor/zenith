@@ -10,6 +10,9 @@ use super::{
     font::{build_plan, collect_usage},
 };
 
+/// The page transform every 100 x 80 px stream opens with: px-to-pt scale, then the y flip.
+const PAGE_SPACE: &str = "0.75 0 0 0.75 0 0 cm\n1 0 0 -1 0 80 cm\n";
+
 fn stream(commands: Vec<SceneCommand>) -> String {
     let fonts = default_provider();
     let assets = BytesAssetProvider::new();
@@ -131,7 +134,7 @@ fn dash_state_does_not_leak_into_following_solid_stroke() {
     assert_eq!(output.matches("q\n").count(), 8);
     assert_eq!(output.lines().filter(|line| *line == "Q").count(), 8);
     let solid = stream(strokes(None, None));
-    assert!(output.ends_with(solid.strip_prefix("1 0 0 -1 0 80 cm\n").unwrap()));
+    assert!(output.ends_with(solid.strip_prefix(PAGE_SPACE).unwrap()));
 }
 
 fn glyph(
@@ -249,7 +252,7 @@ fn solid_stroke_retains_historical_content() {
     let output = stream(vec![strokes(None, None).remove(0)]);
     assert_eq!(
         output,
-        "1 0 0 -1 0 80 cm\nq\n0 0 0 RG\n2 w\n10 10 40 30 re\nS\nQ"
+        format!("{PAGE_SPACE}q\n0 0 0 RG\n2 w\n10 10 40 30 re\nS\nQ")
     );
 }
 
@@ -297,7 +300,7 @@ fn dashed_shape_scope_preserves_following_polyline_and_path_strokes() {
     let mut commands = strokes(Some(7.0), Some(3.0));
     commands.extend(solid);
     let output = stream(commands);
-    assert!(output.ends_with(baseline.strip_prefix("1 0 0 -1 0 80 cm\n").unwrap()));
+    assert!(output.ends_with(baseline.strip_prefix(PAGE_SPACE).unwrap()));
 }
 
 #[test]

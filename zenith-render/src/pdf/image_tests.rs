@@ -188,8 +188,8 @@ fn absent_source_crop_retains_pdf_and_raster_bytes() {
             (hash ^ u64::from(*byte)).wrapping_mul(0x100000001b3)
         })
     };
-    assert_eq!(pdf.len(), 1113);
-    assert_eq!(fingerprint(&pdf), 0xc65e08e7b274929b);
+    assert_eq!(pdf.len(), 1130);
+    assert_eq!(fingerprint(&pdf), 0xc0de851fe7e52401);
     assert_eq!(fingerprint(&raster.rgba), 0x33037804bbbf17ee);
 }
 

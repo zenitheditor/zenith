@@ -3,7 +3,7 @@
 
 use pdf_writer::types::{ActionType, AnnotationType, FunctionShadingType};
 use pdf_writer::{Filter, Finish, Pdf, Rect as PdfRect, Ref, Str};
-use zenith_core::{AssetProvider, FontProvider};
+use zenith_core::{AssetProvider, FontProvider, PX_TO_PT};
 use zenith_scene::Scene;
 
 use super::content::{
@@ -292,21 +292,34 @@ fn write_prepared_page(pdf: &mut Pdf, page_tree_id: Ref, prepared: PreparedPage<
     write_images(pdf, &res, &image_refs);
 }
 
+/// Convert a scene px value to PDF points.
+///
+/// Page boxes and annotation rectangles sit outside the content stream.
+/// The content stream `cm` does not reach them, so they scale here.
+fn pt(px: f64) -> f32 {
+    (px * PX_TO_PT) as f32
+}
+
+/// Convert a scene rect (top-left origin, y-down, px) to a PDF rect (bottom-left origin, y-up, pt).
+fn scene_rect_pt(page_height: f64, x0: f64, y0: f64, x1: f64, y1: f64) -> PdfRect {
+    PdfRect::new(pt(x0), pt(page_height - y1), pt(x1), pt(page_height - y0))
+}
+
 /// Write one `/Link` annotation per collected [`LinkAnnot`], converting the
-/// scene-space rect (top-left origin, y-down) to PDF user space (bottom-left,
-/// y-up) and attaching a URI action. Borders are suppressed so the link is
+/// scene-space rect (top-left origin, y-down, px) to PDF default user space
+/// (bottom-left, y-up, pt) and attaching a URI action. Borders are suppressed so the link is
 /// invisible (only the hit region is active), matching common web→PDF output.
 fn write_link_annotations(pdf: &mut Pdf, scene: &Scene, links: &[LinkAnnot], annot_ids: &[Ref]) {
-    let h = scene.height as f32;
     for (link, id) in links.iter().zip(annot_ids) {
-        let x0 = link.x0 as f32;
-        let x1 = link.x1 as f32;
-        // Scene y grows downward; flip both edges. y0 (top) → larger PDF y.
-        let y_top = h - link.y0 as f32;
-        let y_bottom = h - link.y1 as f32;
         let mut annot = pdf.annotation(*id);
         annot.subtype(AnnotationType::Link);
-        annot.rect(PdfRect::new(x0, y_bottom, x1, y_top));
+        annot.rect(scene_rect_pt(
+            scene.height,
+            link.x0,
+            link.y0,
+            link.x1,
+            link.y1,
+        ));
         // No visible border.
         annot.border(0.0, 0.0, 0.0, None);
         annot
@@ -363,26 +376,21 @@ fn write_page(pdf: &mut Pdf, ctx: PageWrite<'_>) {
         gradient_refs,
         image_refs,
     } = ctx;
-    let w = scene.width as f32;
-    let h = scene.height as f32;
-    let media = PdfRect::new(0.0, 0.0, w, h);
+    // Page boxes are in points. The scene is in px, so each value scales by `PX_TO_PT`.
+    let media = PdfRect::new(0.0, 0.0, pt(scene.width), pt(scene.height));
 
     let mut page = pdf.page(page_id);
     page.parent(page_tree_id);
     page.media_box(media);
 
     // Print boxes. When a trim box is present (bleed active), the trim rect is
-    // converted from scene (top-left, y-down) coords to PDF (bottom-left, y-up):
-    // a scene rect [tx, ty, tw, th] becomes PDF [tx, H-(ty+th), tx+tw, H-ty].
+    // converted from scene (top-left, y-down, px) coords to PDF (bottom-left, y-up, pt):
+    // a scene rect [tx, ty, tw, th] becomes PDF [tx, H-(ty+th), tx+tw, H-ty] times `PX_TO_PT`.
     // BleedBox / CropBox = MediaBox (the canvas already includes the bleed).
     // With no trim, all four boxes equal the MediaBox.
     match scene.trim {
         Some(t) => {
-            let x0 = t.x as f32;
-            let x1 = (t.x + t.w) as f32;
-            let y0 = (scene.height - (t.y + t.h)) as f32;
-            let y1 = (scene.height - t.y) as f32;
-            page.trim_box(PdfRect::new(x0, y0, x1, y1));
+            page.trim_box(scene_rect_pt(scene.height, t.x, t.y, t.x + t.w, t.y + t.h));
             page.bleed_box(media);
             page.crop_box(media);
         }

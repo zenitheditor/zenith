@@ -1,7 +1,7 @@
 //! Scene-walk driver ([`translate`]) and per-command emitter ([`emit_command`]).
 
 use pdf_writer::Content;
-use zenith_core::{AssetProvider, FontProvider};
+use zenith_core::{AssetProvider, FontProvider, PX_TO_PT};
 use zenith_geometry::math;
 use zenith_scene::{
     FillRule, Scene, SceneCommand, StrokeAlign,
@@ -18,6 +18,18 @@ use crate::pdf::content::resources::PageResources;
 use crate::pdf::font::FontPlan;
 use crate::pdf::geometry::{ellipse_path, poly_bbox, poly_path, rounded_rect_path, scene_path};
 
+/// Open the page content stream with the scene-to-PDF transform.
+///
+/// The first `cm` scales px to points by [`PX_TO_PT`].
+/// The second `cm` flips the y axis about the page height in px.
+/// Every later operator keeps scene px coordinates.
+/// The stream pushes no `q` here, so it stays balanced.
+pub(in crate::pdf) fn page_space(content: &mut Content, height: f64) {
+    let s = PX_TO_PT as f32;
+    content.transform([s, 0.0, 0.0, s, 0.0, 0.0]);
+    content.transform([1.0, 0.0, 0.0, -1.0, 0.0, height as f32]);
+}
+
 /// Translate `scene` into a single content stream plus the [`PageResources`] it
 /// references. `fonts` resolves glyph outlines; `assets` resolves image bytes.
 pub(in crate::pdf) fn translate(
@@ -29,9 +41,7 @@ pub(in crate::pdf) fn translate(
     let mut content = Content::new();
     let mut res = PageResources::default();
 
-    // Initial CTM: flip the y axis so scene (top-left, y-down) maps to PDF
-    // user space (bottom-left, y-up). 1 scene px == 1 PDF unit.
-    content.transform([1.0, 0.0, 0.0, -1.0, 0.0, scene.height as f32]);
+    page_space(&mut content, scene.height);
 
     let page = (scene.width, scene.height);
 
@@ -76,7 +86,7 @@ pub(in crate::pdf) fn translate_strict(
 ) -> Result<(Content, PageResources), crate::RenderError> {
     let mut content = Content::new();
     let mut res = PageResources::default();
-    content.transform([1.0, 0.0, 0.0, -1.0, 0.0, scene.height as f32]);
+    page_space(&mut content, scene.height);
     let page = (scene.width, scene.height);
     let mut cursor = 0;
     for region in regions {

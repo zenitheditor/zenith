@@ -7,17 +7,19 @@
 //!
 //! # Coordinate system
 //!
-//! The scene is y-DOWN with the origin at the top-left; PDF user space is y-UP
+//! The scene is y-DOWN with the origin at the top-left. PDF user space is y-UP
 //! with the origin at the bottom-left. Every page content stream begins with
-//! the flip CTM `1 0 0 -1 0 H` (H = canvas height), so a scene point `(x, y)`
-//! maps directly to PDF user space with no per-primitive flipping.
+//! the scale CTM `0.75 0 0 0.75 0 0`, then the flip CTM `1 0 0 -1 0 H`
+//! (H = canvas height in px). A scene point `(x, y)` in px then maps to PDF
+//! user space with no per-primitive flipping or scaling.
 //!
 //! # Units
 //!
-//! 1 scene pixel == 1 PDF unit (1/72"). Trim / bleed sizes are already in
-//! pixels, so an A5 trim of 1748 px wide becomes a 1748 pt page. The absolute
-//! point size is large but the *box ratios* (Trim vs Media vs Bleed) are exact,
-//! which is what print pre-flight checks.
+//! One inch is 96 scene px ([`zenith_core::PX_PER_INCH`]) and 72 PDF points.
+//! One px is [`zenith_core::PX_TO_PT`] = 0.75 pt.
+//! An A4 page of 794 x 1123 px is a 595.5 x 842.25 pt PDF page.
+//! MediaBox, TrimBox, BleedBox, CropBox, and link annotation `/Rect` values
+//! are in points. Content stream operators stay in px under the scale CTM.
 //!
 //! # Determinism
 //!
@@ -71,6 +73,8 @@ mod scope_tests;
 mod stroke_tests;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod units_tests;
 
 pub use document::{
     PdfOptions, render_pdf, render_pdf_multi, render_pdf_multi_with, render_pdf_with,

@@ -86,9 +86,23 @@ pub fn format_number(v: f64) -> String {
     format!("{v}")
 }
 
+/// Document pixels per inch.
+///
+/// Zenith fixes one inch at 96 px. `zenith new --format a4` makes a 794 x 1123 px page.
+/// The PDF backend and the print preflight use the same rule.
+pub const PX_PER_INCH: f64 = 96.0;
+
+/// PDF points per inch.
+pub const PT_PER_INCH: f64 = 72.0;
+
+/// Points per document pixel: `72 / 96 = 0.75`.
+///
+/// The PDF backend writes page boxes and annotation rectangles in points with this factor.
+pub const PX_TO_PT: f64 = PT_PER_INCH / PX_PER_INCH;
+
 /// Convert a dimension value + unit to pixels.
 ///
-/// Returns `Some(px)` for `Px` (identity) and `Pt` (×96/72).
+/// Returns `Some(px)` for `Px` (identity) and `Pt` (×[`PX_PER_INCH`]/[`PT_PER_INCH`]).
 /// Returns `None` for `Pct`, `Deg`, and `Unknown` — the caller decides
 /// whether to resolve against an axis basis or emit an advisory.
 ///
@@ -97,7 +111,7 @@ pub fn format_number(v: f64) -> String {
 pub fn dim_to_px(value: f64, unit: &Unit) -> Option<f64> {
     match unit {
         Unit::Px => Some(value),
-        Unit::Pt => Some(value * 96.0 / 72.0),
+        Unit::Pt => Some(value * PX_PER_INCH / PT_PER_INCH),
         Unit::Pct | Unit::Deg | Unit::Unknown(_) => None,
     }
 }

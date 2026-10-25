@@ -15,6 +15,10 @@ it.
 
 ## [Unreleased]
 
+### Breaking
+
+- **PDF page boxes and link annotation rectangles are in points.** One document px is 0.75 pt, the 96 px per inch rule of `(pt)` dimensions and `zenith new --format`. An A4 design of 794 x 1123 px is now a 595.5 x 842.25 pt PDF page, which is 210 x 297 mm. Before, the PDF used 1 px = 1 pt, so the same design printed at 133% (280 x 396 mm). MediaBox, TrimBox, BleedBox, CropBox, and each link `/Rect` change. The content stream opens with one `0.75 0 0 0.75 0 0 cm`, so drawing operands stay in px. Every PDF byte hash changes. PNG and SVG output is unchanged.
+
 ### Added
 
 - **Bundled fallback fonts for Arabic, Hebrew, Chinese, Japanese, Korean, and emoji.** The new `zenith-fonts-fallback` crate embeds Noto Sans Arabic, Noto Sans Hebrew, a Noto Sans CJK SC subset, and monochrome Noto Emoji, and the CLI tries them in that order for a glyph the requested face lacks. A document with no missing glyph renders the same bytes as before. The browser module does not embed them. It fetches each one on demand instead (see below).

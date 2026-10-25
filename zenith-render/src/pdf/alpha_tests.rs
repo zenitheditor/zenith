@@ -158,11 +158,11 @@ fn sorted_discovery_retains_resource_names_and_pdf_bytes() {
     let commands: Vec<_> = [64, 128, 192, 64].into_iter().map(shape).collect();
     let bytes = render(commands.clone());
     check_alpha_references(&bytes, &[(0, 64), (1, 128), (2, 192), (0, 64)]);
-    // FNV-1a fingerprint of the complete PDF before discovery-order interning.
+    // FNV-1a fingerprint of the complete PDF with sorted resource names and page boxes in points.
     let fingerprint = bytes.iter().fold(0xcbf29ce484222325u64, |hash, byte| {
         (hash ^ u64::from(*byte)).wrapping_mul(0x100000001b3)
     });
-    assert_eq!(bytes.len(), 1182);
-    assert_eq!(fingerprint, 0xa3c6c27a46316ea2);
+    assert_eq!(bytes.len(), 1199);
+    assert_eq!(fingerprint, 0x0018a44bf6889f60);
     assert_eq!(bytes, render(commands));
 }

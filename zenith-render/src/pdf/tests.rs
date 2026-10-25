@@ -213,10 +213,10 @@ fn bleed_scene_has_distinct_trim_box() {
     assert!(text.contains("/TrimBox"), "page must carry a /TrimBox");
     assert!(text.contains("/BleedBox"), "page must carry a /BleedBox");
     assert!(text.contains("/CropBox"), "page must carry a /CropBox");
-    // The trim box, converted to PDF coords, is [5 5 105 85] — not the media
-    // box [0 0 110 90].
+    // The trim box, converted to PDF points, is [3.75 3.75 78.75 63.75], not
+    // the media box [0 0 82.5 67.5].
     assert!(
-        text.contains("/TrimBox [5 5 105 85]"),
+        text.contains("/TrimBox [3.75 3.75 78.75 63.75]"),
         "TrimBox must differ from MediaBox; got document:\n{}",
         &text[..text.len().min(1200)]
     );
@@ -234,10 +234,10 @@ fn non_bleed_scene_has_equal_boxes() {
     });
     let bytes = render(&scene);
     let text = String::from_utf8_lossy(&bytes);
-    assert!(text.contains("/MediaBox [0 0 64 48]"));
-    assert!(text.contains("/TrimBox [0 0 64 48]"));
-    assert!(text.contains("/BleedBox [0 0 64 48]"));
-    assert!(text.contains("/CropBox [0 0 64 48]"));
+    assert!(text.contains("/MediaBox [0 0 48 36]"));
+    assert!(text.contains("/TrimBox [0 0 48 36]"));
+    assert!(text.contains("/BleedBox [0 0 48 36]"));
+    assert!(text.contains("/CropBox [0 0 48 36]"));
 }
 
 #[test]
@@ -529,14 +529,8 @@ fn multi_page_pdf_has_one_page_object_per_scene() {
     let mediaboxes = text.matches("/MediaBox").count();
     assert_eq!(mediaboxes, 2, "each page must carry its own MediaBox");
     // Distinct page sizes confirm both scenes were written, not one twice.
-    assert!(
-        text.contains("/MediaBox [0 0 100 80]"),
-        "page 1 box missing"
-    );
-    assert!(
-        text.contains("/MediaBox [0 0 120 60]"),
-        "page 2 box missing"
-    );
+    assert!(text.contains("/MediaBox [0 0 75 60]"), "page 1 box missing");
+    assert!(text.contains("/MediaBox [0 0 90 45]"), "page 2 box missing");
 }
 
 #[test]

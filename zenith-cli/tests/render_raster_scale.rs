@@ -383,7 +383,8 @@ fn pdf_scale_doubles_capture_pixels_and_preserves_page_size() {
             .collect::<Vec<_>>()
     );
     for bytes in [&first, &second] {
-        assert!(String::from_utf8_lossy(bytes).contains("/MediaBox [0 0 100 80]"));
+        // 100 x 80 px at 0.75 pt per px.
+        assert!(String::from_utf8_lossy(bytes).contains("/MediaBox [0 0 75 60]"));
     }
     assert!(
         default["rasterized_regions"][0]

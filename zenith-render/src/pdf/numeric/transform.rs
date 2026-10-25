@@ -11,9 +11,18 @@ pub(super) struct TransformStack {
     raster: bool,
 }
 impl TransformStack {
+    /// Start from the page transform that `page_space` writes: px-to-pt scale, then the y flip.
     pub fn new(height: f64) -> Self {
+        let scale = zenith_core::PX_TO_PT as f32;
         Self {
-            current: Transform::from_row(1.0, 0.0, 0.0, -1.0, 0.0, height as f32),
+            current: Transform::from_scale(scale, scale).pre_concat(Transform::from_row(
+                1.0,
+                0.0,
+                0.0,
+                -1.0,
+                0.0,
+                height as f32,
+            )),
             previous: Vec::new(),
             raster: false,
         }
