@@ -168,10 +168,7 @@ struct SheetSpec {
 /// Returns `render.impose_empty` if `scenes` is empty,
 /// `render.impose_size_mismatch` if pages have differing dimensions, or
 /// `render.impose_invalid` if `creep_mm` or `signature` is invalid.
-pub(super) fn impose_scenes(
-    scenes: &[Scene],
-    opts: ImposeOptions,
-) -> Result<Vec<Scene>, PipelineError> {
+pub fn impose_scenes(scenes: &[Scene], opts: ImposeOptions) -> Result<Vec<Scene>, PipelineError> {
     let Some(first) = scenes.first() else {
         return Err(PipelineError::new(
             "render.impose_empty",

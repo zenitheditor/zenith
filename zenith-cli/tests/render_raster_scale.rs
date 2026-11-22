@@ -277,6 +277,7 @@ fn batch_svg_uses_raster_scale_and_format_wrappers_keep_default_bytes() {
         format: BatchFormat::Svg,
         raster_scale: 1.0,
         cmyk: None,
+        impose: None,
     };
     zenith_cli::commands::merge::run_with_options(
         DOC,

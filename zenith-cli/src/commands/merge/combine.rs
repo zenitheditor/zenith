@@ -95,9 +95,24 @@ impl Combiner {
             ));
             return result;
         }
-        let pages: Vec<usize> = (1..=self.scenes.len()).collect();
-        let bytes = match encode_batch_pdf(options, &self.scenes, &pages, fonts, &self.assets, None)
-        {
+        let scenes = match options.impose {
+            Some(impose_opts) => {
+                match zenith_pipeline::render::impose_scenes(&self.scenes, impose_opts) {
+                    Ok(sheets) => sheets,
+                    Err(err) => {
+                        result.failure = Some(format!(
+                            "combined PDF '{}' not written: {}",
+                            result.path.display(),
+                            err.message
+                        ));
+                        return result;
+                    }
+                }
+            }
+            None => self.scenes,
+        };
+        let pages: Vec<usize> = (1..=scenes.len()).collect();
+        let bytes = match encode_batch_pdf(options, &scenes, &pages, fonts, &self.assets, None) {
             Ok((bytes, _advisories)) => bytes,
             Err(diagnostics) => {
                 let messages: Vec<&str> = diagnostics.iter().map(|d| d.message.as_str()).collect();
@@ -113,7 +128,7 @@ impl Combiner {
             result.failure = Some(crate::output_file::write_failure(&result.path, &error));
             return result;
         }
-        result.pages = self.scenes.len();
+        result.pages = scenes.len();
         result
     }
 }

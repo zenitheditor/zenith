@@ -13,7 +13,7 @@ use super::output::{create_dir_error, write_error};
 
 pub(super) fn dispatch_merge(args: MergeArgs) -> ExitCode {
     let json = args.json;
-    let options = match batch_options(args.format, args.raster_scale.as_deref()) {
+    let options = match merge_batch_options(&args) {
         Ok(options) => options,
         Err(error) => return error.emit(json),
     };
@@ -269,6 +269,40 @@ fn write_manifest(
         .map_err(|e| write_error(path, &e))
 }
 
+fn merge_batch_options(args: &MergeArgs) -> Result<commands::render::BatchExportOptions, CliError> {
+    use crate::cli::PdfColorspaceArg;
+    use commands::render::BatchFormat;
+
+    if (args.colorspace.is_some() || args.print) && args.format != BatchFormat::Pdf {
+        return Err(CliError::usage(
+            "error: --colorspace and --print require --format pdf",
+        ));
+    }
+    if args.print && args.colorspace == Some(PdfColorspaceArg::Srgb) {
+        return Err(CliError::usage(
+            "error: --print cannot be combined with --colorspace srgb",
+        ));
+    }
+    let impose = args.impose.to_impose_options().map_err(CliError::usage)?;
+    if impose.is_some() && args.combine.is_none() {
+        return Err(CliError::usage(
+            "error: --impose on merge requires --combine <FILE>",
+        ));
+    }
+    let mut opts = batch_options(args.format, args.raster_scale.as_deref())?;
+    if args.print && args.raster_scale.is_none() {
+        opts.raster_scale = 300.0 / 96.0;
+    }
+    opts.cmyk = match args.colorspace {
+        Some(PdfColorspaceArg::Cmyk) => Some(true),
+        Some(PdfColorspaceArg::Srgb) => Some(false),
+        None if args.print => Some(true),
+        None => None,
+    };
+    opts.impose = impose;
+    Ok(opts)
+}
+
 fn batch_options(
     format: commands::render::BatchFormat,
     raw: Option<&str>,
@@ -287,5 +321,6 @@ fn batch_options(
         format,
         raster_scale,
         cmyk: None,
+        impose: None,
     })
 }

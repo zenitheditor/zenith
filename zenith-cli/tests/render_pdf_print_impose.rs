@@ -421,3 +421,87 @@ fn pdf_impose_grid_and_cut_and_stack() {
     );
     assert!(!bad_grid.status.success(), "--grid with booklet must fail");
 }
+
+#[test]
+fn merge_combine_cut_and_stack_impose_and_print_preset() {
+    let dir = tempfile::tempdir().unwrap();
+    let home = tempfile::tempdir().unwrap();
+
+    let doc = r##"zenith version=1 {
+  project id="proj.tickets" name="Tickets"
+  tokens format="zenith-token-v1" {
+    token id="color.bg" type="color" value="#ffffff"
+    token id="color.ink" type="color" value="#1e3a5f"
+    token id="font.body" type="fontFamily" value="Noto Sans"
+    token id="size.body" type="dimension" value=(px)14
+  }
+  styles {}
+  document id="doc.tickets" title="Tickets" {
+    page id="page.1" w=(px)100 h=(px)60 {
+      rect id="bg" x=(px)0 y=(px)0 w=(px)100 h=(px)60 fill=(token)"color.bg"
+      text id="label" role="data.code" x=(px)8 y=(px)16 w=(px)84 h=(px)28 fill=(token)"color.ink" font-family=(token)"font.body" font-size=(token)"size.body" { span "T-000" }
+    }
+  }
+}
+"##;
+    fs::write(dir.path().join("ticket.zen"), doc).unwrap();
+    fs::write(
+        dir.path().join("rows.csv"),
+        "code\nT-001\nT-002\nT-003\nT-004\nT-005\n",
+    )
+    .unwrap();
+
+    // 5 rows on a 2x2 cut-and-stack sheet with --print --marks -> 2 CMYK press sheets.
+    // Trim = 200x120 px + 24px slug each side = 248x168 px = 186x126 pt.
+    let out = run_cli(
+        &dir,
+        &home,
+        &[
+            "merge",
+            "ticket.zen",
+            "rows.csv",
+            "--out-dir",
+            "out",
+            "--format",
+            "pdf",
+            "--combine",
+            "press-sheets.pdf",
+            "--print",
+            "--impose",
+            "cut-and-stack",
+            "--grid",
+            "2x2",
+            "--marks",
+        ],
+    );
+    assert!(
+        out.status.success(),
+        "merge --combine --impose failed: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let pdf = fs::read(dir.path().join("press-sheets.pdf")).unwrap();
+    assert_eq!(count_matches(&pdf, b"/MediaBox [0 0 186 126]"), 2);
+    assert!(count_matches(&pdf, b"/GTS_PDFX") > 0 && count_matches(&pdf, b"FOGRA39") > 0);
+    assert_eq!(count_matches(&pdf, b" rg\n"), 0);
+
+    // Guard: --impose on merge without --combine must fail.
+    let bad = run_cli(
+        &dir,
+        &home,
+        &[
+            "merge",
+            "ticket.zen",
+            "rows.csv",
+            "--out-dir",
+            "out2",
+            "--format",
+            "pdf",
+            "--impose",
+            "cut-and-stack",
+        ],
+    );
+    assert!(
+        !bad.status.success(),
+        "merge --impose without --combine must fail"
+    );
+}

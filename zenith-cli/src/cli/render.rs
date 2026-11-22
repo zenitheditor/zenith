@@ -44,6 +44,128 @@ pub enum DuplexArg {
     LongEdge,
 }
 
+/// Shared press-sheet imposition CLI flags used by both `zenith render` and
+/// `zenith merge --combine`.
+#[derive(Debug, Args)]
+pub struct ImposeCliArgs {
+    /// Arrange reading-order pages onto press sheets for PDF output:
+    /// `booklet` (`bifold`), `trifold`, `zfold`, `spread` (`2up`), `grid` (`nup`),
+    /// or `cut-and-stack` (`stack`).
+    #[arg(long, value_enum, value_name = "MODE")]
+    pub impose: Option<ImposeArg>,
+
+    /// Grid dimensions `<cols>x<rows>` (e.g. `2x4`, default `2x2`) for `--impose grid`
+    /// or `--impose cut-and-stack`.
+    #[arg(long, value_name = "CxR")]
+    pub grid: Option<String>,
+
+    /// Duplex flip orientation for imposed back sheets: `short-edge` (default) or `long-edge` (180° back rotation).
+    /// Requires `--impose`.
+    #[arg(long, value_enum, value_name = "EDGE")]
+    pub duplex: Option<DuplexArg>,
+
+    /// Total saddle-stitch creep compensation in millimeters (distributed from 0 on outer sheet to MM on centerfold).
+    /// Requires `--impose booklet`.
+    #[arg(long, value_name = "MM")]
+    pub creep: Option<f64>,
+
+    /// Group pages into multi-signature folded sections of N pages (positive multiple of 4, e.g. 16).
+    /// Requires `--impose booklet`.
+    #[arg(long, value_name = "N")]
+    pub signature: Option<usize>,
+
+    /// Draw sheet-level K-only corner crop marks and fold/cut tick marks in the outer margin.
+    /// Requires `--impose`.
+    #[arg(long)]
+    pub marks: bool,
+}
+
+impl ImposeCliArgs {
+    /// Whether any imposition-related flag was supplied.
+    pub(crate) fn has_any(&self) -> bool {
+        self.impose.is_some()
+            || self.grid.is_some()
+            || self.duplex.is_some()
+            || self.creep.is_some()
+            || self.signature.is_some()
+            || self.marks
+    }
+
+    /// Validate and convert these CLI flags into [`zenith_pipeline::render::ImposeOptions`].
+    pub(crate) fn to_impose_options(
+        &self,
+    ) -> Result<Option<zenith_pipeline::render::ImposeOptions>, String> {
+        use zenith_pipeline::render::{
+            DEFAULT_GRID, DuplexMode, ImposeMode, ImposeOptions, parse_grid_spec,
+        };
+        let Some(mode_arg) = self.impose else {
+            if self.has_any() {
+                return Err(
+                    "error: --duplex, --creep, --signature, --grid, and --marks require --impose <MODE>"
+                        .to_owned(),
+                );
+            }
+            return Ok(None);
+        };
+        let parse_grid = || match self.grid.as_deref() {
+            Some(raw) => parse_grid_spec(raw).map_err(|msg| format!("error: {msg}")),
+            None => Ok(DEFAULT_GRID),
+        };
+        let mode = match mode_arg {
+            ImposeArg::Booklet => ImposeMode::Booklet,
+            ImposeArg::Trifold => ImposeMode::Trifold,
+            ImposeArg::Zfold => ImposeMode::Zfold,
+            ImposeArg::Spread => ImposeMode::Spread,
+            ImposeArg::Grid => {
+                let (cols, rows) = parse_grid()?;
+                ImposeMode::Grid { cols, rows }
+            }
+            ImposeArg::CutAndStack => {
+                let (cols, rows) = parse_grid()?;
+                ImposeMode::CutAndStack { cols, rows }
+            }
+        };
+        if self.grid.is_some()
+            && !matches!(
+                mode,
+                ImposeMode::Grid { .. } | ImposeMode::CutAndStack { .. }
+            )
+        {
+            return Err(
+                "error: --grid requires --impose grid or --impose cut-and-stack".to_owned(),
+            );
+        }
+        let creep_mm = self.creep.unwrap_or(0.0);
+        if !creep_mm.is_finite() || creep_mm < 0.0 {
+            return Err("error: --creep must be a finite number >= 0".to_owned());
+        }
+        if creep_mm > 0.0 && mode != ImposeMode::Booklet {
+            return Err("error: --creep requires --impose booklet".to_owned());
+        }
+        if let Some(sig) = self.signature {
+            if mode != ImposeMode::Booklet {
+                return Err("error: --signature requires --impose booklet".to_owned());
+            }
+            if sig == 0 || sig % 4 != 0 {
+                return Err(
+                    "error: --signature must be a positive multiple of 4 (e.g. 8, 16)".to_owned(),
+                );
+            }
+        }
+        let duplex = match self.duplex {
+            Some(DuplexArg::LongEdge) => DuplexMode::LongEdge,
+            Some(DuplexArg::ShortEdge) | None => DuplexMode::ShortEdge,
+        };
+        Ok(Some(ImposeOptions {
+            mode,
+            duplex,
+            creep_mm,
+            signature: self.signature,
+            marks: self.marks,
+        }))
+    }
+}
+
 /// Arguments for `zenith render`.
 #[derive(Debug, Args)]
 #[command(
@@ -99,36 +221,9 @@ pub struct RenderArgs {
     #[arg(long, value_name = "PATH")]
     pub icc_profile: Option<PathBuf>,
 
-    /// Arrange reading-order pages onto press sheets for `--pdf` output:
-    /// `booklet` (`bifold`), `trifold`, `zfold`, `spread` (`2up`), `grid` (`nup`),
-    /// or `cut-and-stack` (`stack`). Requires `--pdf <OUT>` and cannot be combined with `--page`.
-    #[arg(long, value_enum, value_name = "MODE")]
-    pub impose: Option<ImposeArg>,
-
-    /// Grid dimensions `<cols>x<rows>` (e.g. `2x4`, default `2x2`) for `--impose grid`
-    /// or `--impose cut-and-stack`.
-    #[arg(long, value_name = "CxR")]
-    pub grid: Option<String>,
-
-    /// Duplex flip orientation for imposed back sheets: `short-edge` (default) or `long-edge` (180° back rotation).
-    /// Requires `--impose`.
-    #[arg(long, value_enum, value_name = "EDGE")]
-    pub duplex: Option<DuplexArg>,
-
-    /// Total saddle-stitch creep compensation in millimeters (distributed from 0 on outer sheet to MM on centerfold).
-    /// Requires `--impose booklet`.
-    #[arg(long, value_name = "MM")]
-    pub creep: Option<f64>,
-
-    /// Group pages into multi-signature folded sections of N pages (positive multiple of 4, e.g. 16).
-    /// Requires `--impose booklet`.
-    #[arg(long, value_name = "N")]
-    pub signature: Option<usize>,
-
-    /// Draw sheet-level K-only corner crop marks and dashed fold-crease ticks in the outer margin.
-    /// Requires `--impose`.
-    #[arg(long)]
-    pub marks: bool,
+    /// Press-sheet imposition options for multi-page `--pdf` output (cannot be combined with `--page`).
+    #[command(flatten)]
+    pub impose: ImposeCliArgs,
 
     /// Embed whole font programs in the PDF instead of subsetting to used glyphs.
     ///

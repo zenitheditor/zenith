@@ -68,6 +68,8 @@ pub struct BatchExportOptions {
     pub raster_scale: f64,
     /// Explicit PDF DeviceCMYK override (`None` follows the document's `colorspace`).
     pub cmyk: Option<bool>,
+    /// Optional press-sheet imposition applied to `merge --combine` PDFs.
+    pub impose: Option<zenith_pipeline::render::ImposeOptions>,
 }
 
 impl Default for BatchExportOptions {
@@ -82,6 +84,7 @@ impl From<BatchFormat> for BatchExportOptions {
             format,
             raster_scale: 1.0,
             cmyk: None,
+            impose: None,
         }
     }
 }

@@ -140,6 +140,7 @@ fn svg_native_and_captured_outputs_match_shared_batch_options() {
                     format: BatchFormat::Svg,
                     raster_scale: scale,
                     cmyk: None,
+                    impose: None,
                 },
             )
             .unwrap();

@@ -46,6 +46,16 @@ pub struct MergeArgs {
     /// Also write one PDF of every successful row's pages here. Requires --format pdf.
     #[arg(long, value_name = "FILE")]
     pub combine: Option<PathBuf>,
+    /// Override PDF output color space (`srgb` or `cmyk`). Requires --format pdf.
+    #[arg(long, value_enum, value_name = "SPACE")]
+    pub colorspace: Option<crate::cli::PdfColorspaceArg>,
+    /// Print-ready PDF preset: emits DeviceCMYK and 300 DPI fallback (`--raster-scale 3.125`).
+    /// Requires --format pdf.
+    #[arg(long)]
+    pub print: bool,
+    /// Press-sheet imposition options for `--combine <FILE>` PDF output.
+    #[command(flatten)]
+    pub impose: crate::cli::render::ImposeCliArgs,
 }
 
 /// Arguments for `zenith variant`.

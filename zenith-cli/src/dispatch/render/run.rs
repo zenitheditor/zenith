@@ -9,15 +9,13 @@ use std::process::ExitCode;
 
 use zenith_core::{DataContext, Diagnostic};
 
-use crate::cli::{DuplexArg, ImposeArg, PdfColorspaceArg, RenderArgs};
+use crate::cli::{PdfColorspaceArg, RenderArgs};
 use crate::cli_helpers::{parse_spread_spec, read_file};
 use crate::commands;
 use crate::json_types::RenderImageJson;
 use crate::report::CliError;
 use zenith_pipeline::imports::ImportFiles;
-use zenith_pipeline::{
-    DuplexMode, ImposeMode, ImposeOptions, PipelineError, PolicyFlags, RenderOptions, SpreadOptions,
-};
+use zenith_pipeline::{ImposeOptions, PipelineError, PolicyFlags, RenderOptions, SpreadOptions};
 
 use super::output::gate;
 
@@ -67,87 +65,15 @@ pub(in crate::dispatch) fn dispatch_render(args: RenderArgs) -> ExitCode {
         return CliError::usage("error: --icc-profile cannot be combined with --colorspace srgb")
             .emit(json);
     }
-    if args.impose.is_some() && args.pdf.is_none() {
+    if args.impose.impose.is_some() && args.pdf.is_none() {
         return CliError::usage("error: --impose requires --pdf <OUT>").emit(json);
     }
-    if args.impose.is_some() && args.page.is_some() {
+    if args.impose.impose.is_some() && args.page.is_some() {
         return CliError::usage("error: --impose cannot be combined with --page").emit(json);
     }
-    if args.impose.is_none()
-        && (args.duplex.is_some()
-            || args.creep.is_some()
-            || args.signature.is_some()
-            || args.grid.is_some()
-            || args.marks)
-    {
-        return CliError::usage(
-            "error: --duplex, --creep, --signature, --grid, and --marks require --impose <MODE>",
-        )
-        .emit(json);
-    }
-    let impose = match args.impose {
-        None => None,
-        Some(mode_arg) => {
-            let parse_grid = || match args.grid.as_deref() {
-                Some(raw) => zenith_pipeline::render::parse_grid_spec(raw),
-                None => Ok(zenith_pipeline::render::DEFAULT_GRID),
-            };
-            let mode = match mode_arg {
-                ImposeArg::Booklet => ImposeMode::Booklet,
-                ImposeArg::Trifold => ImposeMode::Trifold,
-                ImposeArg::Zfold => ImposeMode::Zfold,
-                ImposeArg::Spread => ImposeMode::Spread,
-                ImposeArg::Grid => match parse_grid() {
-                    Ok((cols, rows)) => ImposeMode::Grid { cols, rows },
-                    Err(msg) => return CliError::usage(format!("error: {msg}")).emit(json),
-                },
-                ImposeArg::CutAndStack => match parse_grid() {
-                    Ok((cols, rows)) => ImposeMode::CutAndStack { cols, rows },
-                    Err(msg) => return CliError::usage(format!("error: {msg}")).emit(json),
-                },
-            };
-            if args.grid.is_some()
-                && !matches!(
-                    mode,
-                    ImposeMode::Grid { .. } | ImposeMode::CutAndStack { .. }
-                )
-            {
-                return CliError::usage(
-                    "error: --grid requires --impose grid or --impose cut-and-stack",
-                )
-                .emit(json);
-            }
-            let creep_mm = args.creep.unwrap_or(0.0);
-            if !creep_mm.is_finite() || creep_mm < 0.0 {
-                return CliError::usage("error: --creep must be a finite number >= 0").emit(json);
-            }
-            if creep_mm > 0.0 && mode != ImposeMode::Booklet {
-                return CliError::usage("error: --creep requires --impose booklet").emit(json);
-            }
-            if let Some(sig) = args.signature {
-                if mode != ImposeMode::Booklet {
-                    return CliError::usage("error: --signature requires --impose booklet")
-                        .emit(json);
-                }
-                if sig == 0 || sig % 4 != 0 {
-                    return CliError::usage(
-                        "error: --signature must be a positive multiple of 4 (e.g. 8, 16)",
-                    )
-                    .emit(json);
-                }
-            }
-            let duplex = match args.duplex {
-                Some(DuplexArg::LongEdge) => DuplexMode::LongEdge,
-                Some(DuplexArg::ShortEdge) | None => DuplexMode::ShortEdge,
-            };
-            Some(ImposeOptions {
-                mode,
-                duplex,
-                creep_mm,
-                signature: args.signature,
-                marks: args.marks,
-            })
-        }
+    let impose = match args.impose.to_impose_options() {
+        Ok(opts) => opts,
+        Err(msg) => return CliError::usage(msg).emit(json),
     };
     let cmyk = match args.colorspace {
         Some(PdfColorspaceArg::Cmyk) => Some(true),
