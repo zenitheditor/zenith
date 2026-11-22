@@ -149,3 +149,88 @@ fn link_rect_is_the_scaled_flipped_run_box() {
         "the run must show text"
     );
 }
+
+#[test]
+fn link_rect_tracks_push_scale_translate_and_rotation() {
+    let fonts = default_provider();
+    let font_id = fonts.all_faces().first().expect("bundled face").id.clone();
+    let glyph_cmd = |link: &str| SceneCommand::DrawGlyphRun {
+        x: 10.0,
+        y: 40.0,
+        font_id: font_id.clone(),
+        font_size: 32.0,
+        color: Color::srgb(0, 0, 0, 255),
+        stroke_color: None,
+        stroke_width: None,
+        link: Some(link.to_owned()),
+        selectable: true,
+        source_node_id: None,
+        glyphs: vec![SceneGlyph {
+            glyph_id: 36,
+            dx: 0.0,
+            dy: 0.0,
+            text: "A".to_owned(),
+        }],
+    };
+    let assets = BytesAssetProvider::new();
+
+    // Baseline untransformed link box on a 200x60 page.
+    let mut base = Scene::new(200.0, 60.0);
+    base.commands.push(glyph_cmd("https://zenith.example/base"));
+    let base_plan = font::build_plan(
+        &font::collect_usage(std::slice::from_ref(&base)),
+        &fonts,
+        true,
+    );
+    let (_, base_res) = translate(&base, &fonts, &assets, &base_plan);
+    let b = base_res.links.first().expect("baseline link");
+
+    // Imposed spread right-hand panel: PushScaleTranslate(1, 1, 200, 0) on a 400x60 sheet.
+    let mut spread = Scene::new(400.0, 60.0);
+    spread.commands.push(SceneCommand::PushScaleTranslate {
+        sx: 1.0,
+        sy: 1.0,
+        tx: 200.0,
+        ty: 0.0,
+    });
+    spread
+        .commands
+        .push(glyph_cmd("https://zenith.example/right"));
+    spread.commands.push(SceneCommand::PopTransform);
+    let spread_text = String::from_utf8_lossy(&render_pdf(&spread, &fonts, &assets)).into_owned();
+    let want_spread = [
+        (b.x0 + 200.0) * 0.75,
+        (60.0 - b.y1) * 0.75,
+        (b.x1 + 200.0) * 0.75,
+        (60.0 - b.y0) * 0.75,
+    ];
+    assert_close(&array(&spread_text, "Rect"), &want_spread);
+
+    // Duplex long-edge 180 deg rotation around sheet center (200, 30) composed with panel shift.
+    let mut duplex = Scene::new(400.0, 60.0);
+    duplex.commands.push(SceneCommand::PushTransform {
+        angle_deg: 180.0,
+        cx: 200.0,
+        cy: 30.0,
+    });
+    duplex.commands.push(SceneCommand::PushScaleTranslate {
+        sx: 1.0,
+        sy: 1.0,
+        tx: 200.0,
+        ty: 0.0,
+    });
+    duplex
+        .commands
+        .push(glyph_cmd("https://zenith.example/duplex"));
+    duplex.commands.push(SceneCommand::PopTransform);
+    duplex.commands.push(SceneCommand::PopTransform);
+    let duplex_text = String::from_utf8_lossy(&render_pdf(&duplex, &fonts, &assets)).into_owned();
+    // 180 deg around (200, 30) maps (x + 200, y) -> (400 - (x + 200), 60 - y) = (200 - x, 60 - y).
+    let want_duplex = [
+        (200.0 - b.x1) * 0.75,
+        b.y0 * 0.75,
+        (200.0 - b.x0) * 0.75,
+        b.y1 * 0.75,
+    ];
+    assert_close(&array(&duplex_text, "Rect"), &want_duplex);
+}

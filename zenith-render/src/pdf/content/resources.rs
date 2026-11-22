@@ -27,6 +27,10 @@ pub(in crate::pdf) struct PageResources {
     /// in scene coordinates (top-left origin, y-down). Materialized as `/Link`
     /// annotations by the document writer.
     pub(in crate::pdf) links: Vec<LinkAnnot>,
+    /// Active 2D affine transform stack (`[a, b, c, d, e, f]`) matching PDF
+    /// `PushTransform` / `PushScaleTranslate` / `PushTransformMatrix` /
+    /// `PopTransform` scopes. Empty means identity (no active transform).
+    pub(in crate::pdf) ctm_stack: Vec<[f64; 6]>,
 }
 
 /// A clickable link rectangle in scene coordinates (top-left origin, y-down) plus
@@ -53,6 +57,56 @@ impl PageResources {
         let index = self.alphas.len();
         self.alphas.push(a);
         index
+    }
+
+    /// Compose `local` (`[a, b, c, d, e, f]`) onto the active transform stack.
+    pub(in crate::pdf) fn push_ctm(&mut self, local: [f64; 6]) {
+        let next = match self.ctm_stack.last().copied() {
+            Some(o) => [
+                o[0] * local[0] + o[2] * local[1],
+                o[1] * local[0] + o[3] * local[1],
+                o[0] * local[2] + o[2] * local[3],
+                o[1] * local[2] + o[3] * local[3],
+                o[0] * local[4] + o[2] * local[5] + o[4],
+                o[1] * local[4] + o[3] * local[5] + o[5],
+            ],
+            None => local,
+        };
+        self.ctm_stack.push(next);
+    }
+
+    /// Pop the most recently pushed transform scope.
+    pub(in crate::pdf) fn pop_ctm(&mut self) {
+        self.ctm_stack.pop();
+    }
+
+    /// Map a scene-space axis-aligned rectangle through the active transform
+    /// stack, returning its page-space bounding box. When no transform is
+    /// active, returns the input coordinates untouched (bit-identical).
+    pub(in crate::pdf) fn transform_rect(
+        &self,
+        x0: f64,
+        y0: f64,
+        x1: f64,
+        y1: f64,
+    ) -> (f64, f64, f64, f64) {
+        let Some(m) = self.ctm_stack.last().copied() else {
+            return (x0, y0, x1, y1);
+        };
+        let corners = [(x0, y0), (x1, y0), (x1, y1), (x0, y1)];
+        let mut min_x = f64::INFINITY;
+        let mut min_y = f64::INFINITY;
+        let mut max_x = f64::NEG_INFINITY;
+        let mut max_y = f64::NEG_INFINITY;
+        for (px, py) in corners {
+            let tx = m[0] * px + m[2] * py + m[4];
+            let ty = m[1] * px + m[3] * py + m[5];
+            min_x = min_x.min(tx);
+            min_y = min_y.min(ty);
+            max_x = max_x.max(tx);
+            max_y = max_y.max(ty);
+        }
+        (min_x, min_y, max_x, max_y)
     }
 }
 

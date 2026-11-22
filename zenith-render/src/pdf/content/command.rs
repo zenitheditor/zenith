@@ -660,23 +660,42 @@ pub(in crate::pdf) fn emit_command(
         SceneCommand::PushTransform { angle_deg, cx, cy } => {
             content.save_state();
             let theta = (*angle_deg).to_radians();
-            let (s, c) = (math::sin(theta) as f32, math::cos(theta) as f32);
-            let (cx, cy) = (*cx as f32, *cy as f32);
+            let (s64, c64) = (math::sin(theta), math::cos(theta));
+            let (s, c) = (s64 as f32, c64 as f32);
+            let (cx32, cy32) = (*cx as f32, *cy as f32);
             // Translate(cx,cy) · Rotate(θ) · Translate(-cx,-cy), as one matrix.
-            content.transform([c, s, -s, c, cx - c * cx + s * cy, cy - s * cx - c * cy]);
+            content.transform([
+                c,
+                s,
+                -s,
+                c,
+                cx32 - c * cx32 + s * cy32,
+                cy32 - s * cx32 - c * cy32,
+            ]);
+            res.push_ctm([
+                c64,
+                s64,
+                -s64,
+                c64,
+                *cx - c64 * *cx + s64 * *cy,
+                *cy - s64 * *cx - c64 * *cy,
+            ]);
         }
         SceneCommand::PushScaleTranslate { sx, sy, tx, ty } => {
             content.save_state();
             content.transform([*sx as f32, 0.0, 0.0, *sy as f32, *tx as f32, *ty as f32]);
+            res.push_ctm([*sx, 0.0, 0.0, *sy, *tx, *ty]);
         }
         SceneCommand::PushTransformMatrix { a, b, c, d, e, f } => {
             content.save_state();
             content.transform([
                 *a as f32, *b as f32, *c as f32, *d as f32, *e as f32, *f as f32,
             ]);
+            res.push_ctm([*a, *b, *c, *d, *e, *f]);
         }
         SceneCommand::PopTransform => {
             content.restore_state();
+            res.pop_ctm();
         }
 
         // ── Compositing layers ────────────────────────────────────────────

@@ -128,11 +128,17 @@ fn emit_text_run(
             right = right.max(glyph.dx + adv);
         }
         if left.is_finite() && right.is_finite() {
+            let (x0, y0, x1, y1) = res.transform_rect(
+                x + f64::from(left),
+                y - f64::from(ascent),
+                x + f64::from(right),
+                y - f64::from(descent),
+            );
             res.links.push(LinkAnnot {
-                x0: x + f64::from(left),
-                y0: y - f64::from(ascent),
-                x1: x + f64::from(right),
-                y1: y - f64::from(descent),
+                x0,
+                y0,
+                x1,
+                y1,
                 url: url.to_owned(),
             });
         }
