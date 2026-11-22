@@ -71,33 +71,33 @@ impl Tree {
         }
     }
 
-    /// Every id of a page, master, or component and of the nodes inside
-    /// it, owner first, depth first in document order.
+    /// Every id of a page, master, or component and of the nodes (plus page
+    /// safe-zones and folds) inside it, owner first, depth first in document order.
     fn ordered(doc: &Document) -> Vec<String> {
-        let owners: Vec<(&str, &[Node])> = doc
-            .body
-            .pages
-            .iter()
-            .map(|p| (p.id.as_str(), p.children.as_slice()))
-            .chain(
-                doc.masters
-                    .iter()
-                    .map(|m| (m.id.as_str(), m.children.as_slice())),
-            )
-            .chain(
-                doc.components
-                    .iter()
-                    .map(|c| (c.id.as_str(), c.children.as_slice())),
-            )
-            .collect();
         let mut tree = Tree::default();
-        for (owner, children) in &owners {
-            tree.add(owner, children);
+        for page in &doc.body.pages {
+            tree.add(&page.id, &page.children);
+        }
+        for master in &doc.masters {
+            tree.add(&master.id, &master.children);
+        }
+        for comp in &doc.components {
+            tree.add(&comp.id, &comp.children);
         }
         let mut out = Vec::new();
-        for (owner, _) in &owners {
-            out.push((*owner).to_owned());
-            out.extend(tree.descendants(owner).into_iter().map(str::to_owned));
+        for page in &doc.body.pages {
+            out.push(page.id.clone());
+            out.extend(tree.descendants(&page.id).into_iter().map(str::to_owned));
+            out.extend(page.safe_zones.iter().map(|z| z.id.clone()));
+            out.extend(page.folds.iter().map(|f| f.id.clone()));
+        }
+        for master in &doc.masters {
+            out.push(master.id.clone());
+            out.extend(tree.descendants(&master.id).into_iter().map(str::to_owned));
+        }
+        for comp in &doc.components {
+            out.push(comp.id.clone());
+            out.extend(tree.descendants(&comp.id).into_iter().map(str::to_owned));
         }
         out
     }

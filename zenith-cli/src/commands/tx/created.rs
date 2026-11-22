@@ -77,4 +77,39 @@ mod tests {
     fn line_for_no_ids() {
         assert_eq!(created_line(&[]), "created: (none)");
     }
+
+    #[test]
+    fn duplicate_page_reports_safe_zone_and_fold_ids() {
+        let src = r##"zenith version=1 {
+  project id="proj.dup" name="Dup"
+  tokens format="zenith-token-v1" {
+    token id="color.bg" type="color" value="#ffffff"
+  }
+  styles {}
+  document id="doc.dup" title="Dup" {
+    page id="page.1" w=(px)200 h=(px)100 {
+      safe-zone id="zone.safe" type="safe" x=(px)10 y=(px)10 w=(px)180 h=(px)80
+      fold id="fold.center" orientation="vertical" position=(px)100
+      rect id="rect.bg" x=(px)0 y=(px)0 w=(px)200 h=(px)100 fill=(token)"color.bg"
+    }
+  }
+}
+"##;
+        let doc = KdlAdapter.parse(src.as_bytes()).expect("parse doc");
+        let tx = zenith_tx::Transaction::from_json(
+            r#"{"ops":[{"op":"duplicate_page","page":"page.1","new_id":"page.2","id_suffix":".2"}]}"#,
+        )
+        .expect("parse tx");
+        let result = zenith_tx::run_transaction(&doc, &tx).expect("run tx");
+        assert!(
+            result.status == zenith_tx::TxStatus::Accepted,
+            "tx must accept: {:?}",
+            result.diagnostics
+        );
+        let ids = created_ids(&tx.ops, &doc, &result).expect("created ids");
+        assert_eq!(
+            ids,
+            vec!["page.2", "rect.bg.2", "zone.safe.2", "fold.center.2"]
+        );
+    }
 }
