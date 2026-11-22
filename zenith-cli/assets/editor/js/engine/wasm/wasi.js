@@ -2,7 +2,7 @@
 // module. A static host runs the engine in a Worker through it (see
 // `worker.js`). `zenith edit` uses the native engine and never loads it.
 //
-// It implements exactly the 13 imports the module declares. stdin is the
+// It implements the WASI imports the module declares. stdin is the
 // request chunks read in order (the envelope, then any font bytes; see
 // `request.js`), stdout and stderr are captured. There is no filesystem,
 // no preopen, and no environment. One instance runs one request: a WASI
@@ -44,6 +44,14 @@ export class Wasi {
     const isStdio = (fd) => fd === 0 || fd === 1 || fd === 2;
     return {
       wasi_snapshot_preview1: {
+        clock_time_get(clockId, _precision, timePtr) {
+          const ns =
+            clockId === 0
+              ? BigInt(Date.now()) * 1_000_000n
+              : BigInt(Math.round(performance.now() * 1_000_000));
+          self.view().setBigUint64(timePtr, ns, true);
+          return ERRNO_SUCCESS;
+        },
         random_get(buf, len) {
           const out = self.bytes().subarray(buf, buf + len);
           for (let i = 0; i < len; i += 65536) {

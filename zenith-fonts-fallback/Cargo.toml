@@ -13,6 +13,7 @@ publish.workspace = true
 description = "Zenith fallback fonts: Noto Sans Arabic, Hebrew, CJK SC (subset), and monochrome Noto Emoji as embedded bytes."
 include = [
     "Cargo.toml",
+    "LICENSE",
     "build.rs",
     "ABOUT.txt",
     "OFL.txt",

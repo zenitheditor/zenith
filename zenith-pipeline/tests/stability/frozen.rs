@@ -38,9 +38,10 @@ pub fn frozen_at(dir: &Path) -> String {
     let path = dir.join("FROZEN_AT");
     let text = std::fs::read_to_string(&path)
         .unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()));
-    let version = text.trim().to_owned();
+    let normalized = text.replace("\r\n", "\n");
+    let version = normalized.trim().to_owned();
     assert_eq!(
-        text,
+        normalized,
         format!("{version}\n"),
         "{} must be one line `X.Y.Z` and a newline",
         path.display()

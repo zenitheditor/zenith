@@ -113,7 +113,8 @@ fn check_all(dir: &Path) -> Pins {
             "{name}: canonical format is not idempotent. Formatting the formatted text \
              changes it"
         );
-        if once == src.as_bytes() {
+        let normalized_src = src.replace("\r\n", "\n");
+        if once == normalized_src.as_bytes() {
             pins.canonical.insert(name.clone());
         }
 
@@ -193,7 +194,7 @@ fn frozen_corpus_parses_validates_formats_and_renders_as_pinned() {
     let expected: Pins = serde_json::from_str(&text)
         .unwrap_or_else(|e| panic!("{} is not a pins object: {e}", manifest.display()));
     assert_eq!(
-        text,
+        text.replace("\r\n", "\n"),
         encode(&expected),
         "{} is not in canonical form. Run `{UPDATE_CMD}`",
         manifest.display()

@@ -423,8 +423,8 @@ fn pdf_rows_and_combined_file_are_committed_outputs() {
     assert_eq!(output["format"], "pdf");
     assert_eq!(output["raster_scale"], 2.0);
     let paths: Vec<_> = [
-        env.dir.path().join("out/row-0001.pdf"),
-        env.dir.path().join("out/row-0002.pdf"),
+        env.dir.path().join("out").join("row-0001.pdf"),
+        env.dir.path().join("out").join("row-0002.pdf"),
         env.dir.path().join("all.pdf"),
     ]
     .iter()
