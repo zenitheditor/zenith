@@ -15,6 +15,18 @@ it.
 
 ## [Unreleased]
 
+### Added
+
+- **N-up gang-up (`--impose grid`) and cut-and-stack (`--impose cut-and-stack`) PDF imposition** with `--grid CxR` (default `2x2`), 2D outer-bleed preservation, and solid internal cut ticks (CLI `render`, `merge --combine`, and MCP `zenith_render`).
+- **CMYK density control bars & 4-plate registration targets (`--color-bars`)** on imposed press sheets (CLI and MCP `zenith_render`).
+- **Strict PDF/X `/DestOutputProfile` ICC embedding (`--icc-profile <PATH>`)** for 4-channel CMYK ICC profiles with ISO 15076-1 header validation.
+- **Batch PDF press parity:** `zenith merge` and `zenith variant` PDF exports now honor document `colorspace="cmyk"`, and `zenith merge --combine` supports `--colorspace`, `--print`, `--impose`, `--grid`, `--marks`, and `--color-bars`.
+
+### Fixed
+
+- **PDF `/Link` annotation rects now track active scene transforms** (`PushTransform`, `PushScaleTranslate`, `PushTransformMatrix`), keeping clickable links aligned on imposed sheets and rotated text.
+- **`zenith tx` `duplicate_page` `created` output now includes duplicated `safe-zone` and `fold` ids.**
+
 ## [0.0.15] — 2026-11-22
 
 ### Breaking

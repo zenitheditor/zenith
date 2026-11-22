@@ -11,11 +11,14 @@ Zenith exports deterministic PNG, SVG, and PDF artifacts from editable `.zen` so
 | `--pdf PATH` | Writes every page into one PDF unless `--page N` selects one page. |
 | `--colorspace srgb\|cmyk` | Overrides PDF color space (`srgb` for digital sharing, `cmyk` for print). Omit to follow document `colorspace` (default `srgb`). |
 | `--print` | Print-ready PDF preset: forces `DeviceCMYK` and sets 300 DPI raster fallback (`--raster-scale 3.125`, unless `--raster-scale` is given). |
-| `--impose MODE` | Arranges reading-order pages onto press sheets for `--pdf`: `booklet` (`bifold`, `saddle`), `trifold` (`letterfold`), `zfold` (`accordion`), or `spread` (`2up`). Cannot combine with `--page`. |
+| `--icc-profile PATH` | Embeds a 4-channel CMYK ICC profile file as PDF/X `/DestOutputProfile` (implies CMYK). |
+| `--impose MODE` | Arranges reading-order pages onto press sheets for `--pdf`: `booklet` (`bifold`, `saddle`), `trifold` (`letterfold`), `zfold` (`accordion`), `spread` (`2up`), `grid` (`nup`), or `cut-and-stack` (`stack`). Cannot combine with `--page`. |
+| `--grid CxR` | Sheet grid dimensions (e.g. `2x4`, default `2x2`) for `--impose grid` or `--impose cut-and-stack`. |
 | `--duplex EDGE` | Back-sheet flip for `--impose`: `short-edge` (default) or `long-edge` (180° back rotation). |
 | `--creep MM` | Total saddle-stitch creep compensation in mm (`--impose booklet` only). |
 | `--signature N` | Multi-signature section size in pages, positive multiple of 4 (`--impose booklet` only). |
-| `--marks` | Draws K-only outer corner crop marks and dashed fold ticks on `--impose` sheets. |
+| `--marks` | Draws K-only outer corner crop marks and internal fold (dashed) or cut (solid) ticks on `--impose` sheets. |
+| `--color-bars` | Draws an 11-patch CMYK density control bar and 4-plate registration targets in the outer margin on `--impose` sheets. |
 | `--all-pages DIR` | Writes `page-N.png` in document order. |
 | `--all-pages-svg DIR` | Writes `page-N.svg` in document order. |
 | `--contact-sheet PATH` | Writes one PNG containing the selected pages. |
@@ -42,7 +45,9 @@ Author multi-page leaflets, brochures, and booklets in **natural reading order**
   - `--impose trifold` (`letterfold`): 3-up roll/letter fold (`[5|6|1]`, `[2|3|4]`; pads to multiple of 6).
   - `--impose zfold` (`accordion`): 3-up Z/accordion fold (`[5|4|1]`, `[2|3|6]`; pads to multiple of 6).
   - `--impose spread` (`2up`): 2-up reading-order spreads (`[1|2]`, `[3|4]`; pads to multiple of 2).
-  - Add `--marks` for K-only corner crop marks + dashed fold ticks (omit for online print shops that reject marks), and `--duplex long-edge` when the printer tumbles on the long edge.
+  - `--impose grid` (`nup`) with `--grid CxR` (default `2x2`): sequential N-up gang-up grid for cards, stickers, and flyers.
+  - `--impose cut-and-stack` (`stack`) with `--grid CxR` (default `2x2`): stack-ordered N-up sheets so guillotine cuts stay in sequential order (also supported on `zenith merge --format pdf --combine`).
+  - Add `--marks` for K-only corner crop marks + fold/cut ticks, `--color-bars` for an 11-patch CMYK density bar + 4-plate registration targets, `--icc-profile PATH` for strict PDF/X-4 `/DestOutputProfile` embedding, and `--duplex long-edge` when the printer tumbles on the long edge.
 - **Vector SVG fidelity:** SVG linear-gradient fills, linear-gradient strokes, and non-square `objectBoundingBox` diagonal gradients emit as native PDF axial shadings (in both `DeviceRGB` and `DeviceCMYK`) without rasterizing.
 
 Vector dimensions and geometry remain unchanged by `--raster-scale`. Existing bitmap assets retain their source resolution. PNG `--scale` changes output dimensions. Each side becomes `max(1, round(page_px * F))`, with half values rounded away from zero.
@@ -97,7 +102,9 @@ Inspect committed paths after an I/O error. A blocked status does not imply zero
 | `raster_scale` | SVG/PDF only. Finite `0 < F <= 4`, default 1. |
 | `colorspace` | PDF only. `srgb` or `cmyk`. Omit to follow document `colorspace`. |
 | `print` | PDF only. Print preset: `DeviceCMYK` + `300 DPI` fallback (`raster_scale: 3.125` unless set). |
-| `impose` | PDF only (omit `page`). `booklet` (`bifold`, `saddle`), `trifold` (`letterfold`), `zfold` (`accordion`), or `spread` (`2up`). |
+| `impose` | PDF only (omit `page`). `booklet` (`bifold`, `saddle`), `trifold` (`letterfold`), `zfold` (`accordion`), `spread` (`2up`), `grid` (`nup`), or `cut-and-stack` (`stack`). |
+| `grid` | `impose=grid\|cut-and-stack` only. Grid dimensions `<cols>x<rows>` (default `2x2`). |
+| `color_bars` | `impose` only. Draw 11-patch CMYK density bar and 4-plate registration targets. |
 | `scale` | PNG only. Finite `0 < F <= 4`, default 1. |
 | `contact_sheet` | PNG only. Tiles all pages unless `page` selects one. |
 | `out` | Optional protected filesystem write, alongside the artifact resource link. |
