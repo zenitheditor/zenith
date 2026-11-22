@@ -54,7 +54,7 @@ fn svg_complex_paints_and_compositing_match_raster_planes() {
     let bodies = [
         "<defs><radialGradient id='g'><stop stop-color='red'/><stop offset='1' stop-color='blue'/></radialGradient></defs><rect width='20' height='20' fill='url(#g)'/>",
         "<defs><linearGradient id='g'><stop stop-color='red' stop-opacity='.2'/><stop offset='1' stop-color='blue'/></linearGradient></defs><rect width='20' height='20' fill='url(#g)'/>",
-        "<defs><linearGradient id='g'><stop stop-color='red'/><stop offset='1' stop-color='blue'/></linearGradient></defs><path d='M2 5 L18 15' fill='none' stroke='url(#g)' stroke-width='4'/>",
+        "<defs><radialGradient id='g'><stop stop-color='red'/><stop offset='1' stop-color='blue'/></radialGradient></defs><path d='M2 5 L18 15' fill='none' stroke='url(#g)' stroke-width='4'/>",
         "<defs><clipPath id='c'><circle cx='10' cy='10' r='7'/></clipPath></defs><rect width='20' height='20' fill='red' clip-path='url(#c)'/>",
         "<defs><mask id='m'><rect width='10' height='20' fill='white'/></mask></defs><rect width='20' height='20' fill='red' mask='url(#m)'/>",
         "<defs><pattern id='p' width='4' height='4' patternUnits='userSpaceOnUse'><rect width='2' height='4' fill='blue'/></pattern></defs><rect width='20' height='20' fill='url(#p)'/>",
@@ -98,7 +98,19 @@ fn svg_linear_gradient_affine_spread_and_stop_layout_match_raster_planes() {
     let svg = document(
         "<defs><linearGradient id='g' x2='1' y2='1'><stop stop-color='red'/><stop offset='1' stop-color='blue'/></linearGradient></defs><rect width='20' height='10' fill='url(#g)'/>",
     );
-    check_raster_with_assets(&scene(image()), &svg_assets(&svg));
+    let (text, count) = content(&scene(image()), &svg_assets(&svg));
+    assert_eq!(
+        count, 0,
+        "non-square diagonal linear gradient should stay native vector"
+    );
+    assert!(text.contains("/sh0 sh"), "{text}");
+
+    let stroke_svg = document(
+        "<defs><linearGradient id='g' x1='0.1' y1='0.9' x2='0.9' y2='0.1'><stop stop-color='red'/><stop offset='1' stop-color='blue'/></linearGradient></defs><path d='M2 5 L18 15' fill='none' stroke='url(#g)' stroke-width='4' stroke-linecap='round' stroke-linejoin='round'/>",
+    );
+    let (text, count) = content(&scene(image()), &svg_assets(&stroke_svg));
+    assert_eq!(count, 0, "linear-gradient stroke should stay native vector");
+    assert!(text.contains("/sh0 sh"), "{text}");
 }
 
 #[test]

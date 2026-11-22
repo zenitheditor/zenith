@@ -90,7 +90,16 @@ fn unsupported_node(node: &usvg::Node, parent: Affine) -> bool {
                     .as_ref()
                     .is_some_and(|fill| unsupported_fill(&fill.paint, path, transform))
                 || path.stroke.as_ref().is_some_and(|stroke| {
-                    !matches!(stroke.paint, Paint::Color(_))
+                    let unsupported_paint = match &stroke.paint {
+                        Paint::Color(_) => false,
+                        Paint::LinearGradient(_) => {
+                            unsupported_fill(&stroke.paint, path, transform)
+                                || super::svg::expand_stroke(&path.data, stroke, transform)
+                                    .is_none()
+                        }
+                        Paint::RadialGradient(_) | Paint::Pattern(_) => true,
+                    };
+                    unsupported_paint
                         || stroke.linejoin == usvg::LineJoin::MiterClip
                         || !transform.conformal()
                         || unsupported_stroke_numbers(stroke, transform)
@@ -123,20 +132,22 @@ fn unsupported_fill(paint: &Paint, path: &usvg::Path, transform: Affine) -> bool
             let axis_aligned = (gradient.x1 == gradient.x2 || gradient.y1 == gradient.y2)
                 && gradient_map.b == 0.0
                 && gradient_map.c == 0.0;
-            let invalid_endpoints = super::svg::resolve_linear(gradient, path, transform)
-                .is_none_or(|gradient| match gradient.geometry {
+            let invalid_endpoints = super::svg::resolve_linear_shading(gradient, path, transform)
+                .is_none_or(|resolved| match resolved.gradient.geometry {
                     super::gradient::GradientGeometry::Axial([x0, y0, x1, y1]) => {
                         ![x0, y0, x1, y1].iter().all(|value| value.is_finite())
                             || (x0 == x1 && y0 == y1)
                     }
                     super::gradient::GradientGeometry::Radial(_) => true,
                 });
+            let transform_ok =
+                gradient_map.conformal() || axis_aligned || gradient_map.to_pdf_matrix().is_some();
             invalid_endpoints
                 || (gradient.units == usvg::Units::ObjectBoundingBox && path.text_bbox.is_some())
                 || !valid_stops
                 || gradient.spread_method != usvg::SpreadMethod::Pad
                 || gradient.transform != usvg::Transform::default()
-                || !(gradient_map.conformal() || axis_aligned)
+                || !transform_ok
         }
     }
 }

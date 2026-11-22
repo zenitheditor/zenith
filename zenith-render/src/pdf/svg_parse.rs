@@ -96,6 +96,22 @@ impl Affine {
     pub(super) fn avg_scale(self) -> f64 {
         (self.a * self.d - self.b * self.c).abs().sqrt()
     }
+
+    /// Convert to a finite, invertible PDF CTM `[a b c d e f]`.
+    pub(super) fn to_pdf_matrix(self) -> Option<[f32; 6]> {
+        let det = self.a * self.d - self.b * self.c;
+        if !det.is_finite() || det.abs() <= 1e-12 {
+            return None;
+        }
+        let values = [self.a, self.b, self.c, self.d, self.e, self.f];
+        if !values
+            .iter()
+            .all(|v| v.is_finite() && v.abs() <= f64::from(f32::MAX))
+        {
+            return None;
+        }
+        Some(values.map(|v| v as f32))
+    }
 }
 
 pub(super) fn placement_transform(tree: &usvg::Tree, place: SvgPlacement<'_>) -> Option<Affine> {

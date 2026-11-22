@@ -148,14 +148,14 @@ fn emit_path(
             Paint::Color(c) => {
                 content.save_state();
                 set_alpha(content, res, alpha);
-                color::set_fill(content, &svg_color(*c));
+                color::set_fill(content, &svg_color(*c), res.cmyk);
                 let produced = build_path(content, path, t);
                 fill_path(content, produced, even_odd);
                 content.restore_state();
             }
             Paint::LinearGradient(lg) => {
-                if let Some(g) = resolve_linear(lg, path, t) {
-                    let id = push_gradient(res, g);
+                if let Some(resolved) = resolve_linear_shading(lg, path, t) {
+                    let id = push_gradient(res, resolved.gradient);
                     content.save_state();
                     set_alpha(content, res, alpha);
                     if build_path(content, path, t) {
@@ -165,6 +165,9 @@ fn emit_path(
                             content.clip_nonzero();
                         }
                         content.end_path();
+                        if let Some(matrix) = resolved.ctm {
+                            content.transform(matrix);
+                        }
                         content.shading(name(SHADING_PREFIX, id).as_name());
                     } else {
                         content.end_path();
@@ -177,7 +180,7 @@ fn emit_path(
                 if let Some(stop) = gradient.stops.first() {
                     content.save_state();
                     set_alpha(content, res, alpha);
-                    color::set_fill(content, &svg_color(stop.color));
+                    color::set_fill(content, &svg_color(stop.color), res.cmyk);
                     let produced = build_path(content, path, t);
                     fill_path(content, produced, even_odd);
                     content.restore_state();
@@ -188,6 +191,27 @@ fn emit_path(
     }
 
     if let Some(stroke) = &path.stroke {
+        if let Paint::LinearGradient(lg) = &stroke.paint
+            && let Some(resolved) = resolve_linear_shading(lg, path, t)
+            && let Some(stroked) = expand_stroke(&path.data, stroke, t)
+        {
+            let alpha = opacity * f64::from(stroke.opacity.get());
+            let id = push_gradient(res, resolved.gradient);
+            content.save_state();
+            set_alpha(content, res, alpha);
+            if build_path_data(content, &stroked, t) {
+                content.clip_nonzero();
+                content.end_path();
+                if let Some(matrix) = resolved.ctm {
+                    content.transform(matrix);
+                }
+                content.shading(name(SHADING_PREFIX, id).as_name());
+            } else {
+                content.end_path();
+            }
+            content.restore_state();
+            return;
+        }
         let stroke_color = match &stroke.paint {
             Paint::Color(c) => Some(svg_color(*c)),
             // Compatibility emission when malformed scopes or raster errors bypass planning.
@@ -205,7 +229,7 @@ fn emit_path(
             let width = f64::from(stroke.width.get()) * scale;
             content.save_state();
             set_alpha(content, res, alpha);
-            color::set_stroke(content, &sc);
+            color::set_stroke(content, &sc, res.cmyk);
             content.set_line_width(width as f32);
             content.set_line_cap(match stroke.linecap {
                 usvg::LineCap::Butt => pdf_writer::types::LineCapStyle::ButtCap,
@@ -253,9 +277,13 @@ fn emit_path(
 /// any segment was produced. Quadratics are elevated to cubics (PDF has no
 /// quadratic operator).
 fn build_path(content: &mut Content, path: &usvg::Path, t: Affine) -> bool {
+    build_path_data(content, &path.data, t)
+}
+
+fn build_path_data(content: &mut Content, data: &usvg::tiny_skia_path::Path, t: Affine) -> bool {
     let mut produced = false;
     let mut cur = (0.0_f64, 0.0_f64);
-    for seg in path.data.segments() {
+    for seg in data.segments() {
         match seg {
             PathSegment::MoveTo(p) => {
                 let (px, py) = t.map_pt(p);
@@ -332,38 +360,61 @@ fn svg_color(c: usvg::Color) -> Color {
     Color::srgb(c.red, c.green, c.blue, 255)
 }
 
+/// Expand a `usvg::Stroke` into its filled outline path in SVG local space so
+/// gradient strokes can be clipped and painted with a native PDF axial shading.
+pub(super) fn expand_stroke(
+    data: &usvg::tiny_skia_path::Path,
+    stroke: &usvg::Stroke,
+    t: Affine,
+) -> Option<usvg::tiny_skia_path::Path> {
+    use usvg::tiny_skia_path::{LineCap, LineJoin, Stroke, StrokeDash};
+    let res_scale = (t.avg_scale() as f32).clamp(0.25, 16.0);
+    let dashed;
+    let target = if let Some(dashes) = &stroke.dasharray {
+        let dash = StrokeDash::new(dashes.clone(), stroke.dashoffset)?;
+        dashed = data.dash(&dash, res_scale)?;
+        &dashed
+    } else {
+        data
+    };
+    let skia_stroke = Stroke {
+        width: stroke.width.get(),
+        miter_limit: stroke.miterlimit.get(),
+        line_cap: match stroke.linecap {
+            usvg::LineCap::Butt => LineCap::Butt,
+            usvg::LineCap::Round => LineCap::Round,
+            usvg::LineCap::Square => LineCap::Square,
+        },
+        line_join: match stroke.linejoin {
+            usvg::LineJoin::Miter | usvg::LineJoin::MiterClip => LineJoin::Miter,
+            usvg::LineJoin::Round => LineJoin::Round,
+            usvg::LineJoin::Bevel => LineJoin::Bevel,
+        },
+        dash: None,
+    };
+    target.stroke(&skia_stroke, res_scale)
+}
+
+/// Resolved SVG linear gradient plus an optional PDF CTM applied immediately
+/// before `sh` for non-conformal `objectBoundingBox` diagonal gradients.
+pub(super) struct ResolvedLinearShading {
+    pub(super) gradient: PdfGradient,
+    pub(super) ctm: Option<[f32; 6]>,
+}
+
 /// Resolve a `usvg` linear gradient over `path` (under transform `t`) into a PDF
-/// axial gradient with endpoints in scene space. `userSpaceOnUse` maps the
-/// declared endpoints directly; `objectBoundingBox` maps them through the path's
-/// local bounding box first. Returns `None` with fewer than two stops.
-pub(super) fn resolve_linear(
+/// axial gradient and optional shading CTM. Conformal or axis-aligned gradients
+/// bake endpoints into scene space (`ctm: None`); non-square diagonal
+/// `objectBoundingBox` gradients keep local endpoints and supply `ctm` so
+/// gradient isolines shear identically to SVG.
+pub(super) fn resolve_linear_shading(
     lg: &usvg::LinearGradient,
     path: &usvg::Path,
     t: Affine,
-) -> Option<PdfGradient> {
+) -> Option<ResolvedLinearShading> {
     if lg.stops.len() < 2 {
         return None;
     }
-    // Endpoints in the path's local user space.
-    let (p1, p2) = match lg.units {
-        Units::UserSpaceOnUse => (
-            (f64::from(lg.x1), f64::from(lg.y1)),
-            (f64::from(lg.x2), f64::from(lg.y2)),
-        ),
-        Units::ObjectBoundingBox => {
-            let b = path.data.bounds();
-            let (bx, by) = (f64::from(b.x()), f64::from(b.y()));
-            let (bw, bh) = (f64::from(b.width()), f64::from(b.height()));
-            (
-                (bx + f64::from(lg.x1) * bw, by + f64::from(lg.y1) * bh),
-                (bx + f64::from(lg.x2) * bw, by + f64::from(lg.y2) * bh),
-            )
-        }
-    };
-    // Apply the gradientTransform, then the path's local→scene transform.
-    let g = t.then(Affine::from_usvg(lg.base.transform));
-    let (x0, y0) = g.map(p1.0, p1.1);
-    let (x1, y1) = g.map(p2.0, p2.1);
     let stops: Vec<(f32, [f32; 3])> = lg
         .stops
         .iter()
@@ -378,8 +429,46 @@ pub(super) fn resolve_linear(
             )
         })
         .collect();
-    Some(PdfGradient {
-        geometry: GradientGeometry::Axial([x0 as f32, y0 as f32, x1 as f32, y1 as f32]),
-        stops,
+
+    let (bbox_map, p1, p2) = match lg.units {
+        Units::UserSpaceOnUse => (
+            t.then(Affine::from_usvg(lg.base.transform)),
+            (f64::from(lg.x1), f64::from(lg.y1)),
+            (f64::from(lg.x2), f64::from(lg.y2)),
+        ),
+        Units::ObjectBoundingBox => {
+            let b = path.data.bounds();
+            let (bx, by) = (f64::from(b.x()), f64::from(b.y()));
+            let (bw, bh) = (f64::from(b.width()), f64::from(b.height()));
+            (
+                t.then(Affine::scale_translate(bw, bh, bx, by))
+                    .then(Affine::from_usvg(lg.base.transform)),
+                (bx + f64::from(lg.x1) * bw, by + f64::from(lg.y1) * bh),
+                (bx + f64::from(lg.x2) * bw, by + f64::from(lg.y2) * bh),
+            )
+        }
+    };
+
+    let axis_aligned = (lg.x1 == lg.x2 || lg.y1 == lg.y2) && bbox_map.b == 0.0 && bbox_map.c == 0.0;
+    if bbox_map.conformal() || axis_aligned {
+        let g = t.then(Affine::from_usvg(lg.base.transform));
+        let (x0, y0) = g.map(p1.0, p1.1);
+        let (x1, y1) = g.map(p2.0, p2.1);
+        return Some(ResolvedLinearShading {
+            gradient: PdfGradient {
+                geometry: GradientGeometry::Axial([x0 as f32, y0 as f32, x1 as f32, y1 as f32]),
+                stops,
+            },
+            ctm: None,
+        });
+    }
+
+    let ctm = bbox_map.to_pdf_matrix()?;
+    Some(ResolvedLinearShading {
+        gradient: PdfGradient {
+            geometry: GradientGeometry::Axial([lg.x1, lg.y1, lg.x2, lg.y2]),
+            stops,
+        },
+        ctm: Some(ctm),
     })
 }
