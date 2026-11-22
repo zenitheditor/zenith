@@ -26,7 +26,7 @@ mod svg;
 mod view;
 
 pub use compile::{CompiledPage, CompiledPages, PageSelection, compile_pages};
-pub use impose::{DuplexMode, ImposeMode, ImposeOptions};
+pub use impose::{DEFAULT_GRID, DuplexMode, ImposeMode, ImposeOptions, parse_grid_spec};
 pub use options::{RenderOptions, SpreadOptions};
 pub use pdf::{PdfArtifact, pdf_rasterization_diagnostics, render_pdf, render_pdf_pages};
 pub use png::{

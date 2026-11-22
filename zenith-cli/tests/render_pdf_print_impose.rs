@@ -349,3 +349,75 @@ fn pdf_icc_profile_embeds_dest_output_profile_and_rejects_invalid_headers() {
         "--icc-profile with --colorspace srgb must fail"
     );
 }
+
+#[test]
+fn pdf_impose_grid_and_cut_and_stack() {
+    let dir = tempfile::tempdir().unwrap();
+    let home = tempfile::tempdir().unwrap();
+    fs::write(dir.path().join("leaflet.zen"), FOUR_PAGE_CMYK_DOC).unwrap();
+
+    // 4 pages of 100x140 px on a 2x2 grid -> 1 sheet of 200x280 px = 150x210 pt.
+    let grid_out = run_cli(
+        &dir,
+        &home,
+        &[
+            "render",
+            "leaflet.zen",
+            "--pdf",
+            "grid.pdf",
+            "--impose",
+            "grid",
+            "--grid",
+            "2x2",
+        ],
+    );
+    assert!(
+        grid_out.status.success(),
+        "grid impose failed: {}",
+        String::from_utf8_lossy(&grid_out.stderr)
+    );
+    let grid_bytes = fs::read(dir.path().join("grid.pdf")).unwrap();
+    assert_eq!(count_matches(&grid_bytes, b"/MediaBox [0 0 150 210]"), 1);
+
+    // 4 pages on a 2x1 cut-and-stack -> 2 sheets: [1, 3] and [2, 4], distinct from spread [1, 2], [3, 4].
+    let stack_out = run_cli(
+        &dir,
+        &home,
+        &[
+            "render",
+            "leaflet.zen",
+            "--pdf",
+            "stack.pdf",
+            "--impose",
+            "cut-and-stack",
+            "--grid",
+            "2x1",
+            "--marks",
+        ],
+    );
+    assert!(
+        stack_out.status.success(),
+        "cut-and-stack impose failed: {}",
+        String::from_utf8_lossy(&stack_out.stderr)
+    );
+    let stack_bytes = fs::read(dir.path().join("stack.pdf")).unwrap();
+    // 200x140 trim + 24px slug on each side = 248x188 px = 186x141 pt.
+    assert_eq!(count_matches(&stack_bytes, b"/MediaBox [0 0 186 141]"), 2);
+
+    // Guard: --grid on booklet must fail.
+    let bad_grid = run_cli(
+        &dir,
+        &home,
+        &[
+            "render",
+            "leaflet.zen",
+            "--pdf",
+            "bad.pdf",
+            "--impose",
+            "booklet",
+            "--grid",
+            "2x2",
+        ],
+    );
+    assert!(!bad_grid.status.success(), "--grid with booklet must fail");
+}

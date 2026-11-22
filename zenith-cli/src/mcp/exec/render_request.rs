@@ -143,11 +143,16 @@ impl<'a> RenderRequest<'a> {
             }
         };
         let marks = optional_bool(args, "marks")?.unwrap_or(false);
+        let grid_raw = optional_string(args, "grid")?;
         if impose_raw.is_none()
-            && (duplex_raw.is_some() || creep_mm.is_some() || signature.is_some() || marks)
+            && (duplex_raw.is_some()
+                || creep_mm.is_some()
+                || signature.is_some()
+                || grid_raw.is_some()
+                || marks)
         {
             return Err(invalid(
-                "duplex/creep_mm/signature/marks",
+                "duplex/creep_mm/signature/grid/marks",
                 "no impose",
                 "Pass impose when using prepress sheet options",
             ));
@@ -163,14 +168,38 @@ impl<'a> RenderRequest<'a> {
                     "trifold" | "letterfold" => ImposeMode::Trifold,
                     "zfold" | "accordion" => ImposeMode::Zfold,
                     "spread" | "2up" => ImposeMode::Spread,
+                    "grid" | "nup" | "cut-and-stack" | "stack" => {
+                        let (cols, rows) = match grid_raw {
+                            Some(raw) => zenith_pipeline::render::parse_grid_spec(raw)
+                                .map_err(|msg| invalid("grid", raw, &msg))?,
+                            None => zenith_pipeline::render::DEFAULT_GRID,
+                        };
+                        if matches!(mode_str, "grid" | "nup") {
+                            ImposeMode::Grid { cols, rows }
+                        } else {
+                            ImposeMode::CutAndStack { cols, rows }
+                        }
+                    }
                     value => {
                         return Err(invalid(
                             "impose",
                             value,
-                            "Pass booklet, trifold, zfold, or spread",
+                            "Pass booklet, trifold, zfold, spread, grid, or cut-and-stack",
                         ));
                     }
                 };
+                if grid_raw.is_some()
+                    && !matches!(
+                        mode,
+                        ImposeMode::Grid { .. } | ImposeMode::CutAndStack { .. }
+                    )
+                {
+                    return Err(invalid(
+                        "grid",
+                        mode_str,
+                        "Use impose=grid or impose=cut-and-stack with grid",
+                    ));
+                }
                 let creep = creep_mm.unwrap_or(0.0);
                 if creep > 0.0 && mode != ImposeMode::Booklet {
                     return Err(invalid("creep_mm", mode_str, "Set impose to booklet"));

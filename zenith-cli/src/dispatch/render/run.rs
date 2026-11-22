@@ -74,22 +74,49 @@ pub(in crate::dispatch) fn dispatch_render(args: RenderArgs) -> ExitCode {
         return CliError::usage("error: --impose cannot be combined with --page").emit(json);
     }
     if args.impose.is_none()
-        && (args.duplex.is_some() || args.creep.is_some() || args.signature.is_some() || args.marks)
+        && (args.duplex.is_some()
+            || args.creep.is_some()
+            || args.signature.is_some()
+            || args.grid.is_some()
+            || args.marks)
     {
         return CliError::usage(
-            "error: --duplex, --creep, --signature, and --marks require --impose <MODE>",
+            "error: --duplex, --creep, --signature, --grid, and --marks require --impose <MODE>",
         )
         .emit(json);
     }
     let impose = match args.impose {
         None => None,
         Some(mode_arg) => {
+            let parse_grid = || match args.grid.as_deref() {
+                Some(raw) => zenith_pipeline::render::parse_grid_spec(raw),
+                None => Ok(zenith_pipeline::render::DEFAULT_GRID),
+            };
             let mode = match mode_arg {
                 ImposeArg::Booklet => ImposeMode::Booklet,
                 ImposeArg::Trifold => ImposeMode::Trifold,
                 ImposeArg::Zfold => ImposeMode::Zfold,
                 ImposeArg::Spread => ImposeMode::Spread,
+                ImposeArg::Grid => match parse_grid() {
+                    Ok((cols, rows)) => ImposeMode::Grid { cols, rows },
+                    Err(msg) => return CliError::usage(format!("error: {msg}")).emit(json),
+                },
+                ImposeArg::CutAndStack => match parse_grid() {
+                    Ok((cols, rows)) => ImposeMode::CutAndStack { cols, rows },
+                    Err(msg) => return CliError::usage(format!("error: {msg}")).emit(json),
+                },
             };
+            if args.grid.is_some()
+                && !matches!(
+                    mode,
+                    ImposeMode::Grid { .. } | ImposeMode::CutAndStack { .. }
+                )
+            {
+                return CliError::usage(
+                    "error: --grid requires --impose grid or --impose cut-and-stack",
+                )
+                .emit(json);
+            }
             let creep_mm = args.creep.unwrap_or(0.0);
             if !creep_mm.is_finite() || creep_mm < 0.0 {
                 return CliError::usage("error: --creep must be a finite number >= 0").emit(json);

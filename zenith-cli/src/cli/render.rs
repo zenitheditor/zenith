@@ -27,6 +27,12 @@ pub enum ImposeArg {
     /// 2-up side-by-side spreads (`[1|2]`, `[3|4]`, …; pads to multiple of 2).
     #[value(alias = "2up")]
     Spread,
+    /// Sequential N-up gang-up grid (`--grid CxR`, default `2x2`).
+    #[value(alias = "nup")]
+    Grid,
+    /// Stack-ordered N-up cut-and-stack (`--grid CxR`, default `2x2`) so guillotine cuts stay in order.
+    #[value(alias = "stack")]
+    CutAndStack,
 }
 
 /// Duplex flip orientation for back sheets when `--impose` is active.
@@ -93,12 +99,16 @@ pub struct RenderArgs {
     #[arg(long, value_name = "PATH")]
     pub icc_profile: Option<PathBuf>,
 
-    /// Arrange reading-order pages onto folded press sheets for `--pdf` output:
-    /// `booklet` (alias `bifold`, `[4|1]`, `[2|3]`), `trifold` (`[5|6|1]`, `[2|3|4]`),
-    /// `zfold` (`[5|4|1]`, `[2|3|6]`), or `spread` (alias `2up`, `[1|2]`, `[3|4]`).
-    /// Requires `--pdf <OUT>` and cannot be combined with `--page`.
+    /// Arrange reading-order pages onto press sheets for `--pdf` output:
+    /// `booklet` (`bifold`), `trifold`, `zfold`, `spread` (`2up`), `grid` (`nup`),
+    /// or `cut-and-stack` (`stack`). Requires `--pdf <OUT>` and cannot be combined with `--page`.
     #[arg(long, value_enum, value_name = "MODE")]
     pub impose: Option<ImposeArg>,
+
+    /// Grid dimensions `<cols>x<rows>` (e.g. `2x4`, default `2x2`) for `--impose grid`
+    /// or `--impose cut-and-stack`.
+    #[arg(long, value_name = "CxR")]
+    pub grid: Option<String>,
 
     /// Duplex flip orientation for imposed back sheets: `short-edge` (default) or `long-edge` (180° back rotation).
     /// Requires `--impose`.

@@ -41,6 +41,64 @@ pub enum ImposeMode {
     /// Simple 2-up side-by-side spreads in reading order: `[1 | 2]`, `[3 | 4]`, …
     /// Pads to a multiple of 2 pages.
     Spread,
+    /// Sequential N-up gang-up grid (`cols × rows` per sheet, left-to-right, top-to-bottom):
+    /// sheet 1 = `[1, 2, …, N]`, sheet 2 = `[N+1, …, 2N]`, …
+    Grid {
+        /// Columns per sheet (`1..=32`).
+        cols: usize,
+        /// Rows per sheet (`1..=32`).
+        rows: usize,
+    },
+    /// Stack-ordered N-up cut-and-stack imposition (`cols × rows` per sheet).
+    /// For `P` pages and `N = cols * rows` slots, produces `S = ceil(P / N)` sheets
+    /// where sheet `k` slot `i` holds page `i * S + k + 1` so guillotine-cutting
+    /// the stack into `N` piles and stacking them yields sequential order `1..=P`.
+    CutAndStack {
+        /// Columns per sheet (`1..=32`).
+        cols: usize,
+        /// Rows per sheet (`1..=32`).
+        rows: usize,
+    },
+}
+
+/// Default N-up grid dimensions (`2×2`, 4-up) when `--grid` is omitted for
+/// `grid` or `cut-and-stack` imposition.
+pub const DEFAULT_GRID: (usize, usize) = (2, 2);
+
+/// Maximum columns or rows allowed in a single N-up imposition grid.
+const MAX_GRID_SIDE: usize = 32;
+
+/// Parse a `<cols>x<rows>` grid specification (e.g. `"2x4"`, `"3x3"`).
+///
+/// Requires `1 <= cols <= 32`, `1 <= rows <= 32`, and `cols * rows >= 2`.
+///
+/// # Errors
+///
+/// Returns a descriptive message when the string is malformed or out of bounds.
+pub fn parse_grid_spec(raw: &str) -> Result<(usize, usize), String> {
+    let trimmed = raw.trim();
+    let Some((c_str, r_str)) = trimmed.split_once(['x', 'X']) else {
+        return Err(format!(
+            "invalid grid '{raw}': expected <cols>x<rows> (e.g. 2x2, 2x4)"
+        ));
+    };
+    let cols: usize = c_str
+        .parse()
+        .map_err(|_| format!("invalid grid columns '{c_str}' in '{raw}'"))?;
+    let rows: usize = r_str
+        .parse()
+        .map_err(|_| format!("invalid grid rows '{r_str}' in '{raw}'"))?;
+    if cols == 0 || rows == 0 || cols > MAX_GRID_SIDE || rows > MAX_GRID_SIDE {
+        return Err(format!(
+            "grid '{raw}' out of range: cols and rows must be in 1..={MAX_GRID_SIDE}"
+        ));
+    }
+    if cols * rows < 2 {
+        return Err(format!(
+            "grid '{raw}' must place at least 2 pages per sheet (e.g. 2x1, 2x2)"
+        ));
+    }
+    Ok((cols, rows))
 }
 
 /// Duplex flip orientation for back sheets of an imposed press PDF.
@@ -87,10 +145,13 @@ impl ImposeOptions {
     }
 }
 
-/// One planned sheet: panel slots (`None` = blank), creep shift (px) inward
-/// toward the spine for left/right panels, and whether this is a back side.
+/// One planned sheet: panel slots (`None` = blank) in row-major order, grid
+/// dimensions (`cols × rows`), creep shift (px) inward toward the spine, and
+/// whether this is a back side.
 struct SheetSpec {
     slots: Vec<Option<usize>>,
+    cols: usize,
+    rows: usize,
     creep_px: f64,
     is_back: bool,
 }
@@ -152,6 +213,22 @@ pub(super) fn impose_scenes(
         }
     }
 
+    if let ImposeMode::Grid { cols, rows } | ImposeMode::CutAndStack { cols, rows } = opts.mode
+        && (cols == 0
+            || rows == 0
+            || cols > MAX_GRID_SIDE
+            || rows > MAX_GRID_SIDE
+            || cols * rows < 2)
+    {
+        return Err(PipelineError::new(
+            "render.impose_invalid",
+            format!(
+                "impose grid {cols}x{rows} is invalid: cols and rows must be in 1..={MAX_GRID_SIDE} with cols*rows >= 2"
+            ),
+            2,
+        ));
+    }
+
     let (page_w, page_h) = (first.width, first.height);
     let (bleed_x, bleed_y, trim_w, trim_h) = match first.trim {
         Some(t) => (t.x, t.y, t.w, t.h),
@@ -210,12 +287,16 @@ fn sheet_plan(page_count: usize, opts: ImposeOptions) -> Vec<SheetSpec> {
                     // Outside (front of physical sheet): [sig_size - 2k, 2k + 1]
                     sheets.push(SheetSpec {
                         slots: vec![slot(base + sig_size - 2 * k), slot(base + 2 * k + 1)],
+                        cols: 2,
+                        rows: 1,
                         creep_px,
                         is_back: false,
                     });
                     // Inside (back of physical sheet): [2k + 2, sig_size - 2k - 1]
                     sheets.push(SheetSpec {
                         slots: vec![slot(base + 2 * k + 2), slot(base + sig_size - 2 * k - 1)],
+                        cols: 2,
+                        rows: 1,
                         creep_px,
                         is_back: true,
                     });
@@ -231,12 +312,16 @@ fn sheet_plan(page_count: usize, opts: ImposeOptions) -> Vec<SheetSpec> {
                 // Outside: [5, 6, 1] (tucked flap | back cover | front cover)
                 sheets.push(SheetSpec {
                     slots: vec![slot(base + 5), slot(base + 6), slot(base + 1)],
+                    cols: 3,
+                    rows: 1,
                     creep_px: 0.0,
                     is_back: false,
                 });
                 // Inside: [2, 3, 4]
                 sheets.push(SheetSpec {
                     slots: vec![slot(base + 2), slot(base + 3), slot(base + 4)],
+                    cols: 3,
+                    rows: 1,
                     creep_px: 0.0,
                     is_back: true,
                 });
@@ -251,12 +336,16 @@ fn sheet_plan(page_count: usize, opts: ImposeOptions) -> Vec<SheetSpec> {
                 // Front: [5, 4, 1] (back of 6 | back of 3 | front cover)
                 sheets.push(SheetSpec {
                     slots: vec![slot(base + 5), slot(base + 4), slot(base + 1)],
+                    cols: 3,
+                    rows: 1,
                     creep_px: 0.0,
                     is_back: false,
                 });
                 // Back: [2, 3, 6]
                 sheets.push(SheetSpec {
                     slots: vec![slot(base + 2), slot(base + 3), slot(base + 6)],
+                    cols: 3,
+                    rows: 1,
                     creep_px: 0.0,
                     is_back: true,
                 });
@@ -270,6 +359,43 @@ fn sheet_plan(page_count: usize, opts: ImposeOptions) -> Vec<SheetSpec> {
                 let base = k * 2;
                 sheets.push(SheetSpec {
                     slots: vec![slot(base + 1), slot(base + 2)],
+                    cols: 2,
+                    rows: 1,
+                    creep_px: 0.0,
+                    is_back: false,
+                });
+            }
+            sheets
+        }
+        ImposeMode::Grid { cols, rows } => {
+            let per_sheet = cols * rows;
+            let sheet_count = page_count.div_ceil(per_sheet);
+            let mut sheets = Vec::with_capacity(sheet_count);
+            for k in 0..sheet_count {
+                let base = k * per_sheet;
+                let slots = (0..per_sheet).map(|i| slot(base + i + 1)).collect();
+                sheets.push(SheetSpec {
+                    slots,
+                    cols,
+                    rows,
+                    creep_px: 0.0,
+                    is_back: false,
+                });
+            }
+            sheets
+        }
+        ImposeMode::CutAndStack { cols, rows } => {
+            let per_sheet = cols * rows;
+            let sheet_count = page_count.div_ceil(per_sheet);
+            let mut sheets = Vec::with_capacity(sheet_count);
+            for k in 0..sheet_count {
+                let slots = (0..per_sheet)
+                    .map(|i| slot(i * sheet_count + k + 1))
+                    .collect();
+                sheets.push(SheetSpec {
+                    slots,
+                    cols,
+                    rows,
                     creep_px: 0.0,
                     is_back: false,
                 });
@@ -279,17 +405,18 @@ fn sheet_plan(page_count: usize, opts: ImposeOptions) -> Vec<SheetSpec> {
     }
 }
 
-/// Compose one physical sheet by placing each panel slot side-by-side left-to-right,
-/// preserving outer bleed while meeting flush at internal fold/spine edges.
+/// Compose one physical sheet by placing each panel slot on a `cols × rows` grid,
+/// preserving outer bleed while meeting flush at internal fold/cut edges.
 fn compose_sheet(
     scenes: &[Scene],
     spec: &SheetSpec,
     (bleed_x, bleed_y, trim_w, trim_h): (f64, f64, f64, f64),
     opts: ImposeOptions,
 ) -> Scene {
-    let cols = spec.slots.len();
+    let cols = spec.cols;
+    let rows = spec.rows;
     let sheet_trim_w = trim_w * cols as f64;
-    let sheet_trim_h = trim_h;
+    let sheet_trim_h = trim_h * rows as f64;
     let margin_x = if opts.marks {
         bleed_x.max(MARKS_MIN_SLUG_PX)
     } else {
@@ -322,15 +449,18 @@ fn compose_sheet(
         });
     }
 
-    for (col, page_slot) in spec.slots.iter().enumerate() {
+    for (idx, page_slot) in spec.slots.iter().enumerate() {
         let Some(page_idx) = *page_slot else {
             continue;
         };
         let Some(page) = scenes.get(page_idx) else {
             continue;
         };
+        let row = idx / cols;
+        let col = idx % cols;
         let panel_trim_x = margin_x + trim_w * col as f64;
-        // Outer sheet edges preserve bleed; inner fold/spine edges clip flush at trim.
+        let panel_trim_y = margin_y + trim_h * row as f64;
+        // Outer sheet edges preserve bleed; internal fold/cut edges clip flush at trim.
         let clip_x = if col == 0 {
             margin_x - bleed_x
         } else {
@@ -341,11 +471,19 @@ fn compose_sheet(
         } else {
             panel_trim_x + trim_w
         };
-        let clip_y = margin_y - bleed_y;
-        let clip_h = sheet_trim_h + 2.0 * bleed_y;
+        let clip_y = if row == 0 {
+            margin_y - bleed_y
+        } else {
+            panel_trim_y
+        };
+        let clip_bottom = if row + 1 == rows {
+            margin_y + sheet_trim_h + bleed_y
+        } else {
+            panel_trim_y + trim_h
+        };
 
         // Saddle-stitch creep shifts left panel right (+creep) and right panel left (-creep).
-        let creep_shift = if spec.creep_px > 0.0 && cols == 2 {
+        let creep_shift = if spec.creep_px > 0.0 && cols == 2 && rows == 1 {
             if col == 0 {
                 spec.creep_px
             } else {
@@ -355,7 +493,7 @@ fn compose_sheet(
             0.0
         };
         let tx = (panel_trim_x - bleed_x) + creep_shift;
-        let ty = margin_y - bleed_y;
+        let ty = panel_trim_y - bleed_y;
 
         // Strip per-page trailing crop marks (8 StrokeLines emitted by scene compiler when bleed > 0)
         // so only clean sheet-level marks appear when `--marks` is enabled.
@@ -365,7 +503,7 @@ fn compose_sheet(
             x: clip_x,
             y: clip_y,
             w: clip_right - clip_x,
-            h: clip_h,
+            h: clip_bottom - clip_y,
         });
         if tx != 0.0 || ty != 0.0 {
             sheet.commands.push(SceneCommand::PushScaleTranslate {
@@ -383,11 +521,16 @@ fn compose_sheet(
     }
 
     if opts.marks {
+        let dashed_internal = matches!(
+            opts.mode,
+            ImposeMode::Booklet | ImposeMode::Trifold | ImposeMode::Zfold | ImposeMode::Spread
+        );
         emit_sheet_marks(
             &mut sheet.commands,
             (margin_x, margin_y, sheet_trim_w, sheet_trim_h),
-            cols,
-            trim_w,
+            (cols, rows),
+            (trim_w, trim_h),
+            dashed_internal,
         );
     }
 
@@ -403,24 +546,26 @@ fn compose_sheet(
 /// carry stray interior crop marks.
 fn strip_panel_crop_marks(page: &Scene) -> &[SceneCommand] {
     if page.trim.is_some()
-        && page.commands.len() >= 8
-        && page.commands[page.commands.len() - 8..]
+        && let Some(split_at) = page.commands.len().checked_sub(8)
+        && let Some((head, tail)) = page.commands.split_at_checked(split_at)
+        && tail
             .iter()
             .all(|cmd| matches!(cmd, SceneCommand::StrokeLine { .. }))
     {
-        &page.commands[..page.commands.len() - 8]
+        head
     } else {
         &page.commands
     }
 }
 
-/// Emit K-only corner crop marks at the 4 sheet trim corners and dashed fold
-/// ticks in the top/bottom outer margins at every internal fold crease.
+/// Emit K-only corner crop marks at the 4 sheet trim corners and internal fold
+/// (dashed) or cut (solid) tick marks in the outer margins.
 fn emit_sheet_marks(
     commands: &mut Vec<SceneCommand>,
     (left, top, trim_w, trim_h): (f64, f64, f64, f64),
-    cols: usize,
-    panel_trim_w: f64,
+    (cols, rows): (usize, usize),
+    (panel_trim_w, panel_trim_h): (f64, f64),
+    dashed_internal: bool,
 ) {
     let right = left + trim_w;
     let bottom = top + trim_h;
@@ -455,11 +600,18 @@ fn emit_sheet_marks(
     line(right + o, bottom, right + o + l, bottom, None);
     line(right, bottom + o, right, bottom + o + l, None);
 
-    // Internal fold-crease tick marks (dashed, strictly outside trim).
+    // Internal column fold/cut tick marks (strictly outside trim).
+    let tick_dash = dashed_internal.then_some(3.0);
     for col in 1..cols {
         let fx = left + panel_trim_w * col as f64;
-        line(fx, top - o - l, fx, top - o, Some(3.0));
-        line(fx, bottom + o, fx, bottom + o + l, Some(3.0));
+        line(fx, top - o - l, fx, top - o, tick_dash);
+        line(fx, bottom + o, fx, bottom + o + l, tick_dash);
+    }
+    // Internal row cut tick marks (strictly outside trim).
+    for row in 1..rows {
+        let fy = top + panel_trim_h * row as f64;
+        line(left - o - l, fy, left - o, fy, tick_dash);
+        line(right + o, fy, right + o + l, fy, tick_dash);
     }
 }
 
@@ -599,5 +751,69 @@ mod tests {
             .filter(|c| matches!(c, SceneCommand::StrokeLine { .. }))
             .count();
         assert_eq!(mark_lines, 10);
+    }
+
+    #[test]
+    fn grid_and_cut_and_stack_plans_and_2d_marks() {
+        // 10 pages on a 2x2 grid (4-up) -> 3 sheets.
+        assert_eq!(
+            slots_only(&sheet_plan(
+                10,
+                ImposeOptions::new(ImposeMode::Grid { cols: 2, rows: 2 })
+            )),
+            vec![
+                vec![Some(0), Some(1), Some(2), Some(3)],
+                vec![Some(4), Some(5), Some(6), Some(7)],
+                vec![Some(8), Some(9), None, None],
+            ]
+        );
+        // Cut-and-stack for 10 pages on 2x2 (S=3 sheets):
+        // sheet 0 = [1, 4, 7, 10], sheet 1 = [2, 5, 8, _], sheet 2 = [3, 6, 9, _].
+        assert_eq!(
+            slots_only(&sheet_plan(
+                10,
+                ImposeOptions::new(ImposeMode::CutAndStack { cols: 2, rows: 2 })
+            )),
+            vec![
+                vec![Some(0), Some(3), Some(6), Some(9)],
+                vec![Some(1), Some(4), Some(7), None],
+                vec![Some(2), Some(5), Some(8), None],
+            ]
+        );
+
+        let pages = vec![Scene::new(100.0, 60.0); 10];
+        let opts = ImposeOptions {
+            marks: true,
+            ..ImposeOptions::new(ImposeMode::CutAndStack { cols: 2, rows: 2 })
+        };
+        let sheets = impose_scenes(&pages, opts).unwrap();
+        assert_eq!(sheets.len(), 3);
+        // 2x2 of 100x60 = 200x120 trim + 24px slug on each side = 248x168.
+        assert!((sheets[0].width - 248.0).abs() < 1e-6);
+        assert!((sheets[0].height - 168.0).abs() < 1e-6);
+        // 8 corner lines + 2 column cut ticks + 2 row cut ticks = 12 solid StrokeLines.
+        let mark_lines: Vec<_> = sheets[0]
+            .commands
+            .iter()
+            .filter_map(|c| match c {
+                SceneCommand::StrokeLine { stroke_dash, .. } => Some(*stroke_dash),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(mark_lines.len(), 12);
+        assert!(
+            mark_lines.iter().all(Option::is_none),
+            "cut-and-stack cut ticks must be solid"
+        );
+    }
+
+    #[test]
+    fn parse_grid_spec_validates_bounds() {
+        assert_eq!(parse_grid_spec("2x4"), Ok((2, 4)));
+        assert_eq!(parse_grid_spec("3X2"), Ok((3, 2)));
+        assert!(parse_grid_spec("1x1").is_err());
+        assert!(parse_grid_spec("0x2").is_err());
+        assert!(parse_grid_spec("33x2").is_err());
+        assert!(parse_grid_spec("2by4").is_err());
     }
 }
