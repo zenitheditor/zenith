@@ -17,6 +17,7 @@ it.
 
 ### Added
 
+- **Deterministic multi-agent transaction merge (`zenith_tx::merge_transactions`):** scopes concurrent `Transaction` batches by touched node/page/token/style/master/asset/document IDs (`BTreeSet`), merges disjoint edits cleanly in deterministic agent order, and reports exact overlapping-scope conflicts without silent overwrites.
 - **Automatic overflow pagination (`zenith reflow <DOC.zen> [--apply] [--max-pages N] [--json]`):** spawns continuation pages for overflowing `chain="..."` text flows (preserving `master`, page size, bleed, margins, and layout) until all chained copy fits; dry-run by default with unified diff preview.
 - **Editable SVG import (`zenith import svg <INPUT.svg> --out <OUT.zen>`):** converts vector SVGs (shapes, paths, arcs, transforms, group opacity) into native editable `.zen` `path` nodes with deduplicated `color.svg.*` and `size.stroke.*` design tokens (`--force`, `--name`, `--json`).
 - **N-up gang-up (`--impose grid`) and cut-and-stack (`--impose cut-and-stack`) PDF imposition** with `--grid CxR` (default `2x2`), 2D outer-bleed preservation, and solid internal cut ticks (CLI `render`, `merge --combine`, and MCP `zenith_render`).

@@ -12,6 +12,7 @@ pub mod merge;
 pub mod op;
 pub mod result;
 pub mod schema;
+pub mod tx_merge;
 
 // Curated flat re-exports.
 pub use engine::query::{FlowPlacement, layout_flow, parent_space_origin};
@@ -26,3 +27,4 @@ pub use op::{
     ShadowLayerInput, SizeInput, Transaction,
 };
 pub use result::{TxError, TxResult, TxStatus};
+pub use tx_merge::{ScopedTx, TxConflict, TxMergeOutcome, merge_transactions};
