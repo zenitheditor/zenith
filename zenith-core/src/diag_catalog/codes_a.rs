@@ -228,6 +228,11 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
         "Composition import graph contains a cycle.",
     ),
     info(
+        "import.format_failed",
+        Severity::Error,
+        "Canonical formatting of the imported `.zen` document failed.",
+    ),
+    info(
         "import.hash_mismatch",
         Severity::Error,
         "Imported source bytes do not match the declared sha256.",
@@ -248,6 +253,11 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
         "Imported `.zen` source could not be read.",
     ),
     info(
+        "import.output_exists",
+        Severity::Error,
+        "Import output file already exists and `--force` was not passed.",
+    ),
+    info(
         "import.page_size_mismatch",
         Severity::Error,
         "Imported page target dimensions differ from the host page without an explicit fit.",
@@ -256,6 +266,16 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
         "import.parse_error",
         Severity::Error,
         "Imported `.zen` source could not be parsed.",
+    ),
+    info(
+        "import.read_failed",
+        Severity::Error,
+        "Import source file could not be read from disk.",
+    ),
+    info(
+        "import.svg_failed",
+        Severity::Error,
+        "Converting the input SVG into a `.zen` document failed.",
     ),
     info(
         "import.token_conflict",

@@ -47,6 +47,11 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
         "Recipe palette references an unknown or non-color token.",
     ),
     info(
+        "render.icc_read_failed",
+        Severity::Error,
+        "Reading the requested `--icc-profile` file failed.",
+    ),
+    info(
         "render.no_pages",
         Severity::Error,
         "Document has no pages to render.",
