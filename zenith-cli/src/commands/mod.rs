@@ -19,6 +19,7 @@ pub mod merge;
 pub mod new;
 pub mod perceive;
 pub mod plugin;
+pub mod reflow;
 pub mod render;
 pub mod schema;
 pub mod theme;

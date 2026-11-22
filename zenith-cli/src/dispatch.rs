@@ -20,6 +20,7 @@ mod history;
 mod import;
 mod library;
 mod output;
+mod reflow;
 mod render;
 mod tools;
 mod workspace;
@@ -49,6 +50,7 @@ pub fn run() -> ExitCode {
         Command::Sync(args) => history::dispatch_sync(args),
         Command::Edit(args) => editor::dispatch_edit(args),
         Command::Tx(args) => edit::dispatch_tx(args),
+        Command::Reflow(args) => reflow::dispatch_reflow(args),
         Command::OutlineText(args) => edit::dispatch_outline_text(args),
         Command::Variant(args) => batch::dispatch_variant(args),
         Command::Update(args) => tools::dispatch_update(args),

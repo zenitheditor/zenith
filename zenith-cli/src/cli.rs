@@ -24,6 +24,7 @@ mod import;
 mod library;
 mod perceive;
 mod plugin;
+mod reflow;
 mod render;
 mod schema;
 mod tx;
@@ -41,6 +42,7 @@ pub use perceive::{PerceiveArgs, PerceiveSub};
 pub use plugin::{
     AgentFlags, PluginArgs, PluginInstallArgs, PluginSub, PluginUninstallArgs, ScopeArg,
 };
+pub use reflow::ReflowArgs;
 pub use render::{DuplexArg, ImposeArg, PdfColorspaceArg, RenderArgs};
 pub use schema::{SchemaArgs, SchemaSub};
 pub use tx::{COMMON_EDITS, OutlineTextArgs, TxArgs};
@@ -137,6 +139,9 @@ pub enum Command {
     /// The preferred way to edit a document. A dry run prints the source diff and the moved or
     /// resized boxes. `--apply` writes. Every edit keeps ids unique and references valid.
     Tx(TxArgs),
+
+    /// Automatically paginate overflowing `chain="..."` text flows into continuation pages (dry-run by default).
+    Reflow(ReflowArgs),
 
     /// Serve a `.zen` document to the browser editor and to agents over local HTTP.
     ///
