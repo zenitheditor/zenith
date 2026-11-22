@@ -167,6 +167,7 @@ pub fn run_variant_with_output_constraints(
     let doc = KdlAdapter
         .parse(doc_src.as_bytes())
         .map_err(|e| VariantCmdErr::new(crate::report::parse_error_line(doc_src, &e)))?;
+    let options = options.resolved_for_doc(&doc);
 
     let policy = load_batch_policy(format, &doc, project_dir).map_err(VariantCmdErr::new)?;
 

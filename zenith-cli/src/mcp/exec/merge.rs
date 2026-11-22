@@ -151,6 +151,7 @@ fn options(args: &Value) -> Result<render::BatchExportOptions, String> {
     Ok(render::BatchExportOptions {
         format,
         raster_scale,
+        cmyk: None,
     })
 }
 

@@ -66,6 +66,8 @@ impl BatchFormat {
 pub struct BatchExportOptions {
     pub format: BatchFormat,
     pub raster_scale: f64,
+    /// Explicit PDF DeviceCMYK override (`None` follows the document's `colorspace`).
+    pub cmyk: Option<bool>,
 }
 
 impl Default for BatchExportOptions {
@@ -79,6 +81,7 @@ impl From<BatchFormat> for BatchExportOptions {
         Self {
             format,
             raster_scale: 1.0,
+            cmyk: None,
         }
     }
 }
@@ -93,6 +96,14 @@ impl BatchExportOptions {
             );
         }
         Ok(())
+    }
+
+    /// Resolve `cmyk` from `doc.colorspace` when not explicitly overridden.
+    pub(crate) fn resolved_for_doc(mut self, doc: &Document) -> Self {
+        if self.cmyk.is_none() && doc.colorspace.as_deref() == Some("cmyk") {
+            self.cmyk = Some(true);
+        }
+        self
     }
 }
 
@@ -173,7 +184,7 @@ pub(crate) fn encode_batch_pdf(
         PdfExportOptions {
             subset: true,
             raster_scale: options.raster_scale,
-            ..PdfExportOptions::default()
+            cmyk: options.cmyk.unwrap_or(false),
         },
     )
     .map_err(|e| {

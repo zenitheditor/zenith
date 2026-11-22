@@ -193,3 +193,65 @@ fn pdf_colorspace_print_and_impose_modes() {
         );
     }
 }
+
+#[test]
+fn merge_pdf_honors_document_cmyk_colorspace() {
+    let dir = tempfile::tempdir().unwrap();
+    let home = tempfile::tempdir().unwrap();
+
+    let doc = r##"zenith version=1 colorspace="cmyk" {
+  project id="proj.cmyk_merge" name="CMYK Merge"
+  tokens format="zenith-token-v1" {
+    token id="color.bg" type="color" value="#ffffff"
+    token id="color.ink" type="color" value="#1e3a5f"
+    token id="font.body" type="fontFamily" value="Noto Sans"
+    token id="size.body" type="dimension" value=(px)16
+  }
+  styles {}
+  document id="doc.cmyk_merge" title="CMYK Merge" {
+    page id="page.1" w=(px)200 h=(px)100 {
+      rect id="bg" x=(px)0 y=(px)0 w=(px)200 h=(px)100 fill=(token)"color.bg"
+      text id="label" role="data.name" x=(px)16 y=(px)24 w=(px)168 h=(px)40 fill=(token)"color.ink" font-family=(token)"font.body" font-size=(token)"size.body" { span "Placeholder" }
+    }
+  }
+}
+"##;
+    fs::write(dir.path().join("card.zen"), doc).unwrap();
+    fs::write(dir.path().join("rows.csv"), "name\nAlice\nBob\n").unwrap();
+
+    let out = run_cli(
+        &dir,
+        &home,
+        &[
+            "merge",
+            "card.zen",
+            "rows.csv",
+            "--out-dir",
+            "out",
+            "--format",
+            "pdf",
+            "--combine",
+            "combined.pdf",
+        ],
+    );
+    assert!(
+        out.status.success(),
+        "merge failed: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let combined = fs::read(dir.path().join("combined.pdf")).unwrap();
+    assert!(
+        count_matches(&combined, b"/GTS_PDFX") > 0 && count_matches(&combined, b"FOGRA39") > 0,
+        "combined merge PDF for colorspace=\"cmyk\" must emit PDF/X FOGRA39 OutputIntent"
+    );
+    assert_eq!(
+        count_matches(&combined, b" rg\n"),
+        0,
+        "CMYK merge PDF must not emit DeviceRGB fill operators"
+    );
+    assert_eq!(
+        count_matches(&combined, b"/Type /Page\n"),
+        2,
+        "combined merge PDF must contain 2 pages"
+    );
+}

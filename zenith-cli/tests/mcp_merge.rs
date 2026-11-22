@@ -139,6 +139,7 @@ fn svg_native_and_captured_outputs_match_shared_batch_options() {
                 BatchExportOptions {
                     format: BatchFormat::Svg,
                     raster_scale: scale,
+                    cmyk: None,
                 },
             )
             .unwrap();

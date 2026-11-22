@@ -145,6 +145,9 @@ zenith render examples/hello.zen --scene scene.json       # dump the scene IR
 | `--all-pages-svg DIR` | Writes `page-N.svg` in document order. |
 | `--raster-scale F` | SVG/PDF fallback resolution. Finite `0 < F <= 4`, default 1. |
 | `--scale F` | PNG output scale. Finite `0 < F <= 4`, default 1. |
+| `--colorspace srgb\|cmyk` | Override PDF output colorspace (`cmyk` emits DeviceCMYK + `FOGRA39` PDF/X `OutputIntent`). |
+| `--print` | Press-ready PDF preset (`--colorspace cmyk` + 300 DPI fallback `--raster-scale 3.125`). |
+| `--impose MODE` | Press sheet imposition for multi-page PDFs (`booklet`, `trifold`, `zfold`, `spread`), with `--marks`, `--duplex`, `--creep`, and `--signature`. |
 | `--deny render.svg_rasterized` | Blocks SVG exports requiring raster fallback. |
 | `--deny render.pdf_rasterized` | Blocks PDF exports requiring raster fallback. |
 

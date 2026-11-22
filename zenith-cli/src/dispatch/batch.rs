@@ -286,5 +286,6 @@ fn batch_options(
     Ok(commands::render::BatchExportOptions {
         format,
         raster_scale,
+        cmyk: None,
     })
 }

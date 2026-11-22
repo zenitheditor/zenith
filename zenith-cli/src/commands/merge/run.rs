@@ -207,6 +207,7 @@ pub fn run_with_targets(
     let doc = KdlAdapter
         .parse(doc_src.as_bytes())
         .map_err(|e| MergeError::new(crate::report::parse_error_line(doc_src, &e)))?;
+    let options = options.resolved_for_doc(&doc);
 
     let policy = load_batch_policy(format, &doc, project_dir).map_err(MergeError::new)?;
     // Every row is validated and compiled under the merged config policy and brand,
