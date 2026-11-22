@@ -2204,7 +2204,7 @@ checksum = "ec7a2a501ed189703dba8b08142f057e887dfc4b2cc4db2d343ac6376ba3e0b9"
 
 [[package]]
 name = "zenith-core"
-version = "0.0.15"
+version = "0.0.16"
 dependencies = [
  "kdl",
  "oxidoc-highlight",
@@ -2215,7 +2215,7 @@ dependencies = [
 
 [[package]]
 name = "zenith-editor"
-version = "0.0.15"
+version = "0.0.16"
 dependencies = [
  "kdl",
  "serde",
@@ -2241,7 +2241,7 @@ dependencies = [
 
 [[package]]
 name = "zenith-editor-wasm"
-version = "0.0.15"
+version = "0.0.16"
 dependencies = [
  "base64",
  "serde",
@@ -2254,7 +2254,7 @@ dependencies = [
 
 [[package]]
 name = "zenith-fonts-fallback"
-version = "0.0.15"
+version = "0.0.16"
 dependencies = [
  "sha2",
  "ttf-parser 0.25.1",
@@ -2262,14 +2262,14 @@ dependencies = [
 
 [[package]]
 name = "zenith-geometry"
-version = "0.0.15"
+version = "0.0.16"
 dependencies = [
  "libm",
 ]
 
 [[package]]
 name = "zenith-layout"
-version = "0.0.15"
+version = "0.0.16"
 dependencies = [
  "rustybuzz 0.20.1",
  "unicode-bidi",
@@ -2281,7 +2281,7 @@ dependencies = [
 
 [[package]]
 name = "zenith-perception"
-version = "0.0.15"
+version = "0.0.16"
 dependencies = [
  "zenith-core",
  "zenith-geometry",
@@ -2290,7 +2290,7 @@ dependencies = [
 
 [[package]]
 name = "zenith-pipeline"
-version = "0.0.15"
+version = "0.0.16"
 dependencies = [
  "csv",
  "imagesize",
@@ -2310,7 +2310,7 @@ dependencies = [
 
 [[package]]
 name = "zenith-producers"
-version = "0.0.15"
+version = "0.0.16"
 dependencies = [
  "usvg",
  "zenith-core",
@@ -2320,7 +2320,7 @@ dependencies = [
 
 [[package]]
 name = "zenith-raster"
-version = "0.0.15"
+version = "0.0.16"
 dependencies = [
  "zenith-core",
  "zenith-geometry",
@@ -2328,7 +2328,7 @@ dependencies = [
 
 [[package]]
 name = "zenith-render"
-version = "0.0.15"
+version = "0.0.16"
 dependencies = [
  "gif",
  "jpeg-decoder",
@@ -2348,7 +2348,7 @@ dependencies = [
 
 [[package]]
 name = "zenith-scene"
-version = "0.0.15"
+version = "0.0.16"
 dependencies = [
  "hyphenation",
  "serde",
@@ -2361,7 +2361,7 @@ dependencies = [
 
 [[package]]
 name = "zenith-session"
-version = "0.0.15"
+version = "0.0.16"
 dependencies = [
  "dirs",
  "flate2",
@@ -2374,7 +2374,7 @@ dependencies = [
 
 [[package]]
 name = "zenith-tool"
-version = "0.0.15"
+version = "0.0.16"
 dependencies = [
  "clap",
  "csv",
@@ -2404,7 +2404,7 @@ dependencies = [
 
 [[package]]
 name = "zenith-tx"
-version = "0.0.15"
+version = "0.0.16"
 dependencies = [
  "serde",
  "serde_json",
@@ -2415,7 +2415,7 @@ dependencies = [
 
 [[package]]
 name = "zenith-zpx"
-version = "0.0.15"
+version = "0.0.16"
 dependencies = [
  "kdl",
  "png",

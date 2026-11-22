@@ -15,6 +15,8 @@ it.
 
 ## [Unreleased]
 
+## [0.0.16] — 2026-11-23
+
 ### Added
 
 - **Deterministic multi-agent transaction merge (`zenith_tx::merge_transactions`):** scopes concurrent `Transaction` batches by touched node/page/token/style/master/asset/document IDs (`BTreeSet`), merges disjoint edits cleanly in deterministic agent order, and reports exact overlapping-scope conflicts without silent overwrites.
