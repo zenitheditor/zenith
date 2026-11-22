@@ -432,3 +432,33 @@ fn raster_error_retains_region_draws() {
             .contains("-4 2 10 8 re")
     );
 }
+
+#[test]
+fn outer_page_clip_isolates_raster_command_and_keeps_siblings_vector() {
+    let mut scene = Scene::new(48.0, 48.0);
+    scene.commands = vec![
+        SceneCommand::PushClip {
+            x: 0.0,
+            y: 0.0,
+            w: 48.0,
+            h: 48.0,
+        },
+        shape(),
+        SceneCommand::BeginBlur { radius: 1.0 },
+        shape(),
+        SceneCommand::EndBlur,
+        shape(),
+        SceneCommand::PopClip,
+    ];
+    let fonts = default_provider();
+    let assets = BytesAssetProvider::new();
+    let ranges = super::scopes::plan(&scene, &fonts, &assets).unwrap();
+    assert_eq!(ranges, vec![2..5]);
+    let plan = build_plan(&Default::default(), &fonts, true);
+    let (content, resources) = translate(&scene, &fonts, &assets, &plan);
+    assert_eq!(resources.images.len(), 1);
+    let stream = String::from_utf8(content.finish().into_vec()).unwrap();
+    assert_eq!(stream.matches("/im0 Do").count(), 1);
+    // Both sibling shapes outside the blur remain native vector rectangles.
+    assert_eq!(stream.matches("-4 2 10 8 re").count(), 2);
+}
