@@ -28,9 +28,19 @@ page id="page.cn" w=(px)640 h=(px)360 {
     let result = compile(&doc, &default_provider());
     let cmds = &result.scene.commands;
 
-    // The line is still emitted.
+    // The line is still emitted as a 2-point segment, with its end pulled back
+    // inside the arrowhead base so the stroke cap never pokes past the sharp tip.
     let line = first_stroke_polyline_points(cmds);
-    assert_eq!(line, vec![140.0, 80.0, 300.0, 100.0]);
+    assert_eq!(line.len(), 4);
+    assert_eq!((line[0], line[1]), (140.0, 80.0));
+    assert!(
+        line[2] < 300.0 && line[2] > 290.0,
+        "end x pulled back inside head; got {line:?}"
+    );
+    assert!(
+        line[3] < 100.0 && line[3] > 98.0,
+        "end y pulled back along segment; got {line:?}"
+    );
 
     // Exactly one arrowhead, a 3-vertex triangle.
     let heads = all_fill_polygon_points(cmds);
@@ -94,9 +104,15 @@ page id="page.cn" w=(px)640 h=(px)360 {
     let result = compile(&doc, &default_provider());
     let cmds = &result.scene.commands;
 
-    assert_eq!(
-        first_stroke_polyline_points(cmds),
-        vec![140.0, 80.0, 300.0, 100.0]
+    let line = first_stroke_polyline_points(cmds);
+    assert_eq!(line.len(), 4);
+    assert!(
+        line[0] > 140.0 && line[0] < 150.0,
+        "start x pulled back inside head; got {line:?}"
+    );
+    assert!(
+        line[2] < 300.0 && line[2] > 290.0,
+        "end x pulled back inside head; got {line:?}"
     );
 
     let heads = all_fill_polygon_points(cmds);

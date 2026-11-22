@@ -170,12 +170,18 @@ page id="page.co" w=(px)640 h=(px)360 {
     let result = compile(&doc, &default_provider());
     let cmds = &result.scene.commands;
 
-    // Straight 2-point line between the raw anchors.
+    // Straight 2-point line starting at the raw `from` anchor and stopping cleanly
+    // inside the arrowhead base so the stroke cap does not blunt the tip.
     let line = first_stroke_polyline_points(cmds);
     assert_eq!(
-        line,
-        vec![140.0, 80.0, 300.0, 100.0],
+        line.len(),
+        4,
         "straight route must remain a 2-point line; got {line:?}"
+    );
+    assert_eq!((line[0], line[1]), (140.0, 80.0));
+    assert!(
+        line[2] < 300.0 && line[2] > 290.0,
+        "end x pulled back inside head; got {line:?}"
     );
 
     // Marker endpoints are the raw anchors: tip on the `to` anchor.

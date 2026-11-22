@@ -214,7 +214,7 @@ pub(in crate::compile) fn compile_connector(
     // boxes (and falls back to the plain elbow when no clear path exists);
     // everything else (None / "straight" / unknown — validation already warned)
     // is the straight 2-point line, byte-identical to Unit 1/2.
-    let flat_points = if from_id == to_id {
+    let mut flat_points = if from_id == to_id {
         let side = loop_side(
             connector
                 .from_anchor
@@ -246,6 +246,16 @@ pub(in crate::compile) fn compile_connector(
             _ => vec![f_pt.0, f_pt.1, t_pt.0, t_pt.1],
         }
     };
+
+    // Translate page-space routed points into render space by the print-bleed
+    // offset (`ctx.page_origin`). No-op when bleed == 0.
+    let (ox, oy) = ctx.page_origin;
+    if ox != 0.0 || oy != 0.0 {
+        for pair in flat_points.as_chunks_mut::<2>().0 {
+            pair[0] += ox;
+            pair[1] += oy;
+        }
+    }
 
     // STROKE — only emit when a stroke color is present (mirrors polyline: no
     // stroke token → nothing drawn). Style cascade for stroke + stroke-width.
@@ -290,8 +300,37 @@ pub(in crate::compile) fn compile_connector(
     let start_tip = point_at(&flat_points, 0);
     let start_from = point_at(&flat_points, 1);
 
+    // Pull back the shaft endpoint inside any arrowhead so the blunt stroke cap
+    // never pokes out past the pointed tip of the filled triangle.
+    let mut stroke_points = flat_points.clone();
+    let head_len = (stroke_width * 3.5).max(7.0);
+    let pullback = head_len * 0.85;
+    if connector.marker_end.as_deref() == Some("arrow")
+        && n >= 2
+        && let (Some(tip), Some(from_pt)) = (end_tip, end_from)
+    {
+        let (vx, vy) = (tip.0 - from_pt.0, tip.1 - from_pt.1);
+        let len = (vx * vx + vy * vy).sqrt();
+        if len > head_len {
+            let last = (n - 1) * 2;
+            stroke_points[last] = tip.0 - (vx / len) * pullback;
+            stroke_points[last + 1] = tip.1 - (vy / len) * pullback;
+        }
+    }
+    if connector.marker_start.as_deref() == Some("arrow")
+        && n >= 2
+        && let (Some(tip), Some(from_pt)) = (start_tip, start_from)
+    {
+        let (vx, vy) = (tip.0 - from_pt.0, tip.1 - from_pt.1);
+        let len = (vx * vx + vy * vy).sqrt();
+        if len > head_len {
+            stroke_points[0] = tip.0 - (vx / len) * pullback;
+            stroke_points[1] = tip.1 - (vy / len) * pullback;
+        }
+    }
+
     commands.push(SceneCommand::StrokePolyline {
-        points: flat_points.clone(),
+        points: stroke_points,
         color,
         stroke_width,
         closed: false,
