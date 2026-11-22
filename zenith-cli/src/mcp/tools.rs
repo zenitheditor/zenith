@@ -162,6 +162,13 @@ SVG exports page 1 by default, outlines text, embeds images, and reports raster 
                     "diagnostics": { "type": "boolean", "description": "Include soft diagnostics (default false)." },
                     "scale": { "type": "number", "exclusiveMinimum": 0, "maximum": 4, "description": "png only: raster scale, 0 < scale <= 4 (default 1). Each side is max(1, round(page_px * scale)); drawn at that scale, not resampled." },
                     "raster_scale": { "type": "number", "exclusiveMinimum": 0, "maximum": 4, "description": "svg/pdf only: raster fallback resolution, 0 < raster_scale <= 4 (default 1). Vector page dimensions and geometry remain unchanged." },
+                    "colorspace": { "type": "string", "enum": ["srgb", "cmyk"], "description": "pdf only: override output color space (srgb for digital sharing, cmyk for print). Omit to follow document colorspace." },
+                    "print": { "type": "boolean", "description": "pdf only: print-ready preset — emits DeviceCMYK and 300 DPI raster fallback (raster_scale=3.125 unless raster_scale is set)." },
+                    "impose": { "type": "string", "enum": ["booklet", "bifold", "saddle", "trifold", "letterfold", "zfold", "accordion", "spread", "2up"], "description": "pdf only (no page): arrange reading-order pages onto press sheets." },
+                    "duplex": { "type": "string", "enum": ["short-edge", "long-edge"], "description": "impose only: back-sheet flip orientation (default short-edge; long-edge rotates back sheets 180 deg)." },
+                    "creep_mm": { "type": "number", "minimum": 0, "description": "impose=booklet only: total saddle-stitch creep compensation in mm." },
+                    "signature": { "type": "integer", "minimum": 4, "multipleOf": 4, "description": "impose=booklet only: multi-signature section size (positive multiple of 4, e.g. 16)." },
+                    "marks": { "type": "boolean", "description": "impose only: draw K-only outer corner crop marks and dashed fold ticks." },
                     "contact_sheet": { "type": "boolean", "description": "png only: tile every page (or `page`) into one labelled PNG, ceil(sqrt(n)) columns. Without scale, fits 2048 px wide." }
                 },
                 "required": ["doc", "format"]

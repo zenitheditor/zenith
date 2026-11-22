@@ -9,13 +9,15 @@ use std::process::ExitCode;
 
 use zenith_core::{DataContext, Diagnostic};
 
-use crate::cli::RenderArgs;
+use crate::cli::{DuplexArg, ImposeArg, PdfColorspaceArg, RenderArgs};
 use crate::cli_helpers::{parse_spread_spec, read_file};
 use crate::commands;
 use crate::json_types::RenderImageJson;
 use crate::report::CliError;
 use zenith_pipeline::imports::ImportFiles;
-use zenith_pipeline::{PipelineError, PolicyFlags, RenderOptions, SpreadOptions};
+use zenith_pipeline::{
+    DuplexMode, ImposeMode, ImposeOptions, PipelineError, PolicyFlags, RenderOptions, SpreadOptions,
+};
 
 use super::output::gate;
 
@@ -48,13 +50,84 @@ pub(in crate::dispatch) fn dispatch_render(args: RenderArgs) -> ExitCode {
         )
         .emit(json);
     }
+    if args.colorspace.is_some() && args.pdf.is_none() {
+        return CliError::usage("error: --colorspace requires --pdf <OUT>").emit(json);
+    }
+    if args.print && args.pdf.is_none() {
+        return CliError::usage("error: --print requires --pdf <OUT>").emit(json);
+    }
+    if args.print && args.colorspace == Some(PdfColorspaceArg::Srgb) {
+        return CliError::usage("error: --print cannot be combined with --colorspace srgb")
+            .emit(json);
+    }
+    if args.impose.is_some() && args.pdf.is_none() {
+        return CliError::usage("error: --impose requires --pdf <OUT>").emit(json);
+    }
+    if args.impose.is_some() && args.page.is_some() {
+        return CliError::usage("error: --impose cannot be combined with --page").emit(json);
+    }
+    if args.impose.is_none()
+        && (args.duplex.is_some() || args.creep.is_some() || args.signature.is_some() || args.marks)
+    {
+        return CliError::usage(
+            "error: --duplex, --creep, --signature, and --marks require --impose <MODE>",
+        )
+        .emit(json);
+    }
+    let impose = match args.impose {
+        None => None,
+        Some(mode_arg) => {
+            let mode = match mode_arg {
+                ImposeArg::Booklet => ImposeMode::Booklet,
+                ImposeArg::Trifold => ImposeMode::Trifold,
+                ImposeArg::Zfold => ImposeMode::Zfold,
+                ImposeArg::Spread => ImposeMode::Spread,
+            };
+            let creep_mm = args.creep.unwrap_or(0.0);
+            if !creep_mm.is_finite() || creep_mm < 0.0 {
+                return CliError::usage("error: --creep must be a finite number >= 0").emit(json);
+            }
+            if creep_mm > 0.0 && mode != ImposeMode::Booklet {
+                return CliError::usage("error: --creep requires --impose booklet").emit(json);
+            }
+            if let Some(sig) = args.signature {
+                if mode != ImposeMode::Booklet {
+                    return CliError::usage("error: --signature requires --impose booklet")
+                        .emit(json);
+                }
+                if sig == 0 || sig % 4 != 0 {
+                    return CliError::usage(
+                        "error: --signature must be a positive multiple of 4 (e.g. 8, 16)",
+                    )
+                    .emit(json);
+                }
+            }
+            let duplex = match args.duplex {
+                Some(DuplexArg::LongEdge) => DuplexMode::LongEdge,
+                Some(DuplexArg::ShortEdge) | None => DuplexMode::ShortEdge,
+            };
+            Some(ImposeOptions {
+                mode,
+                duplex,
+                creep_mm,
+                signature: args.signature,
+                marks: args.marks,
+            })
+        }
+    };
+    let cmyk = match args.colorspace {
+        Some(PdfColorspaceArg::Cmyk) => Some(true),
+        Some(PdfColorspaceArg::Srgb) => Some(false),
+        None if args.print => Some(true),
+        None => None,
+    };
     let raster_scale = match args
         .raster_scale
         .as_deref()
         .map(|raw| commands::render::parse_scale_flag(raw, "--raster-scale"))
         .transpose()
     {
-        Ok(scale) => scale.unwrap_or(1.0),
+        Ok(scale) => scale.unwrap_or(if args.print { 300.0 / 96.0 } else { 1.0 }),
         Err(message) => return CliError::usage(message).emit(json),
     };
     if args.raster_scale.is_some()
@@ -113,6 +186,8 @@ pub(in crate::dispatch) fn dispatch_render(args: RenderArgs) -> ExitCode {
         data: data_ctx.as_ref(),
         scale,
         raster_scale,
+        cmyk,
+        impose,
         pending: Vec::new(),
         directories: Vec::new(),
         messages: Vec::new(),
@@ -161,6 +236,8 @@ pub(super) struct RenderRun<'a> {
     /// The checked `--scale`, when given.
     pub(super) scale: Option<f64>,
     pub(super) raster_scale: f64,
+    pub(super) cmyk: Option<bool>,
+    pub(super) impose: Option<ImposeOptions>,
     pub(super) directories: Vec<std::path::PathBuf>,
     pub(super) messages: Vec<String>,
     pub(super) pending: Vec<(std::path::PathBuf, Vec<u8>)>,
@@ -190,6 +267,8 @@ impl RenderRun<'_> {
             construction_overlay: self.args.construction_overlay,
             scale: self.output_scale(),
             raster_scale: self.raster_scale,
+            cmyk: self.cmyk,
+            impose: self.impose,
             parsed: None,
         }
     }

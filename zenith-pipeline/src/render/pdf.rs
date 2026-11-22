@@ -133,6 +133,11 @@ fn render_pages(
     if Diagnostic::has_errors(&diagnostics) {
         return Err(PipelineError::blocked(diagnostics, 2).with_import_files(import_files));
     }
+    let scenes = match opts.impose {
+        Some(impose) => super::impose::impose_scenes(&scenes, impose)
+            .map_err(|e| e.with_import_files(import_files.clone()))?,
+        None => scenes,
+    };
     let mut output = render_pdf_multi_report_with_options(
         &scenes,
         &fonts,
@@ -140,6 +145,9 @@ fn render_pages(
         PdfExportOptions {
             subset: opts.subset,
             raster_scale: opts.raster_scale,
+            cmyk: opts
+                .cmyk
+                .unwrap_or_else(|| doc.colorspace.as_deref() == Some("cmyk")),
         },
     )
     .map_err(|e| {
@@ -156,9 +164,11 @@ fn render_pages(
         ));
         PipelineError::blocked(all, 2).with_import_files(import_files.clone())
     })?;
-    for region in &mut output.rasterized_regions {
-        if let Some(&index) = region.page.checked_sub(1).and_then(|n| indices.get(n)) {
-            region.page = index + 1;
+    if opts.impose.is_none() {
+        for region in &mut output.rasterized_regions {
+            if let Some(&index) = region.page.checked_sub(1).and_then(|n| indices.get(n)) {
+                region.page = index + 1;
+            }
         }
     }
     diagnostics.extend(govern_compile_diagnostics(

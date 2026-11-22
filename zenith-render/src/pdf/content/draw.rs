@@ -55,7 +55,7 @@ pub(in crate::pdf::content) fn fill_region<F: Fn(&mut Content) -> bool>(
         ScenePaint::Solid { color } => {
             content.save_state();
             apply_alpha(content, res, color);
-            color::set_fill(content, color);
+            color::set_fill(content, color, res.cmyk);
             let produced = build_path(content);
             fill(content, produced);
             content.restore_state();

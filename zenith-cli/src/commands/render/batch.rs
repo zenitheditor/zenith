@@ -173,6 +173,7 @@ pub(crate) fn encode_batch_pdf(
         PdfExportOptions {
             subset: true,
             raster_scale: options.raster_scale,
+            ..PdfExportOptions::default()
         },
     )
     .map_err(|e| {

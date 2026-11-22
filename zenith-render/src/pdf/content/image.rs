@@ -90,7 +90,7 @@ pub(super) fn emit_image(
         }
         zenith_core::AssetKind::Font | zenith_core::AssetKind::Unknown(_) => return,
     }
-    let Some(decoded) = decode_for_pdf(&asset.bytes, src_rect) else {
+    let Some(decoded) = decode_for_pdf(&asset.bytes, src_rect, res.cmyk) else {
         return;
     };
     let (sw, sh) = (f64::from(decoded.width), f64::from(decoded.height));

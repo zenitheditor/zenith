@@ -32,14 +32,29 @@ pub(in crate::pdf) fn page_space(content: &mut Content, height: f64) {
 
 /// Translate `scene` into a single content stream plus the [`PageResources`] it
 /// references. `fonts` resolves glyph outlines; `assets` resolves image bytes.
+#[cfg_attr(not(test), allow(dead_code))]
 pub(in crate::pdf) fn translate(
     scene: &Scene,
     fonts: &dyn FontProvider,
     assets: &dyn AssetProvider,
     font_plan: &FontPlan,
 ) -> (Content, PageResources) {
+    translate_with(scene, fonts, assets, font_plan, false)
+}
+
+/// Like [`translate`], with explicit DeviceCMYK output mode.
+pub(in crate::pdf) fn translate_with(
+    scene: &Scene,
+    fonts: &dyn FontProvider,
+    assets: &dyn AssetProvider,
+    font_plan: &FontPlan,
+    cmyk: bool,
+) -> (Content, PageResources) {
     let mut content = Content::new();
-    let mut res = PageResources::default();
+    let mut res = PageResources {
+        cmyk,
+        ..PageResources::default()
+    };
 
     page_space(&mut content, scene.height);
 
@@ -83,9 +98,13 @@ pub(in crate::pdf) fn translate_strict(
     font_plan: &FontPlan,
     regions: &[crate::pdf::report::PlannedRegion],
     raster_scale: f64,
+    cmyk: bool,
 ) -> Result<(Content, PageResources), crate::RenderError> {
     let mut content = Content::new();
-    let mut res = PageResources::default();
+    let mut res = PageResources {
+        cmyk,
+        ..PageResources::default()
+    };
     page_space(&mut content, scene.height);
     let page = (scene.width, scene.height);
     let mut cursor = 0;
@@ -167,7 +186,7 @@ pub(in crate::pdf) fn emit_command(
             }
             content.save_state();
             apply_alpha(content, res, color);
-            color::set_stroke(content, color);
+            color::set_stroke(content, color, res.cmyk);
             content.set_line_width(*stroke_width as f32);
             set_dash(content, *stroke_dash, *stroke_gap);
             if stroke_linecap.is_some() {
@@ -223,7 +242,7 @@ pub(in crate::pdf) fn emit_command(
             let corner_radii = radii.unwrap_or([*radius; 4]);
             content.save_state();
             apply_alpha(content, res, color);
-            color::set_stroke(content, color);
+            color::set_stroke(content, color, res.cmyk);
             content.set_line_width(*stroke_width as f32);
             set_dash(content, *stroke_dash, *stroke_gap);
             if stroke_linecap.is_some() {
@@ -277,7 +296,7 @@ pub(in crate::pdf) fn emit_command(
             }
             content.save_state();
             apply_alpha(content, res, color);
-            color::set_stroke(content, color);
+            color::set_stroke(content, color, res.cmyk);
             content.set_line_width(*stroke_width as f32);
             set_dash(content, *stroke_dash, *stroke_gap);
             if stroke_linecap.is_some() {
@@ -309,7 +328,7 @@ pub(in crate::pdf) fn emit_command(
             }
             content.save_state();
             apply_alpha(content, res, color);
-            color::set_stroke(content, color);
+            color::set_stroke(content, color, res.cmyk);
             content.set_line_width(*stroke_width as f32);
             set_dash(content, *stroke_dash, *stroke_gap);
             if stroke_linecap.is_some() {
@@ -355,7 +374,7 @@ pub(in crate::pdf) fn emit_command(
 
             content.save_state();
             apply_alpha(content, res, color);
-            color::set_stroke(content, color);
+            color::set_stroke(content, color, res.cmyk);
 
             if aligned {
                 // 1. Install the alignment clip from the polygon fill path.
@@ -455,7 +474,7 @@ pub(in crate::pdf) fn emit_command(
 
             content.save_state();
             apply_alpha(content, res, color);
-            color::set_stroke(content, color);
+            color::set_stroke(content, color, res.cmyk);
 
             if aligned {
                 match align {

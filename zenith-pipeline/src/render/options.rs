@@ -2,6 +2,7 @@
 
 use zenith_core::{DataContext, Document};
 
+use super::impose::ImposeOptions;
 use crate::policy::PolicyFlags;
 
 /// Options of one render call. Each field has the meaning of the CLI flag
@@ -26,6 +27,12 @@ pub struct RenderOptions<'a> {
     /// `--raster-scale`: raster fallback resolution for SVG and PDF
     /// (`1.0` = page pixels).
     pub raster_scale: f64,
+    /// Override PDF color space: `Some(true)` forces DeviceCMYK, `Some(false)`
+    /// forces DeviceRGB, and `None` follows the document's `colorspace` attribute.
+    pub cmyk: Option<bool>,
+    /// Optional sheet imposition for multi-page PDF export (e.g. `booklet`,
+    /// `trifold`, `zfold`, `spread`), with bleed, marks, duplex, creep, and signature options.
+    pub impose: Option<ImposeOptions>,
     /// The parse of the source the caller already holds. The render uses it
     /// instead of parsing the source again. It must be the parse of that
     /// source: the output then equals a render without it.
@@ -45,6 +52,8 @@ impl<'a> RenderOptions<'a> {
             construction_overlay: false,
             scale: 1.0,
             raster_scale: 1.0,
+            cmyk: None,
+            impose: None,
             parsed: None,
         }
     }
@@ -96,6 +105,20 @@ impl<'a> RenderOptions<'a> {
     #[must_use]
     pub fn with_raster_scale(mut self, raster_scale: f64) -> Self {
         self.raster_scale = raster_scale;
+        self
+    }
+
+    /// This options set with an explicit PDF CMYK override (`None` follows the document).
+    #[must_use]
+    pub fn with_cmyk(mut self, cmyk: Option<bool>) -> Self {
+        self.cmyk = cmyk;
+        self
+    }
+
+    /// This options set with PDF sheet imposition.
+    #[must_use]
+    pub fn with_impose(mut self, impose: Option<ImposeOptions>) -> Self {
+        self.impose = impose;
         self
     }
 }

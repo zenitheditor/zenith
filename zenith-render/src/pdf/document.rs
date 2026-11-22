@@ -1,14 +1,14 @@
 //! Top-level PDF document assembly: page boxes, object-id allocation, resource
 //! materialization, and the deterministic trailer.
 
-use pdf_writer::types::{ActionType, AnnotationType, FunctionShadingType};
-use pdf_writer::{Filter, Finish, Pdf, Rect as PdfRect, Ref, Str};
+use pdf_writer::types::{ActionType, AnnotationType, FunctionShadingType, OutputIntentSubtype};
+use pdf_writer::{Filter, Finish, Pdf, Rect as PdfRect, Ref, Str, TextStr};
 use zenith_core::{AssetProvider, FontProvider, PX_TO_PT};
 use zenith_scene::Scene;
 
 use super::content::{
     ALPHA_PREFIX, FONT_PREFIX, IMAGE_PREFIX, LinkAnnot, PageResources, SHADING_PREFIX, name,
-    translate, translate_strict,
+    translate_strict, translate_with,
 };
 use super::font;
 use super::gradient::{GradientGeometry, PdfGradient};
@@ -19,11 +19,16 @@ pub struct PdfOptions {
     /// Subset embedded fonts to used glyphs (`true`, default) or embed whole fonts (`false`).
     /// Native text remains selectable and searchable. Rasterized text loses these capabilities.
     pub subset: bool,
+    /// Emit all colors, gradients, and images in DeviceCMYK (`true`) instead of DeviceRGB (`false`).
+    pub cmyk: bool,
 }
 
 impl Default for PdfOptions {
     fn default() -> Self {
-        Self { subset: true }
+        Self {
+            subset: true,
+            cmyk: false,
+        }
     }
 }
 
@@ -132,17 +137,39 @@ pub(super) fn assemble(
             let regions = plans
                 .get(index)
                 .ok_or_else(|| crate::RenderError::new("missing PDF page capture plan"))?;
-            translate_strict(scene, fonts, assets, &font_plan, regions, raster_scale).map_err(
-                |error| crate::RenderError::new(format!("PDF page {}: {error}", index + 1)),
-            )?
+            translate_strict(
+                scene,
+                fonts,
+                assets,
+                &font_plan,
+                regions,
+                raster_scale,
+                options.cmyk,
+            )
+            .map_err(|error| crate::RenderError::new(format!("PDF page {}: {error}", index + 1)))?
         } else {
-            translate(scene, fonts, assets, &font_plan)
+            translate_with(scene, fonts, assets, &font_plan, options.cmyk)
         };
         pages.push(prepare_page(scene, translated, &mut alloc));
     }
 
     // ── Catalog + page tree ──────────────────────────────────────────────
-    pdf.catalog(catalog_id).pages(page_tree_id);
+    let mut catalog = pdf.catalog(catalog_id);
+    catalog.pages(page_tree_id);
+    if options.cmyk {
+        let mut intents = catalog.output_intents();
+        let mut intent = intents.push();
+        intent.subtype(OutputIntentSubtype::PDFX);
+        intent.output_condition(TextStr(
+            "Offset printing, ISO 12647-2:2004/Amd 1, coated art paper",
+        ));
+        intent.output_condition_identifier(TextStr("FOGRA39"));
+        intent.registry_name(TextStr("http://www.color.org"));
+        intent.info(TextStr("ISO Coated v2 300% (ECI)"));
+        intent.finish();
+        intents.finish();
+    }
+    catalog.finish();
     pdf.pages(page_tree_id)
         .kids(pages.iter().map(|p| p.page_id))
         .count(pages.len() as i32);
@@ -460,21 +487,29 @@ fn write_alpha_states(pdf: &mut Pdf, res: &PageResources, alpha_ids: &[Ref]) {
     }
 }
 
-/// Write native axial or radial shading with DeviceRGB color functions.
+/// Write native axial or radial shading with DeviceRGB or DeviceCMYK color functions.
 fn write_gradients(pdf: &mut Pdf, res: &PageResources, refs: &[GradientRefs]) {
     for (g, gr) in res.gradients.iter().zip(refs) {
-        write_gradient_function(pdf, gr, g);
+        write_gradient_function(pdf, gr, g, res.cmyk);
 
         let mut shading = pdf.function_shading(gr.shading);
         match g.geometry {
             GradientGeometry::Axial(coords) => {
                 shading.shading_type(FunctionShadingType::Axial);
-                shading.color_space().device_rgb();
+                if res.cmyk {
+                    shading.color_space().device_cmyk();
+                } else {
+                    shading.color_space().device_rgb();
+                }
                 shading.coords(coords);
             }
             GradientGeometry::Radial(coords) => {
                 shading.shading_type(FunctionShadingType::Radial);
-                shading.color_space().device_rgb();
+                if res.cmyk {
+                    shading.color_space().device_cmyk();
+                } else {
+                    shading.color_space().device_rgb();
+                }
                 shading.coords(coords);
             }
         }
@@ -490,12 +525,12 @@ fn write_gradients(pdf: &mut Pdf, res: &PageResources, refs: &[GradientRefs]) {
 /// exponential (linear) function is emitted at `gr.function`; with more stops a
 /// Type 3 stitching function at `gr.function` combines one exponential
 /// subfunction per segment (refs in `gr.sub_functions`).
-fn write_gradient_function(pdf: &mut Pdf, gr: &GradientRefs, g: &PdfGradient) {
+fn write_gradient_function(pdf: &mut Pdf, gr: &GradientRefs, g: &PdfGradient, cmyk: bool) {
     // Two-stop (or defensively fewer): a single linear exponential function.
     if g.stops.len() <= 2 {
         let c0 = g.stops.first().map(|s| s.1).unwrap_or([0.0, 0.0, 0.0]);
         let c1 = g.stops.get(1).map(|s| s.1).unwrap_or(c0);
-        write_linear_segment(pdf, gr.function, c0, c1);
+        write_linear_segment(pdf, gr.function, c0, c1, cmyk);
         return;
     }
 
@@ -503,7 +538,7 @@ fn write_gradient_function(pdf: &mut Pdf, gr: &GradientRefs, g: &PdfGradient) {
     for (k, sub) in gr.sub_functions.iter().enumerate() {
         let c0 = g.stops.get(k).map(|s| s.1).unwrap_or([0.0, 0.0, 0.0]);
         let c1 = g.stops.get(k + 1).map(|s| s.1).unwrap_or(c0);
-        write_linear_segment(pdf, *sub, c0, c1);
+        write_linear_segment(pdf, *sub, c0, c1, cmyk);
     }
 
     // Interior stop offsets become the stitching bounds; each subfunction's
@@ -524,27 +559,37 @@ fn write_gradient_function(pdf: &mut Pdf, gr: &GradientRefs, g: &PdfGradient) {
 
     let mut stitch = pdf.stitching_function(gr.function);
     stitch.domain([0.0, 1.0]);
-    stitch.range([0.0, 1.0, 0.0, 1.0, 0.0, 1.0]);
+    if cmyk {
+        stitch.range([0.0, 1.0, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0]);
+    } else {
+        stitch.range([0.0, 1.0, 0.0, 1.0, 0.0, 1.0]);
+    }
     stitch.functions(gr.sub_functions.iter().copied());
     stitch.bounds(bounds);
     stitch.encode(encode);
     stitch.finish();
 }
 
-/// Write a single Type 2 (exponential, `N = 1` linear) function in DeviceRGB
-/// mapping `[0, 1]` from color `c0` to `c1`.
-fn write_linear_segment(pdf: &mut Pdf, id: Ref, c0: [f32; 3], c1: [f32; 3]) {
+/// Write a single Type 2 (exponential, `N = 1` linear) function in DeviceRGB or
+/// DeviceCMYK mapping `[0, 1]` from color `c0` to `c1`.
+fn write_linear_segment(pdf: &mut Pdf, id: Ref, c0: [f32; 3], c1: [f32; 3], cmyk: bool) {
     let mut f = pdf.exponential_function(id);
     f.domain([0.0, 1.0]);
-    f.range([0.0, 1.0, 0.0, 1.0, 0.0, 1.0]);
-    f.c0(c0);
-    f.c1(c1);
+    if cmyk {
+        f.range([0.0, 1.0, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0]);
+        f.c0(super::color::rgb_to_cmyk(c0[0], c0[1], c0[2]));
+        f.c1(super::color::rgb_to_cmyk(c1[0], c1[1], c1[2]));
+    } else {
+        f.range([0.0, 1.0, 0.0, 1.0, 0.0, 1.0]);
+        f.c0(c0);
+        f.c1(c1);
+    }
     f.n(1.0);
     f.finish();
 }
 
-/// Write each image as a FlateDecode DeviceRGB XObject, with an optional
-/// FlateDecode DeviceGray SMask for transparency.
+/// Write each image as a FlateDecode DeviceRGB or DeviceCMYK XObject, with an
+/// optional FlateDecode DeviceGray SMask for transparency.
 fn write_images(pdf: &mut Pdf, res: &PageResources, refs: &[ImageRefs]) {
     for (img, ir) in res.images.iter().zip(refs) {
         let w = img.width as i32;
@@ -554,7 +599,11 @@ fn write_images(pdf: &mut Pdf, res: &PageResources, refs: &[ImageRefs]) {
         xobj.filter(Filter::FlateDecode);
         xobj.width(w);
         xobj.height(h);
-        xobj.color_space().device_rgb();
+        if img.cmyk {
+            xobj.color_space().device_cmyk();
+        } else {
+            xobj.color_space().device_rgb();
+        }
         xobj.bits_per_component(8);
         if let Some(smask) = ir.smask {
             xobj.s_mask(smask);

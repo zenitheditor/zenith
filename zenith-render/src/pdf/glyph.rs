@@ -174,7 +174,7 @@ fn emit_stroke_run(
     if let Some((stroke, width)) = glyph_stroke(run) {
         content.save_state();
         apply_alpha(content, res, stroke);
-        color::set_stroke(content, stroke);
+        color::set_stroke(content, stroke, res.cmyk);
         content.set_line_width(width);
         content.set_miter_limit(tiny_skia::Stroke::default().miter_limit);
         if emit_outlines(content, face, scale, run) {
@@ -271,7 +271,7 @@ fn emit_text_fill(
     } = run;
     content.save_state();
     apply_alpha(content, res, color);
-    color::set_fill(content, color);
+    color::set_fill(content, color, res.cmyk);
     content.begin_text();
     content.set_font(name(FONT_PREFIX, font_idx).as_name(), font_size);
     emit_positioned_cids(content, font_plan, run);
@@ -289,7 +289,7 @@ fn emit_outline_fill(
     let color = run.color;
     content.save_state();
     apply_alpha(content, res, color);
-    color::set_fill(content, color);
+    color::set_fill(content, color, res.cmyk);
 
     let any = emit_outlines(content, face, scale, run);
     if any {

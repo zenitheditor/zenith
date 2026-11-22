@@ -39,7 +39,7 @@ pub use perceive::{PerceiveArgs, PerceiveSub};
 pub use plugin::{
     AgentFlags, PluginArgs, PluginInstallArgs, PluginSub, PluginUninstallArgs, ScopeArg,
 };
-pub use render::RenderArgs;
+pub use render::{DuplexArg, ImposeArg, PdfColorspaceArg, RenderArgs};
 pub use schema::{SchemaArgs, SchemaSub};
 pub use tx::{COMMON_EDITS, OutlineTextArgs, TxArgs};
 pub use workspace::{

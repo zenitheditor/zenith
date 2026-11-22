@@ -124,7 +124,7 @@ fn crop_and_embed(
     }
 
     // 6. Encode the crop as an image XObject.
-    let Some(decoded) = decoded_image_from_straight_rgba(&cropped, cw, ch) else {
+    let Some(decoded) = decoded_image_from_straight_rgba(&cropped, cw, ch, res.cmyk) else {
         return Ok(());
     };
     let placement = [

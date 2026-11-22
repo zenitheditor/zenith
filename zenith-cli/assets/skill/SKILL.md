@@ -34,7 +34,7 @@ Read a reference only when a step fails or the task is not covered above:
 | --- | --- |
 | Tokens, primitives, transactions, pointer edits (`zenith edit`) | `references/authoring-workflow.md` |
 | A brief no starter matches | `references/by-kind.md` |
-| Export, fallback reports, output errors | `references/export.md` |
+| Export, print CMYK, imposition, fallback reports | `references/export.md` |
 | Auto-layout, anchors, safe zones | `references/layout.md` |
 | Themes, styles, defaults | `references/themes.md` |
 | Diagnostics, contrast, fonts | `references/diagnostics.md` |

@@ -14,6 +14,8 @@ fn options(flags: &PolicyFlags) -> RenderOptions<'_> {
         construction_overlay: false,
         scale: 1.0,
         raster_scale: 1.0,
+        cmyk: None,
+        impose: None,
         parsed: None,
     }
 }

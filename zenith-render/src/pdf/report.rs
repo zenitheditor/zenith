@@ -13,12 +13,15 @@ pub struct PdfExportOptions {
     pub subset: bool,
     /// Raster fallback resolution multiplier in the interval (0, 4].
     pub raster_scale: f64,
+    /// Emit all colors, gradients, and images in DeviceCMYK (`true`) instead of DeviceRGB (`false`).
+    pub cmyk: bool,
 }
 impl Default for PdfExportOptions {
     fn default() -> Self {
         Self {
             subset: true,
             raster_scale: 1.0,
+            cmyk: false,
         }
     }
 }
@@ -95,6 +98,7 @@ pub fn render_pdf_multi_report(
         PdfExportOptions {
             subset: options.subset,
             raster_scale: 1.0,
+            cmyk: options.cmyk,
         },
     )
 }
@@ -185,6 +189,7 @@ pub fn render_pdf_multi_report_with_options(
             assets,
             PdfOptions {
                 subset: options.subset,
+                cmyk: options.cmyk,
             },
             Some(&plans),
             options.raster_scale,

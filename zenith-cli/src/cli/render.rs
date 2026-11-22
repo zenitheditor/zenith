@@ -1,7 +1,42 @@
 //! Argument types for `zenith render`.
 
-use clap::Args;
+use clap::{Args, ValueEnum};
 use std::path::PathBuf;
+
+/// Color space override for `--pdf` output.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum PdfColorspaceArg {
+    /// Emit DeviceRGB for screen viewing and digital sharing.
+    Srgb,
+    /// Emit DeviceCMYK for commercial print production.
+    Cmyk,
+}
+
+/// Sheet imposition layout for `--pdf` output.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum ImposeArg {
+    /// 2-up saddle-stitch / bi-fold (`[4|1]`, `[2|3]`, …; pads to multiple of 4).
+    #[value(alias = "bifold", alias = "saddle")]
+    Booklet,
+    /// 3-up roll-fold / letter-fold (`[5|6|1]`, `[2|3|4]`; pads to multiple of 6).
+    #[value(alias = "letterfold")]
+    Trifold,
+    /// 3-up Z-fold / accordion (`[5|4|1]`, `[2|3|6]`; pads to multiple of 6).
+    #[value(alias = "accordion")]
+    Zfold,
+    /// 2-up side-by-side spreads (`[1|2]`, `[3|4]`, …; pads to multiple of 2).
+    #[value(alias = "2up")]
+    Spread,
+}
+
+/// Duplex flip orientation for back sheets when `--impose` is active.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum DuplexArg {
+    /// Standard short-edge flip (landscape booklets): both sides upright.
+    ShortEdge,
+    /// Long-edge flip: back sheets rotate 180° around sheet center.
+    LongEdge,
+}
 
 /// Arguments for `zenith render`.
 #[derive(Debug, Args)]
@@ -17,7 +52,8 @@ zenith render poster.zen --svg out.svg                     # page 1, outlined te
 zenith render deck.zen --contact-sheet sheet.png             # all pages, one image\n  \
 zenith render deck.zen --png slide.png --page 3 --scale 0.5  # cheap preview\n  \
 zenith render book.zen --all-pages pages/ --scale 0.25       # small PNG per page\n  \
-zenith render book.zen --pdf book.pdf          # print-ready vector PDF"
+zenith render book.zen --pdf share.pdf --colorspace srgb     # RGB PDF for digital sharing\n  \
+zenith render book.zen --pdf print.pdf --print --impose booklet # CMYK 300 DPI bi-fold/booklet"
 )]
 pub struct RenderArgs {
     /// Path to the `.zen` document.
@@ -35,9 +71,49 @@ pub struct RenderArgs {
     #[arg(long, value_name = "OUT")]
     pub svg: Option<PathBuf>,
 
-    /// Write a vector PDF (with print boxes + DeviceCMYK) to this path.
+    /// Write a vector PDF (with print boxes + DeviceRGB/DeviceCMYK) to this path.
     #[arg(long, value_name = "OUT")]
     pub pdf: Option<PathBuf>,
+
+    /// Override PDF output color space (`srgb` for digital sharing, `cmyk` for print).
+    ///
+    /// When omitted, `--pdf` follows the document's `colorspace` attribute (default: `srgb`).
+    /// Requires `--pdf <OUT>`.
+    #[arg(long, value_enum, value_name = "SPACE")]
+    pub colorspace: Option<PdfColorspaceArg>,
+
+    /// Print-ready PDF preset: emits DeviceCMYK and sets 300 DPI raster fallback
+    /// (`--raster-scale 3.125`, unless `--raster-scale` is explicitly given).
+    /// Requires `--pdf <OUT>`.
+    #[arg(long)]
+    pub print: bool,
+
+    /// Arrange reading-order pages onto folded press sheets for `--pdf` output:
+    /// `booklet` (alias `bifold`, `[4|1]`, `[2|3]`), `trifold` (`[5|6|1]`, `[2|3|4]`),
+    /// `zfold` (`[5|4|1]`, `[2|3|6]`), or `spread` (alias `2up`, `[1|2]`, `[3|4]`).
+    /// Requires `--pdf <OUT>` and cannot be combined with `--page`.
+    #[arg(long, value_enum, value_name = "MODE")]
+    pub impose: Option<ImposeArg>,
+
+    /// Duplex flip orientation for imposed back sheets: `short-edge` (default) or `long-edge` (180° back rotation).
+    /// Requires `--impose`.
+    #[arg(long, value_enum, value_name = "EDGE")]
+    pub duplex: Option<DuplexArg>,
+
+    /// Total saddle-stitch creep compensation in millimeters (distributed from 0 on outer sheet to MM on centerfold).
+    /// Requires `--impose booklet`.
+    #[arg(long, value_name = "MM")]
+    pub creep: Option<f64>,
+
+    /// Group pages into multi-signature folded sections of N pages (positive multiple of 4, e.g. 16).
+    /// Requires `--impose booklet`.
+    #[arg(long, value_name = "N")]
+    pub signature: Option<usize>,
+
+    /// Draw sheet-level K-only corner crop marks and dashed fold-crease ticks in the outer margin.
+    /// Requires `--impose`.
+    #[arg(long)]
+    pub marks: bool,
 
     /// Embed whole font programs in the PDF instead of subsetting to used glyphs.
     ///

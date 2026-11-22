@@ -335,6 +335,8 @@ fn run_render(args: &Value) -> Result<Value, String> {
         construction_overlay: false,
         scale: scale.unwrap_or(1.0),
         raster_scale: raster_scale.unwrap_or(1.0),
+        cmyk: request.cmyk,
+        impose: request.impose,
         parsed: None,
     };
     let mut image_meta: Option<Value> = None;

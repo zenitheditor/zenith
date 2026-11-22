@@ -52,7 +52,10 @@ fn native_and_captured_documents_retain_legacy_bytes() {
     ] {
         let scene = scene(commands);
         for subset in [true, false] {
-            let options = PdfOptions { subset };
+            let options = PdfOptions {
+                subset,
+                ..PdfOptions::default()
+            };
             let output = render_pdf_report(&scene, &fonts, &assets, options).unwrap();
             assert_eq!(
                 output.bytes,

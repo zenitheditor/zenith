@@ -691,8 +691,24 @@ fn textless_scene_identical_under_subset_options() {
         h: 40.0,
         paint: Paint::solid(Color::srgb(9, 9, 9, 255)),
     });
-    let subset = render_pdf_with(&scene, &fonts, &assets, PdfOptions { subset: true });
-    let full = render_pdf_with(&scene, &fonts, &assets, PdfOptions { subset: false });
+    let subset = render_pdf_with(
+        &scene,
+        &fonts,
+        &assets,
+        PdfOptions {
+            subset: true,
+            ..PdfOptions::default()
+        },
+    );
+    let full = render_pdf_with(
+        &scene,
+        &fonts,
+        &assets,
+        PdfOptions {
+            subset: false,
+            ..PdfOptions::default()
+        },
+    );
     let plain = render(&scene);
     assert_eq!(
         subset, full,
@@ -750,4 +766,127 @@ fn rect_clip_still_emits_re_clip() {
     }));
     let text = String::from_utf8_lossy(&bytes);
     assert!(text.contains("20 20 60 60 re\nW\nn"), "rect clip");
+}
+
+#[test]
+fn cmyk_mode_emits_device_cmyk_for_vectors_gradients_and_images() {
+    use super::{PdfOptions, render_pdf_with};
+    use std::sync::Arc;
+    use zenith_core::AssetKind;
+    use zenith_scene::{FitMode, GradientPaint, GradientStop};
+
+    let (fonts, _) = providers();
+    let mut assets = zenith_core::BytesAssetProvider::new();
+    let mut pixmap = tiny_skia::Pixmap::new(2, 2).unwrap();
+    for px in pixmap.pixels_mut() {
+        *px = tiny_skia::ColorU8::from_rgba(0, 128, 255, 255).premultiply();
+    }
+    assets.register(
+        "img",
+        AssetKind::Image,
+        Arc::from(pixmap.encode_png().unwrap()),
+    );
+
+    let mut scene = Scene::new(100.0, 100.0);
+    scene.commands.push(SceneCommand::FillRect {
+        x: 0.0,
+        y: 0.0,
+        w: 50.0,
+        h: 50.0,
+        paint: Paint::solid(Color::srgb(255, 0, 0, 255)),
+    });
+    scene.commands.push(SceneCommand::StrokeRect {
+        x: 5.0,
+        y: 5.0,
+        w: 40.0,
+        h: 40.0,
+        color: Color::srgb(0, 0, 0, 255),
+        stroke_width: 2.0,
+        stroke_dash: None,
+        stroke_gap: None,
+        stroke_linecap: None,
+    });
+    scene.commands.push(SceneCommand::FillRect {
+        x: 50.0,
+        y: 0.0,
+        w: 50.0,
+        h: 50.0,
+        paint: Paint::Gradient(GradientPaint {
+            angle_deg: 0.0,
+            radial: false,
+            center_x: None,
+            center_y: None,
+            radius_frac: None,
+            stops: vec![
+                GradientStop {
+                    offset: 0.0,
+                    color: Color::srgb(0, 255, 255, 255),
+                },
+                GradientStop {
+                    offset: 1.0,
+                    color: Color::srgb(255, 255, 0, 255),
+                },
+            ],
+        }),
+    });
+    scene.commands.push(SceneCommand::DrawImage {
+        x: 0.0,
+        y: 50.0,
+        w: 50.0,
+        h: 50.0,
+        asset_id: "img".into(),
+        fit: FitMode::Stretch,
+        pos_x: 50.0,
+        pos_y: 50.0,
+        opacity: 1.0,
+        clip_shape: None,
+        src_rect: None,
+        svg_style: None,
+    });
+
+    let cmyk_pdf = render_pdf_with(
+        &scene,
+        &fonts,
+        &assets,
+        PdfOptions {
+            subset: true,
+            cmyk: true,
+        },
+    );
+    let cmyk_text = String::from_utf8_lossy(&cmyk_pdf);
+    assert!(
+        cmyk_text.contains("/DeviceCMYK"),
+        "CMYK PDF must emit DeviceCMYK color spaces"
+    );
+    assert!(
+        cmyk_text.contains("/GTS_PDFX") && cmyk_text.contains("FOGRA39"),
+        "CMYK PDF must carry PDF/X FOGRA39 OutputIntent"
+    );
+    assert!(
+        !cmyk_text.contains("/DeviceRGB"),
+        "CMYK PDF must not emit any DeviceRGB color spaces"
+    );
+    assert!(
+        cmyk_text.contains("0 1 1 0 k\n"),
+        "pure red fill should emit 0 1 1 0 k"
+    );
+    assert!(
+        cmyk_text.contains("0 0 0 1 K\n"),
+        "pure black stroke should emit K-only 0 0 0 1 K"
+    );
+    assert!(
+        !cmyk_text.contains(" rg\n") && !cmyk_text.contains(" RG\n"),
+        "CMYK PDF must not emit rg/RG vector color operators"
+    );
+
+    let rgb_pdf = render_pdf_with(&scene, &fonts, &assets, PdfOptions::default());
+    let rgb_text = String::from_utf8_lossy(&rgb_pdf);
+    assert!(
+        rgb_text.contains("/DeviceRGB"),
+        "default sRGB PDF must continue emitting DeviceRGB"
+    );
+    assert!(
+        !rgb_text.contains("/DeviceCMYK"),
+        "default sRGB PDF must not emit DeviceCMYK for sRGB colors"
+    );
 }

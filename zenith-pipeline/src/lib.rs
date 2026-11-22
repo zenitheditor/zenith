@@ -41,9 +41,9 @@ pub use io::{
 };
 pub use policy::PolicyFlags;
 pub use render::{
-    CompiledPage, CompiledPages, ContactSheetArtifact, DeviceRect, PageRect, PageSelection,
-    PageView, PdfArtifact, PngArtifact, PngImage, PngPagesArtifact, RegionArtifact, RegionView,
-    RenderOptions, SceneArtifact, SpreadOptions, SvgArtifact, SvgPageArtifact, SvgPagesArtifact,
-    ViewOptions, render_png_region, view_page,
+    CompiledPage, CompiledPages, ContactSheetArtifact, DeviceRect, DuplexMode, ImposeMode,
+    ImposeOptions, PageRect, PageSelection, PageView, PdfArtifact, PngArtifact, PngImage,
+    PngPagesArtifact, RegionArtifact, RegionView, RenderOptions, SceneArtifact, SpreadOptions,
+    SvgArtifact, SvgPageArtifact, SvgPagesArtifact, ViewOptions, render_png_region, view_page,
 };
 pub use validate::{Validation, compile_check_diagnostics, validate_parsed, validate_source};

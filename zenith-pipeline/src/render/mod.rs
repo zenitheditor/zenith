@@ -14,6 +14,7 @@
 //!   optional raster (the editor canvas path).
 
 mod compile;
+mod impose;
 mod options;
 mod pdf;
 mod png;
@@ -25,6 +26,7 @@ mod svg;
 mod view;
 
 pub use compile::{CompiledPage, CompiledPages, PageSelection, compile_pages};
+pub use impose::{DuplexMode, ImposeMode, ImposeOptions};
 pub use options::{RenderOptions, SpreadOptions};
 pub use pdf::{PdfArtifact, pdf_rasterization_diagnostics, render_pdf, render_pdf_pages};
 pub use png::{

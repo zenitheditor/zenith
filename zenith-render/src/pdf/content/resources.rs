@@ -11,6 +11,8 @@ use crate::pdf::image::DecodedImage;
 /// deduplication and emitted in a deterministic order by the document writer.
 #[derive(Default)]
 pub(in crate::pdf) struct PageResources {
+    /// Emit all colors, shadings, and raster images in DeviceCMYK when `true`.
+    pub(in crate::pdf) cmyk: bool,
     /// Distinct fill/stroke alpha values (< 255), in first-seen order.
     /// Each becomes one `/ExtGState` with `ca` + `CA`. Index = resource id.
     pub(in crate::pdf) alphas: Vec<u8>,

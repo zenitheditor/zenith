@@ -33,13 +33,14 @@ Each recipe: scaffold → structure → primitives. Syntax comes from `zenith sc
 - Structure: one row frame, `justify="space-between"`, `align="center"`: mark, message, CTA.
 - Anchor the row so it survives size variants.
 
-## 4. Poster / flyer (print)
+## 4. Poster / flyer / folded leaflet (print)
 
-- Scaffold: `--format a4` (or `a3`, `tabloid`, `--landscape`).
+- Scaffold: `--format a4` (or `a3`, `tabloid`, `--landscape`). For folded leaflets/booklets, author panels in reading order at the finished panel size (e.g. 4 × `--format a5` pages for an A4 bi-fold, or 6 panel pages for a tri-fold).
 - Structure: one column frame: title, supporting line, body or bullets, venue/date/CTA.
 - A larger title needs a new size token, never a raw px font size.
 - One depth motif: `pattern`, gradient token, or `light`.
-- Print proof: `zenith render <doc> --pdf <out.pdf>`.
+- Digital sharing PDF: `zenith render <doc> --pdf <share.pdf> --colorspace srgb`.
+- Commercial print PDF: `zenith render <doc> --pdf <print.pdf> --print` (add `--impose booklet|trifold|zfold|spread` for folded/2-up press sheets).
 
 ## 5. Deck / slides
 
@@ -159,4 +160,5 @@ Details: `references/variants.md`.
 | `color.base.300` as text on dark themes | `color.base.content` + `opacity` |
 | Hand-tokenizing raw literals | `zenith fix --apply` |
 | Shrinking type to clear overflow | bigger box, reflow, or `chain` |
+| Hand-imposing `[4\|1]` / `[2\|3]` panels on one spread | author pages `1..N` in reading order + `--impose booklet` |
 | Five background effects | one motif |
