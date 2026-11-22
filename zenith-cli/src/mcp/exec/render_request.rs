@@ -143,16 +143,18 @@ impl<'a> RenderRequest<'a> {
             }
         };
         let marks = optional_bool(args, "marks")?.unwrap_or(false);
+        let color_bars = optional_bool(args, "color_bars")?.unwrap_or(false);
         let grid_raw = optional_string(args, "grid")?;
         if impose_raw.is_none()
             && (duplex_raw.is_some()
                 || creep_mm.is_some()
                 || signature.is_some()
                 || grid_raw.is_some()
-                || marks)
+                || marks
+                || color_bars)
         {
             return Err(invalid(
-                "duplex/creep_mm/signature/grid/marks",
+                "duplex/creep_mm/signature/grid/marks/color_bars",
                 "no impose",
                 "Pass impose when using prepress sheet options",
             ));
@@ -220,6 +222,7 @@ impl<'a> RenderRequest<'a> {
                     creep_mm: creep,
                     signature,
                     marks,
+                    color_bars,
                 })
             }
         };

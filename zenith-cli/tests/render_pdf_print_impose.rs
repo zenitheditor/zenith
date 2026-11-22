@@ -393,6 +393,7 @@ fn pdf_impose_grid_and_cut_and_stack() {
             "--grid",
             "2x1",
             "--marks",
+            "--color-bars",
         ],
     );
     assert!(
@@ -403,6 +404,11 @@ fn pdf_impose_grid_and_cut_and_stack() {
     let stack_bytes = fs::read(dir.path().join("stack.pdf")).unwrap();
     // 200x140 trim + 24px slug on each side = 248x188 px = 186x141 pt.
     assert_eq!(count_matches(&stack_bytes, b"/MediaBox [0 0 186 141]"), 2);
+    // Registration black (1 1 1 1 K) emitted for 4-plate registration targets.
+    assert!(
+        count_matches(&stack_bytes, b"1 1 1 1 K") > 0,
+        "--color-bars must emit 4-plate registration targets"
+    );
 
     // Guard: --grid on booklet must fail.
     let bad_grid = run_cli(

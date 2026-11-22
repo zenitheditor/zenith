@@ -78,6 +78,11 @@ pub struct ImposeCliArgs {
     /// Requires `--impose`.
     #[arg(long)]
     pub marks: bool,
+
+    /// Draw a 11-patch CMYK density control bar and 4-plate registration targets in the outer margin.
+    /// Requires `--impose`.
+    #[arg(long)]
+    pub color_bars: bool,
 }
 
 impl ImposeCliArgs {
@@ -89,6 +94,7 @@ impl ImposeCliArgs {
             || self.creep.is_some()
             || self.signature.is_some()
             || self.marks
+            || self.color_bars
     }
 
     /// Validate and convert these CLI flags into [`zenith_pipeline::render::ImposeOptions`].
@@ -101,7 +107,7 @@ impl ImposeCliArgs {
         let Some(mode_arg) = self.impose else {
             if self.has_any() {
                 return Err(
-                    "error: --duplex, --creep, --signature, --grid, and --marks require --impose <MODE>"
+                    "error: --duplex, --creep, --signature, --grid, --marks, and --color-bars require --impose <MODE>"
                         .to_owned(),
                 );
             }
@@ -162,6 +168,7 @@ impl ImposeCliArgs {
             creep_mm,
             signature: self.signature,
             marks: self.marks,
+            color_bars: self.color_bars,
         }))
     }
 }
