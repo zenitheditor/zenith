@@ -133,7 +133,7 @@ fn supported_paint(paint: &Paint) -> bool {
     matches!(paint, Paint::Color(_))
 }
 
-fn stroke_linecap(stroke: &usvg::Stroke) -> Option<String> {
+pub(crate) fn stroke_linecap(stroke: &usvg::Stroke) -> Option<String> {
     match stroke.linecap {
         usvg::LineCap::Butt => None,
         usvg::LineCap::Round => Some("round".to_owned()),
@@ -141,7 +141,7 @@ fn stroke_linecap(stroke: &usvg::Stroke) -> Option<String> {
     }
 }
 
-fn stroke_linejoin(stroke: &usvg::Stroke) -> Option<String> {
+pub(crate) fn stroke_linejoin(stroke: &usvg::Stroke) -> Option<String> {
     match stroke.linejoin {
         usvg::LineJoin::Miter | usvg::LineJoin::MiterClip => None,
         usvg::LineJoin::Round => Some("round".to_owned()),
@@ -149,7 +149,7 @@ fn stroke_linejoin(stroke: &usvg::Stroke) -> Option<String> {
     }
 }
 
-fn path_subpaths(path: &usvg::Path, transform: Affine) -> Vec<PathSubpath> {
+pub(crate) fn path_subpaths(path: &usvg::Path, transform: Affine) -> Vec<PathSubpath> {
     let mut subpaths = Vec::new();
     let mut current = Vec::new();
     let mut closed = false;
@@ -231,7 +231,7 @@ fn anchor(x: f64, y: f64) -> PathAnchor {
     }
 }
 
-fn px(value: f64) -> Dimension {
+pub(crate) fn px(value: f64) -> Dimension {
     Dimension {
         value,
         unit: Unit::Px,
@@ -240,7 +240,7 @@ fn px(value: f64) -> Dimension {
 
 /// A 2-D affine map `(x, y) -> (a*x + c*y + e, b*x + d*y + f)`.
 #[derive(Clone, Copy)]
-struct Affine {
+pub(crate) struct Affine {
     a: f64,
     b: f64,
     c: f64,
@@ -250,7 +250,7 @@ struct Affine {
 }
 
 impl Affine {
-    fn identity() -> Self {
+    pub(crate) fn identity() -> Self {
         Self {
             a: 1.0,
             b: 0.0,
@@ -261,7 +261,7 @@ impl Affine {
         }
     }
 
-    fn from_usvg(t: usvg::Transform) -> Self {
+    pub(crate) fn from_usvg(t: usvg::Transform) -> Self {
         Self {
             a: f64::from(t.sx),
             b: f64::from(t.ky),
@@ -272,7 +272,7 @@ impl Affine {
         }
     }
 
-    fn then(self, next: Self) -> Self {
+    pub(crate) fn then(self, next: Self) -> Self {
         Self {
             a: next.a * self.a + next.c * self.b,
             b: next.b * self.a + next.d * self.b,
@@ -283,7 +283,11 @@ impl Affine {
         }
     }
 
-    fn map_pt(self, p: Point) -> (f64, f64) {
+    pub(crate) fn uniform_scale(self) -> f64 {
+        (self.a * self.d - self.b * self.c).abs().sqrt()
+    }
+
+    pub(crate) fn map_pt(self, p: Point) -> (f64, f64) {
         let x = f64::from(p.x);
         let y = f64::from(p.y);
         (

@@ -5,6 +5,7 @@ mod file_import;
 mod model;
 #[cfg(test)]
 mod smoke;
+mod svg_doc;
 mod svg_native;
 mod zpx_bake;
 
@@ -14,5 +15,6 @@ pub use model::{
     AssetProducer, FileImportProvenance, ProduceRequest, ProducedAsset, Provenance,
     ZpxBakeProvenance,
 };
+pub use svg_doc::{SvgImportOptions, SvgImportOutput, svg_to_document};
 pub use svg_native::{SvgNativeOptions, svg_to_native_paths};
 pub use zpx_bake::ZpxBakeProducer;
