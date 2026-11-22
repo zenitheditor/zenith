@@ -15,60 +15,41 @@ it.
 
 ## [Unreleased]
 
+## [0.0.15] — 2026-11-22
+
 ### Breaking
 
-- **PDF page boxes and link annotation rectangles are in points.** One document px is 0.75 pt, the 96 px per inch rule of `(pt)` dimensions and `zenith new --format`. An A4 design of 794 x 1123 px is now a 595.5 x 842.25 pt PDF page, which is 210 x 297 mm. Before, the PDF used 1 px = 1 pt, so the same design printed at 133% (280 x 396 mm). MediaBox, TrimBox, BleedBox, CropBox, and each link `/Rect` change. The content stream opens with one `0.75 0 0 0.75 0 0 cm`, so drawing operands stay in px. Every PDF byte hash changes. PNG and SVG output is unchanged.
+- **PDF page boxes and links use true physical points (`1 px = 0.75 pt`).** An A4 page now prints at exact 210 × 297 mm instead of 133%. PDF byte hashes change; PNG and SVG are unchanged.
+- **Connector arrowheads pull shafts back cleanly.** Arrowhead shafts shorten inside the tip so blunt caps no longer poke past the point. Connector PNGs with arrowheads change.
 
 ### Added
 
-- **`zenith merge` and `zenith variant` write PDF with `--format pdf`.** A merge row is ONE PDF with all its pages, named `<stem>.pdf`. PNG and SVG still write one file per page. Each page keeps its TrimBox and BleedBox from `page bleed`. `--raster-scale` sets the PDF fallback resolution, as with `zenith render --pdf`. Row policy and blocking match the other formats. `render.pdf_rasterized` reaches each row report under the config policy, and a denied capture writes nothing for that row. `merge --combine FILE` also writes one PDF of every successful row's pages, in CSV order. Failed rows are left out and listed in the `--json` report under `combined`. The merge manifest records a written combined file under `combined`. Variant reports and manifests name the file in `outputs_pdf`. MCP `zenith_merge` takes `format: "pdf"` and `combine`. PNG and SVG batch output, reports, and manifests are byte-identical to before.
-- **Bundled fallback fonts for Arabic, Hebrew, Chinese, Japanese, Korean, and emoji.** The new `zenith-fonts-fallback` crate embeds Noto Sans Arabic, Noto Sans Hebrew, a Noto Sans CJK SC subset, and monochrome Noto Emoji, and the CLI tries them in that order for a glyph the requested face lacks. A document with no missing glyph renders the same bytes as before. The browser module does not embed them. It fetches each one on demand instead (see below).
-- **The browser editor fetches the fallback fonts on demand.** When text has a character that only a fallback face covers, the engine names that file with a `font.unresolved` advisory and in `fonts.required` (`fallback: true`). The page fetches it from `fonts/` and renders again. The engine registers the files in chain order, so the render equals the CLI render whatever the fetch order. `build-static-editor.mjs` copies the four files into `fonts/`. `examples/text-scripts.zen` now renders the same bytes in the browser and the CLI.
-- **Mixed-direction text, CJK line breaks, and emoji sequences render correctly.** Text runs the UAX #9 bidi algorithm: an Arabic or Hebrew phrase inside English reads right to left, and Latin words and digits inside RTL text keep their order. A `text` node without `direction` takes its base direction from its first strong character, so an Arabic paragraph aligns right and wraps in RTL order. `direction="ltr"` and `direction="rtl"` override it. Chinese and Japanese wrap between characters with UAX #14 rules: no line starts with `。`, `，`, `」`, or a small kana, and no line ends with `「`. Korean still breaks at spaces. An emoji ZWJ sequence, a skin-tone modifier, and a combining mark stay in one font run. `examples/text-scripts.zen` shows every case. Latin-only documents render the same bytes as before.
-- **Variant overrides re-layout.** An `override` in a `variants` block now takes `font-size` (a dimension token ref), `w`/`h` `"hug"`/`"fill"`, and the frame keys `layout`, `gap`, `wrap-gap`, `padding`, `padding-x`, `padding-y`, `padding-top`, `padding-right`, `padding-bottom`, `padding-left`, `justify`, `align`, and `wrap`. Auto-layout runs again at the variant size. A square page built from layout frames retargets to a story or a banner with three to five overrides. `examples/variants.zen` shows it. `variant.override_unsupported_property` reports a key the target node kind does not have. A bad value takes the node codes (`node.invalid_value`, `node.invalid_geometry`, `token.*`). A document whose overrides use none of the new keys generates the same files as before, except for the token fix below.
-- **`set_override` sets the text, fill, or visibility of one component child on one instance.** `{"op":"set_override","instance":"p1.c2","ref":"card.body","text":"New body"}`. `null` removes a field, and an override with no field left goes. Before, no `tx` op could change one card of a row.
-- **Node ops reach component children by their id.** A node id resolves on pages, then masters, then component definitions. `set_geometry` on `card.body` changes every instance. `add_node` takes a component id as `parent`. `group` now also works on master children.
-- **`move_page` and `swap_pages` move one page or swap two.** `{"op":"move_page","page":"p16","position":{"at":"after","id":"p10"}}`. `reorder_pages` takes a full order, and in a revision benchmark an agent wrote a wrong one.
-- **`zenith tx` prints the page order before and after a page op.** Human output adds `pages: a, b, c -> a, c, b`. `--json` adds `pages.before` and `pages.after`.
-- **`tx.unknown_node` explains a scoped id like `p2.c2/card.body`.** A diagnostic names a component child inside an instance this way, but no op takes it. When the id resolves to an instance and a child of its component, the message names both fixes. Use `set_override` with `instance` and `ref` to change that instance only. Use the child id alone to edit the component for every instance.
-- **`tx.unknown_node` suggests the closest ids.** The message ends with `(did you mean: a, b, c?)` for up to 3 ids within a few edits, across pages, masters, and components. No id close enough gives no hint. In a benchmark an agent guessed `p5b.kicker.5b` 37 times where the id was `p5.kicker.5b`.
-- **`zenith tx` names the ids a `duplicate_page` or `duplicate_node` op creates.** Human output adds `created: p5b, p5.kicker.5b ... (+9 more)` with up to 5 ids. `--json` adds the full `created` array.
-- **A parse error names sibling nodes on one line.** `text … { … } text …` now hints to end each node with `;`. `rect id="a" rect id="b"` on one line was read as one rect that kept only `b`. It is now a parse error with the same hint.
-- **`zenith schema write`, `zenith tx --help`, and the starter output list `move_page` and `set_override`.** `tx --help` no longer points at `examples/*.tx.json`, which agents cannot see. The `duplicate_page` entry says that child ids become `<id><id_suffix>`.
-- **A stated stability promise and a frozen corpus that holds it.** README.md `## Stability` lists what a 0.0.x release keeps and what it can break. `zenith-pipeline/tests/corpus/v0.0.14/` freezes 39 documents. A test checks that each one parses, validates without Error, formats idempotently, and renders to its pinned PNG hashes. A refresh of the corpus needs a `### Breaking` section in this file.
-- **`zenith schema diagnostics <FILTER>` lists only the codes that match.** The match is case-insensitive on the code and summary, and it includes Error codes. The full list is 15 KB as text and 63 KB as JSON. In a merge benchmark, agents called the full list up to 14 times in one run because a tool-output cap cut it off before the codes they needed.
-- **The `zenith inspect` outline holds what a revision needs.** Text lines add `style=`, nodes add an authored `fill=`, and images add `asset=`. Each instance adds `component=` and one `override` line per entry. Page lines name their master. Assets, masters, components, and styles follow the pages. For a 4-page brochure the outline is 5.4 KB, against 10.5 KB of source. `--json` is unchanged.
-- **Print preflight diagnostics.** They run on a print page: a page with a positive `bleed`, or any page of a `colorspace="cmyk"` document. A screen design reports nothing new. One inch is 96 px.
-  - `image.effective_ppi` and `image.effective_ppi_target`: a raster image's source pixels per placed inch, with `src-*` crops, fit mode, and instance scale counted. `image.effective_ppi` is a Warning below 150 ppi. `image.effective_ppi_target` is an Advisory from 150 to under 300 ppi. The message names the size of source or box that meets the threshold.
-  - `ink.rich_black`: text under 24 px (18 pt) filled with K of 60% or more plus two or more of C, M, Y.
-  - `ink.total_coverage`: a CMYK color over 300% total ink. The message gives a color within the limit.
-- **`font.not_embeddable` reports a restricted or bitmap-only face at validate time.** The PDF backend reads the OS/2 `fsType` bits. It draws such a face's text as outlines and embeds a no-subsetting face whole. Before, it embedded every face.
+- **CMYK PDF export & presets (`--colorspace srgb|cmyk`, `--print`).** Outputs native `DeviceCMYK` (K-only neutrals) with a PDF/X `FOGRA39` `OutputIntent`; `--print` enables CMYK + 300 DPI fallback in one flag, while `--colorspace srgb` forces RGB for digital sharing.
+- **Print sheet imposition (`--impose`).** Arrange reading-order pages onto press sheets (`booklet`/`bifold`, `trifold`, `zfold`, `spread`/`2up`) with outer-bleed preservation, `--marks` (crop + dashed fold ticks), `--duplex long-edge`, `--creep <MM>`, and `--signature <N>`. Also available in MCP `zenith_render`.
+- **Native vector SVG gradient strokes & diagonal `objectBoundingBox` gradients in PDF.** Gradient-stroked SVGs (e.g. logos) now export as crisp vector PDF shadings instead of rasterizing.
+- **Batch PDF output (`zenith merge --format pdf`, `zenith variant --format pdf`, `merge --combine`).** Export multi-page row PDFs and combined PDFs from CLI and MCP `zenith_merge`.
+- **Multilingual text & bundled fallback fonts.** Added Arabic, Hebrew, CJK, and monochrome emoji fallback fonts (bundled in CLI, fetched on demand in browser), UAX #9 bidi layout, and UAX #14 CJK line wrapping.
+- **Print preflight & font embeddability diagnostics.** Added `image.effective_ppi`, `image.effective_ppi_target`, `ink.rich_black`, `ink.total_coverage`, and `font.not_embeddable`.
+- **Variant layout overrides.** `variants` overrides now support `font-size`, `w`/`h` (`"hug"`/`"fill"`), and frame layout properties with full re-layout.
+- **New `tx` ops & revision ergonomics.** Added `set_override`, `move_page`, and `swap_pages`; node ops now reach component children; `zenith tx` prints created ids and page order deltas; `tx.unknown_node` suggests closest ids and explains scoped ids; `zenith schema diagnostics <FILTER>` filters diagnostic codes; `zenith inspect` includes styles, fills, assets, masters, and overrides.
+- **Frozen stability corpus.** Added a 39-document regression corpus pinned against `0.0.14` to guard parse, validate, format, and render stability.
 
 ### Changed
 
-- **`image.upscale` is skipped on a print page.** `image.effective_ppi` reports the same image with its ppi number.
-- **Agent-facing output is shorter.** An agent re-sends every earlier tool result on each turn, so these cut its input tokens.
-  - The `zenith tx` source diff prints no context lines, only the changed lines under each hunk header. `zenith fix` keeps 3 lines.
-  - `zenith schema ops` shows the first sentence of each summary and ends with a pointer to `zenith schema op <name>`.
-  - `zenith schema op` folds a side or axis family (`padding_x`, `margin_top`) into its base row when the types match.
-  - `zenith tx --help` is shorter. It adds `create_token` and `set_style_property` to the common edits, notes the `"(px)4"` form of a size token, and routes to `zenith inspect`.
-  - The skill routes a revision to `zenith inspect` and `zenith tokens`, and reads the source only when they miss a fact.
+- **Shorter agent-facing CLI output.** Trimmed `zenith tx` diffs, `zenith schema ops`, `zenith tx --help`, and skill routing to reduce token overhead.
+- **Print pages skip `image.upscale`** in favor of `image.effective_ppi`.
+- **`zenith merge` enforces config policy on PNG as well as SVG**, failing rows on denied codes.
 
 ### Fixed
 
-- **The browser editor no longer sends font files as base64 JSON on every request.** The Worker keeps each fetched font as raw bytes and sends them after the request envelope: the envelope lists `"fonts": [{"file", "size"}]`, then one NUL byte, then the bytes. For `examples/text-scripts.zen` a request held 8.99 MB of JSON and 6.7 MB of base64 to decode. It now holds about 10 KB of JSON and no base64. The `fonts` key inside `params` is gone. Native paths are unchanged.
-- **A fallback-font run on a single line sits on the line's baseline.** An Arabic word on a Latin line drew lower, on its own face's ascent.
-- **A hyphenated or broken `code` word keeps the mono face.** Its fragments reshaped in the node family.
-- **`light` and `mesh` with a `pct` position or size are skipped with `scene.unsupported_unit`.** Before, `x=(pct)85` drew the node at x of 0 and `validate` stayed silent. Now `light` and `mesh` match `rect`. A document that uses `px` or `pt` renders the same bytes as before.
-- **The bundled Noto font notices name the SIL Open Font License 1.1.** They said Apache-2.0, but each face's name table states OFL 1.1.
-- **A token that only a variant override uses no longer raises `token.unused`.** `zenith validate` now counts override token refs as references and checks them. `zenith variant` drops each token that a generated variant leaves without a reference. A token the source already leaves unused stays.
-- **A bad override `x`/`y`/`w`/`h` is a parse error.** A value without a unit, or a string other than `"hug"`/`"fill"`, was silently dropped.
-- **The `zenith schema node light` example uses a valid unit.** It taught `x=(%)85`, and `zenith validate` rejects the `%` unit.
-- **`find_replace_text` reaches instance override texts, masters, and components.** The document-wide run skipped them. With `node` set to an instance, it edits that instance only and adds a text override where the component text matches.
-
-### Changed
-
-- **`zenith merge` reports each row's warnings and applies the config policy, for PNG as well as SVG.** A `deny`ed code fails the row. A malformed config now fails the merge with exit code 2.
+- **Outer page clip scopes no longer force whole-page PDF rasterization**, keeping sibling text and vectors selectable.
+- **Connectors respect print bleed offsets** when `bleed > 0`.
+- **Browser editor transfers fetched fonts as raw bytes** instead of base64 JSON.
+- **Fallback-font runs align to the line baseline**, and hyphenated `code` words keep their monospace face.
+- **`find_replace_text` now updates instance overrides, masters, and components.**
+- **Variant-only tokens no longer trigger `token.unused`**, and invalid override geometry or `pct` units on `light`/`mesh` are properly reported.
+- **Bundled Noto font notices now cite SIL OFL 1.1**, and `zenith schema node light` uses valid units.
+- **Sibling nodes on one line without `;` now produce a clear parse error.**
 
 ---
 
