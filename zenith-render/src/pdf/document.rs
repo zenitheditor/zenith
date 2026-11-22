@@ -101,7 +101,28 @@ pub fn render_pdf_multi_with(
     assets: &dyn AssetProvider,
     options: PdfOptions,
 ) -> Vec<u8> {
-    assemble(scenes, fonts, assets, options, None, 1.0).unwrap_or_default()
+    assemble(scenes, fonts, assets, options, None, 1.0, None).unwrap_or_default()
+}
+
+/// Validate that `bytes` carries a standard ISO 15076-1 CMYK ICC profile header
+/// (at least 128 bytes, `acsp` signature at offset 36, `CMYK` color space at offset 16).
+fn validate_cmyk_icc(bytes: &[u8]) -> Result<(), crate::RenderError> {
+    if bytes.len() < 128 {
+        return Err(crate::RenderError::new(
+            "invalid ICC profile: file is shorter than the 128-byte ICC header",
+        ));
+    }
+    if bytes.get(36..40) != Some(b"acsp") {
+        return Err(crate::RenderError::new(
+            "invalid ICC profile: missing 'acsp' signature in header",
+        ));
+    }
+    if bytes.get(16..20) != Some(b"CMYK") {
+        return Err(crate::RenderError::new(
+            "invalid ICC profile: expected a 4-channel CMYK color space profile",
+        ));
+    }
+    Ok(())
 }
 
 pub(super) fn assemble(
@@ -111,7 +132,14 @@ pub(super) fn assemble(
     options: PdfOptions,
     plans: Option<&[Vec<super::report::PlannedRegion>]>,
     raster_scale: f64,
+    icc_profile: Option<&[u8]>,
 ) -> Result<Vec<u8>, crate::RenderError> {
+    if options.cmyk
+        && let Some(raw_icc) = icc_profile
+    {
+        validate_cmyk_icc(raw_icc)?;
+    }
+
     let mut pdf = Pdf::new();
 
     let catalog_id = Ref::new(1);
@@ -153,6 +181,12 @@ pub(super) fn assemble(
         pages.push(prepare_page(scene, translated, &mut alloc));
     }
 
+    let icc_id = if options.cmyk && icc_profile.is_some() {
+        Some(alloc())
+    } else {
+        None
+    };
+
     // ── Catalog + page tree ──────────────────────────────────────────────
     let mut catalog = pdf.catalog(catalog_id);
     catalog.pages(page_tree_id);
@@ -166,6 +200,9 @@ pub(super) fn assemble(
         intent.output_condition_identifier(TextStr("FOGRA39"));
         intent.registry_name(TextStr("http://www.color.org"));
         intent.info(TextStr("ISO Coated v2 300% (ECI)"));
+        if let Some(id) = icc_id {
+            intent.dest_output_profile(id);
+        }
         intent.finish();
         intents.finish();
     }
@@ -183,6 +220,12 @@ pub(super) fn assemble(
     // ── Per-page bodies ──────────────────────────────────────────────────
     for prepared in pages {
         write_prepared_page(&mut pdf, page_tree_id, prepared);
+    }
+
+    // ── Optional PDF/X OutputIntent ICC profile stream ───────────────────
+    if let (Some(id), Some(raw_icc)) = (icc_id, icc_profile) {
+        let flate = miniz_oxide::deflate::compress_to_vec_zlib(raw_icc, 6);
+        pdf.icc_profile(id, &flate).n(4).filter(Filter::FlateDecode);
     }
 
     Ok(pdf.finish())

@@ -358,6 +358,7 @@ fn construction_overlay_appends_guide_commands_to_scene_json() {
         scale: 1.0,
         raster_scale: 1.0,
         cmyk: None,
+        icc_profile: None,
         impose: None,
         parsed: None,
     };

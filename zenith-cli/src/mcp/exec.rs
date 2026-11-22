@@ -336,6 +336,7 @@ fn run_render(args: &Value) -> Result<Value, String> {
         scale: scale.unwrap_or(1.0),
         raster_scale: raster_scale.unwrap_or(1.0),
         cmyk: request.cmyk,
+        icc_profile: None,
         impose: request.impose,
         parsed: None,
     };

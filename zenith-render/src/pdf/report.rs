@@ -7,7 +7,7 @@ use zenith_core::{AssetKind, AssetProvider, FontProvider};
 use zenith_scene::{Scene, SceneCommand};
 
 /// Strict PDF export options. Raster scale affects captures only.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct PdfExportOptions {
     /// Subset embedded selectable fonts.
     pub subset: bool,
@@ -15,6 +15,9 @@ pub struct PdfExportOptions {
     pub raster_scale: f64,
     /// Emit all colors, gradients, and images in DeviceCMYK (`true`) instead of DeviceRGB (`false`).
     pub cmyk: bool,
+    /// Optional CMYK ICC profile bytes embedded as `/DestOutputProfile` in the
+    /// PDF/X `/OutputIntents` dictionary when `cmyk` is `true`.
+    pub icc_profile: Option<Vec<u8>>,
 }
 impl Default for PdfExportOptions {
     fn default() -> Self {
@@ -22,6 +25,7 @@ impl Default for PdfExportOptions {
             subset: true,
             raster_scale: 1.0,
             cmyk: false,
+            icc_profile: None,
         }
     }
 }
@@ -99,6 +103,7 @@ pub fn render_pdf_multi_report(
             subset: options.subset,
             raster_scale: 1.0,
             cmyk: options.cmyk,
+            icc_profile: None,
         },
     )
 }
@@ -193,6 +198,7 @@ pub fn render_pdf_multi_report_with_options(
             },
             Some(&plans),
             options.raster_scale,
+            options.icc_profile.as_deref(),
         )?,
         rasterized_regions,
     })

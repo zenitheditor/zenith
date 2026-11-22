@@ -15,6 +15,7 @@ fn options(flags: &PolicyFlags) -> RenderOptions<'_> {
         scale: 1.0,
         raster_scale: 1.0,
         cmyk: None,
+        icc_profile: None,
         impose: None,
         parsed: None,
     }

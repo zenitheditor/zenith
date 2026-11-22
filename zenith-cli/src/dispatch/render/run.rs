@@ -60,6 +60,13 @@ pub(in crate::dispatch) fn dispatch_render(args: RenderArgs) -> ExitCode {
         return CliError::usage("error: --print cannot be combined with --colorspace srgb")
             .emit(json);
     }
+    if args.icc_profile.is_some() && args.pdf.is_none() {
+        return CliError::usage("error: --icc-profile requires --pdf <OUT>").emit(json);
+    }
+    if args.icc_profile.is_some() && args.colorspace == Some(PdfColorspaceArg::Srgb) {
+        return CliError::usage("error: --icc-profile cannot be combined with --colorspace srgb")
+            .emit(json);
+    }
     if args.impose.is_some() && args.pdf.is_none() {
         return CliError::usage("error: --impose requires --pdf <OUT>").emit(json);
     }
@@ -118,7 +125,24 @@ pub(in crate::dispatch) fn dispatch_render(args: RenderArgs) -> ExitCode {
     let cmyk = match args.colorspace {
         Some(PdfColorspaceArg::Cmyk) => Some(true),
         Some(PdfColorspaceArg::Srgb) => Some(false),
-        None if args.print => Some(true),
+        None if args.print || args.icc_profile.is_some() => Some(true),
+        None => None,
+    };
+    let icc_profile: Option<Vec<u8>> = match &args.icc_profile {
+        Some(path) => match std::fs::read(path) {
+            Ok(bytes) => Some(bytes),
+            Err(e) => {
+                return CliError::new(
+                    "render.icc_read_failed",
+                    format!(
+                        "error[render.icc_read_failed]: could not read ICC profile '{}': {e}",
+                        path.display()
+                    ),
+                    2,
+                )
+                .emit(json);
+            }
+        },
         None => None,
     };
     let raster_scale = match args
@@ -187,6 +211,7 @@ pub(in crate::dispatch) fn dispatch_render(args: RenderArgs) -> ExitCode {
         scale,
         raster_scale,
         cmyk,
+        icc_profile: icc_profile.as_deref(),
         impose,
         pending: Vec::new(),
         directories: Vec::new(),
@@ -237,6 +262,7 @@ pub(super) struct RenderRun<'a> {
     pub(super) scale: Option<f64>,
     pub(super) raster_scale: f64,
     pub(super) cmyk: Option<bool>,
+    pub(super) icc_profile: Option<&'a [u8]>,
     pub(super) impose: Option<ImposeOptions>,
     pub(super) directories: Vec<std::path::PathBuf>,
     pub(super) messages: Vec<String>,
@@ -268,6 +294,7 @@ impl RenderRun<'_> {
             scale: self.output_scale(),
             raster_scale: self.raster_scale,
             cmyk: self.cmyk,
+            icc_profile: self.icc_profile,
             impose: self.impose,
             parsed: None,
         }

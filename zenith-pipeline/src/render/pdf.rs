@@ -148,6 +148,7 @@ fn render_pages(
             cmyk: opts
                 .cmyk
                 .unwrap_or_else(|| doc.colorspace.as_deref() == Some("cmyk")),
+            icc_profile: opts.icc_profile.map(<[u8]>::to_vec),
         },
     )
     .map_err(|e| {

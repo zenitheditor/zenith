@@ -30,6 +30,9 @@ pub struct RenderOptions<'a> {
     /// Override PDF color space: `Some(true)` forces DeviceCMYK, `Some(false)`
     /// forces DeviceRGB, and `None` follows the document's `colorspace` attribute.
     pub cmyk: Option<bool>,
+    /// Optional CMYK ICC profile bytes embedded as `/DestOutputProfile` in the
+    /// PDF/X `/OutputIntents` dictionary when exporting CMYK PDF.
+    pub icc_profile: Option<&'a [u8]>,
     /// Optional sheet imposition for multi-page PDF export (e.g. `booklet`,
     /// `trifold`, `zfold`, `spread`), with bleed, marks, duplex, creep, and signature options.
     pub impose: Option<ImposeOptions>,
@@ -53,6 +56,7 @@ impl<'a> RenderOptions<'a> {
             scale: 1.0,
             raster_scale: 1.0,
             cmyk: None,
+            icc_profile: None,
             impose: None,
             parsed: None,
         }
@@ -112,6 +116,13 @@ impl<'a> RenderOptions<'a> {
     #[must_use]
     pub fn with_cmyk(mut self, cmyk: Option<bool>) -> Self {
         self.cmyk = cmyk;
+        self
+    }
+
+    /// This options set with an embedded CMYK ICC profile for PDF/X `/DestOutputProfile`.
+    #[must_use]
+    pub fn with_icc_profile(mut self, icc_profile: Option<&'a [u8]>) -> Self {
+        self.icc_profile = icc_profile;
         self
     }
 

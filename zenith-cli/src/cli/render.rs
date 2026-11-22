@@ -88,6 +88,11 @@ pub struct RenderArgs {
     #[arg(long)]
     pub print: bool,
 
+    /// Embed a 4-channel CMYK ICC profile file as `/DestOutputProfile` in the
+    /// PDF/X `/OutputIntents` dictionary. Implies CMYK output; requires `--pdf <OUT>`.
+    #[arg(long, value_name = "PATH")]
+    pub icc_profile: Option<PathBuf>,
+
     /// Arrange reading-order pages onto folded press sheets for `--pdf` output:
     /// `booklet` (alias `bifold`, `[4|1]`, `[2|3]`), `trifold` (`[5|6|1]`, `[2|3|4]`),
     /// `zfold` (`[5|4|1]`, `[2|3|6]`), or `spread` (alias `2up`, `[1|2]`, `[3|4]`).

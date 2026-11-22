@@ -255,3 +255,97 @@ fn merge_pdf_honors_document_cmyk_colorspace() {
         "combined merge PDF must contain 2 pages"
     );
 }
+
+#[test]
+fn pdf_icc_profile_embeds_dest_output_profile_and_rejects_invalid_headers() {
+    let dir = tempfile::tempdir().unwrap();
+    let home = tempfile::tempdir().unwrap();
+    fs::write(dir.path().join("leaflet.zen"), FOUR_PAGE_CMYK_DOC).unwrap();
+
+    // Minimal valid 128-byte ISO 15076-1 CMYK ICC header ('CMYK' at 16..20, 'acsp' at 36..40).
+    let mut valid_icc = vec![0u8; 128];
+    valid_icc[0..4].copy_from_slice(&128u32.to_be_bytes());
+    valid_icc[16..20].copy_from_slice(b"CMYK");
+    valid_icc[36..40].copy_from_slice(b"acsp");
+    fs::write(dir.path().join("fogra39.icc"), &valid_icc).unwrap();
+
+    // Valid ICC profile embeds /DestOutputProfile with /N 4 and /FlateDecode, deterministically.
+    let out1 = run_cli(
+        &dir,
+        &home,
+        &[
+            "render",
+            "leaflet.zen",
+            "--pdf",
+            "with-icc-1.pdf",
+            "--icc-profile",
+            "fogra39.icc",
+        ],
+    );
+    assert!(
+        out1.status.success(),
+        "render with --icc-profile failed: {}",
+        String::from_utf8_lossy(&out1.stderr)
+    );
+    let out2 = run_cli(
+        &dir,
+        &home,
+        &[
+            "render",
+            "leaflet.zen",
+            "--pdf",
+            "with-icc-2.pdf",
+            "--icc-profile",
+            "fogra39.icc",
+        ],
+    );
+    assert!(out2.status.success());
+    let pdf1 = fs::read(dir.path().join("with-icc-1.pdf")).unwrap();
+    let pdf2 = fs::read(dir.path().join("with-icc-2.pdf")).unwrap();
+    assert_eq!(pdf1, pdf2, "ICC-embedded PDF must be deterministic");
+    assert!(count_matches(&pdf1, b"/GTS_PDFX") > 0);
+    assert!(count_matches(&pdf1, b"/DestOutputProfile ") > 0);
+    assert!(count_matches(&pdf1, b"/N 4") > 0);
+    assert_eq!(count_matches(&pdf1, b" rg\n"), 0);
+
+    // Invalid ICC (RGB instead of CMYK) must fail cleanly.
+    let mut rgb_icc = valid_icc.clone();
+    rgb_icc[16..20].copy_from_slice(b"RGB ");
+    fs::write(dir.path().join("srgb.icc"), &rgb_icc).unwrap();
+    let bad_rgb = run_cli(
+        &dir,
+        &home,
+        &[
+            "render",
+            "leaflet.zen",
+            "--pdf",
+            "bad-rgb.pdf",
+            "--icc-profile",
+            "srgb.icc",
+        ],
+    );
+    assert!(
+        !bad_rgb.status.success(),
+        "RGB ICC profile must be rejected"
+    );
+
+    // Guard: --icc-profile cannot be combined with --colorspace srgb.
+    let bad_combo = run_cli(
+        &dir,
+        &home,
+        &[
+            "render",
+            "leaflet.zen",
+            "--pdf",
+            "bad-combo.pdf",
+            "--colorspace",
+            "srgb",
+            "--icc-profile",
+            "fogra39.icc",
+        ],
+    );
+    assert!(
+        !bad_combo.status.success(),
+        "--icc-profile with --colorspace srgb must fail"
+    );
+}

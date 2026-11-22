@@ -185,6 +185,7 @@ pub(crate) fn encode_batch_pdf(
             subset: true,
             raster_scale: options.raster_scale,
             cmyk: options.cmyk.unwrap_or(false),
+            icc_profile: None,
         },
     )
     .map_err(|e| {
