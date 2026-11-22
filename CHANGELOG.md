@@ -26,6 +26,7 @@ it.
 
 ### Fixed
 
+- **KDL parser nesting-depth guard (`MAX_KDL_NESTING_DEPTH = 64`):** prevents stack-overflow crashes on adversarial deeply nested KDL inputs at the CLI, MCP, and browser editor trust boundaries.
 - **`chart.overflow` lint now detects colliding own-labels inside squashed plot boxes** and suggests a `SetProperty` height/width fix.
 - **PDF `/Link` annotation rects now track active scene transforms** (`PushTransform`, `PushScaleTranslate`, `PushTransformMatrix`), keeping clickable links aligned on imposed sheets and rotated text.
 - **`zenith tx` `duplicate_page` `created` output now includes duplicated `safe-zone` and `fold` ids.**

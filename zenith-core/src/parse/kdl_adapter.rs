@@ -17,6 +17,89 @@ use super::KdlSource;
 #[derive(Debug, Clone, Default)]
 pub struct KdlAdapter;
 
+/// Maximum KDL `{ ... }` block nesting depth accepted before invoking the
+/// recursive `kdl` parser, preventing stack-overflow crashes on adversarial
+/// deeply nested inputs at the CLI / MCP / editor trust boundary.
+const MAX_KDL_NESTING_DEPTH: usize = 64;
+
+/// Linear O(N) pre-scan that rejects KDL sources nested deeper than
+/// [`MAX_KDL_NESTING_DEPTH`], skipping quoted strings and `//` / `/* */`
+/// comments so braces inside string literals or comments never trigger it.
+fn check_nesting_depth(text: &str) -> Result<(), ParseError> {
+    let bytes = text.as_bytes();
+    let mut i = 0usize;
+    let mut depth = 0usize;
+    let mut in_string = false;
+    let mut block_comment = 0usize;
+    while let Some(&b) = bytes.get(i) {
+        if block_comment > 0 {
+            if b == b'/' && bytes.get(i + 1) == Some(&b'*') {
+                block_comment += 1;
+                i += 2;
+                continue;
+            }
+            if b == b'*' && bytes.get(i + 1) == Some(&b'/') {
+                block_comment -= 1;
+                i += 2;
+                continue;
+            }
+            i += 1;
+            continue;
+        }
+        if in_string {
+            if b == b'\\' {
+                i += 2;
+                continue;
+            }
+            if b == b'"' {
+                in_string = false;
+            }
+            i += 1;
+            continue;
+        }
+        if b == b'/' && bytes.get(i + 1) == Some(&b'/') {
+            i += 2;
+            while let Some(&c) = bytes.get(i) {
+                i += 1;
+                if c == b'\n' {
+                    break;
+                }
+            }
+            continue;
+        }
+        if b == b'/' && bytes.get(i + 1) == Some(&b'*') {
+            block_comment = 1;
+            i += 2;
+            continue;
+        }
+        if b == b'"' {
+            in_string = true;
+            i += 1;
+            continue;
+        }
+        if b == b'{' {
+            depth += 1;
+            if depth > MAX_KDL_NESTING_DEPTH {
+                let (line, col) = line_col(text, i).unwrap_or((1, 1));
+                return Err(ParseError::with_span(
+                    ParseErrorCode::InvalidKdl,
+                    crate::ast::Span {
+                        start: i,
+                        end: i + 1,
+                    },
+                    format!(
+                        "KDL parse error at line {line}, column {col}: nesting depth exceeds maximum of {MAX_KDL_NESTING_DEPTH}"
+                    ),
+                ));
+            }
+        } else if b == b'}' {
+            depth = depth.saturating_sub(1);
+        }
+        i += 1;
+    }
+    Ok(())
+}
+
 impl KdlSource for KdlAdapter {
     fn parse(&self, source: &[u8]) -> Result<Document, ParseError> {
         // Step 1: validate UTF-8.
@@ -26,6 +109,9 @@ impl KdlSource for KdlAdapter {
                 format!("source is not valid UTF-8: {e}"),
             )
         })?;
+
+        // Step 1b: guard against stack overflow on adversarial nested blocks.
+        check_nesting_depth(text)?;
 
         // Step 2: parse KDL.
         let kdl_doc: kdl::KdlDocument = text.parse().map_err(|e: kdl::KdlError| {
