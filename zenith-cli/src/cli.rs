@@ -20,6 +20,7 @@ mod asset;
 mod batch;
 mod edit;
 mod fix;
+mod import;
 mod library;
 mod perceive;
 mod plugin;
@@ -32,6 +33,7 @@ pub use asset::{AssetArgs, AssetImportArgs, AssetSub, AssetZpxBakeArgs};
 pub use batch::{MergeArgs, VariantArgs};
 pub use edit::EditArgs;
 pub use fix::FixArgs;
+pub use import::{ImportArgs, ImportSub, ImportSvgArgs};
 pub use library::{
     LibraryAddArgs, LibraryArgs, LibraryListArgs, LibrarySearchArgs, LibraryShowArgs, LibrarySub,
 };
@@ -193,6 +195,9 @@ pub enum Command {
 
     /// Import local files as frozen document assets.
     Asset(AssetArgs),
+
+    /// Import external vector designs into editable `.zen` documents.
+    Import(ImportArgs),
 
     /// Discover and materialize reusable design assets (tokens, components, actions).
     ///

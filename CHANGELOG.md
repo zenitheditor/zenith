@@ -17,6 +17,7 @@ it.
 
 ### Added
 
+- **Editable SVG import (`zenith import svg <INPUT.svg> --out <OUT.zen>`):** converts vector SVGs (shapes, paths, arcs, transforms, group opacity) into native editable `.zen` `path` nodes with deduplicated `color.svg.*` and `size.stroke.*` design tokens (`--force`, `--name`, `--json`).
 - **N-up gang-up (`--impose grid`) and cut-and-stack (`--impose cut-and-stack`) PDF imposition** with `--grid CxR` (default `2x2`), 2D outer-bleed preservation, and solid internal cut ticks (CLI `render`, `merge --combine`, and MCP `zenith_render`).
 - **CMYK density control bars & 4-plate registration targets (`--color-bars`)** on imposed press sheets (CLI and MCP `zenith_render`).
 - **Strict PDF/X `/DestOutputProfile` ICC embedding (`--icc-profile <PATH>`)** for 4-channel CMYK ICC profiles with ISO 15076-1 header validation.
@@ -24,6 +25,7 @@ it.
 
 ### Fixed
 
+- **`chart.overflow` lint now detects colliding own-labels inside squashed plot boxes** and suggests a `SetProperty` height/width fix.
 - **PDF `/Link` annotation rects now track active scene transforms** (`PushTransform`, `PushScaleTranslate`, `PushTransformMatrix`), keeping clickable links aligned on imposed sheets and rotated text.
 - **`zenith tx` `duplicate_page` `created` output now includes duplicated `safe-zone` and `fold` ids.**
 

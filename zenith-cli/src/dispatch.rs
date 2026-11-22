@@ -17,6 +17,7 @@ mod edit;
 mod editor;
 mod fix;
 mod history;
+mod import;
 mod library;
 mod output;
 mod render;
@@ -38,6 +39,7 @@ pub fn run() -> ExitCode {
         Command::Perceive(args) => document::dispatch_perceive(args),
         Command::Merge(args) => batch::dispatch_merge(args),
         Command::Asset(args) => asset::dispatch_asset(args),
+        Command::Import(args) => import::dispatch_import(args),
         Command::Library(args) => library::dispatch_library(args),
         Command::History(args) => history::dispatch_history(args),
         Command::Undo(args) => history::dispatch_undo(args),
