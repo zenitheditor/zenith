@@ -86,3 +86,30 @@ fn normal_charts_of_every_cartesian_kind_are_silent() {
         assert!(found.is_empty(), "{kind} {attrs}: {found:#?}");
     }
 }
+
+#[test]
+fn squashed_plot_own_labels_collide_and_suggest_h_fix() {
+    // Titled bar chart at h=75: all text stays inside the box, but the plot area is squashed
+    // to ~18px so y-axis tick labels (0, 25, 50, 75, 100) pile on top of each other.
+    let body = r#"      chart id="c" kind="bar" x=(px)40 y=(px)40 w=(px)400 h=(px)75 title="Sales" {
+        categories "North" "South" "West"
+        series label="2025" 25.0 60.0 100.0
+      }"#;
+    let found = hits(&doc(body));
+    assert_eq!(found.len(), 1, "{found:#?}");
+    let d = &found[0];
+    assert_eq!(d.subject_id.as_deref(), Some("c"));
+    assert!(
+        d.message.contains("own labels collide"),
+        "expected own-label collision diagnostic, got: {}",
+        d.message
+    );
+    match d.fix() {
+        Some(FixHint::SetProperty { property, to }) => {
+            assert_eq!(property, "h");
+            let px: f64 = to.trim_start_matches("(px)").parse().expect("px value");
+            assert!(px > 75.0, "{to}");
+        }
+        other => panic!("expected SetProperty fix, got {other:?}"),
+    }
+}

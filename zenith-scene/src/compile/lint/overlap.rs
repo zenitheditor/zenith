@@ -19,7 +19,7 @@ use super::ledger::{PageLedger, TextItem, TextSource};
 use super::paint::Authored;
 
 /// Glyph-ink intersection area, in px², above which two texts collide.
-const MIN_OVERLAP_AREA: f64 = 4.0;
+pub(super) const MIN_OVERLAP_AREA: f64 = 4.0;
 /// Effective opacity below which a text is a watermark, not body ink.
 const MIN_OPACITY: f64 = 0.5;
 /// Clearance the fix leaves between the upper ink bottom and the moved ink.
@@ -54,7 +54,7 @@ fn subject(ledger: &PageLedger, item: &TextItem) -> String {
 
 /// The glyph collision of two texts: summed glyph-pair intersection area
 /// and the bounds of the intersections.
-fn glyph_overlap(a: &TextItem, b: &TextItem) -> Option<(f64, LayoutBox)> {
+pub(super) fn glyph_overlap(a: &TextItem, b: &TextItem) -> Option<(f64, LayoutBox)> {
     let near_b: Vec<LayoutBox> = a
         .ink
         .glyphs

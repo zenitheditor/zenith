@@ -19,8 +19,9 @@ use zenith_core::Diagnostic;
 use crate::layout::LayoutBox;
 
 use super::arrange::set_px;
-use super::geom::{bounds, union};
-use super::ledger::{Entry, PageLedger, TextSource};
+use super::geom::{bounds, intersect, union};
+use super::ledger::{Entry, PageLedger, TextItem, TextSource};
+use super::overlap::{MIN_OVERLAP_AREA, glyph_overlap};
 use super::paint::Authored;
 
 /// Ink tolerance in px on each side.
@@ -70,16 +71,20 @@ impl Spill {
     }
 }
 
-/// Every `chart.overflow` of the page.
+/// Every `chart.overflow` of the page: either chart string ink leaves the
+/// compiled chart box, or the chart's own labels collide with each other
+/// inside a squashed plot box.
 pub(super) fn chart_overflow(
     ledger: &PageLedger,
     authored: &BTreeMap<String, Authored>,
 ) -> Vec<Diagnostic> {
     let mut inks: BTreeMap<usize, LayoutBox> = BTreeMap::new();
+    let mut items_by_chart: BTreeMap<usize, Vec<&TextItem>> = BTreeMap::new();
     for item in ledger.texts.iter() {
         if !matches!(item.source, TextSource::Chart(_)) {
             continue;
         }
+        items_by_chart.entry(item.entry).or_default().push(item);
         let Some(ink) = bounds(&item.ink.local) else {
             continue;
         };
@@ -99,12 +104,120 @@ pub(super) fn chart_overflow(
             continue;
         }
         let spill = Spill::of(b.rect, ink);
-        if spill == Spill::default() {
+        if spill != Spill::default() {
+            out.push(diagnostic(entry, b.rect, spill, authored));
             continue;
         }
-        out.push(diagnostic(entry, b.rect, spill, authored));
+        if let Some(chart_items) = items_by_chart.get(&index)
+            && let Some(collision) = own_label_collision(chart_items)
+        {
+            out.push(collision_diagnostic(entry, b.rect, collision, authored));
+        }
     }
     out
+}
+
+/// Summary of colliding own-label pairs inside one chart.
+struct LabelCollision {
+    pairs: usize,
+    extra_h: f64,
+    extra_w: f64,
+}
+
+/// Detect glyph-level collisions between distinct labels belonging to the same chart.
+fn own_label_collision(items: &[&TextItem]) -> Option<LabelCollision> {
+    let checked: Vec<&TextItem> = items
+        .iter()
+        .copied()
+        .filter(|item| item.ink.axis_aligned && !item.ink.glyphs.is_empty())
+        .collect();
+    let mut pairs = 0usize;
+    let mut extra_h = 0.0_f64;
+    let mut extra_w = 0.0_f64;
+    for (i, a) in checked.iter().enumerate() {
+        for b in checked.iter().skip(i + 1) {
+            if intersect(a.bounds, b.bounds).is_none() {
+                continue;
+            }
+            if let Some((overlap_area, hull)) = glyph_overlap(a, b)
+                && overlap_area > MIN_OVERLAP_AREA
+            {
+                pairs += 1;
+                // Stacked labels (similar x, close y) need vertical room; side-by-side need width.
+                let dx = ((a.bounds.x + a.bounds.w * 0.5) - (b.bounds.x + b.bounds.w * 0.5)).abs();
+                let dy = ((a.bounds.y + a.bounds.h * 0.5) - (b.bounds.y + b.bounds.h * 0.5)).abs();
+                if dx <= dy || hull.h >= hull.w {
+                    extra_h += hull.h + 4.0;
+                } else {
+                    extra_w += hull.w + 4.0;
+                }
+            }
+        }
+    }
+    (pairs > 0).then_some(LabelCollision {
+        pairs,
+        extra_h,
+        extra_w,
+    })
+}
+
+fn size_fix(
+    entry: &Entry,
+    authored: &BTreeMap<String, Authored>,
+    (need_w, grow_w): (f64, bool),
+    (need_h, grow_h): (f64, bool),
+) -> (Vec<String>, Option<zenith_core::FixHint>) {
+    let mut sizes = Vec::new();
+    if grow_h {
+        sizes.push(format!("h=(px){need_h:.0}"));
+    }
+    if grow_w {
+        sizes.push(format!("w=(px){need_w:.0}"));
+    }
+    let facts = authored
+        .get(&entry.id)
+        .filter(|_| !entry.expanded)
+        .copied()
+        .unwrap_or_default();
+    let fix = if grow_h && facts.h_px.is_some() {
+        Some(set_px("h", need_h))
+    } else if grow_w && facts.w_px.is_some() {
+        Some(set_px("w", need_w))
+    } else {
+        None
+    };
+    (sizes, fix)
+}
+
+fn collision_diagnostic(
+    entry: &Entry,
+    rect: LayoutBox,
+    collision: LabelCollision,
+    authored: &BTreeMap<String, Authored>,
+) -> Diagnostic {
+    let need_h = (rect.h + collision.extra_h).ceil();
+    let need_w = (rect.w + collision.extra_w).ceil();
+    let (sizes, fix) = size_fix(
+        entry,
+        authored,
+        (need_w, collision.extra_w > 0.0),
+        (need_h, collision.extra_h > 0.0),
+    );
+    let id = &entry.id;
+    Diagnostic::warning(
+        "chart.overflow",
+        format!(
+            "chart '{id}' own labels collide inside its {:.0}x{:.0}px box ({} overlapping label \
+             pair(s)). The plot area is too cramped for its labels. Set {} to fit.",
+            rect.w,
+            rect.h,
+            collision.pairs,
+            sizes.join(" ")
+        ),
+        entry.span,
+        Some(id.clone()),
+    )
+    .with_fix(fix)
 }
 
 fn diagnostic(
@@ -115,25 +228,12 @@ fn diagnostic(
 ) -> Diagnostic {
     let need_h = (rect.h + spill.vertical()).ceil();
     let need_w = (rect.w + spill.horizontal()).ceil();
-    let mut sizes = Vec::new();
-    if spill.vertical() > 0.0 {
-        sizes.push(format!("h=(px){need_h:.0}"));
-    }
-    if spill.horizontal() > 0.0 {
-        sizes.push(format!("w=(px){need_w:.0}"));
-    }
-    let facts = authored
-        .get(&entry.id)
-        .filter(|_| !entry.expanded)
-        .copied()
-        .unwrap_or_default();
-    let fix = if spill.vertical() > 0.0 && facts.h_px.is_some() {
-        Some(set_px("h", need_h))
-    } else if spill.horizontal() > 0.0 && facts.w_px.is_some() {
-        Some(set_px("w", need_w))
-    } else {
-        None
-    };
+    let (sizes, fix) = size_fix(
+        entry,
+        authored,
+        (need_w, spill.horizontal() > 0.0),
+        (need_h, spill.vertical() > 0.0),
+    );
     let id = &entry.id;
     Diagnostic::warning(
         "chart.overflow",
