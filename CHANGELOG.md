@@ -15,6 +15,15 @@ it.
 
 ## [Unreleased]
 
+## [0.0.18] — 2026-11-24
+
+### Added
+
+- **Redesigned browser & hosted editor (`zenith edit` and GitHub Pages):** new 44 px top bar with Undo/Redo and hold-for-history popover, centered drawing tool pill (`Move`, `Text`, `Rectangle`, `Ellipse`, `Line`, `Hand`), `Design | Split | Code` segmented switch, tabbed left rail (`Layers`, `Pages`, `Tokens`), `⌘K` command palette, never-empty Page properties with drag-to-scrub numeric labels, WCAG AA light-first & dark themes, and a dedicated phone layout (`≤ 720 px`) with bottom sheets.
+- **Engine history & drawing commands (`zenith-editor`):** added `history.list`, `history.goto`, and `node.add` (`rect`, `ellipse`, `line`, `text` backed by semantic design tokens).
+- **Hosted Welcome screen, browser-local draft recovery, and six curated starters:** added Swiss exhibition poster (`Night Garden`), editorial field brief (`The harbor in focus`), prepress pipeline (`Proof to Press`), 16:9 keynote slide (`Deterministic Design`), 2-page hardware spec sheet (`Meridian M-04`), and 1:1 token card (`Design Like Code`), plus opt-in browser draft recovery and unified file/folder opening.
+- **GitHub Pages release deployment workflow (`editor-pages.yml`):** gated on stable release tags on `main` with pre-deploy Chromium smoke tests, deterministic SHA-256 rollback archives, and post-deploy live HTTPS verification.
+
 ## [0.0.17] — 2026-11-23
 
 ### Added
