@@ -169,8 +169,9 @@ SVG exports page 1 by default, outlines text, embeds images, and reports raster 
                     "duplex": { "type": "string", "enum": ["short-edge", "long-edge"], "description": "impose only: back-sheet flip orientation (default short-edge; long-edge rotates back sheets 180 deg)." },
                     "creep_mm": { "type": "number", "minimum": 0, "description": "impose=booklet only: total saddle-stitch creep compensation in mm." },
                     "signature": { "type": "integer", "minimum": 4, "multipleOf": 4, "description": "impose=booklet only: multi-signature section size (positive multiple of 4, e.g. 16)." },
-                    "marks": { "type": "boolean", "description": "impose only: draw K-only outer corner crop marks and fold/cut ticks." },
-                    "color_bars": { "type": "boolean", "description": "impose only: draw CMYK density control bar and 4-plate registration targets in the outer margin." },
+                    "marks": { "type": "boolean", "description": "pdf only: true draws K-only corner crop marks (1-up or imposed); false suppresses per-page bleed crop marks for clean-bleed print RIPs; omit for default." },
+                    "color_bars": { "type": "boolean", "description": "pdf only: draw CMYK density control bar and 4-plate registration targets in the outer margin (works standalone or with impose)." },
+                    "bleed": { "type": "string", "description": "pdf only: override page bleed (e.g. 3mm, 0.125in, 9pt, 12px) so one .zen file can emit both digital RGB and print-ready bleed PDFs." },
                     "contact_sheet": { "type": "boolean", "description": "png only: tile every page (or `page`) into one labelled PNG, ceil(sqrt(n)) columns. Without scale, fits 2048 px wide." }
                 },
                 "required": ["doc", "format"]

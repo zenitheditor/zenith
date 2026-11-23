@@ -75,28 +75,26 @@ pub struct ImposeCliArgs {
     pub signature: Option<usize>,
 
     /// Draw sheet-level K-only corner crop marks and fold/cut tick marks in the outer margin.
-    /// Requires `--impose`.
-    #[arg(long)]
+    /// Works standalone (1-up press sheets) or with `--impose`.
+    #[arg(long, conflicts_with = "no_marks")]
     pub marks: bool,
 
+    /// Suppress per-page corner crop marks on bleed pages, producing clean bleed artwork for print-shop RIPs.
+    #[arg(long, conflicts_with = "marks")]
+    pub no_marks: bool,
+
     /// Draw a 11-patch CMYK density control bar and 4-plate registration targets in the outer margin.
-    /// Requires `--impose`.
+    /// Works standalone (1-up press sheets) or with `--impose`.
     #[arg(long)]
     pub color_bars: bool,
+
+    /// Override page bleed for PDF export (e.g. `3mm`, `0.125in`, `9pt`, `12px`).
+    /// Lets one `.zen` file emit both digital RGB and print-ready bleed PDFs.
+    #[arg(long, value_name = "DIM")]
+    pub bleed: Option<String>,
 }
 
 impl ImposeCliArgs {
-    /// Whether any imposition-related flag was supplied.
-    pub(crate) fn has_any(&self) -> bool {
-        self.impose.is_some()
-            || self.grid.is_some()
-            || self.duplex.is_some()
-            || self.creep.is_some()
-            || self.signature.is_some()
-            || self.marks
-            || self.color_bars
-    }
-
     /// Validate and convert these CLI flags into [`zenith_pipeline::render::ImposeOptions`].
     pub(crate) fn to_impose_options(
         &self,
@@ -105,11 +103,22 @@ impl ImposeCliArgs {
             DEFAULT_GRID, DuplexMode, ImposeMode, ImposeOptions, parse_grid_spec,
         };
         let Some(mode_arg) = self.impose else {
-            if self.has_any() {
+            if self.grid.is_some()
+                || self.duplex.is_some()
+                || self.creep.is_some()
+                || self.signature.is_some()
+            {
                 return Err(
-                    "error: --duplex, --creep, --signature, --grid, --marks, and --color-bars require --impose <MODE>"
+                    "error: --duplex, --creep, --signature, and --grid require --impose <MODE>"
                         .to_owned(),
                 );
+            }
+            if self.marks || self.color_bars || self.no_marks {
+                return Ok(Some(ImposeOptions {
+                    marks: self.marks,
+                    color_bars: self.color_bars,
+                    ..ImposeOptions::new(ImposeMode::Single)
+                }));
             }
             return Ok(None);
         };
@@ -171,6 +180,47 @@ impl ImposeCliArgs {
             color_bars: self.color_bars,
         }))
     }
+
+    /// Parse `--bleed <DIM>` (e.g. `3mm`, `0.125in`, `9pt`, `12px`) into pixels.
+    pub(crate) fn parse_bleed_px(&self) -> Result<Option<f64>, String> {
+        self.bleed.as_deref().map(parse_bleed_dim_px).transpose()
+    }
+}
+
+/// Parse a bleed dimension string (`3mm`, `0.125in`, `9pt`, `12px`) into pixels.
+pub(crate) fn parse_bleed_dim_px(raw: &str) -> Result<f64, String> {
+    let s = raw.trim();
+    let split_idx = s
+        .rfind(|c: char| !c.is_ascii_alphabetic())
+        .map(|i| i + 1)
+        .unwrap_or(0);
+    let (num_str, unit_str) = s.split_at(split_idx);
+    let value: f64 = num_str.trim().parse().map_err(|_| {
+        format!("error: invalid --bleed '{raw}'; expected e.g. 3mm, 0.125in, 9pt, 12px")
+    })?;
+    if !value.is_finite() || value < 0.0 {
+        return Err(format!(
+            "error: --bleed '{raw}' must be a finite number >= 0"
+        ));
+    }
+    let unit = if unit_str.is_empty() {
+        zenith_core::Unit::Px
+    } else {
+        match unit_str {
+            "px" => zenith_core::Unit::Px,
+            "pt" => zenith_core::Unit::Pt,
+            "mm" => zenith_core::Unit::Mm,
+            "cm" => zenith_core::Unit::Cm,
+            "in" => zenith_core::Unit::In,
+            _ => {
+                return Err(format!(
+                    "error: invalid --bleed unit '{unit_str}'; expected px, pt, mm, cm, or in"
+                ));
+            }
+        }
+    };
+    zenith_core::dim_to_px(value, &unit)
+        .ok_or_else(|| format!("error: could not convert --bleed '{raw}' to px"))
 }
 
 /// Arguments for `zenith render`.
@@ -327,4 +377,49 @@ pub struct RenderArgs {
     /// (PNG or SVG pages per CSV row with a provenance manifest) use `zenith merge` instead.
     #[arg(long, value_name = "FILE")]
     pub data: Option<PathBuf>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ImposeCliArgs;
+
+    fn bleed_args(bleed: Option<&str>) -> ImposeCliArgs {
+        ImposeCliArgs {
+            impose: None,
+            grid: None,
+            duplex: None,
+            creep: None,
+            signature: None,
+            marks: false,
+            no_marks: false,
+            color_bars: false,
+            bleed: bleed.map(str::to_owned),
+        }
+    }
+
+    #[test]
+    fn parse_bleed_px_supports_all_physical_units() {
+        assert_eq!(bleed_args(None).parse_bleed_px().unwrap(), None);
+        let mm3 = bleed_args(Some("3mm")).parse_bleed_px().unwrap().unwrap();
+        assert!((mm3 - 3.0 * 96.0 / 25.4).abs() < 1e-6);
+        assert_eq!(
+            bleed_args(Some("9pt")).parse_bleed_px().unwrap(),
+            Some(12.0)
+        );
+        assert_eq!(
+            bleed_args(Some("12px")).parse_bleed_px().unwrap(),
+            Some(12.0)
+        );
+        assert_eq!(
+            bleed_args(Some("0.125in")).parse_bleed_px().unwrap(),
+            Some(12.0)
+        );
+    }
+
+    #[test]
+    fn parse_bleed_px_rejects_invalid_values() {
+        assert!(bleed_args(Some("-1mm")).parse_bleed_px().is_err());
+        assert!(bleed_args(Some("abc")).parse_bleed_px().is_err());
+        assert!(bleed_args(Some("3em")).parse_bleed_px().is_err());
+    }
 }

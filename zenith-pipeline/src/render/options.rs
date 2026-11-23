@@ -36,6 +36,9 @@ pub struct RenderOptions<'a> {
     /// Optional sheet imposition for multi-page PDF export (e.g. `booklet`,
     /// `trifold`, `zfold`, `spread`), with bleed, marks, duplex, creep, and signature options.
     pub impose: Option<ImposeOptions>,
+    /// Optional uniform bleed margin override in px (`--bleed 3mm`).
+    /// When `Some(px)`, overrides `page.bleed` for every page during PDF export.
+    pub bleed_px: Option<f64>,
     /// The parse of the source the caller already holds. The render uses it
     /// instead of parsing the source again. It must be the parse of that
     /// source: the output then equals a render without it.
@@ -58,6 +61,7 @@ impl<'a> RenderOptions<'a> {
             cmyk: None,
             icc_profile: None,
             impose: None,
+            bleed_px: None,
             parsed: None,
         }
     }
@@ -130,6 +134,13 @@ impl<'a> RenderOptions<'a> {
     #[must_use]
     pub fn with_impose(mut self, impose: Option<ImposeOptions>) -> Self {
         self.impose = impose;
+        self
+    }
+
+    /// This options set with a uniform page bleed override in px (`--bleed`).
+    #[must_use]
+    pub fn with_bleed_px(mut self, bleed_px: Option<f64>) -> Self {
+        self.bleed_px = bleed_px;
         self
     }
 }

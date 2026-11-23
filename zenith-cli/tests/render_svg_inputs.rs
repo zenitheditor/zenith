@@ -17,6 +17,7 @@ fn options(flags: &PolicyFlags) -> RenderOptions<'_> {
         cmyk: None,
         icc_profile: None,
         impose: None,
+        bleed_px: None,
         parsed: None,
     }
 }

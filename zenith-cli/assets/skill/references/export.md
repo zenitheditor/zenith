@@ -17,8 +17,10 @@ Zenith exports deterministic PNG, SVG, and PDF artifacts from editable `.zen` so
 | `--duplex EDGE` | Back-sheet flip for `--impose`: `short-edge` (default) or `long-edge` (180° back rotation). |
 | `--creep MM` | Total saddle-stitch creep compensation in mm (`--impose booklet` only). |
 | `--signature N` | Multi-signature section size in pages, positive multiple of 4 (`--impose booklet` only). |
-| `--marks` | Draws K-only outer corner crop marks and internal fold (dashed) or cut (solid) ticks on `--impose` sheets. |
-| `--color-bars` | Draws an 11-patch CMYK density control bar and 4-plate registration targets in the outer margin on `--impose` sheets. |
+| `--marks` | Draws K-only outer corner crop marks (plus fold/cut ticks when `--impose` is used). Works on single-page `--pdf` and `--impose` sheets. |
+| `--no-marks` | Suppresses crop marks and fold/cut ticks (useful on `--impose` sheets or clean bleed PDFs). |
+| `--color-bars` | Draws an 11-patch CMYK density control bar and 4-plate registration targets in the outer margin. Works on single-page `--pdf` and `--impose` sheets. |
+| `--bleed DIM` | Overrides page bleed for PDF export (e.g. `3mm`, `0.125in`, `9pt`). Lets one `.zen` file emit both digital RGB and print-ready bleed PDFs without duplicating source. |
 | `--all-pages DIR` | Writes `page-N.png` in document order. |
 | `--all-pages-svg DIR` | Writes `page-N.svg` in document order. |
 | `--contact-sheet PATH` | Writes one PNG containing the selected pages. |
@@ -40,14 +42,14 @@ zenith render examples/multipage.zen --contact-sheet out/sheet.png --scale 0.5 -
 Author multi-page leaflets, brochures, and booklets in **natural reading order** (`1, 2, 3, 4…`) at the finished panel size (for example, 4 × A5 portrait pages for an A4 bi-fold), then export both deliverables from the same `.zen` file:
 
 - **Digital sharing (`--colorspace srgb`):** reading-order pages (`1→2→3→4`), `DeviceRGB`, default `1×` raster fallback — smaller file, reads naturally on phones and laptops.
-- **Commercial print (`--print` + `--impose`):** `DeviceCMYK` with PDF/X `FOGRA39` `OutputIntent` across vectors, text, native SVGs, gradients, and images (keeping neutral grays/black K-only), `300 DPI` raster fallback (`3.125×`), outer-edge bleed preservation (inner fold edges flush), and press-imposed sheets:
+- **Commercial print (`--print` + `--impose`):** `DeviceCMYK` with PDF/X `FOGRA39` `OutputIntent` across vectors, text, native SVGs, gradients, and images (keeping neutral grays/black K-only), `300 DPI` raster fallback (`3.125×`), outer-edge bleed preservation (declare `bleed=(mm)3` on `document` or `page`, with inner fold edges flush), and press-imposed sheets:
   - `--impose booklet` (`bifold`, `saddle`): 2-up saddle-stitch (`[4|1]`, `[2|3]` for 4 pages; pads to multiple of 4). Supports `--signature N` (multi-signature books) and `--creep MM` (saddle-stitch shingling).
   - `--impose trifold` (`letterfold`): 3-up roll/letter fold (`[5|6|1]`, `[2|3|4]`; pads to multiple of 6).
   - `--impose zfold` (`accordion`): 3-up Z/accordion fold (`[5|4|1]`, `[2|3|6]`; pads to multiple of 6).
   - `--impose spread` (`2up`): 2-up reading-order spreads (`[1|2]`, `[3|4]`; pads to multiple of 2).
   - `--impose grid` (`nup`) with `--grid CxR` (default `2x2`): sequential N-up gang-up grid for cards, stickers, and flyers.
   - `--impose cut-and-stack` (`stack`) with `--grid CxR` (default `2x2`): stack-ordered N-up sheets so guillotine cuts stay in sequential order (also supported on `zenith merge --format pdf --combine`).
-  - Add `--marks` for K-only corner crop marks + fold/cut ticks, `--color-bars` for an 11-patch CMYK density bar + 4-plate registration targets, `--icc-profile PATH` for strict PDF/X-4 `/DestOutputProfile` embedding, and `--duplex long-edge` when the printer tumbles on the long edge.
+  - Add `--bleed 3mm` on the CLI (or `bleed=(mm)3` on `page`), `--marks` for K-only corner crop marks + fold/cut ticks (or `--no-marks` for clean bleed without marks), `--color-bars` for an 11-patch CMYK density bar + 4-plate registration targets, `--icc-profile PATH` for strict PDF/X-4 `/DestOutputProfile` embedding, and `--duplex long-edge` when the printer tumbles on the long edge.
 - **Vector SVG fidelity:** SVG linear-gradient fills, linear-gradient strokes, and non-square `objectBoundingBox` diagonal gradients emit as native PDF axial shadings (in both `DeviceRGB` and `DeviceCMYK`) without rasterizing.
 
 Vector dimensions and geometry remain unchanged by `--raster-scale`. Existing bitmap assets retain their source resolution. PNG `--scale` changes output dimensions. Each side becomes `max(1, round(page_px * F))`, with half values rounded away from zero.

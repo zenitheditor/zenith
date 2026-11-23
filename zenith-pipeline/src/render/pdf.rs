@@ -82,6 +82,15 @@ fn render_pages(
         import_diagnostics,
         import_files,
     } = parse_validate_with(host, src, opts.parsed, project_dir, opts.flags)?.into_parts();
+    if let Some(bleed_px) = opts.bleed_px {
+        let dim = zenith_core::Dimension {
+            value: bleed_px,
+            unit: zenith_core::Unit::Px,
+        };
+        for p in &mut doc.body.pages {
+            p.bleed = Some(dim.clone());
+        }
+    }
     let indices = match page {
         Some(page) => vec![
             resolve_page_index(&doc, page)
@@ -206,4 +215,43 @@ pub fn pdf_rasterization_diagnostics(regions: &[PdfRasterizedRegion]) -> Vec<Dia
             )
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::policy::PolicyFlags;
+    use crate::{Host, MemFs, NoConfig};
+
+    #[test]
+    fn bleed_px_override_emits_distinct_trim_and_bleed_boxes() {
+        let src = r##"zenith version=1 {
+  project id="p" name="P"
+  tokens format="zenith-token-v1" {
+    token id="c.bg" type="color" value="#ffffff"
+  }
+  styles {}
+  document id="d" title="D" {
+    page id="page.1" w=(mm)210 h=(mm)297 background=(token)"c.bg" {}
+  }
+}"##;
+        let fs = MemFs::new();
+        let host = Host::new(&fs, &NoConfig);
+        let flags = PolicyFlags::default();
+        let bleed_3mm = 3.0 * 96.0 / 25.4;
+        let out = render_pdf_pages(
+            host,
+            src,
+            None,
+            RenderOptions::new(&flags).with_bleed_px(Some(bleed_3mm)),
+        )
+        .expect("render with bleed override");
+        let text = String::from_utf8_lossy(&out.pdf);
+        assert!(text.contains("/TrimBox"), "expected /TrimBox in PDF");
+        assert!(text.contains("/BleedBox"), "expected /BleedBox in PDF");
+        assert!(
+            !text.contains("/TrimBox [0 0 "),
+            "expected inset /TrimBox when bleed_px > 0"
+        );
+    }
 }

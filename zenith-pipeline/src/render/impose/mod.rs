@@ -20,6 +20,9 @@ pub use plan::{DEFAULT_GRID, parse_grid_spec};
 /// How reading-order pages are arranged onto physical press sheets for PDF output.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ImposeMode {
+    /// 1-up single-page press sheet: preserves each page 1-to-1 with outer bleed
+    /// and optional slug margin for sheet-level `--marks` and `--color-bars`.
+    Single,
     /// 2-up saddle-stitch / bi-fold imposition. Pads to a multiple of 4 pages.
     /// For 4 pages: sheet 1 = `[4 | 1]` (outside), sheet 2 = `[2 | 3]` (inside).
     /// For 8 pages: `[8 | 1]`, `[2 | 7]`, `[6 | 3]`, `[4 | 5]`.
@@ -120,6 +123,17 @@ pub fn impose_scenes(scenes: &[Scene], opts: ImposeOptions) -> Result<Vec<Scene>
     let sheets = plan::sheet_plan(scenes.len(), opts);
     Ok(sheets
         .iter()
-        .map(|spec| compose::compose_sheet(scenes, spec, geom, opts))
+        .map(|spec| {
+            let sheet_geom = if opts.mode == ImposeMode::Single {
+                spec.slots
+                    .first()
+                    .and_then(|s| *s)
+                    .and_then(|idx| scenes.get(idx))
+                    .map_or(geom, plan::panel_geometry)
+            } else {
+                geom
+            };
+            compose::compose_sheet(scenes, spec, sheet_geom, opts)
+        })
         .collect())
 }

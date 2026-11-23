@@ -338,6 +338,7 @@ fn run_render(args: &Value) -> Result<Value, String> {
         cmyk: request.cmyk,
         icc_profile: None,
         impose: request.impose,
+        bleed_px: request.bleed_px,
         parsed: None,
     };
     let mut image_meta: Option<Value> = None;

@@ -360,6 +360,7 @@ fn construction_overlay_appends_guide_commands_to_scene_json() {
         cmyk: None,
         icc_profile: None,
         impose: None,
+        bleed_px: None,
         parsed: None,
     };
     let artifact = to_scene_json_with_options(CONSTRUCTION_DOC, None, 1, opts)

@@ -36,6 +36,7 @@ pub(super) struct RenderRequest<'a> {
     pub raster_scale: Option<f64>,
     pub cmyk: Option<bool>,
     pub impose: Option<ImposeOptions>,
+    pub bleed_px: Option<f64>,
 }
 impl<'a> RenderRequest<'a> {
     pub(super) fn parse(args: &'a Value) -> Result<Self, String> {
@@ -142,24 +143,43 @@ impl<'a> RenderRequest<'a> {
                 })?)
             }
         };
-        let marks = optional_bool(args, "marks")?.unwrap_or(false);
+        let marks_opt = optional_bool(args, "marks")?;
+        let marks = marks_opt.unwrap_or(false);
         let color_bars = optional_bool(args, "color_bars")?.unwrap_or(false);
+        let bleed_raw = optional_string(args, "bleed")?;
+        if (marks_opt.is_some() || color_bars || bleed_raw.is_some()) && format != RenderFormat::Pdf
+        {
+            return Err(invalid(
+                "marks/color_bars/bleed",
+                format.as_str(),
+                "Set format to pdf",
+            ));
+        }
+        let bleed_px = match bleed_raw {
+            Some(raw) => Some(
+                crate::cli::parse_bleed_dim_px(raw).map_err(|msg| invalid("bleed", raw, &msg))?,
+            ),
+            None => None,
+        };
         let grid_raw = optional_string(args, "grid")?;
         if impose_raw.is_none()
             && (duplex_raw.is_some()
                 || creep_mm.is_some()
                 || signature.is_some()
-                || grid_raw.is_some()
-                || marks
-                || color_bars)
+                || grid_raw.is_some())
         {
             return Err(invalid(
-                "duplex/creep_mm/signature/grid/marks/color_bars",
+                "duplex/creep_mm/signature/grid",
                 "no impose",
-                "Pass impose when using prepress sheet options",
+                "Pass impose when using imposition sheet options",
             ));
         }
         let impose = match impose_raw {
+            None if marks_opt.is_some() || color_bars => Some(ImposeOptions {
+                marks,
+                color_bars,
+                ..ImposeOptions::new(ImposeMode::Single)
+            }),
             None => None,
             Some(_) if page.is_some() => {
                 return Err(invalid("impose", "page", "Omit page when using impose"));
@@ -239,6 +259,7 @@ impl<'a> RenderRequest<'a> {
             raster_scale,
             cmyk,
             impose,
+            bleed_px,
         })
     }
 }
@@ -318,6 +339,20 @@ mod tests {
                 .unwrap()
                 .contact_sheet
         );
+    }
+
+    #[test]
+    fn bleed_and_marks_require_pdf_format() {
+        assert!(
+            RenderRequest::parse(&json!({"doc":"doc.zen","format":"png","bleed":"3mm"})).is_err()
+        );
+        assert!(
+            RenderRequest::parse(&json!({"doc":"doc.zen","format":"svg","marks":false})).is_err()
+        );
+        let args = json!({"doc":"doc.zen","format":"pdf","bleed":"3mm","marks":false});
+        let req = RenderRequest::parse(&args).unwrap();
+        assert!(req.bleed_px.is_some());
+        assert!(!req.impose.unwrap().marks);
     }
 
     #[test]

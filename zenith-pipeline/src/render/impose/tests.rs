@@ -234,3 +234,76 @@ fn parse_grid_spec_validates_bounds() {
     assert!(parse_grid_spec("33x2").is_err());
     assert!(parse_grid_spec("2by4").is_err());
 }
+
+#[test]
+fn single_mode_preserves_each_page_with_marks_and_color_bars() {
+    let mut p1 = Scene::new(120.0, 160.0);
+    p1.trim = Some(zenith_scene::Rect {
+        x: 10.0,
+        y: 10.0,
+        w: 100.0,
+        h: 140.0,
+    });
+    let mut p2 = Scene::new(220.0, 260.0);
+    p2.trim = Some(zenith_scene::Rect {
+        x: 10.0,
+        y: 10.0,
+        w: 200.0,
+        h: 240.0,
+    });
+    let opts = ImposeOptions {
+        marks: true,
+        color_bars: true,
+        ..ImposeOptions::new(ImposeMode::Single)
+    };
+    let sheets = impose_scenes(&[p1, p2], opts).unwrap();
+    assert_eq!(sheets.len(), 2);
+    assert_eq!(sheets[0].trim.unwrap().w, 100.0);
+    assert_eq!(sheets[1].trim.unwrap().w, 200.0);
+    // 8 corner crop marks + 11 CMYK patches + 2 registration targets on each 1-up sheet.
+    let fill_rects = sheets[0]
+        .commands
+        .iter()
+        .filter(|c| matches!(c, SceneCommand::FillRect { .. }))
+        .count();
+    assert_eq!(fill_rects, 11);
+}
+
+#[test]
+fn single_mode_without_marks_produces_clean_bleed() {
+    let mut p1 = Scene::new(120.0, 160.0);
+    p1.trim = Some(zenith_scene::Rect {
+        x: 10.0,
+        y: 10.0,
+        w: 100.0,
+        h: 140.0,
+    });
+    // Simulate the 8 trailing inline crop-mark StrokeLine commands emitted by the scene compiler.
+    for _ in 0..8 {
+        p1.commands.push(SceneCommand::StrokeLine {
+            x1: 0.0,
+            y1: 10.0,
+            x2: 8.0,
+            y2: 10.0,
+            color: zenith_core::Color::cmyk(0.0, 0.0, 0.0, 100.0, 0, 0, 0),
+            stroke_width: 0.5,
+            stroke_dash: None,
+            stroke_gap: None,
+            stroke_linecap: None,
+        });
+    }
+    let sheets = impose_scenes(&[p1], ImposeOptions::new(ImposeMode::Single)).unwrap();
+    assert_eq!(sheets.len(), 1);
+    assert_eq!(sheets[0].width, 120.0);
+    assert_eq!(sheets[0].height, 160.0);
+    assert_eq!(sheets[0].trim.unwrap().w, 100.0);
+    assert_eq!(
+        sheets[0]
+            .commands
+            .iter()
+            .filter(|c| matches!(c, SceneCommand::StrokeLine { .. }))
+            .count(),
+        0,
+        "clean-bleed single mode must strip inline crop marks"
+    );
+}

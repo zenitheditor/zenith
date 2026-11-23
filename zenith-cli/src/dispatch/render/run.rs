@@ -68,11 +68,26 @@ pub(in crate::dispatch) fn dispatch_render(args: RenderArgs) -> ExitCode {
     if args.impose.impose.is_some() && args.pdf.is_none() {
         return CliError::usage("error: --impose requires --pdf <OUT>").emit(json);
     }
+    if (args.impose.marks
+        || args.impose.no_marks
+        || args.impose.color_bars
+        || args.impose.bleed.is_some())
+        && args.pdf.is_none()
+    {
+        return CliError::usage(
+            "error: --marks, --no-marks, --color-bars, and --bleed require --pdf <OUT>",
+        )
+        .emit(json);
+    }
     if args.impose.impose.is_some() && args.page.is_some() {
         return CliError::usage("error: --impose cannot be combined with --page").emit(json);
     }
     let impose = match args.impose.to_impose_options() {
         Ok(opts) => opts,
+        Err(msg) => return CliError::usage(msg).emit(json),
+    };
+    let bleed_px = match args.impose.parse_bleed_px() {
+        Ok(px) => px,
         Err(msg) => return CliError::usage(msg).emit(json),
     };
     let cmyk = match args.colorspace {
@@ -166,6 +181,7 @@ pub(in crate::dispatch) fn dispatch_render(args: RenderArgs) -> ExitCode {
         cmyk,
         icc_profile: icc_profile.as_deref(),
         impose,
+        bleed_px,
         pending: Vec::new(),
         directories: Vec::new(),
         messages: Vec::new(),
@@ -217,6 +233,7 @@ pub(super) struct RenderRun<'a> {
     pub(super) cmyk: Option<bool>,
     pub(super) icc_profile: Option<&'a [u8]>,
     pub(super) impose: Option<ImposeOptions>,
+    pub(super) bleed_px: Option<f64>,
     pub(super) directories: Vec<std::path::PathBuf>,
     pub(super) messages: Vec<String>,
     pub(super) pending: Vec<(std::path::PathBuf, Vec<u8>)>,
@@ -249,6 +266,7 @@ impl RenderRun<'_> {
             cmyk: self.cmyk,
             icc_profile: self.icc_profile,
             impose: self.impose,
+            bleed_px: self.bleed_px,
             parsed: None,
         }
     }

@@ -43,6 +43,7 @@ pub use plugin::{
     AgentFlags, PluginArgs, PluginInstallArgs, PluginSub, PluginUninstallArgs, ScopeArg,
 };
 pub use reflow::ReflowArgs;
+pub(crate) use render::parse_bleed_dim_px;
 pub use render::{DuplexArg, ImposeArg, PdfColorspaceArg, RenderArgs};
 pub use schema::{SchemaArgs, SchemaSub};
 pub use tx::{COMMON_EDITS, OutlineTextArgs, TxArgs};

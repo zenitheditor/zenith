@@ -130,32 +130,40 @@ pub(super) fn validate_and_measure(
         ));
     }
 
-    let (page_w, page_h) = (first.width, first.height);
-    let (bleed_x, bleed_y, trim_w, trim_h) = match first.trim {
-        Some(t) => (t.x, t.y, t.w, t.h),
-        None => (0.0, 0.0, page_w, page_h),
-    };
-    for (idx, scene) in scenes.iter().enumerate().skip(1) {
-        if (scene.width - page_w).abs() > 0.5 || (scene.height - page_h).abs() > 0.5 {
-            return Err(PipelineError::new(
-                "render.impose_size_mismatch",
-                format!(
-                    "imposition requires uniform page sizes: page 1 is {page_w}x{page_h} px, but page {} is {}x{} px",
-                    idx + 1,
-                    scene.width,
-                    scene.height
-                ),
-                2,
-            ));
+    let geom = panel_geometry(first);
+    if opts.mode != ImposeMode::Single {
+        let (page_w, page_h) = (first.width, first.height);
+        for (idx, scene) in scenes.iter().enumerate().skip(1) {
+            if (scene.width - page_w).abs() > 0.5 || (scene.height - page_h).abs() > 0.5 {
+                return Err(PipelineError::new(
+                    "render.impose_size_mismatch",
+                    format!(
+                        "imposition requires uniform page sizes: page 1 is {page_w}x{page_h} px, but page {} is {}x{} px",
+                        idx + 1,
+                        scene.width,
+                        scene.height
+                    ),
+                    2,
+                ));
+            }
         }
     }
 
-    Ok(PanelGeometry {
+    Ok(geom)
+}
+
+/// Extract `(bleed_x, bleed_y, trim_w, trim_h)` in px from a single compiled page scene.
+pub(super) fn panel_geometry(scene: &Scene) -> PanelGeometry {
+    let (bleed_x, bleed_y, trim_w, trim_h) = match scene.trim {
+        Some(t) => (t.x, t.y, t.w, t.h),
+        None => (0.0, 0.0, scene.width, scene.height),
+    };
+    PanelGeometry {
         bleed_x,
         bleed_y,
         trim_w,
         trim_h,
-    })
+    }
 }
 
 /// Compute the ordered list of press sheets (slots, grid dims, creep, back-side flag).
@@ -167,6 +175,15 @@ pub(super) fn sheet_plan(page_count: usize, opts: ImposeOptions) -> Vec<SheetSpe
     };
 
     match opts.mode {
+        ImposeMode::Single => (0..page_count)
+            .map(|idx| SheetSpec {
+                slots: vec![Some(idx)],
+                cols: 1,
+                rows: 1,
+                creep_px: 0.0,
+                is_back: false,
+            })
+            .collect(),
         ImposeMode::Booklet => {
             let sig_size = opts.signature.unwrap_or_else(|| page_count.div_ceil(4) * 4);
             let sig_count = page_count.div_ceil(sig_size);
