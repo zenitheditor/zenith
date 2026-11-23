@@ -15,6 +15,22 @@ it.
 
 ## [Unreleased]
 
+## [0.0.17] — 2026-11-23
+
+### Added
+
+- Use `(mm)`, `(cm)`, and `(in)` for physical dimensions in `.zen` files.
+- Override PDF bleed and control 1-up press marks and color bars through CLI and MCP.
+  CLI flags are `--bleed DIM`, `--marks`, `--no-marks`, and `--color-bars`.
+- Style tables with rounded corners, alternating row fills, and selectable border styles.
+- Add markers and value labels to line and area charts. Round the free ends of grouped bars.
+- Format and align running fields with placeholders such as `Page {page} of {pages}`.
+
+### Fixed
+
+- Text and TOC entries honor style `line-height`. Footnotes have more space between entries.
+- Orthogonal connectors leave and approach anchors from the outside of their shapes.
+
 ## [0.0.16] — 2026-11-23
 
 ### Added
