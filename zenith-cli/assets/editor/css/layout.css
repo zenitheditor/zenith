@@ -391,22 +391,22 @@ body {
     min-height: 420px;
   }
 
-  .app[data-poster="true"] {
+  html[data-host="wasm"] .app {
     grid-template-rows: auto auto minmax(0, 1fr) auto var(--status-h);
     --tool: 28px;
   }
 
-  .app[data-poster="true"] .topbar {
+  html[data-host="wasm"] .topbar {
     flex-wrap: wrap;
     gap: var(--space-1);
     padding-block: var(--space-1);
   }
 
-  .app[data-poster="true"] .doc-title {
+  html[data-host="wasm"] .doc-title {
     flex-basis: 100%;
   }
 
-  .app[data-poster="true"] .toolbar {
+  html[data-host="wasm"] .toolbar {
     flex-wrap: wrap;
     max-width: 100%;
   }
@@ -488,24 +488,34 @@ body {
 }
 
 @media (max-width: 440px) {
-  .app[data-poster="true"] .toolbar {
+  html[data-host="wasm"] .toolbar {
+    position: relative;
     display: grid;
     grid-template-columns: repeat(3, max-content);
     justify-items: start;
   }
 
-  .app[data-poster="true"] .toolbar > .tool-group:has(#theme),
-  .app[data-poster="true"] #save i {
+  html[data-host="wasm"] .toolbar > .tool-group:has(#theme),
+  html[data-host="wasm"] #save i {
     display: none;
   }
 
-  .app[data-poster="true"] #show-source,
-  .app[data-poster="true"] #export-tools,
-  .app[data-poster="true"] #save {
+  html[data-host="wasm"] #show-source,
+  html[data-host="wasm"] #export-tools,
+  html[data-host="wasm"] #save {
     grid-row: 2;
   }
 
-  .app[data-poster="true"] .toolbar #save-label {
+  html[data-host="wasm"] .toolbar #save-label {
     display: inline;
+  }
+
+  html[data-host="wasm"] .export-tools {
+    position: static;
+  }
+
+  html[data-host="wasm"] .export-menu {
+    right: auto;
+    inset-inline-start: 0;
   }
 }

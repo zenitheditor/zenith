@@ -628,7 +628,24 @@ export const steps = [
   ],
   [
     "phone width stacks with no horizontal scroll",
-    async ({ page, shot }) => {
+    async ({ page, shot, mode }) => {
+      const checkHostedHeader = async () => {
+        const hidden = await page.eval(`(() => {
+          const bar = document.querySelector('.topbar').getBoundingClientRect();
+          return ['doc-name', 'export-menu-toggle', 'save', 'save-label'].filter((id) => {
+            const box = document.getElementById(id).getBoundingClientRect();
+            return !box.width || !box.height || box.left < bar.left || box.right > bar.right
+              || box.top < bar.top || box.bottom > bar.bottom;
+          });
+        })()`);
+        check(hidden.length === 0, `hosted controls clipped on phone: ${hidden.join(", ")}`);
+        await page.clickSelector("#export-menu-toggle");
+        check(await page.eval(`(() => {
+          const menu = document.querySelector('.export-menu').getBoundingClientRect();
+          return menu.width > 0 && menu.left >= 0 && menu.right <= innerWidth;
+        })()`), "the open export menu is clipped");
+        await page.clickSelector("#export-menu-toggle");
+      };
       await page.viewport(390, 844, true);
       await viewportIs(page, 390);
       await page.waitFor("document.getElementById('divider').getAttribute('aria-orientation') === 'horizontal'", "the stacked layout");
@@ -639,8 +656,16 @@ export const steps = [
       }))()`);
       check(m.doc <= m.inner && m.body <= m.inner && m.ws <= m.inner, `horizontal overflow: ${JSON.stringify(m)}`);
       check(m.orient === "horizontal", `divider orientation ${m.orient}`);
+      if (mode === "static") await checkHostedHeader();
       await settle(page);
       await shot("phone");
+      if (mode === "static") {
+        await page.viewport(320, 780, true);
+        await viewportIs(page, 320);
+        await checkHostedHeader();
+        await settle(page);
+        await shot("phone-320");
+      }
       await page.viewport(1440, 900);
       await viewportIs(page, 1440);
       await page.waitFor("document.getElementById('divider').getAttribute('aria-orientation') === 'vertical'", "the side-by-side layout");
