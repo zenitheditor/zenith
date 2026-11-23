@@ -10,6 +10,7 @@ import path from "node:path";
 import { tmpdir } from "node:os";
 import { steps as draftSteps } from "./draft_steps.js";
 import { A, check, cursorAt, engineState, landed, ready, settle, state } from "./helpers.js";
+import { steps as samplePathSteps } from "./sample_paths_steps.js";
 import { crlfEdits, editWhileTyping, paneIsEngine } from "./sync_checks.js";
 
 /** Install a fake `FileSystemFileHandle` store and pickers in the page. */
@@ -776,5 +777,6 @@ export const steps = [
       return { downloads: dl.names };
     },
   ],
+  ...samplePathSteps,
   ...draftSteps,
 ];

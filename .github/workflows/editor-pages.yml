@@ -1,0 +1,248 @@
+name: Deploy Editor Pages
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Stable release tag, such as v0.0.18
+        required: true
+        type: string
+      rollback_run_id:
+        description: Successful Editor Pages run ID for rollback
+        type: string
+      rollback_sha256:
+        description: Site archive SHA-256 from the rollback run summary
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: editor-pages
+  cancel-in-progress: false
+
+jobs:
+  site:
+    name: Check the editor site
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      tag: ${{ steps.release.outputs.tag }}
+      sha: ${{ steps.release.outputs.sha }}
+      checksum: ${{ steps.archive.outputs.checksum }}
+    env:
+      TAG: ${{ inputs.tag }}
+      ROLLBACK_RUN_ID: ${{ inputs.rollback_run_id }}
+      ROLLBACK_SHA256: ${{ inputs.rollback_sha256 }}
+      ZENITH_E2E_NO_SANDBOX: "1"
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check release and rollback inputs
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          fail() { echo "::error::$1" >&2; exit 1; }
+
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            fail "Enter a stable release tag in vX.Y.Z form."
+          fi
+          sha=$(git rev-parse --verify "refs/tags/${TAG}^{commit}") || fail "Tag $TAG does not resolve to a commit."
+          git merge-base --is-ancestor "$sha" "$GITHUB_SHA" || fail "Tag $TAG is outside the dispatched main history."
+
+          api="repos/$GITHUB_REPOSITORY"
+          gh api "$api/releases/tags/$TAG" |
+            jq -e --arg tag "$TAG" '.tag_name == $tag and .draft == false and .prerelease == false and .published_at != null' >/dev/null ||
+            fail "Publish the stable GitHub Release for $TAG before deploying."
+
+          gh api --method GET --paginate "$api/actions/workflows/release.yml/runs" \
+            -f "head_sha=$sha" -f event=push -f status=success -F per_page=100 |
+            jq -e -s --arg tag "$TAG" --arg sha "$sha" --arg repo "$GITHUB_REPOSITORY" '
+              any(.[].workflow_runs[];
+                .head_sha == $sha and .head_branch == $tag and .head_repository.full_name == $repo
+                and .event == "push" and .status == "completed" and .conclusion == "success")' >/dev/null ||
+            fail "The Release workflow must finish successfully for the $TAG tag push at $sha."
+
+          if [[ -n "$ROLLBACK_RUN_ID" || -n "$ROLLBACK_SHA256" ]]; then
+            if [[ ! "$ROLLBACK_RUN_ID" =~ ^[1-9][0-9]*$ || ! "$ROLLBACK_SHA256" =~ ^[a-f0-9]{64}$ ]]; then
+              fail "Enter both a rollback run ID and its lowercase SHA-256, or leave both blank."
+            fi
+            workflow_id=$(gh api "$api/actions/workflows/editor-pages.yml" --jq '.id')
+            run=$(gh api "$api/actions/runs/$ROLLBACK_RUN_ID")
+            jq -e --argjson workflow "$workflow_id" --arg repo "$GITHUB_REPOSITORY" '
+              .workflow_id == $workflow and .head_repository.full_name == $repo and .head_branch == "main"
+              and .event == "workflow_dispatch" and .status == "completed" and .conclusion == "success"' <<< "$run" >/dev/null ||
+              fail "Choose a successful Editor Pages run from main in this repository."
+            prior=$(jq -er '.head_sha' <<< "$run")
+            git merge-base --is-ancestor "$prior" "$GITHUB_SHA" && git merge-base --is-ancestor "$sha" "$prior" ||
+              fail "The rollback run and $TAG must belong to the dispatched main history."
+          fi
+
+          printf 'tag=%s\nsha=%s\n' "$TAG" "$sha" >> "$GITHUB_OUTPUT"
+          printf 'ZENITH_PAGES_STAGE=%s\n' "$RUNNER_TEMP/zenith-editor-pages" >> "$GITHUB_ENV"
+
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ steps.release.outputs.sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      - uses: dtolnay/rust-toolchain@stable
+        if: inputs.rollback_run_id == ''
+        with:
+          targets: wasm32-wasip1
+
+      - uses: Swatinem/rust-cache@v2
+        if: inputs.rollback_run_id == ''
+        with:
+          prefix-key: editor-pages
+
+      - name: Build the release site
+        if: inputs.rollback_run_id == ''
+        env:
+          SOURCE_SHA: ${{ steps.release.outputs.sha }}
+        run: |
+          set -euo pipefail
+          SITE="$ZENITH_PAGES_STAGE/site"
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          rustc --version
+          node --version
+          cargo build --locked --profile release-wasm --target wasm32-wasip1 -p zenith-editor-wasm
+          node zenith-cli/scripts/build-static-editor.mjs --pages --out "$SITE"
+          jq -n --arg tag "$TAG" --arg sha "$SOURCE_SHA" '{tag: $tag, sha: $sha}' > "$SITE/build.json"
+
+      - name: Restore the rollback site
+        if: inputs.rollback_run_id != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh run download "$ROLLBACK_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --name editor-pages-rollback --dir "$ZENITH_PAGES_STAGE"
+          cd "$ZENITH_PAGES_STAGE"
+          printf '%s  site.tar\n' "$ROLLBACK_SHA256" | sha256sum --check --strict
+          mkdir site
+          tar --extract --file site.tar --directory site --no-same-owner --no-same-permissions
+
+      - name: Smoke the site
+        env:
+          SOURCE_SHA: ${{ steps.release.outputs.sha }}
+        run: |
+          set -euo pipefail
+          SITE="$ZENITH_PAGES_STAGE/site"
+          jq -e --arg tag "$TAG" --arg sha "$SOURCE_SHA" '.tag == $tag and .sha == $sha' "$SITE/build.json" >/dev/null || {
+            echo "::error::The site build.json must match $TAG at $SOURCE_SHA."
+            exit 1
+          }
+          CHROME=$(command -v google-chrome || command -v chromium || command -v chromium-browser)
+          "$CHROME" --version
+          node zenith-cli/tests/editor_e2e/pages_smoke.mjs --site "$SITE" --chromium "$CHROME"
+
+      - name: Checksum the site archive
+        id: archive
+        run: |
+          set -euo pipefail
+          cd "$ZENITH_PAGES_STAGE"
+          if [[ -z "$ROLLBACK_RUN_ID" ]]; then
+            tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner --directory=site --create --file=site.tar .
+          fi
+          checksum=$(sha256sum site.tar | cut -d' ' -f1)
+          printf 'checksum=%s\n' "$checksum" >> "$GITHUB_OUTPUT"
+
+      - name: Retain the checked site
+        uses: actions/upload-artifact@v7
+        with:
+          name: editor-pages-rollback
+          path: ${{ env.ZENITH_PAGES_STAGE }}/site.tar
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload the Pages site
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: ${{ env.ZENITH_PAGES_STAGE }}/site
+
+  deploy:
+    name: Publish the editor
+    needs: site
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    outputs:
+      url: ${{ steps.publish.outputs.page_url }}
+    environment:
+      name: github-pages
+      url: ${{ steps.publish.outputs.page_url }}
+    steps:
+      - name: Deploy the checked artifact
+        id: publish
+        uses: actions/deploy-pages@v4
+
+      - name: Record the deployment
+        env:
+          TAG: ${{ needs.site.outputs.tag }}
+          SOURCE_SHA: ${{ needs.site.outputs.sha }}
+          CHECKSUM: ${{ needs.site.outputs.checksum }}
+          EDITOR_URL: ${{ steps.publish.outputs.page_url }}
+        run: |
+          {
+            printf '## Editor Pages deployment\n\n'
+            printf -- '- URL: %s\n' "$EDITOR_URL"
+            printf -- '- Tag: `%s`\n' "$TAG"
+            printf -- '- Source SHA: `%s`\n' "$SOURCE_SHA"
+            printf -- '- Site archive SHA-256: `%s`\n' "$CHECKSUM"
+            printf -- '- Rollback run ID: `%s`\n' "$GITHUB_RUN_ID"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  live:
+    name: Check the hosted editor
+    needs: [site, deploy]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      SOURCE_SHA: ${{ needs.site.outputs.sha }}
+      EDITOR_URL: ${{ needs.deploy.outputs.url }}
+      ZENITH_E2E_NO_SANDBOX: "1"
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.site.outputs.sha }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      - name: Smoke the hosted editor and record headers
+        run: |
+          set -euo pipefail
+          if [[ "$EDITOR_URL" != https://* ]]; then
+            echo "::error::The deployed editor URL must use HTTPS."
+            exit 1
+          fi
+          EDITOR_URL="${EDITOR_URL%/}/"
+          CHROME=$(command -v google-chrome || command -v chromium || command -v chromium-browser)
+          log="$RUNNER_TEMP/zenith-editor-live.log"
+          result=success
+          node zenith-cli/tests/editor_e2e/pages_smoke.mjs --url "$EDITOR_URL" --chromium "$CHROME" --sha "$SOURCE_SHA" \
+            2>&1 | tee "$log" || result=failure
+          {
+            printf '## Editor Pages live check\n\n'
+            printf -- '- Source SHA: `%s`\n- Result: %s\n\n' "$SOURCE_SHA" "$result"
+            printf '%s\n' '```text'
+            cat "$log"
+            printf '%s\n' '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          test "$result" = success

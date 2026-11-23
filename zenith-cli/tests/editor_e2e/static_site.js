@@ -54,7 +54,7 @@ function globalHeaders(dir) {
  * serves `.wasm` as `application/octet-stream`. Resolves `{url, close}`;
  * `url` is the page address.
  */
-export function serve(dir, { prefix = "/", wasmType = true, csp = true } = {}) {
+export function serve(dir, { prefix = "/", wasmType = true, csp = true, onFile } = {}) {
   const headers = globalHeaders(dir);
   if (!csp) delete headers["Content-Security-Policy"];
   const server = http.createServer((req, res) => {
@@ -71,6 +71,7 @@ export function serve(dir, { prefix = "/", wasmType = true, csp = true } = {}) {
       return send(404, "not found");
     }
     const ext = path.extname(file);
+    onFile?.(rel);
     let type = TYPES[ext] ?? "application/octet-stream";
     if (ext === ".wasm" && !wasmType) type = "application/octet-stream";
     res.writeHead(200, { ...headers, "Content-Type": type, "Cache-Control": "no-cache" });

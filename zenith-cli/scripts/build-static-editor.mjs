@@ -1,6 +1,6 @@
 // Build the static editor: a directory any static file host can serve.
 //
-//   node zenith-cli/scripts/build-static-editor.mjs --out <dir> [--wasm <file>] [--examples <dir>] [--no-samples]
+//   node zenith-cli/scripts/build-static-editor.mjs --out <dir> [--wasm <file>] [--pages | --examples <dir> | --no-samples]
 //
 // The wasm module comes from
 //   cargo build --target wasm32-wasip1 -p zenith-editor-wasm --profile release-wasm
@@ -25,17 +25,20 @@ import { fileURLToPath } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(here, "../..");
+const PAGES_SAMPLES = ["article.zen", "copy/article.md", "flowchart.zen"];
 
 function args() {
   const out = { samples: true };
   const argv = process.argv.slice(2);
   for (let i = 0; i < argv.length; i++) {
     const key = argv[i];
-    if (key === "--no-samples") out.samples = false;
+    if (key === "--pages") out.pages = true;
+    else if (key === "--no-samples") out.samples = false;
     else if (["--out", "--wasm", "--examples"].includes(key)) out[key.slice(2)] = argv[++i];
     else throw new Error(`unknown argument ${key}; see the header of build-static-editor.mjs`);
   }
   if (!out.out) throw new Error("missing --out <dir>; see the header of build-static-editor.mjs");
+  if (out.pages && (!out.samples || out.examples)) throw new Error("--pages requires the bundled gallery");
   return out;
 }
 
@@ -111,7 +114,8 @@ function main() {
   if (a.samples) {
     const examples = path.resolve(a.examples || path.join(repo, "examples"));
     // A top-level .png is the preview of a document, not a project file.
-    const all = walk(examples).filter((rel) => !(rel.endsWith(".png") && !rel.includes("/")) && rel !== "README.md");
+    const all = a.pages ? PAGES_SAMPLES
+      : walk(examples).filter((rel) => !(rel.endsWith(".png") && !rel.includes("/")) && rel !== "README.md");
     for (const rel of all) copy(path.join(examples, rel), path.join(out, "samples", rel));
     const docs = all.filter((rel) => rel.endsWith(".zen") && !rel.includes("/"));
     documents = docs.length;

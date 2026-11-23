@@ -131,6 +131,11 @@ jobs:
         # wasm engine in Chromium, and the wasm page-1 PNG against
         # zenith-cli/tests/render_hashes.json. Any byte difference fails it.
         run: cargo test -p zenith-tool --test editor_page --locked -- --nocapture
+      - name: Check the packaged editor under the Pages path
+        run: |
+          site="$RUNNER_TEMP/zenith-pages-ci"
+          node zenith-cli/scripts/build-static-editor.mjs --pages --out "$site" --wasm "$ZENITH_E2E_WASM"
+          node zenith-cli/tests/editor_e2e/pages_smoke.mjs --site "$site" --chromium "$ZENITH_E2E_CHROMIUM"
 
   msrv:
     name: Minimum Rust version (1.95.0)

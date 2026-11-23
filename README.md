@@ -620,6 +620,22 @@ How it behaves:
 - Each engine call sends the session and the project files to the module. Keep large images out of a project folder.
 - A save on the static site does not stamp a `doc-id` into the file.
 
+#### Deploy the editor to GitHub Pages
+
+- **Repository setup.** Select **GitHub Actions** under **Settings → Pages**. Protect the `github-pages` environment to allow deployments from `main`.
+- **Origin.** Set a dedicated custom domain before inviting people to store browser drafts. Verify domain ownership and enforce HTTPS. Browser storage is scoped to the origin. Paths on an organization’s shared `github.io` host share that origin. Moving to another origin leaves existing drafts on the old one.
+- **Release.** Publish the stable tag through the Release workflow. Wait for the Release run to pass and the tagged commit to reach `main`. Dispatch **Deploy Editor Pages** from `main` with that tag. Start a new dispatch to retry a deployment. The workflow records the editor URL, source SHA, and archive checksum.
+- **Response headers.** GitHub Pages controls the response headers. The bundle’s `_headers` file targets Netlify and Cloudflare Pages. Check the hosted response for HTTPS, the Wasm MIME type, and any policy that affects Workers or Wasm.
+- **Live check.** The workflow checks the deployed source SHA, opens the editor in Chromium, and records both header responses. To repeat the check, set `PAGES_URL`, `SOURCE_SHA`, and `CHROME` to the deployed URL, commit, and Chromium executable.
+
+```bash
+node zenith-cli/tests/editor_e2e/pages_smoke.mjs --url "$PAGES_URL" --chromium "$CHROME" --sha "$SOURCE_SHA"
+```
+
+- **Rollback.** Download `editor-pages-rollback` from the successful run. Keep `site.tar` and its checksum outside Actions. Actions retains the archive for 30 days. During that window, dispatch with the previous tag. Set `rollback_run_id` and `rollback_sha256` from its summary. The workflow checks the old run and archive, then runs smoke checks and deploys the restored bundle. Check that an existing browser draft opens.
+
+The build job reads repository and workflow metadata. The deploy job alone gets `pages: write` and `id-token: write`. GitHub Pages setup and domain changes need repository access. [Pages workflow setup](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages) · [Custom domains](https://docs.github.com/en/pages/configuring-a-custom-domain-for-your-github-pages-site/about-custom-domains-and-github-pages)
+
 ### Agents and MCP
 
 Agents drive the same session the page shows. Over HTTP, `POST /api/cmd` runs an editor command (`{"command":"commands.list"}` lists them). Edits from an agent appear live in the page. Over MCP, six tools expose the engine. They open and save only `.zen` files. The read root is the document's directory (or `root`). `/` is refused as a read root unless the server runs with `zenith mcp --root /`. A server holds at most 16 sessions: a new one evicts the least recently used session without unsaved edits.
