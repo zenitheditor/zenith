@@ -44,6 +44,7 @@ use super::markdown_block::{
     BLOCKQUOTE_INDENT_PX, BlockStyleCascade, CODE_BLOCK_BG, HR_COLOR, HR_THICKNESS_PX,
     LIST_INDENT_PX, ResolvedBlockStyle, block_role, resolve_block_style_core,
 };
+use super::measure::line_height_override_px;
 use super::pack::{LineDecoration, LineStyle};
 use super::shape::{
     LINK_COLOR, ResolvedSpan, WordMetrics, WordToken, resolve_font_family_name,
@@ -213,7 +214,7 @@ pub(in crate::compile) fn shape_source_blocks(
             node_id: &src.id,
         };
         let spans = block_spans(block, bctx, diagnostics);
-        let (tokens, metrics) = shape_words(
+        let (tokens, mut metrics) = shape_words(
             &spans,
             block_families,
             NodeShape {
@@ -228,6 +229,11 @@ pub(in crate::compile) fn shape_source_blocks(
             &src.id,
             src.source_span,
         );
+        if matches!(block, MdBlock::Paragraph { .. })
+            && let Some(lh) = line_height_override_px(src, style_env.resolved, style_env.style_map)
+        {
+            metrics.line_height = lh;
+        }
 
         // Left indent + full-width decoration recovered from the block kind, so a
         // chained blockquote/list/code block matches the single-box look. Indent

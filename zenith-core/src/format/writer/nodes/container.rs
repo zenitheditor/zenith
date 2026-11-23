@@ -205,7 +205,10 @@ pub(super) fn write_table(t: &TableNode, out: &mut String, depth: usize) {
     write_opt_property_value(out, "border", &t.border);
     write_opt_property_value(out, "border-width", &t.border_width);
     write_opt_property_value(out, "header-fill", &t.header_fill);
+    write_opt_property_value(out, "zebra-fill", &t.zebra_fill);
     write_opt_str(out, "header-style", &t.header_style);
+    write_opt_str(out, "border-style", &t.border_style);
+    write_opt_property_value(out, "radius", &t.radius);
     write_opt_str(out, "h-align", &t.h_align);
     write_opt_str(out, "v-align", &t.v_align);
     write_opt_f64(out, "opacity", &t.opacity);

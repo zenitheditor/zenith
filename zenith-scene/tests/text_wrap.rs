@@ -339,3 +339,51 @@ page id="page.fb2" w=(px)400 h=(px)200 {
         "expected DrawGlyphRun for registered Noto Sans family",
     );
 }
+
+#[test]
+fn wrapped_text_honors_style_line_height_override() {
+    let src = r##"zenith version=1 {
+  project id="proj.lh" name="LH"
+  tokens format="zenith-token-v1" {
+    token id="f.sans" type="fontFamily" value="Noto Sans"
+    token id="s.body" type="dimension" value=(px)14
+    token id="lh.airy" type="dimension" value=(px)26
+    token id="c.ink" type="color" value="#111111"
+  }
+  styles {
+    style id="body.airy" {
+      font-family (token)"f.sans"
+      font-size (token)"s.body"
+      line-height (token)"lh.airy"
+      fill (token)"c.ink"
+    }
+  }
+  document id="doc.lh" title="LH" {
+    page id="page.lh" w=(px)400 h=(px)300 {
+      text id="t" x=(px)20 y=(px)20 w=(px)120 h=(px)120 style="body.airy" {
+        span "Deterministic execution across sovereign regions and enclaves."
+      }
+    }
+  }
+}"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+    let mut ys: Vec<f64> = result
+        .scene
+        .commands
+        .iter()
+        .filter_map(|c| match c {
+            SceneCommand::DrawGlyphRun { y, .. } => Some(*y),
+            _ => None,
+        })
+        .collect();
+    ys.sort_by(f64::total_cmp);
+    ys.dedup_by(|a, b| (*a - *b).abs() < 0.01);
+    assert!(ys.len() >= 2, "expected >= 2 wrapped lines, got {ys:?}");
+    assert!(
+        (ys[1] - ys[0] - 26.0).abs() < 0.1,
+        "expected 26px baseline spacing from style line-height, got {} -> {}",
+        ys[0],
+        ys[1]
+    );
+}

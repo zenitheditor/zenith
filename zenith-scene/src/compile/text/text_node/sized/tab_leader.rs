@@ -49,6 +49,7 @@ pub(super) fn render_tab_leader(
             text_y: layout.text_y,
             ctx,
             glyph_stroke: style.glyph_stroke,
+            line_height_override: style.line_height_override,
         },
         commands,
         diagnostics,

@@ -12,6 +12,7 @@ use zenith_core::{ChartNode, Diagnostic};
 
 use crate::ir::{Color, Paint, SceneCommand};
 
+use super::super::util::resolve_property_dimension_px;
 use super::axis::{emit_axis_lines, format_tick_label, line};
 use super::bar::{BarMode, ValueLabelMode, stacked_max};
 use super::bar_emit::{explicit_value_color, value_ink, value_role};
@@ -265,6 +266,8 @@ pub(in crate::compile) fn emit_hbar(
     let series_values: Vec<&[f64]> = chart.series.iter().map(|s| s.values.as_slice()).collect();
     let rects = hbar_rects(&plot, &x_scale, &series_values, mode);
     let label_mode = ValueLabelMode::resolve(chart.value_labels.as_deref(), is_stacked);
+    let bar_radius =
+        resolve_property_dimension_px(chart.radius.as_ref(), text.cx.resolved, 0.0).max(0.0);
 
     for (s, series) in chart.series.iter().enumerate() {
         let color = series_color(series, s, text.cx.resolved, diagnostics, &chart.id);
@@ -277,13 +280,32 @@ pub(in crate::compile) fn emit_hbar(
             if rect.w < 0.5 || rect.h < 0.5 {
                 continue;
             }
-            commands.push(SceneCommand::FillRect {
-                x: rect.x,
-                y: rect.y,
-                w: rect.w,
-                h: rect.h,
-                paint: paint.clone(),
-            });
+            if bar_radius > 0.0 && mode == BarMode::Grouped {
+                let r = bar_radius.min(rect.w.min(rect.h) / 2.0);
+                let is_neg = series.values.get(c).copied().unwrap_or(0.0) < 0.0;
+                let radii = if is_neg {
+                    Some([r, 0.0, 0.0, r])
+                } else {
+                    Some([0.0, r, r, 0.0])
+                };
+                commands.push(SceneCommand::FillRoundedRect {
+                    x: rect.x,
+                    y: rect.y,
+                    w: rect.w,
+                    h: rect.h,
+                    radius: r,
+                    paint: paint.clone(),
+                    radii,
+                });
+            } else {
+                commands.push(SceneCommand::FillRect {
+                    x: rect.x,
+                    y: rect.y,
+                    w: rect.w,
+                    h: rect.h,
+                    paint: paint.clone(),
+                });
+            }
             if label_mode == ValueLabelMode::Off {
                 continue;
             }

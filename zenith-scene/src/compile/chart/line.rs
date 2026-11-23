@@ -5,10 +5,42 @@
 //! and are directly unit-testable. Emit helpers push `SceneCommand`s into an
 //! existing command list — no allocations beyond the points vec.
 
+use zenith_core::{ChartNode, Diagnostic};
+
 use crate::ir::{Color, FillRule, Paint, SceneCommand, StrokeAlign};
 
+use super::axis::format_tick_label;
+use super::bar_emit::{explicit_value_color, value_ink};
 use super::frame::PlotArea;
+use super::role::ChartTextRole;
 use super::scale::LinearScale;
+use super::text::ChartText;
+
+/// Point marker radius in px for line and area charts.
+const MARKER_RADIUS: f64 = 3.5;
+
+/// Point marker style for `line` and `area` charts.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum LineMarkerStyle {
+    None,
+    Circle,
+    Ring,
+}
+
+impl LineMarkerStyle {
+    /// Resolve `chart.markers`: explicit `"none"|"circle"|"ring"` wins; when
+    /// absent, labeled charts default to `Ring` and unlabeled charts stay `None`
+    /// (keeping unlabeled charts byte-identical).
+    pub(super) fn resolve(markers: Option<&str>, has_value_labels: bool) -> Self {
+        match markers {
+            Some("none") => Self::None,
+            Some("circle") => Self::Circle,
+            Some("ring") => Self::Ring,
+            _ if has_value_labels => Self::Ring,
+            _ => Self::None,
+        }
+    }
+}
 
 // ── line_points ───────────────────────────────────────────────────────────────
 
@@ -131,6 +163,134 @@ pub(super) fn emit_area_fill(
         paint: Paint::solid(area_color),
         fill_rule: FillRule::NonZero,
     });
+}
+
+// ── emit_line_markers ─────────────────────────────────────────────────────────
+
+/// Emit crisp point markers at each `(x, y)` vertex of a line or area series.
+pub(super) fn emit_line_markers(
+    points: &[(f64, f64)],
+    color: Color,
+    style: LineMarkerStyle,
+    commands: &mut Vec<SceneCommand>,
+) {
+    if style == LineMarkerStyle::None || points.is_empty() {
+        return;
+    }
+    let white = Color::srgb(255, 255, 255, 255);
+    let d = MARKER_RADIUS * 2.0;
+    for &(cx, cy) in points {
+        let x = cx - MARKER_RADIUS;
+        let y = cy - MARKER_RADIUS;
+        match style {
+            LineMarkerStyle::None => {}
+            LineMarkerStyle::Circle => {
+                commands.push(SceneCommand::FillEllipse {
+                    x,
+                    y,
+                    w: d,
+                    h: d,
+                    paint: Paint::solid(color),
+                    rx: None,
+                    ry: None,
+                });
+                commands.push(SceneCommand::StrokeEllipse {
+                    x,
+                    y,
+                    w: d,
+                    h: d,
+                    color: white,
+                    stroke_width: 1.5,
+                    stroke_dash: None,
+                    stroke_gap: None,
+                    stroke_linecap: None,
+                    rx: None,
+                    ry: None,
+                });
+            }
+            LineMarkerStyle::Ring => {
+                commands.push(SceneCommand::FillEllipse {
+                    x,
+                    y,
+                    w: d,
+                    h: d,
+                    paint: Paint::solid(white),
+                    rx: None,
+                    ry: None,
+                });
+                commands.push(SceneCommand::StrokeEllipse {
+                    x,
+                    y,
+                    w: d,
+                    h: d,
+                    color,
+                    stroke_width: 2.0,
+                    stroke_dash: None,
+                    stroke_gap: None,
+                    stroke_linecap: None,
+                    rx: None,
+                    ry: None,
+                });
+            }
+        }
+    }
+}
+
+// ── emit_line_value_labels ────────────────────────────────────────────────────
+
+/// Context for emitting line/area value labels, bundled to stay under the clippy argument limit.
+#[derive(Clone, Copy)]
+pub(super) struct LineLabelCtx<'a> {
+    pub(super) plot: &'a PlotArea,
+    pub(super) series_idx: usize,
+    pub(super) has_markers: bool,
+}
+
+/// Emit numeric value labels above (or below when near the plot top) each point
+/// of a line or area series.
+pub(super) fn emit_line_value_labels(
+    chart: &ChartNode,
+    points: &[(f64, f64)],
+    lc: LineLabelCtx<'_>,
+    text: ChartText<'_>,
+    commands: &mut Vec<SceneCommand>,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    let Some(series) = chart.series.get(lc.series_idx) else {
+        return;
+    };
+    let explicit = explicit_value_color(chart, lc.series_idx, text, diagnostics);
+    let color = value_ink(explicit, None, text.look);
+    let b = text.base();
+    let clearance = if lc.has_markers { MARKER_RADIUS } else { 1.0 } + 0.35 * b;
+    let n_categories = chart
+        .series
+        .iter()
+        .map(|s| s.values.len())
+        .max()
+        .unwrap_or(0);
+
+    for (c, (&(pt_x, pt_y), &value)) in points.iter().zip(series.values.iter()).enumerate() {
+        let label = format_tick_label(value);
+        let Some(shaped) = text.shape(&label, ChartTextRole::Value, diagnostics) else {
+            continue;
+        };
+        let baseline_above = pt_y - clearance;
+        let baseline = if baseline_above - shaped.ascent >= lc.plot.y {
+            baseline_above
+        } else {
+            pt_y + clearance + shaped.ascent
+        };
+        let max_x = (lc.plot.x + lc.plot.w - shaped.advance).max(lc.plot.x);
+        let x = (pt_x - shaped.advance / 2.0).clamp(lc.plot.x, max_x);
+        text.emit(
+            shaped,
+            (x, baseline),
+            color,
+            lc.series_idx * n_categories + c,
+            commands,
+        );
+    }
 }
 
 // ── Unit tests ────────────────────────────────────────────────────────────────
@@ -342,5 +502,34 @@ mod tests {
             }
             other => panic!("expected FillPolygon, got {:?}", other),
         }
+    }
+
+    #[test]
+    fn marker_style_resolves_explicit_and_labeled_defaults() {
+        assert_eq!(LineMarkerStyle::resolve(None, false), LineMarkerStyle::None);
+        assert_eq!(LineMarkerStyle::resolve(None, true), LineMarkerStyle::Ring);
+        assert_eq!(
+            LineMarkerStyle::resolve(Some("circle"), false),
+            LineMarkerStyle::Circle
+        );
+        assert_eq!(
+            LineMarkerStyle::resolve(Some("none"), true),
+            LineMarkerStyle::None
+        );
+    }
+
+    #[test]
+    fn emit_line_markers_emits_fill_and_stroke_per_point() {
+        let pts = vec![(10.0, 20.0), (50.0, 40.0)];
+        let mut cmds = Vec::new();
+        emit_line_markers(
+            &pts,
+            Color::srgb(13, 148, 136, 255),
+            LineMarkerStyle::Ring,
+            &mut cmds,
+        );
+        assert_eq!(cmds.len(), 4);
+        assert!(matches!(cmds[0], SceneCommand::FillEllipse { .. }));
+        assert!(matches!(cmds[1], SceneCommand::StrokeEllipse { .. }));
     }
 }

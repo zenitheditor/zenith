@@ -172,6 +172,20 @@ pub(in crate::compile) fn resolve_field_to_text(
         _ => return None,
     };
 
+    let text = if let Some(fmt) = field.format.as_deref() {
+        let effective_style = field.folio_style.as_deref().or(ctx.section_folio_style);
+        let page_str = format_folio(ctx.page_index_1based, effective_style);
+        let pages_str = format_folio(ctx.total_pages, effective_style);
+        fmt.replace("{value}", &text)
+            .replace("{page}", &page_str)
+            .replace("{pages}", &pages_str)
+    } else {
+        text
+    };
+    if text.is_empty() {
+        return None;
+    }
+
     // Geometry: prefer the field's own x/w, falling back to the live area.
     let live = ctx.live_area;
     let x = field
@@ -200,10 +214,14 @@ pub(in crate::compile) fn resolve_field_to_text(
         w,
         h,
         layout_item: Default::default(),
-        // A field is always a single line; alignment defaults by field type but
-        // an explicit field-level note: fields do not expose `align` in v0, so
-        // the per-type default is authoritative.
-        align: Some(default_align.to_owned()),
+        // A field is always a single line; explicit `align` overrides the
+        // per-type default.
+        align: Some(
+            field
+                .align
+                .clone()
+                .unwrap_or_else(|| default_align.to_owned()),
+        ),
         v_align: None,
         direction: None,
         overflow: Some("clip".to_owned()),
@@ -298,6 +316,8 @@ mod tests {
             target: None,
             folio_style: None,
             suppress_first: None,
+            format: None,
+            align: None,
             x: None,
             y: None,
             w: None,
@@ -457,6 +477,8 @@ mod tests {
             target: None,
             folio_style: folio_style.map(str::to_owned),
             suppress_first,
+            format: None,
+            align: None,
             x: None,
             y: None,
             w: None,
@@ -491,6 +513,8 @@ mod tests {
             target: None,
             folio_style: None,
             suppress_first,
+            format: None,
+            align: None,
             x: None,
             y: None,
             w: None,
@@ -605,6 +629,8 @@ mod tests {
             target: None,
             folio_style: folio_style.map(str::to_owned),
             suppress_first: None,
+            format: None,
+            align: None,
             x: None,
             y: None,
             w: None,
@@ -854,5 +880,17 @@ mod tests {
             resolve_field_to_text(&field, &ctx).is_none(),
             "suppress-first=true on page 1 must suppress section-page-number"
         );
+    }
+
+    #[test]
+    fn format_and_align_override_field_output() {
+        let (by_id, markers, boxes) = make_ctx();
+        let ctx = field_ctx(4, 8, &by_id, &markers, &boxes);
+        let mut field = page_number_field(None, None);
+        field.format = Some("Page {page} of {pages} ({value})".to_owned());
+        field.align = Some("end".to_owned());
+        let text = resolve_field_to_text(&field, &ctx).expect("formatted field must resolve");
+        assert_eq!(span_text(&text), "Page 4 of 8 (4)");
+        assert_eq!(text.align.as_deref(), Some("end"));
     }
 }

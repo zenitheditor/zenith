@@ -57,6 +57,7 @@ pub(in crate::compile) fn emit_wrap_path(
         font_size,
         letter_spacing_px,
         kerning_pairs,
+        line_height_override,
         align,
         deco_thickness,
         direction: node_direction,
@@ -83,7 +84,7 @@ pub(in crate::compile) fn emit_wrap_path(
         .first()
         .map_or_else(Vec::new, |s| s.features.clone());
 
-    let (tokens, metrics) = shape_words(
+    let (tokens, mut metrics) = shape_words(
         &resolved_spans,
         families,
         NodeShape {
@@ -98,6 +99,9 @@ pub(in crate::compile) fn emit_wrap_path(
         &text.id,
         text.source_span,
     );
+    if let Some(lh) = line_height_override {
+        metrics.line_height = lh;
+    }
 
     // ── Baseline-grid snap (single-box wrap path) ────────────────────
     // When the page declares a positive baseline grid `g` AND no drop cap

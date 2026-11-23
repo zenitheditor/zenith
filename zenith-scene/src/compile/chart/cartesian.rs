@@ -13,7 +13,10 @@ use super::bar_emit::{CatLabels, emit_bars, emit_category_labels};
 use super::frame::{Bands, BoxPx};
 use super::hbar::emit_hbar;
 use super::legend::{LegendConfig, emit_legend, legend_split};
-use super::line::{emit_area_fill, emit_line_series, line_points};
+use super::line::{
+    LineLabelCtx, LineMarkerStyle, emit_area_fill, emit_line_markers, emit_line_series,
+    emit_line_value_labels, line_points,
+};
 use super::palette::series_color;
 use super::scale::{LinearScale, data_range, nice_ticks};
 use super::text::ChartText;
@@ -166,6 +169,29 @@ fn emit_vertical(
         emit_line_series(pts, *c, 2.0, commands);
     }
     emit_axis_lines(&plot, text.look, commands);
+    let show_values = matches!(
+        chart.value_labels.as_deref(),
+        Some("auto" | "top" | "center")
+    );
+    let marker_style = LineMarkerStyle::resolve(chart.markers.as_deref(), show_values);
+    let has_markers = marker_style != LineMarkerStyle::None;
+    for (idx, (pts, c)) in series_geom.iter().enumerate() {
+        emit_line_markers(pts, *c, marker_style, commands);
+        if show_values {
+            emit_line_value_labels(
+                chart,
+                pts,
+                LineLabelCtx {
+                    plot: &plot,
+                    series_idx: idx,
+                    has_markers,
+                },
+                text,
+                commands,
+                diagnostics,
+            );
+        }
+    }
     if !chart.categories.is_empty() {
         emit_category_labels(
             &chart.categories,

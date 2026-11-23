@@ -127,6 +127,8 @@ pub(in crate::compile) struct TabLeaderArgs<'a> {
     pub(in crate::compile) text_y: f64,
     pub(in crate::compile) ctx: super::super::RenderCtx,
     pub(in crate::compile) glyph_stroke: (Option<Color>, Option<f64>),
+    /// Optional explicit line-height override in px (from `style` `line-height`).
+    pub(in crate::compile) line_height_override: Option<f64>,
 }
 
 /// A line being emitted, plus the constant geometry — used internally by the

@@ -346,8 +346,16 @@ pub struct TableNode {
     /// Header-row background override, applied to header cells (precedence:
     /// cell.fill > header_fill > table.fill).
     pub header_fill: Option<PropertyValue>,
+    /// Alternating body-row background override (`(row - header_rows) % 2 == 1`).
+    pub zebra_fill: Option<PropertyValue>,
     /// Header text style ref, applied to header-row cell text.
     pub header_style: Option<String>,
+    /// Border drawing style: `"grid"` (default), `"horizontal"` (row dividers only),
+    /// or `"none"` (no border strokes).
+    pub border_style: Option<String>,
+    /// Corner radius of the table box (token or dimension); when positive, clips
+    /// cell fills and borders to a rounded rectangle.
+    pub radius: Option<PropertyValue>,
     /// Default horizontal alignment (`start`(default)/`center`/`end`).
     pub h_align: Option<String>,
     /// Default vertical alignment (`top`(default)/`middle`/`bottom`).

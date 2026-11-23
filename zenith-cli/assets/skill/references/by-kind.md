@@ -79,7 +79,8 @@ Each recipe: scaffold → structure → primitives. Syntax comes from `zenith sc
 - Data is a `chart` (`bar`, `line`, `area`, `sparkline`, `pie`, `donut`). Never hand-drawn bars.
 - Grouped or stacked: `bar-mode`. Horizontal: `orientation`. Data binding: `data-ref` + `render --data`.
 - Two series: if `secondary` ≈ `primary` in `zenith tokens`, use `color.primary` + `color.accent`.
-- Chart text: the chart style sets `font-family`, `font-size`, and `fill`. `stroke` colours the axes.
+- Chart text: the chart style sets `font-family`, `font-size` (`>= (px)11` on A4 so `0.875×` value labels stay above the `9px` legibility floor), and `fill`. `stroke` colours the axes (use a mid-tone border token for legible gridlines).
+- Visual polish: `radius=(px)4` rounds grouped bar ends; `markers="ring"` (or `"circle"`) adds crisp data points to line/area charts.
 - Title draws at 1.25 × `font-size`. Value labels draw at 0.875 × `font-size`.
 - No style: text scales with the chart box and contrasts with the fill under it.
 - A theme row `chart style="ui.chart"` styles every chart. Text on a dark frame takes its `.content` colour.
@@ -89,16 +90,19 @@ Each recipe: scaffold → structure → primitives. Syntax comes from `zenith sc
 
 - Scaffold: `--format a4`.
 - Rows of data are a `table`, never free `text` cells.
+- Editorial polish: `border-style="horizontal"`, `zebra-fill=(token)"color.surface"`, and `radius=(px)6` produce clean modern tables without heavy full grids.
 - Keep cell type at `size.body` or `size.caption` so rows fit.
 
 ## 10. Long-form article / report
 
 - Scaffold: `--format a4 --pages N`.
 - Short copy: `text` with `span`s.
-- Structured prose: `format="markdown"`, styled with `block role="…"` (`zenith schema block`).
+- Editorial prose & paragraphs: never stuff 12+ lines into one dense span. Split multi-paragraph copy using `format="markdown"` (blank lines between paragraphs, styled with `block role="…"`) or stacked `text` nodes inside a `layout="column"` `frame` with `gap`.
+- Typographic rhythm & leading: declare distinct `line-height` dimension tokens on styles (e.g. airy `(px)20`–`(px)22` on `12px`–`13px` body styles, tight `1.15×` on display/H1 styles, and `(px)24`–`(px)26` on `toc` styles). For formal multi-column prose, `align="justify" hyphenate=#true` gives clean editorial columns.
 - External copy: `src="copy/body.md"` (project-relative).
 - Overflow: add boxes with the same `chain` id. Only the first box holds content.
-- Book parts: `footnote`, `toc`, `code` nodes.
+- Book parts: `footnote`, `toc`, `code` nodes, and `field` (`format="Page {page} of {pages}" align="end"` for clean single-node footers).
+- Style `toc` with a dimension token `line-height` (e.g. `token id="lh.toc" type="dimension" value=(px)26`) inside a framed card so entries breathe.
 - Never shrink a long text into one undersized box.
 
 ## 11. Photo + type

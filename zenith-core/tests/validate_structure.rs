@@ -40,6 +40,8 @@ fn field_node(id: &str, field_type: &str) -> FieldNode {
         target: None,
         folio_style: None,
         suppress_first: None,
+        format: None,
+        align: None,
         x: None,
         y: Some(pxv(80.0)),
         h: Some(pxv(40.0)),

@@ -12,7 +12,8 @@ use super::shared::{
 use super::suggest::check_unknown_props;
 use crate::schema::enums::{
     CHART_BAR_MODES, CHART_KINDS, CHART_LEGEND_ALIGNS, CHART_LEGEND_LAYOUTS,
-    CHART_LEGEND_POSITIONS, CHART_ORIENTATIONS, CHART_POINT_PLACEMENTS, CHART_VALUE_LABELS,
+    CHART_LEGEND_POSITIONS, CHART_MARKERS, CHART_ORIENTATIONS, CHART_POINT_PLACEMENTS,
+    CHART_VALUE_LABELS,
 };
 use crate::suggest::{invalid_value_message, replace_value_fix};
 use crate::validate::check::nodes::WalkCtx;
@@ -207,6 +208,26 @@ pub(in crate::validate::check) fn check_chart(
                 )),
             );
         }
+    }
+
+    // Validate markers against {"none", "circle", "ring"}.
+    if let Some(markers) = &c.markers
+        && !CHART_MARKERS.contains(&markers.as_str())
+    {
+        diagnostics.push(
+            Diagnostic::warning(
+                "chart.invalid_markers",
+                invalid_value_message(
+                    &format!("chart '{}'", c.id),
+                    "markers",
+                    markers,
+                    CHART_MARKERS,
+                ),
+                c.source_span,
+                Some(c.id.clone()),
+            )
+            .with_fix(replace_value_fix("markers", markers, CHART_MARKERS)),
+        );
     }
 
     // Validate point-placement against the recognized set {"edge", "center"}.

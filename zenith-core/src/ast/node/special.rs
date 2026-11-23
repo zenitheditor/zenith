@@ -305,6 +305,10 @@ pub struct FieldNode {
     /// When `true`, a numeric field renders nothing on document page 1 (the
     /// title page). Used to suppress the folio on the first page.
     pub suppress_first: Option<bool>,
+    /// Optional format template with `{value}`, `{page}`, and `{pages}` placeholders.
+    pub format: Option<String>,
+    /// Optional horizontal text alignment (`start`, `center`, `end`, `justify`).
+    pub align: Option<String>,
     pub x: Option<PropertyValue>,
     pub y: Option<PropertyValue>,
     pub w: Option<PropertyValue>,

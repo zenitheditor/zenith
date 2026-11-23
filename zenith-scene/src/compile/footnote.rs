@@ -45,7 +45,7 @@ use super::util::{px_prop, resolve_geometry_px, resolve_property_dimension_px};
 use crate::layout::LayoutBox;
 
 /// The gap (px) between stacked footnotes in the zone.
-const FOOTNOTE_GAP: f64 = 6.0;
+const FOOTNOTE_GAP: f64 = 12.0;
 /// The vertical gap (px) between the separator rule and the first footnote.
 const SEPARATOR_GAP: f64 = 10.0;
 /// The separator rule thickness in px.

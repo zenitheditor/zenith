@@ -11,7 +11,7 @@ use crate::compile::text::chain_member::render_chain_member;
 use crate::compile::text::ctx::{ChainMemberPlace, ShapeEnv, TextCompileEnv};
 use crate::compile::text::ink::ink_bounds;
 use crate::compile::text::markdown_block::compile_markdown_blocks;
-use crate::compile::text::measure::{font_size_px, resolve_text_families};
+use crate::compile::text::measure::{font_size_px, line_height_override_px, resolve_text_families};
 use crate::compile::text::overflow_mode::{ClipBox, TextOverflow, clip_commands_since};
 use crate::compile::text::resolve_kerning_pairs;
 use crate::compile::text::shape::{resolve_font_feature_set, resolve_letter_spacing};
@@ -150,6 +150,7 @@ pub(in crate::compile::text::text_node) fn compile_text_core(
         .as_ref()
         .or_else(|| style_prop(&text.style, env.style_map, "letter-spacing"));
     let kerning_pairs = resolve_kerning_pairs(&text.kerning_pairs, env.resolved);
+    let line_height_override = line_height_override_px(text, env.resolved, env.style_map);
     // The base direction: explicit `direction`, else the first strong char.
     let direction = node_direction(text);
 
@@ -165,6 +166,7 @@ pub(in crate::compile::text::text_node) fn compile_text_core(
         letter_spacing_prop,
         letter_spacing_px: resolve_letter_spacing(letter_spacing_prop, env.resolved),
         kerning_pairs: &kerning_pairs,
+        line_height_override,
         direction,
         glyph_stroke,
         node_opacity,
@@ -200,7 +202,7 @@ pub(in crate::compile::text::text_node) fn compile_text_core(
     }
 
     let shaped = shape_spans(&style, &spans, diagnostics);
-    let first_line_height = shaped.first_line_height();
+    let first_line_height = line_height_override.unwrap_or_else(|| shaped.first_line_height());
     let total_advance = shaped.total_advance;
     let has_spans = !shaped.spans.is_empty();
 

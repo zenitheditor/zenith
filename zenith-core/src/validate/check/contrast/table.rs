@@ -31,11 +31,16 @@ pub(super) fn check_table_text_contrast(
 
     for (row_idx, row) in table.rows.iter().enumerate() {
         let is_header = (row_idx as u32) < header_rows;
+        let is_zebra = !is_header && ((row_idx as u32) - header_rows) % 2 == 1;
         for cell in &row.cells {
             let cell_bg = if let Some(rgb) = resolve_fill(&cell.fill) {
                 Some(rgb)
             } else if is_header {
                 resolve_fill(&table.header_fill)
+                    .or_else(|| resolve_fill(&table.fill))
+                    .or(page_bg_rgb)
+            } else if is_zebra {
+                resolve_fill(&table.zebra_fill)
                     .or_else(|| resolve_fill(&table.fill))
                     .or(page_bg_rgb)
             } else {

@@ -112,6 +112,7 @@ pub(crate) const CHART_KNOWN_PROPS: &[&str] = &[
     "orientation",
     "point-placement",
     "point_placement",
+    "markers",
     "value-labels",
     "value_labels",
     "value-color",
@@ -162,6 +163,7 @@ pub(super) fn transform_chart(node: &KdlNode) -> Result<ChartNode, ParseError> {
     let orientation = optional_string_prop(node, "orientation").map(str::to_owned);
     let point_placement =
         optional_string_prop_aliased(node, "point-placement", "point_placement").map(str::to_owned);
+    let markers = optional_string_prop(node, "markers").map(str::to_owned);
     let value_labels =
         optional_string_prop_aliased(node, "value-labels", "value_labels").map(str::to_owned);
     let value_color = optional_property_value_aliased(node, "value-color", "value_color");
@@ -344,6 +346,7 @@ pub(super) fn transform_chart(node: &KdlNode) -> Result<ChartNode, ParseError> {
         bar_mode,
         orientation,
         point_placement,
+        markers,
         value_labels,
         value_color,
         label_colors,

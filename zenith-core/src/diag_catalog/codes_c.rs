@@ -284,6 +284,11 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
         "Table `border-collapse` value is not recognized.",
     ),
     info(
+        "table.invalid_border_style",
+        Severity::Error,
+        "Table `border-style` is not one of `grid`, `horizontal`, or `none`.",
+    ),
+    info(
         "table.invalid_h_align",
         Severity::Error,
         "Table `h-align` value is not recognized.",

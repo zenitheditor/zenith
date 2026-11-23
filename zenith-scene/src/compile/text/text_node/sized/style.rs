@@ -27,6 +27,7 @@ pub(super) struct NodeStyle<'a> {
     pub(super) letter_spacing_prop: Option<&'a PropertyValue>,
     pub(super) letter_spacing_px: f32,
     pub(super) kerning_pairs: &'a [KerningPairAdjustment],
+    pub(super) line_height_override: Option<f64>,
     pub(super) direction: TextDirection,
     pub(super) glyph_stroke: (Option<Color>, Option<f64>),
     /// Node opacity alone (`opacity=`), before the `ctx` cascade.

@@ -4,13 +4,14 @@ use std::collections::BTreeSet;
 
 use crate::ast::node::FieldNode;
 use crate::diagnostics::Diagnostic;
+use crate::schema::enums::TEXT_ALIGNS;
 use crate::suggest::{invalid_value_message, replace_value_fix};
 
 use crate::validate::check::nodes::WalkCtx;
 use crate::validate::check::nodes::node::shared::{
     AnchorParentCtx, AnchorProps, check_anchor, check_style_ref,
 };
-use crate::validate::check::nodes::node::suggest::check_unknown_props;
+use crate::validate::check::nodes::node::suggest::{check_unknown_props, push_invalid_value};
 use crate::validate::check::register_id;
 use crate::validate::check::visual::{VisualExpect, check_visual_prop};
 
@@ -165,4 +166,62 @@ pub(in crate::validate::check) fn check_field(
         field.source_span,
         diagnostics,
     );
+
+    if let Some(align) = field.align.as_deref()
+        && !TEXT_ALIGNS.contains(&align)
+    {
+        push_invalid_value(
+            &format!("field '{}'", field.id),
+            Some(field.id.clone()),
+            "align",
+            align,
+            TEXT_ALIGNS,
+            field.source_span,
+            diagnostics,
+        );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{KdlAdapter, KdlSource, validate};
+
+    #[test]
+    fn field_align_validates_against_text_aligns() {
+        let valid = r##"zenith version=1 {
+  project id="p" name="P"
+  tokens format="zenith-token-v1" {}
+  styles {}
+  document id="d" title="D" {
+    page id="p1" w=(px)400 h=(px)300 {
+      field id="f1" type="page-number" format="Page {page} of {pages}" align="end" x=(px)20 y=(px)20 w=(px)100 h=(px)20
+    }
+  }
+}"##;
+        let doc_ok = KdlAdapter.parse(valid.as_bytes()).expect("parse valid");
+        assert!(
+            validate(&doc_ok).diagnostics.is_empty(),
+            "valid field format and align must produce zero diagnostics"
+        );
+
+        let invalid = r##"zenith version=1 {
+  project id="p" name="P"
+  tokens format="zenith-token-v1" {}
+  styles {}
+  document id="d" title="D" {
+    page id="p1" w=(px)400 h=(px)300 {
+      field id="f1" type="page-number" align="diagonal" x=(px)20 y=(px)20 w=(px)100 h=(px)20
+    }
+  }
+}"##;
+        let doc_bad = KdlAdapter.parse(invalid.as_bytes()).expect("parse invalid");
+        let rep = validate(&doc_bad);
+        assert!(
+            rep.diagnostics
+                .iter()
+                .any(|d| d.code == "node.invalid_value" && d.subject_id.as_deref() == Some("f1")),
+            "expected node.invalid_value on invalid field align, got {:?}",
+            rep.diagnostics
+        );
+    }
 }

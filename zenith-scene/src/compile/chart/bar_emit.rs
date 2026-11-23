@@ -6,6 +6,7 @@ use zenith_core::{ChartNode, Diagnostic};
 use crate::ir::{Color, Paint, SceneCommand};
 
 use super::super::paint::resolve_property_color;
+use super::super::util::resolve_property_dimension_px;
 use super::axis::format_tick_label;
 use super::bar::{BarMode, BarRect, ValueLabelMode, bar_rects};
 use super::frame::PlotArea;
@@ -84,6 +85,8 @@ pub(super) fn emit_bars(
     let n_categories = series_values.iter().map(|s| s.len()).max().unwrap_or(0);
     let label_mode =
         ValueLabelMode::resolve(chart.value_labels.as_deref(), mode == BarMode::Stacked);
+    let bar_radius =
+        resolve_property_dimension_px(chart.radius.as_ref(), text.cx.resolved, 0.0).max(0.0);
 
     for (s, series) in chart.series.iter().enumerate() {
         let color = series_color(series, s, text.cx.resolved, diagnostics, &chart.id);
@@ -96,13 +99,32 @@ pub(super) fn emit_bars(
             if rect.w <= 0.0 || rect.h < 0.5 {
                 continue;
             }
-            commands.push(SceneCommand::FillRect {
-                x: rect.x,
-                y: rect.y,
-                w: rect.w,
-                h: rect.h,
-                paint: paint.clone(),
-            });
+            if bar_radius > 0.0 && mode == BarMode::Grouped {
+                let r = bar_radius.min(rect.w.min(rect.h) / 2.0);
+                let is_neg = series.values.get(c).copied().unwrap_or(0.0) < 0.0;
+                let radii = if is_neg {
+                    Some([0.0, 0.0, r, r])
+                } else {
+                    Some([r, r, 0.0, 0.0])
+                };
+                commands.push(SceneCommand::FillRoundedRect {
+                    x: rect.x,
+                    y: rect.y,
+                    w: rect.w,
+                    h: rect.h,
+                    radius: r,
+                    paint: paint.clone(),
+                    radii,
+                });
+            } else {
+                commands.push(SceneCommand::FillRect {
+                    x: rect.x,
+                    y: rect.y,
+                    w: rect.w,
+                    h: rect.h,
+                    paint: paint.clone(),
+                });
+            }
             if label_mode == ValueLabelMode::Off {
                 continue;
             }

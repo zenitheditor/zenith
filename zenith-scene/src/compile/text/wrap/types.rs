@@ -37,6 +37,7 @@ pub(in crate::compile) struct WrapGeom<'a> {
     pub(in crate::compile) font_size: f32,
     pub(in crate::compile) letter_spacing_px: f32,
     pub(in crate::compile) kerning_pairs: &'a [KerningPairAdjustment],
+    pub(in crate::compile) line_height_override: Option<f64>,
     pub(in crate::compile) align: &'a str,
     pub(in crate::compile) deco_thickness: f64,
     pub(in crate::compile) direction: TextDirection,

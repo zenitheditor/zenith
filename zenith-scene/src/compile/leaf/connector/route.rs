@@ -39,6 +39,75 @@ pub(super) fn orthogonal_route(
     }
 }
 
+/// Orthogonal route that guarantees each endpoint leaves/enters its box
+/// outward along its anchor normal (`outward_dir`). When the direct 3-segment
+/// `orthogonal_route` already moves outward at both ends, it returns the exact
+/// same points; otherwise it stubs outward by `ORTHO_STUB` px and routes
+/// through the open corridor between the boxes.
+pub(super) fn orthogonal_route_outward(
+    f: (f64, f64),
+    fs: AnchorSide,
+    from_box: (f64, f64, f64, f64),
+    t: (f64, f64),
+    ts: AnchorSide,
+    to_box: (f64, f64, f64, f64),
+) -> Vec<f64> {
+    const ORTHO_STUB: f64 = 18.0;
+    let f_out = outward_dir(fs, f, from_box);
+    let t_out = outward_dir(ts, t, to_box);
+
+    match (fs, ts) {
+        (AnchorSide::Horizontal, AnchorSide::Horizontal) => {
+            let mx = (f.0 + t.0) / 2.0;
+            if (mx - f.0) * f_out.0 >= 0.0 && (mx - t.0) * t_out.0 >= 0.0 {
+                return orthogonal_route(f, fs, t, ts);
+            }
+            let fx = f.0 + f_out.0 * ORTHO_STUB;
+            let tx = t.0 + t_out.0 * ORTHO_STUB;
+            let mid_y = if from_box.1 + from_box.3 <= to_box.1 {
+                (from_box.1 + from_box.3 + to_box.1) / 2.0
+            } else if to_box.1 + to_box.3 <= from_box.1 {
+                (to_box.1 + to_box.3 + from_box.1) / 2.0
+            } else {
+                (f.1 + t.1) / 2.0
+            };
+            vec![f.0, f.1, fx, f.1, fx, mid_y, tx, mid_y, tx, t.1, t.0, t.1]
+        }
+        (AnchorSide::Vertical, AnchorSide::Vertical) => {
+            let my = (f.1 + t.1) / 2.0;
+            if (my - f.1) * f_out.1 >= 0.0 && (my - t.1) * t_out.1 >= 0.0 {
+                return orthogonal_route(f, fs, t, ts);
+            }
+            let fy = f.1 + f_out.1 * ORTHO_STUB;
+            let ty = t.1 + t_out.1 * ORTHO_STUB;
+            let mid_x = if from_box.0 + from_box.2 <= to_box.0 {
+                (from_box.0 + from_box.2 + to_box.0) / 2.0
+            } else if to_box.0 + to_box.2 <= from_box.0 {
+                (to_box.0 + to_box.2 + from_box.0) / 2.0
+            } else {
+                (f.0 + t.0) / 2.0
+            };
+            vec![f.0, f.1, f.0, fy, mid_x, fy, mid_x, ty, t.0, ty, t.0, t.1]
+        }
+        (AnchorSide::Horizontal, AnchorSide::Vertical) => {
+            if (t.0 - f.0) * f_out.0 >= 0.0 && (f.1 - t.1) * t_out.1 >= 0.0 {
+                return orthogonal_route(f, fs, t, ts);
+            }
+            let fx = f.0 + f_out.0 * ORTHO_STUB;
+            let ty = t.1 + t_out.1 * ORTHO_STUB;
+            vec![f.0, f.1, fx, f.1, fx, ty, t.0, ty, t.0, t.1]
+        }
+        (AnchorSide::Vertical, AnchorSide::Horizontal) => {
+            if (t.1 - f.1) * f_out.1 >= 0.0 && (f.0 - t.0) * t_out.0 >= 0.0 {
+                return orthogonal_route(f, fs, t, ts);
+            }
+            let fy = f.1 + f_out.1 * ORTHO_STUB;
+            let tx = t.0 + t_out.0 * ORTHO_STUB;
+            vec![f.0, f.1, f.0, fy, tx, fy, tx, t.1, t.0, t.1]
+        }
+    }
+}
+
 /// The unit outward normal of an anchor point on its box face, used to stub the
 /// `route="avoid"` path cleanly out of (and into) each box. A `Horizontal` edge
 /// (left/right) leaves along ±x toward the side the anchor sits on; a `Vertical`
@@ -288,5 +357,53 @@ mod tests {
         let a = self_loop_path((10.0, 20.0, 80.0, 40.0), "bottom");
         let b = self_loop_path((10.0, 20.0, 80.0, 40.0), "bottom");
         assert_eq!(a, b);
+    }
+
+    #[test]
+    fn orthogonal_route_outward_keeps_normal_z_route_unchanged() {
+        let from_box = (100.0, 100.0, 120.0, 60.0);
+        let to_box = (300.0, 200.0, 120.0, 60.0);
+        let f = (220.0, 130.0);
+        let t = (300.0, 230.0);
+        assert_eq!(
+            orthogonal_route_outward(
+                f,
+                AnchorSide::Horizontal,
+                from_box,
+                t,
+                AnchorSide::Horizontal,
+                to_box
+            ),
+            orthogonal_route(f, AnchorSide::Horizontal, t, AnchorSide::Horizontal)
+        );
+    }
+
+    #[test]
+    fn orthogonal_route_outward_stubs_outside_when_stacked_boxes_leave_horizontally() {
+        // Source box centered above two target boxes: left-side exit should go
+        // strictly left of from_box (x < 240) and never cut inward through it.
+        let from_box = (240.0, 100.0, 200.0, 72.0);
+        let to_box = (60.0, 240.0, 220.0, 68.0);
+        let f = (240.0, 136.0);
+        let t = (280.0, 274.0);
+        let pts = orthogonal_route_outward(
+            f,
+            AnchorSide::Horizontal,
+            from_box,
+            t,
+            AnchorSide::Horizontal,
+            to_box,
+        );
+        // First segment leaves left (fx < f.0), never backtracking into from_box.
+        assert!(pts[2] < f.0, "expected outward left stub, got x={}", pts[2]);
+        // Enters target from the right (tx > t.0).
+        let n = pts.len();
+        assert!(
+            pts[n - 4] > t.0,
+            "expected outward right entry stub, got x={}",
+            pts[n - 4]
+        );
+        // Horizontal corridor sits between the two boxes' Y spans (172..240).
+        assert!(pts[5] > 172.0 && pts[5] < 240.0);
     }
 }

@@ -164,8 +164,8 @@ fn attribute_type_for_kind_inner(kind: &str, name: &str, fallback: &'static str)
         // border (table): Color (container.rs:305→312).
         (_, "border") => "token ref: color",
         // contrast-bg (text): Color (text.rs:139).
-        // header-fill (table): Color (container.rs:306→312).
-        (_, "contrast-bg" | "header-fill") => "token ref: color",
+        // header-fill / zebra-fill (table): Color (container.rs:306→312).
+        (_, "contrast-bg" | "header-fill" | "zebra-fill") => "token ref: color",
         // kind: the `kind` attribute means different things on different surfaces.
         //   shape: process/decision/terminator/ellipse (validate/check/nodes/node/shape.rs:152).
         //   pattern: grid/scatter (validate/check/nodes/node/pattern.rs:140).
@@ -201,6 +201,7 @@ fn attribute_type_for_kind_inner(kind: &str, name: &str, fallback: &'static str)
         // text `format` is the content format (`schema::enums::TEXT_FORMATS`).
         // The span data format (currency|percent|number) hint is the generic arm.
         ("text", "format") => "enum: markdown|plain",
+        ("field", "format") => "string",
         ("token-map", "from") | ("token-map", "to") => "string",
         // chart axis/legend/caption/bar-mode/orientation/legend-position/legend-layout/legend-align: chart-only attributes (validate/check/nodes/node/chart.rs).
         ("chart", "legend") => "bool",
@@ -212,7 +213,9 @@ fn attribute_type_for_kind_inner(kind: &str, name: &str, fallback: &'static str)
         ("chart", "bar-mode") => "enum: grouped|stacked",
         ("chart", "orientation") => "enum: vertical|horizontal",
         ("chart", "point-placement") => "enum: edge|center",
+        ("chart", "markers") => "enum: none|circle|ring",
         ("chart", "value-labels") => "enum: auto|none|top|center",
+        ("table", "border-style") => "enum: grid|horizontal|none",
         ("chart", "value-color") => "token ref: color",
         // label-color is a named prop on series children; surfaces here for type-hint purposes.
         ("chart", "label-color") => "token ref: color",
@@ -275,7 +278,7 @@ fn attribute_type_generic(name: &str, fallback: &'static str) -> &'static str {
         "label-offset-x" | "label-offset-y" => "px literal",
         "anchor-gap" => "px literal",
         "blur" => "px literal",
-        "bleed" => "px literal",
+        "bleed" => "dimension literal (px|pt|mm|cm|in)",
         "spread-gutter" => "px literal",
         "margin-inner" | "margin-outer" | "margin-top" | "margin-bottom" => "px literal",
         "symmetry-cx" | "symmetry-cy" => "px literal",

@@ -45,6 +45,7 @@ pub(super) fn emit_wrapped(
             font_size: style.font_size,
             letter_spacing_px: style.letter_spacing_px,
             kerning_pairs: style.kerning_pairs,
+            line_height_override: style.line_height_override,
             align: layout.align,
             deco_thickness: layout.deco_thickness,
             direction: style.direction,

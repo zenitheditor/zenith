@@ -22,7 +22,7 @@ use super::super::routing;
 use super::anchor::{ExactOutlineRef, resolve_anchor};
 use super::label::emit_connector_label;
 use super::route::{
-    arrowhead_points, loop_side, orthogonal_route, outward_dir, point_at, self_loop_path,
+    arrowhead_points, loop_side, orthogonal_route_outward, outward_dir, point_at, self_loop_path,
 };
 
 /// Obstacle-clearance margin (px) used by `route="avoid"`: obstacles inflate by
@@ -224,7 +224,9 @@ pub(in crate::compile) fn compile_connector(
         self_loop_path(from_box, side)
     } else {
         match connector.route.as_deref() {
-            Some("orthogonal") => orthogonal_route(f_pt, f_side, t_pt, t_side),
+            Some("orthogonal") => {
+                orthogonal_route_outward(f_pt, f_side, from_box, t_pt, t_side, to_box)
+            }
             Some("avoid") => {
                 let obstacles: Vec<(f64, f64, f64, f64)> = node_boxes
                     .iter()
@@ -241,7 +243,9 @@ pub(in crate::compile) fn compile_connector(
                     &obstacles,
                     ROUTE_MARGIN,
                 )
-                .unwrap_or_else(|| orthogonal_route(f_pt, f_side, t_pt, t_side))
+                .unwrap_or_else(|| {
+                    orthogonal_route_outward(f_pt, f_side, from_box, t_pt, t_side, to_box)
+                })
             }
             _ => vec![f_pt.0, f_pt.1, t_pt.0, t_pt.1],
         }

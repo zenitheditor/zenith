@@ -174,6 +174,7 @@ pub(in crate::compile) fn compile_tab_leader(
         text_y,
         ctx,
         glyph_stroke,
+        line_height_override,
     } = args;
     let engine = env.engine;
     let fonts = env.fonts;
@@ -246,13 +247,14 @@ pub(in crate::compile) fn compile_tab_leader(
         .collect();
 
     // Shared metrics from the first available run (left, right, or the leader).
-    let (ascent, line_height) = rows
+    let (ascent, natural_line_height) = rows
         .iter()
         .flat_map(|r| r.left_runs.iter().chain(r.right_runs.iter()))
         .next()
         .or(leader_run.as_ref())
         .map(|r| (r.ascent as f64, r.line_height as f64))
         .unwrap_or((0.0, 0.0));
+    let line_height = line_height_override.unwrap_or(natural_line_height);
 
     // Rotation bracket: only when both w and h are present (safe pivot center),
     // mirroring the main text path so rotated TOC pages behave consistently.
@@ -371,4 +373,71 @@ pub(in crate::compile) fn compile_tab_leader(
     }
 
     rows.len() as f64 * line_height
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::ir::SceneCommand;
+    use zenith_core::{KdlAdapter, KdlSource, default_provider};
+
+    #[test]
+    fn toc_honors_style_line_height_override() {
+        let src = r##"zenith version=1 {
+  project id="p" name="P"
+  tokens format="zenith-token-v1" {
+    token id="c.ink" type="color" value="#111111"
+    token id="f.sans" type="fontFamily" value="Noto Sans"
+    token id="s.body" type="dimension" value=(px)14
+    token id="lh.toc" type="dimension" value=(px)28
+  }
+  styles {
+    style id="toc.spaced" {
+      font-family (token)"f.sans"
+      font-size (token)"s.body"
+      line-height (token)"lh.toc"
+      fill (token)"c.ink"
+    }
+    style id="h.role" {
+      font-family (token)"f.sans"
+      font-size (token)"s.body"
+      fill (token)"c.ink"
+    }
+  }
+  document id="d" title="D" {
+    page id="page.1" w=(px)600 h=(px)800 {
+      toc id="t" x=(px)40 y=(px)40 w=(px)400 h=(px)200 match-style="h.role" style="toc.spaced"
+    }
+    page id="page.2" w=(px)600 h=(px)800 {
+      text id="h1" x=(px)40 y=(px)40 w=(px)300 h=(px)30 style="h.role" { span "One" }
+    }
+    page id="page.3" w=(px)600 h=(px)800 {
+      text id="h2" x=(px)40 y=(px)40 w=(px)300 h=(px)30 style="h.role" { span "Two" }
+    }
+  }
+}"##;
+        let doc = KdlAdapter.parse(src.as_bytes()).expect("parse");
+        let res = crate::compile(&doc, &default_provider());
+        let mut ys: Vec<f64> = res
+            .scene
+            .commands
+            .iter()
+            .filter_map(|cmd| match cmd {
+                SceneCommand::DrawGlyphRun {
+                    y,
+                    source_node_id: Some(id),
+                    ..
+                } if id == "t" => Some(*y),
+                _ => None,
+            })
+            .collect();
+        ys.sort_by(f64::total_cmp);
+        ys.dedup_by(|a, b| (*a - *b).abs() < 0.01);
+        assert_eq!(ys.len(), 2, "expected 2 distinct TOC row baselines: {ys:?}");
+        assert!(
+            (ys[1] - ys[0] - 28.0).abs() < 0.1,
+            "expected 28px baseline spacing, got {} -> {}",
+            ys[0],
+            ys[1]
+        );
+    }
 }

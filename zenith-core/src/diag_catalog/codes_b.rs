@@ -497,6 +497,11 @@ pub(super) const CODES: &[DiagnosticCodeInfo] = &[
         "Chart `orientation` is not `vertical` or `horizontal`.",
     ),
     info(
+        "chart.invalid_markers",
+        Severity::Warning,
+        "Chart `markers` is not one of `none`, `circle`, or `ring`.",
+    ),
+    info(
         "chart.invalid_point_placement",
         Severity::Error,
         "Chart `point-placement` is not `edge` or `center`.",

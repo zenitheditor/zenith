@@ -150,6 +150,8 @@ pub(super) fn write_field(f: &FieldNode, out: &mut String, depth: usize) {
     write_opt_str(out, "recto", &f.recto);
     write_opt_str(out, "verso", &f.verso);
     write_opt_str(out, "target", &f.target);
+    write_opt_str(out, "format", &f.format);
+    write_opt_str(out, "align", &f.align);
     write_opt_property_value(out, "x", &f.x);
     write_opt_property_value(out, "y", &f.y);
     write_box_size(out, "w", &f.w, f.layout_item.w_keyword);

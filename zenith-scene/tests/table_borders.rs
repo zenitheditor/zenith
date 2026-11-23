@@ -184,3 +184,42 @@ fn collapse_explicit_cell_border_wins_on_shared_edge() {
         color.r, color.g, color.b
     );
 }
+
+#[test]
+fn horizontal_borders_and_radius_clip_align_to_padded_cells() {
+    let src = r##"zenith version=1 {
+  project id="proj.hb" name="HB"
+  tokens format="zenith-token-v1" {
+    token id="c.border" type="color" value="#cbd5e1"
+  }
+  styles {}
+  document id="doc.hb" title="HB" {
+    page id="p1" w=(px)600 h=(px)400 {
+      table id="t1" x=(px)40 y=(px)50 w=(px)244 h=(px)84 cell-padding=(px)12 gap=(px)0 border=(token)"c.border" border-width=(px)1 border-style="horizontal" radius=(px)6 {
+        column width=(px)100
+        column width=(px)120
+        row height=(px)30 {
+          cell { text id="a" { span "A" } }
+          cell { text id="b" { span "B" } }
+        }
+        row height=(px)30 {
+          cell { text id="c" { span "C" } }
+          cell { text id="d" { span "D" } }
+        }
+      }
+    }
+  }
+}"##;
+    let doc = parse(src);
+    let result = compile(&doc, &default_provider());
+    let clip = result.scene.commands.iter().find_map(|cmd| match cmd {
+        SceneCommand::PushClipRoundedRect { x, y, w, h, .. } => Some((*x, *y, *w, *h)),
+        _ => None,
+    });
+    assert_eq!(clip, Some((52.0, 62.0, 220.0, 60.0)));
+    let divider = result.scene.commands.iter().find_map(|cmd| match cmd {
+        SceneCommand::StrokeLine { x1, x2, .. } => Some((*x1, *x2)),
+        _ => None,
+    });
+    assert_eq!(divider, Some((52.0, 272.0)));
+}

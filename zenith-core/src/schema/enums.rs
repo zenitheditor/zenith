@@ -55,8 +55,12 @@ pub(crate) const CHART_BAR_MODES: &[&str] = &["grouped", "stacked"];
 pub(crate) const CHART_ORIENTATIONS: &[&str] = &["vertical", "horizontal"];
 /// Chart `point-placement` values.
 pub(crate) const CHART_POINT_PLACEMENTS: &[&str] = &["edge", "center"];
+/// Chart `markers` values.
+pub(crate) const CHART_MARKERS: &[&str] = &["none", "circle", "ring"];
 /// Chart `value-labels` values.
 pub(crate) const CHART_VALUE_LABELS: &[&str] = &["auto", "none", "top", "center"];
+/// Table `border-style` values.
+pub(crate) const TABLE_BORDER_STYLES: &[&str] = &["grid", "horizontal", "none"];
 /// Chart `legend-position` values.
 pub(crate) const CHART_LEGEND_POSITIONS: &[&str] = &["right", "left", "top", "bottom"];
 /// Chart `legend-layout` values.
@@ -111,7 +115,9 @@ mod tests {
             ("chart", "bar-mode", CHART_BAR_MODES),
             ("chart", "orientation", CHART_ORIENTATIONS),
             ("chart", "point-placement", CHART_POINT_PLACEMENTS),
+            ("chart", "markers", CHART_MARKERS),
             ("chart", "value-labels", CHART_VALUE_LABELS),
+            ("table", "border-style", TABLE_BORDER_STYLES),
             ("connector", "route", CONNECTOR_ROUTES),
             ("text", "overflow", TEXT_OVERFLOWS),
             ("code", "overflow", CODE_OVERFLOWS),

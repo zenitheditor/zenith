@@ -10,7 +10,9 @@ use std::collections::BTreeSet;
 use crate::ast::node::{FrameNode, GroupNode, LayoutKind, TableNode};
 use crate::ast::value::{Dimension, dim_to_px};
 use crate::diagnostics::Diagnostic;
-use crate::schema::enums::{BORDER_COLLAPSES, H_ALIGNS, SYMMETRY_MODES, V_ALIGNS};
+use crate::schema::enums::{
+    BORDER_COLLAPSES, H_ALIGNS, SYMMETRY_MODES, TABLE_BORDER_STYLES, V_ALIGNS,
+};
 use crate::suggest::{invalid_value_message, replace_value_fix};
 
 use super::shared::{
@@ -491,6 +493,7 @@ pub(in crate::validate::check) fn check_table(
         ("fill", t.fill.as_ref()),
         ("border", t.border.as_ref()),
         ("header-fill", t.header_fill.as_ref()),
+        ("zebra-fill", t.zebra_fill.as_ref()),
     ] {
         check_visual_prop(
             &t.id,
@@ -506,6 +509,7 @@ pub(in crate::validate::check) fn check_table(
         ("border-width", t.border_width.as_ref()),
         ("gap", t.gap.as_ref()),
         ("cell-padding", t.cell_padding.as_ref()),
+        ("radius", t.radius.as_ref()),
     ] {
         check_visual_prop(
             &t.id,
@@ -543,6 +547,24 @@ pub(in crate::validate::check) fn check_table(
                 Some(t.id.clone()),
             )
             .with_fix(replace_value_fix("v-align", va, V_ALIGNS)),
+        );
+    }
+    if let Some(bs) = t.border_style.as_deref()
+        && !TABLE_BORDER_STYLES.contains(&bs)
+    {
+        diagnostics.push(
+            Diagnostic::error(
+                "table.invalid_border_style",
+                invalid_value_message(
+                    &format!("table '{}'", t.id),
+                    "border-style",
+                    bs,
+                    TABLE_BORDER_STYLES,
+                ),
+                t.source_span,
+                Some(t.id.clone()),
+            )
+            .with_fix(replace_value_fix("border-style", bs, TABLE_BORDER_STYLES)),
         );
     }
     if let Some(bc) = t.border_collapse.as_deref()

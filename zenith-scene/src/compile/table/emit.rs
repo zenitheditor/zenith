@@ -111,6 +111,8 @@ struct CellEmit {
     pad: f64,
     opacity: f64,
     is_header: bool,
+    is_zebra: bool,
+    suppress_cell_borders: bool,
 }
 
 pub(in crate::compile) fn compile_table(
@@ -243,7 +245,31 @@ pub(in crate::compile) fn compile_table(
     // BTreeMap (deterministic, float-safe key) and emit them in a single pass
     // after the cell loop. Any other value (including None/"separate"/unknown)
     // uses the default per-cell four-StrokeLine emission unchanged.
-    let collapse_mode = matches!(table.border_collapse.as_deref(), Some("collapse"));
+    let border_style = table.border_style.as_deref().unwrap_or("grid");
+    let horizontal_only = border_style == "horizontal";
+    let no_borders = border_style == "none";
+    let suppress_cell_borders = horizontal_only || no_borders;
+    let collapse_mode =
+        !suppress_cell_borders && matches!(table.border_collapse.as_deref(), Some("collapse"));
+    let radius = resolve_property_dimension_px(table.radius.as_ref(), cx.resolved, 0.0).max(0.0);
+
+    let total_w: f64 =
+        col_widths.iter().sum::<f64>() + gap * (col_count.saturating_sub(1)) as f64 + 2.0 * pad;
+    let total_h: f64 =
+        row_heights.iter().sum::<f64>() + gap * (row_count.saturating_sub(1)) as f64 + 2.0 * pad;
+    let cells_x = origin_x + pad;
+    let cells_y = origin_y + pad;
+    let cells_w = (total_w - 2.0 * pad).max(0.0);
+    let cells_h = (total_h - 2.0 * pad).max(0.0);
+    if radius > 0.0 {
+        commands.push(SceneCommand::PushClipRoundedRect {
+            x: cells_x,
+            y: cells_y,
+            w: cells_w,
+            h: cells_h,
+            radius,
+        });
+    }
 
     // Accumulator for collapse mode: EdgeKey → EdgeStyle.
     // Populated during the cell loop below; empty (and unused) in separate mode.
@@ -276,10 +302,14 @@ pub(in crate::compile) fn compile_table(
             h: span_h.max(0.0),
         };
 
+        let is_header = pc.row < header_rows;
+        let is_zebra = !is_header && (pc.row - header_rows) % 2 == 1;
         let cell_emit = CellEmit {
             pad,
             opacity,
-            is_header: pc.row < header_rows,
+            is_header,
+            is_zebra,
+            suppress_cell_borders,
         };
 
         if collapse_mode {
@@ -315,6 +345,36 @@ pub(in crate::compile) fn compile_table(
             stroke_linecap: None,
         });
     }
+
+    if horizontal_only
+        && let Some(prop) = table.border.as_ref()
+        && let Some(mut color) = resolve_property_color(prop, cx.resolved, diagnostics, &table.id)
+    {
+        color.a = (color.a as f64 * opacity).round() as u8;
+        let bw = resolve_border_width(table.border_width.as_ref(), cx.resolved, 1.0).max(0.0);
+        if bw > 0.0 {
+            let x1 = cells_x;
+            let x2 = cells_x + cells_w;
+            for r in 0..row_count.saturating_sub(1) {
+                let y = row_top[r] + row_heights[r] + gap / 2.0;
+                commands.push(SceneCommand::StrokeLine {
+                    x1,
+                    y1: y,
+                    x2,
+                    y2: y,
+                    color,
+                    stroke_width: bw,
+                    stroke_dash: None,
+                    stroke_gap: None,
+                    stroke_linecap: None,
+                });
+            }
+        }
+    }
+
+    if radius > 0.0 {
+        commands.push(SceneCommand::PopClip);
+    }
 }
 
 /// Emit one cell in collapse mode: background fill and clipped content only
@@ -343,6 +403,11 @@ fn emit_cell(
     ctx: RenderCtx,
 ) {
     emit_cell_fill(cell, rect, cell_emit, cx, commands, diagnostics);
+
+    if cell_emit.suppress_cell_borders {
+        emit_cell_children(cell, rect, cell_emit, cx, commands, diagnostics, ctx);
+        return;
+    }
 
     let table = cx.table;
     // ── Separate border: each cell draws its own four edges independently ─
@@ -402,7 +467,7 @@ fn emit_cell_fill(
     diagnostics: &mut Vec<Diagnostic>,
 ) {
     let table = cx.table;
-    if let Some(prop) = cell_fill_prop(cell, table, cell_emit.is_header)
+    if let Some(prop) = cell_fill_prop(cell, table, cell_emit.is_header, cell_emit.is_zebra)
         && let Some(mut color) = resolve_property_color(prop, cx.resolved, diagnostics, &table.id)
     {
         color.a = (color.a as f64 * cell_emit.opacity).round() as u8;
@@ -416,15 +481,18 @@ fn emit_cell_fill(
     }
 }
 
-/// The fill a cell paints: cell.fill > header_fill (header only) > table.fill.
+/// The fill a cell paints: cell.fill > header_fill (header only) > zebra_fill (odd body row) > table.fill.
 fn cell_fill_prop<'t>(
     cell: &'t zenith_core::TableCell,
     table: &'t TableNode,
     is_header: bool,
+    is_zebra: bool,
 ) -> Option<&'t PropertyValue> {
     cell.fill.as_ref().or_else(|| {
         if is_header {
             table.header_fill.as_ref().or(table.fill.as_ref())
+        } else if is_zebra {
+            table.zebra_fill.as_ref().or(table.fill.as_ref())
         } else {
             table.fill.as_ref()
         }
@@ -452,7 +520,7 @@ fn emit_cell_children(
     let table = cx.table;
     let node_cx = NodeCtx {
         backdrop: fill_backdrop(
-            cell_fill_prop(cell, table, cell_emit.is_header),
+            cell_fill_prop(cell, table, cell_emit.is_header, cell_emit.is_zebra),
             cell_emit.opacity,
             cx.backdrop,
             cx.resolved,

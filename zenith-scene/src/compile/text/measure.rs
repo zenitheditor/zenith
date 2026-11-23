@@ -38,6 +38,29 @@ pub(in crate::compile) fn font_size_px(
     resolve_property_dimension_px(font_size_prop.as_ref(), resolved, 16.0) as f32
 }
 
+/// Resolve an explicit `line-height` override from the node's referenced style
+/// (`None` when the style is absent, declares no positive `line-height`, or the
+/// node explicitly overrides `font_size` to a different pixel size than the
+/// style's `font-size`).
+pub(in crate::compile) fn line_height_override_px(
+    text: &TextNode,
+    resolved: &BTreeMap<String, ResolvedToken>,
+    style_map: &BTreeMap<&str, &Style>,
+) -> Option<f64> {
+    if let Some(node_fs) = text.font_size.as_ref()
+        && let Some(style_fs) = style_prop(&text.style, style_map, "font-size")
+    {
+        let node_px = resolve_property_dimension_px(Some(node_fs), resolved, 0.0);
+        let style_px = resolve_property_dimension_px(Some(style_fs), resolved, 0.0);
+        if node_px > 0.0 && style_px > 0.0 && (node_px - style_px).abs() > 0.01 {
+            return None;
+        }
+    }
+    style_prop(&text.style, style_map, "line-height")
+        .map(|p| resolve_property_dimension_px(Some(p), resolved, 0.0))
+        .filter(|lh| lh.is_finite() && *lh > 0.0)
+}
+
 /// Resolve a text node's font family list with style cascade, probing the
 /// provider and emitting the `font.unresolved` advisory on fallback.
 ///
@@ -226,7 +249,7 @@ pub(in crate::compile) fn measure_text_natural(
     }
     let node_direction = node_direction(text);
     let kerning_pairs = resolve_kerning_pairs(&text.kerning_pairs, env.resolved);
-    let (tokens, metrics) = shape_words(
+    let (tokens, mut metrics) = shape_words(
         &spans,
         families,
         NodeShape {
@@ -244,6 +267,9 @@ pub(in crate::compile) fn measure_text_natural(
         &text.id,
         text.source_span,
     );
+    if let Some(lh) = line_height_override_px(text, env.resolved, env.style_map) {
+        metrics.line_height = lh;
+    }
     if tokens.is_empty() {
         return None;
     }
@@ -283,7 +309,7 @@ pub(in crate::compile) fn measure_text_wrapped_height(
     }
     let node_direction = node_direction(text);
     let kerning_pairs = resolve_kerning_pairs(&text.kerning_pairs, env.resolved);
-    let (tokens, metrics) = shape_words(
+    let (tokens, mut metrics) = shape_words(
         &spans,
         families,
         NodeShape {
@@ -301,6 +327,9 @@ pub(in crate::compile) fn measure_text_wrapped_height(
         &text.id,
         text.source_span,
     );
+    if let Some(lh) = line_height_override_px(text, env.resolved, env.style_map) {
+        metrics.line_height = lh;
+    }
     if tokens.is_empty() {
         return None;
     }

@@ -361,3 +361,36 @@ fn chart_text_is_deterministic() {
         format!("{:?}", b.diagnostics)
     );
 }
+
+#[test]
+fn grouped_bar_chart_uses_rounded_rects_only_when_radius_is_set() {
+    let without_radius = compile_doc(&doc(
+        "",
+        "",
+        "",
+        (800, 600),
+        &bar("plain", (50, 50, 500, 300), ""),
+    ));
+    assert!(
+        !without_radius
+            .scene
+            .commands
+            .iter()
+            .any(|c| matches!(c, zenith_scene::SceneCommand::FillRoundedRect { .. }))
+    );
+
+    let with_radius = compile_doc(&doc(
+        "",
+        "",
+        "",
+        (800, 600),
+        &bar("rounded", (50, 50, 500, 300), "radius=(px)4"),
+    ));
+    assert!(with_radius.scene.commands.iter().any(|c| matches!(
+        c,
+        zenith_scene::SceneCommand::FillRoundedRect {
+            radii: Some([r1, r2, 0.0, 0.0]),
+            ..
+        } if *r1 > 0.0 && *r2 > 0.0
+    )));
+}

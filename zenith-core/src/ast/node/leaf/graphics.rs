@@ -255,6 +255,9 @@ pub struct ChartNode {
     /// value axis, last at the right edge) | `"center"` (category-band centers).
     /// freeform, validated later.
     pub point_placement: Option<String>,
+    /// Point marker style for line/area charts: `"none"` | `"circle"` | `"ring"`.
+    /// When absent, defaults to `"ring"` if `value-labels` is active, else `"none"`.
+    pub markers: Option<String>,
     /// Value-label display/placement: `"auto"` (default) | `"none"` | `"top"` |
     /// `"center"`. freeform, validated later.
     pub value_labels: Option<String>,
