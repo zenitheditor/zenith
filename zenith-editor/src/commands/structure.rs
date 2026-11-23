@@ -5,10 +5,10 @@ use std::collections::BTreeSet;
 
 use serde::Deserialize;
 use serde_json::Value;
-use zenith_core::Node;
-use zenith_tx::{AnchorEdit, Op, Permissions};
+use zenith_core::{Node, ResolvedValue, TokenType, dim_to_px, resolve_tokens};
+use zenith_tx::{AnchorEdit, Op, Permissions, Position};
 
-use super::common::{params, target, targets};
+use super::common::{page_index, params, target, targets};
 use crate::ctx::Ctx;
 use crate::doc::tree::{Located, all_ids, child_lists, locate, unique_id};
 use crate::edit::ops::{OpsEdit, apply_ops};
@@ -309,4 +309,190 @@ pub(crate) fn ungroup(ctx: &mut Ctx<'_, '_>, raw: Value) -> Result<Value, Editor
         .collect();
     let op = Op::Ungroup { group_id: id };
     edit(ctx, &doc, vec![op], children, raw)
+}
+
+#[derive(Debug, Clone, Copy, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum AddKind {
+    Rect,
+    Ellipse,
+    Line,
+    Text,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AddParams {
+    kind: AddKind,
+    x: f64,
+    y: f64,
+    #[serde(default)]
+    w: Option<f64>,
+    #[serde(default)]
+    h: Option<f64>,
+    #[serde(default)]
+    x2: Option<f64>,
+    #[serde(default)]
+    y2: Option<f64>,
+    #[serde(default)]
+    text: Option<String>,
+    #[serde(default)]
+    page: Option<usize>,
+    #[serde(default)]
+    id: Option<String>,
+}
+
+fn fmt_px(v: f64) -> String {
+    let r = (v * 10.0).round() / 10.0;
+    if (r.fract()).abs() < 1e-6 {
+        format!("{}", r as i64)
+    } else {
+        format!("{r:.1}")
+    }
+}
+
+fn escape_kdl_str(s: &str) -> String {
+    s.replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('\n', "\\n")
+        .replace('\r', "")
+}
+
+fn create_token_op(id: &str, token_type: &str, value: &str) -> Op {
+    Op::CreateToken {
+        id: id.to_owned(),
+        token_type: token_type.to_owned(),
+        value: value.to_owned(),
+        set: None,
+        layers: Vec::new(),
+        filter_ops: Vec::new(),
+        stops: Vec::new(),
+        angle: None,
+        radial: None,
+        center_x: None,
+        center_y: None,
+        radius: None,
+        shape: None,
+        feather: None,
+        invert: None,
+    }
+}
+
+/// Insert a new `rect`, `ellipse`, `line`, or `text` node on the target
+/// page (default: the session page) and select it.
+pub(crate) fn add(ctx: &mut Ctx<'_, '_>, raw: Value) -> Result<Value, EditorError> {
+    let p: AddParams = params(ctx, raw.clone())?;
+    let doc = ctx.editable()?;
+    let idx = page_index(ctx, p.page, doc.body.pages.len())?;
+    let page = doc
+        .body
+        .pages
+        .get(idx)
+        .ok_or_else(|| EditorError::new("render.page_out_of_range", "page out of range"))?;
+    let parent = page.id.clone();
+    let prefix = match p.kind {
+        AddKind::Rect => "rect",
+        AddKind::Ellipse => "ellipse",
+        AddKind::Line => "line",
+        AddKind::Text => "text",
+    };
+    let id = match p.id {
+        Some(id) => id,
+        None => unique_id(prefix, &all_ids(&doc)),
+    };
+
+    let resolved = resolve_tokens(&doc.tokens).resolved;
+    let mut taken_tokens: BTreeSet<String> =
+        doc.tokens.tokens.iter().map(|t| t.id.clone()).collect();
+    let mut ops: Vec<Op> = Vec::new();
+
+    let mut ensure_token = |base: &str, token_type: &str, value: &str| -> String {
+        let mut tid = base.to_owned();
+        let mut n = 2_u32;
+        while taken_tokens.contains(&tid) {
+            tid = format!("{base}-{n}");
+            n += 1;
+        }
+        taken_tokens.insert(tid.clone());
+        ops.push(create_token_op(&tid, token_type, value));
+        tid
+    };
+
+    let color_tok = resolved
+        .iter()
+        .find(|(_, t)| matches!(t.token_type, TokenType::Color))
+        .map(|(k, _)| k.clone())
+        .unwrap_or_else(|| ensure_token("color.accent", "color", "#0870a6"));
+
+    let mut dim_tok = |base: &str, px: f64| -> String {
+        resolved
+            .iter()
+            .find(|(_, t)| match &t.value {
+                ResolvedValue::Dimension(d) => {
+                    dim_to_px(d.value, &d.unit).is_some_and(|v| (v - px).abs() < 1e-6)
+                }
+                ResolvedValue::Color(_)
+                | ResolvedValue::CmykColor { .. }
+                | ResolvedValue::Number(_)
+                | ResolvedValue::FontFamily(_)
+                | ResolvedValue::FontWeight(_)
+                | ResolvedValue::Gradient(_)
+                | ResolvedValue::Shadow(_)
+                | ResolvedValue::Filter(_)
+                | ResolvedValue::Mask(_) => false,
+            })
+            .map(|(k, _)| k.clone())
+            .unwrap_or_else(|| ensure_token(base, "dimension", &format!("(px){}", fmt_px(px))))
+    };
+
+    let font_tok = resolved
+        .iter()
+        .find(|(_, t)| matches!(t.token_type, TokenType::FontFamily))
+        .map(|(k, _)| k.clone());
+
+    let x = fmt_px(p.x);
+    let y = fmt_px(p.y);
+    let color_ref = format!("(token)\"{}\"", escape_kdl_str(&color_tok));
+    let source = match p.kind {
+        AddKind::Rect => {
+            let w = fmt_px(p.w.unwrap_or(120.0).max(1.0));
+            let h = fmt_px(p.h.unwrap_or(80.0).max(1.0));
+            format!("rect id=\"{id}\" x=(px){x} y=(px){y} w=(px){w} h=(px){h} fill={color_ref}")
+        }
+        AddKind::Ellipse => {
+            let w = fmt_px(p.w.unwrap_or(100.0).max(1.0));
+            let h = fmt_px(p.h.unwrap_or(100.0).max(1.0));
+            format!("ellipse id=\"{id}\" x=(px){x} y=(px){y} w=(px){w} h=(px){h} fill={color_ref}")
+        }
+        AddKind::Line => {
+            let x2 = fmt_px(p.x2.unwrap_or(p.x + p.w.unwrap_or(120.0)));
+            let y2 = fmt_px(p.y2.unwrap_or(p.y + p.h.unwrap_or(0.0)));
+            let sw = dim_tok("size.stroke-width.2", 2.0);
+            format!(
+                "line id=\"{id}\" x1=(px){x} y1=(px){y} x2=(px){x2} y2=(px){y2} stroke={color_ref} stroke-width=(token)\"{}\"",
+                escape_kdl_str(&sw)
+            )
+        }
+        AddKind::Text => {
+            let w = fmt_px(p.w.unwrap_or(180.0).max(20.0));
+            let h = fmt_px(p.h.unwrap_or(32.0).max(16.0));
+            let fs = dim_tok("size.font-size.24", 24.0);
+            let font = match &font_tok {
+                Some(tok) => format!(" font-family=(token)\"{}\"", escape_kdl_str(tok)),
+                None => String::new(),
+            };
+            let body = escape_kdl_str(p.text.as_deref().unwrap_or("Text"));
+            format!(
+                "text id=\"{id}\" x=(px){x} y=(px){y} w=(px){w} h=(px){h} font-size=(token)\"{}\"{font} fill={color_ref} {{ span \"{body}\" }}",
+                escape_kdl_str(&fs)
+            )
+        }
+    };
+
+    ops.push(Op::AddNode {
+        parent,
+        position: Position::Last,
+        source,
+    });
+    edit(ctx, &doc, ops, vec![id], raw)
 }

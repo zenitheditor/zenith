@@ -208,6 +208,17 @@ static COMMANDS: &[CommandSpec] = &[
         run: set::run,
     },
     CommandSpec {
+        id: "node.add",
+        label: "Add node",
+        params: "{kind: \"rect\"|\"ellipse\"|\"line\"|\"text\", x, y: page px, w?, h?, x2?, y2?, \
+            text?, page?, id?}",
+        result: EDIT_RESULT,
+        mutates: true,
+        needs_version: true,
+        enabled: when_valid,
+        run: structure::add,
+    },
+    CommandSpec {
         id: "node.remove",
         label: "Delete",
         params: "{ids?: [id] = selection}",
@@ -278,6 +289,27 @@ static COMMANDS: &[CommandSpec] = &[
         needs_version: true,
         enabled: when_redo,
         run: history::redo,
+    },
+    CommandSpec {
+        id: "history.list",
+        label: "History",
+        params: "{}",
+        result: "{index, count, can_undo, can_redo, entries: [{index, label, current, ahead, \
+            selection: [id]}]}",
+        mutates: false,
+        needs_version: false,
+        enabled: always,
+        run: history::list,
+    },
+    CommandSpec {
+        id: "history.goto",
+        label: "Go to history step",
+        params: "{index: 0-based history index}",
+        result: EDIT_RESULT,
+        mutates: true,
+        needs_version: true,
+        enabled: always,
+        run: history::goto,
     },
     CommandSpec {
         id: "doc.format",

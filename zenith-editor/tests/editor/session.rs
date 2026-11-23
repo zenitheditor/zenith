@@ -146,6 +146,8 @@ fn commands_list_reports_enabled_state() {
         "node.ungroup",
         "history.undo",
         "history.redo",
+        "history.list",
+        "history.goto",
         "doc.format",
         "fonts.required",
         "commands.list",

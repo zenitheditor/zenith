@@ -141,3 +141,58 @@ fn undo_survives_invalid_text_and_typing_mixes_with_edits() {
     d.ok("history.undo", json!({}));
     assert_eq!(d.session.text, original);
 }
+
+#[test]
+fn history_list_and_goto_jump_across_undo_and_redo() {
+    let original = doc(BODY);
+    let mut d = Driver::open(&original);
+    d.ok("select.set", json!({ "ids": ["r"] }));
+    d.ok("node.set", json!({ "x": 50 }));
+    let after_one = d.session.text.clone();
+    d.ok("node.set", json!({ "y": 80 }));
+    d.ok("node.set", json!({ "w": 120 }));
+    let after_three = d.session.text.clone();
+
+    let listed = d.ok("history.list", json!({}));
+    assert_eq!(listed["index"], 3);
+    assert_eq!(listed["count"], 3);
+    assert_eq!(listed["can_undo"], true);
+    assert_eq!(listed["can_redo"], false);
+    assert_eq!(listed["entries"].as_array().expect("entries").len(), 4);
+    assert_eq!(listed["entries"][0]["label"], "doc.open");
+    assert_eq!(listed["entries"][3]["current"], true);
+
+    // Jump directly back to step 1 (after x=50)
+    let jumped = d.ok("history.goto", json!({ "index": 1 }));
+    assert_eq!(jumped["changed"], true);
+    assert_eq!(d.session.text, after_one);
+
+    let listed = d.ok("history.list", json!({}));
+    assert_eq!(listed["index"], 1);
+    assert_eq!(listed["count"], 3);
+    assert_eq!(listed["can_undo"], true);
+    assert_eq!(listed["can_redo"], true);
+    assert_eq!(listed["entries"][1]["current"], true);
+    assert_eq!(listed["entries"][2]["ahead"], true);
+    assert_eq!(listed["entries"][3]["ahead"], true);
+
+    // Jump forward to step 3
+    d.ok("history.goto", json!({ "index": 3 }));
+    assert_eq!(d.session.text, after_three);
+
+    // Jump all the way back to step 0 (initial doc)
+    d.ok("history.goto", json!({ "index": 0 }));
+    assert_eq!(d.session.text, original);
+
+    // No-op goto current index
+    let v = d.session.version;
+    let noop = d.ok("history.goto", json!({ "index": 0 }));
+    assert_eq!(noop["changed"], false);
+    assert_eq!(d.session.version, v);
+
+    // Out-of-range index fails cleanly
+    assert_eq!(
+        d.err("history.goto", json!({ "index": 99 })).code,
+        "editor.history_out_of_range"
+    );
+}

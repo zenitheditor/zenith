@@ -104,3 +104,39 @@ fn format_rewrites_canonically_and_lists_dropped_comments() {
     let again = d.ok("doc.format", json!({}));
     assert_eq!(again["changed"], false);
 }
+
+#[test]
+fn node_add_creates_rect_ellipse_line_and_text() {
+    let mut d = Driver::open(&doc(
+        r#"      rect id="r" x=(px)10 y=(px)10 w=(px)40 h=(px)30 fill=(token)"color.ink""#,
+    ));
+    let r = d.ok(
+        "node.add",
+        json!({ "kind": "rect", "x": 20, "y": 30, "w": 100, "h": 60 }),
+    );
+    assert_eq!(r["changed"], true);
+    assert_eq!(r["selection"], json!(["rect"]));
+    assert!(d.session.valid);
+
+    let e = d.ok(
+        "node.add",
+        json!({ "kind": "ellipse", "x": 40, "y": 50, "w": 80, "h": 80 }),
+    );
+    assert_eq!(e["selection"], json!(["ellipse"]));
+    assert!(d.session.valid);
+
+    let l = d.ok(
+        "node.add",
+        json!({ "kind": "line", "x": 10, "y": 10, "x2": 150, "y2": 90 }),
+    );
+    assert_eq!(l["selection"], json!(["line"]));
+    assert!(d.session.valid);
+
+    let t = d.ok(
+        "node.add",
+        json!({ "kind": "text", "x": 24, "y": 120, "w": 200, "h": 36, "text": "Hello" }),
+    );
+    assert_eq!(t["selection"], json!(["text"]));
+    assert!(d.session.valid);
+    assert!(d.session.text.contains("span \"Hello\""));
+}

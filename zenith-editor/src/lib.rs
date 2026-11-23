@@ -97,6 +97,7 @@
 //! | `gesture.commit` | gesture + version | edit |
 //! | `tx.apply` | `{ops, permissions?, label?, select?}` + version | edit |
 //! | `node.set` | `{id?, x?, y?, w?, h?, rotate?, opacity?, fill?, stroke?, stroke_width?, radius?, font_family?, font_size?, font_weight?, align?, text?, spans?, visible?, locked?}` + flags + version | edit |
+//! | `node.add` | `{kind: rect\|ellipse\|line\|text, x, y, w?, h?, x2?, y2?, text?, page?, id?}` + version | edit |
 //! | `node.remove` | `{ids?}` + version | edit |
 //! | `node.duplicate` | `{id?, ids?, new_id?, dx?, dy?}` + version | edit |
 //! | `node.reorder` | `{id?, to: forward\|backward\|front\|back}` + version | edit |
@@ -104,6 +105,8 @@
 //! | `node.ungroup` | `{id?}` + version | edit |
 //! | `history.undo` | `{}` + version | edit |
 //! | `history.redo` | `{}` + version | edit |
+//! | `history.list` | `{}` | `{index, count, can_undo, can_redo, entries: [{index, label, current, ahead, selection}]}` |
+//! | `history.goto` | `{index}` + version | edit |
 //! | `doc.format` | `{}` + version | edit |
 //! | `doc.tokens` | `{type?}` | `{stale, tokens: [{id, type, value}]}` |
 //! | `fonts.required` | `{}` | `{faces: [{family, weight, style, file?}], embedded, complete}` |
