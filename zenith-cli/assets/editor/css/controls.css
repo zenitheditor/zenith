@@ -372,3 +372,41 @@ button {
   display: flex;
   justify-content: flex-end;
 }
+
+#draft-entry {
+  flex: 0 0 auto;
+  min-height: 0;
+  padding: 2px var(--space-2);
+  font-size: inherit;
+}
+
+#status-draft {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+}
+
+#draft-dialog {
+  width: min(400px, calc(100vw - 2 * var(--space-4)));
+}
+
+#draft-message:empty {
+  display: none;
+}
+
+#draft-list li {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+  overflow-wrap: anywhere;
+}
+
+.draft-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.draft-actions .button {
+  width: auto;
+}

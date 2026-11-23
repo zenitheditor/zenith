@@ -30,6 +30,7 @@ export class FileTools {
       if (this.menu.open && !this.menu.contains(e.target)) this.menu.open = false;
     });
     document.addEventListener("keydown", (e) => {
+      if (this.switching || document.querySelector("dialog[open]")) return;
       if (this.menu.open && e.key === "Escape") {
         this.closeMenu();
         e.preventDefault();
@@ -58,7 +59,7 @@ export class FileTools {
 
   async openFile() {
     const picked = await this.attempt(() => this.host.pickDocument());
-    if (picked) await this.load(picked);
+    if (picked) await this.load({ ...picked, draftSource: { kind: "device" } });
   }
 
   async openFolder() {
@@ -75,24 +76,50 @@ export class FileTools {
       return;
     }
     const spec = await this.attempt(() => projectDocument(project));
-    if (spec) await this.load(spec);
+    if (spec) await this.load({ ...spec, draftSource: { kind: "device" } });
   }
 
   /** Replace the document with `spec` (see `WasmEngine.openDocument`). */
   async load(spec) {
     const app = this.app;
-    if (app.dirty() && !(await this.confirmDiscard(spec.name))) return;
-    app.notices.hide(CONFIRM);
-    if (!(await app.sync.tryFlush())) {
-      app.notices.toast("The editor text has not reached the engine yet. Try again.", "error");
-      return;
+    if (this.switching) return false;
+    let approved = null;
+    while (app.atRisk() && approved !== app.code.text()) {
+      approved = app.code.text();
+      if (!(await this.confirmDiscard(spec.name))) return false;
     }
+    if (this.switching) return false;
+    this.switching = true;
+    const root = byId("app");
+    const focused = document.activeElement;
+    root.inert = true;
+    root.setAttribute("aria-busy", "true");
     try {
-      await this.host.openDocument(spec);
+      await app.intents.run(() => app.sync.exclusive(async () => {
+        if (!(await app.sync.flushNow())) throw new Error("Sync the editor text and try again.");
+        if (app.atRisk() && approved !== app.code.text()) {
+          throw new Error("The document changed while opening. Try again.");
+        }
+        await this.host.openDocument(spec);
+      }));
+      app.drafts?.bind(app.name, app.code.text(), spec.draftSource ?? null, spec.draftRecord);
+      this.showDraftWarning(spec.draftWarning);
       app.notices.toast(`Opened ${spec.name}.`);
+      return true;
     } catch (err) {
       app.notices.error("file.open", { code: err.code ?? "static.open_failed", message: err.message });
+      return false;
+    } finally {
+      root.inert = false;
+      root.removeAttribute("aria-busy");
+      this.switching = false;
+      if (root.contains(focused) && !focused.closest("[hidden]")) focused.focus();
+      else byId("viewport").focus();
     }
+  }
+
+  showDraftWarning(message) {
+    if (message) this.app.notices.show("draft-assets", { level: "warning", message });
   }
 
   /**
@@ -112,10 +139,10 @@ export class FileTools {
       this.app.notices.show(CONFIRM, {
         level: "warning",
         title: `${this.app.name} has unsaved edits.`,
-        message: `Opening ${next} drops them. Save first to keep them.`,
+        message: `Save to a file or download .zen to keep these edits before opening ${next}.`,
         dismiss: false,
         actions: [
-          { label: `Open ${next}`, kind: "danger", run: () => finish(true) },
+          { label: `Open ${next}`, run: () => finish(true) },
           { label: "Cancel", run: () => finish(false) },
         ],
       });

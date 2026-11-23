@@ -51,30 +51,50 @@ async function main() {
     return;
   }
 
+  const { Drafts, starterSource } = await import("./app/drafts.js");
+  const drafts = new Drafts(async (spec) => {
+    const app = window.zenithEditor;
+    if (app?.files) return app.files.load(spec);
+    const choices = byId("welcome-choices");
+    choices.inert = true;
+    try {
+      await openWelcome(spec);
+    } finally {
+      choices.inert = false;
+    }
+  });
+  async function openWelcome(spec) {
+    try {
+      await mountWasm(spec, drafts);
+    } catch (error) {
+      if (!byId("welcome").hidden) throw error;
+      showWasmStartError(error);
+      return;
+    }
+    byId("viewport").focus();
+  }
   const path = new URLSearchParams(location.search).get("doc");
   if (path === null) {
     const { showWelcome } = await import("./app/welcome.js");
-    showWelcome(async (spec) => {
-      try {
-        await mountWasm(spec);
-      } catch (error) {
-        if (!byId("welcome").hidden) throw error;
-        showWasmStartError(error);
-        return;
-      }
-      byId("viewport").focus();
-    });
+    showWelcome(openWelcome);
     return;
   }
   byId("app").hidden = false;
   banner("info", "Opening the document.");
-  await loadSample(path).then((spec) => mountWasm(spec, curatedExample(path))).catch(showWasmStartError);
+  try {
+    const spec = await loadSample(path);
+    const example = curatedExample(path);
+    if (example) spec.draftSource = await starterSource(example, spec);
+    await mountWasm(spec, drafts, example);
+  } catch (error) {
+    showWasmStartError(error);
+  }
 }
 
-async function mountWasm(spec, example = null) {
+async function mountWasm(spec, drafts, example = null) {
   const startup = await startWasm(spec);
   try {
-    await mount(startup, "wasm", spec.project, example);
+    await mount(startup, "wasm", spec, example, drafts);
   } catch (error) {
     startup.engine.close();
     throw error;
@@ -95,20 +115,24 @@ function showWasmStartError(error) {
   back.focus();
 }
 
-async function mount({ engine, summary }, host, project, example) {
+async function mount({ engine, summary }, host, spec, example, drafts) {
   const { App } = await import("./app/app.js");
   if (host === "wasm") hydrateIcons(document);
   byId("welcome").hidden = true;
   byId("app").hidden = false;
   byId("skip-source").hidden = false;
   byId("banners").replaceChildren();
-  const app = new App(engine, summary, { example });
+  const app = new App(engine, summary, { example, drafts });
   window.zenithEditor = app;
+  drafts?.bind(app.name, summary.text, spec.draftSource ?? null, spec.draftRecord);
+  drafts?.attach(app);
   await app.start();
+  const project = spec?.project;
   if (project?.skipped?.length) {
     const { showSkippedFiles } = await import("./app/project-picker.js");
     showSkippedFiles(app.notices, project);
   }
+  app.files?.showDraftWarning(spec.draftWarning);
   document.documentElement.dataset.host = host;
   document.documentElement.dataset.ready = "true";
 }

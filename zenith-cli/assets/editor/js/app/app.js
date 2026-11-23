@@ -29,7 +29,7 @@ const REFRESH_MS = 40;
 const SEVERITY = { error: "error", warning: "warning", advisory: "info" };
 
 export class App {
-  constructor(engine, summary, { example = null } = {}) {
+  constructor(engine, summary, { example = null, drafts = null } = {}) {
     this.host = engine;
     this.engine = engine;
     this.path = summary.path;
@@ -45,6 +45,7 @@ export class App {
     this.diagnosticList = [];
     this.index = null;
     this.example = example;
+    this.drafts = drafts;
 
     this.notices = new Notices(byId("banners"), byId("toasts"));
     this.layout = new Layout({ poster: this.example === FEATURED_POSTER });
@@ -62,7 +63,10 @@ export class App {
     this.intents = new Serial();
     this.status = new Status(this);
     this.code = new CodeEditor(byId("code-host"), summary.text, {
-      localChange: (changes) => this.sync.localChange(changes),
+      localChange: (changes) => {
+        this.drafts?.capture(this.code.text(), this.name);
+        this.sync.localChange(changes);
+      },
       cursor: (head) => this.selection.cursor(head),
       undo: () => this.history("history.undo"),
       redo: () => this.history("history.redo"),
@@ -157,6 +161,7 @@ export class App {
       this.notices.toast(on ? "Snapping on." : "Snapping off.", "info");
     });
     document.addEventListener("keydown", (e) => {
+      if (this.files && (this.files.switching || document.querySelector("dialog[open]"))) return;
       const mod = e.ctrlKey || e.metaKey;
       if (!mod || e.altKey) return;
       if (e.target instanceof Element && e.target.closest(".cm-editor")) return;
@@ -170,7 +175,7 @@ export class App {
       e.preventDefault();
     });
     window.addEventListener("beforeunload", (e) => {
-      if (!this.dirty()) return;
+      if (!this.atRisk()) return;
       e.preventDefault();
       e.returnValue = "";
     });
@@ -179,6 +184,12 @@ export class App {
   /** `true` while the document has edits not on disk. */
   dirty() {
     return this.serverDirty || this.sync.pending();
+  }
+
+  atRisk() {
+    if (!this.drafts) return this.dirty();
+    const text = this.code.text();
+    return (this.dirty() || this.drafts.needsCopy(text)) && !this.drafts.confirmed(text);
   }
 
   /** Byte/UTF-16 index of the engine text, rebuilt when it changes. */
@@ -195,6 +206,9 @@ export class App {
   /** The engine text moved: refresh what depends on it. */
   textChanged(info) {
     if (typeof info.dirty === "boolean") this.serverDirty = info.dirty;
+    if (!["open", "typing", "disk"].includes(info.source)) {
+      this.drafts?.capture(this.code.text(), this.name);
+    }
     const reply = info.reply;
     if (reply && Array.isArray(reply.diagnostics)) {
       this.setDiagnostics(reply.diagnostics, reply.valid, reply.stale);

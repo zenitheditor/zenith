@@ -231,19 +231,35 @@ export class WasmEngine {
   openDocument({ name, text, path = null, handle = null, project = null, mtimeMs = null }) {
     return this.enqueue(async () => {
       await this.worker.ready();
+      path ??= name;
+      handle ??= project?.handles?.get(path) ?? null;
+      const nextMtime = handle ? (mtimeMs ?? (await browser.readHandle(handle)).mtimeMs) : null;
       const before = this.session;
-      this.name = name;
-      this.path = path ?? name;
-      this.root = project?.root ?? "";
-      this.handle = handle ?? project?.handles?.get(this.path) ?? null;
-      this.handles = project?.handles ?? new Map();
-      await this.worker.project({ files: project?.files ?? {}, resetFonts: true });
-      this.loadedFonts.clear();
+      const previousPath = this.path;
+      const previousProject = { files: this.worker.files ?? {}, fonts: this.worker.fonts, resetFonts: true };
+      const previousFonts = this.loadedFonts;
+      const previousFontKey = this.fontKey;
+      this.path = path;
+      this.loadedFonts = new Set();
       this.fontKey = null;
-      const out = await this.exec({ command: "doc.open", params: { text } });
-      if (!out.ok) throw new EngineError(out.error.code, out.error.message);
+      try {
+        await this.worker.project({ files: project?.files ?? {}, resetFonts: true });
+        const out = await this.exec({ command: "doc.open", params: { text } });
+        if (!out.ok) throw new EngineError(out.error.code, out.error.message);
+      } catch (error) {
+        this.session = before;
+        this.path = previousPath;
+        this.loadedFonts = previousFonts;
+        this.fontKey = previousFontKey;
+        await this.worker.project(previousProject);
+        throw error;
+      }
+      this.name = name;
+      this.root = project?.root ?? "";
+      this.handle = handle;
+      this.handles = project?.handles ?? new Map();
       this.savedText = text;
-      this.mtimeMs = this.handle ? (mtimeMs ?? (await browser.readHandle(this.handle)).mtimeMs) : null;
+      this.mtimeMs = nextMtime;
       this.conflict = null;
       this.readonly = false;
       this.emit("opened", {

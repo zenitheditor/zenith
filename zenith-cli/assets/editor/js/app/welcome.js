@@ -55,10 +55,16 @@ export function showWelcome(open) {
     button.addEventListener("click", () => choose(button, pick));
   }
 
-  bind("welcome-blank", async () => ({ ...(await loadSample("starters/blank.zen")), name: "Untitled.zen" }));
-  bind("welcome-open", pickDocument);
+  bind("welcome-blank", async () => ({
+    ...(await loadSample("starters/blank.zen")), name: "Untitled.zen", draftSource: { kind: "blank" },
+  }));
+  const device = async (pick) => {
+    const spec = await pick();
+    return spec && { ...spec, draftSource: { kind: "device" } };
+  };
+  bind("welcome-open", () => device(pickDocument));
   if (canPickDirectory() || "webkitdirectory" in document.createElement("input")) {
     byId("welcome-folder").hidden = false;
-    bind("welcome-folder", pickFolder);
+    bind("welcome-folder", () => device(pickFolder));
   }
 }

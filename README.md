@@ -615,6 +615,8 @@ How it behaves:
 - `?doc=starters/poster.zen` opens the featured poster. `?doc=samples/<name>.zen` opens an example directly.
 - The featured poster opens with the headline selected. Use **Source** to see the text behind the canvas.
 - **Export** downloads `.zen` source or the current page as a PNG. **Copy example link** shares the original starter.
+- The browser keeps drafts for blank designs and featured examples. Enable browser drafts explicitly for files you open.
+- Resume or download drafts from the welcome screen. Save a `.zen` file for a copy outside browser storage.
 - Each engine call sends the session and the project files to the module. Keep large images out of a project folder.
 - A save on the static site does not stamp a `doc-id` into the file.
 

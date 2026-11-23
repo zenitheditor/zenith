@@ -189,6 +189,7 @@ export class EventRouter {
         break;
       case "saved":
         if (data.version === app.sync.version) app.serverDirty = false;
+        app.drafts?.copied();
         if (data.client !== app.engine.clientId) {
           app.notices.toast(`Saved ${app.name} from another client.`);
         }

@@ -29,6 +29,7 @@
             <button type="button" class="button" id="welcome-open">Open .zen file</button>
             <button type="button" class="button" id="welcome-folder" hidden>Open project folder</button>
           </div>
+          <button type="button" class="button" id="welcome-drafts" hidden>Browser drafts</button>
         </div>
         <img class="welcome-poster" id="welcome-poster-image" width="400" height="480" alt="Night Garden event poster" hidden>
       </div>
@@ -154,6 +155,8 @@
   <footer class="statusbar">
     <span class="status-item" id="status-valid" aria-live="polite"></span>
     <span class="status-item" id="status-save" aria-live="polite"></span>
+    <span class="status-item" id="status-draft" aria-live="polite" hidden></span>
+    <button type="button" class="button" id="draft-entry" hidden>Browser drafts</button>
     <span class="status-spacer"></span>
     <span class="status-item" id="status-conn" aria-live="polite"></span>
     <span class="status-item muted" id="status-version"></span>
@@ -164,6 +167,14 @@
   <p class="doc-dialog-note" id="doc-dialog-note"></p>
   <ul class="doc-dialog-list" id="doc-dialog-list"></ul>
   <div class="doc-dialog-actions"><button type="button" class="button" id="doc-dialog-cancel">Cancel</button></div>
+</dialog>
+<dialog class="doc-dialog" id="draft-dialog" aria-labelledby="draft-title">
+  <h2 class="pane-title" id="draft-title">Browser drafts</h2>
+  <p class="doc-dialog-note">Drafts stay in this browser. Download a .zen file to keep a copy.</p>
+  <button type="button" class="button" id="draft-opt-in" hidden>Keep this document’s source in this browser</button>
+  <p class="doc-dialog-note" id="draft-message" role="status"></p>
+  <ul class="doc-dialog-list" id="draft-list"></ul>
+  <div class="doc-dialog-actions"><button type="button" class="button" id="draft-close">Close</button></div>
 </dialog>
 <div class="toasts" id="toasts" role="status" aria-live="polite"></div>
 <div class="sr-only" id="announce" role="status" aria-live="polite"></div>

@@ -8,6 +8,7 @@
 import { writeFileSync } from "node:fs";
 import path from "node:path";
 import { tmpdir } from "node:os";
+import { steps as draftSteps } from "./draft_steps.js";
 import { A, check, cursorAt, engineState, landed, ready, settle, state } from "./helpers.js";
 import { crlfEdits, editWhileTyping, paneIsEngine } from "./sync_checks.js";
 
@@ -775,4 +776,5 @@ export const steps = [
       return { downloads: dl.names };
     },
   ],
+  ...draftSteps,
 ];

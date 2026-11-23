@@ -116,6 +116,10 @@
   color: var(--danger);
 }
 
+#welcome-drafts {
+  margin-top: var(--space-3);
+}
+
 @media (max-width: 680px) {
   .welcome-hero {
     grid-template-columns: minmax(0, 1fr);
@@ -128,4 +132,8 @@
   .welcome-poster {
     max-width: min(100%, 320px);
   }
+}
+/* Ignore diagnostics from the prior source revision during a check. */
+.app[data-checking] :is(#diag-counts, #diag-list) {
+  visibility: hidden;
 }
