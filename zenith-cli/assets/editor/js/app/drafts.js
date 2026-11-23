@@ -210,19 +210,20 @@ export class Drafts {
   }
 
   async show() {
-    this.dialog.showModal();
     this.message.textContent = this.active?.message ?? "";
-    await this.refresh();
+    await this.refresh(true);
+    if (!this.dialog.open) this.dialog.showModal();
   }
 
-  async refresh() {
+  async refresh(opening = false) {
     const reading = ++this.reading;
+    const populate = opening || this.dialog.open;
     try {
       const { records, unreadable } = await this.store.list();
       if (reading !== this.reading) return;
       this.hasDrafts = records.length > 0;
       this.error = unreadable;
-      if (this.dialog.open && !this.busy) {
+      if (populate && !this.busy) {
         this.list.replaceChildren(...records.map((record) => this.row(record)));
         if (unreadable) this.message.textContent = "Some browser drafts are unreadable.";
         else if (!records.length && !this.message.textContent) this.message.textContent = "No browser drafts.";
@@ -231,7 +232,7 @@ export class Drafts {
     } catch (error) {
       if (reading !== this.reading) return;
       this.error = true;
-      if (this.dialog.open) this.message.textContent = this.storageError(error);
+      if (populate) this.message.textContent = this.storageError(error);
     }
     this.render();
   }
