@@ -1,6 +1,8 @@
 # @zenitheditor/zenith-mcp
 
-NPM launcher for the Zenith MCP server.
+**Design as code for AI agents and humans.** NPM launcher for the [Zenith](https://github.com/zenitheditor/zenith) MCP server.
+
+Let your coding agent create, validate, and edit plain-text `.zen` design documents — then inspect and polish the exact same files visually in the **[Zenith browser editor](https://zenitheditor.github.io/zenith/)** or render deterministic PNG, SVG, and print-ready PDF.
 
 This package installs the matching prebuilt `zenith` binary from GitHub Releases and exposes a
 `zenith-mcp` command for MCP clients.

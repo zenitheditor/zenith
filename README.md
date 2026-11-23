@@ -4,22 +4,24 @@
 
 <img src="assets/showcase/hero.png" alt="Zenith — give your AI agent the power to create and edit real designs" width="900">
 
-<h3>A design-document format and engine built for the age of AI agents.</h3>
+<h3>Design as code — where humans and AI agents collaborate on real designs.</h3>
 
 <p>
-Plain-text <strong>.zen</strong> design files that you can read, diff, review, validate, and let an agent safely edit — compiled <strong>deterministically</strong> to pixel-exact PNG, self-contained SVG, and print-ready PDF.
+Plain-text <strong>.zen</strong> design files you can read, diff, review, validate, and edit visually in the browser or with an AI agent — compiled <strong>deterministically</strong> to pixel-exact PNG, self-contained SVG, and print-ready PDF.
 </p>
 
 <p>
-  <a href="#install"><strong>Install</strong></a> 
-  <a href="#quick-start"><strong>Quick start</strong></a> 
-  <a href="#what-it-does"><strong>Features</strong></a> 
-  <a href="#validation--the-safety-net"><strong>Validation</strong></a>
-  <a href="#command-surface"><strong>Commands</strong></a> 
+  <a href="https://zenitheditor.github.io/zenith/"><strong>Try the editor ↗</strong></a> ·
+  <a href="#install"><strong>Install</strong></a> ·
+  <a href="#quick-start"><strong>Quick start</strong></a> ·
+  <a href="#what-it-does"><strong>Features</strong></a> ·
+  <a href="#validation--the-safety-net"><strong>Validation</strong></a> ·
+  <a href="#command-surface"><strong>Commands</strong></a> ·
   <a href="#use-with-your-coding-agent"><strong>Agents</strong></a>
 </p>
 
 <p>
+  <a href="https://zenitheditor.github.io/zenith/"><img src="https://img.shields.io/badge/editor-try%20in%20browser-0870a6" alt="Try Zenith editor in browser"></a>
   <a href="https://github.com/zenitheditor/zenith/actions/workflows/ci.yml"><img src="https://github.com/zenitheditor/zenith/actions/workflows/ci.yml/badge.svg" alt="CI status"></a>
   <a href="https://github.com/zenitheditor/zenith/releases"><img src="https://img.shields.io/github/v/release/zenitheditor/zenith?include_prereleases&label=release" alt="Latest GitHub release"></a>
   <a href="https://crates.io/crates/zenith-tool"><img src="https://img.shields.io/crates/v/zenith-tool?label=crates.io" alt="zenith-tool on crates.io"></a>
@@ -35,9 +37,21 @@ Plain-text <strong>.zen</strong> design files that you can read, diff, review, v
 
 ---
 
-Zenith is a plain-text format and engine for design files — posters, decks, books, social graphics, diagrams, and more. The idea is simple: **design should work the way code does.** You should be able to read it, diff it, review it, test it, and let an agent safely edit it.
+Zenith brings **design as code** to posters, decks, reports, diagrams, books, and print layouts. A `.zen` file is plain-text [KDL](https://kdl.dev) that both humans and AI agents can own together: agents generate and refactor layouts, tokens, and copy through validated transactions or MCP, while you inspect, drag, tweak, and polish the exact same file visually in the browser — and every build renders to the **same pixels every time** as PNG, self-contained SVG, or print-ready PDF.
 
-A `.zen` file is human-readable [KDL](https://kdl.dev) text. The engine parses it, validates it against a large diagnostic set, compiles it to a backend-neutral scene, and renders the same file to the **same pixels every time** — as a PNG, self-contained SVG, or print-ready PDF.
+## Try it in the browser
+
+**[Open the live Zenith editor →](https://zenitheditor.github.io/zenith/)** — runs the full Rust engine locally in your browser via WebAssembly (nothing is uploaded). Start from six curated templates, open a `.zen` file or project folder your agent created, or run `zenith edit poster.zen` locally.
+
+<p align="center">
+  <a href="https://zenitheditor.github.io/zenith/">
+    <img src="assets/editor/editor-split.png" alt="Zenith browser editor in Split view — plain-text .zen source on the left, live deterministic canvas and Inspector on the right" width="900">
+  </a>
+</p>
+
+- **One source of truth for humans and AI:** drag, draw, or edit in the Inspector and Zenith patches the `.zen` text in place; let your coding agent edit the same file via CLI or MCP and see changes live.
+- **Design, Split, or Code views:** switch seamlessly between a focused canvas, side-by-side KDL source, and inline diagnostics with live error underlines.
+- **Token-governed & validated:** edit semantic colors, typography, and dimensions in one place with instant preflight diagnostics.
 
 > The sections below are collapsed to keep this page skimmable — click any heading's ▸ to expand it. **Install** and **Quick start** are open by default.
 
@@ -519,18 +533,15 @@ Run `zenith <command> --help` for flags (each prints a description and an exampl
 
 ## Browser editor
 
-<details><summary>Edit a <code>.zen</code> file in the browser: source on one side, the rendered page on the other. Local server or static site.</summary>
+<details><summary>Edit a <code>.zen</code> file visually or in Split view — <a href="https://zenitheditor.github.io/zenith/">hosted on GitHub Pages</a> or locally via <code>zenith edit</code>.</summary>
 
-The source pane is the source of truth. The canvas shows the engine render of that text. Canvas edits (move, resize, rotate, inspector fields) become transactions that modify the text.
+The source pane is the source of truth. The canvas shows the deterministic engine render of that text. Drawing tools (`Text`, `Rectangle`, `Ellipse`, `Line`) and canvas/inspector edits (move, resize, rotate, token-backed fields) become transactions that patch the `.zen` source in place.
 
 <p align="center">
-  <img src="assets/editor/editor-split.png" alt="The Zenith browser editor: source pane, canvas with a selected text node, layers, inspector, and diagnostics panel" width="900">
+  <img src="assets/editor/editor-canvas.png" alt="Zenith browser editor in Design view with a selected text node, drawing tools, Layers/Pages/Tokens rail, and Inspector" width="900">
 </p>
 <p align="center">
-  <img src="assets/editor/editor-canvas.png" alt="The Zenith browser editor with the canvas in fullscreen and a text node selected with its resize and rotate handles" width="900">
-</p>
-<p align="center">
-  <img src="assets/editor/editor-diagnostics.png" alt="The Zenith browser editor listing an unknown token reference as an error in the diagnostics panel, with the source line underlined" width="900">
+  <img src="assets/editor/editor-diagnostics.png" alt="Zenith browser editor showing inline error underlines, stale-render indicator, and the floating Problems popover" width="900">
 </p>
 
 ### `zenith edit`
