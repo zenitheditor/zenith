@@ -101,7 +101,7 @@ export const steps = [
         cards: document.querySelectorAll('#welcome-gallery a').length,
       })`);
       check(!initial.editor && initial.engineFiles.length === 0, `welcome starts editor: ${JSON.stringify(initial)}`);
-      check(initial.cards === 3, `expected three template cards, got ${initial.cards}`);
+      check(initial.cards === 6, `expected six template cards, got ${initial.cards}`);
       check(await page.eval(`['welcome-open', 'welcome-folder', 'welcome-open-dlg'].every((id) =>
         document.getElementById(id).querySelector('svg[aria-hidden="true"]'))`), "welcome action icons did not load");
       await shot("welcome");
@@ -121,6 +121,8 @@ export const steps = [
       for (const [path, headline] of [
         ["starters/harbor-report.zen", "The harbor in focus"],
         ["starters/print-workflow.zen", "Proof to Press"],
+        ["starters/keynote-slide.zen", "Same bytes in.\nSame pixels out."],
+        ["starters/launch-card.zen", "Design\nlike code."],
       ]) {
         await openWelcome();
         const link = `#welcome-gallery a[href="?doc=${path}"]`;
@@ -148,6 +150,7 @@ export const steps = [
           return pick();
         };
       })()`);
+      await page.eval("document.getElementById('welcome-open').scrollIntoView({ block: 'center' })");
       await page.clickSelector("#welcome-open");
       await ready(page);
       check(await page.eval(`window.__welcomePick && ${A}.name === 'Picked.zen'`), "the file picker lost its initiating click");
@@ -165,6 +168,7 @@ export const steps = [
           this.dispatchEvent(new Event('change'));
         };
       })()`);
+      await page.eval("document.getElementById('welcome-open').scrollIntoView({ block: 'center' })");
       await page.clickSelector("#welcome-open");
       await ready(page);
       check(await page.eval(`window.__welcomePick && ${A}.name === 'Fallback.zen'`), "the input fallback lost its initiating click");
@@ -179,6 +183,7 @@ export const steps = [
           },
         };
       }`);
+      await page.eval("document.getElementById('welcome-folder').scrollIntoView({ block: 'center' })");
       await page.clickSelector("#welcome-folder");
       await ready(page);
       check(await page.eval(`window.__welcomePick && ${A}.name === 'Project.zen'`), "the folder picker lost its initiating click");

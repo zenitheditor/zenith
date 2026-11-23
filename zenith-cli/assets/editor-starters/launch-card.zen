@@ -1,0 +1,65 @@
+zenith version=1 {
+  project id="proj.launch-card" name="Design Like Code"
+  tokens format="zenith-token-v1" {
+    token id="surface.paper" type="color" value="#f5f2eb"
+    token id="surface.ink" type="color" value="#111318"
+    token id="surface.muted" type="color" value="#525866"
+    token id="brand.primary" type="color" value="#1d4ed8"
+    token id="brand.accent" type="color" value="#dc2626"
+    token id="surface.rule" type="color" value="#d6d0c4"
+    token id="font.serif" type="fontFamily" value="Noto Serif"
+    token id="font.sans" type="fontFamily" value="Noto Sans"
+    token id="font.mono" type="fontFamily" value="Noto Sans Mono"
+    token id="size.micro" type="dimension" value=(px)12
+    token id="size.body" type="dimension" value=(px)16
+    token id="size.display" type="dimension" value=(px)72
+    token id="stroke.thin" type="dimension" value=(px)1.5
+    token id="stroke.thick" type="dimension" value=(px)3
+    token id="weight.400" type="fontWeight" value=400
+    token id="weight.600" type="fontWeight" value=600
+    token id="weight.700" type="fontWeight" value=700
+  }
+  styles {
+    style id="mono" {
+      font-family (token)"font.mono"
+      font-size (token)"size.micro"
+      font-weight (token)"weight.600"
+      fill (token)"surface.ink"
+    }
+    style id="mono-muted" {
+      font-family (token)"font.mono"
+      font-size (token)"size.micro"
+      font-weight (token)"weight.600"
+      fill (token)"surface.muted"
+    }
+  }
+  document id="doc.launch-card" title="Design Like Code" {
+    page id="square" w=(px)720 h=(px)720 background=(token)"surface.paper" {
+      // Swiss outer grid rules
+      line id="grid.top" x1=(px)44 y1=(px)68 x2=(px)676 y2=(px)68 stroke=(token)"surface.ink" stroke-width=(token)"stroke.thick"
+      line id="grid.mid" x1=(px)44 y1=(px)384 x2=(px)676 y2=(px)384 stroke=(token)"surface.rule" stroke-width=(token)"stroke.thin"
+      line id="grid.bot" x1=(px)44 y1=(px)652 x2=(px)676 y2=(px)652 stroke=(token)"surface.ink" stroke-width=(token)"stroke.thin"
+
+      // Top metadata
+      text id="brand.tag" x=(px)44 y=(px)38 w=(px)260 h=(px)20 style="mono" { span "ZENITH · OPEN FORMAT" }
+      text id="edition.tag" x=(px)436 y=(px)38 w=(px)240 h=(px)20 align="end" style="mono-muted" { span "TOKEN EDITION · 1:1" }
+
+      // Geometric Bauhaus / Swiss graphic block (top half)
+      group id="artwork" {
+        rect id="geo.cobalt" x=(px)44 y=(px)96 w=(px)304 h=(px)260 fill=(token)"brand.primary"
+        ellipse id="geo.disc" x=(px)236 y=(px)120 w=(px)212 h=(px)212 fill=(token)"brand.accent"
+        ellipse id="geo.cut" x=(px)388 y=(px)164 w=(px)124 h=(px)124 fill=(token)"surface.ink"
+        rect id="geo.bar" x=(px)548 y=(px)96 w=(px)128 h=(px)260 fill=(token)"surface.ink"
+        ellipse id="geo.dot" x=(px)588 y=(px)136 w=(px)48 h=(px)48 fill=(token)"surface.paper"
+      }
+
+      // Display typography (bottom half)
+      text id="headline" x=(px)42 y=(px)398 w=(px)636 h=(px)184 font-family=(token)"font.serif" font-size=(token)"size.display" font-weight=(token)"weight.700" fill=(token)"surface.ink" { span "Design\nlike code." }
+      text id="subcopy" x=(px)44 y=(px)592 w=(px)600 h=(px)44 font-family=(token)"font.sans" font-size=(token)"size.body" font-weight=(token)"weight.400" fill=(token)"surface.muted" { span "Plain-text .zen documents with semantic tokens, deterministic PNG & print PDF." }
+
+      // Bottom bar
+      text id="foot.l" x=(px)44 y=(px)668 w=(px)320 h=(px)18 style="mono" { span "TRY EDITING brand.primary IN TOKENS" }
+      text id="foot.r" x=(px)516 y=(px)668 w=(px)160 h=(px)18 align="end" style="mono-muted" { span "720 × 720 PX" }
+    }
+  }
+}

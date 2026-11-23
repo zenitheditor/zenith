@@ -6,7 +6,14 @@
 
 import { blobToBase64 } from "../engine/wasm/files.js";
 
-const EXAMPLES = new Set(["starters/poster.zen", "starters/harbor-report.zen", "starters/print-workflow.zen"]);
+const EXAMPLES = new Set([
+  "starters/poster.zen",
+  "starters/harbor-report.zen",
+  "starters/print-workflow.zen",
+  "starters/keynote-slide.zen",
+  "starters/spec-sheet.zen",
+  "starters/launch-card.zen",
+]);
 
 export const BLANK_PRESETS = {
   poster: { title: "Untitled Poster", name: "Untitled.zen", w: 600, h: 720 },

@@ -1,58 +1,123 @@
 zenith version=1 {
   project id="proj.harbor-report" name="Harbor Monitor"
   tokens format="zenith-token-v1" {
-    token id="color.blue" type="color" value="#213da1"
-    token id="color.paper" type="color" value="#f4f1e7"
-    token id="color.ink" type="color" value="#18245a"
-    token id="color.secondary" type="color" value="#384470"
-    token id="color.tint" type="color" value="#dce6ff"
-    token id="color.bars" type="color" value="#4268dd"
-    token id="px.14" type="dimension" value=(px)14
-    token id="px.2" type="dimension" value=(px)2
-    token id="px.60" type="dimension" value=(px)60
-    token id="px.82" type="dimension" value=(px)82
-    token id="px.22" type="dimension" value=(px)22
-    token id="px.16" type="dimension" value=(px)16
-    token id="px.17" type="dimension" value=(px)17
+    token id="color.paper" type="color" value="#f7f4ee"
+    token id="color.surface" type="color" value="#efeae0"
+    token id="color.ink" type="color" value="#111827"
+    token id="color.muted" type="color" value="#4b5563"
+    token id="color.teal" type="color" value="#0f4c5c"
+    token id="color.accent" type="color" value="#b83b0a"
+    token id="color.rule" type="color" value="#d4cdc0"
+    token id="font.serif" type="fontFamily" value="Noto Serif"
+    token id="font.sans" type="fontFamily" value="Noto Sans"
+    token id="font.mono" type="fontFamily" value="Noto Sans Mono"
+    token id="size.micro" type="dimension" value=(px)11
+    token id="size.body" type="dimension" value=(px)14
+    token id="size.sub" type="dimension" value=(px)17
+    token id="size.h2" type="dimension" value=(px)19
+    token id="size.kpi" type="dimension" value=(px)44
+    token id="size.title" type="dimension" value=(px)54
+    token id="stroke.thin" type="dimension" value=(px)1
+    token id="stroke.thick" type="dimension" value=(px)2.5
+    token id="weight.400" type="fontWeight" value=400
     token id="weight.600" type="fontWeight" value=600
     token id="weight.700" type="fontWeight" value=700
-    token id="sans" type="fontFamily" value="Noto Sans"
-    token id="serif" type="fontFamily" value="Noto Serif"
-    token id="mono" type="fontFamily" value="Noto Sans Mono"
   }
   styles {
     style id="meta" {
-      font-family (token)"mono"
-      font-size (token)"px.14"
+      font-family (token)"font.mono"
+      font-size (token)"size.micro"
       font-weight (token)"weight.600"
-      fill (token)"color.blue"
+      fill (token)"color.teal"
+    }
+    style id="kpi-num" {
+      font-family (token)"font.serif"
+      font-size (token)"size.kpi"
+      font-weight (token)"weight.700"
+      fill (token)"color.ink"
+    }
+    style id="kpi-label" {
+      font-family (token)"font.sans"
+      font-size (token)"size.body"
+      font-weight (token)"weight.600"
+      fill (token)"color.ink"
+    }
+    style id="kpi-delta" {
+      font-family (token)"font.mono"
+      font-size (token)"size.micro"
+      font-weight (token)"weight.600"
+      fill (token)"color.accent"
+    }
+    style id="col-head" {
+      font-family (token)"font.sans"
+      font-size (token)"size.body"
+      font-weight (token)"weight.700"
+      fill (token)"color.teal"
+    }
+    style id="col-body" {
+      font-family (token)"font.sans"
+      font-size (token)"size.body"
+      font-weight (token)"weight.400"
+      fill (token)"color.muted"
     }
   }
   document id="doc.harbor-report" title="The harbor in focus" {
     page id="brief" w=(px)720 h=(px)900 background=(token)"color.paper" {
-      text id="masthead" x=(px)44 y=(px)40 w=(px)350 h=(px)25 style="meta" { span "HARBOR MONITOR / FIELD BRIEF" }
-      text id="period" x=(px)410 y=(px)40 w=(px)266 h=(px)25 align="end" style="meta" { span "APR–JUL • EXAMPLE DATA" }
-      line id="top-rule" x1=(px)44 y1=(px)77 x2=(px)676 y2=(px)77 stroke=(token)"color.blue" stroke-width=(token)"px.2"
-      text id="headline" x=(px)43.4 y=(px)92 w=(px)640 h=(px)85 overflow="autofit" font-family=(token)"serif" font-size=(token)"px.60" font-weight=(token)"weight.700" fill=(token)"color.ink" { span "The harbor in focus" }
-      text id="dek" x=(px)44 y=(px)187 w=(px)632 h=(px)36 font-family=(token)"sans" font-size=(token)"px.22" fill=(token)"color.secondary" { span "Four stations track water clarity through the summer." }
+      // Masthead with double editorial rule
+      text id="masthead" x=(px)48 y=(px)34 w=(px)360 h=(px)18 style="meta" { span "HARBOR MONITOR · FIELD BRIEF NO. 14" }
+      text id="period" x=(px)432 y=(px)34 w=(px)240 h=(px)18 align="end" style="meta" { span "APR–JUL · NORTH BASIN" }
+      line id="rule.top-thick" x1=(px)48 y1=(px)58 x2=(px)672 y2=(px)58 stroke=(token)"color.ink" stroke-width=(token)"stroke.thick"
+      line id="rule.top-thin" x1=(px)48 y1=(px)63 x2=(px)672 y2=(px)63 stroke=(token)"color.rule" stroke-width=(token)"stroke.thin"
 
-      rect id="metric-field" x=(px)44 y=(px)249 w=(px)632 h=(px)150 fill=(token)"color.tint"
-      text id="hero-metric" x=(px)64 y=(px)259 w=(px)295 h=(px)112 font-family=(token)"serif" font-size=(token)"px.82" font-weight=(token)"weight.700" fill=(token)"color.blue" { span "2.4 m" }
-      text id="metric-caption" x=(px)371 y=(px)280 w=(px)273 h=(px)77 font-family=(token)"sans" font-size=(token)"px.22" font-weight=(token)"weight.700" fill=(token)"color.ink" { span "Median visibility in July" }
-      text id="metric-change" x=(px)371 y=(px)355 w=(px)273 h=(px)26 style="meta" { span "+0.7 M SINCE APRIL" }
+      // Editorial headline & dek
+      text id="headline" x=(px)48 y=(px)78 w=(px)624 h=(px)72 overflow="autofit" font-family=(token)"font.serif" font-size=(token)"size.title" font-weight=(token)"weight.700" fill=(token)"color.ink" { span "The harbor in focus" }
+      text id="dek" x=(px)48 y=(px)154 w=(px)624 h=(px)48 font-family=(token)"font.sans" font-size=(token)"size.sub" font-weight=(token)"weight.400" fill=(token)"color.muted" { span "Secchi-disk water clarity across four fixed monitoring stations shows steady seasonal recovery after spring dredging." }
 
-      text id="chart-label" x=(px)44 y=(px)431 w=(px)632 h=(px)32 font-family=(token)"sans" font-size=(token)"px.22" font-weight=(token)"weight.700" fill=(token)"color.ink" { span "Visibility by month (m)" }
-      chart id="trend" kind="bar" x=(px)50 y=(px)471 w=(px)612 h=(px)210 value-labels="top" {
+      // 3-column structured KPI strip
+      rect id="kpi.band" x=(px)48 y=(px)218 w=(px)624 h=(px)122 fill=(token)"color.surface"
+      line id="kpi.top" x1=(px)48 y1=(px)218 x2=(px)672 y2=(px)218 stroke=(token)"color.teal" stroke-width=(token)"stroke.thick"
+
+      text id="kpi1.num" x=(px)66 y=(px)234 w=(px)176 h=(px)52 style="kpi-num" { span "2.4 m" }
+      text id="kpi1.lbl" x=(px)66 y=(px)289 w=(px)176 h=(px)20 style="kpi-label" { span "July median clarity" }
+      text id="kpi1.sub" x=(px)66 y=(px)312 w=(px)176 h=(px)16 style="kpi-delta" { span "+0.7 M SINCE APRIL" }
+
+      line id="kpi.div1" x1=(px)256 y1=(px)236 x2=(px)256 y2=(px)324 stroke=(token)"color.rule" stroke-width=(token)"stroke.thin"
+
+      text id="kpi2.num" x=(px)272 y=(px)234 w=(px)176 h=(px)52 style="kpi-num" { span "4 / 4" }
+      text id="kpi2.lbl" x=(px)272 y=(px)289 w=(px)176 h=(px)20 style="kpi-label" { span "Stations reporting" }
+      text id="kpi2.sub" x=(px)272 y=(px)312 w=(px)176 h=(px)16 style="meta" { span "98.4% TELEMETRY UPTIME" }
+
+      line id="kpi.div2" x1=(px)464 y1=(px)236 x2=(px)464 y2=(px)324 stroke=(token)"color.rule" stroke-width=(token)"stroke.thin"
+
+      text id="kpi3.num" x=(px)478 y=(px)234 w=(px)176 h=(px)52 style="kpi-num" { span "0.38" }
+      text id="kpi3.lbl" x=(px)478 y=(px)289 w=(px)176 h=(px)20 style="kpi-label" { span "Turbidity index" }
+      text id="kpi3.sub" x=(px)478 y=(px)312 w=(px)176 h=(px)16 style="meta" { span "-18% VS Q1 BASELINE" }
+
+      // Chart section
+      text id="chart.kicker" x=(px)48 y=(px)368 w=(px)300 h=(px)16 style="meta" { span "FIGURE 01 · SEASONAL TREND" }
+      text id="chart.title" x=(px)48 y=(px)388 w=(px)420 h=(px)28 font-family=(token)"font.serif" font-size=(token)"size.h2" font-weight=(token)"weight.700" fill=(token)"color.ink" { span "Median visibility by month (meters)" }
+      text id="chart.note" x=(px)472 y=(px)394 w=(px)200 h=(px)18 align="end" style="meta" { span "TARGET THRESHOLD: 2.0 M" }
+
+      chart id="trend" kind="bar" x=(px)48 y=(px)428 w=(px)624 h=(px)244 value-labels="center" {
         categories "Apr" "May" "Jun" "Jul"
-        series label="Median visibility" color=(token)"color.bars" 1.7 2.0 2.2 2.4
+        series label="Outer pier & basin median" color=(token)"color.teal" 1.7 2.0 2.2 2.4
       }
 
-      line id="notes-rule" x1=(px)44 y1=(px)704 x2=(px)676 y2=(px)704 stroke=(token)"color.blue" stroke-width=(token)"px.2"
-      text id="notes" x=(px)44 y=(px)723 w=(px)632 h=(px)156 format="markdown" font-family=(token)"sans" font-size=(token)"px.16" fill=(token)"color.ink" {
-        span "### What changed\n\nWater clarity improved at three of four stations. The outer pier remained clear throughout the season.\n\n### What to check next\n\nSample the inner basin after heavy rain to check whether runoff accounts for the lower readings."
-        block role="h3" font-family=(token)"sans" font-size=(token)"px.17" font-weight=(token)"weight.700" fill=(token)"color.blue" space-before=(px)6 space-after=(px)4
-        block role="p" font-family=(token)"sans" font-size=(token)"px.16" fill=(token)"color.ink" space-before=(px)0 space-after=(px)5
-      }
+      // Two-column editorial takeaways
+      line id="notes.rule" x1=(px)48 y1=(px)696 x2=(px)672 y2=(px)696 stroke=(token)"color.ink" stroke-width=(token)"stroke.thin"
+
+      text id="col1.h" x=(px)48 y=(px)714 w=(px)292 h=(px)22 style="col-head" { span "What changed" }
+      text id="col1.p" x=(px)48 y=(px)740 w=(px)292 h=(px)108 style="col-body" { span "Water clarity improved steadily at three of four stations following the completion of spring maintenance dredging. The outer pier held above 2.3 m throughout July." }
+
+      line id="notes.mid" x1=(px)360 y1=(px)714 x2=(px)360 y2=(px)842 stroke=(token)"color.rule" stroke-width=(token)"stroke.thin"
+
+      text id="col2.h" x=(px)380 y=(px)714 w=(px)292 h=(px)22 style="col-head" { span "Next field protocol" }
+      text id="col2.p" x=(px)380 y=(px)740 w=(px)292 h=(px)108 style="col-body" { span "Deploy mobile turbidity loggers in the inner basin within six hours of >15 mm rainfall to isolate stormwater runoff from tidal sediment." }
+
+      // Footer folio
+      line id="foot.rule" x1=(px)48 y1=(px)856 x2=(px)672 y2=(px)856 stroke=(token)"color.rule" stroke-width=(token)"stroke.thin"
+      text id="foot.left" x=(px)48 y=(px)868 w=(px)320 h=(px)16 style="meta" { span "COASTAL HYDROLOGY WORKING GROUP" }
+      text id="foot.right" x=(px)472 y=(px)868 w=(px)200 h=(px)16 align="end" style="meta" { span "PAGE 01 · PUBLIC BRIEF" }
     }
   }
 }

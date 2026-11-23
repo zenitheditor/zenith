@@ -26,8 +26,12 @@ import { fileURLToPath } from "node:url";
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(here, "../..");
 const GALLERY_FILES = [
-  "poster.zen", "poster.png", "print-workflow.zen", "print-workflow.png",
+  "poster.zen", "poster.png",
   "harbor-report.zen", "harbor-report.png",
+  "print-workflow.zen", "print-workflow.png",
+  "keynote-slide.zen", "keynote-slide.png",
+  "spec-sheet.zen", "spec-sheet.png",
+  "launch-card.zen", "launch-card.png",
 ];
 
 function args() {

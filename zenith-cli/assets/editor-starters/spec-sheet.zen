@@ -1,0 +1,180 @@
+zenith version=1 {
+  project id="proj.spec-sheet" name="Meridian M-04"
+  tokens format="zenith-token-v1" {
+    token id="color.paper" type="color" value="#ffffff"
+    token id="color.panel" type="color" value="#f3f4f6"
+    token id="color.cabinet" type="color" value="#1c1f24"
+    token id="color.cone" type="color" value="#2e333b"
+    token id="color.ring" type="color" value="#4b5563"
+    token id="color.ink" type="color" value="#111111"
+    token id="color.muted" type="color" value="#52525b"
+    token id="color.rule" type="color" value="#d4d4d8"
+    token id="color.accent" type="color" value="#b84006"
+    token id="font.sans" type="fontFamily" value="Noto Sans"
+    token id="font.mono" type="fontFamily" value="Noto Sans Mono"
+    token id="size.micro" type="dimension" value=(px)10
+    token id="size.cell" type="dimension" value=(px)12
+    token id="size.body" type="dimension" value=(px)13
+    token id="size.sub" type="dimension" value=(px)16
+    token id="size.h2" type="dimension" value=(px)22
+    token id="size.title" type="dimension" value=(px)44
+    token id="stroke.thin" type="dimension" value=(px)1
+    token id="stroke.med" type="dimension" value=(px)2
+    token id="radius.cab" type="dimension" value=(px)16
+    token id="radius.port" type="dimension" value=(px)4
+    token id="pad.cell" type="dimension" value=(px)10
+    token id="gap.zero" type="dimension" value=(px)0
+    token id="weight.400" type="fontWeight" value=400
+    token id="weight.600" type="fontWeight" value=600
+    token id="weight.700" type="fontWeight" value=700
+  }
+  styles {
+    style id="mono-kicker" {
+      font-family (token)"font.mono"
+      font-size (token)"size.micro"
+      font-weight (token)"weight.600"
+      fill (token)"color.muted"
+    }
+    style id="mono-accent" {
+      font-family (token)"font.mono"
+      font-size (token)"size.micro"
+      font-weight (token)"weight.600"
+      fill (token)"color.accent"
+    }
+    style id="tbl-head" {
+      font-family (token)"font.mono"
+      font-size (token)"size.micro"
+      font-weight (token)"weight.700"
+      fill (token)"color.ink"
+    }
+    style id="tbl-key" {
+      font-family (token)"font.sans"
+      font-size (token)"size.cell"
+      font-weight (token)"weight.600"
+      fill (token)"color.ink"
+    }
+    style id="tbl-val" {
+      font-family (token)"font.mono"
+      font-size (token)"size.cell"
+      font-weight (token)"weight.400"
+      fill (token)"color.muted"
+    }
+  }
+  document id="doc.spec-sheet" title="Meridian M-04 Specification" {
+    page id="cover" w=(px)595 h=(px)842 background=(token)"color.paper" {
+      // Top technical header
+      text id="p1.brand" x=(px)42 y=(px)32 w=(px)280 h=(px)16 style="mono-kicker" { span "MERIDIAN ACOUSTICS · TECHNICAL DATA" }
+      text id="p1.rev" x=(px)395 y=(px)32 w=(px)158 h=(px)16 align="end" style="mono-accent" { span "SHEET 04-A · REV 2.1" }
+      line id="p1.rule-top" x1=(px)42 y1=(px)54 x2=(px)553 y2=(px)54 stroke=(token)"color.ink" stroke-width=(token)"stroke.med"
+
+      // Model title
+      text id="p1.title" x=(px)42 y=(px)72 w=(px)400 h=(px)56 font-family=(token)"font.sans" font-size=(token)"size.title" font-weight=(token)"weight.700" fill=(token)"color.ink" { span "Meridian M-04" }
+      text id="p1.sub" x=(px)42 y=(px)130 w=(px)440 h=(px)24 font-family=(token)"font.sans" font-size=(token)"size.sub" font-weight=(token)"weight.400" fill=(token)"color.muted" { span "Bi-amplified near-field studio reference monitor" }
+
+      // Elevation drawing stage
+      rect id="draw.stage" x=(px)42 y=(px)176 w=(px)511 h=(px)452 fill=(token)"color.panel" stroke=(token)"color.rule" stroke-width=(token)"stroke.thin"
+      text id="draw.label" x=(px)58 y=(px)192 w=(px)220 h=(px)16 style="mono-kicker" { span "FIG 1.1 · FRONT BAFFLE ELEVATION" }
+      text id="draw.scale" x=(px)420 y=(px)192 w=(px)116 h=(px)16 align="end" style="mono-kicker" { span "SCALE 1:2 · MM" }
+
+      // Acoustic reference axes
+      line id="axis.v" x1=(px)297.5 y1=(px)216 x2=(px)297.5 y2=(px)578 stroke=(token)"color.rule" stroke-width=(token)"stroke.thin"
+      line id="axis.h1" x1=(px)110 y1=(px)316 x2=(px)412 y2=(px)316 stroke=(token)"color.rule" stroke-width=(token)"stroke.thin"
+      line id="axis.h2" x1=(px)110 y1=(px)456 x2=(px)412 y2=(px)456 stroke=(token)"color.rule" stroke-width=(token)"stroke.thin"
+
+      // Speaker cabinet & transducers
+      rect id="cab.outer" x=(px)192 y=(px)236 w=(px)211 h=(px)336 fill=(token)"color.cabinet" radius=(token)"radius.cab"
+      ellipse id="tw.waveguide" x=(px)254 y=(px)272 w=(px)87 h=(px)87 fill=(token)"color.cone" stroke=(token)"color.ring" stroke-width=(token)"stroke.thin"
+      ellipse id="tw.dome" x=(px)281 y=(px)299 w=(px)33 h=(px)33 fill=(token)"color.ink" stroke=(token)"color.accent" stroke-width=(token)"stroke.med"
+      ellipse id="wf.surround" x=(px)224 y=(px)382 w=(px)147 h=(px)147 fill=(token)"color.cone" stroke=(token)"color.ring" stroke-width=(token)"stroke.med"
+      ellipse id="wf.cone" x=(px)242 y=(px)400 w=(px)111 h=(px)111 fill=(token)"color.cabinet" stroke=(token)"color.ring" stroke-width=(token)"stroke.thin"
+      ellipse id="wf.cap" x=(px)276 y=(px)434 w=(px)43 h=(px)43 fill=(token)"color.ink"
+      rect id="bass.port" x=(px)238 y=(px)544 w=(px)119 h=(px)12 fill=(token)"color.ink" radius=(token)"radius.port"
+      ellipse id="led.power" x=(px)376 y=(px)254 w=(px)7 h=(px)7 fill=(token)"color.accent"
+
+      // Callout annotations
+      text id="call.tw" x=(px)418 y=(px)308 w=(px)124 h=(px)16 style="mono-kicker" { span "25 MM SILK DOME" }
+      text id="call.wf" x=(px)418 y=(px)448 w=(px)124 h=(px)16 style="mono-kicker" { span "130 MM ARAMID" }
+      text id="call.dim" x=(px)192 y=(px)586 w=(px)211 h=(px)16 align="center" style="mono-accent" { span "W 188 × H 298 × D 214 MM" }
+
+      // Bottom 3-column acoustic summary
+      line id="p1.rule-mid" x1=(px)42 y1=(px)652 x2=(px)553 y2=(px)652 stroke=(token)"color.ink" stroke-width=(token)"stroke.thin"
+
+      text id="s1.lbl" x=(px)42 y=(px)668 w=(px)155 h=(px)16 style="mono-accent" { span "RESPONSE (±1.5 DB)" }
+      text id="s1.val" x=(px)42 y=(px)688 w=(px)155 h=(px)28 font-family=(token)"font.sans" font-size=(token)"size.h2" font-weight=(token)"weight.700" fill=(token)"color.ink" { span "44 Hz – 24 kHz" }
+
+      text id="s2.lbl" x=(px)220 y=(px)668 w=(px)155 h=(px)16 style="mono-accent" { span "BI-AMP POWER" }
+      text id="s2.val" x=(px)220 y=(px)688 w=(px)155 h=(px)28 font-family=(token)"font.sans" font-size=(token)"size.h2" font-weight=(token)"weight.700" fill=(token)"color.ink" { span "80 W + 40 W" }
+
+      text id="s3.lbl" x=(px)398 y=(px)668 w=(px)155 h=(px)16 style="mono-accent" { span "PEAK SPL (PAIR)" }
+      text id="s3.val" x=(px)398 y=(px)688 w=(px)155 h=(px)28 font-family=(token)"font.sans" font-size=(token)"size.h2" font-weight=(token)"weight.700" fill=(token)"color.ink" { span "107 dB @ 1 m" }
+
+      // Page 1 footer
+      line id="p1.rule-foot" x1=(px)42 y1=(px)796 x2=(px)553 y2=(px)796 stroke=(token)"color.rule" stroke-width=(token)"stroke.thin"
+      text id="p1.foot-l" x=(px)42 y=(px)808 w=(px)320 h=(px)16 style="mono-kicker" { span "MERIDIAN M-04 · OVERVIEW" }
+      text id="p1.foot-r" x=(px)430 y=(px)808 w=(px)123 h=(px)16 align="end" style="mono-kicker" { span "PAGE 01 / 02" }
+    }
+
+    page id="specs" w=(px)595 h=(px)842 background=(token)"color.paper" {
+      text id="p2.brand" x=(px)42 y=(px)32 w=(px)280 h=(px)16 style="mono-kicker" { span "MERIDIAN ACOUSTICS · TECHNICAL DATA" }
+      text id="p2.rev" x=(px)333 y=(px)32 w=(px)220 h=(px)16 align="end" style="mono-accent" { span "SHEET 04-B · SPECIFICATIONS" }
+      line id="p2.rule-top" x1=(px)42 y1=(px)54 x2=(px)553 y2=(px)54 stroke=(token)"color.ink" stroke-width=(token)"stroke.med"
+
+      text id="p2.title" x=(px)42 y=(px)76 w=(px)511 h=(px)34 font-family=(token)"font.sans" font-size=(token)"size.h2" font-weight=(token)"weight.700" fill=(token)"color.ink" { span "Acoustic & Electrical Specifications" }
+      text id="p2.sub" x=(px)42 y=(px)110 w=(px)511 h=(px)20 font-family=(token)"font.sans" font-size=(token)"size.body" font-weight=(token)"weight.400" fill=(token)"color.muted" { span "Measured anechoic at 1.0 m on the tweeter reference axis (23 °C, 50% RH)." }
+
+      table id="tbl.specs" x=(px)42 y=(px)148 w=(px)511 h=(px)340 border=(token)"color.rule" border-width=(token)"stroke.thin" header-rows=1 header-fill=(token)"color.panel" cell-padding=(token)"pad.cell" gap=(token)"gap.zero" {
+        column width=(px)185
+        column width=(px)216
+        column width=(px)110
+        row {
+          cell { text id="th.param" style="tbl-head" { span "PARAMETER" } }
+          cell { text id="th.val" style="tbl-head" { span "SPECIFICATION" } }
+          cell { text id="th.tol" style="tbl-head" { span "TOLERANCE" } }
+        }
+        row {
+          cell { text id="r1.k" style="tbl-key" { span "Frequency Response" } }
+          cell { text id="r1.v" style="tbl-val" { span "44 Hz – 24,000 Hz" } }
+          cell { text id="r1.t" style="tbl-val" { span "±1.5 dB" } }
+        }
+        row {
+          cell { text id="r2.k" style="tbl-key" { span "Crossover Network" } }
+          cell { text id="r2.v" style="tbl-val" { span "2.1 kHz Linkwitz-Riley" } }
+          cell { text id="r2.t" style="tbl-val" { span "24 dB/oct" } }
+        }
+        row {
+          cell { text id="r3.k" style="tbl-key" { span "Amplification" } }
+          cell { text id="r3.v" style="tbl-val" { span "Class-D 80 W LF + 40 W HF" } }
+          cell { text id="r3.t" style="tbl-val" { span "THD < 0.04%" } }
+        }
+        row {
+          cell { text id="r4.k" style="tbl-key" { span "Self-Generated Noise" } }
+          cell { text id="r4.v" style="tbl-val" { span "< 12 dB(A) @ 10 cm" } }
+          cell { text id="r4.t" style="tbl-val" { span "A-weighted" } }
+        }
+        row {
+          cell { text id="r5.k" style="tbl-key" { span "Balanced Inputs" } }
+          cell { text id="r5.v" style="tbl-val" { span "XLR + 6.3 mm TRS" } }
+          cell { text id="r5.t" style="tbl-val" { span "+4 dBu" } }
+        }
+        row {
+          cell { text id="r6.k" style="tbl-key" { span "Enclosure" } }
+          cell { text id="r6.v" style="tbl-val" { span "Die-cast aluminum" } }
+          cell { text id="r6.t" style="tbl-val" { span "5.4 kg" } }
+        }
+        row {
+          cell { text id="r7.k" style="tbl-key" { span "Power Consumption" } }
+          cell { text id="r7.v" style="tbl-val" { span "0.4 W standby / 140 W max" } }
+          cell { text id="r7.t" style="tbl-val" { span "100–240 V" } }
+        }
+      }
+
+      rect id="note.box" x=(px)42 y=(px)520 w=(px)511 h=(px)110 fill=(token)"color.panel" stroke=(token)"color.rule" stroke-width=(token)"stroke.thin"
+      text id="note.kicker" x=(px)60 y=(px)538 w=(px)300 h=(px)16 style="mono-accent" { span "FACTORY CALIBRATION" }
+      text id="note.body" x=(px)60 y=(px)560 w=(px)475 h=(px)58 font-family=(token)"font.sans" font-size=(token)"size.body" font-weight=(token)"weight.400" fill=(token)"color.muted" { span "Every Meridian M-04 pair is matched within ±0.5 dB from 100 Hz to 10 kHz and ships with an individual serialized response certificate." }
+
+      line id="p2.rule-foot" x1=(px)42 y1=(px)796 x2=(px)553 y2=(px)796 stroke=(token)"color.rule" stroke-width=(token)"stroke.thin"
+      text id="p2.foot-l" x=(px)42 y=(px)808 w=(px)320 h=(px)16 style="mono-kicker" { span "MERIDIAN M-04 · SPECIFICATIONS" }
+      text id="p2.foot-r" x=(px)430 y=(px)808 w=(px)123 h=(px)16 align="end" style="mono-kicker" { span "PAGE 02 / 02" }
+    }
+  }
+}

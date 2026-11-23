@@ -9,6 +9,9 @@ function showGallery() {
   byId("welcome-poster-image").src = "starters/poster.png";
   byId("welcome-report-image").src = "starters/harbor-report.png";
   byId("welcome-diagram-image").src = "starters/print-workflow.png";
+  byId("welcome-slide-image").src = "starters/keynote-slide.png";
+  byId("welcome-spec-image").src = "starters/spec-sheet.png";
+  byId("welcome-card-image").src = "starters/launch-card.png";
   byId("welcome-poster").hidden = false;
   byId("welcome-gallery").hidden = false;
 }

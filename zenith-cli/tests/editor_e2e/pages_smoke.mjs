@@ -86,6 +86,16 @@ async function smoke(base, downloads, requestedFiles) {
     await page.goto(direct.href);
     await ready(page);
     check(await page.eval(`${A}.valid && ${A}.code.text().includes("proof-to-revise")`), "the print workflow did not load");
+    for (const [doc, marker] of [
+      ["starters/keynote-slide.zen", "Same bytes in."],
+      ["starters/spec-sheet.zen", "Meridian M-04"],
+      ["starters/launch-card.zen", "Design\\nlike code."],
+    ]) {
+      direct.searchParams.set("doc", doc);
+      await page.goto(direct.href);
+      await ready(page);
+      check(await page.eval(`${A}.valid && ${A}.code.text().includes(${JSON.stringify(marker)})`), `${doc} did not load`);
+    }
     await page.goto(base);
     await page.waitFor("!document.getElementById('welcome-drafts').hidden", "the resume action");
     await page.clickSelector("#welcome-drafts");

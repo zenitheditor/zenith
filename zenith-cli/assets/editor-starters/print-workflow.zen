@@ -1,67 +1,124 @@
 zenith version=1 {
   project id="proj.print-workflow" name="Proof to Press"
   tokens format="zenith-token-v1" {
-    token id="color.ink" type="color" value="#142d2e"
-    token id="color.connector" type="color" value="#3a6466"
-    token id="color.field" type="color" value="#e7efe9"
-    token id="color.header" type="color" value="#122d2e"
-    token id="color.heading" type="color" value="#effaf1"
-    token id="color.subtitle" type="color" value="#b8d9c5"
-    token id="color.white" type="color" value="#ffffff"
-    token id="color.rule" type="color" value="#527978"
-    token id="color.decision" type="color" value="#f8da8d"
-    token id="color.decision-edge" type="color" value="#7c571e"
-    token id="color.release" type="color" value="#b7dfbf"
-    token id="px.22" type="dimension" value=(px)22
-    token id="px.15" type="dimension" value=(px)15
-    token id="px.59" type="dimension" value=(px)59
-    token id="px.21" type="dimension" value=(px)21
-    token id="px.2" type="dimension" value=(px)2
-    token id="px.3" type="dimension" value=(px)3
-    token id="px.1" type="dimension" value=(px)1
-    token id="px.17" type="dimension" value=(px)17
-    token id="weight.700" type="fontWeight" value=700
+    token id="color.canvas" type="color" value="#f8fafc"
+    token id="color.lane" type="color" value="#f1f5f9"
+    token id="color.card" type="color" value="#ffffff"
+    token id="color.ink" type="color" value="#0f172a"
+    token id="color.muted" type="color" value="#475569"
+    token id="color.border" type="color" value="#cbd5e1"
+    token id="color.line" type="color" value="#64748b"
+    token id="color.blue" type="color" value="#0369a1"
+    token id="color.blue-tint" type="color" value="#e0f2fe"
+    token id="color.green" type="color" value="#047857"
+    token id="color.green-tint" type="color" value="#d1fae5"
+    token id="color.amber" type="color" value="#b45309"
+    token id="color.amber-tint" type="color" value="#fef3c7"
+    token id="font.sans" type="fontFamily" value="Noto Sans"
+    token id="font.mono" type="fontFamily" value="Noto Sans Mono"
+    token id="size.micro" type="dimension" value=(px)11
+    token id="size.label" type="dimension" value=(px)13
+    token id="size.node" type="dimension" value=(px)15
+    token id="size.sub" type="dimension" value=(px)15
+    token id="size.title" type="dimension" value=(px)34
+    token id="stroke.thin" type="dimension" value=(px)1
+    token id="stroke.med" type="dimension" value=(px)1.75
+    token id="stroke.conn" type="dimension" value=(px)2
+    token id="radius.sm" type="dimension" value=(px)8
+    token id="radius.lg" type="dimension" value=(px)10
+    token id="pad.card" type="dimension" value=(px)12
+    token id="weight.400" type="fontWeight" value=400
     token id="weight.600" type="fontWeight" value=600
-    token id="sans" type="fontFamily" value="Noto Sans"
-    token id="mono" type="fontFamily" value="Noto Sans Mono"
-    token id="radius" type="dimension" value=(px)14
-    token id="padding" type="dimension" value=(px)12
+    token id="weight.700" type="fontWeight" value=700
   }
   styles {
-    style id="node-label" {
-      font-family (token)"sans"
-      font-size (token)"px.22"
+    style id="eyebrow" {
+      font-family (token)"font.mono"
+      font-size (token)"size.micro"
+      font-weight (token)"weight.600"
+      fill (token)"color.blue"
+    }
+    style id="lane-title" {
+      font-family (token)"font.mono"
+      font-size (token)"size.micro"
+      font-weight (token)"weight.600"
+      fill (token)"color.muted"
+    }
+    style id="node-title" {
+      font-family (token)"font.sans"
+      font-size (token)"size.node"
       font-weight (token)"weight.700"
       fill (token)"color.ink"
     }
-    style id="edge-label" {
-      font-family (token)"mono"
-      font-size (token)"px.15"
+    style id="edge-lbl" {
+      font-family (token)"font.mono"
+      font-size (token)"size.micro"
       font-weight (token)"weight.600"
-      fill (token)"color.connector"
+      fill (token)"color.muted"
+    }
+    style id="edge-pass" {
+      font-family (token)"font.mono"
+      font-size (token)"size.micro"
+      font-weight (token)"weight.600"
+      fill (token)"color.green"
+    }
+    style id="edge-warn" {
+      font-family (token)"font.mono"
+      font-size (token)"size.micro"
+      font-weight (token)"weight.600"
+      fill (token)"color.amber"
     }
   }
   document id="doc.proof-to-press" title="Proof to Press" {
-    page id="workflow" w=(px)900 h=(px)670 background=(token)"color.field" {
-      rect id="header" x=(px)0 y=(px)0 w=(px)900 h=(px)170 fill=(token)"color.header"
-      text id="headline" x=(px)42 y=(px)30 w=(px)810 h=(px)78 font-family=(token)"sans" font-size=(token)"px.59" font-weight=(token)"weight.700" fill=(token)"color.heading" { span "Proof to Press" }
-      text id="subtitle" x=(px)46 y=(px)112 w=(px)810 h=(px)36 font-family=(token)"sans" font-size=(token)"px.21" fill=(token)"color.subtitle" { span "A production handoff for customer-supplied artwork" }
+    page id="workflow" w=(px)900 h=(px)670 background=(token)"color.canvas" {
+      // Clean technical header
+      text id="kicker" x=(px)40 y=(px)30 w=(px)420 h=(px)18 style="eyebrow" { span "PREPRESS PIPELINE · SPECIFICATION REV 4.2" }
+      text id="doc-code" x=(px)660 y=(px)30 w=(px)200 h=(px)18 align="end" style="lane-title" { span "ISO 12647-2 · CMYK" }
+      text id="headline" x=(px)40 y=(px)52 w=(px)520 h=(px)44 font-family=(token)"font.sans" font-size=(token)"size.title" font-weight=(token)"weight.700" fill=(token)"color.ink" { span "Proof to Press" }
+      text id="subtitle" x=(px)40 y=(px)98 w=(px)720 h=(px)24 font-family=(token)"font.sans" font-size=(token)"size.sub" font-weight=(token)"weight.400" fill=(token)"color.muted" { span "Deterministic handoff from source artwork to verified offset print plates." }
+      line id="head.rule" x1=(px)40 y1=(px)136 x2=(px)860 y2=(px)136 stroke=(token)"color.border" stroke-width=(token)"stroke.thin"
 
-      shape id="intake" kind="process" x=(px)42 y=(px)308 w=(px)170 h=(px)79 fill=(token)"color.white" stroke=(token)"color.rule" stroke-width=(token)"px.2" radius=(token)"radius" padding=(token)"padding" text-style="node-label" { span "Check PDF" }
-      shape id="decision" kind="decision" x=(px)275 y=(px)255 w=(px)246 h=(px)185 fill=(token)"color.decision" stroke=(token)"color.decision-edge" stroke-width=(token)"px.2" padding=(token)"padding" text-style="node-label" { span "Proof approved?" }
-      shape id="release" kind="process" x=(px)655 y=(px)308 w=(px)203 h=(px)79 fill=(token)"color.release" stroke=(token)"color.rule" stroke-width=(token)"px.2" radius=(token)"radius" padding=(token)"padding" text-style="node-label" { span "Release to press" }
-      shape id="revision" kind="process" x=(px)287 y=(px)506 w=(px)222 h=(px)72 fill=(token)"color.white" stroke=(token)"color.rule" stroke-width=(token)"px.2" radius=(token)"radius" padding=(token)"padding" text-style="node-label" { span "Revise artwork" }
+      // 4 subtle stage swimlanes
+      rect id="lane.01" x=(px)40 y=(px)156 w=(px)192 h=(px)428 fill=(token)"color.lane" stroke=(token)"color.border" stroke-width=(token)"stroke.thin" radius=(token)"radius.lg"
+      rect id="lane.02" x=(px)248 y=(px)156 w=(px)196 h=(px)428 fill=(token)"color.lane" stroke=(token)"color.border" stroke-width=(token)"stroke.thin" radius=(token)"radius.lg"
+      rect id="lane.03" x=(px)460 y=(px)156 w=(px)196 h=(px)428 fill=(token)"color.lane" stroke=(token)"color.border" stroke-width=(token)"stroke.thin" radius=(token)"radius.lg"
+      rect id="lane.04" x=(px)672 y=(px)156 w=(px)188 h=(px)428 fill=(token)"color.lane" stroke=(token)"color.border" stroke-width=(token)"stroke.thin" radius=(token)"radius.lg"
 
-      connector id="check-to-proof" from="intake" to="decision" route="orthogonal" marker-end="arrow" stroke=(token)"color.connector" stroke-width=(token)"px.3"
-      connector id="proof-to-press" from="decision" to="release" route="orthogonal" marker-end="arrow" stroke=(token)"color.connector" stroke-width=(token)"px.3"
-      connector id="proof-to-revise" from="decision" to="revision" route="orthogonal" marker-end="arrow" stroke=(token)"color.connector" stroke-width=(token)"px.3"
-      connector id="revise-to-check" from="revision" from-anchor="left" to="intake" to-anchor="bottom" route="orthogonal" marker-end="arrow" stroke=(token)"color.connector" stroke-width=(token)"px.3"
-      text id="yes" x=(px)554 y=(px)315 w=(px)75 h=(px)24 style="edge-label" { span "YES" }
-      text id="no" x=(px)415 y=(px)454 w=(px)50 h=(px)25 style="edge-label" { span "NO" }
-      text id="retry" x=(px)154 y=(px)502 w=(px)115 h=(px)24 style="edge-label" { span "RECHECK" }
+      text id="lane.01.lbl" x=(px)54 y=(px)172 w=(px)164 h=(px)18 style="lane-title" { span "01 · INTAKE" }
+      text id="lane.02.lbl" x=(px)262 y=(px)172 w=(px)168 h=(px)18 style="lane-title" { span "02 · PREFLIGHT" }
+      text id="lane.03.lbl" x=(px)474 y=(px)172 w=(px)168 h=(px)18 style="lane-title" { span "03 · SIGN-OFF" }
+      text id="lane.04.lbl" x=(px)686 y=(px)172 w=(px)160 h=(px)18 style="lane-title" { span "04 · PRODUCTION" }
 
-      line id="footer-rule" x1=(px)44 y1=(px)609 x2=(px)856 y2=(px)609 stroke=(token)"color.rule" stroke-width=(token)"px.1"
-      text id="handoff-note" x=(px)44 y=(px)627 w=(px)812 h=(px)28 font-family=(token)"sans" font-size=(token)"px.17" fill=(token)"color.ink" { span "Keep the approved proof with the production PDF." }
+      // Primary pipeline nodes
+      shape id="intake" kind="process" x=(px)58 y=(px)239 w=(px)156 h=(px)68 fill=(token)"color.card" stroke=(token)"color.border" stroke-width=(token)"stroke.med" radius=(token)"radius.sm" padding=(token)"pad.card" text-style="node-title" { span "Submit .zen" }
+      shape id="preflight" kind="process" x=(px)266 y=(px)239 w=(px)160 h=(px)68 fill=(token)"color.blue-tint" stroke=(token)"color.blue" stroke-width=(token)"stroke.med" radius=(token)"radius.sm" padding=(token)"pad.card" text-style="node-title" { span "Font & Bleed Check" }
+      shape id="softproof" kind="process" x=(px)266 y=(px)356 w=(px)160 h=(px)68 fill=(token)"color.card" stroke=(token)"color.border" stroke-width=(token)"stroke.med" radius=(token)"radius.sm" padding=(token)"pad.card" text-style="node-title" { span "Render Soft Proof" }
+      shape id="decision" kind="process" x=(px)478 y=(px)296 w=(px)160 h=(px)74 fill=(token)"color.amber-tint" stroke=(token)"color.amber" stroke-width=(token)"stroke.med" radius=(token)"radius.sm" padding=(token)"pad.card" text-style="node-title" { span "Client Approval?" }
+      shape id="impose" kind="process" x=(px)686 y=(px)239 w=(px)160 h=(px)68 fill=(token)"color.card" stroke=(token)"color.border" stroke-width=(token)"stroke.med" radius=(token)"radius.sm" padding=(token)"pad.card" text-style="node-title" { span "CMYK Imposition" }
+      shape id="release" kind="process" x=(px)686 y=(px)356 w=(px)160 h=(px)68 fill=(token)"color.green-tint" stroke=(token)"color.green" stroke-width=(token)"stroke.med" radius=(token)"radius.sm" padding=(token)"pad.card" text-style="node-title" { span "Release to Press" }
+
+      // Revision branch node
+      shape id="revision" kind="process" x=(px)478 y=(px)476 w=(px)160 h=(px)66 fill=(token)"color.card" stroke=(token)"color.amber" stroke-width=(token)"stroke.med" radius=(token)"radius.sm" padding=(token)"pad.card" text-style="node-title" { span "Revise Source" }
+
+      // Orthogonal routed connectors
+      connector id="c.in-pre" from="intake" from-anchor="right" to="preflight" to-anchor="left" route="orthogonal" marker-end="arrow" stroke=(token)"color.line" stroke-width=(token)"stroke.conn"
+      connector id="c.pre-proof" from="preflight" from-anchor="bottom" to="softproof" to-anchor="top" route="orthogonal" marker-end="arrow" stroke=(token)"color.blue" stroke-width=(token)"stroke.conn"
+      connector id="c.proof-dec" from="softproof" from-anchor="right" to="decision" to-anchor="left" route="orthogonal" marker-end="arrow" stroke=(token)"color.line" stroke-width=(token)"stroke.conn"
+      connector id="c.dec-imp" from="decision" from-anchor="right" to="impose" to-anchor="left" route="orthogonal" marker-end="arrow" stroke=(token)"color.green" stroke-width=(token)"stroke.conn"
+      connector id="c.imp-rel" from="impose" from-anchor="bottom" to="release" to-anchor="top" route="orthogonal" marker-end="arrow" stroke=(token)"color.green" stroke-width=(token)"stroke.conn"
+      connector id="proof-to-revise" from="decision" from-anchor="bottom" to="revision" to-anchor="top" route="orthogonal" marker-end="arrow" stroke=(token)"color.amber" stroke-width=(token)"stroke.conn"
+      connector id="c.rev-in" from="revision" from-anchor="left" to="intake" to-anchor="bottom" route="orthogonal" marker-end="arrow" stroke=(token)"color.amber" stroke-width=(token)"stroke.conn"
+
+      // Crisp edge labels
+      text id="lbl.pass" x=(px)354 y=(px)322 w=(px)60 h=(px)16 style="edge-lbl" { span "PASS" }
+      text id="lbl.approved" x=(px)640 y=(px)254 w=(px)46 h=(px)16 style="edge-pass" { span "OK" }
+      text id="lbl.changes" x=(px)566 y=(px)416 w=(px)74 h=(px)16 style="edge-warn" { span "CHANGES" }
+      text id="lbl.rerun" x=(px)154 y=(px)488 w=(px)120 h=(px)16 style="edge-warn" { span "RE-SUBMIT" }
+
+      // Technical legend footer
+      line id="foot.rule" x1=(px)40 y1=(px)606 x2=(px)860 y2=(px)606 stroke=(token)"color.border" stroke-width=(token)"stroke.thin"
+      text id="foot.note" x=(px)40 y=(px)622 w=(px)580 h=(px)22 font-family=(token)"font.sans" font-size=(token)"size.label" font-weight=(token)"weight.400" fill=(token)"color.muted" { span "Archive the signed soft-proof checksum alongside the production PDF/X-4 package." }
+      text id="foot.tag" x=(px)660 y=(px)624 w=(px)200 h=(px)18 align="end" style="lane-title" { span "ZERO-DRIFT RENDER" }
     }
   }
 }

@@ -110,6 +110,7 @@ export const steps = [
         } }];
         return true;
       })()`);
+      await page.eval("document.getElementById('welcome-open').scrollIntoView({ block: 'center' })");
       await page.clickSelector("#welcome-open");
       await ready(page);
       const draftText = `// opted-in source\n${original}`;

@@ -1,0 +1,103 @@
+zenith version=1 {
+  project id="proj.keynote-slide" name="Deterministic Design"
+  tokens format="zenith-token-v1" {
+    token id="color.bg" type="color" value="#0c1118"
+    token id="color.surface" type="color" value="#131b26"
+    token id="color.raised" type="color" value="#1b2636"
+    token id="color.border" type="color" value="#263447"
+    token id="color.ink" type="color" value="#f5f5f0"
+    token id="color.muted" type="color" value="#b8c4d4"
+    token id="color.accent" type="color" value="#56ccf2"
+    token id="color.accent-dim" type="color" value="#0c4a6e"
+    token id="color.emerald" type="color" value="#34d399"
+    token id="font.serif" type="fontFamily" value="Noto Serif"
+    token id="font.sans" type="fontFamily" value="Noto Sans"
+    token id="font.mono" type="fontFamily" value="Noto Sans Mono"
+    token id="size.micro" type="dimension" value=(px)11
+    token id="size.body" type="dimension" value=(px)15
+    token id="size.lead" type="dimension" value=(px)18
+    token id="size.title" type="dimension" value=(px)48
+    token id="size.stat" type="dimension" value=(px)56
+    token id="stroke.thin" type="dimension" value=(px)1
+    token id="stroke.med" type="dimension" value=(px)1.5
+    token id="radius.md" type="dimension" value=(px)10
+    token id="radius.sm" type="dimension" value=(px)6
+    token id="pad.sm" type="dimension" value=(px)10
+    token id="weight.400" type="fontWeight" value=400
+    token id="weight.600" type="fontWeight" value=600
+    token id="weight.700" type="fontWeight" value=700
+  }
+  styles {
+    style id="chrome" {
+      font-family (token)"font.mono"
+      font-size (token)"size.micro"
+      font-weight (token)"weight.600"
+      fill (token)"color.muted"
+    }
+    style id="style.kicker" {
+      font-family (token)"font.mono"
+      font-size (token)"size.micro"
+      font-weight (token)"weight.600"
+      fill (token)"color.accent"
+    }
+    style id="pill-lbl" {
+      font-family (token)"font.sans"
+      font-size (token)"size.body"
+      font-weight (token)"weight.600"
+      fill (token)"color.ink"
+    }
+    style id="stage-lbl" {
+      font-family (token)"font.mono"
+      font-size (token)"size.micro"
+      font-weight (token)"weight.600"
+      fill (token)"color.ink"
+    }
+  }
+  document id="doc.keynote-slide" title="Deterministic Design" {
+    page id="slide-04" w=(px)960 h=(px)540 background=(token)"color.bg" {
+      // Deck top chrome
+      text id="deck.name" x=(px)48 y=(px)28 w=(px)400 h=(px)18 style="chrome" { span "ZENITH ENGINE · ARCHITECTURE BRIEF" }
+      text id="deck.num" x=(px)760 y=(px)28 w=(px)152 h=(px)18 align="end" style="chrome" { span "04 / 12" }
+      line id="rule.top" x1=(px)48 y1=(px)54 x2=(px)912 y2=(px)54 stroke=(token)"color.border" stroke-width=(token)"stroke.thin"
+
+      // Left column: editorial thesis
+      text id="slide.kicker" x=(px)48 y=(px)88 w=(px)260 h=(px)18 style="style.kicker" { span "CORE RENDER INVARIANT" }
+      text id="headline" x=(px)48 y=(px)110 w=(px)480 h=(px)132 font-family=(token)"font.serif" font-size=(token)"size.title" font-weight=(token)"weight.700" fill=(token)"color.ink" { span "Same bytes in.\nSame pixels out." }
+      text id="thesis" x=(px)48 y=(px)250 w=(px)464 h=(px)74 font-family=(token)"font.sans" font-size=(token)"size.lead" font-weight=(token)"weight.400" fill=(token)"color.muted" { span "Every document compiles through a single pure-Rust scene pipeline — identical across Linux, macOS, Windows, and WASM." }
+
+      // Three crisp invariant rows
+      rect id="inv.1.bg" x=(px)48 y=(px)336 w=(px)464 h=(px)38 fill=(token)"color.surface" stroke=(token)"color.border" stroke-width=(token)"stroke.thin" radius=(token)"radius.sm"
+      ellipse id="inv.1.dot" x=(px)64 y=(px)351 w=(px)8 h=(px)8 fill=(token)"color.emerald"
+      text id="inv.1.txt" x=(px)84 y=(px)345 w=(px)410 h=(px)20 style="pill-lbl" { span "Zero C dependencies — pure Rust + tiny-skia" }
+
+      rect id="inv.2.bg" x=(px)48 y=(px)384 w=(px)464 h=(px)38 fill=(token)"color.surface" stroke=(token)"color.border" stroke-width=(token)"stroke.thin" radius=(token)"radius.sm"
+      ellipse id="inv.2.dot" x=(px)64 y=(px)399 w=(px)8 h=(px)8 fill=(token)"color.accent"
+      text id="inv.2.txt" x=(px)84 y=(px)393 w=(px)410 h=(px)20 style="pill-lbl" { span "Ordered BTreeMap render path — zero hash drift" }
+
+      rect id="inv.3.bg" x=(px)48 y=(px)432 w=(px)464 h=(px)38 fill=(token)"color.surface" stroke=(token)"color.border" stroke-width=(token)"stroke.thin" radius=(token)"radius.sm"
+      ellipse id="inv.3.dot" x=(px)64 y=(px)447 w=(px)8 h=(px)8 fill=(token)"color.emerald"
+      text id="inv.3.txt" x=(px)84 y=(px)441 w=(px)410 h=(px)20 style="pill-lbl" { span "One source compiles to PNG, SVG, and print PDF" }
+
+      // Right column: metric + pipeline architecture card
+      rect id="card.bg" x=(px)548 y=(px)84 w=(px)364 h=(px)386 fill=(token)"color.surface" stroke=(token)"color.border" stroke-width=(token)"stroke.thin" radius=(token)"radius.md"
+      text id="card.kicker" x=(px)576 y=(px)108 w=(px)300 h=(px)16 style="style.kicker" { span "CROSS-HOST VERIFICATION" }
+      text id="card.stat" x=(px)576 y=(px)130 w=(px)300 h=(px)66 font-family=(token)"font.serif" font-size=(token)"size.stat" font-weight=(token)"weight.700" fill=(token)"color.ink" { span "100%" }
+      text id="card.sub" x=(px)576 y=(px)196 w=(px)308 h=(px)40 font-family=(token)"font.sans" font-size=(token)"size.body" font-weight=(token)"weight.400" fill=(token)"color.muted" { span "Bit-exact SHA-256 parity across native & browser" }
+
+      line id="card.rule" x1=(px)576 y1=(px)238 x2=(px)884 y2=(px)238 stroke=(token)"color.border" stroke-width=(token)"stroke.thin"
+      text id="pipe.kicker" x=(px)576 y=(px)254 w=(px)300 h=(px)16 style="chrome" { span "COMPILATION PIPELINE" }
+
+      shape id="step.parse" kind="process" x=(px)576 y=(px)282 w=(px)308 h=(px)42 fill=(token)"color.raised" stroke=(token)"color.border" stroke-width=(token)"stroke.thin" radius=(token)"radius.sm" padding=(token)"pad.sm" text-style="stage-lbl" { span "01  KDL SOURCE -> VALIDATED AST" }
+      shape id="step.scene" kind="process" x=(px)576 y=(px)344 w=(px)308 h=(px)42 fill=(token)"color.accent-dim" stroke=(token)"color.accent" stroke-width=(token)"stroke.med" radius=(token)"radius.sm" padding=(token)"pad.sm" text-style="stage-lbl" { span "02  SHAPING -> SCENE IR" }
+      shape id="step.out" kind="process" x=(px)576 y=(px)406 w=(px)308 h=(px)42 fill=(token)"color.raised" stroke=(token)"color.emerald" stroke-width=(token)"stroke.thin" radius=(token)"radius.sm" padding=(token)"pad.sm" text-style="stage-lbl" { span "03  PNG · VECTOR SVG · PDF" }
+
+      connector id="c.1" from="step.parse" from-anchor="bottom" to="step.scene" to-anchor="top" route="orthogonal" marker-end="arrow" stroke=(token)"color.accent" stroke-width=(token)"stroke.med"
+      connector id="c.2" from="step.scene" from-anchor="bottom" to="step.out" to-anchor="top" route="orthogonal" marker-end="arrow" stroke=(token)"color.emerald" stroke-width=(token)"stroke.med"
+
+      // Bottom slide footer
+      line id="rule.foot" x1=(px)48 y1=(px)494 x2=(px)912 y2=(px)494 stroke=(token)"color.border" stroke-width=(token)"stroke.thin"
+      text id="foot.left" x=(px)48 y=(px)506 w=(px)360 h=(px)18 style="chrome" { span "ZENITH DESIGN ENGINE" }
+      text id="foot.right" x=(px)600 y=(px)506 w=(px)312 h=(px)18 align="end" style="chrome" { span "EDITABLE SOURCE · 16:9 WIDESCREEN" }
+    }
+  }
+}
