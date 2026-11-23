@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
 <title>Zenith editor</title>
 <link rel="stylesheet" href="css/tokens.css">
@@ -14,74 +14,148 @@
 <script type="module" src="js/main.js"></script>
 </head>
 <body>
-<a class="skip-link" id="skip-source" href="#code-host">Skip to source</a>
+<a class="skip-link" id="skip-source" href="#code-host" hidden>Skip to source</a>
 <main id="welcome" class="welcome" aria-labelledby="welcome-title" hidden>
+  <header class="w-top">
+    <div class="welcome-brand"><img src="img/zenith-logo.svg" alt=""><span>Zenith</span></div>
+    <div class="w-top-actions">
+      <button type="button" class="button ghost" id="welcome-drafts" hidden><i data-icon="history"></i><span id="welcome-drafts-label">Browser drafts</span></button>
+      <button type="button" class="button ghost" id="welcome-open-dlg"><i data-icon="folder"></i><span>Open…</span></button>
+      <button type="button" class="tool" id="welcome-theme" aria-label="Toggle theme" title="Toggle theme"><i data-icon="moon"></i></button>
+    </div>
+  </header>
   <div class="welcome-inner">
-    <div class="welcome-brand">Zenith</div>
+    <h1 class="welcome-title" id="welcome-title">What are you making?</h1>
+    <p class="welcome-sub">Start blank, from a template, or open a <code>.zen</code> file your agent produced.</p>
     <p class="welcome-status" id="welcome-status" role="status"></p>
     <div id="welcome-choices">
-      <div class="welcome-hero">
-        <div class="welcome-entry">
-          <h1 id="welcome-title">Start a design</h1>
-          <a class="button primary" id="welcome-poster" href="?doc=starters/poster.zen" hidden>Edit this poster</a>
-          <div class="welcome-files">
-            <button type="button" class="button" id="welcome-blank">New blank design</button>
-            <button type="button" class="button" id="welcome-open">Open .zen file</button>
-            <button type="button" class="button" id="welcome-folder" hidden>Open project folder</button>
-          </div>
-          <button type="button" class="button" id="welcome-drafts" hidden>Browser drafts</button>
+      <section class="w-section" aria-labelledby="w-new">
+        <h2 class="eyebrow" id="w-new">New design</h2>
+        <div class="presets">
+          <button type="button" class="preset" id="welcome-blank" data-preset="poster"><span class="preset-shape" style="--w:30;--h:36"></span><b>Poster</b><small>600 × 720</small></button>
+          <button type="button" class="preset" data-preset="a4"><span class="preset-shape" style="--w:30;--h:42"></span><b>A4</b><small>210 × 297 mm</small></button>
+          <button type="button" class="preset" data-preset="slide"><span class="preset-shape" style="--w:48;--h:27"></span><b>Slide 16:9</b><small>1920 × 1080</small></button>
+          <button type="button" class="preset" data-preset="square"><span class="preset-shape" style="--w:36;--h:36"></span><b>Square post</b><small>1080 × 1080</small></button>
+          <button type="button" class="preset" data-preset="story"><span class="preset-shape" style="--w:22;--h:40"></span><b>Story</b><small>1080 × 1920</small></button>
+          <button type="button" class="preset" data-preset="custom"><span class="preset-shape plus"><i data-icon="plus"></i></span><b>Custom size</b><small>Any page</small></button>
         </div>
-        <img class="welcome-poster" id="welcome-poster-image" width="400" height="480" alt="Night Garden event poster" hidden>
-      </div>
-      <section class="welcome-gallery" id="welcome-gallery" aria-labelledby="welcome-templates" hidden>
-        <h2 id="welcome-templates">More templates</h2>
+      </section>
+
+      <section class="w-section" id="welcome-gallery" aria-labelledby="welcome-templates" hidden>
+        <div class="w-section-head">
+          <h2 class="eyebrow" id="welcome-templates">Templates</h2>
+        </div>
         <div class="welcome-cards">
-          <a class="welcome-card" href="?doc=samples/article.zen">
-            <img id="welcome-report-image" alt="" loading="lazy">
-            <span>Article</span>
+          <a class="welcome-card" id="welcome-poster" href="?doc=starters/poster.zen" hidden>
+            <span class="tpl-art" style="--tint:#1b1029"><img id="welcome-poster-image" alt="Night Garden event poster"></span>
+            <span class="tpl-meta"><b>Night Garden</b><small>Event poster · 600 × 720</small></span>
+            <span class="tpl-tags"><span class="tag">Gradients</span><span class="tag">Vector art</span></span>
           </a>
-          <a class="welcome-card" href="?doc=samples/flowchart.zen">
-            <img id="welcome-diagram-image" alt="" loading="lazy">
-            <span>Flowchart</span>
+          <a class="welcome-card" href="?doc=starters/harbor-report.zen">
+            <span class="tpl-art" style="--tint:#ece8dc"><img id="welcome-report-image" alt="" loading="lazy"></span>
+            <span class="tpl-meta"><b>Harbor field report</b><small>One-page report · A4-ish</small></span>
+            <span class="tpl-tags"><span class="tag">Live chart</span><span class="tag">Tokens</span></span>
           </a>
+          <a class="welcome-card" href="?doc=starters/print-workflow.zen">
+            <span class="tpl-art" style="--tint:#dbe9e1"><img id="welcome-diagram-image" alt="" loading="lazy"></span>
+            <span class="tpl-meta"><b>Proof to press</b><small>Workflow diagram · 900 × 670</small></span>
+            <span class="tpl-tags"><span class="tag">Routed connectors</span></span>
+          </a>
+        </div>
+      </section>
+
+      <section class="w-section" aria-labelledby="w-open-sec">
+        <h2 class="eyebrow" id="w-open-sec">Open or resume</h2>
+        <div class="welcome-actions-row">
+          <button type="button" class="button" id="welcome-open"><i data-icon="page"></i>Open .zen file</button>
+          <button type="button" class="button" id="welcome-folder" hidden><i data-icon="folder"></i>Open project folder</button>
         </div>
       </section>
     </div>
   </div>
+  <footer class="w-foot">Everything stays in this browser. Nothing is uploaded.</footer>
 </main>
-<div class="app" id="app" data-full="none">
+
+<div class="app" id="app" data-view="design" data-full="none" data-source="closed" data-bottom="closed" data-left="open" data-right="open">
   <header class="topbar">
-    <div class="doc-title">
-      <span class="doc-name" id="doc-name">Loading</span>
-      <span class="dirty-mark" id="dirty-mark" hidden title="Unsaved changes" aria-label="Unsaved changes"></span>
+    <div class="bar-left">
+      <div class="menu-wrap">
+        <button type="button" class="logo-btn" id="main-menu-btn" aria-haspopup="menu" aria-expanded="false" aria-label="Main menu">
+          <img src="img/zenith-logo.svg" alt=""><i data-icon="chevronDown" class="icon tiny"></i>
+        </button>
+        <div class="menu" id="main-menu" role="menu" hidden>
+          <button type="button" role="menuitem" id="menu-open-file" hidden><i data-icon="page"></i><span>Open .zen file…</span><kbd>⌘O</kbd></button>
+          <button type="button" role="menuitem" id="menu-open-folder" hidden><i data-icon="folder"></i><span>Open project folder…</span></button>
+          <button type="button" role="menuitem" id="menu-download" hidden><i data-icon="download"></i><span>Download .zen</span></button>
+          <button type="button" role="menuitem" id="menu-export-png" hidden><i data-icon="image"></i><span>Export PNG</span></button>
+          <button type="button" role="menuitem" id="menu-copy-example" hidden><i data-icon="link"></i><span>Copy example link</span></button>
+          <hr id="menu-file-sep" hidden>
+          <button type="button" role="menuitem" id="theme" title="Theme: light"><i data-icon="moon"></i><span id="theme-label">Theme: light</span></button>
+          <button type="button" role="menuitem" id="menu-cmdk"><i data-icon="search"></i><span>All commands</span><kbd>⌘K</kbd></button>
+        </div>
+      </div>
+
+      <div class="doc-title">
+        <span class="doc-name" id="doc-name">Loading</span>
+        <span class="dirty-mark" id="dirty-mark" hidden title="Unsaved changes" aria-label="Unsaved changes"></span>
+        <span class="doc-state" id="doc-state"></span>
+      </div>
+
+      <div class="menu-wrap history-wrap">
+        <div class="undo-redo" role="group" aria-label="History">
+          <button type="button" class="tool" id="undo" aria-label="Undo" aria-haspopup="dialog" aria-expanded="false" title="Undo (Ctrl+Z) · Hold for history"><i data-icon="undo"></i><span class="sr-only">Undo</span></button>
+          <button type="button" class="tool" id="redo" aria-label="Redo" title="Redo (Ctrl+Shift+Z)"><i data-icon="redo"></i><span class="sr-only">Redo</span></button>
+        </div>
+        <div class="popover history" id="history" role="dialog" aria-label="History" hidden>
+          <div class="pop-head"><b>History</b><span class="muted" id="history-count">0 of 0</span></div>
+          <div class="history-list" id="history-list"></div>
+          <p class="history-foot">Click a step to go back to it. Make a new change and the dimmed steps are discarded.</p>
+        </div>
+      </div>
     </div>
-    <div class="toolbar" role="toolbar" aria-label="Editor">
-      <div class="tool-group">
-        <button type="button" class="tool" id="toggle-left" aria-pressed="true" aria-controls="panel-left" title="Pages and layers"><i data-icon="panelLeft"></i><span class="sr-only">Pages and layers</span></button>
-        <button type="button" class="tool" id="toggle-bottom" aria-pressed="true" aria-controls="panel-bottom" title="Diagnostics"><i data-icon="panelBottom"></i><span class="sr-only">Diagnostics</span></button>
-        <button type="button" class="tool" id="toggle-right" aria-pressed="true" aria-controls="panel-right" title="Inspector"><i data-icon="panelRight"></i><span class="sr-only">Inspector</span></button>
+
+    <div class="tools-pill" role="toolbar" aria-label="Drawing tools">
+      <button type="button" class="tool on" data-tool="move" aria-pressed="true" title="Move (V)"><i data-icon="pointer"></i><span class="sr-only">Move</span></button>
+      <button type="button" class="tool" data-tool="text" aria-pressed="false" title="Text (T)"><i data-icon="text"></i><span class="sr-only">Text</span></button>
+      <button type="button" class="tool" data-tool="rect" aria-pressed="false" title="Rectangle (R)"><i data-icon="rect"></i><span class="sr-only">Rectangle</span></button>
+      <button type="button" class="tool" data-tool="ellipse" aria-pressed="false" title="Ellipse (O)"><i data-icon="ellipse"></i><span class="sr-only">Ellipse</span></button>
+      <button type="button" class="tool" data-tool="line" aria-pressed="false" title="Line (L)"><i data-icon="line"></i><span class="sr-only">Line</span></button>
+      <span class="pill-sep" aria-hidden="true"></span>
+      <button type="button" class="tool" data-tool="hand" aria-pressed="false" title="Hand (H · or hold Space)"><i data-icon="hand"></i><span class="sr-only">Hand</span></button>
+    </div>
+
+    <div class="bar-right">
+      <div class="seg" role="radiogroup" aria-label="View">
+        <button type="button" role="radio" aria-checked="true" data-view="design" id="view-design" title="Design (Ctrl+1)"><i data-icon="layout"></i><span>Design</span></button>
+        <button type="button" role="radio" aria-checked="false" data-view="split" id="view-split" title="Split (Ctrl+2)"><i data-icon="columns"></i><span>Split</span></button>
+        <button type="button" role="radio" aria-checked="false" data-view="code" id="view-code" title="Code (Ctrl+3)"><i data-icon="code"></i><span>Code</span></button>
       </div>
-      <div class="tool-group" id="file-tools" role="group" aria-label="File" hidden>
-        <button type="button" class="tool" id="open-file" title="Open a .zen file (Ctrl+O)"><i data-icon="open"></i><span class="sr-only">Open a .zen file</span></button>
-        <button type="button" class="tool" id="open-folder" title="Open a project folder"><i data-icon="folder"></i><span class="sr-only">Open a project folder</span></button>
+
+      <div class="menu-wrap">
+        <button type="button" class="button ghost zoom-btn" id="zoom-btn" aria-haspopup="menu" aria-expanded="false" title="Zoom">
+          <span id="zoom-value">100%</span><i data-icon="chevronDown" class="icon tiny"></i>
+        </button>
+        <div class="menu right" id="zoom-menu" role="menu" hidden>
+          <button type="button" role="menuitem" id="zoom-in"><i data-icon="zoomIn"></i><span>Zoom in</span><kbd>+</kbd></button>
+          <button type="button" role="menuitem" id="zoom-out"><i data-icon="zoomOut"></i><span>Zoom out</span><kbd>−</kbd></button>
+          <hr>
+          <button type="button" role="menuitem" id="zoom-fit"><i data-icon="fit"></i><span>Fit page</span><kbd>⇧1</kbd></button>
+          <button type="button" role="menuitem" id="zoom-100"><i data-icon="search"></i><span>100%</span><kbd>⇧0</kbd></button>
+          <hr>
+          <button type="button" role="menuitem" id="snap-toggle" aria-pressed="true" class="check on"><i data-icon="magnet"></i><span>Snap to objects</span></button>
+        </div>
       </div>
-      <div class="tool-group">
-        <button type="button" class="tool" id="undo" title="Undo (Ctrl+Z)"><i data-icon="undo"></i><span class="sr-only">Undo</span></button>
-        <button type="button" class="tool" id="redo" title="Redo (Ctrl+Shift+Z)"><i data-icon="redo"></i><span class="sr-only">Redo</span></button>
-      </div>
-      <div class="tool-group">
-        <button type="button" class="tool" id="theme" title="Theme: system"><i data-icon="theme"></i><span class="sr-only" id="theme-label">Theme: system</span></button>
-      </div>
-      <button type="button" class="button" id="show-source" aria-controls="pane-code" aria-pressed="false" hidden>Source</button>
+
       <details class="export-tools" id="export-tools" hidden>
-        <summary class="button" id="export-menu-toggle">Export</summary>
+        <summary class="button primary" id="export-menu-toggle"><i data-icon="download"></i><span>Export</span></summary>
         <div class="export-menu">
-          <button type="button" class="button" id="download">Download .zen</button>
-          <button type="button" class="button" id="export-png" aria-describedby="png-unavailable">Export PNG</button>
+          <button type="button" class="button" id="download"><i data-icon="page"></i>Download .zen</button>
+          <button type="button" class="button" id="export-png" aria-describedby="png-unavailable"><i data-icon="image"></i>Export PNG</button>
           <p id="png-unavailable" hidden>Fix document errors to export PNG.</p>
-          <button type="button" class="button" id="copy-example" hidden>Copy example link</button>
+          <button type="button" class="button" id="copy-example" hidden><i data-icon="link"></i>Copy example link</button>
         </div>
       </details>
+
       <button type="button" class="button primary" id="save" title="Save (Ctrl+S)"><i data-icon="save"></i><span id="save-label">Save</span></button>
     </div>
   </header>
@@ -89,85 +163,129 @@
   <div class="banners" id="banners" role="region" aria-label="Notices"></div>
 
   <main class="workspace" id="workspace">
-    <aside class="panel panel-left" id="panel-left" aria-label="Pages and layers">
-      <section class="panel-section" aria-labelledby="pages-title">
-        <h2 class="panel-title" id="pages-title">Pages</h2>
+    <aside class="panel panel-left" id="panel-left" aria-label="Layers, pages and tokens">
+      <div class="tabs" role="tablist">
+        <button type="button" role="tab" aria-selected="true" data-ltab="layers">Layers</button>
+        <button type="button" role="tab" aria-selected="false" data-ltab="pages">Pages</button>
+        <button type="button" role="tab" aria-selected="false" data-ltab="tokens">Tokens</button>
+        <button type="button" class="collapse" id="toggle-left" aria-pressed="true" aria-controls="panel-left" title="Hide left panel (Ctrl+\)" aria-label="Hide left panel"><i data-icon="panelLeft"></i></button>
+      </div>
+      <div class="tab-body" data-lbody="layers">
+        <div class="layer-tree" id="layers" role="tree" aria-label="Layers"></div>
+      </div>
+      <div class="tab-body" data-lbody="pages" hidden>
         <ul class="page-list" id="pages"></ul>
-      </section>
-      <section class="panel-section grow" aria-labelledby="layers-title">
-        <h2 class="panel-title" id="layers-title">Layers</h2>
-        <div class="layer-tree" id="layers" role="tree" aria-labelledby="layers-title"></div>
-      </section>
+      </div>
+      <div class="tab-body" data-lbody="tokens" hidden>
+        <div class="token-list" id="tokens"></div>
+      </div>
     </aside>
 
     <div class="center" id="center">
       <section class="pane pane-code" id="pane-code" aria-labelledby="code-title">
-        <div class="pane-head">
+        <div class="pane-head code-head">
           <h2 class="pane-title" id="code-title">Source</h2>
           <span class="pane-meta" id="cursor-pos" aria-hidden="true"></span>
-          <button type="button" class="tool small" id="full-code" aria-pressed="false" title="Fullscreen source (Esc restores)"><i data-icon="expand"></i><span class="sr-only">Fullscreen source</span></button>
         </div>
         <div class="code-host" id="code-host"></div>
       </section>
 
       <div class="divider" id="divider" role="separator" tabindex="0" aria-orientation="vertical" aria-controls="pane-code" aria-label="Resize source and canvas" aria-valuemin="0" aria-valuemax="100" aria-valuenow="50"><span class="divider-grip" aria-hidden="true"></span></div>
 
-      <section class="pane pane-canvas" id="pane-canvas" aria-labelledby="canvas-title">
-        <div class="pane-head">
-          <h2 class="pane-title" id="canvas-title">Canvas</h2>
-          <span class="badge warn" id="stale-badge" hidden>Showing last valid preview</span>
-          <span class="badge" id="render-badge" hidden role="status">Rendering</span>
-          <div class="zoom" role="group" aria-label="Zoom">
-            <button type="button" class="tool small" id="zoom-out" title="Zoom out (-)"><i data-icon="zoomOut"></i><span class="sr-only">Zoom out</span></button>
-            <button type="button" class="zoom-value" id="zoom-100" title="Zoom to 100% (0)" aria-label="Zoom to 100 percent"><span id="zoom-value">100%</span></button>
-            <button type="button" class="tool small" id="zoom-in" title="Zoom in (+)"><i data-icon="zoomIn"></i><span class="sr-only">Zoom in</span></button>
-            <button type="button" class="tool small" id="zoom-fit" title="Fit page (1)"><i data-icon="fit"></i><span class="sr-only">Fit page</span></button>
-          </div>
-          <button type="button" class="tool small" id="snap-toggle" aria-pressed="true" title="Snap to nodes and the page (hold Ctrl or Cmd while moving to skip)"><i data-icon="magnet"></i><span class="sr-only">Snap to nodes and the page</span></button>
-          <button type="button" class="tool small" id="full-canvas" aria-pressed="false" title="Fullscreen canvas (Esc restores)"><i data-icon="expand"></i><span class="sr-only">Fullscreen canvas</span></button>
-        </div>
-        <div class="viewport" id="viewport" tabindex="0" role="application" aria-roledescription="canvas" aria-label="Page canvas. Click selects a node, Shift click adds to the selection. Drag on empty canvas to select with a band (Alt: only nodes wholly inside, Shift: add). Drag a node, the selection, or its handles to move, resize, or rotate it; moves and resizes snap to other nodes and the page while Snap is on. Space and drag, the middle button, or two fingers pan. With nodes selected: arrows move it (Shift: 10 px), Ctrl or Cmd with arrows resizes it, Alt detaches a token or an anchor, the bracket keys rotate it, Delete removes it, Escape cancels a drag or clears the selection. Without a selection arrows pan. Plus and minus zoom, 0 shows 100 percent, 1 fits the page.">
+      <section class="pane pane-canvas" id="pane-canvas" aria-label="Canvas">
+        <div class="viewport" id="viewport" tabindex="0" role="application" aria-roledescription="canvas" aria-label="Page canvas. Click selects a node, Shift click adds to the selection. Drag on empty canvas to select with a band. Choose Text, Rectangle, Ellipse, or Line tools to draw on the page. Space and drag, the middle button, or two fingers pan. Arrows move, Ctrl or Cmd with arrows resize, brackets rotate, Delete removes, Escape clears.">
           <div class="stage" id="stage"><div class="page-frame" id="page-frame" hidden></div></div>
           <canvas class="page-canvas" id="page-canvas" aria-hidden="true"></canvas>
           <div class="stage" id="stage-over"><svg class="overlay" id="overlay" aria-hidden="true"></svg></div>
+          <button type="button" class="stale-badge" id="stale-badge" hidden><i data-icon="warning"></i><span>Source has a problem · showing the last good render</span></button>
+          <span class="badge render-badge" id="render-badge" hidden role="status">Rendering</span>
           <div class="gesture-hint" id="gesture-hint" hidden></div>
           <div class="canvas-empty" id="canvas-empty" hidden></div>
         </div>
+        <button type="button" class="reopen-left" id="reopen-left" aria-label="Show left panel" title="Show left panel (Ctrl+\)"><i data-icon="panelLeft"></i></button>
       </section>
     </div>
 
-    <aside class="panel panel-right" id="panel-right" aria-label="Inspector">
-      <section class="panel-section grow" aria-labelledby="inspector-title">
-        <h2 class="panel-title" id="inspector-title">Inspector</h2>
-        <div class="inspector" id="inspector"></div>
-      </section>
+    <aside class="panel panel-right" id="panel-right" aria-label="Properties">
+      <div class="inspector" id="inspector"></div>
     </aside>
   </main>
 
-  <section class="panel-bottom" id="panel-bottom" aria-labelledby="diag-title">
-    <div class="pane-head">
-      <h2 class="pane-title" id="diag-title">Diagnostics</h2>
-      <span class="diag-counts" id="diag-counts" aria-live="polite"></span>
-    </div>
-    <ul class="diag-list" id="diag-list"></ul>
-  </section>
-
   <footer class="statusbar">
-    <span class="status-item" id="status-valid" aria-live="polite"></span>
-    <span class="status-item" id="status-save" aria-live="polite"></span>
-    <span class="status-item" id="status-draft" aria-live="polite" hidden></span>
-    <button type="button" class="button" id="draft-entry" hidden>Browser drafts</button>
+    <span class="chip status-item" id="status-valid" aria-live="polite"></span>
+    <div class="menu-wrap up">
+      <button type="button" class="chip" id="problems-chip" aria-haspopup="dialog" aria-expanded="false" aria-controls="problems-pop">
+        <i data-icon="warning"></i><span id="problems-label">No problems</span>
+      </button>
+      <div class="popover problems-pop" id="problems-pop" role="dialog" aria-label="Problems" hidden>
+        <div class="pop-head">
+          <b>Problems</b>
+          <span class="diag-counts" id="diag-counts" aria-live="polite"></span>
+        </div>
+        <ul class="diag-list" id="diag-list"></ul>
+      </div>
+    </div>
+    <span class="status-item muted" id="status-save" aria-live="polite"></span>
+    <span class="status-item muted" id="status-draft" aria-live="polite" hidden></span>
+    <button type="button" class="chip" id="draft-entry" hidden>Browser drafts</button>
     <span class="status-spacer"></span>
-    <span class="status-item" id="status-conn" aria-live="polite"></span>
+    <span class="status-item muted" id="status-conn" aria-live="polite"></span>
     <span class="status-item muted" id="status-version"></span>
+    <button type="button" class="chip" id="cmdk-btn" title="All commands (Ctrl+K)"><i data-icon="search"></i><span>Commands</span><kbd>⌘K</kbd></button>
   </footer>
+
+  <!-- Phone bottom bar (≤ 720 px) -->
+  <nav class="phone-bar" id="phone-bar" aria-label="Panels">
+    <button type="button" data-sheet="layers"><i data-icon="layers"></i><span>Layers</span></button>
+    <button type="button" data-sheet="insert"><i data-icon="plus"></i><span>Insert</span></button>
+    <button type="button" data-sheet="edit"><i data-icon="sliders"></i><span>Edit</span></button>
+    <button type="button" data-sheet="code"><i data-icon="code"></i><span>Code</span></button>
+  </nav>
+  <div class="sheet" id="sheet" hidden>
+    <div class="sheet-grip"></div>
+    <div class="sheet-head">
+      <b id="sheet-title"></b>
+      <span class="sheet-sub" id="sheet-sub"></span>
+      <button type="button" class="tool" id="sheet-close" aria-label="Close"><i data-icon="close"></i></button>
+    </div>
+    <div class="sheet-body" id="sheet-body"></div>
+  </div>
 </div>
-<dialog class="doc-dialog" id="doc-dialog" aria-labelledby="doc-dialog-title">
-  <h2 class="pane-title" id="doc-dialog-title">Open a document</h2>
+
+<dialog class="modal open-dlg" id="open-dlg" aria-labelledby="open-dlg-title">
+  <div class="modal-head">
+    <h2 id="open-dlg-title">Open</h2>
+    <button type="button" class="tool" id="open-dlg-close" aria-label="Close"><i data-icon="close"></i></button>
+  </div>
+  <div class="otab">
+    <div class="device-choices">
+      <button type="button" class="device-card" id="open-device-file">
+        <span class="dc-icon"><i data-icon="page"></i></span>
+        <b>A single .zen file</b>
+        <small>Quickest. Linked images and fonts outside the file won't load.</small>
+      </button>
+      <button type="button" class="device-card" id="open-device-folder">
+        <span class="dc-icon"><i data-icon="folder"></i></span>
+        <b>A project folder</b>
+        <small>Recommended for agent projects. Zenith reads images, fonts, and libraries next to your designs.</small>
+      </button>
+    </div>
+    <p class="privacy-note">Files are read in your browser. Nothing is uploaded.</p>
+  </div>
+</dialog>
+
+<dialog class="modal cmdk" id="cmdk" aria-label="Commands">
+  <div class="cmdk-input"><i data-icon="search"></i><input id="cmdk-q" placeholder="Search commands, layers, tokens…" autocomplete="off"><kbd>esc</kbd></div>
+  <div class="cmdk-list" id="cmdk-list"></div>
+</dialog>
+
+<dialog class="doc-dialog" id="doc-dialog" aria-labelledby="doc-dialog-title" aria-describedby="doc-dialog-note">
+  <h2 class="pane-title" id="doc-dialog-title">Choose a document</h2>
   <p class="doc-dialog-note" id="doc-dialog-note"></p>
   <ul class="doc-dialog-list" id="doc-dialog-list"></ul>
   <div class="doc-dialog-actions"><button type="button" class="button" id="doc-dialog-cancel">Cancel</button></div>
 </dialog>
+
 <dialog class="doc-dialog" id="draft-dialog" aria-labelledby="draft-title">
   <h2 class="pane-title" id="draft-title">Browser drafts</h2>
   <p class="doc-dialog-note">Drafts stay in this browser. Download a .zen file to keep a copy.</p>
@@ -176,6 +294,7 @@
   <ul class="doc-dialog-list" id="draft-list"></ul>
   <div class="doc-dialog-actions"><button type="button" class="button" id="draft-close">Close</button></div>
 </dialog>
+
 <div class="toasts" id="toasts" role="status" aria-live="polite"></div>
 <div class="sr-only" id="announce" role="status" aria-live="polite"></div>
 </body>

@@ -17,29 +17,52 @@ export class Status {
     const dirty = app.dirty();
     const hosted = app.host.kind === "wasm";
     const t = app.diagnostics.tally();
-    byId("app").toggleAttribute("data-has-diagnostics", !!(t.error || t.warning || t.advisory));
+    const totalProblems = t.error + t.warning;
+
     const valid = byId("status-valid");
     const checking = hosted && app.sync.pending();
     byId("app").toggleAttribute("data-checking", checking);
     clear(valid);
     if (checking) {
+      valid.className = "chip status-item";
       valid.textContent = "Checking…";
-      valid.style.color = "";
     } else if (t.error > 0) {
-      valid.append(icon("error"), `${plural(t.error, "error")}`);
-      valid.style.color = "var(--danger)";
+      valid.className = "chip status-item err";
+      valid.append(icon("error"), "Showing last valid render");
     } else {
-      valid.append(icon("check"), t.warning ? `Valid, ${plural(t.warning, "warning")}` : "Valid");
-      valid.style.color = "var(--ok)";
+      valid.className = "chip status-item ok";
+      valid.append(icon("check"), "Valid");
     }
+
+    const pChip = byId("problems-chip");
+    const pLabel = byId("problems-label");
+    if (pChip && pLabel) {
+      pChip.className = t.error > 0 ? "chip err" : "chip";
+      pLabel.textContent =
+        t.error > 0
+          ? plural(t.error, "problem")
+          : totalProblems > 0
+            ? plural(totalProblems, "warning")
+            : "No problems";
+    }
+
+    byId("app").classList.toggle("has-error", t.error > 0);
     this.fileSave(dirty);
     const save = byId("save");
-    save.disabled = this.isSaving || app.readonly === true;
-    if (hosted) save.hidden = !app.host.handle && typeof window.showSaveFilePicker !== "function";
+    if (save) {
+      save.disabled = this.isSaving || app.readonly === true;
+      if (hosted) save.hidden = !app.host.handle && typeof window.showSaveFilePicker !== "function";
+    }
     const revision = byId("status-version");
-    revision.hidden = hosted;
-    revision.textContent = `v${app.sync.version}`;
-    byId("status-conn").textContent = this.conn;
+    if (revision) {
+      revision.hidden = hosted;
+      revision.textContent = `v${app.sync.version}`;
+    }
+    const conn = byId("status-conn");
+    if (conn) {
+      conn.hidden = hosted;
+      conn.textContent = this.conn;
+    }
     app.files?.updateActions();
     this.cursor();
   }
@@ -54,19 +77,38 @@ export class Status {
     const atRisk = hosted ? app.atRisk() : dirty;
     mark.hidden = hosted && !app.host.handle ? !atRisk : !dirty;
     document.title = `${mark.hidden ? "" : "● "}${app.name} · Zenith`;
+
+    const docState = byId("doc-state");
+    const statusSave = byId("status-save");
     if (hosted) {
-      byId("status-save").textContent = this.isSaving ? "Saving to file…"
-        : app.host.handle ? dirty ? "File not saved" : "File up to date"
-        : atRisk ? "Unsaved changes" : "";
+      const diskText = this.isSaving
+        ? "Saving to file…"
+        : app.host.handle
+          ? dirty
+            ? "File not saved"
+            : "File up to date"
+          : atRisk
+            ? "Unsaved changes"
+            : "";
+      if (statusSave) statusSave.textContent = diskText;
+      if (docState) {
+        docState.classList.toggle("dirty", dirty || this.isSaving);
+        docState.textContent = diskText || "Saved in browser";
+      }
       return;
     }
-    byId("status-save").textContent = this.isSaving
+    const text = this.isSaving
       ? "Saving"
       : dirty
         ? app.sync.pending()
           ? "Unsaved, syncing"
           : "Unsaved changes"
         : "Saved";
+    if (docState) {
+      docState.classList.toggle("dirty", dirty || this.isSaving);
+      docState.textContent = text;
+    }
+    if (statusSave) statusSave.textContent = text;
   }
 
   saving(on) {

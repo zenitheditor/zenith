@@ -245,7 +245,7 @@ export class SelectionController {
     app.layers.setSelection(ids);
     if (ids.length === 0) {
       app.overlay.setSelection([]);
-      app.inspector.showEmpty("Nothing selected. Click a node on the canvas, in the layers, or in the source.");
+      app.inspector.showEmpty();
       app.code.clearNode();
       return;
     }

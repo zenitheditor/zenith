@@ -1,14 +1,14 @@
 import { canPickDirectory, pickDocument, pickProject } from "../engine/wasm/files.js";
 import { byId } from "../util/dom.js";
 import { projectDocument } from "./project-picker.js";
-import { loadSample } from "./samples.js";
+import { blankPreset } from "./samples.js";
+import { hydrateIcons } from "../ui/icons.js";
 
 function showGallery() {
   if (document.querySelector('meta[name="zenith-gallery"]')?.content !== "true") return;
   byId("welcome-poster-image").src = "starters/poster.png";
-  byId("welcome-report-image").src = "starters/article.png";
-  byId("welcome-diagram-image").src = "starters/flowchart.png";
-  byId("welcome-poster-image").hidden = false;
+  byId("welcome-report-image").src = "starters/harbor-report.png";
+  byId("welcome-diagram-image").src = "starters/print-workflow.png";
   byId("welcome-poster").hidden = false;
   byId("welcome-gallery").hidden = false;
 }
@@ -29,6 +29,7 @@ export function showWelcome(open) {
   byId("app").hidden = true;
   byId("skip-source").hidden = true;
   showGallery();
+  hydrateIcons(welcome);
   welcome.hidden = false;
 
   async function choose(button, pick) {
@@ -46,25 +47,52 @@ export function showWelcome(open) {
       status.dataset.error = "true";
     } finally {
       choices.inert = false;
-      if (!welcome.hidden && !choices.hidden) button.focus();
+      if (!welcome.hidden && !choices.hidden) button?.focus();
     }
   }
 
-  function bind(id, pick) {
-    const button = byId(id);
-    button.addEventListener("click", () => choose(button, pick));
+  for (const btn of welcome.querySelectorAll("[data-preset]")) {
+    btn.addEventListener("click", () => choose(btn, async () => blankPreset(btn.dataset.preset)));
   }
 
-  bind("welcome-blank", async () => ({
-    ...(await loadSample("starters/blank.zen")), name: "Untitled.zen", draftSource: { kind: "blank" },
-  }));
   const device = async (pick) => {
     const spec = await pick();
     return spec && { ...spec, draftSource: { kind: "device" } };
   };
-  bind("welcome-open", () => device(pickDocument));
-  if (canPickDirectory() || "webkitdirectory" in document.createElement("input")) {
-    byId("welcome-folder").hidden = false;
-    bind("welcome-folder", () => device(pickFolder));
+
+  byId("welcome-open")?.addEventListener("click", () => choose(byId("welcome-open"), () => device(pickDocument)));
+  const canDir = canPickDirectory() || "webkitdirectory" in document.createElement("input");
+  const folderBtn = byId("welcome-folder");
+  if (folderBtn && canDir) {
+    folderBtn.hidden = false;
+    folderBtn.addEventListener("click", () => choose(folderBtn, () => device(pickFolder)));
   }
+
+  // Open dialog trigger from Welcome header
+  const openDlg = byId("open-dlg");
+  byId("welcome-open-dlg")?.addEventListener("click", () => {
+    if (!openDlg) return;
+    hydrateIcons(openDlg);
+    openDlg.showModal();
+  });
+  byId("open-dlg-close")?.addEventListener("click", () => openDlg?.close());
+  openDlg?.addEventListener("click", (e) => {
+    if (e.target === openDlg) openDlg.close();
+  });
+  byId("open-device-file")?.addEventListener("click", () => {
+    openDlg?.close();
+    choose(byId("welcome-open"), () => device(pickDocument));
+  });
+  const devFolder = byId("open-device-folder");
+  if (devFolder) {
+    devFolder.hidden = !canDir;
+    devFolder.addEventListener("click", () => {
+      openDlg?.close();
+      choose(byId("welcome-folder"), () => device(pickFolder));
+    });
+  }
+  byId("welcome-theme")?.addEventListener("click", () => {
+    const h = document.documentElement;
+    h.dataset.theme = h.dataset.theme === "dark" ? "light" : "dark";
+  });
 }

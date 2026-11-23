@@ -124,10 +124,35 @@ function numberField(name, label, aria, value, axis, set) {
     }
   });
   const marker = AXES[axis];
+  const lbl = h("span", { class: "edit-label scrub", text: label, title: `${aria} (drag to scrub)` });
+  lbl.addEventListener("pointerdown", (ev) => {
+    if (ev.button !== 0) return;
+    const start = Number(input.value);
+    if (!Number.isFinite(start)) return;
+    ev.preventDefault();
+    const x0 = ev.clientX;
+    lbl.setPointerCapture(ev.pointerId);
+    const step = name === "opacity" ? 0.01 : 1;
+    const onMove = (m) => {
+      const mult = m.shiftKey ? 10 : 1;
+      let next = start + Math.round((m.clientX - x0) / 2) * step * mult;
+      if (name === "opacity") next = Math.min(1, Math.max(0, Math.round(next * 100) / 100));
+      input.value = num(next, 3);
+    };
+    const onUp = () => {
+      lbl.removeEventListener("pointermove", onMove);
+      lbl.removeEventListener("pointerup", onUp);
+      lbl.removeEventListener("pointercancel", onUp);
+      if (Number(input.value) !== start) commit();
+    };
+    lbl.addEventListener("pointermove", onMove);
+    lbl.addEventListener("pointerup", onUp);
+    lbl.addEventListener("pointercancel", onUp);
+  });
   return h(
     "label",
     { class: "edit-field" },
-    h("span", { class: "edit-label", text: label }),
+    lbl,
     input,
     marker ? h("span", { class: `edit-axis ${axis}`, title: marker[1] }, icon(marker[0]), h("span", { class: "sr-only", text: marker[1] })) : null,
   );
@@ -292,8 +317,8 @@ function alignField(value, set) {
   return h("label", { class: "edit-row" }, h("span", { class: "edit-label wide", text: "Align" }), select);
 }
 
-export function textField(value, set) {
-  const area = h("textarea", { class: "edit-text", rows: "2", "aria-label": "Text content", dataset: { field: "text" } });
+export function textField(value, set, label = "Text") {
+  const area = h("textarea", { class: "edit-text", rows: "2", "aria-label": label, dataset: { field: "text" } });
   area.value = value;
   const commit = async () => {
     if (area.value === value) return;
@@ -310,7 +335,7 @@ export function textField(value, set) {
       area.blur();
     }
   });
-  return [h("h3", { text: "Text" }), area, h("p", { class: "edit-tip", text: "Ctrl+Enter or leaving the field applies it." })];
+  return [h("h3", { text: label }), area, h("p", { class: "edit-tip", text: "Ctrl+Enter or leaving the field applies it." })];
 }
 
 /** One text field per span; a styled span keeps its own attributes. */

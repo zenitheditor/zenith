@@ -21,8 +21,17 @@
 
 /* Panning wins over the gesture cursor set in script. */
 .viewport.panning,
-.viewport.space {
+.viewport.space,
+.viewport.tool-hand {
   cursor: grab !important;
+}
+
+.viewport.tool-add {
+  cursor: crosshair;
+}
+
+.app.has-error .page-canvas {
+  filter: saturate(0.7) brightness(0.88);
 }
 
 .viewport.panning:active {

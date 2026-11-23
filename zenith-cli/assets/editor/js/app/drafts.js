@@ -192,7 +192,7 @@ export class Drafts {
     this.entry.hidden = !this.app || !(this.hasDrafts || this.error || scope?.message
       || (scope?.source?.kind === "device" && !scope.enabled));
     this.welcome.hidden = !(this.hasDrafts || this.error);
-    this.welcome.textContent = this.hasDrafts ? "Resume draft" : "Browser drafts";
+    byId("welcome-drafts-label").textContent = this.hasDrafts ? "Resume draft" : "Browser drafts";
     this.optIn.hidden = !(scope?.source?.kind === "device" && !scope.enabled);
     const status = byId("status-draft");
     const label = scope?.message || (scope?.writing || scope?.pending ? "Saving browser draft…"

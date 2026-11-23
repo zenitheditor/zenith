@@ -10,10 +10,14 @@ import { Renderer } from "../canvas/render.js";
 import { DiagnosticsPanel } from "../panels/diagnostics.js";
 import { Inspector } from "../panels/inspector.js";
 import { Layers } from "../panels/layers.js";
+import { TokensPanel } from "../panels/tokens.js";
 import { BufferSync } from "../sync/buffer.js";
+import { CommandPalette } from "../ui/cmdk.js";
+import { HistoryUI } from "../ui/history.js";
+import { icon } from "../ui/icons.js";
 import { Layout } from "../ui/layout.js";
 import { Notices } from "../ui/notify.js";
-import { byId } from "../util/dom.js";
+import { byId, clear, h } from "../util/dom.js";
 import { OffsetIndex } from "../util/text.js";
 import { Serial } from "../util/serial.js";
 import { debounce } from "../util/timing.js";
@@ -21,9 +25,9 @@ import { NodeActions } from "./actions.js";
 import { EventRouter } from "./events.js";
 import { FileTools } from "./files.js";
 import { GestureController } from "./gestures.js";
-import { FEATURED_POSTER } from "./samples.js";
 import { SelectionController } from "./selection.js";
 import { Status } from "./status.js";
+import { ToolController } from "./tools.js";
 
 const REFRESH_MS = 40;
 const SEVERITY = { error: "error", warning: "warning", advisory: "info" };
@@ -48,7 +52,7 @@ export class App {
     this.drafts = drafts;
 
     this.notices = new Notices(byId("banners"), byId("toasts"));
-    this.layout = new Layout({ poster: this.example === FEATURED_POSTER });
+    this.layout = new Layout({ starter: Boolean(this.example) });
     this.events = new EventRouter(this);
     this.engine = this.events.track(engine);
     /**
@@ -82,12 +86,19 @@ export class App {
     this.paint = new PageCanvas(byId("viewport"), byId("page-canvas"));
     const stages = [byId("stage"), byId("stage-over")];
     this.view = new CanvasView(byId("viewport"), stages, byId("page-frame"), byId("overlay"), this.paint, {
-      click: (x, y, e) => this.selection.canvasClick(x, y, e),
+      click: (x, y, e) => {
+        if (this.tools.isDrawing()) {
+          this.tools.clickDraw({ x, y });
+          return;
+        }
+        this.selection.canvasClick(x, y, e);
+      },
       hover: (x, y) => {
         this.selection.hover(x, y);
         this.gestures.pointer(x === null ? null : { x, y });
       },
       grab: (p, e) => this.gestures.grab(p, e),
+      hand: () => this.tools.isHand(),
       key: (e) => this.actions.key(e),
       zoomed: () => {
         this.renderer.zoomed();
@@ -107,18 +118,32 @@ export class App {
     });
     this.inspector = new Inspector(byId("inspector"), {
       set: (id, params) => this.actions.set(id, params),
-      guideText: (id) => this.example === FEATURED_POSTER && id === "headline",
+      guideText: (id) => this.example !== null && id === "headline",
     });
     this.layers = new Layers(byId("pages"), byId("layers"), {
       page: (n) => this.selection.goToPage(n),
       select: (id) => this.selection.selectIds([id], "layers"),
+      selectMany: (ids) => this.selection.selectIds(ids, "layers"),
     });
-    this.diagnostics = new DiagnosticsPanel(byId("diag-list"), byId("diag-counts"), (d) =>
-      this.jumpToDiagnostic(d),
-    );
+    this.tokenList = [];
+    this.tokensPanel = new TokensPanel(byId("tokens"), (t) => {
+      this.layout.showSource(true);
+      const idx = this.code.text().indexOf(`id="${t.id}"`);
+      if (idx >= 0) this.code.jumpTo(idx, idx + t.id.length + 5);
+    });
+    this.diagnostics = new DiagnosticsPanel(byId("diag-list"), byId("diag-counts"), (d) => {
+      this.layout.closePopovers();
+      this.layout.closeSheet();
+      this.jumpToDiagnostic(d);
+    });
     this.selection = new SelectionController(this);
     this.gestures = new GestureController(this, byId("gesture-hint"));
     this.actions = new NodeActions(this);
+    this.tools = new ToolController(this);
+    this.historyUI = new HistoryUI(this);
+    this.cmdk = new CommandPalette(this);
+    this.layout.historyClose = () => this.historyUI.close();
+    this.bindPhoneSheets();
     this.refreshLater = debounce(() => this.refreshDocument(), REFRESH_MS);
     this.layout.onChange(() => this.overlay.draw());
     // The static host opens files itself; `zenith edit` serves one file.
@@ -138,41 +163,148 @@ export class App {
     await this.diagnose();
     this.renderer.request({ fit: true });
     await this.refreshDocument();
-    if (this.example === FEATURED_POSTER) await this.selection.selectIds(["headline"], "starter");
+    await this.historyUI.refresh();
+    if (this.example !== null) await this.selection.selectIds(["headline"], "starter");
     this.events.subscribe();
     const summary = await this.engine.state({ text: true });
     this.events.summary(summary);
   }
 
+  bindPhoneSheets() {
+    const titleEl = byId("sheet-title");
+    const subEl = byId("sheet-sub");
+    const bodyEl = byId("sheet-body");
+    const origins = {
+      layers: { el: byId("layers"), home: byId("layers")?.parentElement },
+      edit: { el: byId("inspector"), home: byId("inspector")?.parentElement },
+      code: { el: byId("code-host"), home: byId("code-host")?.parentElement },
+      problems: { el: byId("diag-list"), home: byId("diag-list")?.parentElement },
+    };
+    const restoreAll = () => {
+      for (const o of Object.values(origins)) {
+        if (o.el && o.home && o.el.parentElement !== o.home) o.home.appendChild(o.el);
+      }
+    };
+    this.layout.sheetHandlers = {
+      render: (kind) => {
+        restoreAll();
+        clear(bodyEl);
+        if (subEl) subEl.textContent = "";
+        if (kind === "layers") {
+          titleEl.textContent = "Layers";
+          if (origins.layers.el) bodyEl.appendChild(origins.layers.el);
+        } else if (kind === "edit") {
+          titleEl.textContent = this.selectionIds.length === 1 ? this.selectionIds[0] : "Page";
+          if (subEl) subEl.textContent = this.selectionIds.length > 1 ? `${this.selectionIds.length} selected` : "";
+          if (origins.edit.el) bodyEl.appendChild(origins.edit.el);
+        } else if (kind === "code") {
+          titleEl.textContent = "Source";
+          if (origins.code.el) bodyEl.appendChild(origins.code.el);
+        } else if (kind === "problems") {
+          titleEl.textContent = "Problems";
+          if (origins.problems.el) bodyEl.appendChild(origins.problems.el);
+        } else if (kind === "insert") {
+          titleEl.textContent = "Insert";
+          const items = [
+            ["text", "Text"],
+            ["rect", "Rectangle"],
+            ["ellipse", "Ellipse"],
+            ["line", "Line"],
+          ];
+          bodyEl.appendChild(
+            h(
+              "div",
+              { class: "insert-grid" },
+              items.map(([k, label]) =>
+                h(
+                  "button",
+                  {
+                    type: "button",
+                    onclick: () => {
+                      this.layout.closeSheet();
+                      this.tools.set(k);
+                    },
+                  },
+                  icon(k, "icon"),
+                  h("span", { text: label }),
+                ),
+              ),
+            ),
+          );
+        }
+      },
+      closed: () => restoreAll(),
+    };
+  }
+
   bindControls() {
-    byId("save").addEventListener("click", () => this.save());
-    byId("undo").addEventListener("click", () => this.history("history.undo"));
-    byId("redo").addEventListener("click", () => this.history("history.redo"));
-    byId("zoom-in").addEventListener("click", () => this.view.zoomTo(this.view.zoom * 1.25));
-    byId("zoom-out").addEventListener("click", () => this.view.zoomTo(this.view.zoom / 1.25));
-    byId("zoom-100").addEventListener("click", () => this.view.actualSize());
-    byId("zoom-fit").addEventListener("click", () => this.view.fit());
-    const snap = byId("snap-toggle");
-    snap.setAttribute("aria-pressed", String(this.gestures.snapOn));
-    snap.addEventListener("click", () => {
-      const on = !this.gestures.snapOn;
-      this.gestures.setSnap(on);
-      snap.setAttribute("aria-pressed", String(on));
-      this.notices.toast(on ? "Snapping on." : "Snapping off.", "info");
+    byId("save")?.addEventListener("click", () => this.save());
+    byId("zoom-in")?.addEventListener("click", () => {
+      this.layout.closePopovers();
+      this.view.zoomTo(this.view.zoom * 1.25);
     });
+    byId("zoom-out")?.addEventListener("click", () => {
+      this.layout.closePopovers();
+      this.view.zoomTo(this.view.zoom / 1.25);
+    });
+    byId("zoom-100")?.addEventListener("click", () => {
+      this.layout.closePopovers();
+      this.view.actualSize();
+    });
+    byId("zoom-fit")?.addEventListener("click", () => {
+      this.layout.closePopovers();
+      this.view.fit();
+    });
+    byId("cmdk-btn")?.addEventListener("click", () => this.cmdk.open());
+    byId("menu-cmdk")?.addEventListener("click", () => {
+      this.layout.closePopovers();
+      this.cmdk.open();
+    });
+    byId("stale-badge")?.addEventListener("click", () => this.layout.openProblems());
+    const snap = byId("snap-toggle");
+    if (snap) {
+      snap.setAttribute("aria-pressed", String(this.gestures.snapOn));
+      snap.classList.toggle("on", this.gestures.snapOn);
+      snap.addEventListener("click", () => {
+        const on = !this.gestures.snapOn;
+        this.gestures.setSnap(on);
+        snap.setAttribute("aria-pressed", String(on));
+        snap.classList.toggle("on", on);
+      });
+    }
     document.addEventListener("keydown", (e) => {
       if (this.files && (this.files.switching || document.querySelector("dialog[open]"))) return;
       const mod = e.ctrlKey || e.metaKey;
-      if (!mod || e.altKey) return;
-      if (e.target instanceof Element && e.target.closest(".cm-editor")) return;
       const key = e.key.toLowerCase();
+      if (mod && !e.altKey && !e.shiftKey && key === "k") {
+        e.preventDefault();
+        this.cmdk.open();
+        return;
+      }
+      if (e.target instanceof Element && e.target.closest(".cm-editor")) return;
       const field = e.target instanceof Element && e.target.closest("input, textarea, select");
-      if (key === "s") this.save();
-      else if (key === "d" && !e.shiftKey && !field) this.actions.duplicate();
-      else if (key === "z" && !e.shiftKey) this.history("history.undo");
-      else if ((key === "z" && e.shiftKey) || key === "y") this.history("history.redo");
-      else return;
-      e.preventDefault();
+      if (mod && !e.altKey) {
+        if (key === "s") this.save();
+        else if (key === "1") this.layout.setView("design");
+        else if (key === "2") this.layout.setView("split");
+        else if (key === "3") this.layout.setView("code");
+        else if (e.key === "\\") this.layout.toggle("left");
+        else if (key === "d" && !e.shiftKey && !field) this.actions.duplicate();
+        else if (key === "z" && !e.shiftKey) this.history("history.undo");
+        else if ((key === "z" && e.shiftKey) || key === "y") this.history("history.redo");
+        else return;
+        e.preventDefault();
+        return;
+      }
+      if (field || e.altKey) return;
+      const toolKeys = { v: "move", t: "text", r: "rect", o: "ellipse", l: "line", h: "hand" };
+      if (toolKeys[key]) {
+        this.tools.set(toolKeys[key]);
+        e.preventDefault();
+      } else if (e.key === "Escape" && this.tools.mode !== "move") {
+        this.tools.set("move");
+        e.preventDefault();
+      }
     });
     window.addEventListener("beforeunload", (e) => {
       if (!this.atRisk()) return;
@@ -238,6 +370,12 @@ export class App {
     if (Array.isArray(reply?.selection)) this.selectionIds = reply.selection;
     this.selection.textChanged();
     this.status.update();
+    if (info.source === "typing") {
+      const ub = byId("undo");
+      if (ub) ub.disabled = false;
+    } else {
+      this.historyUI.refresh();
+    }
     if (info.frame) this.applyFrame(info.frame);
     else this.refreshLater();
   }
@@ -272,10 +410,15 @@ export class App {
     if (outline.ok) {
       this.outline = outline.result;
       this.layers.setOutline(outline.result);
+      this.inspector.setPageInfo(outline.result, this.page);
       this.status.stale(outline.result.stale);
     }
     const tokens = env("doc.tokens");
-    if (tokens.ok) this.inspector.setTokens(tokens.result.tokens);
+    if (tokens.ok) {
+      this.tokenList = tokens.result.tokens ?? [];
+      this.inspector.setTokens(this.tokenList);
+      this.tokensPanel.set(this.tokenList);
+    }
     await this.selection.applyFrame({
       head,
       version: this.sync.version,
@@ -293,10 +436,15 @@ export class App {
     if (outline.ok) {
       this.outline = outline.result;
       this.layers.setOutline(outline.result);
+      this.inspector.setPageInfo(outline.result, this.page);
       this.status.stale(outline.result.stale);
     }
     const tokens = await this.engine.run("doc.tokens", {});
-    if (tokens.ok) this.inspector.setTokens(tokens.result.tokens);
+    if (tokens.ok) {
+      this.tokenList = tokens.result.tokens ?? [];
+      this.inspector.setTokens(this.tokenList);
+      this.tokensPanel.set(this.tokenList);
+    }
     await this.selection.refresh("document");
   }
 
@@ -341,8 +489,7 @@ export class App {
   jumpToDiagnostic(d) {
     const from = this.paneAt(d.start);
     const to = this.paneAt(typeof d.end === "number" ? d.end : d.start);
-    if (this.layout.full === "canvas") this.layout.setFull("none");
-    if (this.layout.poster && !this.layout.poster.source) this.layout.showSource(true);
+    this.layout.showSource(true);
     this.code.jumpTo(from, to);
   }
 
@@ -379,13 +526,28 @@ export class App {
   history(command) {
     return this.intents.run(async () => {
       const env = await this.sync.edit((version) => this.engine.run(command, {}, { version }), "history");
-      if (env.ok) return;
+      if (env.ok) {
+        await this.historyUI.refresh();
+        return;
+      }
       const code = env.error?.code;
       if (code === "editor.nothing_to_undo" || code === "editor.nothing_to_redo") {
-        this.notices.toast(code === "editor.nothing_to_undo" ? "Nothing to undo." : "Nothing to redo.", "info");
+        await this.historyUI.refresh();
         return;
       }
       this.notices.error(command, env, { runOffer: (o) => this.runOffer(o) });
+    });
+  }
+
+  /** Jump directly to a step in the engine history timeline (`history.goto`). */
+  historyGoto(index) {
+    return this.intents.run(async () => {
+      const env = await this.sync.edit((version) => this.engine.run("history.goto", { index }, { version }), "history");
+      if (env.ok) {
+        await this.historyUI.refresh();
+        return;
+      }
+      this.notices.error("history.goto", env, { runOffer: (o) => this.runOffer(o) });
     });
   }
 
@@ -461,7 +623,7 @@ export class App {
    */
   documentOpened(data) {
     this.example = null;
-    this.layout.clearPoster();
+    this.layout.resetDocument();
     this.path = data.path;
     this.name = data.name;
     byId("doc-name").textContent = this.name;

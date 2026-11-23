@@ -1,6 +1,6 @@
-/* Page shell: top bar, notices, workspace (panels, split panes), bottom
-   diagnostics, status bar. Collapsed panels and fullscreen modes are
-   `data-*` attributes on `.app`. */
+/* Editor shell: 44 px top bar, workspace (tabbed left rail, Design|Split|Code
+   center, right Inspector), 28 px status bar, tablet drawer, and <=720 px
+   dedicated phone layout (bottom bar + sheets). */
 
 *,
 *::before,
@@ -43,7 +43,7 @@ body {
   top: -48px;
   z-index: 100;
   padding: var(--space-2) var(--space-3);
-  background: var(--surface);
+  background: var(--raised);
   color: var(--accent);
   border-radius: var(--radius);
   box-shadow: var(--shadow-pop);
@@ -55,42 +55,84 @@ body {
 
 :focus-visible {
   outline: 2px solid var(--focus);
-  outline-offset: 2px;
+  outline-offset: 1px;
+  border-radius: var(--radius-sm);
 }
 
 .app {
   display: grid;
-  grid-template-rows: var(--bar-h) auto minmax(0, 1fr) auto var(--status-h);
-  grid-template-areas: "top" "notices" "work" "bottom" "status";
+  grid-template-rows: var(--bar-h) auto minmax(0, 1fr) var(--status-h);
+  grid-template-areas: "top" "notices" "work" "status";
   height: 100vh;
   height: 100dvh;
   width: 100%;
   overflow: hidden;
 }
 
-/* Top bar */
+/* ── Top bar ───────────────────────────────────────────── */
 
 .topbar {
   grid-area: top;
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  gap: var(--space-3);
+  gap: 10px;
   min-width: 0;
-  padding: 0 var(--space-4);
+  padding: 0 10px;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
+}
+
+.bar-left,
+.bar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.bar-right {
+  justify-content: flex-end;
+}
+
+.logo-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 30px;
+  padding: 0 6px 0 6px;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+}
+
+.logo-btn:hover,
+.logo-btn[aria-expanded="true"] {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.logo-btn img {
+  width: 22px;
+  height: 22px;
+  padding: 3px;
+  border-radius: 5px;
+  background: #ffffff;
+  box-shadow: 0 0 0 1px rgb(11 26 46 / 0.08);
 }
 
 .doc-title {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: 6px;
   min-width: 0;
-  flex: 1 1 auto;
 }
 
 .doc-name {
   font-weight: 600;
+  font-size: var(--t-13);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -98,26 +140,88 @@ body {
 
 .dirty-mark {
   flex: none;
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   background: var(--warning);
 }
 
-.toolbar {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  flex: none;
+.doc-state {
+  color: var(--text-faint);
+  font-size: var(--t-11);
+  white-space: nowrap;
 }
 
-.tool-group {
+.doc-state.dirty {
+  color: var(--warning);
+}
+
+.tools-pill {
   display: flex;
   align-items: center;
   gap: 2px;
+  padding: 3px;
+  border-radius: var(--radius-lg);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
 }
 
-/* Notices */
+.tools-pill .tool {
+  width: 30px;
+  height: 28px;
+  border-radius: 6px;
+}
+
+.tools-pill .tool.on {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+
+.pill-sep {
+  width: 1px;
+  height: 16px;
+  background: var(--border-strong);
+  margin: 0 2px;
+}
+
+.undo-redo {
+  display: flex;
+  gap: 2px;
+}
+
+.undo-redo .tool {
+  position: relative;
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.undo-redo .tool.pressing::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 2px;
+  background: var(--accent);
+  animation: hold-bar 450ms linear forwards;
+}
+
+@keyframes hold-bar {
+  from {
+    width: 0;
+  }
+  to {
+    width: 100%;
+  }
+}
+
+.app[data-view="code"] .tools-pill,
+.app[data-view="code"] .zoom-btn {
+  visibility: hidden;
+}
+
+/* ── Notices ───────────────────────────────────────────── */
 
 .banners {
   grid-area: notices;
@@ -126,7 +230,7 @@ body {
   min-width: 0;
 }
 
-/* Workspace */
+/* ── Workspace ─────────────────────────────────────────── */
 
 .workspace {
   grid-area: work;
@@ -155,8 +259,34 @@ body {
 }
 
 .app[data-left="closed"] .panel-left,
-.app[data-right="closed"] .panel-right {
+.app[data-right="closed"] .panel-right,
+.app[data-view="code"] .panel-right {
   display: none;
+}
+
+.reopen-left {
+  display: none;
+  position: absolute;
+  left: 10px;
+  top: 10px;
+  z-index: 10;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--raised);
+  color: var(--text-muted);
+  box-shadow: var(--shadow-pop);
+  cursor: pointer;
+}
+
+.reopen-left:hover {
+  color: var(--text);
+}
+
+.app[data-left="closed"] .reopen-left {
+  display: grid;
 }
 
 .center {
@@ -165,6 +295,7 @@ body {
   flex: 1 1 0;
   min-width: 0;
   min-height: 0;
+  position: relative;
 }
 
 .pane {
@@ -173,6 +304,7 @@ body {
   min-width: 0;
   min-height: 0;
   background: var(--surface);
+  position: relative;
 }
 
 .pane-code {
@@ -199,17 +331,16 @@ body {
   align-items: center;
   gap: var(--space-2);
   min-width: 0;
-  min-height: 40px;
-  padding: 0 var(--space-2) 0 var(--space-4);
+  height: 36px;
+  padding: 0 12px;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
 }
 
 .pane-title {
   margin: 0;
-  font-size: 12px;
+  font-size: var(--t-11);
   font-weight: 600;
-  letter-spacing: 0.02em;
   color: var(--text-muted);
   white-space: nowrap;
 }
@@ -218,6 +349,7 @@ body {
   flex: 1 1 auto;
   min-width: 0;
   color: var(--text-faint);
+  font-size: var(--t-11);
   font-variant-numeric: tabular-nums;
   text-align: right;
   white-space: nowrap;
@@ -263,60 +395,50 @@ body {
   display: none;
 }
 
-/* Bottom diagnostics */
+/* View states */
 
-.panel-bottom {
-  grid-area: bottom;
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  background: var(--surface);
-  border-top: 1px solid var(--border);
-}
-
-.panel-bottom .diag-list {
-  height: var(--diag-h);
-}
-
-.app[data-bottom="closed"] .panel-bottom .diag-list {
+.app[data-view="design"] .pane-code,
+.app[data-view="design"] .divider,
+.app[data-source="closed"] .pane-code,
+.app[data-source="closed"] .divider {
   display: none;
 }
 
-.app[data-bottom="closed"] .panel-bottom .pane-head {
-  border-bottom: 0;
-}
-
-.app[data-poster="true"][data-bottom="closed"]:not([data-has-diagnostics]) .panel-bottom {
+.app[data-view="code"] .divider,
+.app[data-view="code"] .pane-canvas {
   display: none;
 }
 
-/* Status bar */
+.app[data-view="code"] .pane-code {
+  flex: 1 1 0;
+}
+
+/* ── Status bar ────────────────────────────────────────── */
 
 .statusbar {
   grid-area: status;
   display: flex;
   align-items: center;
-  gap: var(--space-4);
+  gap: 6px;
   min-width: 0;
-  padding: 0 var(--space-4);
-  background: var(--surface-2);
+  padding: 0 8px;
+  background: var(--surface);
   border-top: 1px solid var(--border);
-  color: var(--text-muted);
-  font-size: 12px;
+  color: var(--text-faint);
+  font-size: var(--t-11);
   white-space: nowrap;
-  overflow: hidden;
 }
 
 .status-item {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   min-width: 0;
 }
 
 .status-item .icon {
-  width: 14px;
-  height: 14px;
+  width: 13px;
+  height: 13px;
 }
 
 .status-spacer {
@@ -327,195 +449,224 @@ body {
   color: var(--text-faint);
 }
 
-/* Fullscreen modes */
+/* ── Phone bottom bar & sheets (hidden on desktop) ─────── */
 
-.app[data-full="code"] .panel,
-.app[data-full="code"] .divider,
-.app[data-full="code"] .pane-canvas,
-.app[data-full="code"] .panel-bottom,
-.app[data-full="canvas"] .panel,
-.app[data-full="canvas"] .divider,
-.app[data-full="canvas"] .pane-code,
-.app[data-full="canvas"] .panel-bottom {
+.phone-bar,
+.sheet {
   display: none;
 }
 
-.app[data-full="code"] .pane-code {
-  flex: 1 1 0;
+/* ── Laptop (<= 1240 px) ───────────────────────────────── */
+
+@media (max-width: 1240px) {
+  .seg button span {
+    display: none;
+  }
+
+  .doc-state {
+    display: none;
+  }
 }
 
-.app[data-source="closed"] .pane-code,
-.app[data-source="closed"] .divider {
-  display: none;
+/* ── Tablet (721–860 px) ───────────────────────────────── */
+
+@media (max-width: 860px) {
+  .panel-left {
+    display: none;
+  }
+
+  .reopen-left {
+    display: grid;
+  }
+
+  .app.left-drawer .panel-left {
+    display: flex;
+    position: fixed;
+    left: 0;
+    top: var(--bar-h);
+    bottom: var(--status-h);
+    z-index: 35;
+    width: 240px;
+    box-shadow: var(--shadow-pop);
+  }
+
+  .tools-pill .pill-sep,
+  .tools-pill .tool[data-tool="hand"] {
+    display: none;
+  }
 }
 
-.inspector-advanced {
-  margin-block: var(--space-3);
-}
-
-.inspector-advanced summary {
-  cursor: pointer;
-}
-
-/* Phone width: one column. The panes stack; panels follow below. */
+/* ── Phone (<= 720 px) ─────────────────────────────────── */
 
 @media (max-width: 720px) {
+  .app {
+    grid-template-rows: var(--bar-h) auto minmax(0, 1fr) auto;
+    grid-template-areas: "top" "notices" "work" "phone";
+  }
+
   .topbar {
-    padding: 0 var(--space-2) 0 var(--space-4);
+    grid-template-columns: 1fr auto;
+    gap: 6px;
+    padding: 0 6px;
+    padding-top: env(safe-area-inset-top);
   }
 
-  .toolbar {
-    gap: var(--space-1);
+  .tools-pill,
+  .seg,
+  .menu-wrap:has(#zoom-btn),
+  .panel-left,
+  .panel-right,
+  .statusbar,
+  .reopen-left {
+    display: none !important;
   }
 
-  .toolbar .button span {
+  .doc-name {
+    font-size: 14px;
+    max-width: 36vw;
+  }
+
+  .undo-redo .tool {
+    width: 38px;
+    height: 38px;
+  }
+
+  .bar-right .button {
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    justify-content: center;
+  }
+
+  .bar-right .button span {
     display: none;
   }
 
-  /* A phone seldom picks a folder. */
-  #open-folder {
-    display: none;
+  .app[data-view] .pane-code,
+  .app[data-view] .divider {
+    display: none !important;
   }
 
-  .workspace {
+  .app[data-view] .pane-canvas {
+    display: flex !important;
+  }
+
+  .popover.history {
+    position: fixed;
+    left: 8px;
+    right: 8px;
+    top: calc(var(--bar-h) + 6px);
+    width: auto;
+  }
+
+  .phone-bar {
+    grid-area: phone;
+    display: flex;
+    height: calc(58px + env(safe-area-inset-bottom));
+    padding: 4px 8px env(safe-area-inset-bottom);
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+  }
+
+  .phone-bar button {
+    flex: 1;
+    display: flex;
     flex-direction: column;
-    overflow-y: auto;
-    overflow-x: hidden;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    border: 0;
+    border-radius: 10px;
+    background: transparent;
+    color: var(--text-faint);
+    font-size: 10.5px;
+    font-weight: 600;
+    cursor: pointer;
   }
 
-  /* The panes fill the visible workspace; panels scroll in below. */
-  .center {
-    flex: none;
+  .phone-bar button .icon {
+    width: 20px;
+    height: 20px;
+  }
+
+  .phone-bar button.on {
+    color: var(--accent);
+  }
+
+  .sheet:not([hidden]) {
+    display: flex;
     flex-direction: column;
-    height: 100%;
-    min-height: 420px;
-  }
-
-  html[data-host="wasm"] .app {
-    grid-template-rows: auto auto minmax(0, 1fr) auto var(--status-h);
-    --tool: 28px;
-  }
-
-  html[data-host="wasm"] .topbar {
-    flex-wrap: wrap;
-    gap: var(--space-1);
-    padding-block: var(--space-1);
-  }
-
-  html[data-host="wasm"] .doc-title {
-    flex-basis: 100%;
-  }
-
-  html[data-host="wasm"] .toolbar {
-    flex-wrap: wrap;
-    max-width: 100%;
-  }
-
-  .app[data-poster="true"][data-full="none"][data-source="closed"] .center {
-    min-height: 0;
-    height: clamp(280px, 55vh, 480px);
-  }
-
-  #theme {
-    display: none;
-  }
-
-  .app[data-full="code"] .center,
-  .app[data-full="canvas"] .center {
-    height: 100%;
-    min-height: 0;
-    flex: 1 1 0;
-  }
-
-  .pane-code {
-    flex: 0 0 calc(var(--split) * 100% - 3px);
-  }
-
-  .divider {
-    flex: 0 0 12px;
-    margin: -4px 0;
-    cursor: row-resize;
-  }
-
-  .divider::before {
-    top: 50%;
-    bottom: auto;
+    position: fixed;
     left: 0;
     right: 0;
-    width: auto;
-    height: 1px;
-    transform: translateY(-50%);
+    bottom: calc(58px + env(safe-area-inset-bottom));
+    z-index: 40;
+    max-height: 58vh;
+    background: var(--raised);
+    border-radius: 16px 16px 0 0;
+    box-shadow: 0 -12px 40px rgb(0 0 0 / 0.38);
   }
 
-  .divider:hover::before,
-  .divider.dragging::before,
-  .divider:focus-visible::before {
-    width: auto;
-    height: 3px;
-  }
-
-  .divider-grip {
-    display: block;
-    position: absolute;
-    left: 50%;
-    top: 50%;
+  .sheet-grip {
     width: 36px;
     height: 4px;
-    transform: translate(-50%, -50%);
     border-radius: 2px;
     background: var(--border-strong);
+    margin: 8px auto 2px;
   }
 
-  .panel-left,
-  .panel-right {
-    flex: none;
-    border: 0;
-    border-top: 1px solid var(--border);
-    overflow: visible;
+  .sheet-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 8px 6px 16px;
+    border-bottom: 1px solid var(--border);
   }
 
-  .panel-right {
-    order: 2;
+  .sheet-head b {
+    font-size: 15px;
   }
 
-  .panel-left {
-    order: 3;
+  .sheet-sub {
+    font-size: var(--t-11);
+    color: var(--text-faint);
+    margin-left: 8px;
+    margin-right: auto;
   }
 
-  .statusbar {
-    gap: var(--space-3);
+  .sheet-body {
+    overflow: auto;
+    padding: 8px;
   }
-}
 
-@media (max-width: 440px) {
-  html[data-host="wasm"] .toolbar {
-    position: relative;
+  .sheet-body .code-host {
+    height: 44vh;
+  }
+
+  .insert-grid {
     display: grid;
-    grid-template-columns: repeat(3, max-content);
-    justify-items: start;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+    padding: 4px;
   }
 
-  html[data-host="wasm"] .toolbar > .tool-group:has(#theme),
-  html[data-host="wasm"] #save i {
-    display: none;
+  .insert-grid button {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 16px 8px;
+    border: 0;
+    border-radius: 12px;
+    background: var(--surface-2);
+    color: var(--text);
+    font-weight: 500;
+    cursor: pointer;
   }
 
-  html[data-host="wasm"] #show-source,
-  html[data-host="wasm"] #export-tools,
-  html[data-host="wasm"] #save {
-    grid-row: 2;
-  }
-
-  html[data-host="wasm"] .toolbar #save-label {
-    display: inline;
-  }
-
-  html[data-host="wasm"] .export-tools {
-    position: static;
-  }
-
-  html[data-host="wasm"] .export-menu {
-    right: auto;
-    inset-inline-start: 0;
+  .insert-grid .icon {
+    width: 22px;
+    height: 22px;
+    color: var(--accent);
   }
 }

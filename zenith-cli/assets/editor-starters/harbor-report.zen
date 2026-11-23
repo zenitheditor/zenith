@@ -1,0 +1,58 @@
+zenith version=1 {
+  project id="proj.harbor-report" name="Harbor Monitor"
+  tokens format="zenith-token-v1" {
+    token id="color.blue" type="color" value="#213da1"
+    token id="color.paper" type="color" value="#f4f1e7"
+    token id="color.ink" type="color" value="#18245a"
+    token id="color.secondary" type="color" value="#384470"
+    token id="color.tint" type="color" value="#dce6ff"
+    token id="color.bars" type="color" value="#4268dd"
+    token id="px.14" type="dimension" value=(px)14
+    token id="px.2" type="dimension" value=(px)2
+    token id="px.60" type="dimension" value=(px)60
+    token id="px.82" type="dimension" value=(px)82
+    token id="px.22" type="dimension" value=(px)22
+    token id="px.16" type="dimension" value=(px)16
+    token id="px.17" type="dimension" value=(px)17
+    token id="weight.600" type="fontWeight" value=600
+    token id="weight.700" type="fontWeight" value=700
+    token id="sans" type="fontFamily" value="Noto Sans"
+    token id="serif" type="fontFamily" value="Noto Serif"
+    token id="mono" type="fontFamily" value="Noto Sans Mono"
+  }
+  styles {
+    style id="meta" {
+      font-family (token)"mono"
+      font-size (token)"px.14"
+      font-weight (token)"weight.600"
+      fill (token)"color.blue"
+    }
+  }
+  document id="doc.harbor-report" title="The harbor in focus" {
+    page id="brief" w=(px)720 h=(px)900 background=(token)"color.paper" {
+      text id="masthead" x=(px)44 y=(px)40 w=(px)350 h=(px)25 style="meta" { span "HARBOR MONITOR / FIELD BRIEF" }
+      text id="period" x=(px)410 y=(px)40 w=(px)266 h=(px)25 align="end" style="meta" { span "APR–JUL • EXAMPLE DATA" }
+      line id="top-rule" x1=(px)44 y1=(px)77 x2=(px)676 y2=(px)77 stroke=(token)"color.blue" stroke-width=(token)"px.2"
+      text id="headline" x=(px)43.4 y=(px)92 w=(px)640 h=(px)85 overflow="autofit" font-family=(token)"serif" font-size=(token)"px.60" font-weight=(token)"weight.700" fill=(token)"color.ink" { span "The harbor in focus" }
+      text id="dek" x=(px)44 y=(px)187 w=(px)632 h=(px)36 font-family=(token)"sans" font-size=(token)"px.22" fill=(token)"color.secondary" { span "Four stations track water clarity through the summer." }
+
+      rect id="metric-field" x=(px)44 y=(px)249 w=(px)632 h=(px)150 fill=(token)"color.tint"
+      text id="hero-metric" x=(px)64 y=(px)259 w=(px)295 h=(px)112 font-family=(token)"serif" font-size=(token)"px.82" font-weight=(token)"weight.700" fill=(token)"color.blue" { span "2.4 m" }
+      text id="metric-caption" x=(px)371 y=(px)280 w=(px)273 h=(px)77 font-family=(token)"sans" font-size=(token)"px.22" font-weight=(token)"weight.700" fill=(token)"color.ink" { span "Median visibility in July" }
+      text id="metric-change" x=(px)371 y=(px)355 w=(px)273 h=(px)26 style="meta" { span "+0.7 M SINCE APRIL" }
+
+      text id="chart-label" x=(px)44 y=(px)431 w=(px)632 h=(px)32 font-family=(token)"sans" font-size=(token)"px.22" font-weight=(token)"weight.700" fill=(token)"color.ink" { span "Visibility by month (m)" }
+      chart id="trend" kind="bar" x=(px)50 y=(px)471 w=(px)612 h=(px)210 value-labels="top" {
+        categories "Apr" "May" "Jun" "Jul"
+        series label="Median visibility" color=(token)"color.bars" 1.7 2.0 2.2 2.4
+      }
+
+      line id="notes-rule" x1=(px)44 y1=(px)704 x2=(px)676 y2=(px)704 stroke=(token)"color.blue" stroke-width=(token)"px.2"
+      text id="notes" x=(px)44 y=(px)723 w=(px)632 h=(px)156 format="markdown" font-family=(token)"sans" font-size=(token)"px.16" fill=(token)"color.ink" {
+        span "### What changed\n\nWater clarity improved at three of four stations. The outer pier remained clear throughout the season.\n\n### What to check next\n\nSample the inner basin after heavy rain to check whether runoff accounts for the lower readings."
+        block role="h3" font-family=(token)"sans" font-size=(token)"px.17" font-weight=(token)"weight.700" fill=(token)"color.blue" space-before=(px)6 space-after=(px)4
+        block role="p" font-family=(token)"sans" font-size=(token)"px.16" fill=(token)"color.ink" space-before=(px)0 space-after=(px)5
+      }
+    }
+  }
+}

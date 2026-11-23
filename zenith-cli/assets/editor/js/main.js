@@ -120,7 +120,6 @@ async function mount({ engine, summary }, host, spec, example, drafts) {
   if (host === "wasm") hydrateIcons(document);
   byId("welcome").hidden = true;
   byId("app").hidden = false;
-  byId("skip-source").hidden = false;
   byId("banners").replaceChildren();
   const app = new App(engine, summary, { example, drafts });
   window.zenithEditor = app;

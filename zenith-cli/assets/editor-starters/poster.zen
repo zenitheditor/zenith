@@ -1,33 +1,138 @@
 zenith version=1 {
   project id="proj.night-garden" name="Night Garden"
   tokens format="zenith-token-v1" {
-    token id="paper" type="color" value="#eeeadb"
-    token id="ink" type="color" value="#1c261e"
-    token id="green" type="color" value="#214736"
-    token id="accent" type="color" value="#dcf66b"
-    token id="font" type="fontFamily" value="Noto Sans"
-    token id="size.headline" type="dimension" value=(px)64
-    token id="size.details" type="dimension" value=(px)22
-    token id="weight.bold" type="fontWeight" value=700
-    token id="stroke" type="dimension" value=(px)2
+    token id="reflection.fine" type="dimension" value=(px)1.4
+    token id="reflection.mid" type="dimension" value=(px)2
+    token id="reflection.near" type="dimension" value=(px)2.8
+    token id="color.dark-sky" type="color" value="#311850"
+    token id="color.dusk" type="color" value="#a74472"
+    token id="color.horizon" type="color" value="#f28376"
+    token id="color.moonlight" type="color" value="#fff1ad"
+    token id="color.apricot" type="color" value="#ffbb7d"
+    token id="color.rose" type="color" value="#f36968"
+    token id="color.lake-lit" type="color" value="#673363"
+    token id="color.lake-dark" type="color" value="#2c173c"
+    token id="color.ridge-west" type="color" value="#402351"
+    token id="color.ridge-east" type="color" value="#532853"
+    token id="color.glint-gold" type="color" value="#ffb282"
+    token id="color.glint-rose" type="color" value="#eb8b86"
+    token id="color.glint-lilac" type="color" value="#bd6582"
+    token id="color.glint-plum" type="color" value="#97537b"
+    token id="color.bank-west" type="color" value="#261531"
+    token id="color.bank-east" type="color" value="#2d183a"
+    token id="color.rule" type="color" value="#78425c"
+    token id="px.13" type="dimension" value=(px)13
+    token id="px.18" type="dimension" value=(px)18
+    token id="px.71" type="dimension" value=(px)71
+    token id="px.23" type="dimension" value=(px)23
+    token id="px.1" type="dimension" value=(px)1
+    token id="weight.600" type="fontWeight" value=600
+    token id="weight.700" type="fontWeight" value=700
+    token id="ink" type="color" value="#170d26"
+    token id="paper" type="color" value="#fff2db"
+    token id="accent" type="color" value="#ff996f"
+    token id="serif" type="fontFamily" value="Noto Serif"
+    token id="sans" type="fontFamily" value="Noto Sans"
+    token id="mono" type="fontFamily" value="Noto Sans Mono"
+    token id="grad.sky" type="gradient" angle=(deg)90 {
+      stop offset=0.0 color=(token)"color.dark-sky"
+      stop offset=0.6 color=(token)"color.dusk"
+      stop offset=1.0 color=(token)"color.horizon"
+    }
+    token id="grad.moon" type="gradient" angle=(deg)90 {
+      stop offset=0.0 color=(token)"color.moonlight"
+      stop offset=0.58 color=(token)"color.apricot"
+      stop offset=1.0 color=(token)"color.rose"
+    }
+    token id="water" type="gradient" angle=(deg)90 {
+      stop offset=0.0 color=(token)"color.lake-lit"
+      stop offset=1.0 color=(token)"color.lake-dark"
+    }
   }
-  styles {}
+  styles {
+    style id="edition" {
+      font-family (token)"mono"
+      font-size (token)"px.13"
+      font-weight (token)"weight.600"
+      fill (token)"accent"
+    }
+    style id="details" {
+      font-family (token)"sans"
+      font-size (token)"px.18"
+      font-weight (token)"weight.600"
+      fill (token)"paper"
+    }
+  }
   document id="doc.night-garden" title="Night Garden" {
-    page id="poster" w=(px)600 h=(px)720 background=(token)"paper" {
-      text id="headline" x=(px)38 y=(px)27 w=(px)524 h=(px)92 fill=(token)"ink" font-family=(token)"font" font-size=(token)"size.headline" font-weight=(token)"weight.bold" { span "Night Garden" }
-      text id="subtitle" x=(px)42 y=(px)122 w=(px)516 h=(px)33 fill=(token)"ink" font-family=(token)"font" font-size=(token)"size.details" { span "Open-air cinema" }
+    page id="poster" w=(px)600 h=(px)720 background=(token)"ink" {
+      text id="series" x=(px)32 y=(px)26 w=(px)300 h=(px)22 style="edition" { span "MOONRISE CINEMA" }
+      text id="season" x=(px)365 y=(px)26 w=(px)203 h=(px)22 style="edition" align="end" { span "SUMMER SCREENINGS" }
+      text id="headline" x=(px)27 y=(px)51 w=(px)546 h=(px)96 overflow="autofit" fill=(token)"paper" font-family=(token)"serif" font-size=(token)"px.71" font-weight=(token)"weight.700" { span "Night Garden" }
 
-      rect id="field" x=(px)44 y=(px)178 w=(px)512 h=(px)434 fill=(token)"green"
-      ellipse id="moon" x=(px)210 y=(px)303 w=(px)180 h=(px)180 fill=(token)"accent"
-      ellipse id="orbit.1" x=(px)80 y=(px)313 w=(px)440 h=(px)160 stroke=(token)"paper" stroke-width=(token)"stroke"
-      ellipse id="orbit.2" x=(px)99 y=(px)275 w=(px)402 h=(px)236 stroke=(token)"paper" stroke-width=(token)"stroke"
-      ellipse id="orbit.3" x=(px)147 y=(px)229 w=(px)306 h=(px)328 stroke=(token)"paper" stroke-width=(token)"stroke"
-      ellipse id="orbit.4" x=(px)216 y=(px)199 w=(px)168 h=(px)388 stroke=(token)"paper" stroke-width=(token)"stroke"
-      ellipse id="satellite" x=(px)459 y=(px)293 w=(px)20 h=(px)20 fill=(token)"paper"
+      rect id="sky" x=(px)32 y=(px)154 w=(px)536 h=(px)434 fill=(token)"grad.sky"
+      ellipse id="moon" x=(px)182 y=(px)180 w=(px)236 h=(px)236 fill=(token)"grad.moon"
+      path id="west-ridge" closed=#true fill=(token)"color.ridge-west" {
+        anchor x=(px)32 y=(px)288
+        anchor x=(px)78 y=(px)299
+        anchor x=(px)130 y=(px)341
+        anchor x=(px)172 y=(px)349
+        anchor x=(px)210 y=(px)387
+        anchor x=(px)272 y=(px)418
+        anchor x=(px)32 y=(px)428
+      }
+      path id="east-ridge" closed=#true fill=(token)"color.ridge-east" {
+        anchor x=(px)568 y=(px)279
+        anchor x=(px)526 y=(px)295
+        anchor x=(px)497 y=(px)326
+        anchor x=(px)463 y=(px)330
+        anchor x=(px)403 y=(px)373
+        anchor x=(px)340 y=(px)417
+        anchor x=(px)568 y=(px)431
+      }
+      rect id="lake" x=(px)32 y=(px)418 w=(px)536 h=(px)170 fill=(token)"water"
+      line id="glint.01" x1=(px)283.0 y1=(px)423.0 x2=(px)317.0 y2=(px)423.0 stroke=(token)"color.glint-gold" stroke-width=(token)"reflection.fine"
+      line id="glint.02" x1=(px)290.3 y1=(px)428.7 x2=(px)331.1 y2=(px)428.7 stroke=(token)"color.glint-gold" stroke-width=(token)"reflection.fine"
+      line id="glint.03" x1=(px)271.3 y1=(px)434.5 x2=(px)318.9 y2=(px)434.5 stroke=(token)"color.glint-gold" stroke-width=(token)"reflection.fine"
+      line id="glint.04" x1=(px)264.3 y1=(px)440.4 x2=(px)318.7 y2=(px)440.4 stroke=(token)"color.glint-gold" stroke-width=(token)"reflection.fine"
+      line id="glint.05" x1=(px)278.1 y1=(px)446.4 x2=(px)339.3 y2=(px)446.4 stroke=(token)"color.glint-gold" stroke-width=(token)"reflection.fine"
+      line id="glint.06" x1=(px)270.5 y1=(px)452.4 x2=(px)338.5 y2=(px)452.4 stroke=(token)"color.glint-gold" stroke-width=(token)"reflection.fine"
+      line id="glint.07" x1=(px)251.8 y1=(px)458.5 x2=(px)326.6 y2=(px)458.5 stroke=(token)"color.glint-gold" stroke-width=(token)"reflection.fine"
+      line id="glint.08" x1=(px)259.6 y1=(px)464.6 x2=(px)341.2 y2=(px)464.6 stroke=(token)"color.glint-rose" stroke-width=(token)"reflection.mid"
+      line id="glint.09" x1=(px)266.4 y1=(px)470.8 x2=(px)354.8 y2=(px)470.8 stroke=(token)"color.glint-rose" stroke-width=(token)"reflection.mid"
+      line id="glint.10" x1=(px)247.2 y1=(px)477.1 x2=(px)342.4 y2=(px)477.1 stroke=(token)"color.glint-rose" stroke-width=(token)"reflection.mid"
+      line id="glint.11" x1=(px)240.7 y1=(px)483.5 x2=(px)342.7 y2=(px)483.5 stroke=(token)"color.glint-rose" stroke-width=(token)"reflection.mid"
+      line id="glint.12" x1=(px)254.6 y1=(px)489.9 x2=(px)363.4 y2=(px)489.9 stroke=(token)"color.glint-rose" stroke-width=(token)"reflection.mid"
+      line id="glint.13" x1=(px)246.4 y1=(px)496.4 x2=(px)362.0 y2=(px)496.4 stroke=(token)"color.glint-rose" stroke-width=(token)"reflection.mid"
+      line id="glint.14" x1=(px)227.9 y1=(px)503.0 x2=(px)350.3 y2=(px)503.0 stroke=(token)"color.glint-rose" stroke-width=(token)"reflection.mid"
+      line id="glint.15" x1=(px)236.1 y1=(px)509.7 x2=(px)365.3 y2=(px)509.7 stroke=(token)"color.glint-lilac" stroke-width=(token)"reflection.mid"
+      line id="glint.16" x1=(px)242.5 y1=(px)516.4 x2=(px)378.5 y2=(px)516.4 stroke=(token)"color.glint-lilac" stroke-width=(token)"reflection.mid"
+      line id="glint.17" x1=(px)223.1 y1=(px)523.2 x2=(px)365.9 y2=(px)523.2 stroke=(token)"color.glint-lilac" stroke-width=(token)"reflection.mid"
+      line id="glint.18" x1=(px)217.2 y1=(px)530.0 x2=(px)366.8 y2=(px)530.0 stroke=(token)"color.glint-lilac" stroke-width=(token)"reflection.mid"
+      line id="glint.19" x1=(px)231.0 y1=(px)536.9 x2=(px)387.4 y2=(px)536.9 stroke=(token)"color.glint-lilac" stroke-width=(token)"reflection.near"
+      line id="glint.20" x1=(px)222.2 y1=(px)543.9 x2=(px)385.4 y2=(px)543.9 stroke=(token)"color.glint-lilac" stroke-width=(token)"reflection.near"
+      line id="glint.21" x1=(px)204.1 y1=(px)551.0 x2=(px)374.1 y2=(px)551.0 stroke=(token)"color.glint-lilac" stroke-width=(token)"reflection.near"
+      line id="glint.22" x1=(px)212.7 y1=(px)558.1 x2=(px)389.5 y2=(px)558.1 stroke=(token)"color.glint-plum" stroke-width=(token)"reflection.near"
+      line id="glint.23" x1=(px)218.6 y1=(px)565.3 x2=(px)402.2 y2=(px)565.3 stroke=(token)"color.glint-plum" stroke-width=(token)"reflection.near"
+      line id="glint.24" x1=(px)199.0 y1=(px)572.6 x2=(px)389.4 y2=(px)572.6 stroke=(token)"color.glint-plum" stroke-width=(token)"reflection.near"
+      line id="glint.25" x1=(px)193.6 y1=(px)580.0 x2=(px)390.8 y2=(px)580.0 stroke=(token)"color.glint-plum" stroke-width=(token)"reflection.near"
 
-      line id="divider" x1=(px)42 y1=(px)639 x2=(px)558 y2=(px)639 stroke=(token)"ink" stroke-width=(token)"stroke"
-      text id="date" x=(px)42 y=(px)652 w=(px)270 h=(px)37 fill=(token)"ink" font-family=(token)"font" font-size=(token)"size.details" font-weight=(token)"weight.bold" { span "Friday, 21 August" }
-      text id="time" x=(px)360 y=(px)652 w=(px)198 h=(px)37 align="end" fill=(token)"ink" font-family=(token)"font" font-size=(token)"size.details" { span "Doors at 8 pm" }
+      path id="west-bank" closed=#true fill=(token)"color.bank-west" {
+        anchor x=(px)32 y=(px)354
+        anchor x=(px)137 y=(px)418 in-x=(px)112 in-y=(px)389 out-x=(px)156 out-y=(px)441
+        anchor x=(px)198 y=(px)454 out-x=(px)160 out-y=(px)482
+        anchor x=(px)32 y=(px)527
+      }
+      path id="east-bank" closed=#true fill=(token)"color.bank-east" {
+        anchor x=(px)568 y=(px)370
+        anchor x=(px)481 y=(px)415 in-x=(px)501 in-y=(px)402 out-x=(px)448 out-y=(px)433
+        anchor x=(px)407 y=(px)450 out-x=(px)441 out-y=(px)474
+        anchor x=(px)568 y=(px)531
+      }
+
+      text id="event" x=(px)32 y=(px)607 w=(px)536 h=(px)32 fill=(token)"paper" font-family=(token)"sans" font-size=(token)"px.23" font-weight=(token)"weight.600" { span "Open-air cinema by the lake" }
+      line id="rule" x1=(px)32 y1=(px)650 x2=(px)568 y2=(px)650 stroke=(token)"color.rule" stroke-width=(token)"px.1"
+      text id="date" x=(px)32 y=(px)664 w=(px)244 h=(px)32 style="details" { span "Friday, 21 August" }
+      text id="time" x=(px)320 y=(px)664 w=(px)248 h=(px)32 style="details" align="end" { span "Gates 8 pm · Film 9 pm" }
     }
   }
 }

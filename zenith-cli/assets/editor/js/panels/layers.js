@@ -96,7 +96,7 @@ export class Layers {
       return;
     }
     const items = [];
-    (page.children ?? []).forEach((child, i) => items.push(this.item(child, 1, `${page.id}/${i}`)));
+    this.buildChildren(page.children ?? [], 1, page.id, items);
     const master = page.master ? this.outline.masters?.find((m) => m.id === page.master) : null;
     if (master) {
       const key = `master:${master.id}`;
@@ -193,14 +193,65 @@ export class Layers {
     return item;
   }
 
+  /** Collapse runs of >= 4 consecutive same-kind siblings sharing a `prefix.NN` id. */
+  buildChildren(children, depth, prefix, out) {
+    const runPrefix = (node) => {
+      if (!node?.id || node.children?.length) return null;
+      const m = /^([a-z][\w-]*)\.\d+$/i.exec(node.id);
+      return m ? `${node.kind}:${m[1]}` : null;
+    };
+    let i = 0;
+    while (i < children.length) {
+      const rp = runPrefix(children[i]);
+      if (rp) {
+        let j = i + 1;
+        while (j < children.length && runPrefix(children[j]) === rp) j++;
+        if (j - i >= 4) {
+          const run = children.slice(i, j);
+          const name = rp.split(":")[1];
+          const key = `run:${prefix}/${rp}/${i}`;
+          // Collapsed by default unless explicitly expanded.
+          const open = this.expandedRuns?.has(key) ?? false;
+          const memberIds = run.map((c) => c.id).filter(Boolean);
+          const label = name[0].toUpperCase() + name.slice(1);
+          out.push(
+            this.wrap(
+              {
+                key,
+                runIds: memberIds,
+                label,
+                sub: String(run.length),
+                iconName: "group",
+                kind: "group",
+                depth,
+                open,
+                leaf: false,
+              },
+              open ? run.map((c, k) => this.item(c, depth + 1, `${key}/${k}`)) : [],
+            ),
+          );
+          i = j;
+          continue;
+        }
+      }
+      out.push(this.item(children[i], depth, `${prefix}/${i}`));
+      i++;
+    }
+  }
+
   activate(o) {
     this.focus(o.key);
-    if (o.id !== undefined) this.handlers.select(o.id);
+    if (o.runIds?.length && this.handlers.selectMany) this.handlers.selectMany(o.runIds);
+    else if (o.id !== undefined) this.handlers.select(o.id);
     else if (!o.leaf) this.toggle(o.key);
   }
 
   toggle(key) {
-    if (this.collapsed.has(key)) this.collapsed.delete(key);
+    if (key.startsWith("run:")) {
+      this.expandedRuns ??= new Set();
+      if (this.expandedRuns.has(key)) this.expandedRuns.delete(key);
+      else this.expandedRuns.add(key);
+    } else if (this.collapsed.has(key)) this.collapsed.delete(key);
     else this.collapsed.add(key);
     this.focusKey = key;
     this.drawTree();

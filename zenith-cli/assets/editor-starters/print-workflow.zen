@@ -1,0 +1,67 @@
+zenith version=1 {
+  project id="proj.print-workflow" name="Proof to Press"
+  tokens format="zenith-token-v1" {
+    token id="color.ink" type="color" value="#142d2e"
+    token id="color.connector" type="color" value="#3a6466"
+    token id="color.field" type="color" value="#e7efe9"
+    token id="color.header" type="color" value="#122d2e"
+    token id="color.heading" type="color" value="#effaf1"
+    token id="color.subtitle" type="color" value="#b8d9c5"
+    token id="color.white" type="color" value="#ffffff"
+    token id="color.rule" type="color" value="#527978"
+    token id="color.decision" type="color" value="#f8da8d"
+    token id="color.decision-edge" type="color" value="#7c571e"
+    token id="color.release" type="color" value="#b7dfbf"
+    token id="px.22" type="dimension" value=(px)22
+    token id="px.15" type="dimension" value=(px)15
+    token id="px.59" type="dimension" value=(px)59
+    token id="px.21" type="dimension" value=(px)21
+    token id="px.2" type="dimension" value=(px)2
+    token id="px.3" type="dimension" value=(px)3
+    token id="px.1" type="dimension" value=(px)1
+    token id="px.17" type="dimension" value=(px)17
+    token id="weight.700" type="fontWeight" value=700
+    token id="weight.600" type="fontWeight" value=600
+    token id="sans" type="fontFamily" value="Noto Sans"
+    token id="mono" type="fontFamily" value="Noto Sans Mono"
+    token id="radius" type="dimension" value=(px)14
+    token id="padding" type="dimension" value=(px)12
+  }
+  styles {
+    style id="node-label" {
+      font-family (token)"sans"
+      font-size (token)"px.22"
+      font-weight (token)"weight.700"
+      fill (token)"color.ink"
+    }
+    style id="edge-label" {
+      font-family (token)"mono"
+      font-size (token)"px.15"
+      font-weight (token)"weight.600"
+      fill (token)"color.connector"
+    }
+  }
+  document id="doc.proof-to-press" title="Proof to Press" {
+    page id="workflow" w=(px)900 h=(px)670 background=(token)"color.field" {
+      rect id="header" x=(px)0 y=(px)0 w=(px)900 h=(px)170 fill=(token)"color.header"
+      text id="headline" x=(px)42 y=(px)30 w=(px)810 h=(px)78 font-family=(token)"sans" font-size=(token)"px.59" font-weight=(token)"weight.700" fill=(token)"color.heading" { span "Proof to Press" }
+      text id="subtitle" x=(px)46 y=(px)112 w=(px)810 h=(px)36 font-family=(token)"sans" font-size=(token)"px.21" fill=(token)"color.subtitle" { span "A production handoff for customer-supplied artwork" }
+
+      shape id="intake" kind="process" x=(px)42 y=(px)308 w=(px)170 h=(px)79 fill=(token)"color.white" stroke=(token)"color.rule" stroke-width=(token)"px.2" radius=(token)"radius" padding=(token)"padding" text-style="node-label" { span "Check PDF" }
+      shape id="decision" kind="decision" x=(px)275 y=(px)255 w=(px)246 h=(px)185 fill=(token)"color.decision" stroke=(token)"color.decision-edge" stroke-width=(token)"px.2" padding=(token)"padding" text-style="node-label" { span "Proof approved?" }
+      shape id="release" kind="process" x=(px)655 y=(px)308 w=(px)203 h=(px)79 fill=(token)"color.release" stroke=(token)"color.rule" stroke-width=(token)"px.2" radius=(token)"radius" padding=(token)"padding" text-style="node-label" { span "Release to press" }
+      shape id="revision" kind="process" x=(px)287 y=(px)506 w=(px)222 h=(px)72 fill=(token)"color.white" stroke=(token)"color.rule" stroke-width=(token)"px.2" radius=(token)"radius" padding=(token)"padding" text-style="node-label" { span "Revise artwork" }
+
+      connector id="check-to-proof" from="intake" to="decision" route="orthogonal" marker-end="arrow" stroke=(token)"color.connector" stroke-width=(token)"px.3"
+      connector id="proof-to-press" from="decision" to="release" route="orthogonal" marker-end="arrow" stroke=(token)"color.connector" stroke-width=(token)"px.3"
+      connector id="proof-to-revise" from="decision" to="revision" route="orthogonal" marker-end="arrow" stroke=(token)"color.connector" stroke-width=(token)"px.3"
+      connector id="revise-to-check" from="revision" from-anchor="left" to="intake" to-anchor="bottom" route="orthogonal" marker-end="arrow" stroke=(token)"color.connector" stroke-width=(token)"px.3"
+      text id="yes" x=(px)554 y=(px)315 w=(px)75 h=(px)24 style="edge-label" { span "YES" }
+      text id="no" x=(px)415 y=(px)454 w=(px)50 h=(px)25 style="edge-label" { span "NO" }
+      text id="retry" x=(px)154 y=(px)502 w=(px)115 h=(px)24 style="edge-label" { span "RECHECK" }
+
+      line id="footer-rule" x1=(px)44 y1=(px)609 x2=(px)856 y2=(px)609 stroke=(token)"color.rule" stroke-width=(token)"px.1"
+      text id="handoff-note" x=(px)44 y=(px)627 w=(px)812 h=(px)28 font-family=(token)"sans" font-size=(token)"px.17" fill=(token)"color.ink" { span "Keep the approved proof with the production PDF." }
+    }
+  }
+}

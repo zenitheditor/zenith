@@ -108,8 +108,8 @@ export function bodyBackground(page, color) {
   return page.waitFor(`getComputedStyle(document.body).backgroundColor === ${JSON.stringify(color)}`, `the ${color} background`);
 }
 
-export const DARK_BG = "rgb(20, 23, 28)";
-export const LIGHT_BG = "rgb(244, 245, 247)";
+export const DARK_BG = "rgb(10, 14, 21)";
+export const LIGHT_BG = "rgb(243, 246, 250)";
 
 export async function ready(page) {
   await page.waitFor(
@@ -156,6 +156,10 @@ const SELECTED = (anchor, head) => `(() => { const v = ${A}.code.view; const m =
  * typing starts one frame after the scroll ended.
  */
 export async function selectRange(page, anchor, head) {
+  if (await page.eval("document.getElementById('app').dataset.source === 'closed'")) {
+    await page.clickSelector("#view-split");
+    await nextFrame(page);
+  }
   await page.eval(`(() => { const v = ${A}.code.view; v.focus();
     v.dispatch({ selection: { anchor: ${anchor}, head: ${head} }, scrollIntoView: true }); return true; })()`);
   await page.waitFor(SELECTED(anchor, head), `the code selection ${anchor}..${head} with focus, on screen`);

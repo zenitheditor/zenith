@@ -44,7 +44,7 @@ export class DiagnosticsPanel {
       h("span", {}, plural(t.advisory, "advisory", "advisories")),
     );
     if (this.items.length === 0) {
-      this.list.appendChild(h("li", { class: "empty", text: "No diagnostics. The document checks clean." }));
+      this.list.appendChild(h("li", { class: "empty", text: "No diagnostics." }));
       return;
     }
     for (const d of this.items) {

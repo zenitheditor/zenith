@@ -86,6 +86,10 @@ export class GestureController {
   /** CanvasView `grab`: the drag a left press at page point `p` starts. */
   grab(p, e) {
     const app = this.app;
+    if (app.tools?.isDrawing()) {
+      if (!this.enabled()) return null;
+      return app.tools.beginDraw(p);
+    }
     const version = app.sync.version;
     const blocked = this.enabled() ? null : "The source has errors. Fix them to edit on the canvas.";
     const item = app.overlay.handleItem();
@@ -393,6 +397,14 @@ export class GestureController {
   /** Set the cursor for the last pointer point. */
   cursor() {
     const app = this.app;
+    if (app.tools?.isDrawing()) {
+      app.view.setCursor("crosshair");
+      return;
+    }
+    if (app.tools?.isHand()) {
+      app.view.setCursor("grab");
+      return;
+    }
     const p = this.pointerAt;
     if (!p || !this.enabled()) {
       app.view.setCursor("");

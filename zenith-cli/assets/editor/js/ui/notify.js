@@ -103,8 +103,9 @@ export class Notices {
   /** A short confirmation that fades by itself. */
   toast(message, iconName = "check") {
     const el = h("div", { class: `toast ${iconName}` }, icon(iconName), h("span", { text: message }));
-    this.toasts.appendChild(el);
-    setTimeout(() => el.remove(), TOAST_MS);
+    this.toasts.replaceChildren(el);
+    clearTimeout(this.toastTimer);
+    this.toastTimer = setTimeout(() => el.remove(), TOAST_MS);
   }
 
   /**

@@ -12,19 +12,62 @@ export class Inspector {
     this.root = root;
     this.hooks = hooks;
     this.tokens = [];
+    this.outline = null;
+    this.page = 1;
     this.shownId = null;
-    this.showEmpty("Nothing selected. Click a node on the canvas, in the layers, or in the source.");
+    this.showEmpty();
   }
 
   /** The color tokens the fill and stroke pickers list: `[{id, type, value}]`. */
   setTokens(tokens) {
     this.tokens = tokens ?? [];
+    if (!this.shownId) this.showEmpty();
   }
 
-  showEmpty(text) {
+  setPageInfo(outline, page) {
+    this.outline = outline;
+    this.page = page || 1;
+    if (!this.shownId) this.showEmpty();
+  }
+
+  showEmpty(text = "Select something on the canvas to edit it, or press ⌘K.") {
     this.shownId = null;
     clear(this.root);
-    this.root.appendChild(h("p", { class: "empty", text }));
+    const pg = this.outline?.pages?.find((p) => p.page === this.page);
+    if (!pg) {
+      this.root.appendChild(h("p", { class: "empty", text }));
+      return;
+    }
+    const countNodes = (list) => (list ?? []).reduce((n, c) => n + 1 + countNodes(c.children), 0);
+    const layerCount = countNodes(pg.children);
+    this.root.append(
+      h(
+        "div",
+        { class: "inspector-head page-head" },
+        icon("page"),
+        h("span", { class: "inspector-id", text: pg.name || pg.id }),
+        h("span", { class: "muted", text: "Page" }),
+      ),
+      h("h3", { text: "Size" }),
+      h(
+        "div",
+        { class: "box-grid" },
+        h("div", {}, h("span", { text: "W" }), h("span", { text: `${Math.round(pg.w)} px` })),
+        h("div", {}, h("span", { text: "H" }), h("span", { text: `${Math.round(pg.h)} px` })),
+      ),
+      h("h3", { text: "Document" }),
+      h(
+        "dl",
+        { class: "kv" },
+        h("dt", { text: "Tokens" }),
+        h("dd", { text: String(this.tokens.length) }),
+        h("dt", { text: "Layers" }),
+        h("dd", { text: String(layerCount) }),
+        h("dt", { text: "Pages" }),
+        h("dd", { text: String(this.outline?.pages?.length ?? 1) }),
+      ),
+      h("p", { class: "insp-note", text }),
+    );
   }
 
   /** Show several selected nodes by id. */
@@ -47,8 +90,15 @@ export class Inspector {
     const expanded = this.shownId === info.id && this.root.querySelector(".inspector-advanced")?.open;
     this.shownId = info.id;
     clear(this.root);
+    const guided = this.hooks.guideText?.(info.id) && info.edit?.fields?.includes("text");
+    const set = (params) => this.hooks.set(info.id, params);
+    const details = guided
+      ? h("details", { class: "inspector-advanced", open: expanded },
+          h("summary", { text: "More settings", dataset: { field: "advanced" } }))
+      : this.root;
+    if (guided) this.root.append(...textField(info.edit.text ?? "", set, "Headline"), details);
     const where = info.page ? `Page ${info.page}` : info.master ? `Master ${info.master}` : "";
-    this.root.append(
+    details.append(
       h(
         "div",
         { class: "inspector-head" },
@@ -63,16 +113,7 @@ export class Inspector {
       }),
     );
     this.flags(info);
-    let details = this.root;
     if (info.edit) {
-      const id = info.id;
-      const set = (params) => this.hooks.set(id, params);
-      const guided = this.hooks.guideText?.(id) && info.edit.fields?.includes("text");
-      if (guided) {
-        details = h("details", { class: "inspector-advanced", open: expanded },
-          h("summary", { text: "More settings", dataset: { field: "advanced" } }));
-        this.root.append(...textField(info.edit.text ?? "", set), details);
-      }
       details.append(...editForm(info, this.tokens, set, { omitText: guided }).flat());
     }
     if (info.box) this.box(info.box, details);

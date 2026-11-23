@@ -43,8 +43,25 @@ export const steps = [
       check(!addr.includes("token"), `token still in the address bar: ${addr}`);
       const layers = await page.eval("document.querySelectorAll('#layers [role=treeitem]').length");
       check(layers >= 8, `layers panel shows ${layers} items`);
+      check(
+        await page.eval(`document.getElementById('pane-code').offsetParent === null
+          && document.getElementById('pane-canvas').offsetParent !== null`),
+        "the editor did not open in Design view",
+      );
+      const canvasShare = await page.eval(`(() => {
+        const r = document.getElementById('viewport').getBoundingClientRect();
+        return (r.width * r.height) / (innerWidth * innerHeight);
+      })()`);
+      check(canvasShare >= 0.65, `desktop canvas share ${(canvasShare * 100).toFixed(1)}% < 65%`);
+      await shot("design-first");
+      await page.clickSelector("#view-split");
+      check(await page.eval("document.getElementById('view-split').getAttribute('aria-checked') === 'true'"), "Split view did not activate");
+      await page.clickSelector("#view-design");
+      check(await page.eval("document.getElementById('pane-code').offsetParent === null"), "Design view did not hide Source");
+      await page.clickSelector("#view-split");
+      await settle(page);
       await shot("light");
-      return { version: s.version, layers };
+      return { version: s.version, layers, canvasShare };
     },
   ],
   [
@@ -69,6 +86,16 @@ export const steps = [
       const marks = await page.eval("document.querySelectorAll('.cm-lintRange-error').length");
       check(marks > 0, "no error underline in the source");
       check(bad.sha === before.sha, "preview changed while the text has errors");
+      await page.clickSelector("#view-design");
+      check(
+        await page.eval(`document.getElementById('problems-pop').hidden &&
+          document.getElementById('problems-chip').classList.contains('err')`),
+        "Problems chip did not flag the error",
+      );
+      await page.clickSelector("#problems-chip");
+      await page.clickSelector("#diag-list .sev-error button");
+      check(await page.eval("document.getElementById('app').dataset.source === 'open'"), "the diagnostic did not reveal Source");
+      await cursorAt(page, at + ' w=(px)"'.length);
       await shot("error-stale");
       const v1 = await versionOf(page);
       for (let i = 0; i < ' w=(px)"'.length; i++) await page.key("Backspace");
@@ -184,15 +211,19 @@ export const steps = [
       await page.eval(`(() => { ${A}.code.view.dispatch({ changes: { from: ${at}, insert: ${JSON.stringify(extra)} }, userEvent: "input" }); return true; })()`);
       await page.waitFor("document.querySelectorAll('#pages .row').length === 2", "two pages listed");
       await settle(page);
+      await page.clickSelector('[data-ltab="pages"]');
       await page.clickSelector("#pages li:nth-child(2) .row");
       await page.waitFor(`${A}.page === 2 && ${A}.renderer.shown && ${A}.renderer.shown.page === 2`, "page 2 rendered");
+      await page.clickSelector('[data-ltab="layers"]');
       await page.waitFor("!!document.querySelector('#layers [data-id=\"r2\"]')", "page 2 layers");
+      await page.clickSelector('[data-ltab="pages"]');
       const current = await page.eval("document.querySelector('#pages [aria-current=page] .row-label').textContent");
       check(current === "page.two", `current page row ${current}`);
       const w = await page.eval(`${A}.view.pageW`);
       check(Math.abs(w - 200) < 1, `page 2 width ${w}`);
       await page.clickSelector("#pages li:nth-child(1) .row");
       await page.waitFor(`${A}.page === 1 && ${A}.renderer.shown.page === 1`, "page 1 rendered");
+      await page.clickSelector('[data-ltab="layers"]');
       await page.eval(`(() => { ${A}.code.view.dispatch({ changes: { from: ${at}, to: ${at + extra.length} }, userEvent: "delete" }); return true; })()`);
       await page.waitFor("document.querySelectorAll('#pages .row').length === 1", "back to one page");
       await settle(page);
@@ -225,38 +256,35 @@ export const steps = [
     },
   ],
   [
-    "fullscreen code and canvas, Esc restores",
+    "Design, Split, and Code views switch cleanly",
     async ({ page, shot }) => {
-      await page.clickSelector("#full-code");
-      await page.waitFor("document.getElementById('app').dataset.full === 'code'", "fullscreen code");
-      check(await page.eval("document.getElementById('pane-canvas').offsetParent === null"), "canvas still shown");
+      await page.clickSelector("#view-code");
+      await page.waitFor("document.getElementById('app').dataset.view === 'code'", "code view");
+      check(await page.eval("document.getElementById('pane-canvas').offsetParent === null"), "canvas still shown in Code view");
       await shot("full-code");
-      await page.key("Escape");
-      await page.waitFor("document.getElementById('app').dataset.full === 'none'", "Esc restores from code");
-      await page.clickSelector("#full-canvas");
-      await page.waitFor("document.getElementById('app').dataset.full === 'canvas'", "fullscreen canvas");
-      check(await page.eval("document.getElementById('pane-code').offsetParent === null"), "code still shown");
+      await page.clickSelector("#view-design");
+      await page.waitFor("document.getElementById('app').dataset.view === 'design'", "design view");
+      check(await page.eval("document.getElementById('pane-code').offsetParent === null"), "code still shown in Design view");
       await settle(page);
       await shot("full-canvas");
-      await page.key("Escape");
-      await page.waitFor("document.getElementById('app').dataset.full === 'none'", "Esc restores from canvas");
-      await page.clickSelector("#full-canvas");
-      await page.clickSelector("#full-canvas");
-      await page.waitFor("document.getElementById('app').dataset.full === 'none'", "button restores");
+      await page.clickSelector("#view-split");
+      await page.waitFor("document.getElementById('app').dataset.view === 'split'", "split view");
+      await settle(page);
       return {};
     },
   ],
   [
-    "collapsed panels persist across reload",
+    "side panel preferences persist while source starts closed",
     async ({ page }) => {
-      for (const id of ["toggle-left", "toggle-right", "toggle-bottom"]) await page.clickSelector(`#${id}`);
-      const attrs = "(() => { const d = document.getElementById('app').dataset; return [d.left, d.right, d.bottom].join(); })()";
-      check((await page.eval(attrs)) === "closed,closed,closed", "panels did not collapse");
+      await page.clickSelector("#toggle-left");
+      check(await page.eval("document.getElementById('app').dataset.left === 'closed'"), "left panel did not collapse");
       await page.reload();
       await ready(page);
-      check((await page.eval(attrs)) === "closed,closed,closed", "collapse state lost on reload");
-      for (const id of ["toggle-left", "toggle-right", "toggle-bottom"]) await page.clickSelector(`#${id}`);
-      check((await page.eval(attrs)) === "open,open,open", "panels did not reopen");
+      check(await page.eval("document.getElementById('app').dataset.left === 'closed'"), "collapse state lost on reload");
+      check(await page.eval("document.getElementById('pane-code').offsetParent === null"), "source reopened on reload");
+      await page.clickSelector("#reopen-left");
+      check(await page.eval("document.getElementById('app').dataset.left === 'open'"), "left panel did not reopen");
+      await page.clickSelector("#view-split");
       await settle(page);
       return {};
     },
@@ -264,9 +292,13 @@ export const steps = [
   [
     "zoom, pan, fit, 100%, deep zoom",
     async ({ page, shot }) => {
-      await page.clickSelector("#zoom-fit");
+      const clickZoom = async (id) => {
+        await page.clickSelector("#zoom-btn");
+        await page.clickSelector(id);
+      };
+      await clickZoom("#zoom-fit");
       const fit = await state(page);
-      await page.clickSelector("#zoom-in");
+      await clickZoom("#zoom-in");
       const z1 = await state(page);
       check(Math.abs(z1.zoom - fit.zoom * 1.25) < 1e-6, `zoom-in ${z1.zoom} from ${fit.zoom}`);
       const v = await page.center("#viewport");
@@ -287,7 +319,7 @@ export const steps = [
       const refit = await state(page);
       check(Math.abs(refit.zoom - fit.zoom) < 1e-6, `1 key fit ${refit.zoom}, want ${fit.zoom}`);
       // Past the old 4x render cap: the render follows the zoom exactly.
-      for (let i = 0; i < 14; i++) await page.clickSelector("#zoom-in");
+      for (let i = 0; i < 14; i++) await clickZoom("#zoom-in");
       await page.waitFor(
         `(() => { const a = ${A}; return !!a.renderer.shown && Math.abs(a.renderer.scale - a.view.zoom) < 1e-9; })()`,
         "a render at the zoom",
@@ -297,7 +329,7 @@ export const steps = [
       check(deep.zoom > 4 && Math.abs(deep.scale - deep.zoom) < 1e-9, `deep zoom ${deep.zoom} rendered at ${deep.scale}`);
       check(!deep.rendering, "Rendering still shown after the render");
       await shot("deep-zoom");
-      await page.clickSelector("#zoom-fit");
+      await clickZoom("#zoom-fit");
       await settle(page);
       return { fit: fit.zoom, max: deep.zoom };
     },
@@ -354,6 +386,7 @@ export const steps = [
       checkSharp(m81, "DPR 2 at 81%");
       await shot("dpr2-zoom-81");
       await setDpr(page, 1);
+      await page.clickSelector("#zoom-btn");
       await page.clickSelector("#zoom-fit");
       await settle(page);
       return { scale: m.scale, rect: m.rect, scale81: m81.scale };
@@ -371,6 +404,7 @@ export const steps = [
       await page.eval(`(() => { ${A}.code.view.dispatch({ changes: { from: ${at}, insert: ${JSON.stringify(extra)} }, userEvent: "input" }); return true; })()`);
       await page.waitFor("document.querySelectorAll('#pages .row').length === 2", "two pages listed");
       await settle(page);
+      await page.clickSelector('[data-ltab="pages"]');
       await page.clickSelector("#pages li:nth-child(2) .row");
       await page.waitFor(`${A}.page === 2 && ${A}.renderer.shown && ${A}.renderer.shown.page === 2`, "page 2 rendered");
       await settle(page);
@@ -388,6 +422,7 @@ export const steps = [
       await shot("large-page-800");
       await page.clickSelector("#pages li:nth-child(1) .row");
       await page.waitFor(`${A}.page === 1 && ${A}.renderer.shown.page === 1`, "page 1 rendered");
+      await page.clickSelector('[data-ltab="layers"]');
       await page.eval(`(() => { ${A}.code.view.dispatch({ changes: { from: ${at}, to: ${at + extra.length} }, userEvent: "delete" }); return true; })()`);
       await page.waitFor("document.querySelectorAll('#pages .row').length === 1", "back to one page");
       await settle(page);
@@ -627,48 +662,49 @@ export const steps = [
     },
   ],
   [
-    "phone width stacks with no horizontal scroll",
+    "phone layout has no horizontal scroll or clipped controls at 390px and 320px",
     async ({ page, shot, mode }) => {
-      const checkHostedHeader = async () => {
-        const hidden = await page.eval(`(() => {
+      const checkPhone = async () => {
+        const m = await page.eval(`(() => ({
+          doc: document.documentElement.scrollWidth, body: document.body.scrollWidth,
+          ws: document.getElementById('workspace').scrollWidth, inner: innerWidth,
+          phoneBar: document.getElementById('phone-bar').getBoundingClientRect().height > 0,
+        }))()`);
+        check(m.doc <= m.inner && m.body <= m.inner && m.ws <= m.inner, `horizontal overflow: ${JSON.stringify(m)}`);
+        check(m.phoneBar, "phone bottom bar is hidden");
+        const barIds = mode === "static"
+          ? ["doc-name", "undo", "redo", "export-menu-toggle"]
+          : ["doc-name", "undo", "redo", "save"];
+        const clipped = await page.eval(`(() => {
           const bar = document.querySelector('.topbar').getBoundingClientRect();
-          return ['doc-name', 'export-menu-toggle', 'save', 'save-label'].filter((id) => {
+          return ${JSON.stringify(barIds)}.filter((id) => {
             const box = document.getElementById(id).getBoundingClientRect();
-            return !box.width || !box.height || box.left < bar.left || box.right > bar.right
-              || box.top < bar.top || box.bottom > bar.bottom;
+            return !box.width || !box.height || box.left < bar.left - 1 || box.right > bar.right + 1;
           });
         })()`);
-        check(hidden.length === 0, `hosted controls clipped on phone: ${hidden.join(", ")}`);
-        await page.clickSelector("#export-menu-toggle");
-        check(await page.eval(`(() => {
-          const menu = document.querySelector('.export-menu').getBoundingClientRect();
-          return menu.width > 0 && menu.left >= 0 && menu.right <= innerWidth;
-        })()`), "the open export menu is clipped");
-        await page.clickSelector("#export-menu-toggle");
+        check(clipped.length === 0, `controls clipped on phone: ${clipped.join(", ")}`);
+        if (mode === "static") {
+          await page.clickSelector("#export-menu-toggle");
+          check(await page.eval(`(() => {
+            const menu = document.querySelector('.export-menu').getBoundingClientRect();
+            return menu.width > 0 && menu.left >= 0 && menu.right <= innerWidth;
+          })()`), "the open export menu is clipped");
+          await page.clickSelector("#export-menu-toggle");
+        }
+        return m;
       };
       await page.viewport(390, 844, true);
       await viewportIs(page, 390);
-      await page.waitFor("document.getElementById('divider').getAttribute('aria-orientation') === 'horizontal'", "the stacked layout");
-      const m = await page.eval(`(() => ({
-        doc: document.documentElement.scrollWidth, body: document.body.scrollWidth,
-        ws: document.getElementById('workspace').scrollWidth, inner: innerWidth,
-        orient: document.getElementById('divider').getAttribute('aria-orientation'),
-      }))()`);
-      check(m.doc <= m.inner && m.body <= m.inner && m.ws <= m.inner, `horizontal overflow: ${JSON.stringify(m)}`);
-      check(m.orient === "horizontal", `divider orientation ${m.orient}`);
-      if (mode === "static") await checkHostedHeader();
+      const m = await checkPhone();
       await settle(page);
       await shot("phone");
-      if (mode === "static") {
-        await page.viewport(320, 780, true);
-        await viewportIs(page, 320);
-        await checkHostedHeader();
-        await settle(page);
-        await shot("phone-320");
-      }
+      await page.viewport(320, 780, true);
+      await viewportIs(page, 320);
+      await checkPhone();
+      await settle(page);
+      await shot("phone-320");
       await page.viewport(1440, 900);
       await viewportIs(page, 1440);
-      await page.waitFor("document.getElementById('divider').getAttribute('aria-orientation') === 'vertical'", "the side-by-side layout");
       return m;
     },
   ],

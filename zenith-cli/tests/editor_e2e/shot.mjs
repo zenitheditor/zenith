@@ -215,21 +215,23 @@ async function main() {
     };
 
     if (opts.select) await select(page, opts.select);
-    if (wanted.includes("split")) await shot("split");
+    if (wanted.includes("split")) {
+      await page.eval(`${A}.layout.setView('split')`);
+      await settle(page);
+      await shot("split");
+    }
     if (wanted.includes("canvas")) {
-      await page.clickSelector("#full-canvas");
-      await page.waitFor("document.getElementById('app').dataset.full === 'canvas'", "the full-screen canvas");
+      await page.eval(`${A}.layout.setView('design')`);
       await settle(page);
       await shot("canvas");
-      await page.key("Escape");
-      await page.waitFor("document.getElementById('app').dataset.full === 'none'", "the split view to return");
-      await settle(page);
     }
     if (wanted.includes("diagnostics")) {
+      await page.eval(`${A}.layout.setView('split')`);
       if (opts.break) {
         const broken = breakTokenReference(original);
         await page.eval(`(() => { const v = ${A}.code.view; v.dispatch({ changes: { from: 0, to: v.state.doc.length, insert: ${JSON.stringify(broken)} } }); return true; })()`);
       }
+      await page.eval(`${A}.layout.openProblems()`);
       const has = async () => (await page.eval(`${A}.diagnosticList.length`)) > 0;
       if (opts.break) await page.waitFor(`${A}.diagnosticList.length > 0`, "a diagnostic");
       await settle(page);

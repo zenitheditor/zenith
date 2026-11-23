@@ -6,8 +6,38 @@
 
 import { blobToBase64 } from "../engine/wasm/files.js";
 
-export const FEATURED_POSTER = "starters/poster.zen";
-const EXAMPLES = new Set([FEATURED_POSTER, "samples/article.zen", "samples/flowchart.zen"]);
+const EXAMPLES = new Set(["starters/poster.zen", "starters/harbor-report.zen", "starters/print-workflow.zen"]);
+
+export const BLANK_PRESETS = {
+  poster: { title: "Untitled Poster", name: "Untitled.zen", w: 600, h: 720 },
+  a4: { title: "Untitled A4", name: "document.zen", w: 595, h: 842 },
+  slide: { title: "Untitled Slide", name: "slide.zen", w: 1920, h: 1080 },
+  square: { title: "Untitled Square", name: "square.zen", w: 1080, h: 1080 },
+  story: { title: "Untitled Story", name: "story.zen", w: 1080, h: 1920 },
+  custom: { title: "Untitled", name: "untitled.zen", w: 800, h: 600 },
+};
+
+/** Generate a valid blank `.zen` document with 1 Page + minimal starter tokens (0 starter shapes). */
+export function blankPreset(key = "poster") {
+  const p = BLANK_PRESETS[key] ?? BLANK_PRESETS.poster;
+  const text = `zenith version=1 {
+  project id="project" name="${p.title}"
+  tokens format="zenith-token-v1" {
+    token id="paper" type="color" value="#ffffff"
+    token id="ink" type="color" value="#0b1a2e"
+    token id="accent" type="color" value="#0870a6"
+    token id="sans" type="fontFamily" value="Noto Sans"
+    token id="serif" type="fontFamily" value="Noto Serif"
+  }
+  styles {}
+  document id="doc" title="${p.title}" {
+    page id="page" w=(px)${p.w} h=(px)${p.h} background=(token)"paper" {
+    }
+  }
+}
+`;
+  return { name: p.name, text, project: null, draftSource: { kind: "blank" } };
+}
 
 export function curatedExample(path) {
   return document.querySelector('meta[name="zenith-gallery"]')?.content === "true" && EXAMPLES.has(path)

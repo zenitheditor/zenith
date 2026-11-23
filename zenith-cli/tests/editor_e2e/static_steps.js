@@ -73,7 +73,8 @@ const FONT_DOC = `zenith version=1 {
 /** Open `text` through the mocked picker as file `name` and wait for it. */
 async function openMocked(page, name, text, { render = true } = {}) {
   await page.eval(`(() => { const m = ${MOCKS}; m.put(${JSON.stringify(name)}, ${JSON.stringify(text)}); m.next = ${JSON.stringify(name)}; return true; })()`);
-  await page.clickSelector("#open-file");
+  await page.clickSelector("#main-menu-btn");
+  await page.clickSelector("#menu-open-file");
   await page.waitFor(`${A}.name === ${JSON.stringify(name)} && ${A}.sync.version === (window.zenithEditor.host.session.version) && ${A}.sync.synced()`, `${name} to open`);
   if (render) await page.waitFor(`${A}.renderer.shown && ${A}.renderer.shown.gen === ${A}.renderer.gen`, "the render of the opened document");
   await settle(page);
@@ -100,16 +101,36 @@ export const steps = [
         cards: document.querySelectorAll('#welcome-gallery a').length,
       })`);
       check(!initial.editor && initial.engineFiles.length === 0, `welcome starts editor: ${JSON.stringify(initial)}`);
-      check(initial.cards === 2, `expected two cards beyond the featured poster, got ${initial.cards}`);
+      check(initial.cards === 3, `expected three template cards, got ${initial.cards}`);
+      check(await page.eval(`['welcome-open', 'welcome-folder', 'welcome-open-dlg'].every((id) =>
+        document.getElementById(id).querySelector('svg[aria-hidden="true"]'))`), "welcome action icons did not load");
       await shot("welcome");
       await page.viewport(390, 844);
       await shot("welcome-narrow");
       await page.viewport(1440, 900);
+      await page.eval("document.getElementById('welcome-gallery').scrollIntoView()");
+      await page.waitFor("[...document.querySelectorAll('#welcome-gallery img')].every((img) => img.naturalWidth)", "template previews");
+      await shot("welcome-gallery");
+      await page.eval("document.getElementById('welcome').scrollTop = 0");
 
       await page.clickSelector("#welcome-poster");
       await ready(page);
       check((await state(page)).text.includes('span "Night Garden"'), "the poster did not open");
       check(await page.eval("document.getElementById('welcome').hidden"), "the poster shows the welcome screen");
+
+      for (const [path, headline] of [
+        ["starters/harbor-report.zen", "The harbor in focus"],
+        ["starters/print-workflow.zen", "Proof to Press"],
+      ]) {
+        await openWelcome();
+        const link = `#welcome-gallery a[href="?doc=${path}"]`;
+        await page.eval(`document.querySelector(${JSON.stringify(link)}).scrollIntoView({ block: "center" })`);
+        await page.clickSelector(link);
+        await ready(page);
+        check(await page.eval(`${A}.example === ${JSON.stringify(path)} && ${A}.valid
+          && document.querySelector('#inspector textarea[data-field=text]').value === ${JSON.stringify(headline)}
+          && document.getElementById('app').dataset.source === 'closed'`), `template did not open ready to edit: ${path}`);
+      }
 
       await openWelcome();
       await page.clickSelector("#welcome-blank");
@@ -222,10 +243,10 @@ export const steps = [
       await shot("poster-guided");
       await page.viewport(390, 844);
       await settle(page);
-      check(await page.eval(`['show-source', 'export-menu-toggle'].every((id) => {
+      check(await page.eval(`['export-menu-toggle', 'phone-bar'].every((id) => {
         const box = document.getElementById(id).getBoundingClientRect();
         return box.width > 0 && box.right <= innerWidth;
-      })`), "Source or Export is outside the narrow viewport");
+      })`), "Export or phone bottom bar is outside the narrow viewport");
       await shot("poster-guided-narrow");
       await page.viewport(1440, 900);
       await page.eval(`(() => {
@@ -234,8 +255,8 @@ export const steps = [
         field.dispatchEvent(new Event('change'));
       })()`);
       await page.waitFor(`${A}.code.text().includes('Garden Film Night') && ${A}.sync.synced()`, "the headline edit");
-      await page.clickSelector("#show-source");
-      check(await page.eval("document.getElementById('show-source').getAttribute('aria-pressed') === 'true'"), "Source did not open");
+      await page.clickSelector("#view-split");
+      check(await page.eval("document.getElementById('view-split').getAttribute('aria-checked') === 'true'"), "Split view did not open");
       check(await page.eval(`localStorage.getItem('zenith-edit.layout') === ${JSON.stringify(start.layout)}`), "the guided view modified layout preferences");
 
       await page.eval(`(() => {
@@ -310,7 +331,9 @@ export const steps = [
       check((await state(page)).text.includes('span "Night Garden"'), "the example did not reopen as a fresh copy");
       await openMocked(page, "poster.zen", DOC("Local file"));
       await page.waitFor(`${A}.code.text().includes('title="Local file"')`, "the same-named local file");
-      check(await page.eval(`!${A}.example && document.getElementById('show-source').hidden && document.getElementById('copy-example').hidden`), "a local file inherited the example tools");
+      check(await page.eval(`!${A}.example && !document.getElementById('view-split').hidden &&
+        document.getElementById('app').dataset.source === 'closed' && document.getElementById('copy-example').hidden`),
+      "a local file did not start in the design view");
       await page.goto(url);
       await ready(page);
       return png;
@@ -327,7 +350,7 @@ export const steps = [
       const info = await page.eval(`({
         host: document.documentElement.dataset.host, kind: ${A}.host.kind,
         conn: document.getElementById('status-conn').textContent,
-        tools: !document.getElementById('file-tools').hidden,
+        tools: !document.getElementById('menu-open-file').hidden,
         base: document.baseURI, wasm: ${A}.host.wasmUrl, fonts: ${A}.host.fontsUrl,
         compileMs: ${A}.host.worker.compileMs,
       })`);
@@ -441,14 +464,16 @@ export const steps = [
       await page.type("// unsaved\n");
       await page.waitFor(`${A}.dirty()`, "dirty");
       await page.eval(`(() => { const m = ${MOCKS}; m.put('first.zen', ${JSON.stringify(DOC("First"))}); m.next = 'first.zen'; return true; })()`);
-      await page.clickSelector("#open-file");
+      await page.clickSelector("#main-menu-btn");
+      await page.clickSelector("#menu-open-file");
       await page.waitFor("!!document.querySelector('[data-key=open-confirm]')", "the discard confirmation");
       await page.eval("[...document.querySelectorAll('[data-key=open-confirm] button')].find((b) => b.textContent === 'Cancel').click()");
       await page.waitFor("!document.querySelector('[data-key=open-confirm]')", "the confirmation to close");
       await settle(page);
       const kept = await state(page);
       check(kept.text.includes("// unsaved") && (await page.eval(`${A}.name`)) === "stack.zen", "Cancel did not keep the document");
-      await page.clickSelector("#open-file");
+      await page.clickSelector("#main-menu-btn");
+      await page.clickSelector("#menu-open-file");
       await page.waitFor("!!document.querySelector('[data-key=open-confirm]')", "the discard confirmation again");
       await page.eval("[...document.querySelectorAll('[data-key=open-confirm] button')].find((b) => b.textContent.startsWith('Open')).click()");
       await page.waitFor(`${A}.name === 'first.zen' && ${A}.sync.synced() && ${A}.code.text().includes('title="First"')`, "first.zen to open");
@@ -718,12 +743,17 @@ export const steps = [
         window.showDirectoryPicker = async () => dirOf('');
         return true;
       })()`);
-      await page.clickSelector("#open-folder");
+      await page.clickSelector("#main-menu-btn");
+      await page.clickSelector("#menu-open-folder");
       await page.waitFor("document.getElementById('doc-dialog').open", "the document chooser");
-      const listed = await page.eval("[...document.querySelectorAll('#doc-dialog-list button')].map((b) => b.textContent)");
+      const listed = await page.eval("[...document.querySelectorAll('#doc-dialog-list button')].map((b) => b.dataset.path)");
       check(listed.includes("image.zen") && listed.includes("library/poster.zen"), `chooser lists ${listed}`);
+      check(await page.eval(`document.querySelector('[data-path="library/poster.zen"] small').textContent === 'library/'
+        && document.querySelector('[data-path="library/poster.zen"]').classList.contains('dim')
+        && getComputedStyle(document.getElementById('toasts')).visibility === 'hidden'
+        && document.getElementById('toasts').children.length <= 1`), "the chooser obscures paths or stacks confirmations");
       await shot("static-chooser");
-      await page.eval("[...document.querySelectorAll('#doc-dialog-list button')].find((b) => b.textContent === 'image.zen').click()");
+      await page.clickSelector('#doc-dialog-list button[data-path="image.zen"]');
       await page.waitFor(`${A}.name === 'image.zen' && ${A}.sync.synced() && ${A}.renderer.shown && ${A}.renderer.shown.gen === ${A}.renderer.gen`, "image.zen from the folder");
       await settle(page);
       const withFolder = await state(page);
@@ -755,7 +785,8 @@ export const steps = [
       writeFileSync(file, text);
       await page.send("Page.setInterceptFileChooserDialog", { enabled: true });
       const chosen = new Promise((resolve) => page.browser.on(page.sessionId, "Page.fileChooserOpened", resolve));
-      await page.clickSelector("#open-file");
+      await page.clickSelector("#main-menu-btn");
+      await page.clickSelector("#menu-open-file");
       const opened = await chosen;
       await page.send("DOM.setFileInputFiles", { files: [file], backendNodeId: opened.backendNodeId });
       await page.waitFor(`${A}.code.text().includes('title="Uploaded"') && ${A}.sync.synced()`, "the uploaded document");

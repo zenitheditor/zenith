@@ -54,7 +54,8 @@ async function smoke(base, downloads, requestedFiles) {
 
     const headline = "#inspector textarea[data-field=text]";
     const edited = "Zenith Pages smoke";
-    check(await page.eval(`document.querySelector('${headline}').value === 'Night Garden'`), "the featured headline did not load");
+    check(await page.eval(`document.querySelector('${headline}[aria-label="Headline"]').value === 'Night Garden'`),
+      "the featured headline did not load");
     await page.clickSelector(headline);
     await page.key("a", 2, "KeyA");
     await page.type(edited);
@@ -77,10 +78,14 @@ async function smoke(base, downloads, requestedFiles) {
     await page.goto(direct.href);
     await ready(page);
     check(await page.eval(`${A}.code.text().includes('Night Garden')`), "the starter link opened the saved draft");
-    direct.searchParams.set("doc", "samples/article.zen");
+    direct.searchParams.set("doc", "starters/harbor-report.zen");
     await page.goto(direct.href);
     await ready(page);
-    check(await page.eval(`${A}.valid && Boolean(${A}.host.worker.files['copy/article.md'])`), "the article asset did not load");
+    check(await page.eval(`${A}.valid && ${A}.code.text().includes("What changed")`), "the report did not load");
+    direct.searchParams.set("doc", "starters/print-workflow.zen");
+    await page.goto(direct.href);
+    await ready(page);
+    check(await page.eval(`${A}.valid && ${A}.code.text().includes("proof-to-revise")`), "the print workflow did not load");
     await page.goto(base);
     await page.waitFor("!document.getElementById('welcome-drafts').hidden", "the resume action");
     await page.clickSelector("#welcome-drafts");

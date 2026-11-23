@@ -580,7 +580,8 @@ The server runs until Ctrl-C or `POST /api/shutdown`. Shutdown returns 409 while
 
 - Typing in the source pane is never overwritten. The engine merges other changes (canvas, agents, disk) into the pane without losing keystrokes.
 - Canvas and inspector edits patch the text in place. Comments and layout survive. When a patch has no exact form, the engine rewrites the document in canonical form, shows a warning that comments are gone, and undo restores them. This happens when the layout at the edit point has no exact patch, for example a node on the same line as other text, an inline `{ ... }` child block, or a new top-level node. Removing a node also removes the `//` comment lines directly above it, and the page says so.
-- While the source has errors, the canvas keeps the last valid render, marked "Showing last valid preview", and the diagnostics panel lists the errors.
+- The editor starts with the canvas visible and Source and Diagnostics closed. Use **Show source** for a split view. Use **Hide canvas** in the Source header to work without the preview. Use **Hide panels** in the Canvas header to focus on the design. Press Escape to restore the previous view.
+- While source errors prevent rendering, the canvas keeps the last valid preview. The Diagnostics control flags errors. Select a diagnostic to open its location in Source.
 
 ### Static site
 

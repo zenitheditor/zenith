@@ -238,7 +238,7 @@ export class CanvasView {
       return;
     }
     if (this.pointers.size > 2) return;
-    const pan = e.button === 1 || (e.button === 0 && this.space);
+    const pan = e.button === 1 || (e.button === 0 && (this.space || this.handlers.hand?.()));
     const drag = !pan && e.button === 0 ? (this.handlers.grab?.(this.toPage(e.clientX, e.clientY), e) ?? null) : null;
     this.gesture = {
       kind: pan ? "pan" : "press",

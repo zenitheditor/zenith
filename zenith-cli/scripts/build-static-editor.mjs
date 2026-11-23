@@ -14,7 +14,7 @@
 //   zenith-editor-wasm.wasm            the engine
 //   fonts/                             bundled and fallback fonts the engine asks for by name
 //   samples/                           examples/*.zen, their project files, manifest.json
-//   starters/                          blank document and default gallery previews
+//   starters/                          blank design, gallery documents, and previews
 //   _headers                           content types and CSP for Netlify and Cloudflare Pages
 //
 // Zero dependencies. Exit code 0 on success.
@@ -25,7 +25,10 @@ import { fileURLToPath } from "node:url";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(here, "../..");
-const PAGES_SAMPLES = ["article.zen", "copy/article.md", "flowchart.zen"];
+const GALLERY_FILES = [
+  "poster.zen", "poster.png", "print-workflow.zen", "print-workflow.png",
+  "harbor-report.zen", "harbor-report.png",
+];
 
 function args() {
   const out = { samples: true };
@@ -111,11 +114,10 @@ function main() {
   }
 
   let documents = 0;
-  if (a.samples) {
+  if (a.samples && !a.pages) {
     const examples = path.resolve(a.examples || path.join(repo, "examples"));
     // A top-level .png is the preview of a document, not a project file.
-    const all = a.pages ? PAGES_SAMPLES
-      : walk(examples).filter((rel) => !(rel.endsWith(".png") && !rel.includes("/")) && rel !== "README.md");
+    const all = walk(examples).filter((rel) => !(rel.endsWith(".png") && !rel.includes("/")) && rel !== "README.md");
     for (const rel of all) copy(path.join(examples, rel), path.join(out, "samples", rel));
     const docs = all.filter((rel) => rel.endsWith(".zen") && !rel.includes("/"));
     documents = docs.length;
@@ -129,11 +131,8 @@ function main() {
   copy(path.join(starters, "blank.zen"), path.join(out, "starters/blank.zen"));
   writeFileSync(path.join(out, "starters/manifest.json"), '{"files":[]}\n');
   if (gallery) {
-    for (const file of ["poster.zen", "poster.png"]) {
+    for (const file of GALLERY_FILES) {
       copy(path.join(starters, file), path.join(out, "starters", file));
-    }
-    for (const file of ["article.png", "flowchart.png"]) {
-      copy(path.join(repo, "examples", file), path.join(out, "starters", file));
     }
   }
   writeFileSync(path.join(out, "_headers"), HEADERS);
