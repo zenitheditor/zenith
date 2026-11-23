@@ -151,7 +151,9 @@ fn dim_value(input: &LayoutDim) -> Option<PropertyValue> {
             if s.starts_with('(') {
                 let d = parse_dimension_str(s)?;
                 return match d.unit {
-                    Unit::Px | Unit::Pt => Some(PropertyValue::Dimension(d)),
+                    Unit::Px | Unit::Pt | Unit::Mm | Unit::Cm | Unit::In => {
+                        Some(PropertyValue::Dimension(d))
+                    }
                     Unit::Pct | Unit::Deg | Unit::Unknown(_) => None,
                 };
             }

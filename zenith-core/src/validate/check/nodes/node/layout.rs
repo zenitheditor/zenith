@@ -185,7 +185,9 @@ fn static_px(pv: Option<&PropertyValue>) -> Option<f64> {
     match pv? {
         PropertyValue::Dimension(d) => match d.unit {
             Unit::Pct => None,
-            Unit::Px | Unit::Pt | Unit::Deg | Unit::Unknown(_) => dim_to_px(d.value, &d.unit),
+            Unit::Px | Unit::Pt | Unit::Mm | Unit::Cm | Unit::In | Unit::Deg | Unit::Unknown(_) => {
+                dim_to_px(d.value, &d.unit)
+            }
         },
         PropertyValue::TokenRef(_) | PropertyValue::Literal(_) | PropertyValue::DataRef(_) => None,
     }

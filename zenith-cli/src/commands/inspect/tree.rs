@@ -3,9 +3,7 @@
 
 use std::collections::BTreeMap;
 
-use zenith_core::{
-    Dimension, FrameNode, GroupNode, Node, Page, PropertyValue, ResolvedValue, Unit,
-};
+use zenith_core::{Dimension, FrameNode, GroupNode, Node, Page, PropertyValue, ResolvedValue};
 
 use super::document::{NodeEntry, NodeGeometry, OverrideLine, PageEntry, Resolved};
 
@@ -400,10 +398,7 @@ fn node_children(node: &Node) -> Option<&[Node]> {
 // ── Geometry helpers ──────────────────────────────────────────────────────────
 
 fn dim_to_f64(d: &Dimension) -> f64 {
-    match d.unit {
-        Unit::Pt => d.value * 96.0 / 72.0,
-        Unit::Px | Unit::Pct | Unit::Deg | Unit::Unknown(_) => d.value,
-    }
+    zenith_core::dim_to_px(d.value, &d.unit).unwrap_or(d.value)
 }
 
 fn opt_dim_to_f64(d: Option<&Dimension>) -> Option<f64> {

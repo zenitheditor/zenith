@@ -726,7 +726,7 @@ fn validate_pass(
         }
 
         // ── Bleed validation (never a hard error) ─────────────────────────
-        // The bleed margin must resolve to pixels (px/pt) and be non-negative.
+        // The bleed margin must resolve to pixels (px/pt/mm/cm/in) and be non-negative.
         // An unresolvable unit (pct/deg/unknown) or a negative value is a
         // Warning: the page still renders, bleed is simply ignored.
         if let Some(bleed) = &page.bleed {
@@ -736,7 +736,7 @@ fn validate_pass(
                         "page.invalid_bleed",
                         format!(
                             "page '{}': bleed uses an unresolvable unit; \
-                             allowed units are px and pt (bleed is ignored)",
+                             allowed units are px, pt, mm, cm, and in (bleed is ignored)",
                             page.id
                         ),
                         page.source_span,

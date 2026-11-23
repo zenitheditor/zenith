@@ -204,7 +204,14 @@ fn px_value(dimension: Option<&Dimension>) -> Option<f64> {
     let dimension = dimension?;
     match dimension.unit {
         Unit::Px if dimension.value.is_finite() => Some(dimension.value),
-        Unit::Px | Unit::Pt | Unit::Pct | Unit::Deg | Unit::Unknown(_) => None,
+        Unit::Px
+        | Unit::Pt
+        | Unit::Mm
+        | Unit::Cm
+        | Unit::In
+        | Unit::Pct
+        | Unit::Deg
+        | Unit::Unknown(_) => None,
     }
 }
 

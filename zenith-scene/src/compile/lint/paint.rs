@@ -115,7 +115,13 @@ fn px_literal(value: Option<&PropertyValue>) -> Option<f64> {
     match value {
         Some(PropertyValue::Dimension(d)) => match d.unit {
             Unit::Px => Some(d.value),
-            Unit::Pt | Unit::Pct | Unit::Deg | Unit::Unknown(_) => None,
+            Unit::Pt
+            | Unit::Mm
+            | Unit::Cm
+            | Unit::In
+            | Unit::Pct
+            | Unit::Deg
+            | Unit::Unknown(_) => None,
         },
         Some(
             PropertyValue::TokenRef(_) | PropertyValue::Literal(_) | PropertyValue::DataRef(_),

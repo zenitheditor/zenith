@@ -2,14 +2,20 @@
 //! its unit. Shared by `nudge_geometry`, `nudge_line_points`, and
 //! `nudge_anchor_gap`.
 
-use zenith_core::{Diagnostic, Dimension, PropertyValue, Unit, dim_to_px};
+use zenith_core::{
+    CM_PER_INCH, Diagnostic, Dimension, MM_PER_INCH, PT_PER_INCH, PX_PER_INCH, PropertyValue, Unit,
+    dim_to_px,
+};
 
 /// `d` plus `delta_px`, written in the unit of `d`. `None` when the unit has
 /// no px conversion (`pct`, `deg`, or an unknown unit).
 pub(in crate::engine) fn offset_dimension(d: &Dimension, delta_px: f64) -> Option<Dimension> {
     let delta = match &d.unit {
         Unit::Px => delta_px,
-        Unit::Pt => delta_px * 72.0 / 96.0,
+        Unit::Pt => delta_px * PT_PER_INCH / PX_PER_INCH,
+        Unit::Mm => delta_px * MM_PER_INCH / PX_PER_INCH,
+        Unit::Cm => delta_px * CM_PER_INCH / PX_PER_INCH,
+        Unit::In => delta_px / PX_PER_INCH,
         Unit::Pct | Unit::Deg | Unit::Unknown(_) => return None,
     };
     Some(Dimension {
@@ -109,9 +115,16 @@ mod tests {
         assert_eq!(offset_dimension(&dim(50.0, Unit::Pct), 1.0), None);
         assert_eq!(offset_dimension(&dim(5.0, Unit::Deg), 1.0), None);
         assert_eq!(
-            offset_dimension(&dim(5.0, Unit::Unknown("mm".into())), 1.0),
+            offset_dimension(&dim(5.0, Unit::Unknown("em".into())), 1.0),
             None
         );
+        // 96 px = 25.4 mm = 2.54 cm = 1 in.
+        let mm_offset = offset_dimension(&dim(3.0, Unit::Mm), 96.0).unwrap();
+        assert_eq!(mm_offset.unit, Unit::Mm);
+        assert!((mm_offset.value - 28.4).abs() < 1e-12);
+        assert!((dimension_px(&dim(25.4, Unit::Mm)).unwrap() - 96.0).abs() < 1e-12);
+        assert!((dimension_px(&dim(2.54, Unit::Cm)).unwrap() - 96.0).abs() < 1e-12);
+        assert_eq!(dimension_px(&dim(1.0, Unit::In)), Some(96.0));
     }
 
     #[test]

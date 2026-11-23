@@ -7,6 +7,12 @@ pub enum Unit {
     Px,
     /// Point units — `(pt)`.
     Pt,
+    /// Millimeter units — `(mm)`.
+    Mm,
+    /// Centimeter units — `(cm)`.
+    Cm,
+    /// Inch units — `(in)`.
+    In,
     /// Percentage — `(pct)`.
     Pct,
     /// Degrees — `(deg)`.
@@ -21,6 +27,9 @@ impl Unit {
         match s {
             "px" => Self::Px,
             "pt" => Self::Pt,
+            "mm" => Self::Mm,
+            "cm" => Self::Cm,
+            "in" => Self::In,
             "pct" => Self::Pct,
             "deg" => Self::Deg,
             other => Self::Unknown(other.to_owned()),
@@ -33,6 +42,9 @@ impl Unit {
         match self {
             Self::Px => "px",
             Self::Pt => "pt",
+            Self::Mm => "mm",
+            Self::Cm => "cm",
+            Self::In => "in",
             Self::Pct => "pct",
             Self::Deg => "deg",
             Self::Unknown(s) => s.as_str(),
@@ -95,6 +107,12 @@ pub const PX_PER_INCH: f64 = 96.0;
 /// PDF points per inch.
 pub const PT_PER_INCH: f64 = 72.0;
 
+/// Millimeters per inch (exact ISO definition).
+pub const MM_PER_INCH: f64 = 25.4;
+
+/// Centimeters per inch (exact ISO definition).
+pub const CM_PER_INCH: f64 = 2.54;
+
 /// Points per document pixel: `72 / 96 = 0.75`.
 ///
 /// The PDF backend writes page boxes and annotation rectangles in points with this factor.
@@ -102,7 +120,7 @@ pub const PX_TO_PT: f64 = PT_PER_INCH / PX_PER_INCH;
 
 /// Convert a dimension value + unit to pixels.
 ///
-/// Returns `Some(px)` for `Px` (identity) and `Pt` (×[`PX_PER_INCH`]/[`PT_PER_INCH`]).
+/// Returns `Some(px)` for `Px` (identity), `Pt`, `Mm`, `Cm`, and `In`.
 /// Returns `None` for `Pct`, `Deg`, and `Unknown` — the caller decides
 /// whether to resolve against an axis basis or emit an advisory.
 ///
@@ -112,6 +130,9 @@ pub fn dim_to_px(value: f64, unit: &Unit) -> Option<f64> {
     match unit {
         Unit::Px => Some(value),
         Unit::Pt => Some(value * PX_PER_INCH / PT_PER_INCH),
+        Unit::Mm => Some(value * PX_PER_INCH / MM_PER_INCH),
+        Unit::Cm => Some(value * PX_PER_INCH / CM_PER_INCH),
+        Unit::In => Some(value * PX_PER_INCH),
         Unit::Pct | Unit::Deg | Unit::Unknown(_) => None,
     }
 }

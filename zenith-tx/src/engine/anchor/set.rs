@@ -162,7 +162,7 @@ fn gap_value(input: &LayoutDim) -> Option<Dimension> {
         LayoutDim::Text(s) => {
             let d = parse_dimension_str(s)?;
             match d.unit {
-                Unit::Px | Unit::Pt => Some(d),
+                Unit::Px | Unit::Pt | Unit::Mm | Unit::Cm | Unit::In => Some(d),
                 Unit::Pct | Unit::Deg | Unit::Unknown(_) => None,
             }
         }

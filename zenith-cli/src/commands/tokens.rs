@@ -74,6 +74,9 @@ fn resolved_value_str(rv: &ResolvedValue) -> String {
             let unit = match d.unit {
                 zenith_core::Unit::Px => "px",
                 zenith_core::Unit::Pt => "pt",
+                zenith_core::Unit::Mm => "mm",
+                zenith_core::Unit::Cm => "cm",
+                zenith_core::Unit::In => "in",
                 zenith_core::Unit::Pct => "pct",
                 zenith_core::Unit::Deg => "deg",
                 zenith_core::Unit::Unknown(ref u) => {

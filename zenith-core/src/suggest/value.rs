@@ -381,7 +381,9 @@ fn lab_distance_sq(a: (f64, f64, f64), b: (f64, f64, f64)) -> f64 {
 pub(crate) fn unit_suffix(unit: &Unit) -> &str {
     match unit {
         Unit::Px => "",
-        Unit::Pt | Unit::Pct | Unit::Deg | Unit::Unknown(_) => unit.as_annotation(),
+        Unit::Pt | Unit::Mm | Unit::Cm | Unit::In | Unit::Pct | Unit::Deg | Unit::Unknown(_) => {
+            unit.as_annotation()
+        }
     }
 }
 
