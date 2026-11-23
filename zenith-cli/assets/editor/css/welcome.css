@@ -1,0 +1,131 @@
+.welcome {
+  height: 100%;
+  overflow: auto;
+  background: var(--surface);
+  font-size: 15px;
+}
+
+.welcome-inner {
+  width: min(100%, 1088px);
+  margin-inline: auto;
+  padding: 24px clamp(20px, 5vw, 56px) 48px;
+}
+
+.welcome-brand {
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+  font-size: 19px;
+  font-weight: 650;
+}
+
+.welcome-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 400px);
+  align-items: center;
+  gap: clamp(24px, 6vw, 72px);
+  padding-block: clamp(28px, 5vw, 56px);
+}
+
+.welcome-entry h1 {
+  max-width: 8ch;
+  margin: 0 0 28px;
+  font-size: clamp(42px, 6vw, 76px);
+  font-weight: 650;
+  letter-spacing: -0.07em;
+  line-height: 0.98;
+}
+
+.welcome .button {
+  justify-content: center;
+  min-height: 44px;
+  height: auto;
+  padding: 8px 14px;
+  text-decoration: none;
+}
+
+.welcome-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.welcome-entry .primary:not([hidden]) + .welcome-files {
+  margin-top: 16px;
+}
+
+.welcome-poster {
+  width: 100%;
+  height: auto;
+  max-width: 400px;
+  border: 1px solid var(--border);
+}
+
+.welcome-gallery {
+  padding-block: 24px;
+  border-top: 1px solid var(--border);
+}
+
+.welcome-gallery h2 {
+  margin: 0 0 14px;
+  font-size: 20px;
+  font-weight: 650;
+}
+
+.welcome-cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.welcome-card {
+  display: grid;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  color: var(--text);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.welcome-card img {
+  width: 100%;
+  height: clamp(112px, 23vw, 216px);
+  padding: 12px;
+  background: var(--surface-2);
+  object-fit: contain;
+}
+
+.welcome-card span {
+  padding: 12px 14px;
+}
+
+.welcome-card:hover {
+  background: var(--surface-hover);
+}
+
+.welcome-status {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.welcome-status:not(:empty) {
+  margin-top: 12px;
+}
+
+.welcome-status[data-error="true"] {
+  color: var(--danger);
+}
+
+@media (max-width: 680px) {
+  .welcome-hero {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .welcome-entry h1 {
+    max-width: none;
+  }
+
+  .welcome-poster {
+    max-width: min(100%, 320px);
+  }
+}

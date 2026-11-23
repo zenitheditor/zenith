@@ -14,6 +14,7 @@
 //   zenith-editor-wasm.wasm            the engine
 //   fonts/                             bundled and fallback fonts the engine asks for by name
 //   samples/                           examples/*.zen, their project files, manifest.json
+//   starters/                          blank document and default gallery previews
 //   _headers                           content types and CSP for Netlify and Cloudflare Pages
 //
 // Zero dependencies. Exit code 0 on success.
@@ -89,10 +90,13 @@ function main() {
   }
   // Pin the host: the page then never asks `/api/state`, which a static host answers with a 404.
   const index = path.join(out, "index.html");
+  const gallery = a.samples && !a.examples;
   const html = readFileSync(index, "utf8");
   const marker = '<meta charset="utf-8">';
   if (!html.includes(marker)) throw new Error("index.html lost its charset meta; update build-static-editor.mjs");
-  writeFileSync(index, html.replace(marker, `${marker}\n<meta name="zenith-host" content="wasm">`));
+  const host = '<meta name="zenith-host" content="wasm">';
+  const galleryMeta = gallery ? '\n<meta name="zenith-gallery" content="true">' : "";
+  writeFileSync(index, html.replace(marker, `${marker}\n${host}${galleryMeta}`).replace('id="app"', 'id="app" hidden'));
   copy(wasm, path.join(out, "zenith-editor-wasm.wasm"));
 
   const fonts = path.join(repo, "zenith-core/assets/fonts");
@@ -116,6 +120,17 @@ function main() {
       path.join(out, "samples/manifest.json"),
       `${JSON.stringify({ documents: docs, files }, null, 2)}\n`,
     );
+  }
+  const starters = path.join(repo, "zenith-cli/assets/editor-starters");
+  copy(path.join(starters, "blank.zen"), path.join(out, "starters/blank.zen"));
+  writeFileSync(path.join(out, "starters/manifest.json"), '{"files":[]}\n');
+  if (gallery) {
+    for (const file of ["poster.zen", "poster.png"]) {
+      copy(path.join(starters, file), path.join(out, "starters", file));
+    }
+    for (const file of ["article.png", "flowchart.png"]) {
+      copy(path.join(repo, "examples", file), path.join(out, "starters", file));
+    }
   }
   writeFileSync(path.join(out, "_headers"), HEADERS);
 

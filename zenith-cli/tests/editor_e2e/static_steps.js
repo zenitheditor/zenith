@@ -79,6 +79,125 @@ async function openMocked(page, name, text, { render = true } = {}) {
 
 export const steps = [
   [
+    "welcome: choose an example, a blank design, or a file before the engine starts",
+    async ({ page, url, shot }) => {
+      const home = new URL(url);
+      home.search = "";
+      const openWelcome = async () => {
+        await page.goto(home.href);
+        await page.waitFor("!document.getElementById('welcome').hidden", "the welcome screen");
+      };
+      await page.viewport(1440, 900);
+      await page.media("light");
+      await openWelcome();
+      const initial = await page.eval(`({
+        editor: !document.getElementById('app').hidden || !!window.zenithEditor,
+        engineFiles: performance.getEntriesByType('resource').filter((entry) =>
+          ['.wasm', '/vendor/codemirror.js', '/app/app.js'].some((suffix) => entry.name.endsWith(suffix)))
+          .map((entry) => entry.name),
+        cards: document.querySelectorAll('#welcome-gallery a').length,
+      })`);
+      check(!initial.editor && initial.engineFiles.length === 0, `welcome starts editor: ${JSON.stringify(initial)}`);
+      check(initial.cards === 2, `expected two cards beyond the featured poster, got ${initial.cards}`);
+      await shot("welcome");
+      await page.viewport(390, 844);
+      await shot("welcome-narrow");
+      await page.viewport(1440, 900);
+
+      await page.clickSelector("#welcome-poster");
+      await ready(page);
+      check((await state(page)).text.includes('span "Night Garden"'), "the poster did not open");
+      check(await page.eval("document.getElementById('welcome').hidden"), "the poster shows the welcome screen");
+
+      await openWelcome();
+      await page.clickSelector("#welcome-blank");
+      await ready(page);
+      check(await page.eval(`${A}.name === 'Untitled.zen' && ${A}.valid`), "the blank design did not open");
+
+      await openWelcome();
+      await page.eval(`(() => {
+        const m = ${MOCKS};
+        m.put('Picked.zen', ${JSON.stringify(DOC("Picked"))});
+        m.next = 'Picked.zen';
+        const pick = window.showOpenFilePicker;
+        window.showOpenFilePicker = () => {
+          window.__welcomePick = !window.zenithEditor && navigator.userActivation.isActive;
+          return pick();
+        };
+      })()`);
+      await page.clickSelector("#welcome-open");
+      await ready(page);
+      check(await page.eval(`window.__welcomePick && ${A}.name === 'Picked.zen'`), "the file picker lost its initiating click");
+
+      await openWelcome();
+      await page.eval(`(() => {
+        window.showOpenFilePicker = undefined;
+        const click = HTMLInputElement.prototype.click;
+        HTMLInputElement.prototype.click = function () {
+          if (this.dataset.zenithPicker !== 'file') return click.call(this);
+          window.__welcomePick = !window.zenithEditor && navigator.userActivation.isActive;
+          const transfer = new DataTransfer();
+          transfer.items.add(new File([${JSON.stringify(DOC("Fallback"))}], 'Fallback.zen'));
+          this.files = transfer.files;
+          this.dispatchEvent(new Event('change'));
+        };
+      })()`);
+      await page.clickSelector("#welcome-open");
+      await ready(page);
+      check(await page.eval(`window.__welcomePick && ${A}.name === 'Fallback.zen'`), "the input fallback lost its initiating click");
+
+      await openWelcome();
+      await page.eval(`window.showDirectoryPicker = async () => {
+        window.__welcomePick = !window.zenithEditor && navigator.userActivation.isActive;
+        return {
+          kind: 'directory', name: 'Project',
+          async *values() {
+            yield {kind: 'file', name: 'Project.zen', getFile: async () => new File([${JSON.stringify(DOC("Project"))}], 'Project.zen')};
+          },
+        };
+      }`);
+      await page.clickSelector("#welcome-folder");
+      await ready(page);
+      check(await page.eval(`window.__welcomePick && ${A}.name === 'Project.zen'`), "the folder picker lost its initiating click");
+      await page.goto(url);
+      await ready(page);
+      return initial;
+    },
+  ],
+  [
+    "welcome: recover from a failed link or editor mount",
+    async ({ page, url }) => {
+      const home = new URL(url);
+      home.search = "";
+      const invalid = new URL(home);
+      invalid.searchParams.set("doc", "https://example.invalid/design.zen");
+      const failed = `!document.getElementById('welcome').hidden && document.getElementById('app').hidden &&
+        !!document.querySelector('#welcome-status a') && !window.zenithEditor`;
+      const atHome = `!document.getElementById('welcome').hidden && !document.getElementById('welcome-choices').hidden &&
+        !location.search`;
+
+      await page.goto(invalid.href);
+      await page.waitFor(failed, "a visible error for the invalid link");
+      await page.clickSelector("#welcome-status a");
+      await page.waitFor(atHome, "welcome choices after the link error");
+
+      await page.eval(`(async () => {
+        const { App } = await import(new URL('js/app/app.js', document.baseURI).href);
+        App.prototype.start = async () => { throw new Error('Test mount error'); };
+      })()`);
+      await page.clickSelector("#welcome-blank");
+      await page.waitFor(failed, "a visible error for the failed mount");
+      check(await page.eval("document.activeElement === document.querySelector('#welcome-status a')"), "the recovery link lost focus");
+      await page.clickSelector("#welcome-status a");
+      await page.waitFor(atHome, "welcome choices after the mount error");
+      await page.clickSelector("#welcome-blank");
+      await ready(page);
+
+      await page.goto(url);
+      await ready(page);
+    },
+  ],
+  [
     "wasm engine: the page runs on the wasm host with a clean status",
     async ({ page, url }) => {
       // A fresh load: the shared steps leave a dark phone-width viewport.

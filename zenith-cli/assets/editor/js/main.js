@@ -14,11 +14,10 @@
 // work. The token dies with the server run, so a stored copy grants nothing
 // once `zenith edit` stops.
 
-import { App } from "./app/app.js";
 import { loadSample } from "./app/samples.js";
 import { EngineError, HttpEngine, WasmEngine } from "./engine/index.js";
 import { hydrateIcons } from "./ui/icons.js";
-import { byId } from "./util/dom.js";
+import { byId, h } from "./util/dom.js";
 import { sleep } from "./util/timing.js";
 
 const TOKEN_KEY = "zenith-edit-token";
@@ -44,14 +43,72 @@ function takeToken() {
 }
 
 async function main() {
-  hydrateIcons(document);
   const token = takeToken();
   const host = await chooseHost(token);
-  const { engine, summary } = host === "wasm" ? await startWasm() : await startServer(token);
+  if (host === "http") {
+    hydrateIcons(document);
+    await mount(await startServer(token), host);
+    return;
+  }
+
+  const path = new URLSearchParams(location.search).get("doc");
+  if (path === null) {
+    const { showWelcome } = await import("./app/welcome.js");
+    showWelcome(async (spec) => {
+      try {
+        await mountWasm(spec);
+      } catch (error) {
+        if (!byId("welcome").hidden) throw error;
+        showWasmStartError(error);
+        return;
+      }
+      byId("viewport").focus();
+    });
+    return;
+  }
+  byId("app").hidden = false;
+  banner("info", "Opening the document.");
+  await loadSample(path).then(mountWasm).catch(showWasmStartError);
+}
+
+async function mountWasm(spec) {
+  const startup = await startWasm(spec);
+  try {
+    await mount(startup, "wasm", spec.project);
+  } catch (error) {
+    startup.engine.close();
+    throw error;
+  }
+}
+
+function showWasmStartError(error) {
+  delete window.zenithEditor;
+  byId("app").hidden = true;
+  byId("skip-source").hidden = true;
+  byId("welcome-choices").hidden = true;
+  const status = byId("welcome-status");
+  status.dataset.error = "true";
+  const reason = h("span", { id: "startup-error", text: `Could not open the editor. ${error.message}` });
+  const back = h("a", { href: location.pathname, text: "Back to start", "aria-describedby": reason.id });
+  status.replaceChildren(reason, " ", back);
+  byId("welcome").hidden = false;
+  back.focus();
+}
+
+async function mount({ engine, summary }, host, project) {
+  const { App } = await import("./app/app.js");
+  if (host === "wasm") hydrateIcons(document);
+  byId("welcome").hidden = true;
+  byId("app").hidden = false;
+  byId("skip-source").hidden = false;
   byId("banners").replaceChildren();
   const app = new App(engine, summary);
   window.zenithEditor = app;
   await app.start();
+  if (project?.skipped?.length) {
+    const { showSkippedFiles } = await import("./app/project-picker.js");
+    showSkippedFiles(app.notices, project);
+  }
   document.documentElement.dataset.host = host;
   document.documentElement.dataset.ready = "true";
 }
@@ -102,15 +159,17 @@ async function startServer(token) {
   return { engine, summary };
 }
 
-async function startWasm() {
+async function startWasm(spec) {
   const meta = (name) => document.querySelector(`meta[name="${name}"]`)?.content || undefined;
   const engine = new WasmEngine({ wasmUrl: meta("zenith-wasm"), fontsUrl: meta("zenith-fonts") });
-  banner("info", "Loading the engine.");
-  await engine.ready();
-  banner("info", "Opening the sample document.");
-  const sample = await loadSample(new URLSearchParams(location.search).get("doc"));
-  await engine.openDocument(sample);
-  return { engine, summary: await engine.state({ text: true }) };
+  try {
+    await engine.ready();
+    await engine.openDocument(spec);
+    return { engine, summary: await engine.state({ text: true }) };
+  } catch (err) {
+    engine.close();
+    throw err;
+  }
 }
 
 /** Show one notice row in the banner area, replacing what is there. */

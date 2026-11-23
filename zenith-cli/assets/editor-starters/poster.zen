@@ -1,0 +1,33 @@
+zenith version=1 {
+  project id="proj.night-garden" name="Night Garden"
+  tokens format="zenith-token-v1" {
+    token id="paper" type="color" value="#eeeadb"
+    token id="ink" type="color" value="#1c261e"
+    token id="green" type="color" value="#214736"
+    token id="accent" type="color" value="#dcf66b"
+    token id="font" type="fontFamily" value="Noto Sans"
+    token id="size.headline" type="dimension" value=(px)64
+    token id="size.details" type="dimension" value=(px)22
+    token id="weight.bold" type="fontWeight" value=700
+    token id="stroke" type="dimension" value=(px)2
+  }
+  styles {}
+  document id="doc.night-garden" title="Night Garden" {
+    page id="poster" w=(px)600 h=(px)720 background=(token)"paper" {
+      text id="headline" x=(px)38 y=(px)27 w=(px)524 h=(px)92 fill=(token)"ink" font-family=(token)"font" font-size=(token)"size.headline" font-weight=(token)"weight.bold" { span "Night Garden" }
+      text id="subtitle" x=(px)42 y=(px)122 w=(px)516 h=(px)33 fill=(token)"ink" font-family=(token)"font" font-size=(token)"size.details" { span "Open-air cinema" }
+
+      rect id="field" x=(px)44 y=(px)178 w=(px)512 h=(px)434 fill=(token)"green"
+      ellipse id="moon" x=(px)210 y=(px)303 w=(px)180 h=(px)180 fill=(token)"accent"
+      ellipse id="orbit.1" x=(px)80 y=(px)313 w=(px)440 h=(px)160 stroke=(token)"paper" stroke-width=(token)"stroke"
+      ellipse id="orbit.2" x=(px)99 y=(px)275 w=(px)402 h=(px)236 stroke=(token)"paper" stroke-width=(token)"stroke"
+      ellipse id="orbit.3" x=(px)147 y=(px)229 w=(px)306 h=(px)328 stroke=(token)"paper" stroke-width=(token)"stroke"
+      ellipse id="orbit.4" x=(px)216 y=(px)199 w=(px)168 h=(px)388 stroke=(token)"paper" stroke-width=(token)"stroke"
+      ellipse id="satellite" x=(px)459 y=(px)293 w=(px)20 h=(px)20 fill=(token)"paper"
+
+      line id="divider" x1=(px)42 y1=(px)639 x2=(px)558 y2=(px)639 stroke=(token)"ink" stroke-width=(token)"stroke"
+      text id="date" x=(px)42 y=(px)652 w=(px)270 h=(px)37 fill=(token)"ink" font-family=(token)"font" font-size=(token)"size.details" font-weight=(token)"weight.bold" { span "Friday, 21 August" }
+      text id="time" x=(px)360 y=(px)652 w=(px)198 h=(px)37 align="end" fill=(token)"ink" font-family=(token)"font" font-size=(token)"size.details" { span "Doors at 8 pm" }
+    }
+  }
+}

@@ -3,7 +3,8 @@
 // writes back to the picked file, or downloads where the browser cannot).
 
 import { download } from "../engine/wasm/files.js";
-import { byId, h } from "../util/dom.js";
+import { byId } from "../util/dom.js";
+import { projectDocument, showSkippedFiles } from "./project-picker.js";
 
 const CONFIRM = "open-confirm";
 
@@ -17,7 +18,6 @@ export class FileTools {
     byId("open-file").addEventListener("click", () => this.openFile());
     byId("open-folder").addEventListener("click", () => this.openFolder());
     byId("download").addEventListener("click", () => this.downloadCopy());
-    byId("doc-dialog-cancel").addEventListener("click", () => byId("doc-dialog").close());
     document.addEventListener("keydown", (e) => {
       if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "o") {
         e.preventDefault();
@@ -35,14 +35,7 @@ export class FileTools {
     const project = await this.attempt(() => this.host.pickProject());
     if (!project) return;
     const notices = this.app.notices;
-    if (project.skipped.length) {
-      notices.show("project-skipped", {
-        level: "warning",
-        title: `${project.root}:`,
-        message: `${project.skipped.length} file(s) were too large to load and are missing from the project.`,
-        detail: project.skipped.join("\n"),
-      });
-    }
+    showSkippedFiles(notices, project);
     if (!project.documents.length) {
       notices.show("project-empty", {
         level: "error",
@@ -51,45 +44,8 @@ export class FileTools {
       });
       return;
     }
-    const path = project.documents.length === 1 ? project.documents[0] : await this.choose(project);
-    if (!path) return;
-    await this.load({ name: path.split("/").pop(), text: await this.textOf(project, path), path, project });
-  }
-
-  /** The text of `path` in `project` (its files hold base64). */
-  async textOf(project, path) {
-    const bytes = Uint8Array.from(atob(project.files[path]), (c) => c.charCodeAt(0));
-    return new TextDecoder().decode(bytes);
-  }
-
-  /** Let the user pick one of the project's documents. Resolves the path or `null`. */
-  choose(project) {
-    const dialog = byId("doc-dialog");
-    const list = byId("doc-dialog-list");
-    byId("doc-dialog-note").textContent = `${project.root} holds ${project.documents.length} documents.`;
-    return new Promise((resolve) => {
-      let chosen = null;
-      list.replaceChildren(
-        ...project.documents.map((path) =>
-          h(
-            "li",
-            {},
-            h("button", {
-              type: "button",
-              class: "button",
-              text: path,
-              onclick: () => {
-                chosen = path;
-                dialog.close();
-              },
-            }),
-          ),
-        ),
-      );
-      dialog.addEventListener("close", () => resolve(chosen), { once: true });
-      dialog.showModal();
-      list.querySelector("button")?.focus();
-    });
+    const spec = await this.attempt(() => projectDocument(project));
+    if (spec) await this.load(spec);
   }
 
   /** Replace the document with `spec` (see `WasmEngine.openDocument`). */

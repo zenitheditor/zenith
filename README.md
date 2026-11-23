@@ -611,7 +611,8 @@ How it behaves:
 - Open a `.zen` file or a project folder with the toolbar buttons. A folder gives the document its imports and assets. Chromium writes saves back to the file. Other browsers read through `<input type=file>` and save by download.
 - Bundled fonts beyond Noto Sans Regular and Bold load on demand from `fonts/`.
 - The fallback fonts (Arabic, Hebrew, CJK, emoji) load on demand from `fonts/` too. The page fetches a file only when the text has a character that only that face covers. The render equals the CLI render.
-- `?doc=samples/<name>.zen` opens a sample. The default is `samples/stack.zen`.
+- The bare URL shows the welcome screen. Open a file, start a blank design, or choose a starter.
+- `?doc=starters/poster.zen` opens the featured poster. `?doc=samples/<name>.zen` opens an example directly.
 - Each engine call sends the session and the project files to the module. Keep large images out of a project folder.
 - A save on the static site does not stamp a `doc-id` into the file.
 

@@ -140,7 +140,7 @@ async function main() {
   try {
     const page = await browser.newPage();
     await page.viewport(1440, 900);
-    await page.goto(host.url);
+    await page.goto(`${host.url}?doc=samples/stack.zen`);
     await ready(page);
     const result = await page.eval(`(${PAGE})(${JSON.stringify(largest)})`);
     // The calls of the real page for one keystroke, on the same document.

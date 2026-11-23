@@ -1,0 +1,8 @@
+zenith version=1 {
+  project id="proj.blank" name="Untitled"
+  tokens format="zenith-token-v1" {}
+  styles {}
+  document id="doc.blank" title="Untitled" {
+    page id="page" w=(px)720 h=(px)900
+  }
+}

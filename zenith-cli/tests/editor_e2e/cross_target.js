@@ -174,7 +174,7 @@ async function main() {
   const bad = [];
   try {
     const page = await browser.newPage();
-    await page.goto(`${host.url}`);
+    await page.goto(`${host.url}?doc=samples/stack.zen`);
     await page.waitFor("document.documentElement.dataset.ready === 'true'", "the static page", 30000);
     await page.eval(PAGE.replace("SCENARIO", scenario.toString()));
     for (const [i, name] of names.entries()) {

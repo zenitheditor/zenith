@@ -10,10 +10,44 @@
 <link rel="stylesheet" href="css/controls.css">
 <link rel="stylesheet" href="css/panels.css">
 <link rel="stylesheet" href="css/canvas.css">
+<link rel="stylesheet" href="css/welcome.css">
 <script type="module" src="js/main.js"></script>
 </head>
 <body>
-<a class="skip-link" href="#code-host">Skip to source</a>
+<a class="skip-link" id="skip-source" href="#code-host">Skip to source</a>
+<main id="welcome" class="welcome" aria-labelledby="welcome-title" hidden>
+  <div class="welcome-inner">
+    <div class="welcome-brand">Zenith</div>
+    <p class="welcome-status" id="welcome-status" role="status"></p>
+    <div id="welcome-choices">
+      <div class="welcome-hero">
+        <div class="welcome-entry">
+          <h1 id="welcome-title">Start a design</h1>
+          <a class="button primary" id="welcome-poster" href="?doc=starters/poster.zen" hidden>Edit this poster</a>
+          <div class="welcome-files">
+            <button type="button" class="button" id="welcome-blank">New blank design</button>
+            <button type="button" class="button" id="welcome-open">Open .zen file</button>
+            <button type="button" class="button" id="welcome-folder" hidden>Open project folder</button>
+          </div>
+        </div>
+        <img class="welcome-poster" id="welcome-poster-image" width="400" height="480" alt="Night Garden event poster" hidden>
+      </div>
+      <section class="welcome-gallery" id="welcome-gallery" aria-labelledby="welcome-templates" hidden>
+        <h2 id="welcome-templates">More templates</h2>
+        <div class="welcome-cards">
+          <a class="welcome-card" href="?doc=samples/article.zen">
+            <img id="welcome-report-image" alt="" loading="lazy">
+            <span>Article</span>
+          </a>
+          <a class="welcome-card" href="?doc=samples/flowchart.zen">
+            <img id="welcome-diagram-image" alt="" loading="lazy">
+            <span>Flowchart</span>
+          </a>
+        </div>
+      </section>
+    </div>
+  </div>
+</main>
 <div class="app" id="app" data-full="none">
   <header class="topbar">
     <div class="doc-title">
