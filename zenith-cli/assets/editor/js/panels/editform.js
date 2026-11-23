@@ -50,7 +50,7 @@ const AXES = {
  * token `[{id, type, value}]`. `set(params)` sends `node.set` and resolves
  * `true` on success.
  */
-export function editForm(info, tokens, set) {
+export function editForm(info, tokens, set, { omitText = false } = {}) {
   const e = info.edit;
   const fields = new Set(e.fields ?? []);
   const out = [];
@@ -73,7 +73,7 @@ export function editForm(info, tokens, set) {
     }
   }
   if (fields.has("align")) out.push(alignField(e.align ?? "start", set));
-  if (fields.has("text")) out.push(textField(e.text ?? "", set));
+  if (!omitText && fields.has("text")) out.push(textField(e.text ?? "", set));
   if (fields.has("spans")) out.push(spansField(e.spans ?? [], set));
   const flags = ["visible", "locked"].filter((f) => fields.has(f));
   if (flags.length) out.push(flagsField(e, set));
@@ -292,7 +292,7 @@ function alignField(value, set) {
   return h("label", { class: "edit-row" }, h("span", { class: "edit-label wide", text: "Align" }), select);
 }
 
-function textField(value, set) {
+export function textField(value, set) {
   const area = h("textarea", { class: "edit-text", rows: "2", "aria-label": "Text content", dataset: { field: "text" } });
   area.value = value;
   const commit = async () => {

@@ -198,6 +198,123 @@ export const steps = [
     },
   ],
   [
+    "featured poster: edit the headline, reveal source, and export current content",
+    async ({ page, url, shot }) => {
+      const poster = new URL(url);
+      poster.search = "?doc=starters/poster.zen&test=ignored";
+      poster.hash = "draft=ignored";
+      await page.viewport(1440, 900);
+      await page.goto(poster.href);
+      await ready(page);
+      const start = await page.eval(`({
+        source: document.getElementById('app').dataset.source,
+        diagnostics: document.getElementById('app').dataset.bottom,
+        headline: document.querySelector('#inspector textarea[data-field=text]')?.value,
+        advanced: document.querySelector('#inspector .inspector-advanced')?.open,
+        layout: localStorage.getItem('zenith-edit.layout'),
+        saved: document.getElementById('status-save').textContent,
+      })`);
+      check(start.source === "closed" && start.diagnostics === "closed", "the poster did not start in the canvas view");
+      check(start.headline === "Night Garden" && start.advanced === false, "the headline editor is not ready");
+      check(start.saved === "", "the pristine poster claims to be saved");
+      await shot("poster-guided");
+      await page.viewport(390, 844);
+      await settle(page);
+      check(await page.eval(`['show-source', 'export-menu-toggle'].every((id) => {
+        const box = document.getElementById(id).getBoundingClientRect();
+        return box.width > 0 && box.right <= innerWidth;
+      })`), "Source or Export is outside the narrow viewport");
+      await shot("poster-guided-narrow");
+      await page.viewport(1440, 900);
+      await page.eval(`(() => {
+        const field = document.querySelector('#inspector textarea[data-field=text]');
+        field.value = 'Garden Film Night';
+        field.dispatchEvent(new Event('change'));
+      })()`);
+      await page.waitFor(`${A}.code.text().includes('Garden Film Night') && ${A}.sync.synced()`, "the headline edit");
+      await page.clickSelector("#show-source");
+      check(await page.eval("document.getElementById('show-source').getAttribute('aria-pressed') === 'true'"), "Source did not open");
+      check(await page.eval(`localStorage.getItem('zenith-edit.layout') === ${JSON.stringify(start.layout)}`), "the guided view modified layout preferences");
+
+      await page.eval(`(() => {
+        const app = ${A};
+        const urls = new Map();
+        const makeUrl = URL.createObjectURL.bind(URL);
+        URL.createObjectURL = (blob) => { const url = makeUrl(blob); urls.set(url, blob); return url; };
+        const click = HTMLAnchorElement.prototype.click;
+        window.__exports = [];
+        HTMLAnchorElement.prototype.click = function () {
+          if (this.download) window.__exports.push({name: this.download, blob: urls.get(this.href)});
+          else click.call(this);
+        };
+        const run = app.engine.run;
+        app.engine.run = async (command, params, options) => {
+          const env = await run(command, params, options);
+          if (command === 'doc.render' && !params.viewport) {
+            window.__fullPage = { params, sha: env.result?.sha256 };
+            if (window.__holdExport) await new Promise((resolve) => { window.__releaseExport = resolve; });
+          }
+          return env;
+        };
+        Object.defineProperty(navigator, 'clipboard', {
+          configurable: true,
+          value: { writeText: async () => { throw new Error('Clipboard blocked'); } },
+        });
+      })()`);
+      await page.clickSelector("#export-menu-toggle");
+      await page.clickSelector("#copy-example");
+      await page.waitFor("!!document.querySelector('.example-link')", "the clipboard fallback");
+      const copy = new URL(poster);
+      copy.search = "?doc=starters%2Fposter.zen";
+      copy.hash = "";
+      check(await page.eval(`document.querySelector('.example-link').value === ${JSON.stringify(copy.href)}`), "the copied example link kept extra URL state");
+
+      await page.clickSelector("#export-menu-toggle");
+      await page.clickSelector("#export-png");
+      await page.waitFor("window.__exports.length === 1", "the PNG download");
+      const png = await page.eval(`(async () => {
+        const { name, blob } = window.__exports[0];
+        const bytes = await blob.arrayBuffer();
+        const view = new DataView(bytes);
+        const sha = [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))]
+          .map((n) => n.toString(16).padStart(2, '0')).join('');
+        return { name, width: view.getUint32(16), height: view.getUint32(20),
+          mime: blob.type, same: sha === window.__fullPage.sha, params: window.__fullPage.params };
+      })()`);
+      check(png.name === "poster.png" && png.mime === "image/png" && png.same, `unexpected download: ${JSON.stringify(png)}`);
+      check(png.width === 600 && png.height === 720 && png.params.page === 1 && png.params.scale === 1,
+        `export did not render the whole page: ${JSON.stringify(png)}`);
+
+      await page.eval("window.__holdExport = true");
+      await page.clickSelector("#export-menu-toggle");
+      await page.clickSelector("#export-png");
+      await page.waitFor("typeof window.__releaseExport === 'function'", "the in-flight export");
+      await cursorAt(page, 0);
+      await page.type("// Changed during export\n");
+      await page.eval("window.__releaseExport()");
+      await page.waitFor("document.querySelector('[data-key=export-png]')?.textContent.includes('changed during export')", "the interrupted export notice");
+      check(await page.eval("window.__exports.length === 1"), "a changed snapshot was downloaded");
+
+      await cursorAt(page, 0);
+      await page.type("}\n");
+      await page.waitFor(`!${A}.valid && ${A}.stale`, "the invalid document");
+      await page.clickSelector("#export-menu-toggle");
+      check(await page.eval("document.getElementById('export-png').disabled && !document.getElementById('png-unavailable').hidden"), "invalid text leaves PNG export enabled");
+      await page.clickSelector("#download");
+      check(await page.eval("window.__exports.length === 2 && window.__exports[1].name === 'poster.zen'"), "invalid source cannot be downloaded");
+      check(await page.eval(`window.__exports[1].blob.text().then((text) => text === ${A}.code.text())`), "the source download lost invalid edits");
+      await page.reload();
+      await ready(page);
+      check((await state(page)).text.includes('span "Night Garden"'), "the example did not reopen as a fresh copy");
+      await openMocked(page, "poster.zen", DOC("Local file"));
+      await page.waitFor(`${A}.code.text().includes('title="Local file"')`, "the same-named local file");
+      check(await page.eval(`!${A}.example && document.getElementById('show-source').hidden && document.getElementById('copy-example').hidden`), "a local file inherited the example tools");
+      await page.goto(url);
+      await ready(page);
+      return png;
+    },
+  ],
+  [
     "wasm engine: the page runs on the wasm host with a clean status",
     async ({ page, url }) => {
       // A fresh load: the shared steps leave a dark phone-width viewport.
@@ -365,7 +482,7 @@ export const steps = [
       check(r.text.startsWith("// saved note\n"), "the edit is not in the file");
       check(r.writes === 1, `${r.writes} writes`);
       const status = await page.eval("document.getElementById('status-save').textContent");
-      check(status === "Saved", `status ${status}`);
+      check(status === "File up to date", `status ${status}`);
       return { writes: r.writes };
     },
   ],

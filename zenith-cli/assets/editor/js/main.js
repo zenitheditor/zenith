@@ -14,7 +14,7 @@
 // work. The token dies with the server run, so a stored copy grants nothing
 // once `zenith edit` stops.
 
-import { loadSample } from "./app/samples.js";
+import { curatedExample, loadSample } from "./app/samples.js";
 import { EngineError, HttpEngine, WasmEngine } from "./engine/index.js";
 import { hydrateIcons } from "./ui/icons.js";
 import { byId, h } from "./util/dom.js";
@@ -68,13 +68,13 @@ async function main() {
   }
   byId("app").hidden = false;
   banner("info", "Opening the document.");
-  await loadSample(path).then(mountWasm).catch(showWasmStartError);
+  await loadSample(path).then((spec) => mountWasm(spec, curatedExample(path))).catch(showWasmStartError);
 }
 
-async function mountWasm(spec) {
+async function mountWasm(spec, example = null) {
   const startup = await startWasm(spec);
   try {
-    await mount(startup, "wasm", spec.project);
+    await mount(startup, "wasm", spec.project, example);
   } catch (error) {
     startup.engine.close();
     throw error;
@@ -95,14 +95,14 @@ function showWasmStartError(error) {
   back.focus();
 }
 
-async function mount({ engine, summary }, host, project) {
+async function mount({ engine, summary }, host, project, example) {
   const { App } = await import("./app/app.js");
   if (host === "wasm") hydrateIcons(document);
   byId("welcome").hidden = true;
   byId("app").hidden = false;
   byId("skip-source").hidden = false;
   byId("banners").replaceChildren();
-  const app = new App(engine, summary);
+  const app = new App(engine, summary, { example });
   window.zenithEditor = app;
   await app.start();
   if (project?.skipped?.length) {

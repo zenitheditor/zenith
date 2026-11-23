@@ -613,6 +613,8 @@ How it behaves:
 - The fallback fonts (Arabic, Hebrew, CJK, emoji) load on demand from `fonts/` too. The page fetches a file only when the text has a character that only that face covers. The render equals the CLI render.
 - The bare URL shows the welcome screen. Open a file, start a blank design, or choose a starter.
 - `?doc=starters/poster.zen` opens the featured poster. `?doc=samples/<name>.zen` opens an example directly.
+- The featured poster opens with the headline selected. Use **Source** to see the text behind the canvas.
+- **Export** downloads `.zen` source or the current page as a PNG. **Copy example link** shares the original starter.
 - Each engine call sends the session and the project files to the module. Keep large images out of a project folder.
 - A save on the static site does not stamp a `doc-id` into the file.
 

@@ -4,7 +4,7 @@
 import { cssColor } from "../util/color.js";
 import { clear, h, num, plural } from "../util/dom.js";
 import { icon, kindIcon } from "../ui/icons.js";
-import { editForm } from "./editform.js";
+import { editForm, textField } from "./editform.js";
 
 export class Inspector {
   /** `hooks.set(id, params)`: send `node.set`; resolves `true` on success. */
@@ -44,6 +44,7 @@ export class Inspector {
     const focused = this.shownId === info.id && active instanceof HTMLElement && this.root.contains(active)
       ? active.dataset.field
       : null;
+    const expanded = this.shownId === info.id && this.root.querySelector(".inspector-advanced")?.open;
     this.shownId = info.id;
     clear(this.root);
     const where = info.page ? `Page ${info.page}` : info.master ? `Master ${info.master}` : "";
@@ -62,13 +63,21 @@ export class Inspector {
       }),
     );
     this.flags(info);
+    let details = this.root;
     if (info.edit) {
       const id = info.id;
-      this.root.append(...editForm(info, this.tokens, (params) => this.hooks.set(id, params)).flat());
+      const set = (params) => this.hooks.set(id, params);
+      const guided = this.hooks.guideText?.(id) && info.edit.fields?.includes("text");
+      if (guided) {
+        details = h("details", { class: "inspector-advanced", open: expanded },
+          h("summary", { text: "More settings", dataset: { field: "advanced" } }));
+        this.root.append(...textField(info.edit.text ?? "", set), details);
+      }
+      details.append(...editForm(info, this.tokens, set, { omitText: guided }).flat());
     }
-    if (info.box) this.box(info.box);
-    this.attributes(info.attributes ?? []);
-    if (info.style) this.style(info.style);
+    if (info.box) this.box(info.box, details);
+    this.attributes(info.attributes ?? [], details);
+    if (info.style) this.style(info.style, details);
     if (focused) this.root.querySelector(`[data-field="${focused}"]`)?.focus();
   }
 
@@ -90,7 +99,7 @@ export class Inspector {
     }
   }
 
-  box(b) {
+  box(b, target) {
     const cells = [
       ["X", b.x],
       ["Y", b.y],
@@ -99,7 +108,7 @@ export class Inspector {
     ];
     if (b.rotate !== undefined && b.rotate !== null) cells.push(["R", `${num(b.rotate)}°`]);
     if (Math.abs(b.angle ?? 0) > 1e-9) cells.push(["∠", `${num(b.angle)}°`]);
-    this.root.append(
+    target.append(
       h("h3", { text: "Drawn box (px)" }),
       h(
         "div",
@@ -111,29 +120,29 @@ export class Inspector {
     );
   }
 
-  attributes(list) {
-    this.root.appendChild(h("h3", { text: "Attributes" }));
+  attributes(list, target) {
+    target.appendChild(h("h3", { text: "Attributes" }));
     if (list.length === 0) {
-      this.root.appendChild(h("p", { class: "empty", text: "No attributes." }));
+      target.appendChild(h("p", { class: "empty", text: "No attributes." }));
       return;
     }
     const dl = h("dl", { class: "kv" });
     for (const a of list) {
       dl.append(h("dt", { text: a.name }), h("dd", {}, value(a)));
     }
-    this.root.appendChild(dl);
+    target.appendChild(dl);
   }
 
-  style(s) {
+  style(s, target) {
     const label = s.source === "style" ? `Style ${s.id}` : `Defaults for ${s.id}`;
-    this.root.appendChild(h("h3", { text: label }));
+    target.appendChild(h("h3", { text: label }));
     if (!s.defined) {
-      this.root.appendChild(h("p", { class: "empty", text: `${s.id} is not defined.` }));
+      target.appendChild(h("p", { class: "empty", text: `${s.id} is not defined.` }));
       return;
     }
     const entries = Object.entries(s.properties ?? {});
     if (entries.length === 0) {
-      this.root.appendChild(h("p", { class: "empty", text: "No properties." }));
+      target.appendChild(h("p", { class: "empty", text: "No properties." }));
       return;
     }
     const dl = h("dl", { class: "kv" });
@@ -144,7 +153,7 @@ export class Inspector {
         h("dd", {}, p.token ? tokenChip(p.token, p.resolved) : text),
       );
     }
-    this.root.appendChild(dl);
+    target.appendChild(dl);
   }
 }
 

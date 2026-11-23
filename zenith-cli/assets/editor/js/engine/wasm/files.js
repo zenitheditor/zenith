@@ -209,7 +209,11 @@ export function isReadOnlyError(err) {
 
 /** Offer `text` as a download named `name`. */
 export function download(name, text) {
-  const url = URL.createObjectURL(new Blob([text], { type: "text/plain;charset=utf-8" }));
+  downloadBlob(name, new Blob([text], { type: "text/plain;charset=utf-8" }));
+}
+
+export function downloadBlob(name, blob) {
+  const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
   a.download = name;

@@ -21,6 +21,7 @@ import { NodeActions } from "./actions.js";
 import { EventRouter } from "./events.js";
 import { FileTools } from "./files.js";
 import { GestureController } from "./gestures.js";
+import { FEATURED_POSTER } from "./samples.js";
 import { SelectionController } from "./selection.js";
 import { Status } from "./status.js";
 
@@ -28,7 +29,7 @@ const REFRESH_MS = 40;
 const SEVERITY = { error: "error", warning: "warning", advisory: "info" };
 
 export class App {
-  constructor(engine, summary) {
+  constructor(engine, summary, { example = null } = {}) {
     this.host = engine;
     this.engine = engine;
     this.path = summary.path;
@@ -43,9 +44,10 @@ export class App {
     this.needsVersion = new Map();
     this.diagnosticList = [];
     this.index = null;
+    this.example = example;
 
     this.notices = new Notices(byId("banners"), byId("toasts"));
-    this.layout = new Layout();
+    this.layout = new Layout({ poster: this.example === FEATURED_POSTER });
     this.events = new EventRouter(this);
     this.engine = this.events.track(engine);
     /**
@@ -101,6 +103,7 @@ export class App {
     });
     this.inspector = new Inspector(byId("inspector"), {
       set: (id, params) => this.actions.set(id, params),
+      guideText: (id) => this.example === FEATURED_POSTER && id === "headline",
     });
     this.layers = new Layers(byId("pages"), byId("layers"), {
       page: (n) => this.selection.goToPage(n),
@@ -131,6 +134,7 @@ export class App {
     await this.diagnose();
     this.renderer.request({ fit: true });
     await this.refreshDocument();
+    if (this.example === FEATURED_POSTER) await this.selection.selectIds(["headline"], "starter");
     this.events.subscribe();
     const summary = await this.engine.state({ text: true });
     this.events.summary(summary);
@@ -324,6 +328,7 @@ export class App {
     const from = this.paneAt(d.start);
     const to = this.paneAt(typeof d.end === "number" ? d.end : d.start);
     if (this.layout.full === "canvas") this.layout.setFull("none");
+    if (this.layout.poster && !this.layout.poster.source) this.layout.showSource(true);
     this.code.jumpTo(from, to);
   }
 
@@ -441,6 +446,8 @@ export class App {
    * text and start from page 1 with nothing selected.
    */
   documentOpened(data) {
+    this.example = null;
+    this.layout.clearPoster();
     this.path = data.path;
     this.name = data.name;
     byId("doc-name").textContent = this.name;

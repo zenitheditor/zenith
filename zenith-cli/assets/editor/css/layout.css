@@ -286,6 +286,10 @@ body {
   border-bottom: 0;
 }
 
+.app[data-poster="true"][data-bottom="closed"]:not([data-has-diagnostics]) .panel-bottom {
+  display: none;
+}
+
 /* Status bar */
 
 .statusbar {
@@ -340,6 +344,19 @@ body {
   flex: 1 1 0;
 }
 
+.app[data-source="closed"] .pane-code,
+.app[data-source="closed"] .divider {
+  display: none;
+}
+
+.inspector-advanced {
+  margin-block: var(--space-3);
+}
+
+.inspector-advanced summary {
+  cursor: pointer;
+}
+
 /* Phone width: one column. The panes stack; panels follow below. */
 
 @media (max-width: 720px) {
@@ -355,9 +372,7 @@ body {
     display: none;
   }
 
-  /* Room for the title: Save already downloads where the browser cannot
-     write the file, and a phone seldom picks a folder. */
-  #download,
+  /* A phone seldom picks a folder. */
   #open-folder {
     display: none;
   }
@@ -374,6 +389,31 @@ body {
     flex-direction: column;
     height: 100%;
     min-height: 420px;
+  }
+
+  .app[data-poster="true"] {
+    grid-template-rows: auto auto minmax(0, 1fr) auto var(--status-h);
+    --tool: 28px;
+  }
+
+  .app[data-poster="true"] .topbar {
+    flex-wrap: wrap;
+    gap: var(--space-1);
+    padding-block: var(--space-1);
+  }
+
+  .app[data-poster="true"] .doc-title {
+    flex-basis: 100%;
+  }
+
+  .app[data-poster="true"] .toolbar {
+    flex-wrap: wrap;
+    max-width: 100%;
+  }
+
+  .app[data-poster="true"][data-full="none"][data-source="closed"] .center {
+    min-height: 0;
+    height: clamp(280px, 55vh, 480px);
   }
 
   #theme {
@@ -444,5 +484,28 @@ body {
 
   .statusbar {
     gap: var(--space-3);
+  }
+}
+
+@media (max-width: 440px) {
+  .app[data-poster="true"] .toolbar {
+    display: grid;
+    grid-template-columns: repeat(3, max-content);
+    justify-items: start;
+  }
+
+  .app[data-poster="true"] .toolbar > .tool-group:has(#theme),
+  .app[data-poster="true"] #save i {
+    display: none;
+  }
+
+  .app[data-poster="true"] #show-source,
+  .app[data-poster="true"] #export-tools,
+  .app[data-poster="true"] #save {
+    grid-row: 2;
+  }
+
+  .app[data-poster="true"] .toolbar #save-label {
+    display: inline;
   }
 }

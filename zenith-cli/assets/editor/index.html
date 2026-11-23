@@ -63,7 +63,6 @@
       <div class="tool-group" id="file-tools" role="group" aria-label="File" hidden>
         <button type="button" class="tool" id="open-file" title="Open a .zen file (Ctrl+O)"><i data-icon="open"></i><span class="sr-only">Open a .zen file</span></button>
         <button type="button" class="tool" id="open-folder" title="Open a project folder"><i data-icon="folder"></i><span class="sr-only">Open a project folder</span></button>
-        <button type="button" class="tool" id="download" title="Download a copy"><i data-icon="download"></i><span class="sr-only">Download a copy</span></button>
       </div>
       <div class="tool-group">
         <button type="button" class="tool" id="undo" title="Undo (Ctrl+Z)"><i data-icon="undo"></i><span class="sr-only">Undo</span></button>
@@ -72,7 +71,17 @@
       <div class="tool-group">
         <button type="button" class="tool" id="theme" title="Theme: system"><i data-icon="theme"></i><span class="sr-only" id="theme-label">Theme: system</span></button>
       </div>
-      <button type="button" class="button primary" id="save" title="Save (Ctrl+S)"><i data-icon="save"></i><span>Save</span></button>
+      <button type="button" class="button" id="show-source" aria-controls="pane-code" aria-pressed="false" hidden>Source</button>
+      <details class="export-tools" id="export-tools" hidden>
+        <summary class="button" id="export-menu-toggle">Export</summary>
+        <div class="export-menu">
+          <button type="button" class="button" id="download">Download .zen</button>
+          <button type="button" class="button" id="export-png" aria-describedby="png-unavailable">Export PNG</button>
+          <p id="png-unavailable" hidden>Fix document errors to export PNG.</p>
+          <button type="button" class="button" id="copy-example" hidden>Copy example link</button>
+        </div>
+      </details>
+      <button type="button" class="button primary" id="save" title="Save (Ctrl+S)"><i data-icon="save"></i><span id="save-label">Save</span></button>
     </div>
   </header>
 

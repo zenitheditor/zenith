@@ -93,6 +93,57 @@ button {
   border-color: var(--accent-hover);
 }
 
+.export-tools {
+  position: relative;
+  z-index: 5;
+}
+
+.export-tools summary {
+  list-style: none;
+}
+
+.export-tools summary::-webkit-details-marker {
+  display: none;
+}
+
+.export-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + var(--space-1));
+  display: grid;
+  width: max-content;
+  max-width: min(220px, 80vw);
+  padding: var(--space-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow-pop);
+}
+
+.export-menu .button {
+  min-height: 32px;
+  border-color: transparent;
+}
+
+.export-menu p {
+  margin: 0;
+  padding: 0 var(--space-3) var(--space-2);
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.example-link {
+  display: block;
+  width: 100%;
+  margin-top: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+
 .button.danger {
   color: var(--danger);
   border-color: var(--danger);

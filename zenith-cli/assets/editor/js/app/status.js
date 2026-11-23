@@ -18,6 +18,7 @@ export class Status {
     document.title = `${dirty ? "● " : ""}${app.name} · Zenith`;
     byId("dirty-mark").hidden = !dirty;
     const t = app.diagnostics.tally();
+    byId("app").toggleAttribute("data-has-diagnostics", !!(t.error || t.warning || t.advisory));
     const valid = byId("status-valid");
     clear(valid);
     if (t.error > 0) {
@@ -27,16 +28,24 @@ export class Status {
       valid.append(icon("check"), t.warning ? `Valid, ${plural(t.warning, "warning")}` : "Valid");
       valid.style.color = "var(--ok)";
     }
+    const hosted = app.host.kind === "wasm";
     byId("status-save").textContent = this.isSaving
       ? "Saving"
       : dirty
         ? app.sync.pending()
           ? "Unsaved, syncing"
           : "Unsaved changes"
-        : "Saved";
-    byId("save").disabled = this.isSaving || app.readonly === true;
-    byId("status-version").textContent = `v${app.sync.version}`;
+        : hosted
+          ? app.host.handle ? "File up to date" : ""
+          : "Saved";
+    const save = byId("save");
+    save.disabled = this.isSaving || app.readonly === true;
+    if (hosted) save.hidden = !app.host.handle && typeof window.showSaveFilePicker !== "function";
+    const revision = byId("status-version");
+    revision.hidden = hosted;
+    revision.textContent = `v${app.sync.version}`;
     byId("status-conn").textContent = this.conn;
+    app.files?.updateActions();
     this.cursor();
   }
 

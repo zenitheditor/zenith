@@ -8,6 +8,14 @@
 import { blobToBase64 } from "../engine/wasm/files.js";
 
 const DEFAULT_SAMPLE = "samples/stack.zen";
+export const FEATURED_POSTER = "starters/poster.zen";
+const EXAMPLES = new Set([FEATURED_POSTER, "samples/article.zen", "samples/flowchart.zen"]);
+
+export function curatedExample(path) {
+  return document.querySelector('meta[name="zenith-gallery"]')?.content === "true" && EXAMPLES.has(path)
+    ? path
+    : null;
+}
 
 /** A same-site URL for `path`, or throws. */
 function siteUrl(path) {

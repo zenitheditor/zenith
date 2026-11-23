@@ -14,7 +14,7 @@ const BIG_STEP = 0.1;
 const THEMES = ["system", "light", "dark"];
 
 export class Layout {
-  constructor() {
+  constructor({ poster = false } = {}) {
     this.app = byId("app");
     this.center = byId("center");
     this.divider = byId("divider");
@@ -25,6 +25,7 @@ export class Layout {
       if (typeof stored[key] === typeof DEFAULTS[key]) this.state[key] = stored[key];
     }
     if (!THEMES.includes(this.state.theme)) this.state.theme = "system";
+    this.poster = poster ? { ...this.state, source: false, left: false, right: true, bottom: false } : null;
     this.full = "none";
     this.listeners = [];
     this.bind();
@@ -50,6 +51,7 @@ export class Layout {
       this.setFull(this.full === "canvas" ? "none" : "canvas"),
     );
     byId("theme").addEventListener("click", () => this.cycleTheme());
+    byId("show-source").addEventListener("click", () => this.showSource(this.full === "canvas" || !this.poster?.source));
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape" && this.full !== "none" && !e.defaultPrevented) {
         this.setFull("none");
@@ -81,7 +83,7 @@ export class Layout {
       dragging = false;
       d.classList.remove("dragging");
       if (d.hasPointerCapture(e.pointerId)) d.releasePointerCapture(e.pointerId);
-      this.persist();
+      if (!this.poster) this.persist();
     };
     d.addEventListener("pointerup", end);
     d.addEventListener("pointercancel", end);
@@ -91,8 +93,9 @@ export class Layout {
       const [less, more] = this.stacked() ? ["ArrowUp", "ArrowDown"] : ["ArrowLeft", "ArrowRight"];
       const [min, max] = this.bounds();
       let next = null;
-      if (e.key === less) next = this.state.split - step;
-      else if (e.key === more) next = this.state.split + step;
+      const split = (this.poster ?? this.state).split;
+      if (e.key === less) next = split - step;
+      else if (e.key === more) next = split + step;
       else if (e.key === "Home") next = min;
       else if (e.key === "End") next = max;
       else if (e.key === "Enter") next = DEFAULTS.split;
@@ -114,16 +117,31 @@ export class Layout {
 
   setSplit(fraction, { persist = true } = {}) {
     const [min, max] = this.bounds();
-    this.state.split = Math.min(max, Math.max(min, fraction));
+    (this.poster ?? this.state).split = Math.min(max, Math.max(min, fraction));
     this.applySplit();
-    if (persist) this.persist();
+    if (persist && !this.poster) this.persist();
     this.changed();
   }
 
   toggle(panel) {
-    this.state[panel] = !this.state[panel];
+    const state = this.poster ?? this.state;
+    state[panel] = !state[panel];
     this.apply();
-    this.persist();
+    if (!this.poster) this.persist();
+  }
+
+  showSource(on) {
+    if (!this.poster) return;
+    this.poster.source = on;
+    this.full = "none";
+    this.apply();
+  }
+
+  clearPoster() {
+    if (!this.poster) return;
+    this.poster = null;
+    this.full = "none";
+    this.apply();
   }
 
   /** `"none"`, `"code"`, or `"canvas"`. */
@@ -140,16 +158,24 @@ export class Layout {
   cycleTheme() {
     const i = THEMES.indexOf(this.state.theme);
     this.state.theme = THEMES[(i + 1) % THEMES.length];
+    if (this.poster) this.poster.theme = this.state.theme;
     this.apply();
     this.persist();
   }
 
   apply() {
-    const s = this.state;
+    const s = this.poster ?? this.state;
     this.app.dataset.left = s.left ? "open" : "closed";
     this.app.dataset.right = s.right ? "open" : "closed";
     this.app.dataset.bottom = s.bottom ? "open" : "closed";
     this.app.dataset.full = this.full;
+    const source = (!this.poster || this.poster.source) && this.full !== "canvas";
+    this.app.dataset.poster = String(!!this.poster);
+    this.app.dataset.source = !this.poster || this.poster.source ? "open" : "closed";
+    byId("skip-source").hidden = !!this.poster && !source;
+    const sourceButton = byId("show-source");
+    sourceButton.hidden = !this.poster;
+    sourceButton.setAttribute("aria-pressed", String(source));
     byId("toggle-left").setAttribute("aria-pressed", String(s.left));
     byId("toggle-right").setAttribute("aria-pressed", String(s.right));
     byId("toggle-bottom").setAttribute("aria-pressed", String(s.bottom));
@@ -181,9 +207,10 @@ export class Layout {
   }
 
   applySplit() {
-    this.center.style.setProperty("--split", String(this.state.split));
-    this.divider.setAttribute("aria-valuenow", String(Math.round(this.state.split * 100)));
-    this.divider.setAttribute("aria-valuetext", `Source ${Math.round(this.state.split * 100)} percent`);
+    const split = (this.poster ?? this.state).split;
+    this.center.style.setProperty("--split", String(split));
+    this.divider.setAttribute("aria-valuenow", String(Math.round(split * 100)));
+    this.divider.setAttribute("aria-valuetext", `Source ${Math.round(split * 100)} percent`);
   }
 
   changed() {
