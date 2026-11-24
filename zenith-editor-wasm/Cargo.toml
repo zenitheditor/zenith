@@ -5,7 +5,6 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
-homepage.workspace = true
 publish = false
 description = "Zenith engine as a wasm32-wasip1 command module: one JSON request on stdin, one JSON response on stdout."
 

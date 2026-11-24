@@ -6,7 +6,6 @@ rust-version.workspace = true
 # Code is Apache-2.0. The font files under `fonts/` are OFL-1.1.
 license = "Apache-2.0 AND OFL-1.1"
 repository.workspace = true
-homepage.workspace = true
 categories = ["rendering", "text-processing"]
 keywords = ["fonts", "noto", "cjk", "fallback", "zenith"]
 publish.workspace = true

@@ -6,7 +6,6 @@ rust-version.workspace = true
 # Code is Apache-2.0. The bundled fonts under `assets/fonts/` are OFL-1.1.
 license = "Apache-2.0 AND OFL-1.1"
 repository.workspace = true
-homepage.workspace = true
 keywords.workspace = true
 categories.workspace = true
 publish.workspace = true
