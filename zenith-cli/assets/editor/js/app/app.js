@@ -177,6 +177,25 @@ export class App {
       },
       openExport: () => this.exportDlg?.open(),
       onInspectBox: (box) => this.rulers?.setSelectionBox(box),
+      setLayout: (nodeId, patch) =>
+        this.actions.run("tx.apply", () => ({
+          params: {
+            label: `Update layout on ${nodeId}`,
+            ops: [{ op: "set_layout", node: nodeId, ...patch }],
+          },
+          done: `Updated layout on ${nodeId}.`,
+        })),
+      pathBoolean: (a, b, operation) => {
+        const newId = `bool.${operation}.${Date.now().toString(36).slice(-3)}`;
+        return this.actions.run("tx.apply", () => ({
+          params: {
+            label: `Boolean ${operation}`,
+            select: [newId],
+            ops: [{ op: "path_boolean", node: a, target: b, new_id: newId, operation, tolerance: 0.5 }],
+          },
+          done: `Created boolean ${operation}.`,
+        }));
+      },
     });
     this.layers = new Layers(byId("pages"), byId("layers"), {
       page: (n) => this.selection.goToPage(n),
@@ -185,6 +204,28 @@ export class App {
       toggleVisible: (id, visible) => this.actions.set(id, { visible }),
       toggleLocked: (id, locked) => this.actions.set(id, { locked }),
       contextMenu: (_id, e) => this.openContextMenu(e),
+      reorderLayer: (srcId, targetId) => {
+        const pg = this.outline?.pages?.find((p) => p.page === this.page);
+        if (!pg) return;
+        const findParent = (list, parentId) => {
+          for (const n of list ?? []) {
+            if (n.id === targetId) return parentId;
+            if (n.children?.length) {
+              const found = findParent(n.children, n.id);
+              if (found) return found;
+            }
+          }
+          return null;
+        };
+        const parentId = findParent(pg.children, pg.id) ?? pg.id;
+        this.actions.run("tx.apply", () => ({
+          params: {
+            label: `Move ${srcId}`,
+            ops: [{ op: "reparent", node: srcId, new_parent: parentId, position: { before: targetId } }],
+          },
+          done: `Moved ${srcId}.`,
+        }));
+      },
       addPage: () => {
         const pages = this.outline?.pages ?? [];
         const cur = pages.find((p) => p.page === this.page) ?? pages[0];
@@ -671,8 +712,8 @@ export class App {
       e.preventDefault();
       // Select-on-right-click when clicking an unselected node on canvas.
       const pt = this.view.toPage(e.clientX, e.clientY);
-      const hit = await this.engine.run("select.hit", { page: this.page, x: pt.x, y: pt.y });
-      const hitId = hit.ok ? hit.result?.id : null;
+      const hit = await this.engine.run("select.hit", { x: pt.x, y: pt.y, tolerance: 4 / (this.view.zoom || 1), select: false });
+      const hitId = hit.ok ? hit.result?.hits?.[0]?.id : null;
       if (hitId && !this.selectionIds.includes(hitId)) {
         await this.selection.selectIds([hitId], "canvas");
       }
@@ -959,6 +1000,8 @@ export class App {
     this.status.stale(r.stale);
     this.status.zoom();
     this.overlay.draw();
+    this.rulers?.draw();
+    if (!r.stale && this.valid) this.drafts?.captureThumb(byId("page-canvas"));
   }
 
   renderFailed(env) {

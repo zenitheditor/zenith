@@ -3,6 +3,7 @@ import { hydrateIcons, icon } from "../ui/icons.js";
 import { byId, h } from "../util/dom.js";
 import { DraftStore, draftId } from "./draft-store.js";
 import { curatedExample, loadSample } from "./samples.js";
+import { deleteThumb, loadThumb, saveThumb } from "./workspace-store.js";
 
 function formatShortDate(ms) {
   const d = new Date(ms);
@@ -251,6 +252,27 @@ export class Drafts {
     this.render();
   }
 
+  /** Capture a lightweight thumbnail from the rendered page canvas for the active draft. */
+  captureThumb(canvasEl) {
+    const id = this.active?.id;
+    if (!id || !canvasEl || !canvasEl.width || !canvasEl.height) return;
+    try {
+      const max = 200;
+      const ratio = Math.min(1, max / canvasEl.width, max / canvasEl.height);
+      const off = document.createElement("canvas");
+      off.width = Math.max(1, Math.round(canvasEl.width * ratio));
+      off.height = Math.max(1, Math.round(canvasEl.height * ratio));
+      const ctx = off.getContext("2d");
+      if (!ctx) return;
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, off.width, off.height);
+      ctx.drawImage(canvasEl, 0, 0, off.width, off.height);
+      void saveThumb(id, off.toDataURL("image/jpeg", 0.72));
+    } catch {
+      // Ignore canvas taint / encoding failures.
+    }
+  }
+
   renderWelcomeRecent(records) {
     const sec = byId("welcome-recent-sec");
     const ul = byId("welcome-recent-list");
@@ -261,7 +283,21 @@ export class Drafts {
       return;
     }
     sec.hidden = false;
-    ul.replaceChildren(...records.slice(0, 6).map((record) => this.row(record)));
+    ul.replaceChildren(
+      ...records.slice(0, 6).map((record) => {
+        const li = this.row(record);
+        void loadThumb(record.id).then((url) => {
+          if (!url || !li.isConnected) return;
+          const main = li.querySelector(".draft-row-main");
+          const oldIcon = main?.querySelector("svg.icon");
+          if (oldIcon) {
+            const img = h("img", { src: url, alt: "", class: "recent-thumb" });
+            oldIcon.replaceWith(img);
+          }
+        });
+        return li;
+      }),
+    );
   }
 
   row(record) {
@@ -303,6 +339,7 @@ export class Drafts {
           const result = await this.store.discard(id, revision);
           if (result === "changed") throw new Error("This draft changed in another tab. Review it before discarding.");
           if (this.active?.id === id) this.removed(this.active);
+          void deleteThumb(id);
           this.channel?.postMessage({ id });
           this.message.textContent = "Draft discarded.";
         }),

@@ -5,6 +5,8 @@
 //
 // A handle is a `FileSystemFileHandle`. Nothing here keeps state.
 
+import { saveFolderHandle } from "../../app/workspace-store.js";
+
 /** A file larger than this is not read into the project. */
 export const MAX_FILE_BYTES = 64 * 1024 * 1024;
 /** The project stops growing past this many bytes of files. */
@@ -113,6 +115,20 @@ export async function pickAssetFiles({ startIn = null, multiple = true, accept =
   return chooseWithInput({ accept, multiple });
 }
 
+/** Read an already-granted `FileSystemDirectoryHandle` into a project object. */
+export async function readDirectoryHandle(dir) {
+  if (typeof dir.queryPermission === "function") {
+    const perm = await dir.queryPermission({ mode: "readwrite" });
+    if (perm !== "granted" && typeof dir.requestPermission === "function") {
+      const next = await dir.requestPermission({ mode: "readwrite" });
+      if (next !== "granted") return null;
+    }
+  }
+  const entries = [];
+  await walkDirectory(dir, "", entries);
+  return readEntries(dir.name, entries, true);
+}
+
 /**
  * Pick a project folder and read it. Resolves `{root, files, documents,
  * handles, skipped}` or `null` when the user cancelled. `files` maps a path
@@ -139,9 +155,8 @@ export async function pickProject(startIn = null) {
         throw err;
       }
     }
-    const entries = [];
-    await walkDirectory(dir, "", entries);
-    return readEntries(dir.name, entries, true);
+    void saveFolderHandle(dir);
+    return readDirectoryHandle(dir);
   }
   const files = await chooseWithInput({ directory: true });
   if (!files.length) return null;

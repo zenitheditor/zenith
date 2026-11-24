@@ -182,6 +182,25 @@
   vector-effect: non-scaling-stroke;
 }
 
+.overlay .measure-line {
+  stroke: var(--guide);
+  stroke-width: 1px;
+  stroke-dasharray: 3 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.overlay .measure-pill {
+  fill: var(--guide);
+}
+
+.overlay .measure-text {
+  fill: #ffffff;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  text-anchor: middle;
+  dominant-baseline: central;
+}
+
 .overlay .stem {
   stroke: var(--sel);
   stroke-width: 1px;

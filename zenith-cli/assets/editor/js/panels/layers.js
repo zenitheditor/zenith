@@ -249,6 +249,29 @@ export class Layers {
         class: `row${o.id === undefined && !o.key.startsWith("master:") ? " dim" : ""}${o.hidden ? " dim" : ""}`,
         style: `--depth:${o.depth - 1}`,
         title: o.kind ? `${o.kind}${o.id ? ` ${o.id}` : ""}` : o.label,
+        draggable: o.id !== undefined && this.handlers.reorderLayer ? "true" : undefined,
+        ondragstart: (e) => {
+          if (o.id === undefined) return;
+          e.dataTransfer?.setData("application/x-zenith-layer", o.id);
+          e.dataTransfer.effectAllowed = "move";
+        },
+        ondragover: (e) => {
+          if (o.id !== undefined && this.handlers.reorderLayer && e.dataTransfer?.types?.includes("application/x-zenith-layer")) {
+            e.preventDefault();
+            e.currentTarget.classList.add("drop-before");
+          }
+        },
+        ondragleave: (e) => {
+          e.currentTarget.classList.remove("drop-before");
+        },
+        ondrop: (e) => {
+          e.currentTarget.classList.remove("drop-before");
+          const srcId = e.dataTransfer?.getData("application/x-zenith-layer");
+          if (srcId && o.id && srcId !== o.id && this.handlers.reorderLayer) {
+            e.preventDefault();
+            this.handlers.reorderLayer(srcId, o.id);
+          }
+        },
         onclick: (e) => {
           if (e.target.closest(".twisty") && !o.leaf) this.toggle(o.key);
           else this.activate(o, e);

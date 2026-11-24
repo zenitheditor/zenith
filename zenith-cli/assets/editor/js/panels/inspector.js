@@ -263,6 +263,31 @@ export class Inspector {
           ),
         )
       : null;
+    const boolSec =
+      ids.length === 2 && this.hooks.pathBoolean
+        ? h(
+            "section",
+            { class: "insp-sec" },
+            h("h3", { text: "Boolean Ops" }),
+            h(
+              "div",
+              { class: "align-grid dist-grid" },
+              [
+                ["union", "Union"],
+                ["subtract", "Subtract"],
+                ["intersect", "Intersect"],
+                ["exclude", "Exclude"],
+              ].map(([op, label]) =>
+                h("button", {
+                  type: "button",
+                  class: "align-btn",
+                  text: label,
+                  onclick: () => this.hooks.pathBoolean(ids[0], ids[1], op),
+                }),
+              ),
+            ),
+          )
+        : null;
     this.root.append(
       h(
         "div",
@@ -270,6 +295,7 @@ export class Inspector {
         h("p", { class: "inspector-sub", text: `${plural(ids.length, "node")} selected.` }),
       ),
       alignSec,
+      boolSec,
       sharedSec,
       h(
         "section",
@@ -326,6 +352,65 @@ export class Inspector {
     this.flags(info);
     if (info.edit) {
       details.append(...editForm(info, this.tokens, set, { omitText: guided, createColorToken: this.hooks.createColorToken }).flat());
+    }
+    if (info.kind === "frame" && this.hooks.setLayout) {
+      const attrs = new Map((info.attributes ?? []).map((a) => [a.name, a]));
+      const curMode = String(attrs.get("layout")?.value ?? "absolute");
+      const curGap = attrs.get("gap")?.px ?? "";
+      const curPad = attrs.get("padding")?.px ?? "";
+      const modeBtns = [
+        ["absolute", "Free"],
+        ["row", "Row"],
+        ["column", "Col"],
+        ["grid", "Grid"],
+      ].map(([m, label]) =>
+        h("button", {
+          type: "button",
+          class: `align-btn${curMode === m ? " on" : ""}`,
+          text: label,
+          onclick: () => this.hooks.setLayout(info.id, { layout: m }),
+        }),
+      );
+      const gapIn = h("input", {
+        class: "edit-input",
+        type: "number",
+        min: "0",
+        step: "1",
+        value: curGap === "" ? "" : String(Math.round(curGap)),
+        placeholder: "0",
+        "aria-label": "Layout gap px",
+        onchange: () => {
+          const n = Number(gapIn.value);
+          if (Number.isFinite(n) && n >= 0) this.hooks.setLayout(info.id, { gap: n });
+        },
+      });
+      const padIn = h("input", {
+        class: "edit-input",
+        type: "number",
+        min: "0",
+        step: "1",
+        value: curPad === "" ? "" : String(Math.round(curPad)),
+        placeholder: "0",
+        "aria-label": "Layout padding px",
+        onchange: () => {
+          const n = Number(padIn.value);
+          if (Number.isFinite(n) && n >= 0) this.hooks.setLayout(info.id, { padding: n });
+        },
+      });
+      details.append(
+        h(
+          "section",
+          { class: "insp-sec" },
+          h("h3", { text: "Auto-Layout" }),
+          h("div", { class: "layout-modes" }, modeBtns),
+          h(
+            "div",
+            { class: "page-size-row" },
+            h("label", { class: "page-size-field" }, h("span", { text: "Gap" }), gapIn),
+            h("label", { class: "page-size-field" }, h("span", { text: "Pad" }), padIn),
+          ),
+        ),
+      );
     }
     if (info.box) this.box(info.box, details);
     this.attributes(info.attributes ?? [], details);

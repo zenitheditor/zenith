@@ -258,6 +258,16 @@
   padding: 2px 6px;
 }
 
+.recent-thumb {
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  object-fit: cover;
+  border: 1px solid var(--border);
+  background: #ffffff;
+  flex: none;
+}
+
 @media (max-width: 720px) {
   .welcome-recent-list {
     grid-template-columns: 1fr;

@@ -44,6 +44,8 @@ export class Overlay {
     this.marquee = null;
     /** Snap guides `[{axis, at, from, to}]` (page px). */
     this.guides = [];
+    /** Alt-hover measurement `{ a: {x,y,w,h}, b: {x,y,w,h} }`, or `null`. */
+    this.measure = null;
     /** Handles drawn by the last `draw`, for `handleAt`. */
     this.drawn = [];
   }
@@ -84,6 +86,12 @@ export class Overlay {
   /** Show snap guides `[{axis, at, from, to}]`; `null` or `[]` clears them. */
   setGuides(guides) {
     this.guides = guides ?? [];
+    this.draw();
+  }
+
+  /** Show Alt-hover distance measurement between boxes `a` and `b`, or clear. */
+  setMeasure(a, b) {
+    this.measure = a && b ? { a, b } : null;
     this.draw();
   }
 
@@ -157,6 +165,7 @@ export class Overlay {
       svg.appendChild(polygon(this.ghost.corners, cls));
     }
     for (const guide of this.guides) this.guide(svg, guide, unit);
+    if (this.measure) this.drawMeasure(svg, this.measure.a, this.measure.b, unit);
     if (this.marquee) {
       const { x0, y0, x1, y1 } = this.marquee;
       const box = { x: Math.min(x0, x1), y: Math.min(y0, y1), width: Math.abs(x1 - x0), height: Math.abs(y1 - y0) };
@@ -173,6 +182,41 @@ export class Overlay {
       : { x1: from - reach, y1: at, x2: to + reach, y2: at };
     svg.appendChild(el("line", { class: "guide-halo", ...line }));
     svg.appendChild(el("line", { class: "guide", ...line }));
+  }
+
+  /** Alt-hover distance redlines between selected box `a` and target box `b`. */
+  drawMeasure(svg, a, b, unit) {
+    const aR = a.x + a.w, aB = a.y + a.h, aCx = a.x + a.w / 2, aCy = a.y + a.h / 2;
+    const bR = b.x + b.w, bB = b.y + b.h;
+    const drawSeg = (x1, y1, x2, y2, dist) => {
+      const d = Math.round(Math.abs(dist));
+      if (d < 1) return;
+      svg.appendChild(el("line", { class: "measure-line", x1, y1, x2, y2 }));
+      const mx = (x1 + x2) / 2;
+      const my = (y1 + y2) / 2;
+      const label = `${d}`;
+      const bw = Math.max(20, label.length * 6.5 + 8) * unit;
+      const bh = 15 * unit;
+      svg.appendChild(el("rect", { class: "measure-pill", x: mx - bw / 2, y: my - bh / 2, width: bw, height: bh, rx: 3 * unit }));
+      const txt = el("text", { class: "measure-text", x: mx, y: my, "font-size": 10 * unit });
+      txt.textContent = label;
+      svg.appendChild(txt);
+    };
+    // Inside target (e.g. measuring selected node to its parent/page edges)
+    const inside = a.x >= b.x && a.y >= b.y && aR <= bR && aB <= bB;
+    if (inside) {
+      drawSeg(b.x, aCy, a.x, aCy, a.x - b.x);
+      drawSeg(aR, aCy, bR, aCy, bR - aR);
+      drawSeg(aCx, b.y, aCx, a.y, a.y - b.y);
+      drawSeg(aCx, aB, aCx, bB, bB - aB);
+      return;
+    }
+    // Horizontal gap between non-overlapping boxes
+    if (aR < b.x) drawSeg(aR, aCy, b.x, aCy, b.x - aR);
+    else if (bR < a.x) drawSeg(bR, aCy, a.x, aCy, a.x - bR);
+    // Vertical gap between non-overlapping boxes
+    if (aB < b.y) drawSeg(aCx, aB, aCx, b.y, b.y - aB);
+    else if (bB < a.y) drawSeg(aCx, bB, aCx, a.y, a.y - bB);
   }
 
   /** The handles of the single selected `item` (or the selection box) into group `g`. */

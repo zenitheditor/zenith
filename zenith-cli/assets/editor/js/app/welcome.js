@@ -1,8 +1,9 @@
-import { canPickDirectory, pickDocument, pickProject } from "../engine/wasm/files.js";
+import { canPickDirectory, pickDocument, pickProject, readDirectoryHandle } from "../engine/wasm/files.js";
 import { byId } from "../util/dom.js";
 import { load, save } from "../util/store.js";
 import { projectDocument } from "./project-picker.js";
 import { blankPreset } from "./samples.js";
+import { loadFolderHandle } from "./workspace-store.js";
 import { hydrateIcons } from "../ui/icons.js";
 import { openNewDocDialog } from "../ui/newdoc.js";
 
@@ -77,6 +78,23 @@ export function showWelcome(open) {
   if (folderBtn && canDir) {
     folderBtn.hidden = false;
     folderBtn.addEventListener("click", () => choose(folderBtn, () => device(pickFolder)));
+  }
+  const reconnectBtn = byId("welcome-reconnect");
+  if (reconnectBtn && canDir) {
+    void loadFolderHandle().then((dir) => {
+      if (!dir) return;
+      reconnectBtn.hidden = false;
+      const lbl = byId("welcome-reconnect-label");
+      if (lbl) lbl.textContent = `Reconnect ${dir.name}`;
+      reconnectBtn.onclick = () =>
+        choose(reconnectBtn, async () => {
+          const project = await readDirectoryHandle(dir);
+          if (!project) return null;
+          if (!project.documents.length) throw new Error(`${project.root} has no .zen file.`);
+          const spec = await projectDocument(project);
+          return spec && { ...spec, draftSource: { kind: "device" } };
+        });
+    });
   }
 
   // Open dialog trigger from Welcome header

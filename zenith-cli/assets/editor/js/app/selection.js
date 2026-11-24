@@ -15,12 +15,54 @@ export class SelectionController {
     this.seq = 0;
     this.hoverSeq = 0;
     this.hoverId = null;
+    this.hoverCorners = null;
+    this.altHeld = false;
     this.corners = new Map();
     this.cursorWaiting = false;
     /** `{head, version}` a keystroke batch already resolved. */
     this.frameCursor = null;
     this.cursorLater = debounce(() => this.cursorNow(), CURSOR_MS);
     this.hoverLater = throttle((x, y) => this.hoverNow(x, y), HOVER_MS);
+    window.addEventListener("keydown", (e) => {
+      if (e.key === "Alt" && !this.altHeld) {
+        this.altHeld = true;
+        this.updateMeasure();
+      }
+    });
+    window.addEventListener("keyup", (e) => {
+      if (e.key === "Alt" && this.altHeld) {
+        this.altHeld = false;
+        this.app.overlay.setMeasure(null, null);
+      }
+    });
+    window.addEventListener("blur", () => {
+      if (this.altHeld) {
+        this.altHeld = false;
+        this.app.overlay.setMeasure(null, null);
+      }
+    });
+  }
+
+  updateMeasure() {
+    if (!this.altHeld) {
+      this.app.overlay.setMeasure(null, null);
+      return;
+    }
+    const selBox = this.app.inspector.lastInfo?.box;
+    if (!selBox) {
+      this.app.overlay.setMeasure(null, null);
+      return;
+    }
+    let target = null;
+    if (this.hoverCorners && this.hoverId && !this.app.selectionIds.includes(this.hoverId)) {
+      const xs = this.hoverCorners.map((c) => c[0]);
+      const ys = this.hoverCorners.map((c) => c[1]);
+      const minX = Math.min(...xs), minY = Math.min(...ys);
+      target = { x: minX, y: minY, w: Math.max(...xs) - minX, h: Math.max(...ys) - minY };
+    } else if (this.app.view.pageW && this.app.view.pageH) {
+      target = { x: 0, y: 0, w: this.app.view.pageW, h: this.app.view.pageH };
+    }
+    this.app.overlay.setMeasure(selBox, target);
   }
 
   /** Text changed: cached outlines are stale; a waiting cursor can run. */
@@ -84,7 +126,9 @@ export class SelectionController {
     app.gestures.cursor();
     const corners = top ? await this.outline(top) : null;
     if (seq !== this.hoverSeq) return;
-    app.overlay.setHover(corners?.corners ?? null);
+    this.hoverCorners = corners?.corners ?? null;
+    app.overlay.setHover(this.hoverCorners);
+    if (this.altHeld) this.updateMeasure();
   }
 
   /** `node.handles` of `id`, cached until the text changes. */
