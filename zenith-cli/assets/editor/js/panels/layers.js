@@ -63,6 +63,42 @@ export class Layers {
   drawPages() {
     clear(this.pagesEl);
     const pages = this.outline?.pages ?? [];
+    const bar = this.pagesEl.previousElementSibling?.id === "pages-bar" ? this.pagesEl.previousElementSibling : null;
+    if (bar && this.handlers.addPage) {
+      clear(bar);
+      bar.append(
+        h(
+          "button",
+          { type: "button", class: "page-act-btn", title: "Add page", onclick: () => this.handlers.addPage() },
+          icon("plus"),
+          h("span", { text: "Add" }),
+        ),
+        h(
+          "button",
+          {
+            type: "button",
+            class: "page-act-btn",
+            title: "Duplicate current page",
+            disabled: !pages.length,
+            onclick: () => this.handlers.duplicatePage?.(),
+          },
+          icon("copy"),
+          h("span", { text: "Dup" }),
+        ),
+        h(
+          "button",
+          {
+            type: "button",
+            class: "page-act-btn",
+            title: "Delete current page",
+            disabled: pages.length <= 1,
+            onclick: () => this.handlers.deletePage?.(),
+          },
+          icon("trash"),
+          h("span", { text: "Del" }),
+        ),
+      );
+    }
     for (const p of pages) {
       const current = p.page === this.page;
       this.pagesEl.appendChild(

@@ -137,11 +137,69 @@ export class App {
           },
           done: `Distributed ${axis}.`,
         })),
+      setMany: async (nodeIds, params) => {
+        for (const id of nodeIds) {
+          await this.actions.set(id, params);
+        }
+      },
+      createColorToken: async (hex) => {
+        const clean = hex.replace(/[^0-9a-f]/gi, "").slice(0, 6).toLowerCase() || "custom";
+        const id = `color.c${clean}`;
+        const ok = await this.actions.run("tx.apply", () => ({
+          params: {
+            label: `Add token ${id}`,
+            ops: [{ op: "create_token", id, type: "color", value: hex }],
+          },
+          done: `Created ${id}.`,
+        }));
+        return ok ? id : null;
+      },
     });
     this.layers = new Layers(byId("pages"), byId("layers"), {
       page: (n) => this.selection.goToPage(n),
       select: (id) => this.selection.selectIds([id], "layers"),
       selectMany: (ids) => this.selection.selectIds(ids, "layers"),
+      addPage: () => {
+        const pages = this.outline?.pages ?? [];
+        const cur = pages.find((p) => p.page === this.page) ?? pages[0];
+        const w = Math.round(cur?.w ?? 600);
+        const h = Math.round(cur?.h ?? 720);
+        const nextNum = pages.length + 1;
+        const id = `page.${nextNum}.${Date.now().toString(36).slice(-3)}`;
+        this.actions.run("tx.apply", () => ({
+          params: {
+            label: `Add page ${nextNum}`,
+            ops: [{ op: "add_page", id, w: `(px)${w}`, h: `(px)${h}` }],
+          },
+          done: `Added page ${nextNum}.`,
+        }));
+      },
+      duplicatePage: () => {
+        const cur = this.outline?.pages?.find((p) => p.page === this.page);
+        if (!cur) return;
+        const stamp = Date.now().toString(36).slice(-3);
+        const newId = `${cur.id}-copy-${stamp}`;
+        this.actions.run("tx.apply", () => ({
+          params: {
+            label: `Duplicate page ${cur.id}`,
+            ops: [{ op: "duplicate_page", page: cur.id, new_id: newId, id_suffix: `-${stamp}` }],
+          },
+          done: `Duplicated ${cur.id}.`,
+        }));
+      },
+      deletePage: () => {
+        const pages = this.outline?.pages ?? [];
+        if (pages.length <= 1) return;
+        const cur = pages.find((p) => p.page === this.page);
+        if (!cur) return;
+        this.actions.run("tx.apply", () => ({
+          params: {
+            label: `Delete page ${cur.id}`,
+            ops: [{ op: "delete_page", page: cur.id }],
+          },
+          done: `Deleted ${cur.id}.`,
+        }));
+      },
     });
     this.tokenList = [];
     this.tokensPanel = new TokensPanel(byId("tokens"), {
@@ -339,6 +397,13 @@ export class App {
         else if (key === "3") this.layout.setView("code");
         else if (e.key === "\\") this.layout.toggle("left");
         else if (key === "d" && !e.shiftKey && !field) this.actions.duplicate();
+        else if (key === "g" && !e.shiftKey && !field) this.actions.group();
+        else if (key === "g" && e.shiftKey && !field) this.actions.ungroup();
+        else if (e.key === "]" && !field) this.actions.reorder(e.shiftKey ? "front" : "forward");
+        else if (e.key === "[" && !field) this.actions.reorder(e.shiftKey ? "back" : "backward");
+        else if (key === "c" && !e.shiftKey && !field && this.selectionIds.length && !window.getSelection()?.toString()) this.actions.copy();
+        else if (key === "x" && !e.shiftKey && !field && this.selectionIds.length && !window.getSelection()?.toString()) this.actions.cut();
+        else if (key === "v" && !e.shiftKey && !field && this.actions.clipboard) this.actions.paste();
         else if (key === "z" && !e.shiftKey) this.history("history.undo");
         else if ((key === "z" && e.shiftKey) || key === "y") this.history("history.redo");
         else return;
@@ -396,21 +461,48 @@ export class App {
       if (this.tools.isDrawing() || this.tools.isHand()) return;
       if (this.openInlineText()) e.preventDefault();
     });
+    const imgBtn = byId("tool-image");
+    if (imgBtn && this.files) {
+      imgBtn.hidden = false;
+      imgBtn.addEventListener("click", () => this.files.pickInsertImage());
+    }
+    vp?.addEventListener("dragover", (e) => {
+      if (this.files && e.dataTransfer?.types?.includes("Files")) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "copy";
+      }
+    });
+    vp?.addEventListener("drop", async (e) => {
+      if (!this.files) return;
+      const file = [...(e.dataTransfer?.files ?? [])].find((f) =>
+        /^image\/(png|jpeg|webp|gif|svg\+xml)$/i.test(f.type) || /\.(png|jpe?g|webp|gif|svg)$/i.test(f.name),
+      );
+      if (!file) return;
+      e.preventDefault();
+      const pt = this.view.toPage(e.clientX, e.clientY);
+      await this.files.insertImageFile(file, pt);
+    });
     vp?.addEventListener("contextmenu", (e) => {
       if (!ctx) return;
       e.preventDefault();
       this.layout.closePopovers();
       const hasSel = this.selectionIds.length > 0;
       const single = this.selectionIds.length === 1;
+      const multi = this.selectionIds.length >= 2;
       const isText = single && this.inspector.lastInfo?.kind === "text";
+      const isGroup = single && this.inspector.lastInfo?.kind === "group";
       byId("ctx-edit-text").hidden = !isText;
       byId("ctx-duplicate").hidden = !hasSel;
+      byId("ctx-group").hidden = !multi;
+      byId("ctx-ungroup").hidden = !isGroup;
+      byId("ctx-forward").hidden = !single;
+      byId("ctx-backward").hidden = !single;
       byId("ctx-delete").hidden = !hasSel;
       byId("ctx-reveal").hidden = !single;
       byId("ctx-sep").hidden = !hasSel;
       ctx.hidden = false;
       const w = ctx.offsetWidth || 180;
-      const h = ctx.offsetHeight || 160;
+      const h = ctx.offsetHeight || 220;
       ctx.style.left = `${Math.min(e.clientX, window.innerWidth - w - 8)}px`;
       ctx.style.top = `${Math.min(e.clientY, window.innerHeight - h - 8)}px`;
     });
@@ -430,6 +522,22 @@ export class App {
     byId("ctx-duplicate")?.addEventListener("click", () => {
       closeCtx();
       this.actions.duplicate();
+    });
+    byId("ctx-group")?.addEventListener("click", () => {
+      closeCtx();
+      this.actions.group();
+    });
+    byId("ctx-ungroup")?.addEventListener("click", () => {
+      closeCtx();
+      this.actions.ungroup();
+    });
+    byId("ctx-forward")?.addEventListener("click", () => {
+      closeCtx();
+      this.actions.reorder("forward");
+    });
+    byId("ctx-backward")?.addEventListener("click", () => {
+      closeCtx();
+      this.actions.reorder("backward");
     });
     byId("ctx-delete")?.addEventListener("click", () => {
       closeCtx();

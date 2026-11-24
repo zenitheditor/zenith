@@ -138,6 +138,7 @@
       <button type="button" class="tool" data-tool="rect" aria-pressed="false" title="Rectangle (R)"><i data-icon="rect"></i><span class="sr-only">Rectangle</span></button>
       <button type="button" class="tool" data-tool="ellipse" aria-pressed="false" title="Ellipse (O)"><i data-icon="ellipse"></i><span class="sr-only">Ellipse</span></button>
       <button type="button" class="tool" data-tool="line" aria-pressed="false" title="Line (L)"><i data-icon="line"></i><span class="sr-only">Line</span></button>
+      <button type="button" class="tool" id="tool-image" hidden title="Insert image or SVG"><i data-icon="image"></i><span class="sr-only">Insert image</span></button>
       <span class="pill-sep" aria-hidden="true"></span>
       <button type="button" class="tool" data-tool="hand" aria-pressed="false" title="Hand (H · or hold Space)"><i data-icon="hand"></i><span class="sr-only">Hand</span></button>
     </div>
@@ -193,6 +194,7 @@
         <div class="layer-tree" id="layers" role="tree" aria-label="Layers"></div>
       </div>
       <div class="tab-body" data-lbody="pages" hidden>
+        <div class="pages-bar" id="pages-bar"></div>
         <ul class="page-list" id="pages"></ul>
       </div>
       <div class="tab-body" data-lbody="tokens" hidden>
@@ -379,6 +381,10 @@
 <div class="menu ctx-menu" id="ctx-menu" role="menu" hidden>
   <button type="button" role="menuitem" id="ctx-edit-text" hidden><i data-icon="text"></i><span>Edit text</span><kbd>Enter</kbd></button>
   <button type="button" role="menuitem" id="ctx-duplicate" hidden><i data-icon="copy"></i><span>Duplicate</span><kbd>⌘D</kbd></button>
+  <button type="button" role="menuitem" id="ctx-group" hidden><i data-icon="group"></i><span>Group</span><kbd>⌘G</kbd></button>
+  <button type="button" role="menuitem" id="ctx-ungroup" hidden><i data-icon="group"></i><span>Ungroup</span><kbd>⇧⌘G</kbd></button>
+  <button type="button" role="menuitem" id="ctx-forward" hidden><i data-icon="layers"></i><span>Bring forward</span><kbd>⌘]</kbd></button>
+  <button type="button" role="menuitem" id="ctx-backward" hidden><i data-icon="layers"></i><span>Send backward</span><kbd>⌘[</kbd></button>
   <button type="button" role="menuitem" id="ctx-delete" hidden><i data-icon="trash"></i><span>Delete</span><kbd>Del</kbd></button>
   <button type="button" role="menuitem" id="ctx-reveal" hidden><i data-icon="code"></i><span>Reveal in code</span></button>
   <hr id="ctx-sep" hidden>

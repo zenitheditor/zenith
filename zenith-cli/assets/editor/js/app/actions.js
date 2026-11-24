@@ -35,6 +35,7 @@ const ARROWS = {
 export class NodeActions {
   constructor(app) {
     this.app = app;
+    this.clipboard = null;
   }
 
   /**
@@ -104,6 +105,64 @@ export class NodeActions {
       const params = ids.length === 1 ? { id: ids[0] } : { ids };
       return { params, done: `Duplicated ${ids.join(", ")}.` };
     });
+  }
+
+  /** Group 2+ selected nodes into a new group. */
+  group() {
+    this.run("node.group", (ids) => {
+      if (ids.length < 2) {
+        this.app.notices.toast("Select 2 or more nodes to group.", "info");
+        return null;
+      }
+      return { params: { ids }, done: `Grouped ${ids.length} nodes.` };
+    });
+  }
+
+  /** Ungroup the single selected group node. */
+  ungroup() {
+    this.run("node.ungroup", (ids) => {
+      if (ids.length !== 1) return null;
+      return { params: { id: ids[0] }, done: `Ungrouped ${ids[0]}.` };
+    });
+  }
+
+  /** Reorder the single selected node in z-order: forward, backward, front, back. */
+  reorder(to) {
+    this.run("node.reorder", (ids) => {
+      if (ids.length !== 1) return null;
+      return { params: { id: ids[0], to }, done: `Moved ${ids[0]} ${to}.` };
+    });
+  }
+
+  /** Copy selected node IDs into the session clipboard. */
+  copy() {
+    const ids = [...this.app.selectionIds];
+    if (!ids.length) return false;
+    this.clipboard = { ids, cut: false };
+    this.app.notices.toast(`Copied ${ids.length === 1 ? ids[0] : `${ids.length} nodes`}.`, "info");
+    return true;
+  }
+
+  /** Cut selected node IDs into the session clipboard. */
+  cut() {
+    const ids = [...this.app.selectionIds];
+    if (!ids.length) return false;
+    this.clipboard = { ids, cut: true };
+    this.app.notices.toast(`Cut ${ids.length === 1 ? ids[0] : `${ids.length} nodes`}.`, "info");
+    return true;
+  }
+
+  /** Paste from the session clipboard (+16, +16 px offset). */
+  async paste() {
+    if (!this.clipboard?.ids?.length) return false;
+    const { ids, cut } = this.clipboard;
+    const params = ids.length === 1 ? { id: ids[0], dx: 16, dy: 16 } : { ids, dx: 16, dy: 16 };
+    const ok = await this.run("node.duplicate", () => ({ params, done: "Pasted." }));
+    if (ok && cut) {
+      this.clipboard = null;
+      await this.run("node.remove", () => ({ params: { ids }, done: "Moved selection." }));
+    }
+    return ok;
   }
 
   /** Inspector write: `node.set` on `id` with `params`. Resolves `true` on success. */

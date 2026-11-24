@@ -135,6 +135,49 @@ export class Inspector {
             : null,
         )
       : null;
+    const colorTokens = this.tokens.filter((t) => t.type === "color");
+    const sharedSec = this.hooks.setMany
+      ? h(
+          "section",
+          { class: "insp-sec" },
+          h("h3", { text: "Shared Style" }),
+          h(
+            "div",
+            { class: "shared-row" },
+            h("span", { class: "edit-label", text: "Fill" }),
+            h(
+              "select",
+              {
+                class: "edit-input",
+                "aria-label": "Shared fill token",
+                onchange: (e) => {
+                  if (e.target.value) this.hooks.setMany(ids, { fill: e.target.value });
+                },
+              },
+              h("option", { value: "", text: "Choose token…" }),
+              ...colorTokens.map((t) => h("option", { value: t.id, text: t.id })),
+            ),
+          ),
+          h(
+            "div",
+            { class: "shared-row" },
+            h("span", { class: "edit-label", text: "Opacity" }),
+            h("input", {
+              class: "edit-input",
+              type: "number",
+              min: "0",
+              max: "1",
+              step: "0.05",
+              placeholder: "0 – 1",
+              "aria-label": "Shared opacity",
+              onchange: (e) => {
+                const n = Number(e.target.value);
+                if (Number.isFinite(n) && n >= 0 && n <= 1) this.hooks.setMany(ids, { opacity: n });
+              },
+            }),
+          ),
+        )
+      : null;
     this.root.append(
       h(
         "div",
@@ -142,6 +185,7 @@ export class Inspector {
         h("p", { class: "inspector-sub", text: `${plural(ids.length, "node")} selected.` }),
       ),
       alignSec,
+      sharedSec,
       h(
         "section",
         { class: "insp-sec" },
@@ -195,7 +239,7 @@ export class Inspector {
     );
     this.flags(info);
     if (info.edit) {
-      details.append(...editForm(info, this.tokens, set, { omitText: guided }).flat());
+      details.append(...editForm(info, this.tokens, set, { omitText: guided, createColorToken: this.hooks.createColorToken }).flat());
     }
     if (info.box) this.box(info.box, details);
     this.attributes(info.attributes ?? [], details);

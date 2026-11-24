@@ -10,6 +10,7 @@
 
 import { cssColor } from "../util/color.js";
 import { h, num } from "../util/dom.js";
+import { openColorPopover } from "../ui/colorpop.js";
 import { icon } from "../ui/icons.js";
 
 /** Box and rotate fields: label, accessible name, unit. */
@@ -109,7 +110,7 @@ function sec(title, children) {
  * token `[{id, type, value}]`. `set(params)` sends `node.set` and resolves
  * `true` on success.
  */
-export function editForm(info, tokens, set, { omitText = false } = {}) {
+export function editForm(info, tokens, set, { omitText = false, createColorToken = null } = {}) {
   const e = info.edit;
   const fields = new Set(e.fields ?? []);
   const isText = info.kind === "text" || fields.has("text") || fields.has("spans");
@@ -121,13 +122,13 @@ export function editForm(info, tokens, set, { omitText = false } = {}) {
 
   const typoBound = TYPOGRAPHY.filter(([name]) => fields.has(name));
   const typoItems = typoBound.map(([name, label, type, raw, removable]) =>
-    boundField({ name, label, raw, removable }, e[name] ?? {}, tokens.filter((t) => t.type === type), set),
+    boundField({ name, label, raw, removable, createColorToken }, e[name] ?? {}, tokens.filter((t) => t.type === type), set),
   );
   if (fields.has("align")) typoItems.push(alignField(e.align ?? "start", set));
 
   const appBound = APPEARANCE.filter(([name]) => fields.has(name));
   const appItems = appBound.map(([name, label, type, raw, removable]) =>
-    boundField({ name, label, raw, removable }, e[name] ?? {}, tokens.filter((t) => t.type === type), set),
+    boundField({ name, label, raw, removable, createColorToken }, e[name] ?? {}, tokens.filter((t) => t.type === type), set),
   );
   const flags = ["visible", "locked"].filter((f) => fields.has(f));
   if (flags.length) appItems.push(flagsField(e, set));
@@ -308,7 +309,30 @@ function boundField(spec, bound, tokens, set) {
       dataset: { field: `${name}-value` },
     });
   }
-  const swatch = raw === "color" ? h("span", { class: "swatch" }) : null;
+  const swatch = raw === "color"
+    ? h("button", {
+        type: "button",
+        class: "swatch swatch-btn",
+        title: `Pick ${label.toLowerCase()} color or token`,
+        "aria-label": `Open ${label.toLowerCase()} color and token picker`,
+        onclick: (ev) => {
+          ev.stopPropagation();
+          openColorPopover(ev.currentTarget, {
+            currentHex: input.value || shown,
+            currentToken: bound.token ?? null,
+            tokens,
+            onSelectToken: (id) => set({ [name]: id }),
+            onSelectColor: (hex) => set({ [name]: { value: hex } }),
+            onCreateToken: spec.createColorToken
+              ? async (hex) => {
+                  const id = await spec.createColorToken(hex);
+                  if (id) await set({ [name]: id });
+                }
+              : null,
+          });
+        },
+      })
+    : null;
   const picker = raw === "color"
     ? h("input", { class: "edit-color", type: "color", "aria-label": `${label} color picker`, dataset: { field: `${name}-picker` } })
     : null;

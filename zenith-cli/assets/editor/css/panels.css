@@ -240,6 +240,52 @@
   color: var(--accent);
 }
 
+.shared-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.shared-row .edit-label {
+  min-width: 48px;
+}
+
+.pages-bar {
+  display: flex;
+  gap: 4px;
+  padding: 2px 2px 8px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.page-act-btn {
+  flex: 1 1 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 26px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.page-act-btn:hover:not(:disabled) {
+  border-color: var(--accent-line);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.page-act-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
 .page-list {
   list-style: none;
   margin: 0;

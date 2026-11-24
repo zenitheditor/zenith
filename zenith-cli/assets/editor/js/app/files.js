@@ -201,6 +201,72 @@ export class FileTools {
     await this.app.refreshDocument();
   }
 
+  /** Open a file picker to insert an image/SVG onto the current page. */
+  async pickInsertImage() {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/png,image/jpeg,image/webp,image/gif,image/svg+xml,.png,.jpg,.jpeg,.webp,.svg";
+    input.hidden = true;
+    document.body.appendChild(input);
+    const file = await new Promise((resolve) => {
+      input.addEventListener("change", () => resolve(input.files?.[0] ?? null), { once: true });
+      input.addEventListener("cancel", () => resolve(null), { once: true });
+      input.click();
+    });
+    input.remove();
+    if (file) await this.insertImageFile(file);
+  }
+
+  /** Attach an image/SVG file to the WASM project and insert an `image` node. */
+  async insertImageFile(file, dropPoint = null) {
+    if (!file) return false;
+    const pg = this.app.outline?.pages?.find((p) => p.page === this.app.page);
+    if (!pg) return false;
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+    const rel = `assets/${safeName}`;
+    const isSvg = /\.svg$/i.test(safeName) || file.type === "image/svg+xml";
+    const b64 = await blobToBase64(file);
+    this.host.worker.files = { ...(this.host.worker.files ?? {}), [rel]: b64 };
+
+    let nw = 320;
+    let nh = 240;
+    if (!isSvg && typeof createImageBitmap === "function") {
+      try {
+        const bmp = await createImageBitmap(file);
+        nw = bmp.width || nw;
+        nh = bmp.height || nh;
+        bmp.close();
+      } catch {
+        // Keep fallback dimensions when browser cannot decode bitmap.
+      }
+    }
+    const maxW = Math.max(80, pg.w * 0.6);
+    const maxH = Math.max(80, pg.h * 0.6);
+    const ratio = Math.min(1, maxW / nw, maxH / nh);
+    const w = Math.max(24, Math.round(nw * ratio));
+    const h = Math.max(24, Math.round(nh * ratio));
+    const x = dropPoint ? Math.round(dropPoint.x - w / 2) : Math.round((pg.w - w) / 2);
+    const y = dropPoint ? Math.round(dropPoint.y - h / 2) : Math.round((pg.h - h) / 2);
+
+    const slug = safeName.replace(/\.[^.]+$/, "").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 18) || "image";
+    const stamp = Date.now().toString(36).slice(-4);
+    const assetId = `asset.${slug}.${stamp}`;
+    const nodeId = `img.${slug}.${stamp}`;
+    const source = `image id="${nodeId}" asset="${assetId}" x=(px)${x} y=(px)${y} w=(px)${w} h=(px)${h} fit="contain"`;
+
+    return this.app.actions.run("tx.apply", () => ({
+      params: {
+        label: `Insert ${safeName}`,
+        select: [nodeId],
+        ops: [
+          { op: "add_asset", id: assetId, kind: isSvg ? "svg" : "image", src: rel },
+          { op: "add_node", parent: pg.id, source },
+        ],
+      },
+      done: `Inserted ${safeName}.`,
+    }));
+  }
+
   /**
    * Ask before unsaved edits go. Resolves `true` to go on. A second ask
    * replaces the first, which resolves `false`, so no caller waits forever.
