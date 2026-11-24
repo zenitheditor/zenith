@@ -135,6 +135,8 @@ export const steps = [
         window.__attempted = app.files.load({ name: 'cannot-open.zen', text: '', project: { files: { 'foreign.png': 'AAAA' } } });
         return true;
       })()`);
+      await page.waitFor("!!document.querySelector('[data-key=open-confirm]')", "the unsaved disk discard prompt");
+      await page.eval("[...document.querySelectorAll('[data-key=open-confirm] button')].find((b) => b.textContent.startsWith('Open')).click()");
       await page.waitFor("!!window.__finishFailedOpen && document.getElementById('app').inert", "the switch under input lock");
       await page.type("late input");
       await page.eval("window.__finishFailedOpen()");
