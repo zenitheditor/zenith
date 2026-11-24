@@ -15,6 +15,16 @@ it.
 
 ## [Unreleased]
 
+## [0.0.19] — 2026-11-24
+
+### Added
+
+- **Inline canvas text editing & structured Inspector (`zenith edit` and GitHub Pages):** double-click any text node, press `Enter`, or place a new `T` node to edit directly on the canvas; widened `256 px` Inspector promotes Text & Typography to the top for text nodes, separates sections cleanly, and evaluates arithmetic expressions (e.g. `600/2`) in numeric fields.
+- **Visual token creation & live editing:** add color, dimension, font family, and weight tokens from the **Tokens** tab (`+ Add token`) and edit color tokens inline with live canvas updates via `tx.apply`.
+- **Multi-format Export & `.zip` Project Bundle dialog (`doc.export`, `⇧⌘E`):** export `PNG`, `JPEG`, `WebP` (1×–4× scale + quality slider), vector `SVG`, strict `PDF` (Digital sRGB / Print CMYK 300 DPI, current page or all pages), `.zen`, and self-contained `.zip` bundles (`.zen` + project assets/fonts + optional PDF).
+- **Smart missing-asset import & multi-select alignment:** automatically detects missing external images/fonts/imports in hosted mode and prompts to import files or attach the project folder; selecting 2+ nodes exposes a 6-way Align & Horizontal/Vertical Distribute bar.
+- **Home/Recent navigation, Split-view auto-fit, and canvas right-click context menu:** deduplicated top-left menu with **Home & templates** and **Recent & browser drafts…**, automatic canvas fit when toggling Split view (`⇧1`/`⇧0`), and right-click canvas actions.
+
 ## [0.0.18] — 2026-11-24
 
 ### Added
