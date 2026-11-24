@@ -15,6 +15,28 @@ it.
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-11-24
+
+Major browser editor workspace & precision-layout upgrade for local + hosted `.zen` design workflows (`https://zenitheditor.github.io/zenith/`).
+
+### Added
+
+- **Multi-document Tab Bar & Non-destructive Home:** open multiple `.zen` files in tabs (`Ctrl+Tab` cycling, middle-click close, `+` new file) and switch to Home (`🏠`) without losing open tabs.
+- **New `.zen` file modal & editable Page Size:** create custom-named `.zen` files with page size presets, custom `W × H`, `⇄` orientation swap, and background color (`Alt+N`, `Z` menu, Welcome `Custom size`, `⌘K`); rename files inline in the topbar; resize pages directly in the right Inspector.
+- **Assets Browser & drag-onto-canvas:** dedicated left-rail **Assets** tab with live image/SVG thumbnails, drag-and-drop placement onto canvas coordinates, sibling `.zen` switcher, `+ Add` upload, search filter, and missing-asset `Locate` badges.
+- **Persistent Workspace Folder Reconnect:** remembers your last opened `FileSystemDirectoryHandle` in IndexedDB for 1-click **`Reconnect <folder>`** across reloads.
+- **Canvas Rulers (`⇧R`) & Alt-Hover Distance Redlines:** DPR-aware pixel rulers with selection edge bands, plus live `px` spacing redlines when holding `Alt` over sibling nodes or page edges.
+- **Visual Auto-Layout, Boolean Ops & Layer Drag-Reorder:** Frame Auto-Layout controls (`Free / Row / Col / Grid`, `Gap`, `Pad`), 2-node Boolean Ops (`Union / Subtract / Intersect / Exclude`), Layer Tree drag-to-reorder, search filters for Layers and Tokens, hover eye/lock quick toggles, and select-on-right-click with shared Canvas + Layer Tree context menus.
+- **Recent Files with Thumbnails & 5-tab Settings Modal:** compact 2-column Recent Files list directly on Home with cached preview thumbnails, automatic browser draft saving for local `.zen` files, and a tabbed Settings modal (`General`, `Editor`, `Fonts`, `Storage`, `Diagnostics`).
+
+### Fixed
+
+- Fixed WASM worker synchronization (`worker.project({ files })`) when importing missing external assets or inserting/dropping images.
+- Fixed missing-asset banner to extract real `src="..."` / `import "..."` paths instead of asset IDs, pre-position OS pickers at the `.zen` file's folder (`startIn`), and offer 1-click `Auto-load folder…`.
+- Fixed PNG/JPEG/WebP export dialog image lookup (`env.image`) and prevented duplicate `.zen` entries in `.zip` project bundles.
+- Fixed inline canvas text editing contrast on dark designs and immediate inline edit trigger after placing a new Text node with `T`.
+- Synced Welcome screen theme persistence with the editor layout store.
+
 ## [0.1.0] — 2026-11-24
 
 First public minor release of **Zenith — Design as code** for human + AI agent collaboration: stable `.zen` v1 KDL syntax, deterministic pure-Rust PNG/SVG/PDF rendering (with CMYK, ICC, imposition, bleed/marks, and multilingual fallback fonts), multi-agent transactions & MCP server, and the full local + browser WASM visual editor (`https://zenitheditor.github.io/zenith/`).
