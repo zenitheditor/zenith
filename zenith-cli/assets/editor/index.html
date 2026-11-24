@@ -43,6 +43,11 @@
         </div>
       </section>
 
+      <section class="w-section" id="welcome-recent-sec" aria-labelledby="w-recent-title" hidden>
+        <h2 class="eyebrow" id="w-recent-title">Recent files</h2>
+        <ul class="welcome-recent-list" id="welcome-recent-list"></ul>
+      </section>
+
       <section class="w-section" id="welcome-gallery" aria-labelledby="welcome-templates" hidden>
         <div class="w-section-head">
           <h2 class="eyebrow" id="welcome-templates">Templates</h2>
@@ -94,6 +99,11 @@
 </main>
 
 <div class="app" id="app" data-view="design" data-full="none" data-source="closed" data-bottom="closed" data-left="open" data-right="open">
+  <div class="tab-bar" id="tab-bar" role="tablist" aria-label="Open documents" hidden>
+    <button type="button" class="tab-bar-btn" id="tab-home" title="Home & templates" aria-label="Home & templates"><i data-icon="home"></i></button>
+    <div class="tab-list" id="tab-list"></div>
+    <button type="button" class="tab-bar-btn" id="tab-new" title="New .zen file (Alt+N)" aria-label="New .zen file"><i data-icon="plus"></i></button>
+  </div>
   <header class="topbar">
     <div class="bar-left">
       <div class="menu-wrap">
@@ -110,6 +120,7 @@
           <button type="button" role="menuitem" id="menu-copy-example" hidden><i data-icon="link"></i><span>Copy example link</span></button>
           <hr id="menu-file-sep" hidden>
           <button type="button" role="menuitem" id="theme" title="Theme: light"><i data-icon="moon"></i><span id="theme-label">Theme: light</span></button>
+          <button type="button" role="menuitem" id="menu-settings"><i data-icon="sliders"></i><span>Settings…</span><kbd>⌘,</kbd></button>
           <button type="button" role="menuitem" id="menu-cmdk"><i data-icon="search"></i><span>All commands</span><kbd>⌘K</kbd></button>
         </div>
       </div>
@@ -189,6 +200,7 @@
         <button type="button" role="tab" aria-selected="true" data-ltab="layers">Layers</button>
         <button type="button" role="tab" aria-selected="false" data-ltab="pages">Pages</button>
         <button type="button" role="tab" aria-selected="false" data-ltab="tokens">Tokens</button>
+        <button type="button" role="tab" aria-selected="false" data-ltab="assets">Assets</button>
         <button type="button" class="collapse" id="toggle-left" aria-pressed="true" aria-controls="panel-left" title="Hide left panel (Ctrl+\)" aria-label="Hide left panel"><i data-icon="panelLeft"></i></button>
       </div>
       <div class="tab-body" data-lbody="layers">
@@ -200,6 +212,9 @@
       </div>
       <div class="tab-body" data-lbody="tokens" hidden>
         <div class="token-list" id="tokens"></div>
+      </div>
+      <div class="tab-body" data-lbody="assets" hidden>
+        <div class="asset-list" id="assets"></div>
       </div>
     </aside>
 
@@ -397,6 +412,45 @@
 
     <div class="exp-actions">
       <button type="button" class="button primary" id="exp-run">Export PNG (2×)</button>
+    </div>
+  </div>
+</dialog>
+
+<dialog class="modal settings-dlg" id="settings-dlg" aria-labelledby="settings-title">
+  <div class="modal-head">
+    <h2 id="settings-title">Settings</h2>
+    <button type="button" class="tool" id="settings-close" aria-label="Close"><i data-icon="close"></i></button>
+  </div>
+  <div class="settings-body">
+    <nav class="settings-nav" role="tablist" aria-label="Settings sections">
+      <button type="button" role="tab" class="on" data-set-tab="general" aria-selected="true"><i data-icon="sliders"></i><span>General</span></button>
+      <button type="button" role="tab" data-set-tab="editor" aria-selected="false"><i data-icon="layout"></i><span>Editor</span></button>
+      <button type="button" role="tab" data-set-tab="storage" aria-selected="false"><i data-icon="history"></i><span>Storage</span></button>
+    </nav>
+    <div class="settings-panes">
+      <section class="settings-pane" data-set-pane="general">
+        <h3>Appearance</h3>
+        <div class="exp-row">
+          <label class="exp-lbl" for="set-theme">Theme</label>
+          <select class="edit-input" id="set-theme">
+            <option value="system">System</option>
+            <option value="light">Light</option>
+            <option value="dark">Dark</option>
+          </select>
+        </div>
+      </section>
+      <section class="settings-pane" data-set-pane="editor" hidden>
+        <h3>Canvas &amp; Panels</h3>
+        <label class="flag-check"><input type="checkbox" id="set-snap" checked><span>Snap to objects &amp; guides</span></label>
+        <label class="flag-check"><input type="checkbox" id="set-left" checked><span>Show left panel (Layers, Pages, Tokens, Assets)</span></label>
+        <label class="flag-check"><input type="checkbox" id="set-right" checked><span>Show right Inspector panel</span></label>
+      </section>
+      <section class="settings-pane" data-set-pane="storage" hidden>
+        <h3>Browser drafts</h3>
+        <p class="exp-note" id="set-storage-summary">Checking local storage…</p>
+        <p class="exp-note">Everything stays in this browser. Nothing is uploaded.</p>
+        <button type="button" class="button" id="set-open-drafts">Manage recent &amp; browser drafts…</button>
+      </section>
     </div>
   </div>
 </dialog>

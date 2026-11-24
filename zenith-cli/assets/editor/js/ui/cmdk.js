@@ -61,6 +61,8 @@ export class CommandPalette {
       ["View", "Split view", "columns", "⌘2", () => app.layout.setView("split")],
       ["View", "Code view", "code", "⌘3", () => app.layout.setView("code")],
       ["View", "Toggle left panel", "panelLeft", "⌘\\", () => app.layout.toggle("left")],
+      ["View", "Toggle inspector", "panelRight", "⇧⌘\\", () => app.layout.toggle("right")],
+      ["View", "Settings…", "sliders", "⌘,", () => app.settingsDlg?.open()],
       ["View", "Fit page", "fit", "⇧1", () => app.view.fit()],
       ["View", "Zoom 100%", "zoomIn", "⇧0", () => app.view.actualSize()],
       ["View", "Toggle theme", "theme", "", () => app.layout.cycleTheme()],

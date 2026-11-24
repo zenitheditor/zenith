@@ -25,12 +25,12 @@
   --radius-lg: 10px;
   --radius-xl: 14px;
 
-  --bar-h: 44px;
-  --status-h: 28px;
+  --bar-h: 38px;
+  --status-h: 24px;
   --tool: 28px;
   --tool-small: 26px;
-  --panel-left: 206px;
-  --panel-right: 256px;
+  --panel-left: 214px;
+  --panel-right: 228px;
   --ease: cubic-bezier(0.2, 0, 0, 1);
   --dur: 140ms;
 

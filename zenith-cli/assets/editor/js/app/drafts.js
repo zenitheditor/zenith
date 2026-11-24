@@ -236,6 +236,7 @@ export class Drafts {
       if (reading !== this.reading) return;
       this.hasDrafts = records.length > 0;
       this.error = unreadable;
+      this.renderWelcomeRecent(records);
       if (populate && !this.busy) {
         this.list.replaceChildren(...records.map((record) => this.row(record)));
         if (unreadable) this.message.textContent = "Some browser drafts are unreadable.";
@@ -248,6 +249,19 @@ export class Drafts {
       if (populate) this.message.textContent = this.storageError(error);
     }
     this.render();
+  }
+
+  renderWelcomeRecent(records) {
+    const sec = byId("welcome-recent-sec");
+    const ul = byId("welcome-recent-list");
+    if (!sec || !ul) return;
+    if (!records.length) {
+      sec.hidden = true;
+      ul.replaceChildren();
+      return;
+    }
+    sec.hidden = false;
+    ul.replaceChildren(...records.slice(0, 6).map((record) => this.row(record)));
   }
 
   row(record) {

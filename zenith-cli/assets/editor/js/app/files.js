@@ -176,13 +176,15 @@ export class FileTools {
   }
 
   /** Replace the document with `spec` (see `WasmEngine.openDocument`). */
-  async load(spec) {
+  async load(spec, { fromTab = false } = {}) {
     const app = this.app;
     if (this.switching) return false;
     let approved = null;
-    while (app.atRisk() && approved !== app.code.text()) {
-      approved = app.code.text();
-      if (!(await this.confirmDiscard(spec.name))) return false;
+    if (!fromTab) {
+      while (app.atRisk() && approved !== app.code.text()) {
+        approved = app.code.text();
+        if (!(await this.confirmDiscard(spec.name))) return false;
+      }
     }
     if (this.switching) return false;
     this.switching = true;
@@ -193,14 +195,17 @@ export class FileTools {
     try {
       await app.intents.run(() => app.sync.exclusive(async () => {
         if (!(await app.sync.flushNow())) throw new Error("Sync the editor text and try again.");
-        if (app.atRisk() && approved !== app.code.text()) {
+        if (!fromTab && app.atRisk() && approved !== app.code.text()) {
           throw new Error("The document changed while opening. Try again.");
         }
+        if (!fromTab) app.tabs?.saveCurrent();
         await this.host.openDocument(spec);
       }));
       app.drafts?.bind(app.name, app.code.text(), spec.draftSource ?? null, spec.draftRecord);
+      if (!fromTab) app.tabs?.openOrFocus(spec);
+      app.assetsPanel?.refresh();
       this.showDraftWarning(spec.draftWarning);
-      app.notices.toast(`Opened ${spec.name}.`);
+      if (!fromTab) app.notices.toast(`Opened ${spec.name}.`);
       return true;
     } catch (err) {
       app.notices.error("file.open", { code: err.code ?? "static.open_failed", message: err.message });
@@ -353,6 +358,51 @@ export class FileTools {
       },
       done: `Inserted ${safeName}.`,
     }));
+  }
+
+  /** Insert an already-loaded project image/SVG (from the Assets panel) onto the current page. */
+  async insertProjectAsset(rel) {
+    const pg = this.app.outline?.pages?.find((p) => p.page === this.app.page);
+    if (!pg) return false;
+    const name = rel.split("/").pop() || "asset";
+    const isSvg = /\.svg$/i.test(name);
+    const slug = name.replace(/\.[^.]+$/, "").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 18) || "image";
+    const stamp = Date.now().toString(36).slice(-4);
+    const assetId = `asset.${slug}.${stamp}`;
+    const nodeId = `img.${slug}.${stamp}`;
+    const w = Math.min(280, Math.round(pg.w * 0.45));
+    const h = Math.min(220, Math.round(pg.h * 0.45));
+    const x = Math.round((pg.w - w) / 2);
+    const y = Math.round((pg.h - h) / 2);
+    const source = `image id="${nodeId}" asset="${assetId}" x=(px)${x} y=(px)${y} w=(px)${w} h=(px)${h} fit="contain"`;
+    return this.app.actions.run("tx.apply", () => ({
+      params: {
+        label: `Insert ${name}`,
+        select: [nodeId],
+        ops: [
+          { op: "add_asset", id: assetId, kind: isSvg ? "svg" : "image", src: rel },
+          { op: "add_node", parent: pg.id, source },
+        ],
+      },
+      done: `Inserted ${name}.`,
+    }));
+  }
+
+  /** Open a sibling `.zen` document from the currently loaded project folder. */
+  async openProjectDoc(rel) {
+    const files = this.host.worker.files ?? {};
+    const b64 = files[rel];
+    if (!b64) return false;
+    const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+    const text = new TextDecoder().decode(bytes);
+    const project = { root: this.host.root ?? "", files: { ...files }, handles: new Map(this.host.handles ?? []) };
+    return this.load({
+      name: rel.split("/").pop(),
+      path: rel,
+      text,
+      project,
+      draftSource: { kind: "device" },
+    });
   }
 
   /**

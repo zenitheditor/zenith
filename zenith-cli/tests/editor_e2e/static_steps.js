@@ -877,7 +877,19 @@ export const steps = [
       })()`);
       await page.waitFor(`!document.querySelector('[data-key="missing-assets"]') && ${A}.valid`,
         "missing asset banner to clear after importing logo.svg into worker");
-      return { bannerTitle: bannerTitle.trim() };
+
+      // 4. Assets panel displays the loaded logo.svg thumbnail; Tabs switch between open docs; Settings opens.
+      await page.clickSelector('[data-ltab="assets"]');
+      await page.waitFor("!!document.querySelector('#assets .asset-card img')", "assets panel thumbnail");
+      await shot("static-assets-tab");
+      const tabCount = await page.eval("document.querySelectorAll('#tab-list .doc-tab').length");
+      check(tabCount >= 2, `expected at least 2 open tabs, got ${tabCount}`);
+      await page.clickSelector("#main-menu-btn");
+      await page.clickSelector("#menu-settings");
+      await page.waitFor("document.getElementById('settings-dlg').open", "settings dialog");
+      await shot("static-settings");
+      await page.clickSelector("#settings-close");
+      return { bannerTitle: bannerTitle.trim(), tabCount };
     },
   ],
   ...samplePathSteps,

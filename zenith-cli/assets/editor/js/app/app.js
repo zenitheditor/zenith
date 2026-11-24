@@ -8,6 +8,7 @@ import { Overlay } from "../canvas/overlay.js";
 import { PageCanvas } from "../canvas/paint.js";
 import { Renderer } from "../canvas/render.js";
 import { InlineTextEditor } from "../canvas/textedit.js";
+import { AssetsPanel } from "../panels/assets.js";
 import { DiagnosticsPanel } from "../panels/diagnostics.js";
 import { Inspector } from "../panels/inspector.js";
 import { Layers } from "../panels/layers.js";
@@ -19,6 +20,8 @@ import { HistoryUI } from "../ui/history.js";
 import { icon } from "../ui/icons.js";
 import { Layout } from "../ui/layout.js";
 import { Notices } from "../ui/notify.js";
+import { SettingsDialog } from "../ui/settings.js";
+import { TabBar } from "../ui/tabs.js";
 import { byId, clear, h } from "../util/dom.js";
 import { OffsetIndex } from "../util/text.js";
 import { Serial } from "../util/serial.js";
@@ -252,6 +255,16 @@ export class App {
     this.historyUI = new HistoryUI(this);
     this.cmdk = new CommandPalette(this);
     this.exportDlg = new ExportDialog(this);
+    this.settingsDlg = new SettingsDialog(this);
+    this.assetsPanel = new AssetsPanel(byId("assets"), {
+      files: () => this.host?.worker?.files ?? {},
+      sourceText: () => this.code.text(),
+      currentPath: () => this.path || this.name,
+      onInsert: (rel) => this.files?.insertProjectAsset(rel),
+      onUpload: () => this.files?.pickInsertImage(),
+      onOpenDoc: (rel) => this.files?.openProjectDoc(rel),
+      onLocateMissing: (paths) => this.files?.importMissingAssets(paths),
+    });
     this.layout.historyClose = () => this.historyUI.close();
     this.bindPhoneSheets();
     this.refreshLater = debounce(() => this.refreshDocument(), REFRESH_MS);
@@ -268,6 +281,7 @@ export class App {
     });
     // The static host opens files itself; `zenith edit` serves one file.
     this.files = engine.kind === "wasm" ? new FileTools(this, engine) : null;
+    this.tabs = engine.kind === "wasm" ? new TabBar(this) : null;
   }
 
   async start() {
@@ -376,6 +390,10 @@ export class App {
       this.view.fit();
     });
     byId("cmdk-btn")?.addEventListener("click", () => this.cmdk.open());
+    byId("menu-settings")?.addEventListener("click", () => {
+      this.layout.closePopovers();
+      this.settingsDlg.open();
+    });
     byId("menu-cmdk")?.addEventListener("click", () => {
       this.layout.closePopovers();
       this.cmdk.open();
@@ -405,6 +423,7 @@ export class App {
       const field = e.target instanceof Element && e.target.closest("input, textarea, select");
       if (mod && !e.altKey) {
         if (key === "s") this.save();
+        else if (e.key === "," && !e.shiftKey) this.settingsDlg.open();
         else if (key === "e" && e.shiftKey) this.exportDlg.open();
         else if (key === "1") this.layout.setView("design");
         else if (key === "2") this.layout.setView("split");
@@ -473,6 +492,7 @@ export class App {
       nameEl.title = `${next} — click to rename`;
     }
     if (this.drafts?.active) this.drafts.active.name = next;
+    this.tabs?.syncActiveMeta();
     this.status.update();
     this.notices.toast(`Renamed to ${next}.`);
   }
@@ -728,6 +748,8 @@ export class App {
       this.inspector.setTokens(this.tokenList);
       this.tokensPanel.set(this.tokenList);
     }
+    this.assetsPanel?.refresh();
+    this.tabs?.syncActiveMeta();
     await this.selection.refresh("document");
   }
 

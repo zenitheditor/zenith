@@ -61,12 +61,141 @@ body {
 
 .app {
   display: grid;
-  grid-template-rows: var(--bar-h) auto minmax(0, 1fr) var(--status-h);
-  grid-template-areas: "top" "notices" "work" "status";
+  grid-template-rows: auto var(--bar-h) auto minmax(0, 1fr) var(--status-h);
+  grid-template-areas: "tabs" "top" "notices" "work" "status";
   height: 100vh;
   height: 100dvh;
   width: 100%;
   overflow: hidden;
+}
+
+/* ── Document tab bar ─────────────────────────────────── */
+
+.tab-bar {
+  grid-area: tabs;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 28px;
+  padding: 0 6px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+  min-width: 0;
+}
+
+.tab-bar-btn {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 26px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+}
+
+.tab-bar-btn:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.tab-bar-btn .icon {
+  width: 14px;
+  height: 14px;
+}
+
+.tab-list {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.tab-list::-webkit-scrollbar {
+  display: none;
+}
+
+.doc-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 190px;
+  height: 26px;
+  padding: 0 8px;
+  border-radius: 6px;
+  color: var(--text-muted);
+  font-size: var(--t-12);
+  font-weight: 500;
+  cursor: pointer;
+  user-select: none;
+  flex: none;
+}
+
+.doc-tab:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.doc-tab.on {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 0 0 1px var(--border);
+}
+
+.doc-tab .icon {
+  width: 13px;
+  height: 13px;
+  color: var(--text-faint);
+}
+
+.doc-tab-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.doc-tab-dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--warning);
+}
+
+.doc-tab-close {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  margin-right: -2px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+}
+
+.doc-tab-close:hover {
+  background: var(--surface-active);
+  color: var(--text);
+}
+
+.doc-tab-close .icon {
+  width: 11px;
+  height: 11px;
+}
+
+@media (max-width: 720px) {
+  .tab-bar {
+    display: none !important;
+  }
 }
 
 /* ── Top bar ───────────────────────────────────────────── */
