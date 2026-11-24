@@ -286,9 +286,21 @@ function boundField(spec, bound, tokens, set) {
     });
   } else if (raw === "name") {
     shown = typeof value === "string" ? value : "";
+    const listId = "zenith-font-families";
+    if (name === "font_family" && !document.getElementById(listId)) {
+      const dl = h(
+        "datalist",
+        { id: listId },
+        ["Noto Sans", "Noto Serif", "Noto Sans Mono", ...tokens.map((t) => t.value).filter((v) => typeof v === "string")]
+          .filter((v, i, a) => a.indexOf(v) === i)
+          .map((f) => h("option", { value: f })),
+      );
+      document.body.appendChild(dl);
+    }
     input = h("input", {
       class: "edit-input",
       type: "text",
+      list: name === "font_family" ? listId : undefined,
       spellcheck: "false",
       autocomplete: "off",
       "aria-label": `${label} family name`,

@@ -21,6 +21,7 @@
   <header class="w-top">
     <div class="welcome-brand"><img src="img/zenith-logo.svg" alt=""><span>Zenith</span></div>
     <div class="w-top-actions">
+      <button type="button" class="button" id="welcome-back" hidden></button>
       <button type="button" class="button ghost" id="welcome-drafts" hidden><i data-icon="history"></i><span id="welcome-drafts-label">Browser drafts</span></button>
       <button type="button" class="button ghost" id="welcome-open-dlg"><i data-icon="folder"></i><span>Open…</span></button>
       <button type="button" class="tool" id="welcome-theme" aria-label="Toggle theme" title="Toggle theme"><i data-icon="moon"></i></button>
@@ -167,12 +168,19 @@
           <span id="zoom-value">100%</span><i data-icon="chevronDown" class="icon tiny"></i>
         </button>
         <div class="menu right" id="zoom-menu" role="menu" hidden>
+          <div class="zoom-input-row">
+            <input class="edit-input" id="zoom-input" type="number" min="5" max="3200" step="5" value="100" aria-label="Zoom percent">
+            <span class="unit">%</span>
+          </div>
+          <hr>
           <button type="button" role="menuitem" id="zoom-in"><i data-icon="zoomIn"></i><span>Zoom in</span><kbd>+</kbd></button>
           <button type="button" role="menuitem" id="zoom-out"><i data-icon="zoomOut"></i><span>Zoom out</span><kbd>−</kbd></button>
           <hr>
           <button type="button" role="menuitem" id="zoom-fit"><i data-icon="fit"></i><span>Fit page</span><kbd>⇧1</kbd></button>
+          <button type="button" role="menuitem" id="zoom-sel"><i data-icon="zoomIn"></i><span>Zoom to selection</span><kbd>⇧2</kbd></button>
           <button type="button" role="menuitem" id="zoom-100"><i data-icon="search"></i><span>100%</span><kbd>⇧0</kbd></button>
           <hr>
+          <button type="button" role="menuitem" id="rulers-toggle" aria-pressed="false" class="check"><i data-icon="sliders"></i><span>Rulers</span><kbd>⇧R</kbd></button>
           <button type="button" role="menuitem" id="snap-toggle" aria-pressed="true" class="check on"><i data-icon="magnet"></i><span>Snap to objects</span></button>
         </div>
       </div>
@@ -204,6 +212,7 @@
         <button type="button" class="collapse" id="toggle-left" aria-pressed="true" aria-controls="panel-left" title="Hide left panel (Ctrl+\)" aria-label="Hide left panel"><i data-icon="panelLeft"></i></button>
       </div>
       <div class="tab-body" data-lbody="layers">
+        <input class="edit-input layer-filter" id="layers-filter" type="search" placeholder="Filter layers…" aria-label="Filter layers">
         <div class="layer-tree" id="layers" role="tree" aria-label="Layers"></div>
       </div>
       <div class="tab-body" data-lbody="pages" hidden>
@@ -425,7 +434,9 @@
     <nav class="settings-nav" role="tablist" aria-label="Settings sections">
       <button type="button" role="tab" class="on" data-set-tab="general" aria-selected="true"><i data-icon="sliders"></i><span>General</span></button>
       <button type="button" role="tab" data-set-tab="editor" aria-selected="false"><i data-icon="layout"></i><span>Editor</span></button>
+      <button type="button" role="tab" data-set-tab="fonts" aria-selected="false"><i data-icon="text"></i><span>Fonts</span></button>
       <button type="button" role="tab" data-set-tab="storage" aria-selected="false"><i data-icon="history"></i><span>Storage</span></button>
+      <button type="button" role="tab" data-set-tab="diagnostics" aria-selected="false"><i data-icon="info"></i><span>Diagnostics</span></button>
     </nav>
     <div class="settings-panes">
       <section class="settings-pane" data-set-pane="general">
@@ -441,15 +452,26 @@
       </section>
       <section class="settings-pane" data-set-pane="editor" hidden>
         <h3>Canvas &amp; Panels</h3>
+        <label class="flag-check"><input type="checkbox" id="set-rulers"><span>Show canvas rulers (⇧R)</span></label>
         <label class="flag-check"><input type="checkbox" id="set-snap" checked><span>Snap to objects &amp; guides</span></label>
         <label class="flag-check"><input type="checkbox" id="set-left" checked><span>Show left panel (Layers, Pages, Tokens, Assets)</span></label>
         <label class="flag-check"><input type="checkbox" id="set-right" checked><span>Show right Inspector panel</span></label>
+      </section>
+      <section class="settings-pane" data-set-pane="fonts" hidden>
+        <h3>Font Engine</h3>
+        <pre class="set-diag-pre" id="set-fonts-list"></pre>
+        <p class="exp-note">Drop .ttf or .otf files into your project folder to use custom fonts deterministically.</p>
       </section>
       <section class="settings-pane" data-set-pane="storage" hidden>
         <h3>Browser drafts</h3>
         <p class="exp-note" id="set-storage-summary">Checking local storage…</p>
         <p class="exp-note">Everything stays in this browser. Nothing is uploaded.</p>
         <button type="button" class="button" id="set-open-drafts">Manage recent &amp; browser drafts…</button>
+      </section>
+      <section class="settings-pane" data-set-pane="diagnostics" hidden>
+        <h3>Session Diagnostics</h3>
+        <pre class="set-diag-pre" id="set-diag-pre"></pre>
+        <button type="button" class="button" id="set-copy-diag">Copy diagnostic report</button>
       </section>
     </div>
   </div>

@@ -41,6 +41,7 @@ export class TokensPanel {
     this.tokens = [];
     this.adding = false;
     this.addType = "color";
+    this.query = "";
   }
 
   set(tokens) {
@@ -52,31 +53,51 @@ export class TokensPanel {
     if (!this.host) return;
     clear(this.host);
 
-    if (this.hooks.onCreate) {
-      const addBtn = h(
-        "button",
-        {
-          type: "button",
-          class: "tok-add-btn",
-          id: "tok-add-btn",
-          onclick: () => {
-            this.adding = !this.adding;
-            this.draw();
+    const search = h("input", {
+      type: "search",
+      class: "edit-input asset-search",
+      placeholder: "Filter…",
+      value: this.query,
+      "aria-label": "Filter tokens",
+      oninput: (e) => {
+        this.query = e.target.value;
+        this.draw();
+        const next = this.host.querySelector(".asset-search");
+        if (next) {
+          next.focus();
+          next.setSelectionRange(this.query.length, this.query.length);
+        }
+      },
+    });
+    const addBtn = this.hooks.onCreate
+      ? h(
+          "button",
+          {
+            type: "button",
+            class: "page-act-btn asset-upload-btn",
+            id: "tok-add-btn",
+            onclick: () => {
+              this.adding = !this.adding;
+              this.draw();
+            },
           },
-        },
-        icon("plus"),
-        h("span", { text: this.adding ? "Cancel" : "Add token" }),
-      );
-      this.host.appendChild(h("div", { class: "tok-head" }, addBtn));
-      if (this.adding) this.host.appendChild(this.renderAddForm());
-    }
+          icon("plus"),
+          h("span", { text: this.adding ? "Cancel" : "Add" }),
+        )
+      : null;
+    this.host.appendChild(h("div", { class: "asset-bar" }, search, addBtn));
+    if (this.adding && this.hooks.onCreate) this.host.appendChild(this.renderAddForm());
 
-    if (!this.tokens.length) {
-      this.host.appendChild(h("p", { class: "empty", text: "No tokens defined." }));
+    const q = this.query.trim().toLowerCase();
+    const visible = q
+      ? this.tokens.filter((t) => `${t.id} ${valueText(t)} ${t.type}`.toLowerCase().includes(q))
+      : this.tokens;
+    if (!visible.length) {
+      this.host.appendChild(h("p", { class: "empty", text: q ? "No matching tokens." : "No tokens defined." }));
       return;
     }
     for (const [label, pred] of GROUPS) {
-      const items = this.tokens.filter(pred);
+      const items = visible.filter(pred);
       if (!items.length) continue;
       this.host.appendChild(h("div", { class: "tok-group", text: label }));
       for (const t of items) {

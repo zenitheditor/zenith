@@ -127,7 +127,10 @@ export class Status {
   }
 
   zoom() {
-    byId("zoom-value").textContent = `${Math.round(this.app.view.zoom * 100)}%`;
+    const pct = Math.round(this.app.view.zoom * 100);
+    byId("zoom-value").textContent = `${pct}%`;
+    const zi = byId("zoom-input");
+    if (zi && document.activeElement !== zi) zi.value = String(pct);
   }
 
   /** Show or hide "Rendering" (a render that takes long). */

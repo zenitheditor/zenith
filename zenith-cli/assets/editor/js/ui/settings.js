@@ -40,6 +40,9 @@ export class SettingsDialog {
         snap.classList.toggle("on", on);
       }
     });
+    byId("set-rulers")?.addEventListener("change", (e) => {
+      this.app.setRulers?.(e.target.checked);
+    });
     byId("set-left")?.addEventListener("change", (e) => {
       const s = this.app.layout.starter ?? this.app.layout.state;
       s.left = e.target.checked;
@@ -56,6 +59,35 @@ export class SettingsDialog {
       this.dlg.close();
       this.app.drafts?.show();
     });
+    byId("set-copy-diag")?.addEventListener("click", async () => {
+      const report = this.diagnosticReport();
+      try {
+        await navigator.clipboard.writeText(report);
+        this.app.notices.toast("Copied diagnostic report.");
+      } catch {
+        this.app.notices.toast("Could not access clipboard.", "warning");
+      }
+    });
+  }
+
+  diagnosticReport() {
+    const app = this.app;
+    const pages = app.outline?.pages?.length ?? 0;
+    const files = Object.keys(app.host?.worker?.files ?? {}).length;
+    return JSON.stringify(
+      {
+        host: app.host?.kind,
+        document: app.name,
+        valid: app.valid,
+        pages,
+        tokens: app.tokenList?.length ?? 0,
+        projectFiles: files,
+        diagnostics: app.diagnosticList?.length ?? 0,
+        userAgent: navigator.userAgent,
+      },
+      null,
+      2,
+    );
   }
 
   async open(tab = "general") {
@@ -81,10 +113,28 @@ export class SettingsDialog {
     if (themeSel) themeSel.value = s.theme || "system";
     const snapChk = byId("set-snap");
     if (snapChk) snapChk.checked = Boolean(this.app.gestures?.snapOn);
+    const rulersChk = byId("set-rulers");
+    if (rulersChk) rulersChk.checked = Boolean(this.app.rulers?.on);
     const leftChk = byId("set-left");
     if (leftChk) leftChk.checked = Boolean(s.left);
     const rightChk = byId("set-right");
     if (rightChk) rightChk.checked = Boolean(s.right);
+
+    const fontsEl = byId("set-fonts-list");
+    if (fontsEl) {
+      const docFonts = (this.app.tokenList ?? []).filter((t) => t.type === "fontFamily").map((t) => `${t.id}: ${t.value}`);
+      const loaded = [...(this.app.host?.loadedFonts ?? [])];
+      fontsEl.textContent = [
+        "Bundled: Noto Sans, Noto Serif, Noto Sans Mono (+ Arabic, Hebrew, CJK, Emoji fallback)",
+        loaded.length ? `Loaded in session: ${loaded.join(", ")}` : null,
+        docFonts.length ? `Document tokens: ${docFonts.join(" · ")}` : null,
+      ]
+        .filter(Boolean)
+        .join("\n");
+    }
+
+    const diagEl = byId("set-diag-pre");
+    if (diagEl) diagEl.textContent = this.diagnosticReport();
 
     const summary = byId("set-storage-summary");
     if (summary && this.app.drafts?.store) {

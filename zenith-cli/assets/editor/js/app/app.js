@@ -7,6 +7,7 @@ import { CanvasView } from "../canvas/view.js";
 import { Overlay } from "../canvas/overlay.js";
 import { PageCanvas } from "../canvas/paint.js";
 import { Renderer } from "../canvas/render.js";
+import { CanvasRulers } from "../canvas/rulers.js";
 import { InlineTextEditor } from "../canvas/textedit.js";
 import { AssetsPanel } from "../panels/assets.js";
 import { DiagnosticsPanel } from "../panels/diagnostics.js";
@@ -109,12 +110,17 @@ export class App {
       zoomed: () => {
         this.renderer.zoomed();
         this.overlay.draw();
+        this.rulers?.draw();
         this.status.zoom();
       },
       // The view can move (a resize) before the renderer exists.
-      moved: () => this.renderer?.moved(),
+      moved: () => {
+        this.renderer?.moved();
+        this.rulers?.draw();
+      },
     });
     this.overlay = new Overlay(byId("overlay"), this.view);
+    this.rulers = new CanvasRulers(byId("viewport"), this.view, { on: false });
     this.renderer = new Renderer(this.engine, this.view, this.paint, {
       page: () => this.page,
       rendered: (r) => this.rendered(r),
@@ -169,6 +175,8 @@ export class App {
         if (ok) requestAnimationFrame(() => this.view.fit());
         return ok;
       },
+      openExport: () => this.exportDlg?.open(),
+      onInspectBox: (box) => this.rulers?.setSelectionBox(box),
     });
     this.layers = new Layers(byId("pages"), byId("layers"), {
       page: (n) => this.selection.goToPage(n),
@@ -176,6 +184,7 @@ export class App {
       selectMany: (ids) => this.selection.selectIds(ids, "layers"),
       toggleVisible: (id, visible) => this.actions.set(id, { visible }),
       toggleLocked: (id, locked) => this.actions.set(id, { locked }),
+      contextMenu: (_id, e) => this.openContextMenu(e),
       addPage: () => {
         const pages = this.outline?.pages ?? [];
         const cur = pages.find((p) => p.page === this.page) ?? pages[0];
@@ -389,6 +398,22 @@ export class App {
       this.layout.closePopovers();
       this.view.fit();
     });
+    byId("zoom-sel")?.addEventListener("click", () => {
+      this.layout.closePopovers();
+      this.zoomToSelection();
+    });
+    const zoomInput = byId("zoom-input");
+    zoomInput?.addEventListener("change", () => {
+      const pct = Number(zoomInput.value);
+      if (Number.isFinite(pct) && pct >= 5 && pct <= 3200) {
+        this.view.zoomTo(pct / 100);
+        this.layout.closePopovers();
+      }
+    });
+    const rulersBtn = byId("rulers-toggle");
+    rulersBtn?.addEventListener("click", () => {
+      this.toggleRulers();
+    });
     byId("cmdk-btn")?.addEventListener("click", () => this.cmdk.open());
     byId("menu-settings")?.addEventListener("click", () => {
       this.layout.closePopovers();
@@ -450,8 +475,18 @@ export class App {
         e.preventDefault();
         return;
       }
+      if (e.shiftKey && e.key === "@") {
+        this.zoomToSelection();
+        e.preventDefault();
+        return;
+      }
       if (e.shiftKey && e.key === ")") {
         this.view.actualSize();
+        e.preventDefault();
+        return;
+      }
+      if (e.shiftKey && key === "r") {
+        this.toggleRulers();
         e.preventDefault();
         return;
       }
@@ -474,6 +509,92 @@ export class App {
       e.preventDefault();
       e.returnValue = "";
     });
+  }
+
+  setRulers(on) {
+    this.rulers?.setVisible(on);
+    const btn = byId("rulers-toggle");
+    if (btn) {
+      btn.setAttribute("aria-pressed", String(Boolean(on)));
+      btn.classList.toggle("on", Boolean(on));
+    }
+  }
+
+  toggleRulers() {
+    this.setRulers(!this.rulers?.on);
+  }
+
+  zoomToSelection() {
+    const b = this.inspector.lastInfo?.box;
+    if (!b || !b.w || !b.h) {
+      this.view.fit();
+      return;
+    }
+    const r = byId("viewport").getBoundingClientRect();
+    const pad = 80;
+    const z = Math.min(8, Math.max(0.1, Math.min((r.width - pad) / b.w, (r.height - pad) / b.h)));
+    this.view.zoom = z;
+    this.view.px = Math.round(r.width / 2 - (b.x + b.w / 2) * z);
+    this.view.py = Math.round(r.height / 2 - (b.y + b.h / 2) * z);
+    this.view.apply();
+    this.renderer.zoomed();
+    this.overlay.draw();
+    this.rulers?.draw();
+    this.status.zoom();
+  }
+
+  /** Non-destructive Home view: preserves all open tabs in memory. */
+  async openHomeOverlay() {
+    const welcome = byId("welcome");
+    const appEl = byId("app");
+    if (!welcome || !appEl) return;
+    if (!this._welcomeWired) {
+      this._welcomeWired = true;
+      const { showWelcome } = await import("./welcome.js");
+      showWelcome(async (spec) => {
+        welcome.hidden = true;
+        appEl.hidden = false;
+        await this.files?.load(spec);
+      });
+    }
+    const back = byId("welcome-back");
+    if (back) {
+      back.hidden = false;
+      back.textContent = `← Back to ${this.name}`;
+      back.onclick = () => {
+        welcome.hidden = true;
+        appEl.hidden = false;
+        byId("viewport")?.focus();
+      };
+    }
+    appEl.hidden = true;
+    welcome.hidden = false;
+    void this.drafts?.refresh();
+  }
+
+  openContextMenu(e) {
+    const ctx = byId("ctx-menu");
+    if (!ctx) return;
+    this.layout.closePopovers();
+    const hasSel = this.selectionIds.length > 0;
+    const single = this.selectionIds.length === 1;
+    const multi = this.selectionIds.length >= 2;
+    const isText = single && this.inspector.lastInfo?.kind === "text";
+    const isGroup = single && this.inspector.lastInfo?.kind === "group";
+    byId("ctx-edit-text").hidden = !isText;
+    byId("ctx-duplicate").hidden = !hasSel;
+    byId("ctx-group").hidden = !multi;
+    byId("ctx-ungroup").hidden = !isGroup;
+    byId("ctx-forward").hidden = !single;
+    byId("ctx-backward").hidden = !single;
+    byId("ctx-delete").hidden = !hasSel;
+    byId("ctx-reveal").hidden = !single;
+    byId("ctx-sep").hidden = !hasSel;
+    ctx.hidden = false;
+    const w = ctx.offsetWidth || 180;
+    const h = ctx.offsetHeight || 220;
+    ctx.style.left = `${Math.min(e.clientX, window.innerWidth - w - 8)}px`;
+    ctx.style.top = `${Math.min(e.clientY, window.innerHeight - h - 8)}px`;
   }
 
   /** Rename the open in-browser `.zen` document. */
@@ -522,13 +643,21 @@ export class App {
       imgBtn.addEventListener("click", () => this.files.pickInsertImage());
     }
     vp?.addEventListener("dragover", (e) => {
-      if (this.files && e.dataTransfer?.types?.includes("Files")) {
+      const types = e.dataTransfer?.types ?? [];
+      if (this.files && (types.includes("Files") || types.includes("application/x-zenith-asset"))) {
         e.preventDefault();
         e.dataTransfer.dropEffect = "copy";
       }
     });
     vp?.addEventListener("drop", async (e) => {
       if (!this.files) return;
+      const assetRel = e.dataTransfer?.getData("application/x-zenith-asset");
+      if (assetRel) {
+        e.preventDefault();
+        const pt = this.view.toPage(e.clientX, e.clientY);
+        await this.files.insertProjectAsset(assetRel, pt);
+        return;
+      }
       const file = [...(e.dataTransfer?.files ?? [])].find((f) =>
         /^image\/(png|jpeg|webp|gif|svg\+xml)$/i.test(f.type) || /\.(png|jpe?g|webp|gif|svg)$/i.test(f.name),
       );
@@ -537,29 +666,17 @@ export class App {
       const pt = this.view.toPage(e.clientX, e.clientY);
       await this.files.insertImageFile(file, pt);
     });
-    vp?.addEventListener("contextmenu", (e) => {
+    vp?.addEventListener("contextmenu", async (e) => {
       if (!ctx) return;
       e.preventDefault();
-      this.layout.closePopovers();
-      const hasSel = this.selectionIds.length > 0;
-      const single = this.selectionIds.length === 1;
-      const multi = this.selectionIds.length >= 2;
-      const isText = single && this.inspector.lastInfo?.kind === "text";
-      const isGroup = single && this.inspector.lastInfo?.kind === "group";
-      byId("ctx-edit-text").hidden = !isText;
-      byId("ctx-duplicate").hidden = !hasSel;
-      byId("ctx-group").hidden = !multi;
-      byId("ctx-ungroup").hidden = !isGroup;
-      byId("ctx-forward").hidden = !single;
-      byId("ctx-backward").hidden = !single;
-      byId("ctx-delete").hidden = !hasSel;
-      byId("ctx-reveal").hidden = !single;
-      byId("ctx-sep").hidden = !hasSel;
-      ctx.hidden = false;
-      const w = ctx.offsetWidth || 180;
-      const h = ctx.offsetHeight || 220;
-      ctx.style.left = `${Math.min(e.clientX, window.innerWidth - w - 8)}px`;
-      ctx.style.top = `${Math.min(e.clientY, window.innerHeight - h - 8)}px`;
+      // Select-on-right-click when clicking an unselected node on canvas.
+      const pt = this.view.toPage(e.clientX, e.clientY);
+      const hit = await this.engine.run("select.hit", { page: this.page, x: pt.x, y: pt.y });
+      const hitId = hit.ok ? hit.result?.id : null;
+      if (hitId && !this.selectionIds.includes(hitId)) {
+        await this.selection.selectIds([hitId], "canvas");
+      }
+      this.openContextMenu(e);
     });
     document.addEventListener("pointerdown", (e) => {
       if (ctx && !ctx.hidden && !ctx.contains(e.target)) closeCtx();

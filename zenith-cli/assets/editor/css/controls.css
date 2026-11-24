@@ -1096,3 +1096,30 @@ body:has(dialog[open]) .toasts {
   font-size: var(--t-13);
   font-weight: 600;
 }
+
+.set-diag-pre {
+  margin: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 160px;
+  overflow: auto;
+}
+
+.zoom-input-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+}
+
+.zoom-input-row .edit-input {
+  width: 100%;
+  height: 26px;
+}

@@ -35,6 +35,7 @@ export class Inspector {
   showEmpty(text = "Select something on the canvas to edit it, or press ⌘K.") {
     this.shownId = null;
     this.lastInfo = null;
+    this.hooks.onInspectBox?.(null);
     clear(this.root);
     const pg = this.outline?.pages?.find((p) => p.page === this.page);
     if (!pg) {
@@ -151,6 +152,18 @@ export class Inspector {
           h("dt", { text: "Pages" }),
           h("dd", { text: String(this.outline?.pages?.length ?? 1) }),
         ),
+        this.hooks.openExport
+          ? h(
+              "button",
+              {
+                type: "button",
+                class: "button insp-export-btn",
+                onclick: () => this.hooks.openExport(),
+              },
+              icon("download"),
+              h("span", { text: "Export & Package…" }),
+            )
+          : null,
         h("p", { class: "insp-note", text }),
       ),
     );
@@ -277,6 +290,7 @@ export class Inspector {
     const expanded = this.shownId === info.id && this.root.querySelector(".inspector-advanced")?.open;
     this.shownId = info.id;
     this.lastInfo = info;
+    this.hooks.onInspectBox?.(info.box ?? null);
     clear(this.root);
     const guided = this.hooks.guideText?.(info.id) && info.edit?.fields?.includes("text");
     const set = (params) => this.hooks.set(info.id, params);

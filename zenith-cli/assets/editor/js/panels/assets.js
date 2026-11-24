@@ -147,8 +147,13 @@ export class AssetsPanel {
             {
               type: "button",
               class: "asset-card",
-              title: `${rel} (${approxBytes(b64)}) — click to insert`,
+              draggable: "true",
+              title: `${rel} (${approxBytes(b64)}) — click or drag onto canvas`,
               onclick: () => this.hooks.onInsert?.(rel, b64),
+              ondragstart: (e) => {
+                e.dataTransfer?.setData("application/x-zenith-asset", rel);
+                e.dataTransfer.effectAllowed = "copy";
+              },
             },
             h("span", { class: "asset-thumb" }, img),
             h("span", { class: "asset-card-name", text: name }),

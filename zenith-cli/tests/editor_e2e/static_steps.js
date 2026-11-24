@@ -878,17 +878,25 @@ export const steps = [
       await page.waitFor(`!document.querySelector('[data-key="missing-assets"]') && ${A}.valid`,
         "missing asset banner to clear after importing logo.svg into worker");
 
-      // 4. Assets panel displays the loaded logo.svg thumbnail; Tabs switch between open docs; Settings opens.
+      // 4. Assets panel displays the loaded logo.svg thumbnail; Tabs switch between open docs; Rulers + Settings + non-destructive Home.
       await page.clickSelector('[data-ltab="assets"]');
       await page.waitFor("!!document.querySelector('#assets .asset-card img')", "assets panel thumbnail");
+      await page.eval(`${A}.setRulers(true)`);
       await shot("static-assets-tab");
       const tabCount = await page.eval("document.querySelectorAll('#tab-list .doc-tab').length");
       check(tabCount >= 2, `expected at least 2 open tabs, got ${tabCount}`);
+      await page.clickSelector("#tab-home");
+      await page.waitFor("!document.getElementById('welcome').hidden && !document.getElementById('welcome-back').hidden", "non-destructive Home overlay");
+      await page.clickSelector("#welcome-back");
+      await page.waitFor("!document.getElementById('app').hidden && document.getElementById('welcome').hidden", "return from Home without losing tabs");
+      const tabsAfterHome = await page.eval("document.querySelectorAll('#tab-list .doc-tab').length");
+      check(tabsAfterHome === tabCount, `Home lost tabs: ${tabsAfterHome} !== ${tabCount}`);
       await page.clickSelector("#main-menu-btn");
       await page.clickSelector("#menu-settings");
       await page.waitFor("document.getElementById('settings-dlg').open", "settings dialog");
       await shot("static-settings");
       await page.clickSelector("#settings-close");
+      await page.eval(`${A}.setRulers(false)`);
       return { bannerTitle: bannerTitle.trim(), tabCount };
     },
   ],

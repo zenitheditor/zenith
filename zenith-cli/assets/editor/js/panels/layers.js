@@ -19,9 +19,15 @@ export class Layers {
     this.collapsed = new Set();
     this.focusKey = null;
     this.outlineKey = null;
+    this.query = "";
     // Tree items by node id, rebuilt with the tree.
     this.items = new Map();
     treeEl.addEventListener("keydown", (e) => this.onKey(e));
+    const filterEl = document.getElementById("layers-filter");
+    filterEl?.addEventListener("input", () => {
+      this.query = filterEl.value.trim().toLowerCase();
+      this.drawTree();
+    });
   }
 
   setOutline(outline) {
@@ -131,8 +137,15 @@ export class Layers {
       this.treeEl.appendChild(h("p", { class: "empty", text: "No page to show." }));
       return;
     }
+    const matchesQuery = (node) => {
+      if (!this.query) return true;
+      const hay = `${node.id ?? ""} ${node.name ?? ""} ${node.kind ?? ""}`.toLowerCase();
+      if (hay.includes(this.query)) return true;
+      return (node.children ?? []).some(matchesQuery);
+    };
+    const filteredChildren = this.query ? (page.children ?? []).filter(matchesQuery) : (page.children ?? []);
     const items = [];
-    this.buildChildren(page.children ?? [], 1, page.id, items);
+    this.buildChildren(filteredChildren, 1, page.id, items);
     const master = page.master ? this.outline.masters?.find((m) => m.id === page.master) : null;
     if (master) {
       const key = `master:${master.id}`;
@@ -238,7 +251,13 @@ export class Layers {
         title: o.kind ? `${o.kind}${o.id ? ` ${o.id}` : ""}` : o.label,
         onclick: (e) => {
           if (e.target.closest(".twisty") && !o.leaf) this.toggle(o.key);
-          else this.activate(o);
+          else this.activate(o, e);
+        },
+        oncontextmenu: (e) => {
+          if (o.id === undefined || !this.handlers.contextMenu) return;
+          e.preventDefault();
+          if (!this.selection.includes(o.id)) this.handlers.select(o.id);
+          this.handlers.contextMenu(o.id, e);
         },
       },
       h("span", { class: `twisty${o.leaf ? " leaf" : ""}` }, icon("chevron")),
@@ -314,11 +333,19 @@ export class Layers {
     }
   }
 
-  activate(o) {
+  activate(o, e = null) {
     this.focus(o.key);
     if (o.runIds?.length && this.handlers.selectMany) this.handlers.selectMany(o.runIds);
-    else if (o.id !== undefined) this.handlers.select(o.id);
-    else if (!o.leaf) this.toggle(o.key);
+    else if (o.id !== undefined) {
+      if (e && (e.shiftKey || e.metaKey || e.ctrlKey) && this.handlers.selectMany) {
+        const next = this.selection.includes(o.id)
+          ? this.selection.filter((x) => x !== o.id)
+          : [...this.selection, o.id];
+        this.handlers.selectMany(next);
+      } else {
+        this.handlers.select(o.id);
+      }
+    } else if (!o.leaf) this.toggle(o.key);
   }
 
   toggle(key) {

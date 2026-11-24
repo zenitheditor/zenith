@@ -35,11 +35,9 @@ export class FileTools {
       app.layout.closePopovers();
       this.newDocument();
     });
-    byId("menu-home")?.addEventListener("click", async () => {
+    byId("menu-home")?.addEventListener("click", () => {
       app.layout.closePopovers();
-      if (app.atRisk() && !(await this.confirmDiscard("Home"))) return;
-      const home = new URL("./", location.href);
-      location.href = home.href;
+      app.openHomeOverlay?.();
     });
     byId("menu-drafts")?.addEventListener("click", () => {
       app.layout.closePopovers();
@@ -361,7 +359,7 @@ export class FileTools {
   }
 
   /** Insert an already-loaded project image/SVG (from the Assets panel) onto the current page. */
-  async insertProjectAsset(rel) {
+  async insertProjectAsset(rel, dropPoint = null) {
     const pg = this.app.outline?.pages?.find((p) => p.page === this.app.page);
     if (!pg) return false;
     const name = rel.split("/").pop() || "asset";
@@ -372,8 +370,8 @@ export class FileTools {
     const nodeId = `img.${slug}.${stamp}`;
     const w = Math.min(280, Math.round(pg.w * 0.45));
     const h = Math.min(220, Math.round(pg.h * 0.45));
-    const x = Math.round((pg.w - w) / 2);
-    const y = Math.round((pg.h - h) / 2);
+    const x = dropPoint ? Math.round(dropPoint.x - w / 2) : Math.round((pg.w - w) / 2);
+    const y = dropPoint ? Math.round(dropPoint.y - h / 2) : Math.round((pg.h - h) / 2);
     const source = `image id="${nodeId}" asset="${assetId}" x=(px)${x} y=(px)${y} w=(px)${w} h=(px)${h} fit="contain"`;
     return this.app.actions.run("tx.apply", () => ({
       params: {

@@ -18,12 +18,19 @@ export class TabBar {
     if (!this.bar || !this.list || app.host.kind !== "wasm") return;
 
     this.bar.hidden = false;
-    byId("tab-home")?.addEventListener("click", async () => {
-      if (app.atRisk() && !(await app.files?.confirmDiscard("Home"))) return;
-      location.href = new URL("./", location.href).href;
+    byId("tab-home")?.addEventListener("click", () => {
+      app.openHomeOverlay?.();
     });
     byId("tab-new")?.addEventListener("click", () => {
       app.files?.newDocument();
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.ctrlKey && !e.metaKey && !e.altKey && e.key === "Tab" && this.tabs.length > 1) {
+        e.preventDefault();
+        const i = this.tabs.findIndex((t) => t.id === this.activeId);
+        const next = this.tabs[(i + (e.shiftKey ? -1 : 1) + this.tabs.length) % this.tabs.length];
+        if (next) void this.switchTo(next.id);
+      }
     });
 
     this.recordCurrent();
@@ -176,6 +183,12 @@ export class TabBar {
             class: `doc-tab${active ? " on" : ""}`,
             title: tab.path || tab.name,
             onclick: () => void this.switchTo(tab.id),
+            onauxclick: (e) => {
+              if (e.button === 1 && this.tabs.length > 1) {
+                e.preventDefault();
+                void this.closeTab(tab.id);
+              }
+            },
           },
           icon("page"),
           h("span", { class: "doc-tab-name", text: tab.name }),
