@@ -23,24 +23,26 @@ export class SelectionController {
     this.frameCursor = null;
     this.cursorLater = debounce(() => this.cursorNow(), CURSOR_MS);
     this.hoverLater = throttle((x, y) => this.hoverNow(x, y), HOVER_MS);
-    window.addEventListener("keydown", (e) => {
-      if (e.key === "Alt" && !this.altHeld) {
-        this.altHeld = true;
-        this.updateMeasure();
-      }
-    });
-    window.addEventListener("keyup", (e) => {
-      if (e.key === "Alt" && this.altHeld) {
-        this.altHeld = false;
-        this.app.overlay.setMeasure(null, null);
-      }
-    });
-    window.addEventListener("blur", () => {
-      if (this.altHeld) {
-        this.altHeld = false;
-        this.app.overlay.setMeasure(null, null);
-      }
-    });
+    if (typeof window !== "undefined") {
+      window.addEventListener("keydown", (e) => {
+        if (e.key === "Alt" && !this.altHeld) {
+          this.altHeld = true;
+          this.updateMeasure();
+        }
+      });
+      window.addEventListener("keyup", (e) => {
+        if (e.key === "Alt" && this.altHeld) {
+          this.altHeld = false;
+          this.app.overlay.setMeasure(null, null);
+        }
+      });
+      window.addEventListener("blur", () => {
+        if (this.altHeld) {
+          this.altHeld = false;
+          this.app.overlay.setMeasure(null, null);
+        }
+      });
+    }
   }
 
   updateMeasure() {

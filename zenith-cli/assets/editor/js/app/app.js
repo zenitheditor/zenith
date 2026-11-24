@@ -780,7 +780,7 @@ export class App {
   }
 
   atRisk() {
-    if (!this.drafts) return this.dirty();
+    if (!this.drafts || this.host?.handle) return this.dirty();
     const text = this.code.text();
     return (this.dirty() || this.drafts.needsCopy(text)) && !this.drafts.confirmed(text);
   }
