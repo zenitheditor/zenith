@@ -2,8 +2,8 @@
 
 use super::spec::{CommandSpec, always, when_displayable, when_redo, when_undo, when_valid};
 use crate::commands::{
-    at_offset, batch, buffer, diagnose, fonts, format, gesture, handles, history, inspect, list,
-    marquee, open, outline, render, select, set, structure, tx, view,
+    at_offset, batch, buffer, diagnose, export, fonts, format, gesture, handles, history, inspect,
+    list, marquee, open, outline, render, select, set, structure, tx, view,
 };
 
 /// The diff every text-changing command returns.
@@ -67,6 +67,18 @@ static COMMANDS: &[CommandSpec] = &[
         needs_version: false,
         enabled: when_displayable,
         run: render::run,
+    },
+    CommandSpec {
+        id: "doc.export",
+        label: "Export document",
+        params: "{format: \"svg\"|\"pdf\", page?: 1-based (pdf default: all pages; svg default: \
+            session page), colorspace?: \"srgb\"|\"cmyk\", print?: bool = false}",
+        result: "{format, mime, page?, page_count, width?, height?, bytes, base64, stale, \
+            diagnostics: [diagnostic]}",
+        mutates: false,
+        needs_version: false,
+        enabled: when_displayable,
+        run: export::run,
     },
     CommandSpec {
         id: "doc.outline",

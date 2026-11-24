@@ -5,6 +5,7 @@ pub(crate) mod batch;
 pub(crate) mod buffer;
 pub(crate) mod common;
 pub(crate) mod diagnose;
+pub(crate) mod export;
 pub(crate) mod fonts;
 pub(crate) mod format;
 pub(crate) mod gesture;
