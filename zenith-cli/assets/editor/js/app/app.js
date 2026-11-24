@@ -7,6 +7,7 @@ import { CanvasView } from "../canvas/view.js";
 import { Overlay } from "../canvas/overlay.js";
 import { PageCanvas } from "../canvas/paint.js";
 import { Renderer } from "../canvas/render.js";
+import { InlineTextEditor } from "../canvas/textedit.js";
 import { DiagnosticsPanel } from "../panels/diagnostics.js";
 import { Inspector } from "../panels/inspector.js";
 import { Layers } from "../panels/layers.js";
@@ -140,12 +141,23 @@ export class App {
     this.gestures = new GestureController(this, byId("gesture-hint"));
     this.actions = new NodeActions(this);
     this.tools = new ToolController(this);
+    this.textEdit = new InlineTextEditor(this, byId("viewport"));
     this.historyUI = new HistoryUI(this);
     this.cmdk = new CommandPalette(this);
     this.layout.historyClose = () => this.historyUI.close();
     this.bindPhoneSheets();
     this.refreshLater = debounce(() => this.refreshDocument(), REFRESH_MS);
-    this.layout.onChange(() => this.overlay.draw());
+    this.lastView = (this.layout.starter ?? this.layout.state).view;
+    this.layout.onChange(() => {
+      const curView = (this.layout.starter ?? this.layout.state).view;
+      if (curView !== this.lastView) {
+        this.lastView = curView;
+        if (curView === "split" || curView === "design") {
+          requestAnimationFrame(() => this.view.fit());
+        }
+      }
+      this.overlay.draw();
+    });
     // The static host opens files itself; `zenith edit` serves one file.
     this.files = engine.kind === "wasm" ? new FileTools(this, engine) : null;
   }
@@ -297,6 +309,20 @@ export class App {
         return;
       }
       if (field || e.altKey) return;
+      if (e.shiftKey && e.key === "!") {
+        this.view.fit();
+        e.preventDefault();
+        return;
+      }
+      if (e.shiftKey && e.key === ")") {
+        this.view.actualSize();
+        e.preventDefault();
+        return;
+      }
+      if (e.key === "Enter" && !e.shiftKey && this.selectionIds.length === 1 && this.inspector.lastInfo?.kind === "text") {
+        if (this.openInlineText()) e.preventDefault();
+        return;
+      }
       const toolKeys = { v: "move", t: "text", r: "rect", o: "ellipse", l: "line", h: "hand" };
       if (toolKeys[key]) {
         this.tools.set(toolKeys[key]);
@@ -306,10 +332,87 @@ export class App {
         e.preventDefault();
       }
     });
+    this.bindCanvasExtras();
     window.addEventListener("beforeunload", (e) => {
       if (!this.atRisk()) return;
       e.preventDefault();
       e.returnValue = "";
+    });
+  }
+
+  /** Open inline canvas text editing for the currently selected text node. */
+  openInlineText({ selectAll = false } = {}) {
+    const info = this.inspector.lastInfo;
+    if (info && info.kind === "text" && this.selectionIds.length === 1 && this.selectionIds[0] === info.id) {
+      return this.textEdit.open(info, { selectAll });
+    }
+    return false;
+  }
+
+  bindCanvasExtras() {
+    const vp = byId("viewport");
+    const ctx = byId("ctx-menu");
+    const closeCtx = () => {
+      if (ctx) ctx.hidden = true;
+    };
+    vp?.addEventListener("dblclick", (e) => {
+      if (this.tools.isDrawing() || this.tools.isHand()) return;
+      if (this.openInlineText()) e.preventDefault();
+    });
+    vp?.addEventListener("contextmenu", (e) => {
+      if (!ctx) return;
+      e.preventDefault();
+      this.layout.closePopovers();
+      const hasSel = this.selectionIds.length > 0;
+      const single = this.selectionIds.length === 1;
+      const isText = single && this.inspector.lastInfo?.kind === "text";
+      byId("ctx-edit-text").hidden = !isText;
+      byId("ctx-duplicate").hidden = !hasSel;
+      byId("ctx-delete").hidden = !hasSel;
+      byId("ctx-reveal").hidden = !single;
+      byId("ctx-sep").hidden = !hasSel;
+      ctx.hidden = false;
+      const w = ctx.offsetWidth || 180;
+      const h = ctx.offsetHeight || 160;
+      ctx.style.left = `${Math.min(e.clientX, window.innerWidth - w - 8)}px`;
+      ctx.style.top = `${Math.min(e.clientY, window.innerHeight - h - 8)}px`;
+    });
+    document.addEventListener("pointerdown", (e) => {
+      if (ctx && !ctx.hidden && !ctx.contains(e.target)) closeCtx();
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && ctx && !ctx.hidden) {
+        closeCtx();
+        e.preventDefault();
+      }
+    });
+    byId("ctx-edit-text")?.addEventListener("click", () => {
+      closeCtx();
+      this.openInlineText();
+    });
+    byId("ctx-duplicate")?.addEventListener("click", () => {
+      closeCtx();
+      this.actions.duplicate();
+    });
+    byId("ctx-delete")?.addEventListener("click", () => {
+      closeCtx();
+      this.actions.remove();
+    });
+    byId("ctx-reveal")?.addEventListener("click", () => {
+      closeCtx();
+      const id = this.selectionIds[0];
+      if (!id) return;
+      this.layout.showSource(true);
+      const idx = this.code.text().indexOf(`id="${id}"`);
+      if (idx >= 0) this.code.jumpTo(idx, idx + id.length + 5);
+    });
+    byId("ctx-fit")?.addEventListener("click", () => {
+      closeCtx();
+      this.view.fit();
+    });
+    byId("ctx-100")?.addEventListener("click", () => {
+      closeCtx();
+      this.view.actualSize();
     });
   }
 

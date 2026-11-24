@@ -30,6 +30,22 @@
   cursor: crosshair;
 }
 
+.canvas-text-edit {
+  position: absolute;
+  z-index: 12;
+  margin: -3px 0 0 -4px;
+  padding: 2px 4px;
+  border: 2px solid var(--accent);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  color: var(--text);
+  line-height: 1.2;
+  resize: none;
+  overflow: hidden;
+  outline: none;
+  box-shadow: var(--shadow-pop);
+}
+
 .app.has-error .page-canvas {
   filter: saturate(0.7) brightness(0.88);
 }

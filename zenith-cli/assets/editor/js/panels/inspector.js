@@ -15,6 +15,7 @@ export class Inspector {
     this.outline = null;
     this.page = 1;
     this.shownId = null;
+    this.lastInfo = null;
     this.showEmpty();
   }
 
@@ -32,6 +33,7 @@ export class Inspector {
 
   showEmpty(text = "Select something on the canvas to edit it, or press ⌘K.") {
     this.shownId = null;
+    this.lastInfo = null;
     clear(this.root);
     const pg = this.outline?.pages?.find((p) => p.page === this.page);
     if (!pg) {
@@ -43,40 +45,61 @@ export class Inspector {
     this.root.append(
       h(
         "div",
-        { class: "inspector-head page-head" },
-        icon("page"),
-        h("span", { class: "inspector-id", text: pg.name || pg.id }),
-        h("span", { class: "muted", text: "Page" }),
+        { class: "insp-head-wrap" },
+        h(
+          "div",
+          { class: "inspector-head page-head" },
+          icon("page"),
+          h("span", { class: "inspector-id", text: pg.name || pg.id }),
+          h("span", { class: "muted", text: "Page" }),
+        ),
       ),
-      h("h3", { text: "Size" }),
       h(
-        "div",
-        { class: "box-grid" },
-        h("div", {}, h("span", { text: "W" }), h("span", { text: `${Math.round(pg.w)} px` })),
-        h("div", {}, h("span", { text: "H" }), h("span", { text: `${Math.round(pg.h)} px` })),
+        "section",
+        { class: "insp-sec" },
+        h("h3", { text: "Size" }),
+        h(
+          "div",
+          { class: "box-grid" },
+          h("div", {}, h("span", { text: "W" }), h("span", { text: `${Math.round(pg.w)} px` })),
+          h("div", {}, h("span", { text: "H" }), h("span", { text: `${Math.round(pg.h)} px` })),
+        ),
       ),
-      h("h3", { text: "Document" }),
       h(
-        "dl",
-        { class: "kv" },
-        h("dt", { text: "Tokens" }),
-        h("dd", { text: String(this.tokens.length) }),
-        h("dt", { text: "Layers" }),
-        h("dd", { text: String(layerCount) }),
-        h("dt", { text: "Pages" }),
-        h("dd", { text: String(this.outline?.pages?.length ?? 1) }),
+        "section",
+        { class: "insp-sec" },
+        h("h3", { text: "Document" }),
+        h(
+          "dl",
+          { class: "kv" },
+          h("dt", { text: "Tokens" }),
+          h("dd", { text: String(this.tokens.length) }),
+          h("dt", { text: "Layers" }),
+          h("dd", { text: String(layerCount) }),
+          h("dt", { text: "Pages" }),
+          h("dd", { text: String(this.outline?.pages?.length ?? 1) }),
+        ),
+        h("p", { class: "insp-note", text }),
       ),
-      h("p", { class: "insp-note", text }),
     );
   }
 
   /** Show several selected nodes by id. */
   showMany(ids) {
     this.shownId = null;
+    this.lastInfo = null;
     clear(this.root);
     this.root.append(
-      h("p", { class: "inspector-sub", text: `${plural(ids.length, "node")} selected.` }),
-      h("ul", { class: "page-list" }, ids.map((id) => h("li", { class: "row", text: id }))),
+      h(
+        "div",
+        { class: "insp-head-wrap" },
+        h("p", { class: "inspector-sub", text: `${plural(ids.length, "node")} selected.` }),
+      ),
+      h(
+        "section",
+        { class: "insp-sec" },
+        h("ul", { class: "page-list" }, ids.map((id) => h("li", { class: "row", text: id }))),
+      ),
     );
   }
 
@@ -89,28 +112,38 @@ export class Inspector {
       : null;
     const expanded = this.shownId === info.id && this.root.querySelector(".inspector-advanced")?.open;
     this.shownId = info.id;
+    this.lastInfo = info;
     clear(this.root);
     const guided = this.hooks.guideText?.(info.id) && info.edit?.fields?.includes("text");
     const set = (params) => this.hooks.set(info.id, params);
     const details = guided
       ? h("details", { class: "inspector-advanced", open: expanded },
-          h("summary", { text: "More settings", dataset: { field: "advanced" } }))
+          h("summary", { class: "insp-sec", text: "More settings", dataset: { field: "advanced" } }))
       : this.root;
-    if (guided) this.root.append(...textField(info.edit.text ?? "", set, "Headline"), details);
+    if (guided) {
+      this.root.append(
+        h("section", { class: "insp-sec" }, ...textField(info.edit.text ?? "", set, "Headline")),
+        details,
+      );
+    }
     const where = info.page ? `Page ${info.page}` : info.master ? `Master ${info.master}` : "";
     details.append(
       h(
         "div",
-        { class: "inspector-head" },
-        icon(kindIcon(info.kind)),
-        h("span", { class: "inspector-id", text: info.id }),
+        { class: "insp-head-wrap" },
+        h(
+          "div",
+          { class: "inspector-head" },
+          icon(kindIcon(info.kind)),
+          h("span", { class: "inspector-id", text: info.id }),
+        ),
+        h("p", {
+          class: "inspector-sub",
+          text: [info.kind, info.name ? `"${info.name}"` : null, where, info.parent ? `in ${info.parent}` : null]
+            .filter(Boolean)
+            .join(" · "),
+        }),
       ),
-      h("p", {
-        class: "inspector-sub",
-        text: [info.kind, info.name ? `"${info.name}"` : null, where, info.parent ? `in ${info.parent}` : null]
-          .filter(Boolean)
-          .join(" · "),
-      }),
     );
     this.flags(info);
     if (info.edit) {
@@ -150,40 +183,46 @@ export class Inspector {
     if (b.rotate !== undefined && b.rotate !== null) cells.push(["R", `${num(b.rotate)}°`]);
     if (Math.abs(b.angle ?? 0) > 1e-9) cells.push(["∠", `${num(b.angle)}°`]);
     target.append(
-      h("h3", { text: "Drawn box (px)" }),
       h(
-        "div",
-        { class: "box-grid" },
-        cells.map(([k, v]) =>
-          h("div", {}, h("span", { text: k }), h("span", { text: typeof v === "number" ? num(v) : v })),
+        "details",
+        { class: "insp-sec insp-details", open: true },
+        h("summary", { text: "Drawn box (px)" }),
+        h(
+          "div",
+          { class: "box-grid" },
+          cells.map(([k, v]) =>
+            h("div", {}, h("span", { text: k }), h("span", { text: typeof v === "number" ? num(v) : v })),
+          ),
         ),
       ),
     );
   }
 
   attributes(list, target) {
-    target.appendChild(h("h3", { text: "Attributes" }));
+    const sec = h("details", { class: "insp-sec insp-details", open: true }, h("summary", { text: "Attributes" }));
     if (list.length === 0) {
-      target.appendChild(h("p", { class: "empty", text: "No attributes." }));
-      return;
+      sec.appendChild(h("p", { class: "empty", text: "No attributes." }));
+    } else {
+      const dl = h("dl", { class: "kv" });
+      for (const a of list) {
+        dl.append(h("dt", { text: a.name }), h("dd", {}, value(a)));
+      }
+      sec.appendChild(dl);
     }
-    const dl = h("dl", { class: "kv" });
-    for (const a of list) {
-      dl.append(h("dt", { text: a.name }), h("dd", {}, value(a)));
-    }
-    target.appendChild(dl);
+    target.appendChild(sec);
   }
 
   style(s, target) {
     const label = s.source === "style" ? `Style ${s.id}` : `Defaults for ${s.id}`;
-    target.appendChild(h("h3", { text: label }));
+    const sec = h("details", { class: "insp-sec insp-details", open: true }, h("summary", { text: label }));
+    target.appendChild(sec);
     if (!s.defined) {
-      target.appendChild(h("p", { class: "empty", text: `${s.id} is not defined.` }));
+      sec.appendChild(h("p", { class: "empty", text: `${s.id} is not defined.` }));
       return;
     }
     const entries = Object.entries(s.properties ?? {});
     if (entries.length === 0) {
-      target.appendChild(h("p", { class: "empty", text: "No properties." }));
+      sec.appendChild(h("p", { class: "empty", text: "No properties." }));
       return;
     }
     const dl = h("dl", { class: "kv" });
@@ -194,7 +233,7 @@ export class Inspector {
         h("dd", {}, p.token ? tokenChip(p.token, p.resolved) : text),
       );
     }
-    target.appendChild(dl);
+    sec.appendChild(dl);
   }
 }
 

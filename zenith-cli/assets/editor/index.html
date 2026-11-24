@@ -101,10 +101,11 @@
           <img src="img/zenith-logo.svg" alt=""><i data-icon="chevronDown" class="icon tiny"></i>
         </button>
         <div class="menu" id="main-menu" role="menu" hidden>
+          <button type="button" role="menuitem" id="menu-home" hidden><i data-icon="home"></i><span>Home &amp; templates</span></button>
+          <button type="button" role="menuitem" id="menu-drafts" hidden><i data-icon="history"></i><span>Recent &amp; browser drafts…</span></button>
+          <hr id="menu-home-sep" hidden>
           <button type="button" role="menuitem" id="menu-open-file" hidden><i data-icon="page"></i><span>Open .zen file…</span><kbd>⌘O</kbd></button>
           <button type="button" role="menuitem" id="menu-open-folder" hidden><i data-icon="folder"></i><span>Open project folder…</span></button>
-          <button type="button" role="menuitem" id="menu-download" hidden><i data-icon="download"></i><span>Download .zen</span></button>
-          <button type="button" role="menuitem" id="menu-export-png" hidden><i data-icon="image"></i><span>Export PNG</span></button>
           <button type="button" role="menuitem" id="menu-copy-example" hidden><i data-icon="link"></i><span>Copy example link</span></button>
           <hr id="menu-file-sep" hidden>
           <button type="button" role="menuitem" id="theme" title="Theme: light"><i data-icon="moon"></i><span id="theme-label">Theme: light</span></button>
@@ -312,6 +313,15 @@
   <div class="doc-dialog-actions"><button type="button" class="button" id="draft-close">Close</button></div>
 </dialog>
 
+<div class="menu ctx-menu" id="ctx-menu" role="menu" hidden>
+  <button type="button" role="menuitem" id="ctx-edit-text" hidden><i data-icon="text"></i><span>Edit text</span><kbd>Enter</kbd></button>
+  <button type="button" role="menuitem" id="ctx-duplicate" hidden><i data-icon="copy"></i><span>Duplicate</span><kbd>⌘D</kbd></button>
+  <button type="button" role="menuitem" id="ctx-delete" hidden><i data-icon="trash"></i><span>Delete</span><kbd>Del</kbd></button>
+  <button type="button" role="menuitem" id="ctx-reveal" hidden><i data-icon="code"></i><span>Reveal in code</span></button>
+  <hr id="ctx-sep" hidden>
+  <button type="button" role="menuitem" id="ctx-fit"><i data-icon="fit"></i><span>Fit page</span><kbd>⇧1</kbd></button>
+  <button type="button" role="menuitem" id="ctx-100"><i data-icon="zoomIn"></i><span>Zoom to 100%</span><kbd>⇧0</kbd></button>
+</div>
 <div class="toasts" id="toasts" role="status" aria-live="polite"></div>
 <div class="sr-only" id="announce" role="status" aria-live="polite"></div>
 </body>

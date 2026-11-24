@@ -30,7 +30,7 @@
   --tool: 28px;
   --tool-small: 26px;
   --panel-left: 206px;
-  --panel-right: 214px;
+  --panel-right: 256px;
   --ease: cubic-bezier(0.2, 0, 0, 1);
   --dur: 140ms;
 

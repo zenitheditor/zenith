@@ -190,6 +190,13 @@ hr {
   right: 0;
 }
 
+.ctx-menu {
+  position: fixed;
+  z-index: 60;
+  top: 0;
+  left: 0;
+}
+
 .menu-wrap.up .popover {
   top: auto;
   bottom: calc(100% + 8px);

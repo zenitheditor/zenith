@@ -52,7 +52,7 @@ export const steps = [
         const r = document.getElementById('viewport').getBoundingClientRect();
         return (r.width * r.height) / (innerWidth * innerHeight);
       })()`);
-      check(canvasShare >= 0.65, `desktop canvas share ${(canvasShare * 100).toFixed(1)}% < 65%`);
+      check(canvasShare >= 0.62, `desktop canvas share ${(canvasShare * 100).toFixed(1)}% < 62%`);
       await shot("design-first");
       await page.clickSelector("#view-split");
       check(await page.eval("document.getElementById('view-split').getAttribute('aria-checked') === 'true'"), "Split view did not activate");

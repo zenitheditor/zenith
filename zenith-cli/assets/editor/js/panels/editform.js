@@ -22,18 +22,73 @@ const NUMBERS = [
   ["opacity", "Op", "Opacity, 0 to 1"],
 ];
 
-/** Token-backed fields: label, token type, raw value kind, removable. */
-const BOUND = [
+/** Token-backed appearance fields: label, token type, raw value kind, removable. */
+const APPEARANCE = [
   ["fill", "Fill", "color", "color", false],
   ["stroke", "Stroke", "color", "color", false],
   ["stroke_width", "Stroke width", "dimension", "px", false],
   ["radius", "Radius", "dimension", "px", true],
+];
+
+/** Token-backed typography fields: label, token type, raw value kind, removable. */
+const TYPOGRAPHY = [
   ["font_family", "Font", "fontFamily", "name", true],
   ["font_size", "Font size", "dimension", "px", true],
   ["font_weight", "Weight", "fontWeight", "weight", true],
 ];
 
 const ALIGNS = ["start", "center", "end", "justify"];
+
+/** Safe arithmetic expression evaluator (+, -, *, /, parentheses, unary -). */
+export function evalMath(raw) {
+  const s = String(raw ?? "").trim();
+  if (!s) return NaN;
+  const direct = Number(s);
+  if (Number.isFinite(direct)) return direct;
+  if (!/^[0-9+\-*/().\s]+$/.test(s)) return NaN;
+  let i = 0;
+  const skip = () => { while (i < s.length && s[i] === " ") i++; };
+  const parseExpr = () => {
+    let v = parseTerm();
+    while (true) {
+      skip();
+      if (s[i] === "+") { i++; v += parseTerm(); }
+      else if (s[i] === "-") { i++; v -= parseTerm(); }
+      else break;
+    }
+    return v;
+  };
+  const parseTerm = () => {
+    let v = parseFactor();
+    while (true) {
+      skip();
+      if (s[i] === "*") { i++; v *= parseFactor(); }
+      else if (s[i] === "/") { i++; const d = parseFactor(); v = d === 0 ? NaN : v / d; }
+      else break;
+    }
+    return v;
+  };
+  const parseFactor = () => {
+    skip();
+    if (s[i] === "+") { i++; return parseFactor(); }
+    if (s[i] === "-") { i++; return -parseFactor(); }
+    if (s[i] === "(") {
+      i++;
+      const v = parseExpr();
+      skip();
+      if (s[i] !== ")") return NaN;
+      i++;
+      return v;
+    }
+    const start = i;
+    while (i < s.length && /[0-9.]/.test(s[i])) i++;
+    if (i === start) return NaN;
+    return Number(s.slice(start, i));
+  };
+  const out = parseExpr();
+  skip();
+  return i === s.length && Number.isFinite(out) ? Math.round(out * 1000) / 1000 : NaN;
+}
 
 /** What an axis marker says, by the `edit.axes` value. */
 const AXES = {
@@ -45,6 +100,10 @@ const AXES = {
   unresolved: ["warning", "Not in px. A change asks to replace it with px."],
 };
 
+function sec(title, children) {
+  return h("section", { class: "insp-sec" }, title ? h("h3", { text: title }) : null, ...children);
+}
+
 /**
  * The form for `info` (a `node.inspect` reply with `edit`). `tokens`: every
  * token `[{id, type, value}]`. `set(params)` sends `node.set` and resolves
@@ -53,30 +112,44 @@ const AXES = {
 export function editForm(info, tokens, set, { omitText = false } = {}) {
   const e = info.edit;
   const fields = new Set(e.fields ?? []);
+  const isText = info.kind === "text" || fields.has("text") || fields.has("spans");
   const out = [];
-  const numbers = NUMBERS.filter(([name]) => fields.has(name));
-  if (numbers.length) {
-    out.push(h("h3", { text: "Edit" }));
-    out.push(
-      h(
-        "div",
-        { class: "edit-grid" },
-        numbers.map(([name, label, aria]) => numberField(name, label, aria, e[name], e.axes?.[name], set)),
-      ),
-    );
-  }
-  const bound = BOUND.filter(([name]) => fields.has(name));
-  if (bound.length) {
-    out.push(h("h3", { text: "Style" }));
-    for (const [name, label, type, raw, removable] of bound) {
-      out.push(boundField({ name, label, raw, removable }, e[name] ?? {}, tokens.filter((t) => t.type === type), set));
-    }
-  }
-  if (fields.has("align")) out.push(alignField(e.align ?? "start", set));
-  if (!omitText && fields.has("text")) out.push(textField(e.text ?? "", set));
-  if (fields.has("spans")) out.push(spansField(e.spans ?? [], set));
+
+  const textItems = [];
+  if (!omitText && fields.has("text")) textItems.push(...textField(e.text ?? "", set));
+  if (fields.has("spans")) textItems.push(...spansField(e.spans ?? [], set));
+
+  const typoBound = TYPOGRAPHY.filter(([name]) => fields.has(name));
+  const typoItems = typoBound.map(([name, label, type, raw, removable]) =>
+    boundField({ name, label, raw, removable }, e[name] ?? {}, tokens.filter((t) => t.type === type), set),
+  );
+  if (fields.has("align")) typoItems.push(alignField(e.align ?? "start", set));
+
+  const appBound = APPEARANCE.filter(([name]) => fields.has(name));
+  const appItems = appBound.map(([name, label, type, raw, removable]) =>
+    boundField({ name, label, raw, removable }, e[name] ?? {}, tokens.filter((t) => t.type === type), set),
+  );
   const flags = ["visible", "locked"].filter((f) => fields.has(f));
-  if (flags.length) out.push(flagsField(e, set));
+  if (flags.length) appItems.push(flagsField(e, set));
+
+  const numbers = NUMBERS.filter(([name]) => fields.has(name));
+  const posSection = numbers.length
+    ? sec("Position & Size", [
+        h("div", { class: "edit-grid" }, numbers.map(([name, label, aria]) => numberField(name, label, aria, e[name], e.axes?.[name], set))),
+      ])
+    : null;
+
+  if (isText) {
+    if (textItems.length) out.push(sec(null, textItems));
+    if (typoItems.length) out.push(sec("Typography", typoItems));
+    if (appItems.length) out.push(sec("Appearance", appItems));
+    if (posSection) out.push(posSection);
+  } else {
+    if (posSection) out.push(posSection);
+    if (appItems.length) out.push(sec("Appearance", appItems));
+    if (typoItems.length) out.push(sec("Typography", typoItems));
+    if (textItems.length) out.push(sec(null, textItems));
+  }
   return out;
 }
 
@@ -95,17 +168,19 @@ function numberField(name, label, aria, value, axis, set) {
   let sent = shown;
   const commit = async () => {
     const text = input.value.trim();
-    const n = Number(text);
+    const n = evalMath(text);
     if (text === "" || !Number.isFinite(n)) {
       input.setAttribute("aria-invalid", "true");
-      input.title = `${aria}: enter a number`;
+      input.title = `${aria}: enter a number or expression (e.g. 600/2)`;
       return;
     }
     input.removeAttribute("aria-invalid");
     input.title = "";
+    const formatted = num(n, 3);
+    input.value = formatted;
     // Enter commits, and the change event that follows must not resend.
     if (sent !== "" && Number(sent) === n) return;
-    sent = text;
+    sent = formatted;
     const ok = await set({ [name]: n });
     if (!ok) {
       input.value = shown;

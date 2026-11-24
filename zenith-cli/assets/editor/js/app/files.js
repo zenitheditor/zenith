@@ -26,10 +26,20 @@ export class FileTools {
       saveBtn.title = "Save to file (Ctrl+S)";
       saveBtn.setAttribute("aria-label", "Save to file");
     }
-    for (const id of ["menu-open-file", "menu-open-folder", "menu-download", "menu-export-png", "menu-file-sep"]) {
+    for (const id of ["menu-home", "menu-drafts", "menu-home-sep", "menu-open-file", "menu-open-folder", "menu-file-sep"]) {
       const el = byId(id);
       if (el) el.hidden = false;
     }
+    byId("menu-home")?.addEventListener("click", async () => {
+      app.layout.closePopovers();
+      if (app.atRisk() && !(await this.confirmDiscard("Home"))) return;
+      const home = new URL("./", location.href);
+      location.href = home.href;
+    });
+    byId("menu-drafts")?.addEventListener("click", () => {
+      app.layout.closePopovers();
+      app.drafts?.show();
+    });
     byId("menu-open-file")?.addEventListener("click", () => {
       app.layout.closePopovers();
       this.openFile();
@@ -37,14 +47,6 @@ export class FileTools {
     byId("menu-open-folder")?.addEventListener("click", () => {
       app.layout.closePopovers();
       this.openFolder();
-    });
-    byId("menu-download")?.addEventListener("click", () => {
-      app.layout.closePopovers();
-      this.downloadCopy();
-    });
-    byId("menu-export-png")?.addEventListener("click", () => {
-      app.layout.closePopovers();
-      this.exportPng();
     });
     byId("menu-copy-example")?.addEventListener("click", () => {
       app.layout.closePopovers();
@@ -78,8 +80,6 @@ export class FileTools {
       if (blocked) png.setAttribute("aria-describedby", "png-unavailable");
       else png.removeAttribute("aria-describedby");
     }
-    const menuPng = byId("menu-export-png");
-    if (menuPng) menuPng.disabled = blocked || this.exporting;
     const unavail = byId("png-unavailable");
     if (unavail) unavail.hidden = !blocked;
     const copyEx = byId("copy-example");
