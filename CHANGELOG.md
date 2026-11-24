@@ -15,6 +15,23 @@ it.
 
 ## [Unreleased]
 
+## [0.1.0] — 2026-11-24
+
+First public minor release of **Zenith — Design as code** for human + AI agent collaboration: stable `.zen` v1 KDL syntax, deterministic pure-Rust PNG/SVG/PDF rendering (with CMYK, ICC, imposition, bleed/marks, and multilingual fallback fonts), multi-agent transactions & MCP server, and the full local + browser WASM visual editor (`https://zenitheditor.github.io/zenith/`).
+
+### Added
+
+- **Insert & drag-and-drop images on canvas:** drop PNG, JPEG, WebP, GIF, or SVG files directly onto the canvas (or click the **Insert image** tool) to attach project assets and insert `image` nodes in one transaction.
+- **Layer organization & clipboard:** wired **Group (`⌘G`)**, **Ungroup (`⇧⌘G`)**, **Bring Forward / Send Backward / Front / Back (`⌘]` / `⌘[`)**, and **Copy / Cut / Paste (`⌘C` / `⌘X` / `⌘V`)** into the canvas shortcuts and right-click context menu.
+- **Multi-page management:** added **Add**, **Duplicate**, and **Delete** page actions directly in the **Pages** tab.
+- **In-app Color & Token swatch popover:** clicking any color swatch in the Inspector opens a floating picker with all document color tokens, hex + alpha slider, and one-click **`+ Save color as token`**.
+- **Multi-select shared style editing:** batch-edit Fill token and Opacity across all selected nodes alongside Align & Distribute.
+
+### Changed
+
+- Cleaned up redundant `homepage` and unused workspace `description` fields across workspace `Cargo.toml` manifests for warning-free builds.
+- Refreshed README editor screenshots in `assets/editor/` for the `v0.1.0` UI.
+
 ## [0.0.19] — 2026-11-24
 
 ### Added
