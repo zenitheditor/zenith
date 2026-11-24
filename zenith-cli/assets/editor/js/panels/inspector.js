@@ -84,20 +84,68 @@ export class Inspector {
     );
   }
 
-  /** Show several selected nodes by id. */
+  /** Show several selected nodes by id with Align & Distribute controls. */
   showMany(ids) {
     this.shownId = null;
     this.lastInfo = null;
     clear(this.root);
+    const aligns = [
+      ["left", "Left"],
+      ["hcenter", "Center H"],
+      ["right", "Right"],
+      ["top", "Top"],
+      ["vcenter", "Center V"],
+      ["bottom", "Bottom"],
+    ];
+    const alignSec = this.hooks.align
+      ? h(
+          "section",
+          { class: "insp-sec" },
+          h("h3", { text: "Align" }),
+          h(
+            "div",
+            { class: "align-grid" },
+            aligns.map(([key, label]) =>
+              h("button", {
+                type: "button",
+                class: "align-btn",
+                text: label,
+                title: `Align ${label}`,
+                onclick: () => this.hooks.align(ids, key),
+              }),
+            ),
+          ),
+          ids.length >= 3 && this.hooks.distribute
+            ? h(
+                "div",
+                { class: "align-grid dist-grid" },
+                h("button", {
+                  type: "button",
+                  class: "align-btn",
+                  text: "Distribute H",
+                  onclick: () => this.hooks.distribute(ids, "horizontal"),
+                }),
+                h("button", {
+                  type: "button",
+                  class: "align-btn",
+                  text: "Distribute V",
+                  onclick: () => this.hooks.distribute(ids, "vertical"),
+                }),
+              )
+            : null,
+        )
+      : null;
     this.root.append(
       h(
         "div",
         { class: "insp-head-wrap" },
         h("p", { class: "inspector-sub", text: `${plural(ids.length, "node")} selected.` }),
       ),
+      alignSec,
       h(
         "section",
         { class: "insp-sec" },
+        h("h3", { text: "Selection" }),
         h("ul", { class: "page-list" }, ids.map((id) => h("li", { class: "row", text: id }))),
       ),
     );

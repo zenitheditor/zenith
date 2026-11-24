@@ -1,5 +1,7 @@
-// Tokens tab in the left panel: displays resolved tokens grouped by category.
-// Clicking a token copies/reveals its reference or switches to source.
+// Tokens tab in the left panel: displays resolved tokens grouped by category,
+// with visual `+ Add token` creation and inline editing (color picker swatch,
+// dimension/font/weight inputs) backed by `tx.apply` (`create_token`,
+// `update_token_value`) so users never need to hand-edit KDL.
 
 import { clear, h } from "../util/dom.js";
 import { icon } from "../ui/icons.js";
@@ -12,6 +14,9 @@ const GROUPS = [
   ["Effects", (t) => t.type === "shadow" || t.type === "filter" || t.type === "mask"],
 ];
 
+const BUNDLED_FONTS = ["Noto Sans", "Noto Serif", "Noto Sans Mono"];
+const WEIGHTS = ["300", "400", "500", "600", "700", "800"];
+
 function valueText(t) {
   if (typeof t.value === "string") return t.value;
   if (typeof t.value === "number") return String(t.value);
@@ -22,11 +27,20 @@ function valueText(t) {
   return t.type;
 }
 
+function hex6(v) {
+  if (typeof v !== "string") return "#0870a6";
+  const m = v.trim().match(/^#([0-9a-f]{6})/i);
+  return m ? `#${m[1]}` : "#0870a6";
+}
+
 export class TokensPanel {
-  constructor(host, onPick) {
+  /** `hooks`: `{ onPick(token), onCreate({id, type, value}), onUpdate(id, value) }`. */
+  constructor(host, hooks) {
     this.host = host;
-    this.onPick = onPick;
+    this.hooks = typeof hooks === "function" ? { onPick: hooks } : hooks ?? {};
     this.tokens = [];
+    this.adding = false;
+    this.addType = "color";
   }
 
   set(tokens) {
@@ -37,6 +51,26 @@ export class TokensPanel {
   draw() {
     if (!this.host) return;
     clear(this.host);
+
+    if (this.hooks.onCreate) {
+      const addBtn = h(
+        "button",
+        {
+          type: "button",
+          class: "tok-add-btn",
+          id: "tok-add-btn",
+          onclick: () => {
+            this.adding = !this.adding;
+            this.draw();
+          },
+        },
+        icon("plus"),
+        h("span", { text: this.adding ? "Cancel" : "Add token" }),
+      );
+      this.host.appendChild(h("div", { class: "tok-head" }, addBtn));
+      if (this.adding) this.host.appendChild(this.renderAddForm());
+    }
+
     if (!this.tokens.length) {
       this.host.appendChild(h("p", { class: "empty", text: "No tokens defined." }));
       return;
@@ -46,25 +80,120 @@ export class TokensPanel {
       if (!items.length) continue;
       this.host.appendChild(h("div", { class: "tok-group", text: label }));
       for (const t of items) {
-        const swatch =
-          t.type === "color" && typeof t.value === "string"
-            ? h("span", { class: "sw", style: `background:${t.value}` })
-            : icon(t.type === "fontFamily" ? "text" : "token", "icon");
-        this.host.appendChild(
-          h(
-            "button",
-            {
-              type: "button",
-              class: "tok",
-              title: `${t.id} (${t.type})`,
-              onclick: () => this.onPick?.(t),
-            },
-            swatch,
-            h("span", { class: "tok-name", text: t.id }),
-            h("span", { class: "v", text: valueText(t) }),
-          ),
-        );
+        this.host.appendChild(this.renderRow(t));
       }
     }
+  }
+
+  renderAddForm() {
+    const typeSel = h(
+      "select",
+      { class: "edit-input", "aria-label": "Token type" },
+      [
+        ["color", "Color"],
+        ["dimension", "Size (px)"],
+        ["fontFamily", "Font family"],
+        ["fontWeight", "Font weight"],
+      ].map(([v, lbl]) => h("option", { value: v, text: lbl, selected: v === this.addType })),
+    );
+    const defaultId = {
+      color: "color.custom",
+      dimension: "size.custom",
+      fontFamily: "font.custom",
+      fontWeight: "weight.500",
+    }[this.addType];
+    const idInput = h("input", {
+      class: "edit-input",
+      type: "text",
+      placeholder: defaultId,
+      value: defaultId,
+      "aria-label": "Token ID",
+    });
+
+    let valControl;
+    const readVal = () => {
+      if (this.addType === "dimension") {
+        const n = Number(valControl.value);
+        return Number.isFinite(n) ? `${n}px` : "16px";
+      }
+      return valControl.value.trim();
+    };
+
+    if (this.addType === "color") {
+      valControl = h("input", { class: "tok-color-pick", type: "color", value: "#0870a6", "aria-label": "Token color" });
+    } else if (this.addType === "fontFamily") {
+      valControl = h("select", { class: "edit-input", "aria-label": "Font family" },
+        BUNDLED_FONTS.map((f) => h("option", { value: f, text: f })));
+    } else if (this.addType === "fontWeight") {
+      valControl = h("select", { class: "edit-input", "aria-label": "Font weight" },
+        WEIGHTS.map((w) => h("option", { value: w, text: w, selected: w === "600" })));
+    } else {
+      valControl = h("input", { class: "edit-input", type: "number", value: "16", "aria-label": "Size in px" });
+    }
+
+    typeSel.addEventListener("change", () => {
+      this.addType = typeSel.value;
+      this.draw();
+    });
+
+    const submit = async (e) => {
+      e.preventDefault();
+      const id = idInput.value.trim();
+      const value = readVal();
+      if (!id || !value) return;
+      const ok = await this.hooks.onCreate({ id, type: this.addType, value });
+      if (ok) {
+        this.adding = false;
+        this.draw();
+      }
+    };
+
+    return h(
+      "form",
+      { class: "tok-form", onsubmit: submit },
+      typeSel,
+      idInput,
+      h("div", { class: "tok-form-row" }, valControl, h("button", { type: "submit", class: "button primary small", text: "Add" })),
+    );
+  }
+
+  renderRow(t) {
+    let leading;
+    if (t.type === "color" && typeof t.value === "string" && this.hooks.onUpdate) {
+      const picker = h("input", {
+        type: "color",
+        class: "tok-sw-input",
+        value: hex6(t.value),
+        title: `Change ${t.id} color`,
+        "aria-label": `Change ${t.id} color`,
+      });
+      picker.addEventListener("click", (e) => e.stopPropagation());
+      picker.addEventListener("change", (e) => {
+        e.stopPropagation();
+        this.hooks.onUpdate(t.id, picker.value);
+      });
+      leading = picker;
+    } else if (t.type === "color" && typeof t.value === "string") {
+      leading = h("span", { class: "sw", style: `background:${t.value}` });
+    } else {
+      leading = icon(t.type === "fontFamily" ? "text" : "token", "icon");
+    }
+
+    const row = h(
+      "div",
+      { class: "tok", title: `${t.id} (${t.type})` },
+      leading,
+      h(
+        "button",
+        {
+          type: "button",
+          class: "tok-btn",
+          onclick: () => this.hooks.onPick?.(t),
+        },
+        h("span", { class: "tok-name", text: t.id }),
+        h("span", { class: "v", text: valueText(t) }),
+      ),
+    );
+    return row;
   }
 }

@@ -167,6 +167,7 @@
       <details class="export-tools" id="export-tools" hidden>
         <summary class="button primary" id="export-menu-toggle"><i data-icon="download"></i><span>Export</span></summary>
         <div class="export-menu">
+          <button type="button" class="button primary" id="export-dialog-btn"><i data-icon="sliders"></i>Export &amp; Package…</button>
           <button type="button" class="button" id="download"><i data-icon="page"></i>Download .zen</button>
           <button type="button" class="button" id="export-png" aria-describedby="png-unavailable"><i data-icon="image"></i>Export PNG</button>
           <p id="png-unavailable" hidden>Fix document errors to export PNG.</p>
@@ -289,6 +290,68 @@
       </button>
     </div>
     <p class="privacy-note">Files are read in your browser. Nothing is uploaded.</p>
+  </div>
+</dialog>
+
+<dialog class="modal export-dlg" id="export-dlg" aria-labelledby="export-dlg-title">
+  <div class="modal-head">
+    <h2 id="export-dlg-title">Export &amp; Package</h2>
+    <button type="button" class="tool" id="export-dlg-close" aria-label="Close"><i data-icon="close"></i></button>
+  </div>
+  <div class="export-body">
+    <div class="fmt-pills" role="group" aria-label="Export format">
+      <button type="button" class="fmt-pill on" data-exp-fmt="png" aria-pressed="true">PNG</button>
+      <button type="button" class="fmt-pill" data-exp-fmt="jpeg" aria-pressed="false">JPEG</button>
+      <button type="button" class="fmt-pill" data-exp-fmt="webp" aria-pressed="false">WebP</button>
+      <button type="button" class="fmt-pill" data-exp-fmt="svg" aria-pressed="false">SVG</button>
+      <button type="button" class="fmt-pill" data-exp-fmt="pdf" aria-pressed="false">PDF</button>
+      <button type="button" class="fmt-pill" data-exp-fmt="zen" aria-pressed="false">.zen</button>
+      <button type="button" class="fmt-pill" data-exp-fmt="zip" aria-pressed="false">.zip Bundle</button>
+    </div>
+
+    <div class="exp-section" id="exp-raster-opts">
+      <div class="exp-row">
+        <span class="exp-lbl">Scale</span>
+        <div class="fmt-pills">
+          <button type="button" class="fmt-pill" data-exp-scale="1" aria-pressed="false">1×</button>
+          <button type="button" class="fmt-pill on" data-exp-scale="2" aria-pressed="true">2×</button>
+          <button type="button" class="fmt-pill" data-exp-scale="3" aria-pressed="false">3×</button>
+          <button type="button" class="fmt-pill" data-exp-scale="4" aria-pressed="false">4×</button>
+        </div>
+        <span class="exp-meta" id="exp-dims"></span>
+      </div>
+      <div class="exp-row" id="exp-quality-row" hidden>
+        <label class="exp-lbl" for="exp-quality">Quality</label>
+        <input id="exp-quality" type="range" min="10" max="100" step="5" value="90">
+        <span class="exp-meta" id="exp-quality-val">90%</span>
+      </div>
+    </div>
+
+    <div class="exp-section" id="exp-pdf-opts" hidden>
+      <div class="exp-row">
+        <label class="exp-lbl" for="exp-pdf-preset">Color space</label>
+        <select class="edit-input" id="exp-pdf-preset">
+          <option value="srgb">Digital (sRGB)</option>
+          <option value="cmyk">Print (CMYK · 300 DPI)</option>
+        </select>
+      </div>
+      <div class="exp-row">
+        <label class="exp-lbl" for="exp-pdf-scope">Pages</label>
+        <select class="edit-input" id="exp-pdf-scope">
+          <option value="all">All pages</option>
+          <option value="current">Current page only</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="exp-section" id="exp-zip-opts" hidden>
+      <p class="exp-note" id="exp-zip-summary"></p>
+      <label class="flag-check"><input type="checkbox" id="exp-zip-pdf" checked><span>Include rendered PDF in bundle</span></label>
+    </div>
+
+    <div class="exp-actions">
+      <button type="button" class="button primary" id="exp-run">Export PNG (2×)</button>
+    </div>
   </div>
 </dialog>
 

@@ -84,6 +84,85 @@
   letter-spacing: 0.06em;
 }
 
+.tok-head {
+  padding: 2px 4px 6px;
+}
+
+.tok-add-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  height: 28px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--t-12);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.tok-add-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.tok-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  margin-bottom: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+
+.tok-form-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tok-color-pick {
+  width: 34px;
+  height: 28px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.tok-sw-input {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid rgb(11 26 46 / 0.16);
+  border-radius: 4px;
+  background: transparent;
+  cursor: pointer;
+  flex: none;
+}
+
+.tok-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
 .tok {
   display: flex;
   align-items: center;
@@ -96,7 +175,6 @@
   background: transparent;
   color: var(--text-muted);
   text-align: left;
-  cursor: pointer;
 }
 
 .tok:hover {
@@ -131,6 +209,35 @@
   font-size: var(--t-11);
   line-height: 1.5;
   margin: 10px 0 0;
+}
+
+.align-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
+}
+
+.dist-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 6px;
+}
+
+.align-btn {
+  height: 26px;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.align-btn:hover {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--accent);
 }
 
 .page-list {

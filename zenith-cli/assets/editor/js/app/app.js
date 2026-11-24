@@ -14,6 +14,7 @@ import { Layers } from "../panels/layers.js";
 import { TokensPanel } from "../panels/tokens.js";
 import { BufferSync } from "../sync/buffer.js";
 import { CommandPalette } from "../ui/cmdk.js";
+import { ExportDialog } from "../ui/export.js";
 import { HistoryUI } from "../ui/history.js";
 import { icon } from "../ui/icons.js";
 import { Layout } from "../ui/layout.js";
@@ -120,6 +121,22 @@ export class App {
     this.inspector = new Inspector(byId("inspector"), {
       set: (id, params) => this.actions.set(id, params),
       guideText: (id) => this.example !== null && id === "headline",
+      align: (nodeIds, align) =>
+        this.actions.run("tx.apply", () => ({
+          params: {
+            label: `Align ${align}`,
+            ops: [{ op: "align_nodes", node_ids: nodeIds, align, anchor: "selection" }],
+          },
+          done: `Aligned ${align}.`,
+        })),
+      distribute: (nodeIds, axis) =>
+        this.actions.run("tx.apply", () => ({
+          params: {
+            label: `Distribute ${axis}`,
+            ops: [{ op: "distribute_nodes", node_ids: nodeIds, axis }],
+          },
+          done: `Distributed ${axis}.`,
+        })),
     });
     this.layers = new Layers(byId("pages"), byId("layers"), {
       page: (n) => this.selection.goToPage(n),
@@ -127,10 +144,28 @@ export class App {
       selectMany: (ids) => this.selection.selectIds(ids, "layers"),
     });
     this.tokenList = [];
-    this.tokensPanel = new TokensPanel(byId("tokens"), (t) => {
-      this.layout.showSource(true);
-      const idx = this.code.text().indexOf(`id="${t.id}"`);
-      if (idx >= 0) this.code.jumpTo(idx, idx + t.id.length + 5);
+    this.tokensPanel = new TokensPanel(byId("tokens"), {
+      onPick: (t) => {
+        this.layout.showSource(true);
+        const idx = this.code.text().indexOf(`id="${t.id}"`);
+        if (idx >= 0) this.code.jumpTo(idx, idx + t.id.length + 5);
+      },
+      onCreate: ({ id, type, value }) =>
+        this.actions.run("tx.apply", () => ({
+          params: {
+            label: `Add token ${id}`,
+            ops: [{ op: "create_token", id, type, value }],
+          },
+          done: `Added token ${id}.`,
+        })),
+      onUpdate: (id, value) =>
+        this.actions.run("tx.apply", () => ({
+          params: {
+            label: `Update token ${id}`,
+            ops: [{ op: "update_token_value", id, value }],
+          },
+          done: `Updated ${id}.`,
+        })),
     });
     this.diagnostics = new DiagnosticsPanel(byId("diag-list"), byId("diag-counts"), (d) => {
       this.layout.closePopovers();
@@ -144,6 +179,7 @@ export class App {
     this.textEdit = new InlineTextEditor(this, byId("viewport"));
     this.historyUI = new HistoryUI(this);
     this.cmdk = new CommandPalette(this);
+    this.exportDlg = new ExportDialog(this);
     this.layout.historyClose = () => this.historyUI.close();
     this.bindPhoneSheets();
     this.refreshLater = debounce(() => this.refreshDocument(), REFRESH_MS);
@@ -297,6 +333,7 @@ export class App {
       const field = e.target instanceof Element && e.target.closest("input, textarea, select");
       if (mod && !e.altKey) {
         if (key === "s") this.save();
+        else if (key === "e" && e.shiftKey) this.exportDlg.open();
         else if (key === "1") this.layout.setView("design");
         else if (key === "2") this.layout.setView("split");
         else if (key === "3") this.layout.setView("code");
@@ -587,6 +624,30 @@ export class App {
     }
     this.code.setDiagnostics(marks);
     this.status.update();
+    if (this.files) {
+      const missing = (list ?? []).filter((d) =>
+        d.code === "asset.missing" || d.code === "import.missing" || d.code === "font.missing",
+      );
+      if (missing.length) {
+        const paths = [];
+        for (const d of missing) {
+          const m = String(d.message ?? "").match(/['"]([^'"]+\.[a-z0-9]{2,6})['"]/i);
+          if (m && !paths.includes(m[1])) paths.push(m[1]);
+        }
+        const preview = paths.length ? ` (${paths.slice(0, 3).join(", ")}${paths.length > 3 ? "…" : ""})` : "";
+        this.notices.show("missing-assets", {
+          level: "warning",
+          title: `${missing.length} missing external file${missing.length === 1 ? "" : "s"}${preview}.`,
+          message: "Import the missing file(s) or open the project folder so images, fonts, and libraries render.",
+          actions: [
+            { label: "Import files…", run: () => this.files.importMissingAssets(paths) },
+            { label: "Open project folder…", run: () => this.files.openFolder() },
+          ],
+        });
+      } else {
+        this.notices.hide("missing-assets");
+      }
+    }
   }
 
   jumpToDiagnostic(d) {

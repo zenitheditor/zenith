@@ -2,7 +2,7 @@
 // download a copy. The Save button reaches the same engine (`file.save`
 // writes back to the picked file, or downloads where the browser cannot).
 
-import { download, downloadBlob } from "../engine/wasm/files.js";
+import { blobToBase64, download, downloadBlob } from "../engine/wasm/files.js";
 import { byId, h } from "../util/dom.js";
 import { projectDocument, showSkippedFiles } from "./project-picker.js";
 
@@ -51,6 +51,10 @@ export class FileTools {
     byId("menu-copy-example")?.addEventListener("click", () => {
       app.layout.closePopovers();
       this.copyExample();
+    });
+    byId("export-dialog-btn")?.addEventListener("click", () => {
+      this.menu.open = false;
+      app.exportDlg?.open();
     });
     byId("download")?.addEventListener("click", () => this.downloadCopy());
     byId("export-png")?.addEventListener("click", () => this.exportPng());
@@ -156,6 +160,45 @@ export class FileTools {
 
   showDraftWarning(message) {
     if (message) this.app.notices.show("draft-assets", { level: "warning", message });
+  }
+
+  /**
+   * Prompt the user to pick one or more local files and attach them into the
+   * WASM worker's project file map so missing `assets/...` or fonts resolve
+   * immediately without reopening the whole document.
+   */
+  async importMissingAssets(missingPaths) {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.multiple = true;
+    input.hidden = true;
+    document.body.appendChild(input);
+    const files = await new Promise((resolve) => {
+      input.addEventListener("change", () => resolve([...(input.files ?? [])]), { once: true });
+      input.addEventListener("cancel", () => resolve([]), { once: true });
+      input.click();
+    });
+    input.remove();
+    if (!files.length) return;
+
+    const map = { ...(this.host.worker.files ?? {}) };
+    let matched = 0;
+    for (const file of files) {
+      const b64 = await blobToBase64(file);
+      const targets = missingPaths.filter((p) => p.split("/").pop() === file.name);
+      if (targets.length) {
+        for (const t of targets) map[t] = b64;
+        matched += targets.length;
+      } else {
+        map[file.name] = b64;
+        map[`assets/${file.name}`] = b64;
+        matched += 1;
+      }
+    }
+    this.host.worker.files = map;
+    this.app.notices.toast(`Attached ${matched} asset file${matched === 1 ? "" : "s"}.`);
+    await this.app.diagnose();
+    await this.app.refreshDocument();
   }
 
   /**
