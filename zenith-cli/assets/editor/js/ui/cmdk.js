@@ -72,6 +72,7 @@ export class CommandPalette {
     ];
     if (app.files) {
       cmds.push(
+        ["File", "New .zen file…", "plus", "⌥N", () => app.files.newDocument()],
         ["File", "Open .zen file…", "page", "⌘O", () => app.files.openFile()],
         ["File", "Open project folder…", "folder", "", () => app.files.openFolder()],
         ["File", "Download .zen", "download", "", () => app.files.downloadCopy()],

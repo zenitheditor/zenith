@@ -98,7 +98,7 @@ export const steps = [
     },
   ],
   [
-    "device drafts require opt-in and retain only source; failed switches preserve drafts",
+    "device drafts auto-save source only; failed switches preserve drafts",
     async ({ page, url }) => {
       await welcome(page, url);
       const original = await page.eval(`fetch('starters/blank.zen').then((response) => response.text())`);
@@ -113,17 +113,12 @@ export const steps = [
       await page.eval("document.getElementById('welcome-open').scrollIntoView({ block: 'center' })");
       await page.clickSelector("#welcome-open");
       await ready(page);
-      const draftText = `// opted-in source\n${original}`;
+      const draftText = `// auto-saved device source\n${original}`;
       await edit(page, draftText);
-      await settle(page);
-      check(!(await list(page)).some((record) => record.name === name), "device text was written before opt-in");
-      await dialog(page, "#draft-entry");
-      await page.clickSelector("#draft-opt-in");
       await saved(page);
       const record = (await list(page)).find((entry) => entry.name === name);
       check(record?.text === draftText && JSON.stringify(record.source) === '{"kind":"device"}', "device draft holds foreign state");
       check(Object.keys(record).sort().join() === "id,name,revision,schema,source,text,updatedAt", "unexpected device draft fields");
-      await page.clickSelector("#draft-close");
       check(await page.eval("document.getElementById('status-save').textContent === 'File not saved'"), "browser save obscures disk state");
 
       await cursorAt(page, 2);

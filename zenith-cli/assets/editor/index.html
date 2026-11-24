@@ -84,8 +84,8 @@
       <section class="w-section" aria-labelledby="w-open-sec">
         <h2 class="eyebrow" id="w-open-sec">Open or resume</h2>
         <div class="welcome-actions-row">
+          <button type="button" class="button primary" id="welcome-folder" hidden><i data-icon="folder"></i>Open project folder</button>
           <button type="button" class="button" id="welcome-open"><i data-icon="page"></i>Open .zen file</button>
-          <button type="button" class="button" id="welcome-folder" hidden><i data-icon="folder"></i>Open project folder</button>
         </div>
       </section>
     </div>
@@ -101,11 +101,12 @@
           <img src="img/zenith-logo.svg" alt=""><i data-icon="chevronDown" class="icon tiny"></i>
         </button>
         <div class="menu" id="main-menu" role="menu" hidden>
+          <button type="button" role="menuitem" id="menu-new" hidden><i data-icon="plus"></i><span>New .zen file…</span><kbd>⌥N</kbd></button>
           <button type="button" role="menuitem" id="menu-home" hidden><i data-icon="home"></i><span>Home &amp; templates</span></button>
           <button type="button" role="menuitem" id="menu-drafts" hidden><i data-icon="history"></i><span>Recent &amp; browser drafts…</span></button>
           <hr id="menu-home-sep" hidden>
-          <button type="button" role="menuitem" id="menu-open-file" hidden><i data-icon="page"></i><span>Open .zen file…</span><kbd>⌘O</kbd></button>
           <button type="button" role="menuitem" id="menu-open-folder" hidden><i data-icon="folder"></i><span>Open project folder…</span></button>
+          <button type="button" role="menuitem" id="menu-open-file" hidden><i data-icon="page"></i><span>Open .zen file…</span><kbd>⌘O</kbd></button>
           <button type="button" role="menuitem" id="menu-copy-example" hidden><i data-icon="link"></i><span>Copy example link</span></button>
           <hr id="menu-file-sep" hidden>
           <button type="button" role="menuitem" id="theme" title="Theme: light"><i data-icon="moon"></i><span id="theme-label">Theme: light</span></button>
@@ -224,10 +225,15 @@
           <div class="canvas-empty" id="canvas-empty" hidden></div>
         </div>
         <button type="button" class="reopen-left" id="reopen-left" aria-label="Show left panel" title="Show left panel (Ctrl+\)"><i data-icon="panelLeft"></i></button>
+        <button type="button" class="reopen-right" id="reopen-right" aria-label="Show inspector" title="Show inspector (Shift+Ctrl+\)"><i data-icon="panelRight"></i></button>
       </section>
     </div>
 
     <aside class="panel panel-right" id="panel-right" aria-label="Properties">
+      <div class="panel-right-head">
+        <span class="panel-right-title">Inspector</span>
+        <button type="button" class="collapse" id="toggle-right" aria-pressed="true" aria-controls="panel-right" title="Hide inspector (Shift+Ctrl+\)" aria-label="Hide inspector"><i data-icon="panelRight"></i></button>
+      </div>
       <div class="inspector" id="inspector"></div>
     </aside>
   </main>
@@ -246,7 +252,7 @@
         <ul class="diag-list" id="diag-list"></ul>
       </div>
     </div>
-    <span class="status-item muted" id="status-save" aria-live="polite"></span>
+    <span class="sr-only" id="status-save" aria-live="polite"></span>
     <span class="status-item muted" id="status-draft" aria-live="polite" hidden></span>
     <button type="button" class="chip" id="draft-entry" hidden>Browser drafts</button>
     <span class="status-spacer"></span>
@@ -280,19 +286,57 @@
   </div>
   <div class="otab">
     <div class="device-choices">
+      <button type="button" class="device-card" id="open-device-folder">
+        <span class="dc-icon"><i data-icon="folder"></i></span>
+        <b>A project folder (Recommended)</b>
+        <small>Reads your .zen file together with images, SVGs, fonts, and libraries in one step.</small>
+      </button>
       <button type="button" class="device-card" id="open-device-file">
         <span class="dc-icon"><i data-icon="page"></i></span>
         <b>A single .zen file</b>
-        <small>Quickest. Linked images and fonts outside the file won't load.</small>
-      </button>
-      <button type="button" class="device-card" id="open-device-folder">
-        <span class="dc-icon"><i data-icon="folder"></i></span>
-        <b>A project folder</b>
-        <small>Recommended for agent projects. Zenith reads images, fonts, and libraries next to your designs.</small>
+        <small>Quickest for self-contained designs without external image or font files.</small>
       </button>
     </div>
     <p class="privacy-note">Files are read in your browser. Nothing is uploaded.</p>
   </div>
+</dialog>
+
+<dialog class="modal newdoc-dlg" id="new-doc-dlg" aria-labelledby="new-doc-title">
+  <div class="modal-head">
+    <h2 id="new-doc-title">New .zen file</h2>
+    <button type="button" class="tool" id="new-doc-close" aria-label="Close"><i data-icon="close"></i></button>
+  </div>
+  <form class="export-body" id="new-doc-form">
+    <div class="exp-section">
+      <div class="exp-row">
+        <label class="exp-lbl" for="new-doc-name">File name</label>
+        <input class="edit-input" id="new-doc-name" type="text" value="untitled.zen" required autocomplete="off" spellcheck="false">
+      </div>
+    </div>
+
+    <div class="exp-section">
+      <span class="exp-lbl">Page size</span>
+      <div class="fmt-pills" id="new-doc-presets" role="group" aria-label="Page size presets"></div>
+      <div class="newdoc-dims">
+        <label class="page-size-field"><span>W</span><input class="edit-input" id="new-doc-w" type="number" min="16" max="16384" step="1" value="800" required><span class="unit">px</span></label>
+        <button type="button" class="page-swap-btn" id="new-doc-swap" title="Swap width and height" aria-label="Swap width and height">⇄</button>
+        <label class="page-size-field"><span>H</span><input class="edit-input" id="new-doc-h" type="number" min="16" max="16384" step="1" value="600" required><span class="unit">px</span></label>
+      </div>
+    </div>
+
+    <div class="exp-section">
+      <div class="exp-row">
+        <label class="exp-lbl" for="new-doc-bg">Background</label>
+        <div class="bg-swatches" id="new-doc-swatches"></div>
+        <input class="tok-color-pick" id="new-doc-bg" type="color" value="#ffffff" aria-label="Background color">
+      </div>
+    </div>
+
+    <div class="exp-actions newdoc-actions">
+      <button type="button" class="button" id="new-doc-cancel">Cancel</button>
+      <button type="submit" class="button primary" id="new-doc-create">Create file</button>
+    </div>
+  </form>
 </dialog>
 
 <dialog class="modal export-dlg" id="export-dlg" aria-labelledby="export-dlg-title">
@@ -362,20 +406,28 @@
   <div class="cmdk-list" id="cmdk-list"></div>
 </dialog>
 
-<dialog class="doc-dialog" id="doc-dialog" aria-labelledby="doc-dialog-title" aria-describedby="doc-dialog-note">
-  <h2 class="pane-title" id="doc-dialog-title">Choose a document</h2>
-  <p class="doc-dialog-note" id="doc-dialog-note"></p>
-  <ul class="doc-dialog-list" id="doc-dialog-list"></ul>
-  <div class="doc-dialog-actions"><button type="button" class="button" id="doc-dialog-cancel">Cancel</button></div>
+<dialog class="modal doc-dialog" id="doc-dialog" aria-labelledby="doc-dialog-title" aria-describedby="doc-dialog-note">
+  <div class="modal-head">
+    <h2 id="doc-dialog-title">Choose a document</h2>
+    <button type="button" class="tool" id="doc-dialog-cancel" aria-label="Close"><i data-icon="close"></i></button>
+  </div>
+  <div class="doc-dialog-body">
+    <p class="doc-dialog-note" id="doc-dialog-note"></p>
+    <ul class="doc-dialog-list" id="doc-dialog-list"></ul>
+  </div>
 </dialog>
 
-<dialog class="doc-dialog" id="draft-dialog" aria-labelledby="draft-title">
-  <h2 class="pane-title" id="draft-title">Browser drafts</h2>
-  <p class="doc-dialog-note">Drafts stay in this browser. Download a .zen file to keep a copy.</p>
-  <button type="button" class="button" id="draft-opt-in" hidden>Keep this document’s source in this browser</button>
-  <p class="doc-dialog-note" id="draft-message" role="status"></p>
-  <ul class="doc-dialog-list" id="draft-list"></ul>
-  <div class="doc-dialog-actions"><button type="button" class="button" id="draft-close">Close</button></div>
+<dialog class="modal doc-dialog" id="draft-dialog" aria-labelledby="draft-title">
+  <div class="modal-head">
+    <h2 id="draft-title">Recent &amp; browser drafts</h2>
+    <button type="button" class="tool" id="draft-close" aria-label="Close"><i data-icon="close"></i></button>
+  </div>
+  <div class="doc-dialog-body">
+    <p class="doc-dialog-note">Saved automatically in this browser. Click any file to open it.</p>
+    <button type="button" class="button" id="draft-opt-in" hidden>Keep this document’s source in this browser</button>
+    <p class="doc-dialog-note" id="draft-message" role="status"></p>
+    <ul class="doc-dialog-list" id="draft-list"></ul>
+  </div>
 </dialog>
 
 <div class="menu ctx-menu" id="ctx-menu" role="menu" hidden>

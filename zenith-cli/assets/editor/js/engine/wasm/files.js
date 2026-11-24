@@ -85,6 +85,35 @@ export async function pickDocument() {
 }
 
 /**
+ * Pick one or more external asset files (images, SVGs, fonts, `.zen` imports).
+ * When `startIn` is a `FileSystemFileHandle` (e.g. the currently open `.zen`
+ * file), Chromium opens the OS picker directly in that file's folder.
+ */
+export async function pickAssetFiles({ startIn = null, multiple = true, accept = "" } = {}) {
+  if (canPickFile()) {
+    const opts = { multiple };
+    if (startIn) opts.startIn = startIn;
+    try {
+      const handles = await window.showOpenFilePicker(opts);
+      return Promise.all(handles.map((h) => h.getFile()));
+    } catch (err) {
+      if (isAbort(err)) return [];
+      if (startIn) {
+        try {
+          const handles = await window.showOpenFilePicker({ multiple });
+          return Promise.all(handles.map((h) => h.getFile()));
+        } catch (err2) {
+          if (isAbort(err2)) return [];
+          throw err2;
+        }
+      }
+      throw err;
+    }
+  }
+  return chooseWithInput({ accept, multiple });
+}
+
+/**
  * Pick a project folder and read it. Resolves `{root, files, documents,
  * handles, skipped}` or `null` when the user cancelled. `files` maps a path
  * relative to the folder to base64 text, `documents` lists the `.zen`
@@ -92,14 +121,23 @@ export async function pickDocument() {
  * only), `skipped` lists files left out (too large, or over the project
  * size).
  */
-export async function pickProject() {
+export async function pickProject(startIn = null) {
   if (canPickDirectory()) {
     let dir;
     try {
-      dir = await window.showDirectoryPicker({ mode: "readwrite" });
+      dir = await window.showDirectoryPicker(startIn ? { mode: "readwrite", startIn } : { mode: "readwrite" });
     } catch (err) {
       if (isAbort(err)) return null;
-      throw err;
+      if (startIn) {
+        try {
+          dir = await window.showDirectoryPicker({ mode: "readwrite" });
+        } catch (err2) {
+          if (isAbort(err2)) return null;
+          throw err2;
+        }
+      } else {
+        throw err;
+      }
     }
     const entries = [];
     await walkDirectory(dir, "", entries);

@@ -219,7 +219,12 @@ export class WasmEngine {
 
   /** Ask the user for a project folder: see `files.js` `pickProject`. */
   pickProject() {
-    return browser.pickProject();
+    return browser.pickProject(this.handle);
+  }
+
+  /** Ask the user for asset files, opening at the current document's folder when possible. */
+  pickAssetFiles(opts = {}) {
+    return browser.pickAssetFiles({ startIn: this.handle, ...opts });
   }
 
   /**

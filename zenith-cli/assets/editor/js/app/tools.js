@@ -95,8 +95,11 @@ export class ToolController {
           params = { kind, x: b.x0, y: b.y0, w, h, page: app.page };
         }
         this.set("move");
-        await app.actions.run("node.add", () => ({ params, done: `Added ${kind}.` }));
-        if (kind === "text") app.openInlineText({ selectAll: true });
+        const ok = await app.actions.run("node.add", () => ({ params, done: `Added ${kind}.` }));
+        if (ok && kind === "text") {
+          await app.refreshDocument();
+          app.openInlineText({ selectAll: true });
+        }
       },
       cancel: () => {
         app.overlay.setMarquee(null);
@@ -114,8 +117,11 @@ export class ToolController {
         ? { kind, x: p.x, y: p.y, x2: p.x + def.w, y2: p.y, page: this.app.page }
         : { kind, x: p.x, y: p.y, w: def.w, h: def.h, page: this.app.page };
     this.set("move");
-    await this.app.actions.run("node.add", () => ({ params, done: `Added ${kind}.` }));
-    if (kind === "text") this.app.openInlineText({ selectAll: true });
+    const ok = await this.app.actions.run("node.add", () => ({ params, done: `Added ${kind}.` }));
+    if (ok && kind === "text") {
+      await this.app.refreshDocument();
+      this.app.openInlineText({ selectAll: true });
+    }
     return true;
   }
 }

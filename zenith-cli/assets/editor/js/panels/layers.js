@@ -186,6 +186,50 @@ export class Layers {
 
   wrap(o, children) {
     const selected = o.id !== undefined && this.selection.includes(o.id);
+    const quickBtns =
+      o.id !== undefined && (this.handlers.toggleVisible || this.handlers.toggleLocked)
+        ? h(
+            "span",
+            { class: `row-flags${o.locked || o.hidden ? " pinned" : ""}` },
+            this.handlers.toggleLocked
+              ? h(
+                  "button",
+                  {
+                    type: "button",
+                    class: `layer-quick-btn${o.locked ? " on" : ""}`,
+                    title: o.locked ? "Unlock layer" : "Lock layer",
+                    "aria-label": `${o.locked ? "Unlock" : "Lock"} ${o.label}`,
+                    onclick: (e) => {
+                      e.stopPropagation();
+                      this.handlers.toggleLocked(o.id, !o.locked);
+                    },
+                  },
+                  icon(o.locked ? "lock" : "unlock"),
+                )
+              : null,
+            this.handlers.toggleVisible
+              ? h(
+                  "button",
+                  {
+                    type: "button",
+                    class: `layer-quick-btn${o.hidden ? " on" : ""}`,
+                    title: o.hidden ? "Show layer" : "Hide layer",
+                    "aria-label": `${o.hidden ? "Show" : "Hide"} ${o.label}`,
+                    onclick: (e) => {
+                      e.stopPropagation();
+                      this.handlers.toggleVisible(o.id, Boolean(o.hidden));
+                    },
+                  },
+                  icon(o.hidden ? "hidden" : "eye"),
+                )
+              : null,
+          )
+        : h(
+            "span",
+            { class: "row-flags" },
+            o.locked ? icon("lock") : null,
+            o.hidden ? icon("hidden") : null,
+          );
     const row = h(
       "div",
       {
@@ -201,12 +245,7 @@ export class Layers {
       icon(o.iconName),
       h("span", { class: "row-label", text: o.label }),
       o.sub ? h("span", { class: "row-meta", text: o.sub }) : null,
-      h(
-        "span",
-        { class: "row-flags" },
-        o.locked ? icon("lock") : null,
-        o.hidden ? icon("hidden") : null,
-      ),
+      quickBtns,
     );
     const flags = [o.locked ? "locked" : null, o.hidden ? "hidden" : null, o.guide ? "guide" : null]
       .filter(Boolean)

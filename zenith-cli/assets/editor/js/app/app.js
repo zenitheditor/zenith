@@ -27,6 +27,7 @@ import { NodeActions } from "./actions.js";
 import { EventRouter } from "./events.js";
 import { FileTools } from "./files.js";
 import { GestureController } from "./gestures.js";
+import { normalizeZenName } from "./samples.js";
 import { SelectionController } from "./selection.js";
 import { Status } from "./status.js";
 import { ToolController } from "./tools.js";
@@ -154,11 +155,24 @@ export class App {
         }));
         return ok ? id : null;
       },
+      setPageSize: async (pageId, w, h) => {
+        const ok = await this.actions.run("tx.apply", () => ({
+          params: {
+            label: `Resize page ${pageId} to ${w}×${h}`,
+            ops: [{ op: "set_page_size", page: pageId, w: `(px)${w}`, h: `(px)${h}` }],
+          },
+          done: `Resized page to ${w} × ${h} px.`,
+        }));
+        if (ok) requestAnimationFrame(() => this.view.fit());
+        return ok;
+      },
     });
     this.layers = new Layers(byId("pages"), byId("layers"), {
       page: (n) => this.selection.goToPage(n),
       select: (id) => this.selection.selectIds([id], "layers"),
       selectMany: (ids) => this.selection.selectIds(ids, "layers"),
+      toggleVisible: (id, visible) => this.actions.set(id, { visible }),
+      toggleLocked: (id, locked) => this.actions.set(id, { locked }),
       addPage: () => {
         const pages = this.outline?.pages ?? [];
         const cur = pages.find((p) => p.page === this.page) ?? pages[0];
@@ -395,7 +409,8 @@ export class App {
         else if (key === "1") this.layout.setView("design");
         else if (key === "2") this.layout.setView("split");
         else if (key === "3") this.layout.setView("code");
-        else if (e.key === "\\") this.layout.toggle("left");
+        else if (e.key === "\\" && !e.shiftKey) this.layout.toggle("left");
+        else if (e.key === "\\" && e.shiftKey) this.layout.toggle("right");
         else if (key === "d" && !e.shiftKey && !field) this.actions.duplicate();
         else if (key === "g" && !e.shiftKey && !field) this.actions.group();
         else if (key === "g" && e.shiftKey && !field) this.actions.ungroup();
@@ -440,6 +455,26 @@ export class App {
       e.preventDefault();
       e.returnValue = "";
     });
+  }
+
+  /** Rename the open in-browser `.zen` document. */
+  renameDocument(rawName) {
+    const next = normalizeZenName(rawName, this.name);
+    if (!next || next === this.name) return;
+    this.name = next;
+    this.path = next;
+    if (this.host.kind === "wasm") {
+      this.host.name = next;
+      this.host.path = next;
+    }
+    const nameEl = byId("doc-name");
+    if (nameEl) {
+      nameEl.textContent = next;
+      nameEl.title = `${next} — click to rename`;
+    }
+    if (this.drafts?.active) this.drafts.active.name = next;
+    this.status.update();
+    this.notices.toast(`Renamed to ${next}.`);
   }
 
   /** Open inline canvas text editing for the currently selected text node. */
@@ -737,19 +772,29 @@ export class App {
         d.code === "asset.missing" || d.code === "import.missing" || d.code === "font.missing",
       );
       if (missing.length) {
+        const srcText = this.code.text();
+        const declared = [];
+        for (const m of srcText.matchAll(/\bsrc="([^"]+)"/g)) declared.push(m[1]);
+        for (const m of srcText.matchAll(/\bimport\s+"([^"]+)"/g)) declared.push(m[1]);
+        const loaded = this.host.worker.files ?? {};
         const paths = [];
-        for (const d of missing) {
-          const m = String(d.message ?? "").match(/['"]([^'"]+\.[a-z0-9]{2,6})['"]/i);
-          if (m && !paths.includes(m[1])) paths.push(m[1]);
+        for (const rel of declared) {
+          if (!loaded[rel] && !paths.includes(rel)) paths.push(rel);
+        }
+        if (!paths.length) {
+          for (const d of missing) {
+            const m = String(d.message ?? "").match(/['"]([^'"]+\.[a-z0-9]{2,6})['"]/i);
+            if (m && !paths.includes(m[1])) paths.push(m[1]);
+          }
         }
         const preview = paths.length ? ` (${paths.slice(0, 3).join(", ")}${paths.length > 3 ? "…" : ""})` : "";
         this.notices.show("missing-assets", {
           level: "warning",
           title: `${missing.length} missing external file${missing.length === 1 ? "" : "s"}${preview}.`,
-          message: "Import the missing file(s) or open the project folder so images, fonts, and libraries render.",
+          message: `Auto-load from ${this.name}'s folder, or pick the missing file(s) directly.`,
           actions: [
+            { label: "Auto-load folder…", run: () => this.files.attachFolderAssets(paths) },
             { label: "Import files…", run: () => this.files.importMissingAssets(paths) },
-            { label: "Open project folder…", run: () => this.files.openFolder() },
           ],
         });
       } else {

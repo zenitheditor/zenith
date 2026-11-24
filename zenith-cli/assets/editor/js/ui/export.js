@@ -159,7 +159,8 @@ export class ExportDialog {
         if (this.format === "png" || this.format === "jpeg" || this.format === "webp") {
           const env = await this.app.engine.run("doc.render", { page: this.app.page, scale: this.scale });
           if (!env.ok) throw new Error(env.error?.message || "Render failed.");
-          const pngBlob = await this.app.host.image(env.result);
+          if (!env.image) throw new Error("Render returned no image.");
+          const pngBlob = await this.app.engine.image(env.image);
           if (this.format === "png") {
             downloadBlob(`${stem}${suffix}.png`, pngBlob);
           } else {
@@ -192,6 +193,7 @@ export class ExportDialog {
           const entries = [{ name: this.app.name, data: enc.encode(this.app.code.text()) }];
           const files = this.app.host?.worker?.files ?? {};
           for (const [rel, b64] of Object.entries(files)) {
+            if (rel === this.app.name || rel === this.app.path) continue;
             entries.push({ name: rel, data: base64ToBytes(b64) });
           }
           if (this.zipIncludePdf && this.app.valid && !this.app.stale) {

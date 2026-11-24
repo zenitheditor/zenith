@@ -813,6 +813,73 @@ export const steps = [
       return { downloads: dl.names };
     },
   ],
+  [
+    "new .zen dialog, page size resize, and missing external asset import",
+    async ({ page, url, shot }) => {
+      await page.goto(url);
+      await ready(page);
+      // 1. Open New .zen file modal from Z menu and create a custom 1200x630 file.
+      await page.clickSelector("#main-menu-btn");
+      await page.clickSelector("#menu-new");
+      await page.waitFor("document.getElementById('new-doc-dlg').open", "new doc dialog");
+      await shot("static-new-doc");
+      await page.eval(`(() => {
+        document.getElementById('new-doc-name').value = 'banner';
+        document.getElementById('new-doc-w').value = '1200';
+        document.getElementById('new-doc-h').value = '630';
+        return true;
+      })()`);
+      await page.clickSelector("#new-doc-create");
+      await page.waitFor(`${A}.name === 'banner.zen' && ${A}.outline?.pages?.[0]?.w === 1200 && ${A}.outline?.pages?.[0]?.h === 630`,
+        "custom banner.zen to open at 1200x630");
+      await settle(page);
+      await shot("static-page-inspector");
+
+      // 2. Resize the page in the right Inspector (swap W/H -> 630x1200).
+      await page.clickSelector("#inspector .page-swap-btn");
+      await page.waitFor(`${A}.outline?.pages?.[0]?.w === 630 && ${A}.outline?.pages?.[0]?.h === 1200`,
+        "page swap to resize to 630x1200");
+      await settle(page);
+
+      // 3. Open a .zen with a missing external SVG, then import it into the WASM worker.
+      const svgDoc = `zenith version=1 {
+  project id="p" name="Logo Banner"
+  tokens format="zenith-token-v1" {
+    token id="paper" type="color" value="#0b1a2e"
+  }
+  assets {
+    asset id="asset.logo.svg" kind="svg" src="logo.svg"
+  }
+  document id="d" title="Logo Banner" {
+    page id="page" w=(px)600 h=(px)400 background=(token)"paper" {
+      image id="hero.logo" asset="asset.logo.svg" x=(px)100 y=(px)100 w=(px)200 h=(px)200 fit="contain"
+    }
+  }
+}
+`;
+      const svgText = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" fill="#24b6dd"/></svg>';
+      await page.eval(`(async () => {
+        await ${A}.files.load({ name: 'logo-banner.zen', text: ${JSON.stringify(svgDoc)}, project: null });
+        window.showOpenFilePicker = async () => [{
+          kind: 'file',
+          name: 'logo.svg',
+          async getFile() { return new File([${JSON.stringify(svgText)}], 'logo.svg', { type: 'image/svg+xml' }); },
+        }];
+        return true;
+      })()`);
+      await page.waitFor(`!!document.querySelector('[data-key="missing-assets"]')`, "missing external file banner");
+      const bannerTitle = await page.eval("document.querySelector('[data-key=\"missing-assets\"]')?.textContent ?? ''");
+      check(bannerTitle.includes("logo.svg"), `banner should show real src path logo.svg, got: ${bannerTitle}`);
+      await page.eval(`(() => {
+        const btns = [...document.querySelectorAll('[data-key="missing-assets"] button')];
+        btns.find((b) => b.textContent.includes('Import files'))?.click();
+        return true;
+      })()`);
+      await page.waitFor(`!document.querySelector('[data-key="missing-assets"]') && ${A}.valid`,
+        "missing asset banner to clear after importing logo.svg into worker");
+      return { bannerTitle: bannerTitle.trim() };
+    },
+  ],
   ...samplePathSteps,
   ...draftSteps,
 ];

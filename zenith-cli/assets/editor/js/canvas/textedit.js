@@ -59,7 +59,13 @@ export class InlineTextEditor {
     ta.style.fontSize = `${fontSize.toFixed(1)}px`;
     ta.style.fontWeight = String(fontWeight);
     ta.style.textAlign = align === "end" ? "right" : align === "center" ? "center" : "left";
-    if (fillHex) ta.style.color = fillHex;
+    if (fillHex) {
+      ta.style.color = fillHex;
+      const lum = hexLuminance(fillHex);
+      if (lum !== null) {
+        ta.style.background = lum > 0.58 ? "rgb(11 26 46 / 0.92)" : "rgb(255 255 255 / 0.94)";
+      }
+    }
 
     let finished = false;
     const finish = async (commit) => {
@@ -99,4 +105,21 @@ export class InlineTextEditor {
   close({ commit = false } = {}) {
     if (this.active) this.active.finish(commit);
   }
+}
+
+function hexLuminance(hex) {
+  const clean = String(hex ?? "").trim().replace(/^#/, "");
+  let r, g, b;
+  if (clean.length === 3 || clean.length === 4) {
+    r = parseInt(clean[0] + clean[0], 16);
+    g = parseInt(clean[1] + clean[1], 16);
+    b = parseInt(clean[2] + clean[2], 16);
+  } else if (clean.length === 6 || clean.length === 8) {
+    r = parseInt(clean.slice(0, 2), 16);
+    g = parseInt(clean.slice(2, 4), 16);
+    b = parseInt(clean.slice(4, 6), 16);
+  } else {
+    return null;
+  }
+  return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
 }

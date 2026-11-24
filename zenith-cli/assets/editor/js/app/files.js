@@ -3,6 +3,7 @@
 // writes back to the picked file, or downloads where the browser cannot).
 
 import { blobToBase64, download, downloadBlob } from "../engine/wasm/files.js";
+import { openNewDocDialog } from "../ui/newdoc.js";
 import { byId, h } from "../util/dom.js";
 import { projectDocument, showSkippedFiles } from "./project-picker.js";
 
@@ -26,10 +27,14 @@ export class FileTools {
       saveBtn.title = "Save to file (Ctrl+S)";
       saveBtn.setAttribute("aria-label", "Save to file");
     }
-    for (const id of ["menu-home", "menu-drafts", "menu-home-sep", "menu-open-file", "menu-open-folder", "menu-file-sep"]) {
+    for (const id of ["menu-new", "menu-home", "menu-drafts", "menu-home-sep", "menu-open-file", "menu-open-folder", "menu-file-sep"]) {
       const el = byId(id);
       if (el) el.hidden = false;
     }
+    byId("menu-new")?.addEventListener("click", () => {
+      app.layout.closePopovers();
+      this.newDocument();
+    });
     byId("menu-home")?.addEventListener("click", async () => {
       app.layout.closePopovers();
       if (app.atRisk() && !(await this.confirmDiscard("Home"))) return;
@@ -70,7 +75,58 @@ export class FileTools {
       } else if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "o") {
         e.preventDefault();
         this.openFile();
+      } else if (e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && e.key.toLowerCase() === "n") {
+        e.preventDefault();
+        this.newDocument();
       }
+    });
+    this.bindRename();
+  }
+
+  /** Open the New Document modal and load the created `.zen` file. */
+  newDocument() {
+    openNewDocDialog((spec) => {
+      void this.load(spec);
+    }, { preset: "custom" });
+  }
+
+  /** Click the filename in the topbar to rename the in-browser `.zen` document. */
+  bindRename() {
+    const el = byId("doc-name");
+    if (!el) return;
+    el.classList.add("editable");
+    el.title = "Click to rename file";
+    el.addEventListener("click", () => {
+      if (el.dataset.renaming === "true") return;
+      el.dataset.renaming = "true";
+      const prev = this.app.name;
+      const input = h("input", {
+        type: "text",
+        class: "doc-name-input",
+        value: prev,
+        "aria-label": "Document file name",
+      });
+      const finish = (commit) => {
+        if (el.dataset.renaming !== "true") return;
+        delete el.dataset.renaming;
+        const next = input.value;
+        input.replaceWith(el);
+        if (commit) this.app.renameDocument(next);
+      };
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          finish(true);
+        } else if (e.key === "Escape") {
+          e.preventDefault();
+          finish(false);
+        }
+      });
+      input.addEventListener("blur", () => finish(true));
+      el.replaceWith(input);
+      input.focus();
+      const dot = prev.lastIndexOf(".");
+      input.setSelectionRange(0, dot > 0 ? dot : prev.length);
     });
   }
 
@@ -163,40 +219,72 @@ export class FileTools {
   }
 
   /**
-   * Prompt the user to pick one or more local files and attach them into the
-   * WASM worker's project file map so missing `assets/...` or fonts resolve
-   * immediately without reopening the whole document.
+   * Prompt the user to pick one or more local files (opening directly in the
+   * `.zen` file's folder when Chromium provides a handle) and attach them into
+   * the running WASM worker so missing assets/fonts/imports resolve immediately.
    */
   async importMissingAssets(missingPaths) {
-    const input = document.createElement("input");
-    input.type = "file";
-    input.multiple = true;
-    input.hidden = true;
-    document.body.appendChild(input);
-    const files = await new Promise((resolve) => {
-      input.addEventListener("change", () => resolve([...(input.files ?? [])]), { once: true });
-      input.addEventListener("cancel", () => resolve([]), { once: true });
-      input.click();
-    });
-    input.remove();
-    if (!files.length) return;
+    const files = await this.attempt(() => this.host.pickAssetFiles({ multiple: true }));
+    if (!files?.length) return;
 
     const map = { ...(this.host.worker.files ?? {}) };
     let matched = 0;
     for (const file of files) {
       const b64 = await blobToBase64(file);
-      const targets = missingPaths.filter((p) => p.split("/").pop() === file.name);
+      const base = file.name.toLowerCase();
+      const targets = missingPaths.filter((p) => p.split("/").pop().toLowerCase() === base);
       if (targets.length) {
         for (const t of targets) map[t] = b64;
         matched += targets.length;
+      } else if (missingPaths.length === 1 && files.length === 1) {
+        map[missingPaths[0]] = b64;
+        matched += 1;
       } else {
         map[file.name] = b64;
         map[`assets/${file.name}`] = b64;
         matched += 1;
       }
     }
-    this.host.worker.files = map;
+    await this.host.worker.project({ files: map });
     this.app.notices.toast(`Attached ${matched} asset file${matched === 1 ? "" : "s"}.`);
+    await this.app.diagnose();
+    await this.app.refreshDocument();
+  }
+
+  /**
+   * Pick a folder (opening directly at the `.zen` file's folder via `startIn`)
+   * and auto-attach all matching files into the running WASM worker without
+   * reloading or discarding edits in the open document.
+   */
+  async attachFolderAssets(missingPaths) {
+    const project = await this.attempt(() => this.host.pickProject());
+    if (!project) return;
+    showSkippedFiles(this.app.notices, project);
+    const map = { ...(this.host.worker.files ?? {}), ...project.files };
+    // Also map basename matches when the picked folder is a subfolder (e.g. `assets/`).
+    const byBase = new Map();
+    for (const [rel, b64] of Object.entries(project.files)) {
+      const base = rel.split("/").pop().toLowerCase();
+      if (!byBase.has(base)) byBase.set(base, b64);
+    }
+    let resolved = 0;
+    for (const req of missingPaths) {
+      if (map[req]) {
+        resolved += 1;
+      } else {
+        const hit = byBase.get(req.split("/").pop().toLowerCase());
+        if (hit) {
+          map[req] = hit;
+          resolved += 1;
+        }
+      }
+    }
+    await this.host.worker.project({ files: map });
+    this.app.notices.toast(
+      resolved
+        ? `Auto-loaded ${resolved} missing file${resolved === 1 ? "" : "s"} from ${project.root}.`
+        : `Attached folder ${project.root} (${Object.keys(project.files).length} files).`,
+    );
     await this.app.diagnose();
     await this.app.refreshDocument();
   }
@@ -226,7 +314,7 @@ export class FileTools {
     const rel = `assets/${safeName}`;
     const isSvg = /\.svg$/i.test(safeName) || file.type === "image/svg+xml";
     const b64 = await blobToBase64(file);
-    this.host.worker.files = { ...(this.host.worker.files ?? {}), [rel]: b64 };
+    await this.host.worker.project({ files: { ...(this.host.worker.files ?? {}), [rel]: b64 } });
 
     let nw = 320;
     let nh = 240;

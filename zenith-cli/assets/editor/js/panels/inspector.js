@@ -1,6 +1,7 @@
 // The inspector panel: `node.inspect` for the one selected node, with an
 // edit form for the `node.set` fields the engine lists (see editform.js).
 
+import { PAGE_PRESETS } from "../app/samples.js";
 import { cssColor } from "../util/color.js";
 import { clear, h, num, plural } from "../util/dom.js";
 import { icon, kindIcon } from "../ui/icons.js";
@@ -42,6 +43,87 @@ export class Inspector {
     }
     const countNodes = (list) => (list ?? []).reduce((n, c) => n + 1 + countNodes(c.children), 0);
     const layerCount = countNodes(pg.children);
+    const curW = Math.round(pg.w);
+    const curH = Math.round(pg.h);
+    const matchedPreset = PAGE_PRESETS.find((p) => p.w === curW && p.h === curH)?.key ?? "";
+
+    let sizeBody;
+    if (this.hooks.setPageSize) {
+      const wIn = h("input", {
+        class: "edit-input",
+        type: "number",
+        min: "16",
+        max: "16384",
+        step: "1",
+        value: String(curW),
+        "aria-label": "Page width in pixels",
+        dataset: { field: "page-w" },
+      });
+      const hIn = h("input", {
+        class: "edit-input",
+        type: "number",
+        min: "16",
+        max: "16384",
+        step: "1",
+        value: String(curH),
+        "aria-label": "Page height in pixels",
+        dataset: { field: "page-h" },
+      });
+      const commitSize = () => {
+        const nw = Math.max(16, Math.min(16384, Math.round(Number(wIn.value) || curW)));
+        const nh = Math.max(16, Math.min(16384, Math.round(Number(hIn.value) || curH)));
+        wIn.value = String(nw);
+        hIn.value = String(nh);
+        if (nw !== curW || nh !== curH) this.hooks.setPageSize(pg.id, nw, nh);
+      };
+      wIn.addEventListener("change", commitSize);
+      hIn.addEventListener("change", commitSize);
+      const swapBtn = h("button", {
+        type: "button",
+        class: "page-swap-btn",
+        text: "⇄",
+        title: "Swap width and height",
+        "aria-label": "Swap width and height",
+        onclick: () => {
+          if (curW !== curH) this.hooks.setPageSize(pg.id, curH, curW);
+        },
+      });
+      const presetSel = h(
+        "select",
+        {
+          class: "edit-input page-preset-sel",
+          "aria-label": "Page size preset",
+          onchange: (e) => {
+            const found = PAGE_PRESETS.find((p) => p.key === e.target.value);
+            if (found) this.hooks.setPageSize(pg.id, found.w, found.h);
+          },
+        },
+        h("option", { value: "", text: matchedPreset ? "Custom…" : `Custom (${curW} × ${curH})` }),
+        ...PAGE_PRESETS.map((p) =>
+          h("option", { value: p.key, text: `${p.label} (${p.detail})`, selected: p.key === matchedPreset }),
+        ),
+      );
+      sizeBody = [
+        h(
+          "div",
+          { class: "page-size-row" },
+          h("label", { class: "page-size-field" }, h("span", { text: "W" }), wIn),
+          swapBtn,
+          h("label", { class: "page-size-field" }, h("span", { text: "H" }), hIn),
+        ),
+        presetSel,
+      ];
+    } else {
+      sizeBody = [
+        h(
+          "div",
+          { class: "box-grid" },
+          h("div", {}, h("span", { text: "W" }), h("span", { text: `${curW} px` })),
+          h("div", {}, h("span", { text: "H" }), h("span", { text: `${curH} px` })),
+        ),
+      ];
+    }
+
     this.root.append(
       h(
         "div",
@@ -54,17 +136,7 @@ export class Inspector {
           h("span", { class: "muted", text: "Page" }),
         ),
       ),
-      h(
-        "section",
-        { class: "insp-sec" },
-        h("h3", { text: "Size" }),
-        h(
-          "div",
-          { class: "box-grid" },
-          h("div", {}, h("span", { text: "W" }), h("span", { text: `${Math.round(pg.w)} px` })),
-          h("div", {}, h("span", { text: "H" }), h("span", { text: `${Math.round(pg.h)} px` })),
-        ),
-      ),
+      h("section", { class: "insp-sec" }, h("h3", { text: "Size" }), ...sizeBody),
       h(
         "section",
         { class: "insp-sec" },
@@ -277,7 +349,7 @@ export class Inspector {
     target.append(
       h(
         "details",
-        { class: "insp-sec insp-details", open: true },
+        { class: "insp-sec insp-details" },
         h("summary", { text: "Drawn box (px)" }),
         h(
           "div",
@@ -291,7 +363,7 @@ export class Inspector {
   }
 
   attributes(list, target) {
-    const sec = h("details", { class: "insp-sec insp-details", open: true }, h("summary", { text: "Attributes" }));
+    const sec = h("details", { class: "insp-sec insp-details" }, h("summary", { text: "Attributes" }));
     if (list.length === 0) {
       sec.appendChild(h("p", { class: "empty", text: "No attributes." }));
     } else {
@@ -306,7 +378,7 @@ export class Inspector {
 
   style(s, target) {
     const label = s.source === "style" ? `Style ${s.id}` : `Defaults for ${s.id}`;
-    const sec = h("details", { class: "insp-sec insp-details", open: true }, h("summary", { text: label }));
+    const sec = h("details", { class: "insp-sec insp-details" }, h("summary", { text: label }));
     target.appendChild(sec);
     if (!s.defined) {
       sec.appendChild(h("p", { class: "empty", text: `${s.id} is not defined.` }));

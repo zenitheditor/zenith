@@ -211,6 +211,88 @@
   margin: 10px 0 0;
 }
 
+.page-size-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 6px;
+}
+
+.page-size-field {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--t-11);
+  font-weight: 600;
+  color: var(--text-faint);
+}
+
+.page-size-field .edit-input {
+  width: 100%;
+  min-width: 0;
+}
+
+.page-size-field .unit {
+  font-weight: 400;
+}
+
+.page-swap-btn {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.page-swap-btn:hover {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.page-preset-sel {
+  width: 100%;
+}
+
+.layer-quick-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--dur) var(--ease), color var(--dur) var(--ease), background var(--dur) var(--ease);
+}
+
+.row:hover .layer-quick-btn,
+.row:focus-within .layer-quick-btn,
+.layer-quick-btn.on {
+  opacity: 1;
+}
+
+.layer-quick-btn:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.layer-quick-btn .icon {
+  width: 13px;
+  height: 13px;
+}
+
 .align-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

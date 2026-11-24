@@ -197,10 +197,45 @@ hr {
   left: 0;
 }
 
-/* Export & Package dialog */
+/* New Document & Export dialogs */
 
+.newdoc-dlg,
 .export-dlg {
   width: min(460px, calc(100vw - 24px));
+}
+
+.newdoc-dims {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.newdoc-dlg .edit-input {
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+.newdoc-actions {
+  gap: 8px;
+}
+
+.bg-swatches {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.bg-swatch-btn {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.bg-swatch-btn:hover {
+  border-color: var(--accent);
 }
 
 .export-body {
@@ -866,89 +901,127 @@ body:has(dialog[open]) .toasts {
   visibility: hidden;
 }
 
-/* Legacy dialogs (replaced in Commit 6) */
+/* Recent & browser drafts / Project document chooser modals */
 
 .doc-dialog {
-  max-width: min(420px, calc(100vw - 24px));
-  max-height: min(70vh, 560px);
-  padding: var(--space-4);
-  border: 0;
-  border-radius: var(--radius-xl);
-  background: var(--raised);
-  color: var(--text);
-  box-shadow: var(--shadow-pop);
-}
-
-.doc-dialog::backdrop {
-  background: rgb(3 8 16 / 0.55);
-  backdrop-filter: blur(3px);
+  width: min(440px, calc(100vw - 24px));
+  max-height: min(72vh, 560px);
 }
 
 .doc-dialog[open] {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+}
+
+.doc-dialog-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px 14px;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .doc-dialog-note {
   margin: 0;
+  font-size: var(--t-12);
   color: var(--text-muted);
 }
 
 .doc-dialog-list {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
+  gap: 2px;
   margin: 0;
   padding: 0;
   list-style: none;
   overflow-y: auto;
 }
 
-.doc-dialog-list .button {
-  width: 100%;
-  justify-content: flex-start;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.doc-dialog-actions {
-  display: flex;
-  justify-content: flex-end;
-}
-
-#draft-dialog {
-  width: min(400px, calc(100vw - 24px));
-}
-
 #draft-message:empty {
   display: none;
 }
 
-#draft-list li {
-  display: grid;
-  gap: var(--space-2);
-  padding: var(--space-2) 0;
-  overflow-wrap: anywhere;
+.draft-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 4px;
+  border-radius: var(--radius);
+  transition: background var(--dur) var(--ease);
+}
+
+.draft-row:hover {
+  background: var(--surface-hover);
+}
+
+.draft-row-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.draft-row-main .icon {
+  color: var(--text-faint);
+}
+
+.draft-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: var(--t-13);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.draft-time {
+  flex: none;
+  font-size: var(--t-11);
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
 }
 
 .draft-actions {
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
+  align-items: center;
+  gap: 2px;
+  flex: none;
 }
 
-.draft-actions .button {
-  width: auto;
+.draft-act {
+  width: 28px;
+  height: 28px;
+  color: var(--text-faint);
+}
+
+.draft-act:hover {
+  color: var(--text);
+}
+
+.draft-act.danger:hover {
+  color: var(--danger);
+  background: var(--danger-soft);
 }
 
 .doc-dialog-list .project-document {
   display: grid;
   justify-items: start;
   gap: 1px;
-  min-height: 44px;
+  width: 100%;
+  min-height: 40px;
   height: auto;
-  padding-block: var(--space-2);
+  padding: 6px 10px;
   text-align: start;
   white-space: normal;
   overflow-wrap: anywhere;

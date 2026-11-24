@@ -333,15 +333,11 @@ function boundField(spec, bound, tokens, set) {
         },
       })
     : null;
-  const picker = raw === "color"
-    ? h("input", { class: "edit-color", type: "color", "aria-label": `${label} color picker`, dataset: { field: `${name}-picker` } })
-    : null;
   const paint = (hex) => {
     if (!swatch) return;
     const color = cssColor(hex) !== null && hex.startsWith("#");
     swatch.style.setProperty("background-color", color ? hex : "");
     swatch.classList.toggle("none", !color);
-    if (picker && /^#[0-9a-fA-F]{6}/.test(hex ?? "")) picker.value = hex.slice(0, 7).toLowerCase();
   };
   paint(shown);
   const send = async (v) => {
@@ -391,18 +387,12 @@ function boundField(spec, bound, tokens, set) {
       input.blur();
     }
   });
-  picker?.addEventListener("change", () => {
-    // The native picker has no alpha: keep the alpha the field shows.
-    const alpha = /^#[0-9a-fA-F]{8}$/.test(input.value.trim()) ? input.value.trim().slice(7) : "";
-    input.value = `${picker.value}${alpha}`;
-    commit();
-  });
   return h(
     "div",
     { class: "edit-bound" },
     h("span", { class: "edit-label wide", text: label }),
     h("div", { class: "edit-bound-row" }, swatch, select),
-    h("div", { class: "edit-bound-row" }, picker, input),
+    h("div", { class: "edit-bound-row" }, input),
   );
 }
 

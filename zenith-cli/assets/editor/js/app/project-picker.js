@@ -1,3 +1,4 @@
+import { hydrateIcons } from "../ui/icons.js";
 import { byId, h, plural } from "../util/dom.js";
 
 function decodeText(b64) {
@@ -62,6 +63,7 @@ function renderGroup(list, label, note, paths, dimmed, pick) {
 
 function choose(project) {
   const dialog = byId("doc-dialog");
+  hydrateIcons(dialog);
   const list = byId("doc-dialog-list");
   const { designs, libraries } = classifyProject(project);
   const totalAssets = Math.max(0, Object.keys(project.files ?? {}).length - (project.documents?.length ?? 0));

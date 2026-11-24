@@ -1,8 +1,10 @@
 import { canPickDirectory, pickDocument, pickProject } from "../engine/wasm/files.js";
 import { byId } from "../util/dom.js";
+import { load, save } from "../util/store.js";
 import { projectDocument } from "./project-picker.js";
 import { blankPreset } from "./samples.js";
 import { hydrateIcons } from "../ui/icons.js";
+import { openNewDocDialog } from "../ui/newdoc.js";
 
 function showGallery() {
   if (document.querySelector('meta[name="zenith-gallery"]')?.content !== "true") return;
@@ -55,7 +57,13 @@ export function showWelcome(open) {
   }
 
   for (const btn of welcome.querySelectorAll("[data-preset]")) {
-    btn.addEventListener("click", () => choose(btn, async () => blankPreset(btn.dataset.preset)));
+    btn.addEventListener("click", () => {
+      if (btn.dataset.preset === "custom") {
+        openNewDocDialog((spec) => choose(btn, async () => spec), { preset: "custom" });
+      } else {
+        choose(btn, async () => blankPreset(btn.dataset.preset));
+      }
+    });
   }
 
   const device = async (pick) => {
@@ -94,8 +102,18 @@ export function showWelcome(open) {
       choose(byId("welcome-folder"), () => device(pickFolder));
     });
   }
+  const storedLayout = load("layout", {});
+  if (storedLayout.theme === "dark" || storedLayout.theme === "light") {
+    document.documentElement.dataset.theme = storedLayout.theme;
+  } else {
+    document.documentElement.removeAttribute("data-theme");
+  }
   byId("welcome-theme")?.addEventListener("click", () => {
-    const h = document.documentElement;
-    h.dataset.theme = h.dataset.theme === "dark" ? "light" : "dark";
+    const doc = document.documentElement;
+    const isDark = doc.dataset.theme === "dark"
+      || (!doc.dataset.theme && window.matchMedia?.("(prefers-color-scheme: dark)").matches);
+    const next = isDark ? "light" : "dark";
+    doc.dataset.theme = next;
+    save("layout", { ...load("layout", {}), theme: next });
   });
 }

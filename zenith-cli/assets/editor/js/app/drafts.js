@@ -1,7 +1,16 @@
 import { download } from "../engine/wasm/files.js";
+import { hydrateIcons, icon } from "../ui/icons.js";
 import { byId, h } from "../util/dom.js";
 import { DraftStore, draftId } from "./draft-store.js";
 import { curatedExample, loadSample } from "./samples.js";
+
+function formatShortDate(ms) {
+  const d = new Date(ms);
+  const now = new Date();
+  const sameDay = d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
+  if (sameDay) return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  return d.toLocaleDateString([], { month: "short", day: "numeric" });
+}
 
 export async function starterSource(starter, spec) {
   const files = Object.entries(spec.project?.files ?? {}).sort(([a], [b]) => a < b ? -1 : Number(a > b));
@@ -49,6 +58,9 @@ export class Drafts {
       this.write(scope);
     });
     byId("draft-close").addEventListener("click", () => this.dialog.close());
+    this.dialog.addEventListener("click", (e) => {
+      if (e.target === this.dialog && !this.busy) this.dialog.close();
+    });
     this.dialog.addEventListener("cancel", (event) => {
       if (this.busy) event.preventDefault();
     });
@@ -81,7 +93,7 @@ export class Drafts {
       confirmed: record?.text ?? null,
       recovered: !!record,
       source,
-      enabled: !!record || source?.kind === "starter" || source?.kind === "blank",
+      enabled: !!record || Boolean(source),
       pending: false,
       writing: false,
       message: "",
@@ -210,6 +222,7 @@ export class Drafts {
   }
 
   async show() {
+    hydrateIcons(this.dialog);
     this.message.textContent = this.active?.message ?? "";
     await this.refresh(true);
     if (!this.dialog.open) this.dialog.showModal();
@@ -239,28 +252,50 @@ export class Drafts {
 
   row(record) {
     const { id, revision, name, text, updatedAt } = record;
-    const row = h("li");
-    const heading = h("strong", { text: name });
-    const date = new Date(updatedAt);
-    const stamp = h("span", { class: "muted", text: date.toLocaleString() });
-    const controls = h("div", { class: "draft-actions" });
-    const action = (label, run) => {
-      const button = h("button", { type: "button", class: "button", text: label, "aria-label": label + " " + name });
-      button.addEventListener("click", run);
-      controls.append(button);
-    };
-    action("Resume", () => this.resume(record));
-    action("Download .zen", () => download(name, text));
-    action("Discard", () => this.act(async () => {
-      if (!window.confirm(`Discard the browser draft for ${name}?`)) return;
-      const result = await this.store.discard(id, revision);
-      if (result === "changed") throw new Error("This draft changed in another tab. Review it before discarding.");
-      if (this.active?.id === id) this.removed(this.active);
-      this.channel?.postMessage({ id });
-      this.message.textContent = "Draft discarded.";
-    }));
-    row.append(heading, stamp, controls);
-    return row;
+    const fullStamp = new Date(updatedAt).toLocaleString();
+    const main = h(
+      "button",
+      {
+        type: "button",
+        class: "draft-row-main",
+        "aria-label": `Resume ${name}`,
+        title: `Open ${name} · ${fullStamp}`,
+        onclick: () => this.resume(record),
+      },
+      icon("page"),
+      h("span", { class: "draft-name", text: name }),
+      h("span", { class: "draft-time", text: formatShortDate(updatedAt) }),
+    );
+    const dlBtn = h(
+      "button",
+      {
+        type: "button",
+        class: "tool draft-act",
+        "aria-label": `Download .zen ${name}`,
+        title: `Download ${name}`,
+        onclick: () => download(name, text),
+      },
+      icon("download"),
+    );
+    const delBtn = h(
+      "button",
+      {
+        type: "button",
+        class: "tool draft-act danger",
+        "aria-label": `Discard ${name}`,
+        title: `Delete ${name}`,
+        onclick: () => this.act(async () => {
+          if (!window.confirm(`Delete the browser draft for ${name}?`)) return;
+          const result = await this.store.discard(id, revision);
+          if (result === "changed") throw new Error("This draft changed in another tab. Review it before discarding.");
+          if (this.active?.id === id) this.removed(this.active);
+          this.channel?.postMessage({ id });
+          this.message.textContent = "Draft discarded.";
+        }),
+      },
+      icon("trash"),
+    );
+    return h("li", { class: "draft-row" }, main, h("div", { class: "draft-actions" }, dlBtn, delBtn));
   }
 
   resume(record) {

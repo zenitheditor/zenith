@@ -52,6 +52,8 @@ export class Layout {
   bind() {
     byId("toggle-left")?.addEventListener("click", () => this.toggle("left"));
     byId("reopen-left")?.addEventListener("click", () => this.toggle("left"));
+    byId("toggle-right")?.addEventListener("click", () => this.toggle("right"));
+    byId("reopen-right")?.addEventListener("click", () => this.toggle("right"));
     byId("theme")?.addEventListener("click", () => {
       this.closePopovers();
       this.cycleTheme();
@@ -318,6 +320,7 @@ export class Layout {
       btn.setAttribute("aria-checked", String(btn.dataset.view === view));
     }
     byId("toggle-left")?.setAttribute("aria-pressed", String(s.left));
+    byId("toggle-right")?.setAttribute("aria-pressed", String(s.right));
 
     if (s.theme === "system") document.documentElement.removeAttribute("data-theme");
     else document.documentElement.dataset.theme = s.theme;
